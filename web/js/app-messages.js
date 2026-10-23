@@ -620,7 +620,7 @@ function renderLiveAgentRun() {
       }
     } else {
       byKey[key] = items.length;
-      items.push({ message: null, index: -1, activity: activity });
+      items.push({ message: activity.__reasoningMessage || null, index: -1, activity: activity });
     }
   });
   var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null, hasLiveDraft: hasLiveAgentDraft() });

@@ -10,14 +10,14 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ConversationResponseParser
     {
         public ConversationResponseParseResult Parse(string content, IEnumerable<ToolCatalogEntry> callableTools,
-            IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context)
+            IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context, bool schemaTransport = false)
         {
             if (context == null || !context.IsComplete)
                 return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidContext, "v8 requires a complete local sequential-batch context: " +
                     (context == null ? "missing context" : context.Error));
             if (callableTools == null || runnableCatalog == null)
                 return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidContext, "v8 parsing requires explicit callable/catalog and sequential-batch context.");
-            var parsed = ConversationResponseJson.Read(content);
+            var parsed = ConversationResponseJson.Read(content, schemaTransport);
             if (!parsed.Success) return parsed;
 
             var knownTools = callableTools.Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))

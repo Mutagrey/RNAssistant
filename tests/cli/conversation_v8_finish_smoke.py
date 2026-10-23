@@ -1,5 +1,7 @@
 """Premature v8 finish is rejected after a verified write without replaying it."""
 
+from conversation_transport import conversation_content
+
 import json
 import os
 import subprocess
@@ -62,7 +64,7 @@ def main():
                         raise AssertionError("Unexpected model retry or extra request")
                     response = json.dumps(response)
                 body = json.dumps({"choices": [{"message": {
-                    "role": "assistant", "content": response}}]}).encode()
+                    "role": "assistant", "content": conversation_content(request, response)}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))

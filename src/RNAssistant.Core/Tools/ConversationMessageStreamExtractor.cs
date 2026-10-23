@@ -32,6 +32,15 @@ namespace RNAssistant.Core.Tools
             Skip
         }
 
+        private readonly bool _schemaTransport;
+        private bool _insideResponse;
+        private bool _responseSeen;
+
+        public ConversationMessageStreamExtractor(bool schemaTransport = false)
+        {
+            _schemaTransport = schemaTransport;
+        }
+
         private readonly StringBuilder _property = new StringBuilder();
         private readonly StringBuilder _output = new StringBuilder();
         private readonly Stack<char> _compositeClosers = new Stack<char>();
@@ -88,7 +97,9 @@ namespace RNAssistant.Core.Tools
                         if (char.IsWhiteSpace(value)) return;
                         if (value == '}')
                         {
-                            _state = ParseState.Done;
+                            if (_schemaTransport && _insideResponse)
+                            { _insideResponse = false; _state = ParseState.RootAfterValue; }
+                            else _state = ParseState.Done;
                             return;
                         }
                         if (value != '"')
@@ -111,6 +122,15 @@ namespace RNAssistant.Core.Tools
 
                     case ParseState.RootValue:
                         if (char.IsWhiteSpace(value)) return;
+                        if (_schemaTransport && !_insideResponse)
+                        {
+                            if (_responseSeen || _currentProperty != "response" || value != '{') { Invalidate(); return; }
+                            _insideResponse = true;
+                            _responseSeen = true;
+                            _currentProperty = null;
+                            _state = ParseState.RootPropertyOrEnd;
+                            return;
+                        }
                         if (!_messageSeen && string.Equals(_currentProperty, "message", StringComparison.Ordinal))
                         {
                             if (value != '"')
@@ -134,7 +154,9 @@ namespace RNAssistant.Core.Tools
                         }
                         if (value == '}')
                         {
-                            _state = ParseState.Done;
+                            if (_schemaTransport && _insideResponse)
+                            { _insideResponse = false; _state = ParseState.RootAfterValue; }
+                            else _state = ParseState.Done;
                             return;
                         }
                         Invalidate();

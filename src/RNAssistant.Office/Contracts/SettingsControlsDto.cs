@@ -29,6 +29,7 @@ namespace RNAssistant.Office.Contracts
         public bool SmartChatTitles { get; set; }
         public int MaxAgentIterations { get; set; }
         public int MaxAgentFormatRetries { get; set; }
+        public int MaxConsecutiveReflections { get; set; } = AppSettings.DefaultMaxConsecutiveReflections;
         public int MaxAgentToolSteps { get; set; }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
@@ -78,6 +79,7 @@ namespace RNAssistant.Office.Contracts
                 SmartChatTitles = settings.SmartChatTitles,
                 MaxAgentIterations = settings.MaxAgentIterations,
                 MaxAgentFormatRetries = settings.MaxAgentFormatRetries,
+                MaxConsecutiveReflections = settings.MaxConsecutiveReflections,
                 MaxAgentToolSteps = settings.MaxAgentToolSteps,
                 AutoCompressContext = settings.AutoCompressContext,
                 DebugModelTraffic = settings.DebugModelTraffic,
@@ -128,6 +130,9 @@ namespace RNAssistant.Office.Contracts
             result.SmartChatTitles = SmartChatTitles;
             result.MaxAgentIterations = MaxAgentIterations;
             result.MaxAgentFormatRetries = MaxAgentFormatRetries;
+            if (MaxConsecutiveReflections < 0 || MaxConsecutiveReflections > AppSettings.MaximumConsecutiveReflections)
+                throw new System.ArgumentOutOfRangeException(nameof(MaxConsecutiveReflections));
+            result.MaxConsecutiveReflections = MaxConsecutiveReflections;
             result.MaxAgentToolSteps = MaxAgentToolSteps;
             result.AutoCompressContext = AutoCompressContext;
             result.DebugModelTraffic = DebugModelTraffic;

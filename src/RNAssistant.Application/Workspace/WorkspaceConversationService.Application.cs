@@ -81,6 +81,11 @@ namespace RNAssistant.Runtime
         {
             var session = GetSession(workspace, sessionId);
             if (session == null) throw new ArgumentException("Session not found.");
+            return ReadState(workspace, session);
+        }
+
+        internal WorkspaceSessionSnapshot ReadState(WorkspaceDescriptor workspace, ChatSession session)
+        {
             return new WorkspaceSessionSnapshot
             {
                 Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title,
@@ -100,7 +105,7 @@ namespace RNAssistant.Runtime
                 UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
                 InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
                 InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count,
-                Presentation = Presentation(workspace, session)
+                Presentation = Presentation(workspace, session), ModelProgress = ModelProgress(session)
             };
         }
 

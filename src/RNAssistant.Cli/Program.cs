@@ -274,7 +274,7 @@ namespace RNAssistant.Cli
                     var controlRequest = ControlRequest(options);
                     var current = service.GetSession(workspace, controlRequest.SessionId);
                     if (current?.LastRun == null) throw new ArgumentException("Run not found.");
-                    if (new[] { "message", "task-file", "mode", "max-iterations", "max-tool-steps", "expect-files", "min-reads", "min-writes", "web-checks", "require-web-verify" }.Any(options.ContainsKey))
+                    if (new[] { "message", "task-file", "mode", "max-iterations", "max-tool-steps", "max-reflections", "expect-files", "min-reads", "min-writes", "web-checks", "require-web-verify" }.Any(options.ContainsKey))
                         throw new ArgumentException("Continuation retains its original task, mode, limits and acceptance criteria.");
                     var config = current.LastRun.ModelConfiguration;
                     var resumeSettings = Settings(options, current.Model, config?.AgentResponseMode, config?.SystemPromptRole, config?.ToolResultRole);
@@ -509,6 +509,7 @@ namespace RNAssistant.Cli
                             {
                                 if (!options.ContainsKey("max-iterations")) settings.MaxAgentIterations = limits.MaxIterations;
                                 if (!options.ContainsKey("max-tool-steps")) settings.MaxAgentToolSteps = limits.MaxToolSteps;
+                                if (!options.ContainsKey("max-reflections")) settings.MaxConsecutiveReflections = limits.MaxConsecutiveReflections;
                             }
                             if (config != null)
                             {
@@ -568,11 +569,22 @@ namespace RNAssistant.Cli
                 ReasoningRequestMode = normalizedMode,
                 ContextWindowOverrideTokens = ContextTokens(options),
                 MaxTokens = 4096,
+                MaxConsecutiveReflections = ReflectionDepth(options),
                 MaxAgentIterations = PositiveBoundedOption(options, "max-iterations",
                     AppSettings.DefaultMaxAgentIterations),
                 MaxAgentToolSteps = PositiveBoundedOption(options, "max-tool-steps",
                     AppSettings.DefaultMaxAgentToolSteps)
             };
+        }
+
+        private static int ReflectionDepth(Dictionary<string, string> options)
+        {
+            var raw = Value(options, "max-reflections", null);
+            if (raw == null) return AppSettings.DefaultMaxConsecutiveReflections;
+            int depth;
+            if (!int.TryParse(raw, out depth) || depth < 0 || depth > AppSettings.MaximumConsecutiveReflections)
+                throw new ArgumentException("--max-reflections must be 0..20.");
+            return depth;
         }
 
         private static int ContextTokens(Dictionary<string, string> options)
@@ -992,7 +1004,7 @@ namespace RNAssistant.Cli
             Console.WriteLine("rna sessions --workspace <path> [--jsonl]");
             Console.WriteLine("rna session create --workspace <path> [--title <text>] [--jsonl]");
             Console.WriteLine("run/answer accept --request-id <1..128 characters> with an existing --session. Reuse the same ID and input to obtain its receipt without execution; changed input conflicts. Configuration is not reapplied by a duplicate.");
-            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--mode agent|plan] [--mutation-policy ask|deny] [--auto-confirm on|off] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
+            Console.WriteLine("rna run --workspace <path> (--message <text> | --task-file <file>) [--session <id>] [--mode agent|plan] [--mutation-policy ask|deny] [--auto-confirm on|off] [--profile development] [--model <name>] [--base-url <url>] [--context-tokens <n>] [--response-mode json_schema|json_object] [--instruction-role system|developer] [--tool-result-role user|developer|tool] [--reasoning-mode <mode>] [--thinking on|off] [--max-iterations <1..256>] [--max-tool-steps <1..4096>] [--max-reflections <0..20>] [--expect-files <comma-separated paths>] [--min-reads <n>] [--min-writes <n>] [--require-web-verify] [--web-checks <json-file>] [--jsonl]");
             Console.WriteLine("rna answer --workspace <path> --session <id> --answers-file <json-file> [--auto-confirm on|off] [LLM options] [--jsonl]  (validate answers and start the next turn)");
             Console.WriteLine("--auto-confirm defaults to off for each new run/answer. Plan/Deny still prohibit execution. Pending approval and same-run continuation retain the accepted value after restart.");
             Console.WriteLine("rna inspect --workspace <path> --session <id> [--jsonl]");

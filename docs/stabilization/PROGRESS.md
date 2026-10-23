@@ -1,5 +1,43 @@
 # Stabilization progress
 
+## Conversation v8 recovery and reflection settings — 2026-10-24
+
+Owners: Core ModelProtocol/AgentKernel, Office adapter, Application workspace and Web
+presentation. The current change addresses the incident audit below: strict object
+transport with nested action union; 0–20 frozen reflection depth with proactive
+remaining allowance; separate format/provider/semantic budgets; bounded output-token
+correction; accepted reflection/tool-step reasoning and handoff; workspace accepted metadata,
+scoped in-process previews, stable message nodes and explicit read-only history.
+Built-in prompt schema 53 separates JSON-object examples from strict schema semantics;
+argument descriptions remain in the supplied schema. Independent shared-shell commits
+supply typed terminal run notices and navigation/reconnect fixes.
+
+Verification: host-neutral `v8 recovery:` 6/6 (including persisted reopen), kernel
+57/57 and targeted protocol/context/settings/compatibility checks passed. The
+standalone codec passed 153 response cases / 2156 assertions; the independent schema
+validator passed 139 cases with its two documented local-parser distinctions.
+Scripted CLI `conversation_v8_finish_smoke.py` and `response_mode_smoke.py` passed.
+Web stream handoff, workspace message retention/live progress, shared run notices
+and run-state ordering passed, including browser focus/disclosure checks. No full
+suite, paid model calls or Office validation. Open: actual target-provider support, Windows/WebView2/Office evidence,
+workspace history paging and cross-process live token delivery. The dated audit below
+describes its earlier baseline, not the status of every current implementation.
+
+
+## Conversation v8 / shared-chat incident audit — 2026-10-23
+
+Priority: provider schema admission and visible accepted/terminal chat state.
+Review of `7a627c44` reproduced Office reflection feedback and format recovery,
+but also found an OpenAI-incompatible strict schema root, lost accepted reflection
+display metadata/live handoff, silent workspace failures, discarded output
+termination cause, and incomplete workspace streaming/history presentation.
+Historical workspace envelopes also lack an explicit readable/read-only view.
+The separate uncommitted ChatView anchor fix passes the Office-return probe;
+the committed baseline throws. Findings, owners and bounded next steps are in
+[RISK_REGISTER](RISK_REGISTER.md#conversation-v8--shared-chat-incident-audit--2026-10-23).
+These issues remain open; prior focused protocol checks do not qualify the complete
+chat experience. No full suite, real-provider or Windows/Office qualification ran.
+
 ## Unified Shell regression review — 2026-10-23
 
 Owner: application/shared ChatView. Browser reproductions exposed five defects:

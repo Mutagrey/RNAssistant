@@ -1,5 +1,7 @@
 """Mode admission and typed questions across production CLI processes (scripted HTTP)."""
 import copy
+from conversation_transport import conversation_content
+
 import json
 import os
 import subprocess
@@ -79,7 +81,7 @@ def run_case(root, mode, role):
                 if response == DONE or response == DIRECT_DONE:
                     response = finish(request, direct=response == DIRECT_DONE)
                 body = json.dumps({"choices": [{"message": {"role": "assistant",
-                    "content": json.dumps(response)}}]}).encode()
+                    "content": conversation_content(request, response)}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))

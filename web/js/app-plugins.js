@@ -93,9 +93,9 @@
     el('Apply').hidden=!candidate||!candidate.hasChanges||!selected||!!browsingRelease;
     el('RestoreVersion').hidden=!browsingRelease;el('RestoreVersion').disabled=busy||previewBusy||!selected;
     if(ownsChat()){
-      if(chatComposer)chatComposer.lock(chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
+      if(chatComposer)chatComposer.lock(window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
       el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||!chat;
-      el('Send').disabled=chatBusy||!selected||!chat||!el('Input').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
+      el('Send').disabled=window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!selected||!chat||!el('Input').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
     }
     el('CreateSubmit').disabled=busy;}
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');

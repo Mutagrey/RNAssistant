@@ -1295,11 +1295,12 @@ remain outside the kernel. A runtime diagnostic does not duplicate the usage of
 a prior accepted response. R29 changes the wire shape; retry budgets remain unchanged.
 See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md).
 
-## Retry policy (Phase 2B)
+## Retry policy
 
 | Outcome | Action | Budget |
 |---|---|---|
-| Received completion fails the v4 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
+| Received completion fails the v8 contract | Retry from accepted prompt + one fresh repair instruction | Total 1–20 responses, including first |
+| Provider ends with `finish_reason=length` | Ask for a shorter complete proposal; never dispatch a truncated proposal | At most one correction inside the format budget; repeated truncation is `OutputTruncated` |
 | Runtime ID allocation/restore failure | Fail before acceptance/dispatch; never regenerate model payload for an ID | No model repair |
 | Typed timeout, network failure or HTTP 5xx/server failure | Retry the exact current prompt after a cancellable delay | Two extra requests for the whole step, delays 1s then 2s |
 | Explicit `json_schema` rejection with fallback enabled | Switch to `json_object`, including during repair | One extra request, independent of other budgets |
@@ -1320,8 +1321,9 @@ Error-like text inside model content remains ordinary content.
 The `MaxAgentFormatRetries` settings/bridge key and its stored number are kept;
 the number means total responses, not additional corrections, for both main
 responses and compaction. The form label and tooltip state that distinction.
-Default 10 and normalization to 1–20 remain.
-No second setting key or settings migration is introduced.
+Default 10 and normalization to 1–20 remain. `MaxConsecutiveReflections` is a separate
+accepted-decision limit (0–20, default 2), not an attempt budget; see the
+[v8 contract](protocols/CONVERSATION_RESPONSE_V8.md#admission-persistence-and-presentation).
 
 Every raw attempt retains step correlation and gets a distinct modelAttemptId.
 Existing rejected trace `Attempt` stays zero-based; repair instructions and the

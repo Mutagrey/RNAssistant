@@ -67,16 +67,20 @@ namespace RNAssistant.Office.Services
                         {
                             var visibleDecision = string.IsNullOrWhiteSpace(fact.Response.Message)
                                 ? fact.Response.Decision : fact.Response.Message;
-                            _session.Messages.Add(new ChatMessage
+                            activity = new ChatMessage
                             {
                                 Role = "assistant", Content = string.Empty,
                                 RuntimeProjection = true, ExcludeFromModelContext = true,
+                                ReasoningContent = decision.ReasoningContent,
+                                ReasoningTokens = decision.ReasoningTokens,
+                                ReasoningTruncated = decision.ReasoningTruncated,
                                 Activity = new ChatActivity
                                 {
                                     Kind = "step", StepId = fact.StepId, StepMessage = visibleDecision,
                                     Title = "Промежуточное решение", Status = "completed"
                                 }
-                            });
+                            };
+                            _session.Messages.Add(activity);
                         }
                     }
                     // Persist the entire accepted batch before any dispatch. Callable
@@ -108,9 +112,23 @@ namespace RNAssistant.Office.Services
                     AppendTerminalMessage(fact.Summary);
                     break;
             }
+            if (activity?.Activity?.ToolCallId != null)
+            {
+                // Protocol records stay hidden. Put accepted display metadata on
+                // the first call's visible activity, including resumed/non-dispatched calls.
+                var accepted = _session.Messages.FirstOrDefault(message => message.ProtocolMessage &&
+                    message.Role == "assistant" && message.ToolCallId == activity.Activity.ToolCallId &&
+                    message.AcceptedCallOrigin?.CallIndex == 0);
+                if (accepted != null)
+                {
+                    activity.ReasoningContent = accepted.ReasoningContent;
+                    activity.ReasoningTokens = accepted.ReasoningTokens;
+                    activity.ReasoningTruncated = accepted.ReasoningTruncated;
+                }
+            }
             var appended = _session.Messages.Where(message => !previousMessages.Contains(message.Id)).ToArray();
             StampMessages(appended);
-            Save(fact, appended, activity);
+            Save(fact, appended, fact.Kind == AgentRunEventKind.ResponseAccepted ? null : activity);
             if (fact.Kind == AgentRunEventKind.ToolCompleted)
             {
                 // Counts and the completed activity are already durable. Context/media
@@ -285,11 +303,11 @@ namespace RNAssistant.Office.Services
                 _progress("thinking", "Модель выбирает следующий шаг...", null);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted &&
                 fact.Response.Action == ConversationResponse.ReflectionAction)
-                _progress("thinking", string.IsNullOrWhiteSpace(_stepMessage)
-                    ? fact.Response.Decision : _stepMessage, null);
-            else if (fact.Kind == AgentRunEventKind.ResponseAccepted && !fact.Response.Final && !string.IsNullOrWhiteSpace(_stepMessage))
+                _progress("reflection", string.IsNullOrWhiteSpace(_stepMessage)
+                    ? fact.Response.Decision : _stepMessage, activity.Activity);
+            else if (fact.Kind == AgentRunEventKind.ResponseAccepted && !fact.Response.Final)
                 _progress("acting", _stepMessage, new ChatActivity { StepId = fact.StepId, StepMessage = _stepMessage,
-                    Kind = "step", Title = _stepMessage, Status = "running" });
+                    Kind = "step", Title = string.IsNullOrWhiteSpace(_stepMessage) ? "Выполняю действие" : _stepMessage, Status = "running" });
             else if (activity != null)
                 _progress(fact.Kind == AgentRunEventKind.ToolStarted ? "tool_running" : "tool_result",
                     activity.Activity.ResultMessage ?? _stepMessage ?? "Выполняю действие", activity.Activity);

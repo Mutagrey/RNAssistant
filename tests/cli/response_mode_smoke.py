@@ -1,5 +1,7 @@
 """Check CLI wire settings and their persistence across confirmation."""
 
+from conversation_transport import conversation_content
+
 import json
 import os
 import subprocess
@@ -49,7 +51,7 @@ def main():
             else:
                 content = "Test title"
             body = json.dumps({"choices": [{"message": {"role": "assistant",
-                "content": content}}]}).encode()
+                "content": conversation_content(request, content)}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -88,11 +90,14 @@ def main():
                           "--instruction-role", "user")
             assert invalid.returncode == 2 and not requests, (invalid.stdout, invalid.stderr)
 
+            for depth in ("-1", "21", "bad"):
+                invalid = cli("run", "--workspace", str(workspace), "--message", "Hi", "--max-reflections", depth)
+                assert invalid.returncode == 2 and not requests, (invalid.stdout, invalid.stderr)
             for mode in ("json_schema", "json_object"):
                 role_args = () if mode == "json_schema" else ("--instruction-role", "SYSTEM")
                 role = "developer" if mode == "json_schema" else "system"
                 run = cli("run", "--workspace", str(workspace), "--message", "Hi",
-                          "--response-mode", mode, *role_args)
+                          "--response-mode", mode, "--max-reflections", "0", *role_args)
                 assert run.returncode == 0, (run.stdout, run.stderr)
                 result = json.loads(run.stdout.splitlines()[-1])["data"]
                 assert result["reason"] == "model_finish" and result["action"] == "finish", result
@@ -108,13 +113,17 @@ def main():
                 inspect = cli("inspect", "--workspace", str(workspace),
                               "--session", result["SessionId"])
                 assert inspect.returncode == 0, inspect.stderr
-                saved = json.loads(inspect.stdout)["data"]["modelConfiguration"]
+                inspected = json.loads(inspect.stdout)["data"]
+                assert inspected["Limits"]["MaxConsecutiveReflections"] == 0, inspected
+                saved = inspected["modelConfiguration"]
                 assert saved["AgentResponseMode"] == mode, saved
                 assert saved["SystemPromptRole"] == role, saved
                 assert saved["ToolResultRole"] == "user", saved
             assert len(requests) == 2, len(requests)
-            assert requests[0]["messages"][0]["content"] == requests[1]["messages"][0]["content"], \
-                "Changing the wire role must not rewrite the instruction text"
+            strict_prompt, object_prompt = [request["messages"][0]["content"] for request in requests]
+            assert "TOOL_NAME" not in strict_prompt and "TOOL_NAME" in object_prompt
+            assert "argument contracts are in json_schema" in strict_prompt
+            assert "exact argument schemas" in object_prompt
 
             def assert_pair(request, role, name, arguments):
                 assert "tools" not in request, "v8 stays the only generation protocol"

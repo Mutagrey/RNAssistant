@@ -128,7 +128,7 @@ namespace RNAssistant.Office.Services
             using (var ports = CreatePorts(mode, text, session, input, progress, pendingToolRegistrar, cancellationToken))
             {
                 var result = await ConversationRunCoordinator.RunAsync(new AgentRunRequest(session.LastRun.RunId, session.LastRun.TurnId,
-                    text, new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps))),
+                    text, new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections)),
                     ports, ports, ports, cancellationToken, ports).ConfigureAwait(false);
                 return ports.Result(result.Summary);
             }

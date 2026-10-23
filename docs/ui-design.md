@@ -1014,3 +1014,17 @@ Shimmer активной группы, её выполняемого дейст�
 
 Разделители занимают 1 px в раскладке и имеют область захвата 9 px поверх
 соседних панелей: между деревом и границей заголовка/содержимого нет пустой полосы.
+
+## Reflection and model progress — 2026-10-24
+
+Settings → Agent exposes **Глубина рефлексии**, 0–20 (default 2). It counts accepted
+reflection decisions between terminal tool results/user inputs, independently of
+format and transport retries. The tooltip explains zero and the corrective request.
+Office accepted reflection and tool steps keep provider reasoning through live
+handoff/reopen; a tool batch shows it once, on its first activity.
+Workspace/project/plugin messages have stable identities and retain unchanged DOM
+nodes when new activity arrives. Their run snapshot exposes transient, bounded model
+preview only for the exact locally owned run/attempt; acceptance replaces it with
+saved messages. An old-format workspace chat is explicitly read-only; unsupported
+protocol bodies display a notice, never raw JSON or a silently migrated response.
+Real WebView2/Office behavior remains a target-host qualification gate.

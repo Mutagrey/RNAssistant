@@ -44,6 +44,8 @@ namespace RNAssistant.Core.ModelProtocol
                         (request.CallContext == null ? "missing context" : request.CallContext.Error));
                 var budget = new ModelProtocolRetryBudget(settings);
                 var fallbackUsed = false;
+                var truncatedResponses = 0;
+                var lastTruncated = false;
                 string lastError = null;
                 var lastErrorKind = ConversationResponseError.None;
                 for (var attempt = 1; attempt <= budget.ProtocolAttemptLimit; attempt++)
@@ -61,10 +63,10 @@ namespace RNAssistant.Core.ModelProtocol
                     while (true)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        wireMessages = string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema,
-                            StringComparison.Ordinal) && request.ProjectJsonSchemaMessages != null
-                            ? request.ProjectJsonSchemaMessages(attemptMessages)
-                            : attemptMessages;
+                        var strict = string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal);
+                        wireMessages = strict && request.ProjectJsonSchemaMessages != null
+                            ? request.ProjectJsonSchemaMessages(attemptMessages) : attemptMessages;
+                        if (strict) wireMessages = ModelProtocolWire.ProjectSchemaGuidance(wireMessages);
                         options.TraceMessageContentChanged = ChangedWireMessages(attemptMessages, wireMessages);
                         string budgetError;
                         var repairReserve = lastError == null
@@ -113,7 +115,27 @@ namespace RNAssistant.Core.ModelProtocol
                         TraceAccepted(options, true, progress);
                         return ModelProtocolResult.Refused(completion, contextUsage);
                     }
-                    var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext);
+                    lastTruncated = completion.Termination == LlmCompletionTermination.OutputLimit;
+                    if (lastTruncated)
+                    {
+                        truncatedResponses++;
+                        lastErrorKind = ConversationResponseError.InvalidJson;
+                        lastError = "OUTPUT_LIMIT: the provider cut off the response at its output-token limit. " +
+                            "Return a shorter complete response: keep reasoning and message concise, choose one next action, " +
+                            "and split large changes into smaller tool calls. Do not omit required fields. " +
+                            "Nothing from the truncated response was accepted or executed.";
+                        TraceRejected(options, completion, lastError, attempt - 1, progress);
+                        // One bounded correction within the protocol budget. Repeating
+                        // the same token-limited generation ten times cannot make progress.
+                        cancellationToken.ThrowIfCancellationRequested();
+                        if (truncatedResponses >= 2) break;
+                        continue;
+                    }
+                    if (completion.Termination == LlmCompletionTermination.Filtered)
+                        return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.Provider,
+                            "Провайдер остановил ответ фильтром содержимого."), contextUsage);
+                    var parsed = ModelProtocolWire.Parse(completion.Content, request.CallableTools, request.RunnableCatalog, request.CallContext,
+                        string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal));
                     if (parsed.Success)
                     {
                         TraceAccepted(options, false, progress);
@@ -126,6 +148,10 @@ namespace RNAssistant.Core.ModelProtocol
                     TraceRejected(options, completion, parsed.ErrorCode + ": " + lastError, attempt - 1, progress);
                     cancellationToken.ThrowIfCancellationRequested();
                 }
+                if (lastTruncated)
+                    return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.OutputTruncated,
+                        "Провайдер обрезал ответ по лимиту выходных токенов. Полный ответ получить не удалось; " +
+                        "обрезанные действия не выполнялись. Увеличьте лимит ответа или уменьшите объём следующего изменения."), contextUsage);
                 return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
                     "Ответ модели не выполнен после " + budget.ProtocolAttemptLimit + " попыток получить корректный ответ: " + lastError), contextUsage);
             }
@@ -172,7 +198,8 @@ namespace RNAssistant.Core.ModelProtocol
             cancellationToken.ThrowIfCancellationRequested();
             options.TraceModelAttemptId = Guid.NewGuid().ToString("N");
             options.TraceRequestId = null;
-            if (progress != null && progress.AttemptStarted != null) progress.AttemptStarted(settings.StreamResponses);
+            if (progress != null && progress.AttemptStarted != null) progress.AttemptStarted(settings.StreamResponses,
+                string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal));
             var completion = await _completeAsync(settings, messages, options,
                 progress == null ? null : progress.StreamUpdate, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();

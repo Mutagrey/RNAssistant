@@ -21,15 +21,20 @@ namespace RNAssistant.Core.ModelProtocol
         public string StepId { get; private set; }
         public IReadOnlyList<AgentMessage> AcceptedMessages { get; private set; }
         public string CompletionFeedback { get; private set; }
+        public int? ReflectionLimit { get; private set; }
+        public int ReflectionsUsed { get; private set; }
 
         internal AgentModelRequest(string runId, string turnId, string stepId,
-            IEnumerable<AgentMessage> messages, string completionFeedback = null)
+            IEnumerable<AgentMessage> messages, string completionFeedback = null,
+            int? reflectionLimit = null, int reflectionsUsed = 0)
         {
             RunId = runId;
             TurnId = turnId;
             StepId = stepId;
             AcceptedMessages = Array.AsReadOnly(messages.ToArray());
             CompletionFeedback = completionFeedback;
+            ReflectionLimit = reflectionLimit;
+            ReflectionsUsed = reflectionsUsed;
         }
     }
 

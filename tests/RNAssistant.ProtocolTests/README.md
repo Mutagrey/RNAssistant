@@ -1,6 +1,6 @@
 # Conversation v8 protocol checks
 
-Phase-1 candidate on the `conversation-v8` worktree; owner: Core ModelProtocol.
+Production v8 codec checks; owner: Core ModelProtocol.
 This small net8/C# 7.3 runner source-links the production codec, tool schemas,
 local batch authority and message stream extractor. No Office, fake protocol
 implementation or v7 compatibility codec is included.
@@ -13,7 +13,9 @@ artifacts/protocol-v8/venv/bin/python tests/RNAssistant.ProtocolTests/validate_s
 ```
 
 The independent JSON Schema validator consumes exported **production** schemas and
-positive/negative envelopes. JSON lexical/depth failures are checked by the C#
+positive/negative logical envelopes wrapped explicitly as `{"response": ...}` for
+strict transport. Duplicate evidence is deliberately enforced by the local parser,
+not an unsupported provider keyword. JSON lexical/depth failures are checked by the C#
 parser; duplicate keys must not be flattened by the Python validator. The existing
 optional-argument transport projection is explicit: strict schema requires nullable
 optional fields, while the same local parser also permits their omission under
@@ -39,9 +41,8 @@ The standalone runner does **not** compile ModelProtocolClient's full frozen
 compiler/request loop, kernel, adapters or history reader. Repair content and
 its typed error codes are checked here; frozen-context/retry/fallback integration
 and no-replay remain required in the integrated Harness after phases 2–4.
-The phase-2 candidate compiles its host-neutral production sources through the
-[focused kernel runner](../RNAssistant.V8KernelSmoke/README.md); the full Harness
-still has unmigrated v7 test call sites. Do not merge this intermediate source
-state into main or qualify Office/restart behavior from these protocol tests.
-See the [phase-1 record](../../docs/stabilization/conversation-v8/PHASE1.md) and
-[phase-2 record](../../docs/stabilization/conversation-v8/PHASE2.md).
+Use Harness filter `v8 recovery:` for integrated strict/fallback, reflection depth,
+output-limit correction and Office/workspace live-to-durable presentation. These
+host-neutral checks do not qualify a real provider or Windows/Office/WebView2.
+`--validate` checks a logical JSON-object response; `--validate-schema` requires
+its strict transport wrapper. Endpoint probes select the matching guidance/parser.

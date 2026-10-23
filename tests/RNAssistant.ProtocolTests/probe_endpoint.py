@@ -35,19 +35,21 @@ def run(args):
     model = next(model for model in get("/api/tags")["models"] if model["name"] == args.model)
     schema = json.loads((source / "schema.json").read_text())
     guidance = (source / "guidance.txt").read_text()
+    schema_guidance = (source / "schema-guidance.txt").read_text()
     manifest = {"endpoint": BASE + "/v1/chat/completions", "started_utc": datetime.now(timezone.utc).isoformat(),
                 "endpoint_version": get("/api/version"), "model": model,
                 "base_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip(),
-                "working_tree": "uncommitted phase-1 candidate; full application not integrated",
+                "working_tree": subprocess.check_output(["git", "status", "--short"], cwd=repo, text=True).strip(),
                 "limits": "Synthetic format probes; no tool dispatch, evidence admission, Office or task-success qualification.",
                 "sources": {}, "probes": []}
     for path in [*sorted((repo / "src/RNAssistant.Core/ModelProtocol").glob("*.cs")),
                  repo / "src/RNAssistant.Core/Tools/ToolSchemaSupport.cs", Path(__file__).resolve(),
-                 source / "schema.json", source / "guidance.txt"]:
+                 source / "schema.json", source / "guidance.txt", source / "schema-guidance.txt"]:
         label = str(path.relative_to(repo)) if path.is_relative_to(repo) else path.name
         manifest["sources"][label] = hashlib.sha256(path.read_bytes()).hexdigest()
     save(output / "schema.json", schema)
     (output / "guidance.txt").write_text(guidance)
+    (output / "schema-guidance.txt").write_text(schema_guidance)
     variants = [closed({"action": {"type": "string", "const": name}, "value": {"type": "integer", "enum": [1, 2]}}) for name in ("alpha", "beta")]
     probes = [
         ("root-anyof", {"anyOf": variants}, 'Return {"action":"wrong","value":9,"extra":true}.', False, None),
@@ -61,7 +63,7 @@ def run(args):
         ("json-object", None, "Synthetic protocol test. There were no tool calls. Answer directly with finish, results=[], and message='VBA automates Office.'.", True, "finish")
     ]
     for name, constraint, prompt, envelope, expected_action in probes:
-        body = {"model": args.model, "messages": [{"role": "system", "content": guidance if envelope else "Return only JSON for this synthetic format probe."}, {"role": "user", "content": prompt}],
+        body = {"model": args.model, "messages": [{"role": "system", "content": (schema_guidance if constraint is not None else guidance) if envelope else "Return only JSON for this synthetic format probe."}, {"role": "user", "content": prompt}],
                 "max_tokens": 768, "temperature": 0, "top_p": 1, "stream": False,
                 "response_format": {"type": "json_object"} if constraint is None else {"type": "json_schema", "json_schema": {"name": "probe_" + name.replace("-", "_"), "strict": True, "schema": constraint}}}
         request_bytes = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode()
@@ -86,13 +88,13 @@ def run(args):
                 content_path = output / (name + ".content.json")
                 content_path.write_text(content)
                 value = json.loads(content)
-                errors = list(Draft202012Validator(constraint or schema).iter_errors(value))
+                errors = list(Draft202012Validator(constraint or schema).iter_errors(value if constraint is not None else {"response": value}))
                 result["schema_valid"] = not errors
                 result["schema_errors"] = [error.message for error in errors]
                 if expected_action:
-                    result["requested_action_observed"] = value.get("action") == expected_action
+                    result["requested_action_observed"] = (value.get("response", {}) if constraint is not None else value).get("action") == expected_action
                 if envelope:
-                    check = subprocess.run(["dotnet", str(repo / "tests/RNAssistant.ProtocolTests/bin/Debug/net8.0/RNAssistant.ProtocolTests.dll"), "--validate", str(content_path)], capture_output=True, text=True, cwd=repo)
+                    check = subprocess.run(["dotnet", str(repo / "tests/RNAssistant.ProtocolTests/bin/Debug/net8.0/RNAssistant.ProtocolTests.dll"), "--validate-schema" if constraint is not None else "--validate", str(content_path)], capture_output=True, text=True, cwd=repo)
                     result["parser_valid"] = check.returncode == 0
                     (output / (name + ".parser.txt")).write_text(check.stdout + check.stderr)
                 result["pass"] = result["schema_valid"] and result.get("parser_valid", True) and result.get("requested_action_observed", True)

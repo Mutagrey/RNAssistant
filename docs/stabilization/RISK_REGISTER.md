@@ -8,6 +8,104 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Conversation v8 / shared-chat incident audit — 2026-10-23
+
+**Follow-up 2026-10-24:** the baseline findings below are historical. The current
+working change fixes strict root/wire admission, configurable/proactive reflection
+budget, accepted Office handoff/reasoning, typed output truncation recovery,
+workspace accepted metadata and stable rendering, local-run preview and explicit
+read-only/unsupported history. Shared typed terminal run notices and the composer
+anchor were fixed independently in the shared-shell commits. Remaining: actual
+reported endpoint/model evidence, Windows/Office/WebView2 qualification, workspace
+paging beyond 100 messages, and live token delivery between processes. Full Office /
+workspace chat presentation parity is not claimed by these targeted repairs.
+
+
+Baseline: `7a627c44`; user reports Office reflection-limit stops, format failures,
+immediate json_schema errors and disappearing messages, with similar workspace
+symptoms. Owners and evidence below distinguish v8 regressions from older delivery
+gaps. The user's endpoint/model and failing wire trace were not available; these
+reproductions do not establish the frequency or exact cause of every reported error.
+
+- **P1 — strict provider schema (v8 / Core ModelProtocol).**
+  `ConversationResponseSchemaBuilder.Build` now returns root `anyOf` without an
+  object root; `LlmClient.BuildRequestBody` sends it unchanged with `strict=true`.
+  The v7 root was an object. This violates the documented
+  [OpenAI Structured Outputs root restriction](https://developers.openai.com/api/docs/guides/structured-outputs#root-objects-must-not-be-anyof-and-must-be-an-object).
+  Phase-1 root-union probes qualified only local Ollama, not this provider dialect.
+  Configured json_object fallback can hide the incompatibility; it cannot prove
+  strict-schema support. Next: explicit provider-compatible schema/wire design,
+  preserving local three-action validation, and actual supported-endpoint evidence.
+  Adding only `type=object` while retaining root `anyOf` does not resolve this gate.
+- **P1 — accepted reflection disappears from live Office presentation (v8 / Office
+  adapter + Web chat).** `ConversationKernelAdapter.Store.Report` emits reflection
+  with phase `thinking` and no step activity. `normalizeProgressActivity` replaces
+  its text with generic thinking and has no StepId. The next request resets live
+  content/reasoning; `app-core.js` also labels it a retry because reflection did
+  not retire the preceding attempt. Accepted provider reasoning is saved on the
+  hidden protocol message, but `ChatMessageViewDto.From` strips it and the visible
+  reflection step has no reasoning. Reproduced through ConversationRunService,
+  bridge projection and the JS event handler. Persisted decisions remain present;
+  this is a presentation loss, not proof of deleted durable history. Next: hand
+  off accepted reflection to an identified visible step before retiring its draft;
+  keep rejected drafts distinct and retain accepted display metadata on replay.
+- **P1 — terminal failure is silent in project/plugin chat (Application projection).**
+  `SubmitProjectChatAsync` returns a snapshot after a failed kernel run;
+  `WorkspaceSessionSnapshot`/`ReadState` omit the summary reason and diagnostic.
+  `statusText`/`renderChat` do not present `failed`. A browser probe with the actual
+  failed snapshot shape shows an empty notice. Next: typed terminal reason/message
+  projection shared by both consumers, including reopen, ProtocolExhausted,
+  reflection_limit and provider failure. No success may be inferred from a
+  successfully delivered bridge reply.
+- **P2 — output truncation becomes generic format repair (Core LLM transport).**
+  `LlmCompletionResult` has no finish reason; nonstream parsing discards it and
+  streaming retains only a terminal boolean. Identical partial content with
+  `finish_reason=length` versus `stop` produces identical completion objects.
+  ModelProtocol then retries invalid JSON with the same configured output limit;
+  its repair instruction contains no truncation-specific cause. This predates v8
+  and can contribute to repeated format failures, but the user's wire evidence
+  is needed to attribute their failures. Next: preserve typed termination cause
+  and provide bounded, cause-specific recovery/diagnostics without replaying tools.
+- **P2 — common chat still has separate delivery/presentation (Application/Web).**
+  Workspace `GetResponseAsync(..., null, ...)` has no progress sink; its accepted
+  messages do not retain completion reasoning. `PluginChatMessageDto` lacks stable
+  message/run/step IDs, reasoning and tool outcome detail. `ProjectChat` returns
+  only the last 100 assistant/user records without a history paging contract;
+  the workspace renderer rebuilds the transcript on a changed snapshot. One
+  physical composer/transcript container does not provide Office event/history
+  parity. Next: move these existing consumers onto one typed chat projection and
+  delivery owner, preserving exact source/session identity and paging.
+- **P2 — historical workspace rendering after v8 (Application presentation).**
+  `PresentWorkspaceMessage` parses only v8, then returns raw content for older
+  assistant envelopes. A format-7 accepted answer is displayed as JSON. Workspace
+  snapshot also lacks an execution/read-only compatibility flag. Next: an explicit
+  supported-history/read-only presentation or unsupported-format notice, without
+  migrating streams, executing v7 or adding a hidden protocol fallback.
+- **P1 — returning Project → Office throws (shared ChatView; separate pending fix).**
+  At audited HEAD, mount inserts the composer before `modelContextDialog`, which
+  is no longer a child of `chatDropZone`. Chrome reproduces `NotFoundError`.
+  Independently present uncommitted changes replace this with a composer anchor;
+  the same probe succeeds on that working copy. Keep its ownership/commit separate.
+
+**Reflection recovery itself is present.** The real Office adapter probe accepts
+two reflections, rejects the third and sends corrective feedback on request four.
+Another reflection ends with runtime `reflection_limit`; finish succeeds. An
+invalid-format fourth reply is repaired on request five with the reflection
+feedback still present. Default format allowance is 10 responses including the
+first; it is separate from the one semantic chance after reflection feedback.
+The base prompt says only “bounded”, not the remaining allowance, and feedback
+is reactive after the third response. Review proactive budget guidance and the
+bounded recovery policy; do not merely increase all limits or fabricate calls.
+
+Verification used a temporary probe against the existing host-neutral Harness
+assembly (three Office sequences, bridge/history and termination projections),
+the real JS progress handler, and Chrome preview against HEAD and the working
+copy. No product rebuild, full suite, real-provider call or Windows/Office test
+was run. `stream-render-cost.test.js` as a whole currently fails because its first
+VM fixture lacks `document`; its independent progress-handler portion passes and
+reproduces the reflection handoff defect. Previous codec/scripted green checks did
+not cover provider schema admission or accepted reflection through live UI/reopen.
+
 ## Native Host panel unavailable on startup — 2026-10-23
 
 Owner: WebView bridge/init and controller chat-state read. A Windows Native Host

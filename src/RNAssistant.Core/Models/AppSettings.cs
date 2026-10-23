@@ -202,7 +202,7 @@ namespace RNAssistant.Core.Models
 
         public const string StructuredResponseContract =
             "## Response contract\n\n" +
-            ModelProtocolWire.ActionGuidance + " " +
+            ModelProtocolWire.JsonObjectGuidance + " " +
             ModelProtocolWire.MessageGuidance + " " +
             "Pending calls are intentions. Separate interpretations from facts; do not repeat tool arguments or the full Task List in `message`. Omit private reasoning, boilerplate and invented evidence. " +
             "Titles and snippets are discovery aids, not source proof. Reuse known semantic targets; find only unknown or unresolved targets. Missing or incomplete search cannot establish absence. " +
@@ -281,12 +281,14 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 52;
+        public const int CurrentAgentPromptSchemaVersion = 53;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;
         public const int DefaultMaxAgentIterations = 256;
         public const int DefaultMaxAgentFormatRetries = 10;
+        public const int DefaultMaxConsecutiveReflections = 2;
+        public const int MaximumConsecutiveReflections = 20;
         public const int MaximumAgentFormatRetries = 20;
         public const int DefaultMaxAgentToolSteps = 4096;
         public const int DefaultAttachmentHelperMaxTokens = 0;
@@ -329,6 +331,7 @@ namespace RNAssistant.Core.Models
         // Legacy settings key: total protocol responses including the initial attempt (1–20).
         // Transport retries and the explicit schema fallback have separate budgets.
         public int MaxAgentFormatRetries { get; set; }
+        public int MaxConsecutiveReflections { get; set; }
         public int MaxAgentToolSteps { get; set; }
         public bool AutoCompressContext { get; set; }
         public bool DebugModelTraffic { get; set; }
@@ -406,6 +409,7 @@ namespace RNAssistant.Core.Models
             SmartChatTitles = true;
             MaxAgentIterations = DefaultMaxAgentIterations;
             MaxAgentFormatRetries = DefaultMaxAgentFormatRetries;
+            MaxConsecutiveReflections = DefaultMaxConsecutiveReflections;
             MaxAgentToolSteps = DefaultMaxAgentToolSteps;
             AutoCompressContext = true;
             DebugModelTraffic = false;

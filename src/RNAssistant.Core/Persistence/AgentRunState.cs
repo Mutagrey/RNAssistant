@@ -25,7 +25,7 @@ namespace RNAssistant.Core.Persistence
                 !string.Equals(inFlightTool.TurnId, summary.TurnId, StringComparison.Ordinal)))
                 throw new ArgumentException("In-flight execution belongs to another run.");
             InFlightTool = inFlightTool;
-            if (consecutiveReflections < 0 || consecutiveReflections > 2)
+            if (consecutiveReflections < 0 || consecutiveReflections > limits.MaxConsecutiveReflections)
                 throw new ArgumentOutOfRangeException(nameof(consecutiveReflections));
             ConsecutiveReflections = consecutiveReflections;
             ReflectionFeedbackIssued = reflectionFeedbackIssued;

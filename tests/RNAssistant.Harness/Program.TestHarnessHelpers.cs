@@ -77,6 +77,22 @@ namespace RNAssistant.Harness
             return new ChatConversationStoreAdapter(store);
         }
 
+        private static JObject SchemaTransport(JObject logical)
+        { return new JObject { ["response"] = logical.DeepClone() }; }
+
+        // Behavior fixtures script logical decisions. Transport-specific tests call
+        // ModelProtocolClient directly and must supply their actual wire bytes.
+        private static async Task<LlmCompletionResult> FixtureCompletion(LlmCompletionDelegate completion,
+            AppSettings settings, IEnumerable<ChatMessage> messages, LlmRequestOptions options,
+            Action<LlmStreamUpdate> stream, CancellationToken token)
+        {
+            var result = await completion(settings, messages, options, stream, token);
+            if (result != null && result.Content != null && options?.ResponseFormat == LlmResponseFormats.JsonSchema &&
+                options.ResponseSchemaName == ConversationResponseSchemaBuilder.SchemaName)
+                result.Content = "{\"response\":" + result.Content + "}";
+            return result;
+        }
+
         private static ConversationRunService CreateConversationRunService(IOfficeApplicationAdapter adapter,
             OfficeToolExecutor executor, LlmCompletionDelegate completion, ContextCompactionService compaction = null,
             Func<IMaterializedModelProtocol> modelProtocolFactory = null)
@@ -88,7 +104,7 @@ namespace RNAssistant.Harness
                 executor,
                 ConversationStore(store),
                 EventStore(store),
-                completion,
+                (settings, messages, options, stream, token) => FixtureCompletion(completion, settings, messages, options, stream, token),
                 compaction,
                 modelProtocolFactory);
         }

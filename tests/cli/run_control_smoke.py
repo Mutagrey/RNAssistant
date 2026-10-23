@@ -2,6 +2,8 @@
 
 This verifies runtime semantics, not real-model quality or Office delivery.
 """
+from conversation_transport import conversation_content
+
 import json
 import os
 import subprocess
@@ -71,7 +73,7 @@ def run_case(root):
                     response = finish_response(request)
                 entered.set()
                 assert released.wait(30), "Fixture did not release model wait"
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
+                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(request, response)}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))

@@ -139,7 +139,7 @@ namespace RNAssistant.Harness
                 new ContextMessagePresentation { SourceMessageId = accepted[0].Id, MessageIndex = 0,
                     Role = accepted[0].Role, Presentation = ContextPresentationKind.Full } } };
             var driftedSchema = JObject.Parse(options.ResponseSchemaJson);
-            driftedSchema.SelectToken("anyOf[0].properties.tool_calls.items.anyOf[0].properties.name.const")
+            driftedSchema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.name.const")
                 .Replace(new JValue("different.tool"));
             AssertTrue(ReferenceEquals(accepted, ConversationPromptComposer.ProjectJsonSchemaMessages(
                 accepted, tools, driftedSchema.ToString(Newtonsoft.Json.Formatting.None))),
@@ -201,7 +201,9 @@ namespace RNAssistant.Harness
                 "provenance follows the serialized strict, repair and fallback attempts");
             AssertEqual(ContextPresentationKind.Full, options.TraceContextReceipt.Messages[0].Presentation,
                 "wire attribution does not mutate the frozen compiler receipt");
-            AssertEqual(repairMessages[1], repairMessages[2], "fallback reuses the exact repair message");
+            AssertEqual(repairMessages[1], ModelProtocolWire.ProjectSchemaGuidance(new[] {
+                new ChatMessage { Role = "user", ProtocolMessage = true, Content = repairMessages[2] } })[0].Content,
+                "fallback restores full format guidance on the same repair instruction");
             AssertContains(wirePrompts[0], "\"description\"", "strict prompt retains descriptions");
             AssertContains(wirePrompts[0], "\"safety\"", "strict prompt retains safety policy");
             AssertContains(wirePrompts[0], "\"office_tool_policy\"", "strict prompt retains document policy");
@@ -317,6 +319,7 @@ namespace RNAssistant.Harness
                                 ? ConversationPromptComposer.ProjectJsonSchemaMessages(compiled, callable,
                                     options.ResponseSchemaJson)
                                 : compiled;
+                            if (mode == AgentResponseModes.JsonSchema) wireMessages = ModelProtocolWire.ProjectSchemaGuidance(wireMessages);
                             var api = new LlmMessageBuilder().Build(wireMessages, settings, options);
                             var body = LlmClient.BuildRequestBody(settings, api.Messages, api.EstimatedPromptTokens,
                                 options);
@@ -336,6 +339,13 @@ namespace RNAssistant.Harness
                             data.Close(session.Id, ModelContextInspectorService.Owner, opened.Data.LeaseId);
                             AssertTrue(bytes.SequenceEqual(retained), "inspector returns exact materialized HTTP bytes");
                             requestSizes[mode] = retained.Length;
+                            if (mode == AgentResponseModes.JsonSchema) {
+                                var duplicateApi = new LlmMessageBuilder().Build(compiled, settings, options);
+                                var duplicateBody = LlmClient.BuildRequestBody(settings, duplicateApi.Messages, duplicateApi.EstimatedPromptTokens, options);
+                                AssertTrue(retained.Length < LlmHttpTransport.SerializeJson(duplicateBody).Length,
+                                    "strict projection removes duplicated contracts while retaining argument semantics");
+                                AssertTrue(!wireMessages[0].Content.Contains("TOOL_NAME"), "strict prompt omits shape examples");
+                            }
                             var exact = JObject.Parse(Encoding.UTF8.GetString(retained));
                             var messagesBytes = LlmHttpTransport.SerializeJson(new JObject { ["messages"] = exact["messages"].DeepClone() }).Length -
                                 Encoding.UTF8.GetByteCount("{\"messages\":}");
@@ -363,8 +373,9 @@ namespace RNAssistant.Harness
                                 " sectionTokens=" + string.Join(",", new[] { toolsBytes, schemaBytes,
                                     otherMessagesBytes, otherFieldsBytes }.Select(size => (size + 3) / 4)));
                         }
-                        AssertTrue(requestSizes[AgentResponseModes.JsonSchema] < requestSizes[AgentResponseModes.JsonObject],
-                            "representative strict request is smaller than fallback-ready json_object request");
+                        // Strict required/null alternatives may cost more bytes than
+                        // json_object; the invariant is no duplicate argument contract,
+                        // with semantic descriptions retained in the supplied schema.
                     }
                 }
             });

@@ -137,6 +137,13 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class PluginChatMessageDto
     {
+        [JsonProperty("id")] public string Id { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("reasoningContent", NullValueHandling = NullValueHandling.Ignore)] public string ReasoningContent { get; set; }
+        [JsonProperty("reasoningTokens", NullValueHandling = NullValueHandling.Ignore)] public int? ReasoningTokens { get; set; }
+        [JsonProperty("reasoningTruncated")] public bool ReasoningTruncated { get; set; }
+        [JsonProperty("activity", NullValueHandling = NullValueHandling.Ignore)] public ChatActivity Activity { get; set; }
         [JsonProperty("role")] public string Role { get; set; }
         [JsonProperty("text")] public string Text { get; set; }
         [JsonProperty("actions")] public IReadOnlyList<string> Actions { get; set; }

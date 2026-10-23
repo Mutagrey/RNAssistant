@@ -537,13 +537,21 @@ if (window.chrome && window.chrome.webview) {
       }
       if (isChatProgress) {
         var activityPhase = String(progress.phase || "").toLowerCase();
-        if ((activityPhase === "acting" || activityPhase === "tool_running") && progressChatId) {
+        var acceptedStepReasoning = null;
+        if ((activityPhase === "acting" || activityPhase === "reflection") && progressChatId) {
+          var acceptedRun = state.chatRuns[progressChatId];
+          acceptedStepReasoning = { ReasoningContent: acceptedRun.reasoning || "" };
+          acceptedRun.reasoning = ""; acceptedRun.reasoningComplete = false;
+          if (progressChatId === state.activeChatId) resetLiveReasoning();
+        }
+        if ((activityPhase === "acting" || activityPhase === "reflection" || activityPhase === "tool_running") && progressChatId) {
           state.chatRuns[progressChatId].stream = "";
           state.chatRuns[progressChatId].modelAttemptActive = false;
           state.chatRuns[progressChatId].streamRetrying = false;
           if (progressChatId === state.activeChatId) state.liveStreamContent = null;
         }
         var normalizedActivity = normalizeProgressActivity(progress);
+        if (acceptedStepReasoning) normalizedActivity.__reasoningMessage = acceptedStepReasoning;
         var storedActivity = recordChatRunActivityState(progressChatId, normalizedActivity);
         if (progressChatId === state.activeChatId) {
           state.liveActivity = storedActivity || normalizedActivity;

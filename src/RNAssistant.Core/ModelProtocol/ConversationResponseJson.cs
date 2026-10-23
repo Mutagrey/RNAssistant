@@ -14,7 +14,7 @@ namespace RNAssistant.Core.ModelProtocol
             @"\A(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\z",
             RegexOptions.CultureInvariant);
 
-        internal static ConversationResponseParseResult Read(string content)
+        internal static ConversationResponseParseResult Read(string content, bool schemaTransport = false)
         {
             var raw = (content ?? string.Empty).Trim(' ', '\t', '\r', '\n');
             if (!raw.StartsWith("{", StringComparison.Ordinal) || !raw.EndsWith("}", StringComparison.Ordinal))
@@ -45,6 +45,13 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidJson, "Conversation response is invalid JSON: " + ex.Message);
             }
 
+            if (schemaTransport)
+            {
+                if (root.Properties().Count() != 1 || !(root["response"] is JObject))
+                    return Fail(ConversationResponseError.InvalidJson,
+                        "json_schema transport requires exactly one root field response containing the v8 object.");
+                root = (JObject)root["response"];
+            }
             var action = root["action"] != null && root["action"].Type == JTokenType.String ? (string)root["action"] : null;
             string specialized;
             switch (action)

@@ -62,7 +62,8 @@ def model_digest(origin, model):
 
 def response_action(body):
     envelope, usage = response_envelope(body)
-    return (envelope.get("action") if isinstance(envelope, dict) else None), usage
+    logical = envelope.get("response", envelope) if isinstance(envelope, dict) else envelope
+    return (logical.get("action") if isinstance(logical, dict) else None), usage
 
 
 def response_envelope(body):
@@ -107,7 +108,8 @@ def apply_request_policy(body, policy):
                                     "Benchmark ablation: omit the root reason field from every response." if no_reason else
                                     "Benchmark policy: reflection is unavailable. Choose execute or finish."})
         return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    branches = schema.get("anyOf")
+    decision_schema = schema.get("properties", {}).get("response", schema)
+    branches = decision_schema.get("anyOf")
     if not isinstance(branches, list):
         return body
     if no_reason:
@@ -142,7 +144,7 @@ def apply_request_policy(body, policy):
                 if branch["properties"]["action"].get("const") != "reflection"]
     if len(branches) - len(selected) != 1 or len(selected) < 1:
         raise ValueError("Expected exactly one reflection branch in v8 schema")
-    schema["anyOf"] = selected
+    decision_schema["anyOf"] = selected
     return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
@@ -150,12 +152,14 @@ def apply_response_policy(body, policy):
     if policy != "no_reason_schema":
         return body
     envelope, _usage = response_envelope(body)
+    wrapped = isinstance(envelope, dict) and "response" in envelope
+    if wrapped: envelope = envelope["response"]
     if not isinstance(envelope, dict) or envelope.get("action") not in ("execute", "reflection", "finish"):
         return body
     translated = {"action": envelope["action"],
                   "reason": "Benchmark transport placeholder; no model reason was requested."}
     translated.update({key: value for key, value in envelope.items() if key not in ("action", "reason")})
-    content = json.dumps(translated, ensure_ascii=False, separators=(",", ":"))
+    content = json.dumps({"response": translated} if wrapped else translated, ensure_ascii=False, separators=(",", ":"))
     if not body.startswith(b"data:"):
         response = json.loads(body)
         response["choices"][0]["message"]["content"] = content
@@ -309,6 +313,8 @@ def run_case(name, dll, task_name, task, output, origin, model):
                        if (captures / ("%04d.upstream_response.body" % item["index"])).exists()
                        else (captures / ("%04d.response.body" % item["index"])).read_bytes())[0]
                        for item in http if item["path"].startswith("/v1/chat/completions")]
+    responses = [item.get("response", item) if isinstance(item, dict) else item for item in responses]
+    upstream_responses = [item.get("response", item) if isinstance(item, dict) else item for item in upstream_responses]
     proposed_calls = [call for item in responses if isinstance(item, dict) and item.get("action") in ("execute", "tool")
                       for call in item.get("tool_calls", []) if isinstance(call, dict)]
     signatures = [json.dumps(call, sort_keys=True, ensure_ascii=False) for call in proposed_calls]

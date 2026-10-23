@@ -1,5 +1,14 @@
 # RNAssistant Harness
 
+`v8 recovery:` checks configurable/frozen reflection depth, separate format retries,
+strict response transport, bounded output truncation, accepted reasoning after
+persisted reopen, and workspace live/saved presentation. Run
+`node tests/web/stream-render-cost.test.js`, `node tests/web/workspace-chat-v8.test.js`
+and `node tests/web/workspace-chat-progress.test.js` for the corresponding UI paths;
+the last uses Playwright and optional `BROWSER_EXECUTABLE`. Scripted CLI coverage is
+`tests/cli/conversation_v8_finish_smoke.py` and `tests/cli/response_mode_smoke.py`.
+These checks do not qualify a real provider or Windows/Office/WebView2.
+
 Data Templates is an independent source project in `web/data-templates`.
 `node tests/web/data-templates-export.test.js` checks exported closure/hashes,
 source tests, file-origin UI/extraction/download, and static-origin XLSX Worker

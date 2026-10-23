@@ -63,6 +63,19 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("interruptedEffectPossible")] public bool? InterruptedEffectPossible { get; set; }
         [JsonProperty("messageCount")] public int MessageCount { get; set; }
         public WorkspaceRunPresentation Presentation { get; set; }
+        [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceModelProgress ModelProgress { get; set; }
+    }
+
+    // Transient preview, scoped to one live attempt. Never durable history or authority.
+    public sealed class WorkspaceModelProgress
+    {
+        public string RunId { get; set; }
+        public string StepId { get; set; }
+        public string AttemptId { get; set; }
+        public string Message { get; set; }
+        public string Reasoning { get; set; }
+        public bool ReasoningTruncated { get; set; }
+        public bool Retrying { get; set; }
     }
 
     public sealed class WorkspaceOfficeContext

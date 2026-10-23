@@ -3,6 +3,8 @@
 Uses a controlled HTTP endpoint with structured compaction claims. It qualifies
 production runtime invariants, not summarization quality of a real model.
 """
+from conversation_transport import conversation_content
+
 import json
 import os
 import subprocess
@@ -124,7 +126,7 @@ def run_case(root, recover):
                     else:
                         assert phase["after"] == 5 and read_progress(request)["remainingCompleteFileReads"] == 0
                         response = finish(request)
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
+                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(request, response)}}]}).encode()
                 self.send_response(200); self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):

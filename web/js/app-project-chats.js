@@ -160,12 +160,12 @@
     if (!ownsView()) return;
     if (composer) {
       composer.select({ workspaceId: projectId(), sessionId: currentId() }, active && active.state);
-      composer.lock(busy || uploadingFiles || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
+      composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
     }
 
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
     el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
-    el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
+    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
     var visibleFile = fileNotice && fileNotice.target.workspaceId === projectId() && fileNotice.target.sessionId === currentId();
     el("FileStatus").textContent = visibleFile ? fileNotice.message : "";
     el("FileStatus").classList.toggle("is-error", !!(visibleFile && fileNotice.error));
@@ -390,7 +390,7 @@
     });
     window.RNAssistantWorkspaceChat.registerActions("project", {
       input: function () {
-        el("Send").disabled = busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
+        el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
       },
       submit: function () {
         var text = el("Input").value.trim(); if (!text || el("Send").disabled || !active || uploadingFiles) return;

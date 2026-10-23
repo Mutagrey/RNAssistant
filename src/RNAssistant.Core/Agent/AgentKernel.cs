@@ -93,12 +93,12 @@ namespace RNAssistant.Core.Agent
             if (state.Progress.RecoveryIgnored)
                 return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
                     "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
-            string completionFeedback = state.ReflectionFeedbackIssued ? ReflectionFeedback : null;
+            string completionFeedback = state.ReflectionFeedbackIssued ? ReflectionLimitFeedback(state) : null;
             while (state.Iterations < state.Limits.MaxIterations)
             {
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
-                await TakeInputAsync(state, cancellationToken).ConfigureAwait(false);
+                if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false)) completionFeedback = null;
                 state.Iterations++;
                 var stepId = state.RunId + ":" + state.Iterations;
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ModelStepStarted, state.Summary(), stepId)).ConfigureAwait(false);
@@ -111,7 +111,8 @@ namespace RNAssistant.Core.Agent
                         _input == null ? CancellationToken.None : _input.InterruptToken))
                         model = await _model.SendAsync(new AgentModelRequest(state.RunId, state.TurnId, stepId,
                             state.Messages, completionFeedback ?? (state.Progress.InspectionRequired
-                                ? ModelProtocolWire.UnknownEffectGuidance : null)), requestCancellation.Token).ConfigureAwait(false);
+                                ? ModelProtocolWire.UnknownEffectGuidance : null), state.Limits.MaxConsecutiveReflections,
+                            state.ConsecutiveReflections), requestCancellation.Token).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -170,10 +171,10 @@ namespace RNAssistant.Core.Agent
                     if (state.ReflectionFeedbackIssued)
                         return await FinishAsync(state, RunLifecycle.Failed, "reflection_limit",
                             "Reflection limit reached without a new tool result or user input.").ConfigureAwait(false);
-                    if (state.ConsecutiveReflections >= 2)
+                    if (state.ConsecutiveReflections >= state.Limits.MaxConsecutiveReflections)
                     {
                         state.ReflectionFeedbackIssued = true;
-                        completionFeedback = ReflectionFeedback;
+                        completionFeedback = ReflectionLimitFeedback(state);
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                             state.Summary(reason: "reflection_limit_feedback", message: completionFeedback), stepId)).ConfigureAwait(false);
                         continue;
@@ -251,16 +252,21 @@ namespace RNAssistant.Core.Agent
             return await FinishAsync(state, RunLifecycle.Failed, "iteration_limit", "Model iteration limit reached.").ConfigureAwait(false);
         }
 
-        private const string ReflectionFeedback =
-            "reflection_limit_feedback: Two reflections were already accepted without a new terminal result or user input. Choose execute or finish next; another reflection ends the run.";
-
-        private async Task TakeInputAsync(State state, CancellationToken token)
+        private static string ReflectionLimitFeedback(State state)
         {
-            if (_input == null) return;
+            return "reflection_limit_feedback: The allowance of " + state.Limits.MaxConsecutiveReflections +
+                " consecutive reflections is exhausted. The last reflection was not accepted. Choose execute or finish now; another reflection ends the run. " +
+                "Format repairs and provider retries do not consume reflection depth. Do not invent a tool call or report unverified work as complete.";
+        }
+
+        private async Task<bool> TakeInputAsync(State state, CancellationToken token)
+        {
+            if (_input == null) return false;
             var messages = await _input.TakeInputAsync(token).ConfigureAwait(false);
             if (messages.Count > 0) { state.ConsecutiveReflections = 0; state.ReflectionFeedbackIssued = false; }
             foreach (var message in messages)
                 state.Messages.Add(message);
+            return messages.Count > 0;
         }
 
         private AgentResponse AssignCallIds(State state, AgentResponseDraft response, string sourceModelAttemptId)

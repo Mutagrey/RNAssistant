@@ -2,12 +2,12 @@
 
 Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
 Response protocol is 8, new chat stream format is 8, and built-in prompt
-schema is 52. Formats 6 and 7 remain readable history; neither gains v8
+schema is 53. Formats 6 and 7 remain readable history; neither gains v8
 execution authority or is rewritten/deleted automatically.
 
 ## Model envelope
 
-The model returns one raw JSON object with fields in this order: `action`,
+In `json_object` mode the model returns one raw JSON object with fields in this order: `action`,
 `reason`, action-specific fields, `message` last. `reason` is a short decision
 basis, not private reasoning. `message` is user-facing text and may be empty.
 No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
@@ -27,19 +27,36 @@ discovery calls need not all be cited.
 
 `ModelProtocolWire` owns the canonical action/message/escaping guidance,
 writer and format repair. Default Agent, Chat, Plan, Office editable-prompt
-composition and Workspace/CLI use it. The root `anyOf` schema is a closed
-union of the three forms. `json_schema` and `json_object` both receive local
-parser and kernel validation; a provider schema is never the authority for
-execution. Strict schema rejection may fall back to `json_object` under the
-configured policy without accepting a different logical response shape.
+composition and Workspace/CLI use it. `json_schema` uses an explicit transport
+wrapper: `{"response": <v8 decision>}`. Its root is a closed object with the one
+required `response` property; the three-way `anyOf` lives inside that property.
+Strict parsing requires the wrapper and unwraps it exactly once. Accepted history
+keeps the inner v8 decision; raw traffic diagnostics keep the actual transport.
+`json_object` uses the unwrapped decision. A configured, explicit provider fallback
+switches both parsing and prompt guidance to that unwrapped transport. Neither mode
+bypasses local parser/evidence/kernel validation; duplicate evidence IDs are checked
+locally rather than through an unsupported `uniqueItems` keyword.
+
+JSON-object prompts include three short shape examples and exact argument schemas.
+Strict prompts retain action/evidence/permission semantics without repeating the
+format examples or tool argument schemas. Argument descriptions stay in the supplied
+schema; schema types alone do not explain their meaning. Both full and projected
+prompts belong to the same frozen request, including repair and fallback.
 
 ## Admission, persistence and presentation
 
 Kernel accepts `execute` calls before dispatch and pins their runtime ID,
 step and model-attempt origin. Reflection is persisted as a no-call accepted
-decision; at most two consecutive reflections are accepted, then bounded
-feedback and a terminal limit apply. Terminal tool results reset the
-consecutive reflection counter. Confirmation, restart and continuation keep
+decision. Settings → Agent → **Глубина рефлексии** (`MaxConsecutiveReflections`,
+CLI `--max-reflections`) accepts 0–20, default 2; 0 disables reflection acceptance.
+The value is frozen in the run limits, including restart/confirmation. Only accepted
+reflection decisions increment it. Terminal tool results and fresh user input reset
+it. `REFLECTION_BUDGET` tells the model the remaining allowance before every step;
+at zero it requests `execute` or an honest `finish`. An additional valid reflection
+is rejected with one semantic correction opportunity; another reflection then ends
+with `reflection_limit`. Format repair, provider retries and schema fallback do not
+spend this allowance or that semantic opportunity. The separate overall iteration
+limit still bounds model steps; no extra step is granted beyond it. Confirmation, restart and continuation keep
 the same run ID, limits and accepted-call identities; a confirmation cannot
 claim a continuation under a new run ID.
 
@@ -57,7 +74,10 @@ workspace acceptance and no-replay rules still apply.
 `results/assessment` are shown as claims with exact evidence IDs, never as
 runtime proof. The separate visible reflection activity is excluded from model
 context; its accepted protocol record retains the decision and attempt origin
-as model history. Ordinary completed answers need no service card; partial,
+as model history. The visible step retains accepted provider reasoning; an execute
+response stores that metadata on its first visible tool activity, once per batch. A typed
+reflection progress handoff retires the provisional attempt before the next one;
+rejected drafts are never promoted into accepted history. Ordinary completed answers need no service card; partial,
 unverified and unsatisfied claims receive a separate notice. The run journal
 retains the exact accepted wire and tool-result correlation.
 Model-context replay sanitizes runtime identifiers from accepted `reason` and
@@ -77,3 +97,22 @@ an index reset cannot start a second batch before the preceding results.
 Format-7 chats are read-only after this cutover; no v7 inference,
 dual-write or automatic migration is allowed. Windows x64 + Office x64 +
 WebView2 and real-model qualification remain open.
+
+## Output-token termination and workspace delivery
+
+The LLM parser preserves typed termination for both JSON and SSE. `length` never
+accepts even apparently complete tool JSON. ModelProtocol gives one short-response
+correction inside the configured format-attempt budget, without increasing token
+settings. Repeated truncation ends as `OutputTruncated` with an actionable diagnostic.
+No proposed call from either truncated response is dispatched.
+
+Workspace messages retain accepted reasoning/usage and stable message/run identities.
+Project/plugin snapshots expose typed run state, explicit read-only compatibility,
+and safe activity fields. Unsupported historical protocol bodies are skipped visibly
+without changing the source record. The renderer retains unchanged message nodes.
+While a run belongs to the current process, snapshots also expose a bounded transient
+message/reasoning preview scoped to its run, step and attempt. Accepted/terminal facts
+retire that preview; it is never a durable store or execution authority. CLI receives
+these progress events through its callback. A desktop attached to a run in another
+process still sees persisted progress; cross-process token streaming and history
+paging beyond the existing 100-message window remain separate open delivery work.

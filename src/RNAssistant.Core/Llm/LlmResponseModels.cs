@@ -8,8 +8,11 @@ namespace RNAssistant.Core.Llm
         public string ArgumentsJson { get; set; }
     }
 
+    public enum LlmCompletionTermination { Unspecified, Completed, OutputLimit, Filtered, Other }
+
     public sealed class LlmCompletionResult
     {
+        public LlmCompletionTermination Termination { get; set; }
         public string Content { get; set; }
         public string RefusalContent { get; set; }
         public string ReasoningContent { get; set; }

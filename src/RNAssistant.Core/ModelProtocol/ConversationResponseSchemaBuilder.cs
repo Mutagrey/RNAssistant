@@ -28,7 +28,7 @@ namespace RNAssistant.Core.ModelProtocol
                 options.Add(ClosedObject(new JObject
                 {
                     ["name"] = new JObject { ["type"] = "string", ["const"] = tool.Id },
-                    ["arguments"] = ToolSchemaSupport.ForStructuredOutput(parameters)
+                    ["arguments"] = ToolSchemaSupport.ForStructuredOutput(parameters, keepDescriptions: true)
                 }));
             }
             var branches = new JArray();
@@ -49,7 +49,7 @@ namespace RNAssistant.Core.ModelProtocol
                     ["summary"] = NonblankString(),
                     ["evidence"] = new JObject
                     {
-                        ["type"] = "array", ["items"] = NonblankString(), ["uniqueItems"] = true,
+                        ["type"] = "array", ["items"] = NonblankString(),
                         ["description"] = "Exact runtime tool_call_id references to terminal results of this run; never invented IDs."
                     },
                     ["assessment"] = new JObject
@@ -59,11 +59,12 @@ namespace RNAssistant.Core.ModelProtocol
                     }
                 })
             }));
-            return new JObject
+            // Structured Outputs requires an object root; the closed action union
+            // lives inside an explicit transport envelope, never a permissive root.
+            return ClosedObject(new JObject
             {
-                ["description"] = "Conversation response v8. " + ModelProtocolWire.ActionGuidance,
-                ["anyOf"] = branches
-            }.ToString(Formatting.None);
+                ["response"] = new JObject { ["anyOf"] = branches }
+            }).ToString(Formatting.None);
         }
 
         private static JObject Branch(string action, string field, JObject schema)
@@ -71,7 +72,7 @@ namespace RNAssistant.Core.ModelProtocol
             return ClosedObject(new JObject
             {
                 ["action"] = new JObject { ["type"] = "string", ["const"] = action },
-                ["reason"] = NonblankString(),
+                ["reason"] = new JObject(NonblankString()) { ["description"] = "Brief decision basis, not private reasoning." },
                 [field] = schema,
                 ["message"] = new JObject { ["type"] = "string", ["description"] = ModelProtocolWire.MessageGuidance }
             });

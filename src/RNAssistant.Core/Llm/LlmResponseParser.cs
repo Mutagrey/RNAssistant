@@ -63,7 +63,8 @@ namespace RNAssistant.Core.Llm
                 throw new InvalidOperationException("LLM response has no choices[0].message.");
             }
 
-            return BuildCompletionResult(message, parsed["usage"] as JObject);
+            return BuildCompletionResult(message, parsed["usage"] as JObject,
+                ReadStringToken(parsed.SelectToken("choices[0].finish_reason"), "choices[0].finish_reason"));
         }
 
         private static void ThrowIfProviderError(JObject payload)
@@ -275,6 +276,7 @@ namespace RNAssistant.Core.Llm
             private readonly Action<LlmStreamUpdate> _progress;
             private readonly ThinkStreamSplitter _thinkSplitter;
             private JObject _usage;
+            private string _finishReason;
             private bool _reasoningTruncated;
             private bool _embeddedReasoningTruncated;
             private bool _embeddedProgressReported;
@@ -309,6 +311,7 @@ namespace RNAssistant.Core.Llm
                 if (!string.IsNullOrWhiteSpace(finishReason))
                 {
                     TerminalFinishReasonObserved = true;
+                    _finishReason = finishReason;
                 }
 
                 var delta = chunk.SelectToken("choices[0].delta") as JObject;
@@ -349,7 +352,7 @@ namespace RNAssistant.Core.Llm
                     ["reasoning_content"] = reasoning,
                     ["refusal"] = _refusal.ToString()
                 };
-                var result = BuildCompletionResult(message, _usage);
+                var result = BuildCompletionResult(message, _usage, _finishReason);
                 result.ReasoningTruncated = _reasoning.Length > 0
                     ? _reasoningTruncated
                     : _embeddedReasoningTruncated;
@@ -606,7 +609,7 @@ namespace RNAssistant.Core.Llm
             return ReadInt(details, "reasoning_tokens") ?? ReadInt(usage, "reasoning_tokens");
         }
 
-        private static LlmCompletionResult BuildCompletionResult(JObject message, JObject usage)
+        private static LlmCompletionResult BuildCompletionResult(JObject message, JObject usage, string finishReason)
         {
             var content = ReadAssistantContent(message);
             string embeddedReasoning;
@@ -622,6 +625,10 @@ namespace RNAssistant.Core.Llm
             }
             return new LlmCompletionResult
             {
+                Termination = string.IsNullOrWhiteSpace(finishReason) ? LlmCompletionTermination.Unspecified :
+                    finishReason == "length" ? LlmCompletionTermination.OutputLimit :
+                    finishReason == "stop" ? LlmCompletionTermination.Completed :
+                    finishReason == "content_filter" ? LlmCompletionTermination.Filtered : LlmCompletionTermination.Other,
                 Content = content,
                 RefusalContent = ReadRefusalContent(message),
                 ReasoningContent = providerReasoning.Length > 0 ? providerReasoning : embeddedReasoning,

@@ -306,7 +306,7 @@ namespace RNAssistant.Harness
                 var repaired = (JArray)requests[1]["messages"];
                 AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
                 AssertContains((string)repaired.Last()["content"], "FORMAT_REPAIR:", "unsupported continue receives protocol repair");
-                AssertContains((string)repaired.Last()["content"], ModelProtocolWire.ActionGuidance, "repair carries the shared control contract");
+                AssertContains((string)repaired.Last()["content"], responseMode == AgentResponseModes.JsonSchema ? ModelProtocolWire.SchemaGuidance : ModelProtocolWire.ActionGuidance, "repair carries the shared control contract");
                 var repairBody = JObject.Parse(((string)repaired.Last()["content"]).Substring("FORMAT_REPAIR:\n".Length));
                 AssertContains((string)repairBody["instruction"], ModelProtocolWire.MessageGuidance, "repair does not reintroduce per-call narration");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("I will continue.")),
@@ -314,13 +314,12 @@ namespace RNAssistant.Harness
                 if (responseMode == AgentResponseModes.JsonSchema)
                 {
                     AssertTrue(JToken.DeepEquals(new JArray("execute", "reflection", "finish"),
-                        new JArray(requests[0].SelectTokens("response_format.json_schema.schema.anyOf[*].properties.action.const"))),
+                        new JArray(requests[0].SelectTokens("response_format.json_schema.schema.properties.response.anyOf[*].properties.action.const"))),
                         "schema exposes exactly the three v8 actions");
                     AssertEqual(ModelProtocolWire.MessageGuidance,
-                        (string)requests[0].SelectToken("response_format.json_schema.schema.anyOf[0].properties.message.description"),
+                        (string)requests[0].SelectToken("response_format.json_schema.schema.properties.response.anyOf[0].properties.message.description"),
                         "actual strict wire shares optional progress guidance with repair and defaults");
-                    AssertContains((string)requests[0].SelectToken("response_format.json_schema.schema.description"),
-                        ModelProtocolWire.ActionGuidance, "actual strict wire shares the completion decision rules");
+                    AssertContains(original.ToString(), "response property contains", "strict wire explains its transport envelope");
                 }
                 var completed = service.ExecuteAsync(ChatModes.Agent, "Используй Markdown.", session, NewContext(adapter), settings, catalog, null)
                     .GetAwaiter().GetResult();

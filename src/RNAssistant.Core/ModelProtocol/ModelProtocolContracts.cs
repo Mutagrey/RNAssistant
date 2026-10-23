@@ -39,7 +39,7 @@ namespace RNAssistant.Core.ModelProtocol
     // preserves the existing provisional preview; it is never accepted history.
     public sealed class ModelProtocolProgress
     {
-        public Action<bool> AttemptStarted { get; set; }
+        public Action<bool, bool> AttemptStarted { get; set; }
         public Action<LlmStreamUpdate> StreamUpdate { get; set; }
         public Action AttemptCompleted { get; set; }
         public Action JsonObjectFallback { get; set; }
@@ -49,6 +49,7 @@ namespace RNAssistant.Core.ModelProtocol
     public enum ModelProtocolFailureKind
     {
         ProtocolExhausted,
+        OutputTruncated,
         PromptBudgetExceeded,
         Provider,
         Cancelled,

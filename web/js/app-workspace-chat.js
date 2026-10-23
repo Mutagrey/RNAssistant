@@ -112,7 +112,9 @@
     if (sessionId) selectedSessions.set(workspaceId, sessionId); else selectedSessions.delete(workspaceId);
   }
   function field(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
+  function readOnly(snapshot) { return !!field(field(snapshot, "state"), "readOnly"); }
   function runNotice(snapshot) {
+    if (readOnly(snapshot)) return { title: "Чат доступен только для чтения", text: "Старый протокол. Создайте новый чат для продолжения.", warning: false };
     var state = field(snapshot, "state");
     return window.RNAssistantRunViewState.runNotice(
       window.RNAssistantRunViewState.normalize(field(state, "runViewState")));
@@ -191,19 +193,43 @@
   function renderMessages(list, chat) {
     var key = JSON.stringify([field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
-    var signature = JSON.stringify(chat.messages || []);
+    var snapshot = field(chat, "state"), live = field(snapshot, "modelProgress");
+    if (field(snapshot, "status") !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
+    var signature = JSON.stringify([chat.messages || [], live]);
     if (!changed && list._chatSignature === signature) return;
     var expanded = new Set(Array.from(list.querySelectorAll("details[open][data-message-key]")).map(function (item) { return item.dataset.messageKey; }));
     var scroll = list.scrollTop;
-    list.replaceChildren(); list.dataset.session = key; list._chatSignature = signature;
+    if (changed) { list.replaceChildren(); list._workspaceEntries = Object.create(null); }
+    list.dataset.session = key; list._chatSignature = signature;
+    var previous = list._workspaceEntries || Object.create(null), next = Object.create(null), ordered = [];
     var visible = (chat.messages || []).filter(function (message) {
       return !!(message.text || "").trim() || !!message.reflectionDecision ||
-        !!(message.actions && message.actions.length) || !!(message.results && message.results.length);
+        !!(message.actions && message.actions.length) || !!(message.results && message.results.length) || !!message.reasoningContent || !!message.activity;
     });
-    if (!visible.length) list.appendChild(renderChatEmptyState({ title: "С чего начнём?",
-      text: "Опишите изменение плагина или задайте вопрос об исходниках." }));
+    if (!visible.length) {
+      var empty = previous.empty || { signature: "empty", nodes: [renderChatEmptyState({ title: "С чего начнём?",
+        text: "Опишите изменение плагина или задайте вопрос об исходниках." })] };
+      next.empty = empty; ordered.push.apply(ordered, empty.nodes);
+    }
     visible.forEach(function (message, index) {
-      if (message.reflectionDecision) list.appendChild(reflectionStep(message.reflectionDecision));
+      var id = message.id || "fixture:" + index, messageSignature = JSON.stringify(message);
+      var cached = previous[id];
+      if (cached && cached.signature === messageSignature) {
+        next[id] = cached; ordered.push.apply(ordered, cached.nodes); return;
+      }
+      var nodes = [];
+      if (message.reasoningContent && typeof reasoningBlock === "function") {
+        var reasoning = reasoningBlock(message.reasoningContent, message.reasoningTokens, false, !!message.reasoningTruncated);
+        if (reasoning) nodes.push(reasoning);
+      }
+      if (message.reflectionDecision) nodes.push(reflectionStep(message.reflectionDecision));
+      if (message.activity) {
+        var activity = message.activity, row = document.createElement("div"); row.className = "workspace-chat-activity";
+        row.textContent = (field(activity, "title") || field(activity, "toolId") || "Действие") + " · " +
+          (field(activity, "status") === "running" ? "выполняется" : field(activity, "status") === "completed" ? "завершено" : field(activity, "status")) +
+          (field(activity, "resultMessage") ? " — " + field(activity, "resultMessage") : "");
+        nodes.push(row);
+      }
       var article = (message.text || "").trim()
         ? renderMessageArticle({ Role: message.role, Content: message.text }, index, { workspace: true }) : null;
       var extra = article || document.createElement("div");
@@ -227,8 +253,45 @@
         if (article) article.insertBefore(outcome, article.querySelector(".message-footer"));
         else extra.appendChild(outcome);
       }
-      if (article || extra.childNodes.length) list.appendChild(extra);
+      if (article || extra.childNodes.length) nodes.push(extra);
+      next[id] = { signature: messageSignature, nodes: nodes }; ordered.push.apply(ordered, nodes);
     });
+    if (live) {
+      var liveKey = "live:" + field(live, "runId"), liveEntry = previous[liveKey];
+      var node = liveEntry ? liveEntry.nodes[0] : document.createElement("section");
+      node.className = "agent-model-step agent-stream-step";
+      var thoughts = field(live, "reasoning") || "", oldReasoning = node.querySelector(".reasoning-block");
+      if (thoughts && typeof reasoningBlock === "function") {
+        if (oldReasoning) updateReasoningBlock(oldReasoning, thoughts, null, true, !!field(live, "reasoningTruncated"));
+        else node.insertBefore(reasoningBlock(thoughts, null, true, !!field(live, "reasoningTruncated")), node.firstChild);
+      } else if (oldReasoning) node.removeChild(oldReasoning);
+      var content = field(live, "message") || "", body = node.querySelector(".agent-stream-message");
+      if (content !== node._content) {
+        if (body && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(body);
+        if (content) {
+          if (!body) { body = document.createElement("div"); body.className = "agent-step-message markdown agent-stream-message"; node.appendChild(body); }
+          body.innerHTML = markdown(content); enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content, streaming: true });
+        } else if (body) node.removeChild(body);
+        node._content = content;
+      }
+      var status = node.querySelector(".agent-stream-status");
+      if (!status) { status = document.createElement("div"); status.className = "agent-stream-status"; status.setAttribute("role", "status"); node.appendChild(status); }
+      status.textContent = field(live, "retrying") ? "Повторная попытка…" : "Формируется…";
+      next[liveKey] = liveEntry || { nodes: [node] }; ordered.push(node);
+    }
+    Object.keys(previous).forEach(function (id) {
+      if (next[id] === previous[id]) return;
+      previous[id].nodes.forEach(function (node) {
+        if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(node);
+        if (node.parentNode === list) list.removeChild(node);
+      });
+    });
+    var cursor = list.firstChild;
+    ordered.forEach(function (node) {
+      if (node === cursor) cursor = cursor.nextSibling;
+      else list.insertBefore(node, cursor);
+    });
+    list._workspaceEntries = next;
     list.scrollTop = following ? list.scrollHeight : scroll;
   }
   function renderWorkspaceControls(chat, submitQuestions) {
@@ -390,5 +453,5 @@
     registerActions: registerActions, bindActions: bindActions,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle, latestSnapshot: latestSnapshot, createRunObserver: createRunObserver,
-    runNotice: runNotice };
+    readOnly: readOnly, runNotice: runNotice };
 }());

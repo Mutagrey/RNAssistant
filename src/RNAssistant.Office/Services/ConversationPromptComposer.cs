@@ -269,7 +269,7 @@ namespace RNAssistant.Office.Services
             JObject responseSchema;
             try { responseSchema = JObject.Parse(responseSchemaJson); }
             catch (JsonException) { return messages; }
-            var branches = responseSchema["anyOf"] as JArray;
+            var branches = responseSchema.SelectToken("properties.response.anyOf") as JArray;
             var execute = branches == null ? null : branches.OfType<JObject>().SingleOrDefault(branch =>
                 (string)branch.SelectToken("properties.action.const") == ConversationResponse.ExecuteAction);
             var calls = execute?.SelectToken("properties.tool_calls") as JObject;
@@ -288,7 +288,7 @@ namespace RNAssistant.Office.Services
                     (string)option.SelectToken("properties.name.const"), StringComparison.Ordinal)).ToArray();
                 var parameters = expected[index].SelectToken("function.parameters") as JObject;
                 if (parameters == null || matching.Length != 1 ||
-                    !JToken.DeepEquals(ToolSchemaSupport.ForStructuredOutput(parameters),
+                    !JToken.DeepEquals(ToolSchemaSupport.ForStructuredOutput(parameters, keepDescriptions: true),
                         matching[0].SelectToken("properties.arguments"))) return messages;
             }
 

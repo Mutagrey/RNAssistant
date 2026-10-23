@@ -16,7 +16,7 @@ class Node {
   removeChild(node) { this.children.splice(this.children.indexOf(node), 1); node.parentNode = null; node.removals++; }
 }
 const box = new Node("box"), cleaned = [], frames = [];
-const context = vm.createContext({ console, state: { activeChatId: "a", messages: [] },
+const context = vm.createContext({ console, document: { activeElement: null }, state: { activeChatId: "a", messages: [] },
   $: () => box, clearMarkdownEnhancements: node => cleaned.push(node.id), isPanelActive: () => true });
 context.window = context;
 context.requestAnimationFrame = callback => frames.push(callback);
@@ -136,3 +136,13 @@ assert.equal(bridge.state.liveStreamContent, null, "switching chats cannot reviv
 bridge.endChatRunTracking("background");
 assert.equal(bridge.state.chatRuns.background, undefined, "completion retires attempt and retry state");
 console.log("PASS stream lifecycle: immediate reset, empty retries, background navigation and coalesced first-token paints");
+
+bridge.state.activeChatId = "foreground";
+progress({ reasoningDelta: "Accepted reflection reasoning" });
+progress({ phase: "reflection", message: "Accepted reflection" });
+const acceptedReflection = bridge.state.chatRuns.foreground.activities.slice(-1)[0];
+assert.equal(acceptedReflection.__reasoningMessage.ReasoningContent, "Accepted reflection reasoning");
+progress({ contentReset: true, reasoningReset: true });
+assert.equal(bridge.state.chatRuns.foreground.streamRetrying, false, "a new step after reflection is not a format retry");
+assert.equal(acceptedReflection.__reasoningMessage.ReasoningContent, "Accepted reflection reasoning", "new attempt cannot erase accepted reasoning");
+console.log("PASS reflection: accepted reasoning handoff survives next attempt reset");

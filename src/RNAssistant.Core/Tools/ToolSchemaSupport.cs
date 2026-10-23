@@ -144,7 +144,7 @@ namespace RNAssistant.Core.Tools
             return true;
         }
 
-        public static JObject ForStructuredOutput(JObject schema)
+        public static JObject ForStructuredOutput(JObject schema, bool keepDescriptions = false)
         {
             var clone = schema == null ? EmptyObjectSchema() : (JObject)schema.DeepClone();
             VisitSchemaNodes(clone, node =>
@@ -155,7 +155,7 @@ namespace RNAssistant.Core.Tools
             CollapseObjectAnyOfConstraints(clone);
             MakeOptionalPropertiesNullable(clone);
             MakeObjectSchemasStrict(clone);
-            RemoveStructuredOutputAnnotations(clone);
+            RemoveStructuredOutputAnnotations(clone, keepDescriptions);
             return clone;
         }
 
@@ -321,11 +321,11 @@ namespace RNAssistant.Core.Tools
             visit(schema);
         }
 
-        private static void RemoveStructuredOutputAnnotations(JObject schema)
+        private static void RemoveStructuredOutputAnnotations(JObject schema, bool keepDescriptions)
         {
             VisitSchemaNodes(schema, node =>
             {
-                node.Property("description")?.Remove();
+                if (!keepDescriptions) node.Property("description")?.Remove();
                 node.Property("default")?.Remove();
             });
         }

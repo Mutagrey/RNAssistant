@@ -1,5 +1,7 @@
 """Kill after completed reads; verify retained context and non-replaying recovery."""
 
+from conversation_transport import conversation_content
+
 import json
 import os
 import subprocess
@@ -51,7 +53,7 @@ def main():
                                            "arguments": {"query": "index.html"}}],
                            "message": "Inspect available files."}
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content":
-                json.dumps(content)}}]}).encode()
+                conversation_content(body, content)}}]}).encode()
             try:
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")

@@ -18,9 +18,9 @@ internal static class Program
     {
         try
         {
-            if (args.Length == 2 && args[0] == "--validate")
+            if (args.Length == 2 && (args[0] == "--validate" || args[0] == "--validate-schema"))
             {
-                var parsed = Parse(File.ReadAllText(args[1]));
+                var parsed = ModelProtocolWire.Parse(File.ReadAllText(args[1]), Tools, Tools, Context, args[0] == "--validate-schema");
                 Console.WriteLine(parsed.Success ? ModelProtocolWire.Write(parsed.Response) : parsed.ErrorCode + ": " + parsed.Error);
                 return parsed.Success ? 0 : 1;
             }
@@ -36,7 +36,8 @@ internal static class Program
                 File.WriteAllText(Path.Combine(args[1], "schema.json"), ConversationResponseSchemaBuilder.Build(Tools, Context));
                 File.WriteAllText(Path.Combine(args[1], "schema-no-tools.json"), ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], Context));
                 File.WriteAllText(Path.Combine(args[1], "cases.json"), new JArray(Cases).ToString(Formatting.Indented));
-                File.WriteAllText(Path.Combine(args[1], "guidance.txt"), ModelProtocolWire.ActionGuidance + " " + ModelProtocolWire.MessageGuidance);
+                File.WriteAllText(Path.Combine(args[1], "schema-guidance.txt"), ModelProtocolWire.SchemaGuidance + " " + ModelProtocolWire.MessageGuidance);
+                File.WriteAllText(Path.Combine(args[1], "guidance.txt"), ModelProtocolWire.JsonObjectGuidance + " " + ModelProtocolWire.MessageGuidance);
             }
             Console.WriteLine("PASS protocol v8: " + Cases.Count + " response cases; " + _assertions + " assertions (codec, authority, immutable snapshots, streaming, repair content).");
             return 0;

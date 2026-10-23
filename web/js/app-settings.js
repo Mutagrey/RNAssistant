@@ -26,6 +26,7 @@ var agentSettingsDefaults = {
   autoCompressContext: true,
   maxAgentIterations: 256,
   maxAgentFormatRetries: 10,
+  maxConsecutiveReflections: 2,
   maxAgentToolSteps: 4096
 };
 
@@ -308,6 +309,7 @@ function renderSettings() {
   updateHistoryProtectionControls();
   $("smartChatTitlesInput").checked = (s.SmartChatTitles !== false && s.smartChatTitles !== false);
   $("maxAgentIterationsInput").value = s.MaxAgentIterations || s.maxAgentIterations || agentSettingsDefaults.maxAgentIterations;
+  $("maxConsecutiveReflectionsInput").value = compatibilityValue(s, "MaxConsecutiveReflections", "maxConsecutiveReflections", agentSettingsDefaults.maxConsecutiveReflections);
   $("maxAgentFormatRetriesInput").value = s.MaxAgentFormatRetries || s.maxAgentFormatRetries || agentSettingsDefaults.maxAgentFormatRetries;
   $("maxAgentToolStepsInput").value = s.MaxAgentToolSteps || s.maxAgentToolSteps || agentSettingsDefaults.maxAgentToolSteps;
   if (typeof renderPromptSettings === "function") {
@@ -368,6 +370,7 @@ function readSettings() {
     HistoryKeySource: $("historyKeySourceInput").value,
     SmartChatTitles: $("smartChatTitlesInput").checked,
     MaxAgentIterations: Number($("maxAgentIterationsInput").value || agentSettingsDefaults.maxAgentIterations),
+    MaxConsecutiveReflections: Math.max(0, Math.min(20, Math.trunc(Number($("maxConsecutiveReflectionsInput").value)))),
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
@@ -458,6 +461,7 @@ function resetAgentSettingsToDefaults() {
   $("autoCompressContextInput").checked = agentSettingsDefaults.autoCompressContext;
   $("maxAgentIterationsInput").value = agentSettingsDefaults.maxAgentIterations;
   $("maxAgentFormatRetriesInput").value = agentSettingsDefaults.maxAgentFormatRetries;
+  $("maxConsecutiveReflectionsInput").value = agentSettingsDefaults.maxConsecutiveReflections;
   $("maxAgentToolStepsInput").value = agentSettingsDefaults.maxAgentToolSteps;
   updateAgentProtocolControls();
   markSettingsDirty();

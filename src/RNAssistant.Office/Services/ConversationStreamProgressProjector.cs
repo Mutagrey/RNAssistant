@@ -14,9 +14,9 @@ namespace RNAssistant.Office.Services
             ConversationStreamProgressProjector current = null;
             return new ModelProtocolProgress
             {
-                AttemptStarted = streamingEnabled =>
+                AttemptStarted = (streamingEnabled, schemaTransport) =>
                 {
-                    current = new ConversationStreamProgressProjector(progress);
+                    current = new ConversationStreamProgressProjector(progress, schemaTransport);
                     current.Start(streamingEnabled);
                 },
                 StreamUpdate = update => { if (current != null) current.OnUpdate(update); },
@@ -39,10 +39,10 @@ namespace RNAssistant.Office.Services
         private DateTime _lastContentReportUtc;
         private DateTime _lastReasoningReportUtc;
 
-        public ConversationStreamProgressProjector(Action<string, string, ChatActivity> progress)
+        public ConversationStreamProgressProjector(Action<string, string, ChatActivity> progress, bool schemaTransport = false)
         {
             _progress = progress;
-            _messageExtractor = new ConversationMessageStreamExtractor();
+            _messageExtractor = new ConversationMessageStreamExtractor(schemaTransport);
             _pendingContent = new StringBuilder();
             _pendingReasoning = new StringBuilder();
             _lastContentReportUtc = DateTime.UtcNow;

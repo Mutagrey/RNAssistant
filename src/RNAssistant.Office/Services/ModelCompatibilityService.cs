@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -99,12 +100,12 @@ namespace RNAssistant.Office.Services
                     new ChatMessage
                     {
                         Role = "user",
-                        Content = "Return exactly one JSON object: " + sentinel
+                        Content = "Return exactly one JSON object: " + ProbeTransport(sentinel, responseMode)
                     }
                 },
                 ModelProtocolWire.CreateRequestOptions(responseMode, new[] { tool }, new ModelProtocolCallContext(new string[0])),
                 completion => ValidateSentinel(completion, sentinel, new[] { tool },
-                    new ModelProtocolCallContext(new string[0])),
+                    new ModelProtocolCallContext(new string[0]), responseMode == AgentResponseModes.JsonSchema),
                 cancellationToken);
         }
 
@@ -116,7 +117,7 @@ namespace RNAssistant.Office.Services
         {
             var sentinel = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                 "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
-            var messages = ToolResultProbeMessages(toolResultRole, sentinel);
+            var messages = ToolResultProbeMessages(toolResultRole, ProbeTransport(sentinel, responseMode));
             return RunAsync(
                 settings,
                 "tool_result_json",
@@ -124,9 +125,12 @@ namespace RNAssistant.Office.Services
                 messages,
                 ModelProtocolWire.CreateRequestOptions(responseMode, new ToolCatalogEntry[0], new ModelProtocolCallContext(new string[0])),
                 completion => ValidateSentinel(completion, sentinel, new ToolCatalogEntry[0],
-                    new ModelProtocolCallContext(new string[0])),
+                    new ModelProtocolCallContext(new string[0]), responseMode == AgentResponseModes.JsonSchema),
                 cancellationToken);
         }
+
+        private static string ProbeTransport(string logical, string mode)
+        { return mode == AgentResponseModes.JsonSchema ? new JObject { ["response"] = JObject.Parse(logical) }.ToString(Formatting.None) : logical; }
 
         private static ConversationToolCall ProbeCall()
         {
@@ -137,9 +141,9 @@ namespace RNAssistant.Office.Services
         }
 
         private static string ValidateSentinel(LlmCompletionResult completion, string sentinel,
-            IReadOnlyList<ToolCatalogEntry> tools, ModelProtocolCallContext context)
+            IReadOnlyList<ToolCatalogEntry> tools, ModelProtocolCallContext context, bool schemaTransport)
         {
-            var actual = ModelProtocolWire.Parse(completion == null ? null : completion.Content, tools, tools, context);
+            var actual = ModelProtocolWire.Parse(completion == null ? null : completion.Content, tools, tools, context, schemaTransport);
             if (!actual.Success) return actual.Error;
             var expected = ModelProtocolWire.Parse(sentinel, tools, tools, context);
             if (!expected.Success) throw new InvalidOperationException("Invalid local compatibility sentinel: " + expected.Error);

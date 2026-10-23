@@ -16,12 +16,17 @@ class Element {
     this.scrollTop = 0;
     this.clientHeight = 0;
   }
-  appendChild(child) { this.childNodes.push(child); return child; }
+  get firstChild() { return this.childNodes[0] || null; }
+  get nextSibling() { return this.parentNode?.childNodes[this.parentNode.childNodes.indexOf(this) + 1] || null; }
+  appendChild(child) { if (child.parentNode) child.parentNode.removeChild(child); this.childNodes.push(child); child.parentNode = this; return child; }
+  removeChild(child) { this.childNodes.splice(this.childNodes.indexOf(child), 1); child.parentNode = null; }
+
   append(...children) { children.forEach(child => this.appendChild(child)); }
-  replaceChildren(...children) { this.childNodes = children; }
+  replaceChildren(...children) { this.childNodes.forEach(child => child.parentNode = null); this.childNodes = []; this.append(...children); }
   insertBefore(child, before) {
+    if (child.parentNode) child.parentNode.removeChild(child);
     const index = this.childNodes.indexOf(before);
-    this.childNodes.splice(index < 0 ? this.childNodes.length : index, 0, child);
+    this.childNodes.splice(index < 0 ? this.childNodes.length : index, 0, child); child.parentNode = this;
   }
   setAttribute(name, value) { this[name] = value; }
   querySelectorAll() { return []; }
@@ -76,3 +81,13 @@ assert.equal(details.open, true);
 assert.match(details.childNodes[1].childNodes[0].textContent, /Chart absent · частично/);
 assert.match(details.childNodes[1].childNodes[0].childNodes[0].textContent, /call-1/);
 console.log("PASS workspace v8: reflection step and incomplete finish evidence survive chat rendering");
+
+const firstNode = list.childNodes[0], answerNode = list.childNodes[1];
+const sameMessages = JSON.parse(list._chatSignature)[0];
+sameMessages.push({ id: "new", role: "assistant", text: "New step" });
+context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: sameMessages });
+assert.equal(list.childNodes[0], firstNode, "accepted reflection stays attached when new messages arrive");
+assert.equal(list.childNodes[1], answerNode, "unchanged answer preserves focus and disclosure nodes");
+assert.equal(context.RNAssistantWorkspaceChat.readOnly({ state: { readOnly: true } }), true);
+assert.match(context.RNAssistantWorkspaceChat.runNotice({ state: { readOnly: true } }).text, /Старый протокол/);
+console.log("PASS workspace: stable message nodes and explicit read-only history");

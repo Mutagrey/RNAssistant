@@ -19,13 +19,18 @@ namespace RNAssistant.Core.Agent
     {
         public int MaxIterations { get; private set; }
         public int MaxToolSteps { get; private set; }
+        public int MaxConsecutiveReflections { get; private set; }
 
-        public AgentRunLimits(int maxIterations, int maxToolSteps)
+        public AgentRunLimits(int maxIterations, int maxToolSteps, int? maxConsecutiveReflections = null)
         {
             if (maxIterations < 1) throw new ArgumentOutOfRangeException(nameof(maxIterations));
             if (maxToolSteps < 1) throw new ArgumentOutOfRangeException(nameof(maxToolSteps));
             MaxIterations = maxIterations;
             MaxToolSteps = maxToolSteps;
+            var depth = maxConsecutiveReflections ?? RNAssistant.Core.Models.AppSettings.DefaultMaxConsecutiveReflections;
+            if (depth < 0 || depth > RNAssistant.Core.Models.AppSettings.MaximumConsecutiveReflections)
+                throw new ArgumentOutOfRangeException(nameof(maxConsecutiveReflections));
+            MaxConsecutiveReflections = depth;
         }
     }
 
@@ -86,7 +91,7 @@ namespace RNAssistant.Core.Agent
 
         internal void SetReflectionState(int consecutive, bool feedbackIssued)
         {
-            if (consecutive < 0 || consecutive > 2) throw new ArgumentOutOfRangeException(nameof(consecutive));
+            if (consecutive < 0 || consecutive > RNAssistant.Core.Models.AppSettings.MaximumConsecutiveReflections) throw new ArgumentOutOfRangeException(nameof(consecutive));
             ConsecutiveReflections = consecutive;
             ReflectionFeedbackIssued = feedbackIssued;
         }
