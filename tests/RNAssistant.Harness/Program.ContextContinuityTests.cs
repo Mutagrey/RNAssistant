@@ -227,6 +227,13 @@ namespace RNAssistant.Harness
                     new ToolCatalogEntry[0], new AppSettings(), 4096);
                 AssertEqual(1, again.Messages.Count(item => item.Content.Contains(finding)), "recompiling does not duplicate commentary");
 
+                const string reflectionDecision = "Inspect current formulas before choosing a correction.";
+                var reflection = new ChatMessage { Role = "assistant", RunId = "continuity",
+                    ProtocolMessage = true, ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                    ResponseModelAttemptId = "attempt-reflection",
+                    Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.ReflectionAction,
+                        "The totals disagree.", "", decision: reflectionDecision) };
+                session.Messages.Add(reflection);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue investigating." });
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "The discrepancy is not resolved yet." });
                 string claimKind = "observation";
@@ -238,8 +245,14 @@ namespace RNAssistant.Harness
                     var input = sources.Single(item => ((string)item["text"] ?? "").Contains(finding));
                     AssertTrue((string)input["role"] == "assistant" || (string)input["kind"] == "interpretation",
                         "folding and recompaction preserve the source kind");
-                    var response = new JObject { ["claims"] = new JArray(new JObject {
-                        ["kind"] = claimKind, ["text"] = finding, ["sourceIds"] = new JArray(input["sourceId"]) }) };
+                    var reflected = sources.Single(item => ((string)item["text"] ?? "").Contains(reflectionDecision));
+                    AssertTrue((string)reflected["role"] == "assistant" || (string)reflected["kind"] == "interpretation",
+                        "accepted reflection remains an assistant interpretation source");
+                    var response = new JObject { ["claims"] = new JArray(
+                        new JObject { ["kind"] = claimKind, ["text"] = finding,
+                            ["sourceIds"] = new JArray(input["sourceId"]) },
+                        new JObject { ["kind"] = claimKind, ["text"] = reflectionDecision,
+                            ["sourceIds"] = new JArray(reflected["sourceId"]) }) };
                     string schemaError;
                     AssertEqual(claimKind == "interpretation", ToolSchemaSupport.ValidateArguments(response,
                         JObject.Parse(options.ResponseSchemaJson), false, out schemaError), "strict schema rejects upgraded assistant claims");
@@ -262,13 +275,19 @@ namespace RNAssistant.Harness
                     var checkpoint = compactor.EnsureWithinBudgetAsync(session, settingsForRun, null, true, null,
                         CancellationToken.None, authority, new ToolCatalogEntry[0]).GetAwaiter().GetResult();
                     AssertTrue(checkpoint != null, "completed source boundary permits compaction");
-                    AssertEqual("assistant", checkpoint.Claims.Single().SourceRoles.Single(), "assistant provenance remains explicit");
-                    AssertEqual(session.Messages[0].Id, checkpoint.Claims.Single().SourceMessageIds.Single(), "original accepted response remains the source");
+                    var narrationClaim = checkpoint.Claims.Single(claim => claim.Text == finding);
+                    var reflectionClaim = checkpoint.Claims.Single(claim => claim.Text == reflectionDecision);
+                    AssertEqual("assistant", narrationClaim.SourceRoles.Single(), "assistant provenance remains explicit");
+                    AssertEqual(session.Messages[0].Id, narrationClaim.SourceMessageIds.Single(), "original accepted response remains the source");
+                    AssertEqual("assistant", reflectionClaim.SourceRoles.Single(), "reflection has assistant provenance, not observation authority");
+                    AssertEqual(reflection.Id, reflectionClaim.SourceMessageIds.Single(), "reflection keeps its accepted source after recompaction");
                     chats.Save(session); session = new ChatStore(paths).Load(session.Id);
                     var resumed = compiler.Compile(authority, new ChatMessage[0], ContextCompactionRuntime.BuildActiveWindow(session),
                         null, new ToolCatalogEntry[0], settingsForRun, 4096);
                     AssertContains(string.Join("\n", resumed.Messages.Select(item => item.Content)), finding,
                         "the decision basis survives checkpoint save and restart");
+                    AssertContains(string.Join("\n", resumed.Messages.Select(item => item.Content)), reflectionDecision,
+                        "accepted reflection decision survives checkpoint save and restart");
                     session.Messages.Add(new ChatMessage { Role = "user", Content = "Continue with that unresolved question." });
                     session.Messages.Add(new ChatMessage { Role = "assistant", Content = "No new source evidence yet." });
                 }
