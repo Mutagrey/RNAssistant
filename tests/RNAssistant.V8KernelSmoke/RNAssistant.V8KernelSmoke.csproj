@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="OfficeFinishBridge.cs" />
+    <Compile Remove="AgentKernelFixtureBridge.cs" />
     <Reference Include="RNAssistant.Harness">
       <HintPath>../RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll</HintPath>
     </Reference>

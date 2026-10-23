@@ -470,8 +470,8 @@ It also checks missing-call repair followed by either a complete code answer or 
 real tool step/result before that answer, in both response formats and result roles.
 These scripted responses check control flow and emitted guidance, not whether a
 real model will select `done` at the right time.
-`kernel: rejects narrative checkpoint` and `protocol preflight:` reject old
-checkpoints/history without migration or dispatch. After building the CLI,
+`kernel: stopped continuation rejects unsafe history` and `protocol preflight:`
+reject unsafe checkpoints/history without migration or dispatch. After building the CLI,
 `python3 -B tests/cli/turn_decisions_smoke.py` checks production HTTP requests in
 both result roles and response formats; `mode_questions_smoke.py` checks typed
 question/answer persistence. These are controlled host-neutral checks; they do not
@@ -913,7 +913,8 @@ Filtering limits executed tests. The harness source-links Core and Office-neutra
 
 Conversation v8 has narrow [protocol checks](../RNAssistant.ProtocolTests/README.md)
 and [source-linked kernel/prompt checks](../RNAssistant.V8KernelSmoke/run.sh).
-The latter builds host-neutral Core, Office and Workspace sources. The controlled
+The latter builds host-neutral Core, Office and Workspace sources and runs the
+migrated `AgentKernel` fixtures while other Harness sources still use v7. The controlled
 `python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
 CLI/HTTP requests. `interrupted_run_smoke.py`, `compaction_resume_smoke.py`
 and `run_control_smoke.py` cover process loss, compaction, confirmation and

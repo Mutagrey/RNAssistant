@@ -27,7 +27,8 @@ an irreparable obstacle without reporting success or replaying a tool.
 ## Host-neutral checks
 
 - `sh tests/RNAssistant.V8KernelSmoke/run.sh`: source-linked production build
-  and 26 focused passing checks, including format-7 read-only policy,
+  and 26 focused checks plus 57 migrated `AgentKernel` Harness fixture cases,
+  including format-7 read-only policy,
   finish-claim projection/serialization, stale-response discard on steer and
   closure of a steered read batch with exact terminal IDs. A controlled HTTP
   request through production `ConversationRunService` and fake Excel reproduces
@@ -35,6 +36,9 @@ an irreparable obstacle without reporting success or replaying a tool.
   rejected empty-results finish, then an honest partial finish. The rejected
   promise is absent from accepted history; replay preserves the partial claim
   and sheet evidence without presenting task verification.
+  The kernel fixtures exercise v8 terminal citations, unknown-effect inspection,
+  continuation, confirmation, cancellation and append failures. Confirmation
+  retains the accepted run ID so finish can resolve its terminal evidence.
 - `node tests/web/run-view-state.test.js`: 7/7, including immutable model
   results, a visible partial outcome and no card for an ordinary answer.
 - `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:
@@ -52,7 +56,8 @@ an irreparable obstacle without reporting success or replaying a tool.
   absent from accepted model context. The run then performs a second write and
   finishes with both terminal IDs, without replaying the first write.
 
-The full Harness still has legacy v7 fixtures and cannot compile as a whole.
+The full Harness still has legacy v7 fixtures outside the migrated kernel group
+and cannot compile as a whole.
 The original v7 red audit and its route have been retired; its captured evidence
 remains historical. The full Harness suite and Office
 steer/UI integration checks are not yet migrated. Playwright layout qualification is

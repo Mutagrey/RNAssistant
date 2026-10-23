@@ -11,6 +11,8 @@ cat > "$scratch/production.targets" <<EOF
     <Compile Include="$root/tests/RNAssistant.Harness/ProtectedSecretStoreHarnessStub.cs" />
     <Compile Include="$root/tests/RNAssistant.Harness/AssistantControllerBridgeStub.cs" />
     <Compile Include="$root/tests/RNAssistant.V8KernelSmoke/OfficeFinishBridge.cs" />
+    <Compile Include="$root/tests/RNAssistant.Harness/Program.AgentKernelTests.cs" />
+    <Compile Include="$root/tests/RNAssistant.V8KernelSmoke/AgentKernelFixtureBridge.cs" />
   </ItemGroup>
 </Project>
 EOF
