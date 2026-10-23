@@ -45,9 +45,10 @@ page errors. Причина не установлена; при следующе
    kind/MIME/byteLength/views/capabilities; он не доказывает доступность сейчас
    или возможность чтения моделью. Inspector теперь находит до одного
    сохранённого варианта по каждому известному имени view и по явному запросу
-   отдельно проверяет его payload/части через CAS. Остаются полный постраничный
-   inventory views/coverage, cost конкретных views, availability live providers,
-   provenance преобразований;
+   отдельно проверяет его payload/части через CAS. Полный inventory
+   сохранённых views/coverage доступен постранично для exact ревизии без проверки
+   байтов. Остаются точная CAS-проверка произвольного варианта из inventory,
+   cost конкретных views, availability live providers, provenance преобразований;
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
    над canonical IDs без собственного CAS-доступа или model-facing адресации.

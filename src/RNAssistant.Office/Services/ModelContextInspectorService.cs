@@ -31,6 +31,15 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: payload verification requires an exact saved request and its resource alias.");
             if (!string.IsNullOrEmpty(query.VerifyRetainedView) && string.IsNullOrEmpty(query.VerifyResourceAlias))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: retained view verification requires a resource alias.");
+            var inventoryRequested = !string.IsNullOrEmpty(query.ViewInventoryAlias);
+            var inventoryOffset = query.ViewInventoryOffset ?? 0;
+            if ((!inventoryRequested && (query.ViewInventoryOffset.HasValue || query.ViewInventorySnapshotCount.HasValue)) ||
+                (inventoryRequested &&
+                 (string.IsNullOrEmpty(query.RequestEventId) || !string.IsNullOrEmpty(query.Alias) ||
+                  query.BeforeSequence.HasValue || !string.IsNullOrEmpty(query.VerifyResourceAlias) ||
+                  inventoryOffset < 0 || query.ViewInventorySnapshotCount < 0 ||
+                  (inventoryOffset > 0 && !query.ViewInventorySnapshotCount.HasValue))))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: view inventory requires an exact saved request and a valid page.");
             var response = new ModelContextResponse { ChatId = session.Id, Revision = session.Revision,
                 Events = new ModelContextEventDto[0] };
             if (!query.BeforeSequence.HasValue && string.IsNullOrEmpty(query.RequestEventId) &&
@@ -63,6 +72,8 @@ namespace RNAssistant.Office.Services
                     !string.IsNullOrEmpty(trace.RequestId) && e.RunId == request.RunId && Trace(e).RequestId == trace.RequestId)
                     .Select(e => Describe(e, true, aliases.Request(e.EventId))).ToArray();
                 response.Resources = DescribeResources(session, trace, aliases, request.EventId);
+                if (!string.IsNullOrEmpty(query.ViewInventoryAlias))
+                    response.ViewInventory = DescribeViewInventory(response.Resources, query);
                 if (!string.IsNullOrEmpty(query.VerifyResourceAlias))
                 {
                     var resource = response.Resources.SingleOrDefault(row => row.Alias == query.VerifyResourceAlias);
@@ -224,6 +235,23 @@ namespace RNAssistant.Office.Services
                 case HeadKnowledge.Removed: row.Currentness = ModelContextCurrentness.Removed; break;
                 case HeadKnowledge.Unavailable: row.Currentness = ModelContextCurrentness.Unavailable; break;
             }
+        }
+
+        private ModelContextViewInventoryDto DescribeViewInventory(IReadOnlyList<ModelContextResourceDto> resources,
+            ModelContextQuery query)
+        {
+            var resource = resources.SingleOrDefault(row => row.Alias == query.ViewInventoryAlias);
+            var revisions = _authority?.Store as IResourceRevisionStore;
+            if (resource?.RevisionMetadata == null || revisions == null)
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: view inventory is unavailable for this request and scope.");
+            var offset = query.ViewInventoryOffset ?? 0;
+            var page = revisions.ReadViews(resource.Scope, resource.Resource, offset, 20,
+                query.ViewInventorySnapshotCount);
+            return new ModelContextViewInventoryDto { ResourceAlias = resource.Alias,
+                SnapshotCount = page.SnapshotCount, NextOffset = page.NextOffset,
+                Items = page.Items.Select((view, index) => new ModelContextViewInventoryItemDto {
+                    Ordinal = offset + index, View = view.View, Coverage = view.Coverage,
+                    PayloadRegistered = view.Payload != null, PartsCount = view.Parts.Count }).ToArray() };
         }
 
         private void VerifyPayload(ModelContextResourceDto row, CancellationToken token)

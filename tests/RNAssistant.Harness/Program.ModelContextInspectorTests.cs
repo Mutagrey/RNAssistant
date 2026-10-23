@@ -487,6 +487,56 @@ namespace RNAssistant.Harness
                     AssertTrue(advertisedRow.RetainedViews.Select(view => view.View).OrderBy(view => view)
                         .SequenceEqual(new[] { "outline", "text" }),
                         "read-time descriptor can discover another exact retained view without a live provider read");
+                    for (var index = 0; index < 23; index++)
+                        store.RegisterView(scope, new ResourceRevisionView(first, "text", body.Sha256, body,
+                            new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: index, end: index + 1)));
+                    AssertEqual(ResourceCoverageKinds.Whole, store.GetView(scope, first, "text").Coverage.Kind,
+                        "existing known-name lookup still prefers the whole retained view");
+                    store.RegisterView(scope, new ResourceRevisionView(second, "text", body.Sha256, body,
+                        ResourceCoverage.Whole()));
+                    Func<ModelContextQuery, ModelContextViewInventoryDto> inventory = query =>
+                        inspector().Query(session, query, CancellationToken.None).ViewInventory;
+                    var firstPage = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1" });
+                    AssertEqual(25, firstPage.SnapshotCount, "inventory includes every registered coverage variant of the exact revision");
+                    AssertEqual(20, firstPage.Items.Count, "inventory returns a bounded first page");
+                    AssertEqual(20, firstPage.NextOffset.Value, "inventory exposes a continuation offset");
+                    AssertEqual("outline", firstPage.Items[1].View, "unobserved registered view is listed");
+                    AssertEqual(0L, firstPage.Items[2].Coverage.Start.Value, "coverage variants retain append order");
+                    AssertEqual(1, firstPage.Items[0].PartsCount, "inventory describes retained parts without reading them");
+                    AssertTrue(firstPage.Items[0].PayloadRegistered, "inventory distinguishes registered payloads");
+                    AssertTrue(!Newtonsoft.Json.JsonConvert.SerializeObject(firstPage).Contains(viewPart.Sha256),
+                        "inventory does not expose part CAS addresses");
+                    store.RegisterView(scope, new ResourceRevisionView(first, "internal", body.Sha256, null,
+                        ResourceCoverage.Whole()));
+                    var secondPage = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1", ViewInventoryOffset = firstPage.NextOffset,
+                        ViewInventorySnapshotCount = firstPage.SnapshotCount });
+                    AssertEqual(5, secondPage.Items.Count, "continuation ends at the first-page snapshot count");
+                    AssertTrue(secondPage.NextOffset == null && secondPage.Items.Last().Ordinal == 24,
+                        "newly registered views cannot enter an in-progress inventory");
+                    var freshPage = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1" });
+                    AssertEqual(26, freshPage.SnapshotCount, "a fresh inventory sees later registrations");
+                    var revisited = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 0,
+                        ViewInventorySnapshotCount = firstPage.SnapshotCount });
+                    AssertEqual(25, revisited.SnapshotCount, "earlier pages can be revisited within the pinned inventory");
+                    var replayed = new ResourceAuthorityStore(paths).ReadViews(scope, first, 20, 20, firstPage.SnapshotCount);
+                    AssertTrue(replayed.Items.Select(view => view.Coverage.Start).SequenceEqual(
+                        secondPage.Items.Select(item => item.Coverage.Start)),
+                        "append-order continuation is stable after authority-store restart");
+                    RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
+                        RequestEventId = q1.EventId, ViewInventoryAlias = "R2@v1" }));
+                    RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
+                        ViewInventoryAlias = "R1@v1" }));
+                    RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
+                        RequestEventId = q1.EventId, ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 20 }));
+                    RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
+                        RequestEventId = q1.EventId, ViewInventoryAlias = "R1@v1", ViewInventoryOffset = -1 }));
+                    RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
+                        RequestEventId = q1.EventId, ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 30,
+                        ViewInventorySnapshotCount = 26 }));
                     var foreign = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
                         new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N"),
                             ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
@@ -502,6 +552,8 @@ namespace RNAssistant.Harness
                         "inspector does not consult another document's authority");
                     store.RegisterRevision(new ResourceAuthorityScopeId("document", "other-doc"),
                         new ResourceRevisionMetadata(first, body.Sha256, body));
+                    store.RegisterView(new ResourceAuthorityScopeId("document", "other-doc"),
+                        new ResourceRevisionView(first, "private", body.Sha256, body, ResourceCoverage.Whole()));
                     var foreignVerification = verify(foreign.EventId, "R3@v1");
                     AssertEqual(ModelContextPayloadAvailability.Unknown, foreignVerification.PayloadAvailability,
                         "a saved link cannot authorize another document's payload verification");
@@ -510,6 +562,8 @@ namespace RNAssistant.Harness
                     AssertTrue(foreignVerification.RetainedViews == null,
                         "foreign scope cannot expose retained view metadata");
                     RuntimeThrows<InvalidOperationException>(() => verifyView(foreign.EventId, "R3@v1", "text"));
+                    RuntimeThrows<InvalidOperationException>(() => inventory(new ModelContextQuery {
+                        RequestEventId = foreign.EventId, ViewInventoryAlias = "R3@v1" }));
                     AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery {
                         Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
                         "new scope does not renumber an older alias");

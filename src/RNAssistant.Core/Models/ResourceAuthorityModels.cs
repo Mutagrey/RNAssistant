@@ -326,6 +326,15 @@ namespace RNAssistant.Core.Models
         { Items = items; Generation = generation; Total = total; NextOffset = nextOffset; }
     }
 
+    public sealed class ResourceRevisionViewPage
+    {
+        public IReadOnlyList<ResourceRevisionView> Items { get; private set; }
+        public int SnapshotCount { get; private set; }
+        public int? NextOffset { get; private set; }
+        public ResourceRevisionViewPage(IReadOnlyList<ResourceRevisionView> items, int snapshotCount, int? nextOffset)
+        { Items = items; SnapshotCount = snapshotCount; NextOffset = nextOffset; }
+    }
+
     public interface IResourceAuthorityStore
     {
         event EventHandler<ResourceAuthorityChangedEventArgs> Changed;
@@ -342,6 +351,8 @@ namespace RNAssistant.Core.Models
         ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference);
         void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view);
         ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view);
+        ResourceRevisionViewPage ReadViews(ResourceAuthorityScopeId scope, ResourceRef reference,
+            int offset, int limit, int? snapshotCount = null);
     }
 
     [JsonConverter(typeof(StringEnumConverter))]

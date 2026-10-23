@@ -322,6 +322,37 @@
     } catch (error) { if (valid(c, version) && note.isConnected) note.textContent = error.message || String(error); }
     finally { control.disabled = false; }
   }
+  async function loadViewInventory(c, row, control, note, previous) {
+    var version = c.version, eventId = c.selected, prior = c.inventory[row.alias];
+    if (c.inventoryBusy[row.alias]) return;
+    var offset = prior ? previous ? Math.max(0, prior.offset - prior.pageSize) : prior.nextOffset : 0;
+    if (offset == null) return;
+    var operation = {}; c.inventoryBusy[row.alias] = operation;
+    c.follow = false; control.disabled = true; note.textContent = "Чтение списка сохранённых views…";
+    try {
+      var query = { requestEventId: eventId, viewInventoryAlias: row.alias, viewInventoryOffset: offset };
+      if (prior) query.viewInventorySnapshotCount = prior.snapshotCount;
+      var response = await call(c, "getModelContext", query), page = response.viewInventory;
+      if (!valid(c, version) || c.selected !== eventId) return;
+      if (response.chatId !== c.chatId || !(response.events || []).some(function (item) { return item.eventId === eventId; }) ||
+          !page || page.resourceAlias !== row.alias || !Array.isArray(page.items) ||
+          !Number.isSafeInteger(page.snapshotCount) || page.snapshotCount < 0 ||
+          (prior && page.snapshotCount !== prior.snapshotCount) ||
+          page.items.length > page.snapshotCount - offset ||
+          page.items.some(function (item, index) { return item.ordinal !== offset + index; }) ||
+          (page.nextOffset == null && offset + page.items.length !== page.snapshotCount) ||
+          (page.nextOffset != null && (page.nextOffset !== offset + page.items.length ||
+            page.nextOffset >= page.snapshotCount || !page.items.length)))
+        throw new Error("Ответ списка views не соответствует выбранной ревизии.");
+      c.inventory[row.alias] = { snapshotCount: page.snapshotCount, offset: offset,
+        pageSize: prior ? prior.pageSize : page.items.length, nextOffset: page.nextOffset, items: page.items };
+      if (c.mode === "actual" && c.tab === "resources") { c.focusResource = row.alias; await render(c); }
+    } catch (error) { if (valid(c, version) && note.isConnected) note.textContent = error.message || String(error); }
+    finally {
+      if (c.inventoryBusy[row.alias] === operation) delete c.inventoryBusy[row.alias];
+      control.disabled = false;
+    }
+  }
   function resourceMetadata(c, row, body) {
     var metadata = row.revisionMetadata, payload = metadata && metadata.payload;
     if (metadata) {
@@ -371,7 +402,7 @@
   function resources(c, root) {
     var rows = c.detail && c.detail.resources || [];
     if (!rows.length) { root.appendChild(el("p", "У этого запроса нет сохранённых связей с ресурсами.")); return; }
-    root.appendChild(el("p", "Ревизии из выбранного запроса. Найденные сохранённые views относятся только к именам из наблюдений и descriptor; это не полный список. Явные проверки CAS отдельно проверяют payload ревизии или выбранного view со всеми его частями. Live-источник и зависимости не проверяются; доставка модели определяется наблюдениями ниже.", "model-context-note"));
+    root.appendChild(el("p", "Ревизии из выбранного запроса. Views из наблюдений и descriptor — неполный список; полный список сохранённых вариантов загружается по страницам. CAS проверяется отдельно. Live-источник и зависимости не проверяются; доставка модели определяется наблюдениями ниже.", "model-context-note"));
     var currentness = { Current: "Текущая", Superseded: "Устаревшая", Removed: "Удалена",
       Unavailable: "Недоступна", Unknown: "Неизвестна" };
     rows.forEach(function (row) {
@@ -387,6 +418,36 @@
       body.appendChild(el("p", row.revisionRecorded === true ? "Ревизия есть в authority." :
         row.revisionRecorded === false ? "Ревизия не найдена в текущем authority." : "Наличие ревизии не проверено."));
       resourceMetadata(c, row, body);
+      var inventory = c.inventory[row.alias];
+      if (inventory) {
+        var range = inventory.items.length ? (inventory.offset + 1) + "–" +
+          (inventory.offset + inventory.items.length) : "0";
+        body.appendChild(el("p", "Сохранённые views: " + range + " из " +
+          inventory.snapshotCount + " в снимке authority. Байты списка не проверены."));
+        inventory.items.forEach(function (item) {
+          body.appendChild(el("p", "#" + (item.ordinal + 1) + " · " + item.view +
+            (item.coverage ? " · покрытие " + JSON.stringify(item.coverage) : "") +
+            " · " + (item.payloadRegistered ? "payload зарегистрирован" : "payload не зарегистрирован") +
+            " · частей: " + item.partsCount));
+        });
+      }
+      if (row.revisionRecorded === true && (!inventory || inventory.offset > 0 || inventory.nextOffset != null)) {
+        var inventoryNote = el("p", inventory ? "Доступен переход между страницами views." :
+          "Список сохранённых views ещё не загружен.");
+        body.appendChild(inventoryNote);
+        if (inventory && inventory.offset > 0) {
+          var previous = button("Предыдущая страница views", function () {
+            return loadViewInventory(c, row, previous, inventoryNote, true);
+          });
+          body.appendChild(previous);
+        }
+        if (!inventory || inventory.nextOffset != null) {
+          var load = button(inventory ? "Следующая страница views" : "Показать сохранённые views", function () {
+            return loadViewInventory(c, row, load, inventoryNote, false);
+          });
+          body.appendChild(load);
+        }
+      }
       (row.observations || []).forEach(function (item) {
         var details = [item.requestAlias || "Q?", item.operationAlias || "", item.evidenceAlias || "",
           item.view || "view?", item.coverage ? JSON.stringify(item.coverage) : "coverage?",
@@ -470,7 +531,7 @@
   }
   async function select(c, eventId) {
     var same = c.selected === eventId && c.detail;
-    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.selected = eventId; c.detail = null; c.focusResource = null; }
+    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.selected = eventId; c.detail = null; c.focusResource = null; }
     var version = c.version;
     status(c, "Чтение сохранённого обмена…");
     try {
@@ -534,7 +595,7 @@
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (event) { return event.type === "llm.request"; });
       if (!request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
-      c.selected = request.eventId; c.detail = detail;
+      c.selected = request.eventId; c.detail = detail; c.inventory = {}; c.inventoryBusy = {};
       c.focusResource = detail.selectedResourceAlias || null;
       c.tab = c.focusResource ? "resources" : "messages";
       $("modelContextTab").value = c.tab;
@@ -581,7 +642,7 @@
     if (current) close();
     if (typeof closePromptContextInspector === "function") closePromptContextInspector();
     current = { chatId: state.activeChatId, abort: new AbortController(), requests: new Set(), version: 0,
-      mounts: [], cache: {}, pending: {}, mode: "actual", tab: "messages", follow: true, attempts: [], returnFocus: $("contextMeter") };
+      mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: true, attempts: [], returnFocus: $("contextMeter") };
     $("modelContextDialog").classList.remove("hidden");
     $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
     $("modelContextMode").value = "actual"; $("modelContextTab").value = "messages";
@@ -593,7 +654,7 @@
     $("openModelContextFromTokens").addEventListener("click", open);
     $("closeModelContextButton").addEventListener("click", close);
     $("modelContextMode").addEventListener("change", function () {
-      var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {};
+      var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {};
       $("modelContextActualControls").classList.toggle("hidden", c.mode !== "actual");
       previewAvailability(c);
       if (c.mode === "preview") preview(c); else list(c, false);
@@ -606,8 +667,11 @@
     });
     $("modelContextLatest").addEventListener("click", function () { current.follow = true; current.revision = null; list(current, false); });
     $("modelContextOlder").addEventListener("click", function () { list(current, true); });
-    $("modelContextRefresh").addEventListener("click", function () {
-      if (current.mode === "preview") preview(current); else { current.revision = null; list(current, false); }
+    $("modelContextRefresh").addEventListener("click", async function () {
+      if (current.mode === "preview") { await preview(current); return; }
+      var c = current; c.version++; c.inventory = {}; c.inventoryBusy = {}; c.revision = null;
+      await list(c, false);
+      if (live(c) && c.tab === "resources") await render(c);
     });
     $("modelContextDownload").addEventListener("click", function () {
       var c = current;

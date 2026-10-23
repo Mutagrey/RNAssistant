@@ -81,6 +81,21 @@ function fixture(withAliases = false) {
             resources[0].payloadCheckedUtc = "2026-10-02T11:00:00Z";
           }
         }
+        if (query.viewInventoryAlias) {
+          assert.equal(query.requestEventId, "r1");
+          assert.equal(query.viewInventoryAlias, "R1@v1");
+          const all = [
+            { ordinal: 0, view: "source", coverage: { kind: "whole" }, payloadRegistered: true, partsCount: 2 },
+            { ordinal: 1, view: "source", coverage: { kind: "character-range", start: 10, end: 80 },
+              payloadRegistered: true, partsCount: 0 },
+            { ordinal: 2, view: "internal", coverage: { kind: "whole" }, payloadRegistered: false, partsCount: 0 }
+          ];
+          const offset = query.viewInventoryOffset || 0, snapshotCount = query.viewInventorySnapshotCount ?? all.length;
+          const items = all.slice(offset, Math.min(offset + 2, snapshotCount));
+          return { chatId: "chat", revision, events: [events[0]], resources,
+            viewInventory: { resourceAlias: "R1@v1", snapshotCount,
+              nextOffset: offset + items.length < snapshotCount ? offset + items.length : null, items } };
+        }
         if (query.alias) {
           if (!withAliases || !["Q1", "O1", "E1", "R1@v1"].includes(query.alias)) throw new Error("RESOURCE_NOT_FOUND");
           return { chatId: "chat", revision, events: [events[0]], resources,
@@ -263,6 +278,8 @@ function fixture(withAliases = false) {
     .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить сохранённое тело");
   const viewButton = f => f.get("modelContextBody").children.find(node => node.tag === "details")
     .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить view source");
+  const inventoryButton = (f, label) => f.get("modelContextBody").children.find(node => node.tag === "details")
+    .children[1].children.find(node => node.tag === "button" && node.textContent === label);
   assert.match(resourceText(), /Предыдущая ревизия:.*prior.*Восстановлена из:.*original.*Зависимость:.*dependency/);
   assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
   assert.match(resourceText(), /Запрошено:.*"end":6.*Покрытие в источнике:.*"end":2/);
@@ -274,6 +291,24 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /JSON Pointer "\/data", глубина 2, дети \[1, 3\)/);
   assert.match(resourceText(), /YAML pointer "\/config", глубина 1, дети \[0, 2\)/);
   assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0, "opening resources does not start expensive verification");
+  assert.equal(linked.calls.filter(call => call.query.viewInventoryAlias).length, 0, "inventory is loaded on demand");
+  await inventoryButton(linked, "Показать сохранённые views").fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.viewInventoryOffset, 0);
+  assert.match(resourceText(), /Сохранённые views: 1–2 из 3/);
+  assert.match(resourceText(), /#2 · source · покрытие.*character-range.*start.*10.*end.*80/);
+  assert.equal(linked.calls.filter(call => call.query.verifyResourceAlias).length, 0,
+    "inventory metadata does not trigger CAS verification");
+  await inventoryButton(linked, "Следующая страница views").fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.viewInventoryOffset, 2);
+  assert.equal(linked.calls.at(-1).query.viewInventorySnapshotCount, 3);
+  assert.match(resourceText(), /Сохранённые views: 3–3 из 3.*#3 · internal/);
+  assert.doesNotMatch(resourceText(), /#2 · source/, "older pages leave the DOM");
+  assert.equal(inventoryButton(linked, "Следующая страница views"), undefined,
+    "complete inventory has no forward continuation");
+  await inventoryButton(linked, "Предыдущая страница views").fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.viewInventoryOffset, 0);
+  assert.equal(linked.calls.at(-1).query.viewInventorySnapshotCount, 3);
+  assert.match(resourceText(), /Сохранённые views: 1–2 из 3/);
   await checkButton(linked).fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");
   assert.match(resourceText(), /хеш и длина сохранённого тела проверены/);
@@ -285,6 +320,7 @@ function fixture(withAliases = false) {
   assert.match(resourceText(), /доставка неизвестна/, "CAS validity never manufactures model delivery");
   await linked.get("modelContextRefresh").fire("click"); await flush();
   assert.match(resourceText(), /сохранённое тело не проверено/, "refresh does not leave a stale verification label on screen");
+  assert.doesNotMatch(resourceText(), /Сохранённые views: 1–2 из 3/, "refresh starts a new inventory snapshot");
   linked.verification.availability = "Unavailable";
   linked.verification.partsAvailability = "Unavailable";
   await checkButton(linked).fire("click"); await flush();

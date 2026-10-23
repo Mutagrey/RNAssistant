@@ -727,10 +727,15 @@ traces remain unknown.
 For a selected saved request, the Inspector may look up retained view metadata
 for names in its exact observations and read-time descriptor, within the same
 authorized authority scope. This finds at most one retained coverage variant per
-name, not an exhaustive inventory; an omitted name is unknown, not proof that a
-live provider cannot read it. Metadata-only inspection does not authenticate CAS
-bytes. Explicit checks verify either the revision payload or one selected view
-payload and all its parts by full hash and length. They record transient
+name. A separate paginated inventory lists every registered view/coverage variant
+for the selected exact revision in that scope, in append order. The first page's
+`snapshotCount` bounds later pages, so views registered after it appear only in a
+fresh inventory; the Inspector displays one page at a time. Pages expose coverage,
+payload-registration and part count as metadata; they do not read the live
+provider or authenticate CAS bytes. An
+omitted name is unknown, not proof that a live provider cannot read it. Explicit
+checks verify either the revision payload or one known-name view payload and all
+its parts by full hash and length. They record transient
 per-body status and check time; a valid view does not establish currentness,
 semantic transformation validity or delivery to the model.
 

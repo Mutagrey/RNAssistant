@@ -637,6 +637,9 @@ namespace RNAssistant.Harness
             public ResourceRevisionMetadata GetRevision(ResourceAuthorityScopeId scope, ResourceRef reference) { return _inner.GetRevision(scope, reference); }
             public void RegisterView(ResourceAuthorityScopeId scope, ResourceRevisionView view) { _inner.RegisterView(scope, view); ViewRegistered?.Invoke(view); }
             public ResourceRevisionView GetView(ResourceAuthorityScopeId scope, ResourceRef reference, string view) { ViewReads++; return _inner.GetView(scope, reference, view); }
+            public ResourceRevisionViewPage ReadViews(ResourceAuthorityScopeId scope, ResourceRef reference,
+                int offset, int limit, int? snapshotCount = null)
+            { return _inner.ReadViews(scope, reference, offset, limit, snapshotCount); }
         }
 
         private static void DocumentDiscoveryCurrentHeads()

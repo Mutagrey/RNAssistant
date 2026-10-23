@@ -222,6 +222,7 @@ namespace RNAssistant.Core.Storage
                 using (var stream = new FileStream(ViewPathFor(scope), FileMode.Append, FileAccess.Write, FileShare.Read))
                 { stream.Write(bytes, 0, bytes.Length); stream.Flush(true); }
                 state.Views.Add(key, view);
+                AddViewIndex(state, view);
                 state.ViewLength = new FileInfo(ViewPathFor(scope)).Length;
             }
         }
@@ -230,8 +231,43 @@ namespace RNAssistant.Core.Storage
         {
             lock (_sync)
             using (AcquireLock())
-                return Load(scope).Views.Values.Where(item => RevisionKey(item.Reference) == RevisionKey(reference) && item.View == view)
-                    .OrderByDescending(item => item.Coverage.Kind == ResourceCoverageKinds.Whole).FirstOrDefault();
+            {
+                List<ResourceRevisionView> items;
+                return Load(scope).ViewsByRevision.TryGetValue(RevisionKey(reference), out items)
+                    ? items.Where(item => item.View == view)
+                        .OrderByDescending(item => item.Coverage.Kind == ResourceCoverageKinds.Whole).FirstOrDefault()
+                    : null;
+            }
+        }
+
+        public ResourceRevisionViewPage ReadViews(ResourceAuthorityScopeId scope, ResourceRef reference,
+            int offset, int limit, int? snapshotCount = null)
+        {
+            if (scope == null || reference == null || !reference.IsExact || offset < 0 ||
+                limit < 1 || limit > 50 || snapshotCount < 0)
+                throw new ArgumentException("An exact revision and bounded view page are required.");
+            lock (_sync)
+            using (AcquireLock())
+            {
+                List<ResourceRevisionView> views;
+                if (!Load(scope).ViewsByRevision.TryGetValue(RevisionKey(reference), out views))
+                    views = new List<ResourceRevisionView>();
+                var count = snapshotCount ?? views.Count;
+                if (count > views.Count || offset > count)
+                    throw new ResourceAuthorityConflictException("The retained view inventory snapshot is no longer available.");
+                var items = views.Skip(offset).Take(Math.Min(limit, count - offset)).ToArray();
+                var next = offset + items.Length < count ? (int?)(offset + items.Length) : null;
+                return new ResourceRevisionViewPage(items, count, next);
+            }
+        }
+
+        private static void AddViewIndex(ScopeProjection state, ResourceRevisionView view)
+        {
+            var key = RevisionKey(view.Reference);
+            List<ResourceRevisionView> items;
+            if (!state.ViewsByRevision.TryGetValue(key, out items))
+            { items = new List<ResourceRevisionView>(); state.ViewsByRevision.Add(key, items); }
+            items.Add(view);
         }
 
         private static string ViewKey(ResourceRevisionView view)
@@ -273,6 +309,7 @@ namespace RNAssistant.Core.Storage
                     if (view == null || !state.Revisions.ContainsKey(RevisionKey(view.Reference)) || state.Views.ContainsKey(ViewKey(view)))
                         throw new InvalidDataException("Resource view journal contains an invalid record.");
                     state.Views.Add(ViewKey(view), view);
+                    AddViewIndex(state, view);
                 }
                 foreach (var commit in ReadTail<ResourceAuthorityCommit>(path, state.AuthorityLength))
                 { Validate(state, commit); Apply(state, commit); }
@@ -533,6 +570,8 @@ namespace RNAssistant.Core.Storage
                 new Dictionary<string, ResourceRevisionMetadata>(StringComparer.Ordinal);
             internal readonly Dictionary<string, ResourceRevisionView> Views =
                 new Dictionary<string, ResourceRevisionView>(StringComparer.Ordinal);
+            internal readonly Dictionary<string, List<ResourceRevisionView>> ViewsByRevision =
+                new Dictionary<string, List<ResourceRevisionView>>(StringComparer.Ordinal);
 
             internal ScopeProjection(ResourceAuthorityScopeId scope) { Scope = scope; }
         }

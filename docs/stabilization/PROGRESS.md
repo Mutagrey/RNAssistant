@@ -11,6 +11,19 @@ including after switching chats. Focused inbox, attachment, chat-navigation and
 Chrome delivery checks pass. The physical Office ChatView is still separate and
 the full 1b mount remains open. Windows/Office/WebView2 remain unqualified.
 
+## Resource Context paginated retained view inventory — 2026-10-23
+
+Owner: existing revision authority store and Model Context Inspector. For a
+resource in an exact saved request, Inspector now pages through every registered
+view/coverage variant in its authorized scope and revision. The first page pins
+an append-order count, so later registrations cannot enter an in-progress list;
+a fresh request sees them. The UI keeps one page visible at a time. Pages expose
+metadata only and do not verify CAS, probe a live provider or prove model
+delivery. Focused Harness/Web checks pass
+host-neutral, including restart and foreign-scope isolation. Windows/Office/WebView2
+remain unqualified. Exact CAS verification of an arbitrary inventory variant is
+still open in BACKLOG.
+
 ## Resource Context retained view checks in Inspector — 2026-10-23
 
 Owner: Model Context Inspector and existing revision/CAS stores. For an exact
