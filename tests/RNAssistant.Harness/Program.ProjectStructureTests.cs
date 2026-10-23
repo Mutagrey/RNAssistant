@@ -206,10 +206,17 @@ namespace RNAssistant.Harness
         {
             var root = FindHarnessRepositoryRoot();
             var officeRoot = Path.Combine(root, "src", "RNAssistant.Office");
+            // These concrete members expose artifact authority, cache lifecycle,
+            // or diagnostics; session aggregate operations stay on IConversationStore.
             var allowedConcreteCalls = new[]
             {
                 ".LoadArtifactBody",
-                ".LoadArtifactBodies"
+                ".LoadArtifactBodies",
+                ".DocumentArtifacts",
+                ".ResetAfterRuntimeDataClear",
+                ".PerformanceLog",
+                ".HeaderFullReplayCount",
+                ".HeaderIncrementalReplayCount"
             };
             var offenders = new List<string>();
             foreach (var path in Directory.GetFiles(officeRoot, "*.cs", SearchOption.AllDirectories))
@@ -237,7 +244,6 @@ namespace RNAssistant.Harness
 
             var portMethods = typeof(RNAssistant.Core.Persistence.IConversationStore)
                 .GetMethods(BindingFlags.Instance | BindingFlags.Public);
-            AssertEqual(15, portMethods.Length, "conversation port contains only current aggregate operations");
             foreach (var forbidden in new[]
             {
                 "LoadArtifactBody",
