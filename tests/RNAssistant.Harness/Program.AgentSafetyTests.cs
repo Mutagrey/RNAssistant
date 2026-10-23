@@ -760,17 +760,17 @@ namespace RNAssistant.Harness
                     var repair = JObject.Parse(prompt.Last().Content.Substring(prefix.Length));
                     AssertEqual(calls, (int)repair["attempt"], "repair names the total protocol attempt, including the initial response");
                     AssertEqual(invalid.Length + 1, (int)repair["max_attempts"], "repair reports the configured total limit");
-                    AssertContains((string)repair["instruction"], "conversation-response-v7", "repair uses the active ID-free contract");
-                    AssertContains((string)repair["instruction"], "Do not include id", "repair never asks the model to allocate IDs");
-                    AssertContains((string)repair["instruction"], "nested arguments", "repair preserves the shared string escaping contract");
+                    AssertContains((string)repair["instruction"], "conversation-response-v8", "repair uses the active ID-free contract");
+                    AssertContains((string)repair["instruction"], "Runtime assigns IDs", "repair never asks the model to allocate IDs");
+                    AssertContains((string)repair["instruction"], "including nested tool arguments", "repair preserves the shared string escaping contract");
                     AssertContains((string)repair["instruction"], "arguments is already the root object",
                         "repair explains that tool arguments have no second wrapper");
-                    AssertContains((string)repair["instruction"], "remove that undeclared property",
+                    AssertContains((string)repair["instruction"], "For an undeclared property, remove it",
                         "repair removes the exact property rejected by the schema");
-                    AssertContains((string)repair["instruction"], "move those fields up one level",
+                    AssertContains((string)repair["instruction"], "move those fields up first",
                         "repair preserves declared fields that were placed inside the wrapper");
-                    AssertContains((string)repair["instruction"], "instead of repeating the rejected object unchanged",
-                        "repair forbids identical retries after schema rejection");
+                    AssertContains((string)repair["instruction"], "Do not replay previously accepted operations",
+                        "repair forbids replay of accepted operations");
                 }
                 AssertTrue(prompt.All(message => string.IsNullOrEmpty(message.ReasoningContent)), "rejected reasoning never enters prompt");
                 AssertEqual(stepId, options.TraceStepId, "one logical step across repairs");
@@ -781,7 +781,8 @@ namespace RNAssistant.Harness
                 return Task.FromResult(new LlmCompletionResult
                 {
                     Content = calls <= invalid.Length ? invalid[calls - 1] :
-                        "{\"message\":\"  Accepted.  \",\"action\":\"done\",\"tool_calls\":[]}",
+                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer directly.", "  Accepted.  ", results: new ConversationResultClaim[0]),
                     ReasoningContent = calls <= invalid.Length ? "REJECTED_REASONING" : "accepted reasoning",
                     PromptTokens = calls * 10,
                     CompletionTokens = calls,
@@ -793,7 +794,7 @@ namespace RNAssistant.Harness
                 AttemptStarted = streaming => started++, AttemptCompleted = () => completed++
             }, CancellationToken.None);
             AssertTrue(result.Failure == null, result.Failure == null ? "accepted typed result" : result.Failure.Message);
-            AssertEqual("  Accepted.  ", result.Response.Message, "v7 preserves the exact message string");
+            AssertEqual("  Accepted.  ", result.Response.Message, "v8 preserves the exact message string");
             AssertTrue(!string.IsNullOrWhiteSpace(successfulAttemptId), "accepted response has a generated raw attempt identity");
             AssertEqual(successfulAttemptId, result.SourceModelAttemptId,
                 "accepted source identity is a snapshot unaffected by optional trace changes to reused options");
@@ -918,7 +919,8 @@ namespace RNAssistant.Harness
                 if (formats.Count == 1) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "unsupported schema");
                 if (options.ResponseFormat == LlmResponseFormats.JsonObject)
                     AssertTrue(options.ResponseSchemaName == null && options.ResponseSchemaJson == null, "fallback clears strict schema fields");
-                return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                    ConversationResponse.FinishAction, "Answer directly.", "Done.", results: new ConversationResultClaim[0]) });
             };
             var protocol = new ModelProtocolClient(completion);
             var first = await protocol.GetResponseAsync(request,
@@ -963,7 +965,8 @@ namespace RNAssistant.Harness
                 return Task.FromResult(new LlmCompletionResult
                 {
                     Content = formats.Count == 1 ? "invalid model response" :
-                        "{\"message\":\"Accepted after fallback.\",\"action\":\"done\",\"tool_calls\":[]}"
+                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Answer after fallback.", "Accepted after fallback.", results: new ConversationResultClaim[0])
                 });
             });
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
@@ -989,7 +992,8 @@ namespace RNAssistant.Harness
                 if (prompts.Count == 1 || prompts.Count == 3)
                     throw new LlmRequestException(prompts.Count == 1 ? LlmFailureKind.Timeout : LlmFailureKind.Network, "temporary failure");
                 return Task.FromResult(new LlmCompletionResult { Content = prompts.Count == 2 ? "invalid response" :
-                    "{\"message\":\"Recovered.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer after recovery.", "Recovered.", results: new ConversationResultClaim[0]) });
             }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
             AssertTrue(result.Failure == null, "two transient failures do not consume either protocol response slot");
@@ -1013,7 +1017,8 @@ namespace RNAssistant.Harness
                 if (calls == 1 || calls == 3 || calls == 5 || calls == 6)
                     throw new LlmRequestException(LlmFailureKind.TransientServer, "gateway unavailable", statusCode: 502);
                 return Task.FromResult(new LlmCompletionResult { Content = calls < 5 ? "invalid response" :
-                    "{\"message\":\"Next step.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Answer on the new step.", "Next step.", results: new ConversationResultClaim[0]) });
             }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
             var failed = await protocol.GetResponseAsync(NewProtocolRequest(3), null, CancellationToken.None);
             AssertEqual(ModelProtocolFailureKind.Provider, failed.Failure.Kind, "third transient failure ends the step");

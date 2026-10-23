@@ -74,6 +74,9 @@ an irreparable obstacle without reporting success or replaying a tool.
   The two `agent: no-tool` cases now cover rejected `continue`, typed question
   and post-answer continuation, plus empty-`execute` repair with evidence-citing
   finish. Related schema fallback, Task List and VBA patch fixtures pass.
+- The `model protocol:` group passes 15/15 with v8 accepted responses and
+  current repair guidance; retry, fallback and provider budgets retain their
+  original assertions.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.
