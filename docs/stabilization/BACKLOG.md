@@ -12,6 +12,14 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Resource read Harness: устаревшая фраза результата — 2026-10-23
+
+Owner: resource gateway tests. `tool runtime: native resource tools manual and
+model paths` ожидает `returned its complete source`, тогда как текущий
+`ResourceReadToolHandler` сообщает `returned source text with the reported
+coverage`. Согласовать assertion с coverage-контрактом отдельно; ошибка не
+связана со схемой `common.resources_find`.
+
 ## CLI interactive smoke: подтверждение перед вопросом — 2026-10-23
 
 Owner: CLI interactive test fixture. Полный `tests/cli/interactive_smoke.py`

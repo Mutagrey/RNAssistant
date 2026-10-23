@@ -993,22 +993,15 @@ namespace RNAssistant.Runtime
 
             private static JObject OfficeResourceVariant(bool find)
             {
-                var schema = JObject.Parse(find ? Schema("query", false) : ResourceModelReadSchema.Office());
+                if (find) return ResourceModelFindSchema.BoundOffice();
+                var schema = JObject.Parse(ResourceModelReadSchema.Office());
                 var properties = (JObject)schema["properties"];
                 properties["type"] = new JObject { ["type"] = "string", ["enum"] = new JArray("office") };
                 ((JArray)schema["required"]).Add("type");
-                if (find)
+                foreach (var branch in ((JArray)schema["anyOf"]).OfType<JObject>())
                 {
-                    properties["scope"] = new JObject { ["type"] = "string",
-                        ["enum"] = new JArray("document", "selection", "vba") };
-                }
-                else
-                {
-                    foreach (var branch in ((JArray)schema["anyOf"]).OfType<JObject>())
-                    {
-                        ((JObject)branch["properties"])["type"] = properties["type"].DeepClone();
-                        ((JArray)branch["required"]).Add("type");
-                    }
+                    ((JObject)branch["properties"])["type"] = properties["type"].DeepClone();
+                    ((JArray)branch["required"]).Add("type");
                 }
                 return schema;
             }

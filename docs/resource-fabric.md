@@ -693,6 +693,11 @@ without a profile leaves extractor provenance unknown.
 PDF rendering remains an application data-plane view. The CLI Office binding
 uses the direct Office model-read schema with a required `type=office` discriminator,
 including the same page, section, tree, table, procedure and text-window alternatives.
+Office discovery uses one Core query contract in the direct tool and workspace/CLI
+binding. The bound route adds `type=office`, defaults to its pinned `document`, and
+admits only `document`, `selection` and `vba` scopes; both routes limit a nonempty
+query to 500 characters. Other Office discovery scopes remain available only in
+the direct document chat.
 General navigation and available-view discovery
 across providers remain open.
 

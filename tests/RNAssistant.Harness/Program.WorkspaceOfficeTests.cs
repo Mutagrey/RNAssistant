@@ -28,6 +28,24 @@ namespace RNAssistant.Harness
     {
         private static void WorkspaceOfficeTargetStaysPinned()
         {
+            var directFind = JObject.Parse(ResourceFindToolHandler.Descriptor.ParametersJson);
+            var boundFind = ResourceModelFindSchema.BoundOffice();
+            AssertTrue(JToken.DeepEquals(directFind["properties"]["query"], boundFind["properties"]["query"]),
+                "direct Office and workspace Office discovery share the query limit and description");
+            AssertEqual("document", (string)boundFind["properties"]["scope"]["default"],
+                "workspace Office discovery defaults to the pinned document");
+            string schemaError;
+            AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject { ["type"] = "office", ["scope"] = "vba",
+                ["query"] = new string('x', 500) }, boundFind, false, out schemaError),
+                "workspace Office discovery accepts the shared maximum query in a bound scope: " + schemaError);
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["type"] = "office",
+                ["query"] = new string('x', 501) }, boundFind, false, out schemaError),
+                "workspace Office discovery rejects queries longer than the direct Office limit");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["type"] = "office", ["scope"] = "all" },
+                boundFind, false, out schemaError),
+                "workspace Office discovery cannot escape the pinned document scopes");
+            AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject { ["scope"] = "all" }, directFind,
+                false, out schemaError), "direct Office discovery keeps its broader scopes: " + schemaError);
             WithTempPaths(paths =>
             {
                 var adapter = new FakeOfficeAdapter();
