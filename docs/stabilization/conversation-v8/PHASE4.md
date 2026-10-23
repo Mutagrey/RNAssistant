@@ -82,6 +82,9 @@ an irreparable obstacle without reporting success or replaying a tool.
   survive compaction without being regenerated.
 - Prompt-schema migration and default-prompt checks pass with the shared v8
   action guidance; migrated settings complete direct Agent and Plan turns.
+- Model compatibility probe fixtures pass in both response modes and all three
+  result roles (2/2 cases): exact v8 sentinels qualify, while altered fields,
+  model-owned IDs and loose responses remain rejected.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
 migrated groups; its complete test suite is not yet green.

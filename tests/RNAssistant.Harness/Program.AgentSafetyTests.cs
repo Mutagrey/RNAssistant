@@ -2436,8 +2436,10 @@ namespace RNAssistant.Harness
 
         private static void ModelCompatibilityAcceptsExactSentinels()
         {
-            const string toolJson = "{\"message\":\"TOOL_OK\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
-            const string finalJson = "{\"message\":\"RESULT_OK\",\"action\":\"done\",\"tool_calls\":[]}";
+            var toolJson = ModelProtocolWire.WriteAcceptedCall("Probe one compatible tool call.", "TOOL_OK",
+                new ConversationToolCall { Name = "compat.echo", Arguments = new JObject { ["value"] = "A" } });
+            var finalJson = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
             foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {
@@ -2464,7 +2466,7 @@ namespace RNAssistant.Harness
                 AssertEqual(mode == AgentResponseModes.JsonSchema ? LlmResponseFormats.JsonSchema : LlmResponseFormats.JsonObject,
                     requests[1].Item2.ResponseFormat, "shared options preserve selected format");
                 AssertEqual("Return exactly one JSON object: " + toolJson, requests[1].Item1.Single().Content,
-                    "shared writer supplies the fixed active-v7 probe instruction");
+                    "shared writer supplies the fixed active-v8 probe instruction");
                 AssertEqual("Reply with " + finalJson + ".", requests[2].Item1.Last().Content, "final probe stays in the active contract");
                 AssertTrue(!ReferenceEquals(requests[1].Item2, requests[2].Item2), "shared builder never shares mutable options between probes");
                 var accepted = requests[2].Item1[0];
@@ -2500,8 +2502,10 @@ namespace RNAssistant.Harness
 
         private static void ModelCompatibilityRejectsLooseResponses()
         {
-            const string toolJson = "{\"message\":\"TOOL_OK\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"compat.echo\",\"arguments\":{\"value\":\"A\"}}]}";
-            const string finalJson = "{\"message\":\"RESULT_OK\",\"action\":\"done\",\"tool_calls\":[]}";
+            var toolJson = ModelProtocolWire.WriteAcceptedCall("Probe one compatible tool call.", "TOOL_OK",
+                new ConversationToolCall { Name = "compat.echo", Arguments = new JObject { ["value"] = "A" } });
+            var finalJson = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
             var cases = new List<string[]>
             {
                 new[] { "Any non-empty response", toolJson.Replace("\"A\"", "\"WRONG\""), finalJson.Replace("RESULT_OK", "Any final message") }
