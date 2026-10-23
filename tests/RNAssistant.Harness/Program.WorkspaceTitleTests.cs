@@ -100,8 +100,6 @@ namespace RNAssistant.Harness
                         }
                         string oldCallMessageId = null, oldCallId = null, oldToolName = null;
                         AcceptedToolCallOrigin oldOrigin = null;
-                        string oldCallMessageId = null, oldCallId = null, oldToolName = null;
-                        AcceptedToolCallOrigin oldOrigin = null;
                         using (var reopened = new WorkspaceConversationService(paths))
                         {
                             var next = reopened.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
@@ -140,7 +138,8 @@ namespace RNAssistant.Harness
                             try
                             {
                                 corruptedService.SubmitInputAsync(workspace, invalidRequest,
-                                    settings, () => "test-key").GetAwaiter().GetResult();
+                                    settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
+                                    .GetAwaiter().GetResult();
                             }
                             catch (InvalidOperationException error) { rejected = error; }
                             AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace response is invalid"),
@@ -161,28 +160,34 @@ namespace RNAssistant.Harness
                         var sibling = forged.Messages.Where(message => message.Role == "assistant" &&
                             message.AcceptedCallOrigin != null).Skip(1).First();
                         var siblingOrigin = sibling.AcceptedCallOrigin;
-                        sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
-                            siblingOrigin.ModelAttemptId, siblingOrigin.CallIndex + 2);
-                        new ChatStore(paths).Commit(forged,
-                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
-                        using (var batchService = new WorkspaceConversationService(paths))
+                        foreach (var invalidIndex in new[] { 0, siblingOrigin.CallIndex + 2 })
                         {
-                            var invalidBatch = new WorkspaceSubmitInputRequest {
-                                SessionId = sessionId, RequestId = "invalid-v8-batch-origin",
-                                Message = "После подмены пакета", Mode = ChatModes.Agent
-                            };
-                            InvalidOperationException rejected = null;
-                            try
+                            forged = new ChatStore(paths).Load(sessionId);
+                            sibling = forged.Messages.Single(message => message.Id == sibling.Id);
+                            sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
+                                siblingOrigin.ModelAttemptId, invalidIndex);
+                            new ChatStore(paths).Commit(forged,
+                                new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
+                            using (var batchService = new WorkspaceConversationService(paths))
                             {
-                                batchService.SubmitInputAsync(workspace, invalidBatch, settings,
-                                    () => "test-key").GetAwaiter().GetResult();
+                                var invalidBatch = new WorkspaceSubmitInputRequest {
+                                    SessionId = sessionId, RequestId = "invalid-v8-batch-origin-" + invalidIndex,
+                                    Message = "После подмены пакета", Mode = ChatModes.Agent
+                                };
+                                InvalidOperationException rejected = null;
+                                try
+                                {
+                                    batchService.SubmitInputAsync(workspace, invalidBatch, settings,
+                                        () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
+                                        .GetAwaiter().GetResult();
+                                }
+                                catch (InvalidOperationException error) { rejected = error; }
+                                AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace batch"),
+                                    "calls from a broken v8 batch sequence cannot be rejoined");
+                                AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
+                                    "bad v8 batch origin does not accept a new input");
+                                AssertEqual(3, served, "bad v8 batch origin cannot cause a model request");
                             }
-                            catch (InvalidOperationException error) { rejected = error; }
-                            AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace batch"),
-                                "calls from a broken v8 batch sequence cannot be rejoined");
-                            AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
-                                "bad v8 batch origin does not accept a new input");
-                            AssertEqual(3, served, "bad v8 batch origin cannot cause a model request");
                         }
                         forged = new ChatStore(paths).Load(sessionId);
                         sibling = forged.Messages.Single(message => message.Id == sibling.Id);
@@ -202,7 +207,8 @@ namespace RNAssistant.Harness
                             {
                                 invalidService.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                                     SessionId = sessionId, Message = "После подмены результата", Mode = ChatModes.Agent
-                                }, settings, () => "test-key").GetAwaiter().GetResult();
+                                }, settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
+                                    .GetAwaiter().GetResult();
                             }
                             catch (InvalidOperationException error) { rejected = error; }
                             AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace tool result is invalid"),

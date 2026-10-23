@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Conversation v8 post-merge regression review — 2026-10-23
+
+Owner: Core accepted-history reader / Workspace replay. Review of `a61b5207`
+found two lost history checks: non-native records could carry multiple native
+calls, and a later batch sibling could restart at index zero. Both now fail
+before another input or model request is accepted. Existing regression cases
+cover mixed transports and broken/duplicate batch positions.
+
+The merge also duplicated Harness local variables, left a new Office-history
+fixture on the removed call-builder signature/v7 reply, and omitted `window`
+from a Web test context after the shared-draft change. These fixtures are fixed.
+The host-neutral Harness builds; 38 focused protocol/history/Workspace/question/
+context/plugin cases, eight Node cases and the shared-chat browser routing case
+pass. No complete suite or Office/VSTO validation was run. Remaining v7 CLI
+fixtures are listed in [BACKLOG](BACKLOG.md#cli-smoke-v7-fixtures-after-v8-cutover--2026-10-23);
+formal real-model and Windows/Office/WebView2 qualification remain open.
+
 ## Conversation v8 integration on main — 2026-10-23
 
 The `conversation-v8` implementation and its protocol, kernel, workspace, Office-neutral,

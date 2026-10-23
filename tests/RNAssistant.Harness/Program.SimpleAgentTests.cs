@@ -93,6 +93,17 @@ namespace RNAssistant.Harness
             var batch = nativeMessage();
             batch.ToolCalls.Add(new LlmToolCall { Id = "second", Name = "test.read", ArgumentsJson = "{}" });
             AssertTrue(!ConversationResponseHistoryReader.Read(batch).Success, "ambiguous native batch is not partially adapted");
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer })
+            foreach (var count in new[] { 1, 2 })
+            {
+                var mixedTransport = jsonMessage();
+                mixedTransport.ToolResultRole = role;
+                mixedTransport.ToolCalls = Enumerable.Range(0, count).Select(index => new LlmToolCall {
+                    Id = "foreign_" + index, Type = "function", Name = "other.tool", ArgumentsJson = "{}"
+                }).ToList();
+                AssertTrue(!ConversationResponseHistoryReader.Read(mixedTransport).Success,
+                    "non-native accepted history rejects unexpected native call metadata: " + role + "/" + count);
+            }
             foreach (var arguments in new[] { "{", "[]", "{\"at\":01}", "{}},{\"name\":\"test.read\",\"arguments\":{}" })
             {
                 var invalid = nativeMessage();

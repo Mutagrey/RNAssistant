@@ -32,11 +32,11 @@ namespace RNAssistant.Core.ModelProtocol
             var nativeCalls = message.ToolCalls;
             // Native tool transport stores plain narration plus a runtime call;
             // user/developer transport stores the identified v8 envelope.
-            if (nativeCalls != null && nativeCalls.Count > 0 &&
-                message.ToolResultRole == ToolResultRoles.Tool &&
-                message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion)
+            if (nativeCalls != null && nativeCalls.Count > 0)
             {
-                if (nativeCalls.Count != 1 || nativeCalls[0] == null ||
+                if (message.ToolResultRole != ToolResultRoles.Tool ||
+                    message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
+                    nativeCalls.Count != 1 || nativeCalls[0] == null ||
                     string.IsNullOrWhiteSpace(message.ResponseReason) ||
                     string.IsNullOrWhiteSpace(message.ToolName) ||
                     string.IsNullOrWhiteSpace(nativeCalls[0].ArgumentsJson) ||

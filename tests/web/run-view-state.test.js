@@ -208,6 +208,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
 
 {
   const ui = vm.createContext({});
+  ui.window = ui;
   ui.chatId = chat => chat.Id || chat.id;
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-state.js"), "utf8"), ui);
   const oldChat = { Id: "older", LastActivityUtc: "2026-09-01T10:00:00Z", UpdatedUtc: "2026-09-08T10:00:00Z" };

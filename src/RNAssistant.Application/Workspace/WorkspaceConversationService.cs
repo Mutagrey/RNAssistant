@@ -742,13 +742,14 @@ namespace RNAssistant.Runtime
                     var previous = history.LastOrDefault();
                     if (origin != null && string.IsNullOrWhiteSpace(item.RunId))
                         throw new InvalidOperationException(recovery + "Accepted call has no run ID.");
-                    if (origin != null && origin.CallIndex > 0 && priorOrigin != null &&
-                        origin.StepId == priorOrigin.StepId && origin.ModelAttemptId == priorOrigin.ModelAttemptId &&
-                        origin.CallIndex == priorOrigin.CallIndex + 1 && item.RunId == priorRunId &&
-                        previous?.Kind == AgentMessageKind.Assistant &&
-                        previous.Action == ConversationResponse.ExecuteAction &&
-                        previous.Reason == accepted.Response.Reason && accepted.Response.Message.Length == 0)
+                    if (origin != null && previous?.Kind == AgentMessageKind.Assistant &&
+                        previous.Action == ConversationResponse.ExecuteAction)
                     {
+                        if (priorOrigin == null || origin.CallIndex != priorOrigin.CallIndex + 1 ||
+                            origin.StepId != priorOrigin.StepId || origin.ModelAttemptId != priorOrigin.ModelAttemptId ||
+                            item.RunId != priorRunId || previous.Reason != accepted.Response.Reason ||
+                            accepted.Response.Message.Length != 0)
+                            throw new InvalidOperationException("Stored workspace batch origin or response metadata disagree.");
                         var calls = previous.ToolCalls.Concat(accepted.Response.ToolCalls).ToArray();
                         history.RemoveAt(history.Count - 1);
                         history.Add(AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction,

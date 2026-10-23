@@ -12,6 +12,20 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## CLI smoke v7 fixtures after v8 cutover — 2026-10-23
+
+Owner: Workspace/CLI test fixtures. Static post-merge review found v7 response
+bodies, `model_done` expectations or v7 schema assertions in these active scripts:
+`tool_result_projection_smoke.py`, `read_recovery_smoke.py`,
+`skill_packages_smoke.py`, `unified_agent_smoke.py`, `omitted_read_guard_smoke.py`,
+`turn_decisions_smoke.py`, `binary_resource_smoke.py`, `stabilization_smoke.py`,
+`read_acceptance_context_smoke.py`, `web_checks_runtime_smoke.py`,
+`skills_runtime_smoke.py`. Migrate them and their shared fixture consumers to
+explicit v8 replies with current-run terminal evidence, typed questions and
+current schema assertions; preserve each scenario's behavioral checks. Do not
+add product compatibility for obsolete test wire. These scripts were not run
+in this review and cannot currently establish v8 regression coverage.
+
 ## Resource read Harness: устаревшая фраза результата — 2026-10-23
 
 Owner: resource gateway tests. `tool runtime: native resource tools manual and

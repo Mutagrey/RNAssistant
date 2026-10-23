@@ -70,6 +70,10 @@ evidence-free claims when this run accepted no calls; any cited foreign ID is
 still rejected. Target WebView2 and full integration qualification remain open.
 
 History readers require `ResponseProtocolVersion=8` and exact accepted
-metadata. Format-7 chats are read-only after this cutover; no v7 inference,
+metadata. User/developer history cannot contain native call metadata; native
+history has exactly one paired call. Workspace replay checks adjacent batch
+siblings against the same run, step and model attempt with consecutive indexes;
+an index reset cannot start a second batch before the preceding results.
+Format-7 chats are read-only after this cutover; no v7 inference,
 dual-write or automatic migration is allowed. Windows x64 + Office x64 +
 WebView2 and real-model qualification remain open.

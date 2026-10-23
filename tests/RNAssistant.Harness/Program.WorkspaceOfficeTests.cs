@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
@@ -194,7 +195,9 @@ namespace RNAssistant.Harness
                                     requests[index] = await reader.ReadToEndAsync().ConfigureAwait(false);
                                 var reply = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] =
-                                        "{\"message\":\"Done.\",\"action\":\"done\",\"tool_calls\":[]}" } }) };
+                                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                            "Answer from the retained Office result.", "Done.",
+                                            results: new ConversationResultClaim[0]) } }) };
                                 var bytes = Encoding.UTF8.GetBytes(reply.ToString(Formatting.None));
                                 context.Response.ContentType = "application/json";
                                 context.Response.ContentLength64 = bytes.Length;
@@ -220,7 +223,8 @@ namespace RNAssistant.Harness
                             var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                                 Id = "prior-call", Name = WordToolIds.ReplaceText,
                                 Arguments = new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" }
-                            }, "Replacing.", null, ToolResultRoles.User, FixtureCallOrigin("prior-step"));
+                            }, "Replacing.", "Apply the requested replacement.", null,
+                                ToolResultRoles.User, FixtureCallOrigin("prior-step"));
                             call.RunId = "prior-run";
                             var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
                                 ToolCallId = "prior-call", ToolId = WordToolIds.ReplaceText
