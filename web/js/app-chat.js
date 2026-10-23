@@ -44,7 +44,7 @@ async function createOfficeHostChat(host) {
 }
 
 function officeHostChatUnavailableReason() {
-  if (state.bridgeUnavailable) return "Нет связи с Office. Повторно откройте панель RN Assistant.";
+  if (state.bridgeUnavailable) return state.bridgeFailure && state.bridgeFailure.message || "Панель RN Assistant недоступна.";
   if (!state.officeHostChatAvailable) return "Создание Office-чата недоступно в этом окне.";
   if (state.officeHostChatPending) return "Создаю чат в " + state.officeHostChatTarget + "…";
   if (currentActiveSend()) return "Дождитесь завершения ответа или остановите текущую задачу.";

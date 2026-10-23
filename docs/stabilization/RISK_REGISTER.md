@@ -8,6 +8,18 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Native Host panel unavailable on startup — 2026-10-23
+
+Owner: WebView bridge/init and controller chat-state read. A Windows Native Host
+photo shows the static UI with chats disabled on a package whose auxiliary
+`RNAssistant.JsWorker.exe` reports commit `da3549ce`; that executable does not run
+the panel handshake. Source inspection shows that a missing bridge, init timeout,
+host init failure or Web UI projection exception all produced the same misleading
+unavailable state. The current UI now shows the actual init error and offers an
+explicit retry when a bridge exists. Focused `bridge-bootstrap` passes host-neutral.
+The triggering Windows cause remains open until the exact pane build and runtime
+log or a target-host reproduction are available; no chat data is reset for triage.
+
 ## Source-size audit — 2026-10-22
 
 Fixed source limits were removed across live text captures, HTML and file import,

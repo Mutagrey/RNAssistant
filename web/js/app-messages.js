@@ -256,14 +256,18 @@ function renderChatEmptyState(options) {
 
   var title = document.createElement("div");
   title.className = "chat-empty-title";
-  title.textContent = options ? options.title : state.bridgeUnavailable ? "Откройте панель из Office" :
+  var bridgePresent = !!(window.chrome && window.chrome.webview);
+  title.textContent = options ? options.title : state.bridgeUnavailable
+    ? "Панель RN Assistant недоступна" :
     "Готов к работе с документом";
   empty.appendChild(title);
 
   var text = document.createElement("div");
   text.className = "chat-empty-text";
   text.textContent = options ? options.text : state.bridgeUnavailable
-    ? "Статический UI загружен, но WebView bridge RNAssistant недоступен. Чаты, контекст и инструменты заработают внутри add-in."
+    ? (bridgePresent
+      ? ((state.bridgeFailure && state.bridgeFailure.message) || "Не удалось инициализировать RN Assistant.")
+      : "Связь с RN Assistant недоступна в этом окне. Повторно откройте панель.")
     : "Выберите контекст или задайте вопрос по текущему Office-файлу.";
   empty.appendChild(text);
 
@@ -274,6 +278,17 @@ function renderChatEmptyState(options) {
     return empty;
   }
   if (state.bridgeUnavailable) {
+    if (bridgePresent && (!state.bridgeFailure || state.bridgeFailure.code !== "bridge_contract_mismatch")) {
+      var retryActions = document.createElement("div");
+      retryActions.className = "chat-empty-suggestions";
+      var retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "chat-empty-suggestion";
+      retry.textContent = "Повторить загрузку";
+      retry.addEventListener("click", function () { initialize(); });
+      retryActions.appendChild(retry);
+      empty.appendChild(retryActions);
+    }
     return empty;
   }
 

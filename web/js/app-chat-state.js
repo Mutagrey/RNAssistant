@@ -21,7 +21,7 @@ function renderChatSessions() {
   if (!chats.length) {
     var empty = document.createElement("option");
     empty.value = "";
-    empty.textContent = state.bridgeUnavailable ? "Office bridge недоступен" : "Нет чатов";
+    empty.textContent = state.bridgeUnavailable ? "Панель недоступна" : "Нет чатов";
     select.appendChild(empty);
   }
   chats.forEach(function (chat) {
@@ -512,7 +512,7 @@ function renderChatSessionList(chats) {
     list.classList.add("is-empty");
     var empty = document.createElement("div");
     empty.className = "tree-empty";
-    empty.textContent = state.bridgeUnavailable ? "Office bridge недоступен." : "Чатов пока нет.";
+    empty.textContent = state.bridgeUnavailable ? "Панель недоступна." : "Чатов пока нет.";
     list.appendChild(empty);
     return;
   }

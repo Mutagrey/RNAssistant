@@ -19,6 +19,11 @@ Office launcher or manual attach
 `RNAssistant.*AddIn` остаются compatibility/debug VSTO shells. VBA launchers для
 Excel, Word, PowerPoint и Outlook находятся в `wrappers/native`.
 
+Если начальный bridge-запрос завершился ошибкой, панель показывает её текст и
+разрешает явный повтор загрузки при доступном WebView bridge. Несовпадение
+версий bridge требует установки согласованного комплекта файлов и повторного
+открытия панели; ошибка не сбрасывает и не удаляет чаты.
+
 Список чатов в Desktop, VSTO и in-process NativeHostCli всегда показывает строки
 «Новый чат» для Excel, Word, PowerPoint и Outlook, включая состояние без чатов.
 Нажатие во время перехода между чатами ставит создание в ту же очередь, а не

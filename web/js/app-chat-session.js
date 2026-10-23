@@ -411,6 +411,7 @@ function renderVisibleSecondarySurfaces() {
 function applyInitState(init) {
   init = init || {};
   state.bridgeUnavailable = false;
+  state.bridgeFailure = null;
   document.body.classList.remove("bridge-unavailable");
   state.appVersion = init.appVersion || "";
   state.host = init.host;
@@ -456,6 +457,10 @@ function applyBridgeUnavailableState(error) {
   var previousChatId = state.activeChatId || "";
   captureChatDraft(previousChatId);
   state.bridgeUnavailable = true;
+  state.bridgeFailure = {
+    code: error && error.code || "bridge_init_failed",
+    message: error && error.message || "Не удалось загрузить панель RN Assistant."
+  };
   if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
   if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
   if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();
@@ -516,7 +521,7 @@ function applyBridgeUnavailableState(error) {
   renderVisibleSecondarySurfaces();
   renderModelControls();
   renderSendControls();
-  log((error && (error.detail || error.message)) || "WebView bridge is not available.", "error");
+  log(state.bridgeFailure.message, "error");
 }
 
 function chatNavigationSignature(payload) {

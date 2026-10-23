@@ -8,6 +8,7 @@ const vm = require("node:vm");
 const root = path.join(__dirname, "../..");
 const source = fs.readFileSync(path.join(root, "web/js/app-core.js"), "utf8");
 const chatSessionSource = fs.readFileSync(path.join(root, "web/js/app-chat-session.js"), "utf8");
+const messagesSource = fs.readFileSync(path.join(root, "web/js/app-messages.js"), "utf8");
 
 function createContext() {
   const posted = [];
@@ -45,7 +46,8 @@ function installChatProjection(context) {
   }
   context.document.body = { classList: { add() {}, remove() {} } };
   context.$ = () => ({ textContent: "", classList: { contains: () => false } });
-  for (const name of ["captureChatDraft", "restoreChatDraft", "resetMessageEditState", "renderSettings",
+  for (const name of ["captureChatDraft", "restoreChatDraft", "resetMessageEditState", "resetLiveReasoning",
+    "acceptToolLibraryState", "acceptSkillLibraryState", "renderSettings",
     "renderChatSessions", "renderMessages", "renderContext", "renderContextMeter", "renderModelControls",
     "renderSendControls", "syncTokenEstimateCalibrationFromUsage", "log"]) context[name] = () => {};
   context.toolLibraryItemsFromContract = contract => contract.items;
@@ -72,7 +74,9 @@ function appInit(host, chatId) {
       payload: { bridgeToken: "session-token", bridgeContract: contract, init: initial } });
     const init = await initRequest;
     assert.equal(init, initial, "transport resolves only application state");
+    context.state.bridgeFailure = { code: "bridge_init_failed", message: "Earlier failure" };
     context.applyInitState(init);
+    assert.equal(context.state.bridgeFailure, null, "successful init clears the previous startup failure");
     assert.equal(context.state.bridgeToken, "session-token", "transport accepts its token before resolving init");
     for (const operation of ["selectChat", "createOfficeHostChat"]) {
       const target = appInit("Word", operation + "-chat");
@@ -159,10 +163,44 @@ function appInit(host, chatId) {
     vm.runInContext(chatSessionSource, context, { filename: "app-chat-session.js" });
     context.state.bridgeToken = "token-from-partial-init";
     context.applyBridgeUnavailableState(new Error("initial projection failed"));
+    assert.equal(context.state.bridgeFailure.message, "initial projection failed");
     context.state.initializePromise = Promise.resolve();
     await assert.rejects(() => context.send("listChats", {}), /not initialized/);
     assert.equal(posted.length, 0);
     console.log("PASS bridge bootstrap: failed init projection revokes token and queued calls");
+  }
+
+  {
+    const { context, posted, deliver } = createContext();
+    installChatProjection(context);
+    const element = tag => ({ tag, children: [], handlers: {},
+      appendChild(child) { this.children.push(child); },
+      addEventListener(type, handler) { this.handlers[type] = handler; } });
+    context.document.createElement = element;
+    context.RNAssistantIcons = { render: () => "" };
+    let retries = 0;
+    context.initialize = () => { retries += 1; };
+    vm.runInContext(messagesSource, context, { filename: "app-messages.js" });
+    const init = context.send("init", {});
+    deliver({ id: posted[0].id, ok: false, error: "История чата не читается.",
+      errorDetail: "Request failed. See the local runtime log for details.", errorCode: "bridge_request_failed" });
+    await assert.rejects(init, error => {
+      context.applyBridgeUnavailableState(error);
+      return error.code === "bridge_request_failed";
+    });
+    const unavailable = context.renderChatEmptyState();
+    assert.equal(unavailable.children[2].textContent, "История чата не читается.");
+    const retry = unavailable.children.flatMap(child => child.children).find(child => child.tag === "button");
+    assert.equal(retry.textContent, "Повторить загрузку");
+    retry.handlers.click();
+    assert.equal(retries, 1, "startup retry is an explicit user action");
+    context.state.bridgeFailure.code = "bridge_contract_mismatch";
+    assert.equal(context.renderChatEmptyState().children.some(child => child.className === "chat-empty-suggestions"), false,
+      "incompatible bridge contract requires a matching panel build");
+    context.chrome = null;
+    assert.equal(context.renderChatEmptyState().children.some(child => child.className === "chat-empty-suggestions"), false,
+      "static browser preview cannot retry without a host bridge");
+    console.log("PASS bridge bootstrap: startup failure shows cause and manual retry only for a present bridge");
   }
 
   {

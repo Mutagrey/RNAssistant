@@ -77,6 +77,7 @@ var state = {
   modeSaving: false,
   reasoningSaving: false,
   bridgeUnavailable: false,
+  bridgeFailure: null,
   selectedToolIndex: -1,
   selectedSkillIndex: -1,
   skillEditorPage: "instruction",
@@ -287,7 +288,9 @@ function send(type, payload) {
   var id = String(state.seq++);
   var promise = new Promise(function (resolve, reject) {
     if (!window.chrome || !window.chrome.webview) {
-      reject(new Error("WebView bridge is not available."));
+      var missingBridge = new Error("Связь с RN Assistant недоступна в этом окне.");
+      missingBridge.code = "bridge_missing";
+      reject(missingBridge);
       return;
     }
 
