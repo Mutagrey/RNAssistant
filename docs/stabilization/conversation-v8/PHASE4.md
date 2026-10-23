@@ -4,6 +4,42 @@
 Workspace/CLI recovery. Branch: `conversation-v8`. This is a checked slice,
 not completed phase-4 or release qualification.
 
+## Specification reconciliation — 2026-10-23
+
+Reviewed candidate code at `02872af0` against the original
+`RNAssistant_v8_1_implementation_spec.md` (including amendments A–I),
+[ADR-0016](../../decisions/ADR-0016-conversation-v8-admission.md) and the phase
+reports. This review inspected code and existing evidence; it did not rerun
+builds, the full Harness, a real-model benchmark or Office validation.
+
+| Phase | Readiness |
+| --- | --- |
+| 0 — audit/ADR | Controlled premature-finish reproduction and evidence retained. This does not reproduce the original live-model incident. |
+| 1 — protocol | Codec/schema/repair implemented; focused checks and one pinned endpoint's schema probes exist. |
+| 2 — kernel | Bounded reflection and durable terminal-evidence admission implemented; focused restart/no-replay checks exist. One direct-finish restriction differs from spec §C.3. |
+| 3 — adapters/prompts | Shared v8 guidance and adapters implemented. The complete common scenario matrix across surfaces is not yet qualified. |
+| 4 — persistence/UI | Partial. CLI recovery and Office-neutral projection slices pass, but Workspace UI still drops claims and renders empty reflections. Reflection-specific compaction/restart/UI integration remains unverified. |
+| 5 — real-model qualification | Open. Schema probes are not the required task comparison or field-order/reason ablation. |
+
+The review found two implementation gaps, now tracked with owners and closure
+checks in the [risk register](../RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23):
+Workspace presentation loses finish assessments/evidence and creates an empty
+message for an empty reflection; no-call admission rejects even an evidence-free
+claim although spec §C.3 permits an empty results array without requiring it.
+The saved reflection protocol record does retain decision and attempt origin;
+only its separate Office activity is excluded from model context. Existing
+compaction role/provenance rules handle assistant interpretations, but the
+reflection-specific end-to-end scenario has no qualifying evidence yet.
+
+Remaining order: close these bounded implementation gaps and the unmigrated
+integration scenarios; complete the pinned v7/v8/adaptive-reflection benchmark
+with external task grading and cost/latency metrics; qualify the candidate on
+Windows x64 + Office x64 + WebView2 before release. Default cutover still requires
+the reproducible real-model benefit in spec §G. No implementation percentage or
+completion date follows from the current focused test counts. The separate
+large shared-archive limitation remains open and is not repaired by narrowing
+its fixture.
+
 New chats use stream format 8. Formats 6 and 7 remain readable, but run policy
 refuses execution in them; no history is rewritten or deleted. The
 [candidate wire contract](../../protocols/CONVERSATION_RESPONSE_V8.md) owns
@@ -15,7 +51,8 @@ summary and evidence IDs in typed `RunViewState.ModelResults`.
 `GoalVerification` remains `not_assessed`. The UI shows partial, unverified
 and unsatisfied claims as model assessments with the IDs; an ordinary clean
 completed answer still has no service card. Accepted `reflection` also has
-one visible saved step excluded from model context. Old
+one visible saved activity excluded from model context; the accepted protocol
+record remains a model-history source. Old
 `model_done/model_blocked/model_needs_input` presentation paths are gone.
 
 Workspace preserves a terminal honest failure: when explicit acceptance

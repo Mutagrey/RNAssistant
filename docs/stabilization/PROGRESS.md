@@ -2,6 +2,12 @@
 
 ## Conversation v8 phase-4 persistence/UI slice — 2026-10-23
 
+The [specification reconciliation](conversation-v8/PHASE4.md#specification-reconciliation--2026-10-23)
+at `02872af0` found remaining implementation work: Workspace chat drops finish
+claims and renders empty reflections, and direct-finish admission adds a
+restriction absent from spec §C.3. These have explicit owners and closure checks
+in the [risk register](RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23).
+
 The candidate branch now creates format-8 chats, keeps v7 readable but
 read-only, projects finish claims without upgrading task verification, and
 persists visible reflection steps. Controlled CLI checks cover process death,

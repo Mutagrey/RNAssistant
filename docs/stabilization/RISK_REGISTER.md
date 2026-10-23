@@ -8,6 +8,39 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Conversation v8 readiness review — 2026-10-23
+
+Code review at candidate `02872af0` found two open gaps against the original
+v8.1 specification. They are not Windows-only evidence gaps and are not fixed
+by the passing focused Harness groups.
+
+- **Workspace presentation (spec §G phase 4 / §H.7).**
+  `PluginApplicationService.PresentWorkspaceMessage` returns only message text
+  and tool names; `PluginChatMessageDto` carries no finish claims. Consequently
+  project/plugin chat omits assessment and terminal evidence, including an
+  honest partial/unverified finish. An accepted reflection with `message=""`
+  becomes empty text with no actions, and `app-workspace-chat.js` still appends
+  an article/footer. Owner: Workspace typed presentation and shared web chat
+  renderer. Close with typed claim presentation, no empty reflection bubble,
+  and focused partial/unverified/empty-message checks after history reload.
+  The durable wire already retains the missing fields; no history rewrite is
+  needed. This is distinct from the implemented Office run projection.
+- **Direct-finish admission (spec §C.3).**
+  `ConversationFinishEvidenceAdmission.Evaluate` rejects every nonempty results
+  array when accepted-call count is zero, including an evidence-free claim.
+  The specification permits `results=[]` here; it does not require it. The smoke
+  case named `old-run claim rejected` currently enshrines that extra restriction
+  even though its claim has no reference to an old run. Owner: Core finish
+  admission. Align the guard and test with the spec while keeping any actual
+  foreign/invented citation rejected; verify direct answers and current-run
+  evidence isolation locally.
+
+Reflection decision/provenance through compaction plus process restart and UI
+still needs integration evidence. Generic compaction tests and the kernel-only
+reflection restart check do not close that combined scenario. The full
+[phase readiness review](conversation-v8/PHASE4.md#specification-reconciliation--2026-10-23)
+also retains the real-model benchmark and Windows qualification gates.
+
 ## Shared context archive read limit — 2026-10-23
 
 The v8 Harness migration exposed a host-neutral gap in explicit shared-context

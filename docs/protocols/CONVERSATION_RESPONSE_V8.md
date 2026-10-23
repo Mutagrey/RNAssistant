@@ -54,10 +54,16 @@ workspace acceptance and no-replay rules still apply.
 `finish accepted`, `RunLifecycle.Completed` and task success are distinct.
 `RunViewState.GoalVerification` remains `not_assessed`; model
 `results/assessment` are shown as claims with exact evidence IDs, never as
-runtime proof. Reflection is a visible saved step but is excluded from model
-context. Ordinary completed answers need no service card; partial,
+runtime proof. The separate visible reflection activity is excluded from model
+context; its accepted protocol record retains the decision and attempt origin
+as model history. Ordinary completed answers need no service card; partial,
 unverified and unsatisfied claims receive a separate notice. The run journal
 retains the exact accepted wire and tool-result correlation.
+
+These claim/notice presentation rules currently apply to the Office run view.
+Workspace project/plugin chat still omits claims and renders empty reflection
+messages; the candidate's [open readiness gaps](../stabilization/RISK_REGISTER.md#conversation-v8-readiness-review--2026-10-23)
+also record its stricter-than-specified direct-finish admission.
 
 History readers require `ResponseProtocolVersion=8` and exact accepted
 metadata. Format-7 chats are read-only in this candidate; no v7 inference,
