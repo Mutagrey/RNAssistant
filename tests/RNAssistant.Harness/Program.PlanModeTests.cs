@@ -151,7 +151,8 @@ namespace RNAssistant.Harness
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
                 "common.capabilities_read", "Plan includes progressive capability policy");
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
-                "Never substitute chat prose or an HTML workspace", "Plan requires the Markdown artifact");
+                "Save the active draft with common.plan_doc_save as soon as enough facts exist",
+                "Plan requires the Markdown artifact");
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();

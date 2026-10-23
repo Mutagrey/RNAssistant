@@ -1758,7 +1758,9 @@ namespace RNAssistant.Harness
                         }
                         : new LlmCompletionResult
                         {
-                            Content = "{\"message\":\"Ответ принят.\",\"action\":\"done\",\"tool_calls\":[]}",
+                            Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "Answer the question after valid format repair.", "Ответ принят.",
+                                results: new ConversationResultClaim[0]),
                             ReasoningContent = "ACCEPTED_REASONING"
                         });
                 };
@@ -1774,7 +1776,8 @@ namespace RNAssistant.Harness
                 AssertEqual(0, result.ToolResults.Count, "repair attempts do not dispatch tools");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" && !message.ExcludeFromModelContext).ToList();
                 AssertEqual(1, accepted.Count, "only one assistant response enters accepted history");
-                AssertEqual("Ответ принят.", accepted[0].Content, "accepted message is preserved");
+                AssertEqual("Ответ принят.", (string)JObject.Parse(accepted[0].Content)["message"],
+                    "accepted v8 message is preserved");
                 AssertEqual("ACCEPTED_REASONING", accepted[0].ReasoningContent, "only accepted provider reasoning is retained");
                 AssertTrue(!session.Messages.Concat(requests.SelectMany(request => request)).Any(message =>
                     (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
@@ -3080,13 +3083,19 @@ namespace RNAssistant.Harness
             {
                 var calls = 0;
                 string[] acceptedIds = null;
+                var session = NewSession(adapter);
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     calls++;
                     if (calls == 1) return Task.FromResult(new LlmCompletionResult { Content =
-                        "{\"message\":\"Read twice\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_find\",\"arguments\":{}},{\"name\":\"common.resources_find\",\"arguments\":{}}]}" });
+                        ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
+                            "Read two independent resource views.", "Read twice", calls: new[] {
+                                new ConversationToolCall { Name = ResourceToolCatalog.FindToolId, Arguments = new JObject() },
+                                new ConversationToolCall { Name = ResourceToolCatalog.FindToolId, Arguments = new JObject() }
+                            })) });
                     if (calls == 3) return Task.FromResult(new LlmCompletionResult { Content =
-                        "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" });
+                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                            "Summarize the existing paired read.", "Done", results: new ConversationResultClaim[0]) });
                     var accepted = messages.Where(message => message.Role == "assistant" &&
                         message.ToolName == ResourceToolCatalog.FindToolId && message.AcceptedCallOrigin != null).ToList();
                     AssertEqual(2, accepted.Count, "both identical read positions remain in history");
@@ -3105,9 +3114,10 @@ namespace RNAssistant.Harness
                     AssertEqual(string.Join(",", ids.SelectMany(id => new[] { "assistant:" + id, "tool:" + id })),
                         string.Join(",", exchange.Select(message => message.Role + ":" + message.ToolCallId)),
                         "native tool calls stay paired in both live and reloaded request history");
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    return Task.FromResult(new LlmCompletionResult { Content = ScriptedVerifiedFinish(session,
+                        "Both independent reads are complete.", "Done", "Both resource views were read.",
+                        ResourceToolCatalog.FindToolId, ResourceToolCatalog.FindToolId) });
                 });
-                var session = NewSession(adapter);
                 var settingsForRun = new AppSettings { ToolResultRole = ToolResultRoles.Tool };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var first = service.ExecuteAsync(ChatModes.Agent, "Read twice", session, NewContext(adapter), settingsForRun, tools, null).GetAwaiter().GetResult();
@@ -3398,16 +3408,24 @@ namespace RNAssistant.Harness
                     session, "Reference note", "conversation").Items.Single().Target;
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"message\":\"Читаю заметку.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Первый ответ.\",\"action\":\"done\",\"tool_calls\":[]}",
-                    "{\"message\":\"Перечитываю заметку.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.resources_read\",\"arguments\":{\"target\":\"" + target + "\",\"representation\":\"text\"}}]}",
-                    "{\"message\":\"Второй ответ.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Read the referenced artifact on demand.", "Читаю заметку.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = target, ["representation"] = "text" } }),
+                    null,
+                    ModelProtocolWire.WriteAcceptedCall("Read the current artifact again.", "Перечитываю заметку.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = target, ["representation"] = "text" } }),
+                    null
                 });
                 var captured = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     captured.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The referenced artifact was read in this run.",
+                        captured.Count == 2 ? "Первый ответ." : "Второй ответ.",
+                        "The current artifact body was read.", ResourceToolCatalog.ReadToolId);
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var service = CreateConversationRunService(adapter, executor, completion);
