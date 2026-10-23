@@ -13,6 +13,7 @@
   var panelToggle = null;
   var usageKey = "", usageSnapshot = null, usageError = "", usageRequest = null;
   var presentationChat = "", viewState = {};
+  var activitySelection = null, activityFocusPending = false, returnFocus = null;
 
   try {
     width = Number(window.localStorage.getItem(widthKey)) || width;
@@ -294,14 +295,29 @@
 
   function renderActivity(body) {
     var run = state.activeRunViewState || {};
+    if (activitySelection && run.runId !== activitySelection.runId) {
+      run = (state.messages || []).filter(function (message) {
+        return messageRunId(message) === activitySelection.runId;
+      }).map(messageRunViewState).filter(function (snapshot) {
+        return snapshot && snapshot.runId === activitySelection.runId;
+      }).pop() || { runId: activitySelection.runId, lifecycle: "unavailable" };
+    }
     var lifecycle = run.lifecycle || "idle";
     var labels = { idle: "Нет выполнения", running: "Выполняется", completed: "Завершён",
       failed: "Ошибка", cancelled: "Остановлен", awaiting_user: "Нужен ваш ответ", awaiting_confirmation: "Нужно подтверждение" };
-    heading(body, "Последний запуск");
+    heading(body, activitySelection ? "Выбранный запуск" : "Последний запуск");
+    if (activitySelection) {
+      if (!activitySelection.stepId) body.lastElementChild.dataset.inspectorSelection = "true";
+      action(body, "К последнему запуску", "left", function () {
+        activitySelection = null; viewState.activity = null; render();
+        body.querySelector("h3").tabIndex = -1; body.querySelector("h3").focus({ preventScroll: true });
+      });
+    }
     var narrative = String(run.currentAction || "");
     info(body, labels[lifecycle] || "Состояние недоступно", narrative.length <= 180 ? narrative : "", "clock");
     if (narrative.length > 180) paragraph(disclosure(body, "run-summary:" + run.runId, "Итог запуска", "Подробнее"), narrative);
     if (lifecycle === "idle") { paragraph(body, "Отправьте сообщение, чтобы увидеть ход работы."); return; }
+    var selectedStepFound = false;
     if (typeof collectVisibleAgentTimelineItems === "function") {
       var items = (state.messages || []).map(function (message, index) {
         return { message: message, index: index, activity: messageActivity(message) };
@@ -330,11 +346,17 @@
         var row = node("div", "chat-inspector-step is-" + status);
         row.appendChild(node("span", "chat-inspector-step-number", String(index + 1)));
         var copy = node("div", "chat-inspector-step-copy");
-        var details = disclosure(copy, "step:" + step.id, step.message || (actions.length ? activityPrimaryText(actions[0]) : "Шаг без сообщения"),
+        var details = disclosure(copy, "step:" + run.runId + ":" + step.id, step.message || (actions.length ? activityPrimaryText(actions[0]) : "Шаг без сообщения"),
           agentStatusLabel(status) + " · действий: " + actions.length);
         details.classList.add("chat-inspector-step-detail");
         var sourceChatId = state.activeChatId, sourceRunId = run.runId;
         var stepId = step.marker ? activityStepId(step.marker.activity) : actions.length ? activityStepId(actions[0]) : "";
+        if (activitySelection && activitySelection.stepId && activitySelection.stepId === stepId) {
+          selectedStepFound = true;
+          row.classList.add("is-selected");
+          details.dataset.inspectorSelection = "true";
+          details.querySelector("summary").setAttribute("aria-current", "step");
+        }
         actions.forEach(function (activity) {
           var content = node("div", "chat-inspector-step-call");
           content.appendChild(node("strong", "", activityToolId(activity) || activityPrimaryText(activity)));
@@ -355,6 +377,11 @@
       });
       if (steps.length) body.appendChild(list);
     }
+    if (activitySelection && activitySelection.stepId && !selectedStepFound) {
+      var missing = node("p", "chat-inspector-run-notice", "Шаг не найден в загруженной части истории. Его события можно открыть в журнале.");
+      missing.dataset.inspectorSelection = "true";
+      missing.setAttribute("role", "status"); body.appendChild(missing);
+    }
     if (run.executionHealth === "unknown" || run.executionHealth === "errors") {
       var note = node("div", "chat-inspector-run-notice", run.executionHealth === "unknown"
         ? "Есть неподтверждённые результаты. Проверьте фактическое состояние." : "В ходе работы были неудачные попытки.");
@@ -363,8 +390,9 @@
     heading(body, "Подробности запуска");
     if (run.runId) {
       var chatId = state.activeChatId, runId = run.runId;
+      var selectedStep = activitySelection && activitySelection.stepId || "";
       action(body, "История и диагностика", "clock", function () {
-        if (state.activeChatId === chatId) window.openRunJournal({ chatId: chatId, runId: runId });
+        if (state.activeChatId === chatId) window.openRunJournal({ chatId: chatId, runId: runId, stepId: selectedStep });
       });
     }
   }
@@ -373,7 +401,12 @@
     var panel = document.getElementById("chatInspector");
     var body = document.getElementById("chatInspectorBody");
     if (!panel || !body || !open) return;
-    if (presentationChat !== state.activeChatId) { presentationChat = state.activeChatId; viewState = {}; cancelUsage(); usageKey = ""; usageSnapshot = null; }
+    if (presentationChat !== state.activeChatId) {
+      presentationChat = state.activeChatId; viewState = {}; cancelUsage(); usageKey = ""; usageSnapshot = null;
+      if (activitySelection && activitySelection.chatId !== state.activeChatId) {
+        activitySelection = null; activityFocusPending = false; returnFocus = null;
+      }
+    }
     document.getElementById("chatInspectorViewTitle").textContent = titles[view];
     var summary = document.querySelector("#chatInspectorSwitcher summary");
     var currentIcon = summary.querySelector("[data-inspector-icon]");
@@ -401,6 +434,16 @@
     if (focusKey && previousView === view) {
       var focusTarget = Array.from(body.querySelectorAll("[data-inspector-key]")).find(function (item) { return item.dataset.inspectorKey === focusKey; });
       if (focusTarget) focusTarget.querySelector("summary").focus({ preventScroll: true });
+    }
+    if (activityFocusPending && view === "activity") {
+      activityFocusPending = false;
+      var selected = body.querySelector("[data-inspector-selection]");
+      if (selected) {
+        if (selected.tagName === "DETAILS") { selected.open = true; selected = selected.querySelector("summary"); }
+        else selected.tabIndex = -1;
+        selected.focus({ preventScroll: true });
+        selected.scrollIntoView({ block: "nearest" });
+      }
     }
     if (previousView && previousView !== view && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       body.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "cubic-bezier(.2, .8, .2, 1)" });
@@ -464,6 +507,23 @@
     });
   }
 
+  function openActivity(options, trigger) {
+    if (!options || !options.runId || options.chatId !== state.activeChatId ||
+        (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")) return false;
+    activitySelection = { chatId: options.chatId, runId: options.runId, stepId: options.stepId || "" };
+    activityFocusPending = true;
+    returnFocus = trigger || document.activeElement;
+    view = "activity"; cancelUsage();
+    if (open) render(); else setOpen(true);
+    return true;
+  }
+
+  function restoreFocus() {
+    var target = returnFocus && returnFocus.isConnected && activitySelection && activitySelection.chatId === state.activeChatId
+      ? returnFocus : document.getElementById("toggleChatInspectorButton");
+    target.focus({ preventScroll: true });
+  }
+
   function bind() {
     panelToggle = window.RNAssistantPanelToggle.bind(document.getElementById("toggleChatInspectorButton"), {
       controls: "chatInspector", isOpen: function () { return open; }, setOpen: setOpen
@@ -473,10 +533,9 @@
       button.setAttribute("role", "menuitemradio");
     });
     var panel = document.getElementById("chatInspector");
-    var toggle = document.getElementById("toggleChatInspectorButton");
     document.getElementById("closeChatInspectorButton").addEventListener("click", function () {
       setOpen(false);
-      toggle.focus({ preventScroll: true });
+      restoreFocus();
     });
     panel.addEventListener("keydown", function (event) {
       if (event.key !== "Escape" || !open) return;
@@ -486,7 +545,7 @@
         switcher.querySelector("summary").focus();
       } else {
         setOpen(false);
-        toggle.focus({ preventScroll: true });
+        restoreFocus();
       }
       event.preventDefault();
       event.stopPropagation();
@@ -510,5 +569,5 @@
     sync();
   }
 
-  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync };
+  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync, openActivity: openActivity };
 }());

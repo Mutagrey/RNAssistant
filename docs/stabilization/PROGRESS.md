@@ -34,6 +34,14 @@ the change; no Office/VSTO build was run. Windows/Office/WebView2 remain unquali
 Exact attribution of all last-request tokens, Wide/Focus and later diagnostics
 features remain open in the [UI design](../ui-design.md).
 
+Follow-up: Office message/activity actions now open that run or exact step in the
+same panel. A selected older run remains pinned during updates; missing loaded
+steps stay explicit and link to the exact journal scope. Final answers without
+StepId do not borrow the last step. Close/Esc returns to the source control and
+chat changes reject stale navigation. The focused browser check covers these
+routes. Next: Wide/Focus request reading, followed by exact request composition;
+the updated sequence is in UI design. Workspace/plugin dock integration remains open.
+
 ## Unified Shell application input identity on replay — 2026-10-23
 
 Owner: Core `ConversationInputJournal`. Office inbox recovery and workspace/CLI

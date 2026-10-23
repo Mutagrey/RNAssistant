@@ -577,6 +577,7 @@ function appendAgentRunFooter(node, items, finalMessage) {
     copyChatMessage(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
     log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
   }));
+  if (typeof appendMessageInspectorAction === "function") appendMessageInspectorAction(actions, last.message, null);
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(last.message, last.index);

@@ -359,6 +359,7 @@ function appendMessageFooter(node, message, index, activity) {
     copyChatMessage(activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
   }));
+  appendMessageInspectorAction(actions, message, activity);
   if (!historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(message, index);
@@ -381,6 +382,21 @@ function appendMessageFooter(node, message, index, activity) {
   if (meta.childNodes.length) footer.appendChild(meta);
   if (!assistant) footer.appendChild(actions);
   node.appendChild(footer);
+}
+
+function appendMessageInspectorAction(parent, message, activity) {
+  if (!window.RNAssistantChatInspector || typeof window.RNAssistantChatInspector.openActivity !== "function" || !officeTranscriptActive() ||
+      (!activity && messageRole(message) !== "assistant")) return;
+  var chatId = state.activeChatId;
+  var runId = messageRunId(message) || (activity && activityValue(activity, "RunId", "runId", ""));
+  if (!chatId || !runId) return;
+  var stepId = activity ? activityStepId(activity) : "";
+  var button = smallIconButton(stepId ? "Открыть шаг" : "Открыть ход работы", "search", function (event) {
+    event.preventDefault(); event.stopPropagation();
+    window.RNAssistantChatInspector.openActivity({ chatId: chatId, runId: runId, stepId: stepId }, button);
+  });
+  button.classList.add("message-inspect-action");
+  parent.appendChild(button);
 }
 
 function renderActivityArticle(message, index, activity, options) {
