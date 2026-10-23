@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Resource Context retained view checks in Inspector — 2026-10-23
+
+Owner: Model Context Inspector and existing revision/CAS stores. For an exact
+resource in a saved request, Inspector now finds registered view metadata by
+observed or read-time-advertised names within the authorized scope. Metadata-only
+queries leave bytes unchecked; separate explicit checks verify the revision
+payload or one selected view payload and all its retained parts. A missing
+part cannot be masked by a healthy revision payload. The list is not an exhaustive
+inventory of coverage variants and does not check a live provider or prove model
+delivery. Focused Harness/Web checks pass host-neutral; Windows/Office/WebView2
+remain unqualified.
+
 ## Unified Shell shared workspace view (1b project/plugin slice) — 2026-10-23
 
 Owner: application/chat UI. Project and Plugin now mount the same transcript,

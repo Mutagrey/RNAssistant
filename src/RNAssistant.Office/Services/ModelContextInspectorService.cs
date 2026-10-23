@@ -29,6 +29,8 @@ namespace RNAssistant.Office.Services
             if (!string.IsNullOrEmpty(query.VerifyResourceAlias) &&
                 (string.IsNullOrEmpty(query.RequestEventId) || !string.IsNullOrEmpty(query.Alias) || query.BeforeSequence.HasValue))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: payload verification requires an exact saved request and its resource alias.");
+            if (!string.IsNullOrEmpty(query.VerifyRetainedView) && string.IsNullOrEmpty(query.VerifyResourceAlias))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: retained view verification requires a resource alias.");
             var response = new ModelContextResponse { ChatId = session.Id, Revision = session.Revision,
                 Events = new ModelContextEventDto[0] };
             if (!query.BeforeSequence.HasValue && string.IsNullOrEmpty(query.RequestEventId) &&
@@ -66,7 +68,8 @@ namespace RNAssistant.Office.Services
                     var resource = response.Resources.SingleOrDefault(row => row.Alias == query.VerifyResourceAlias);
                     if (resource == null)
                         throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: resource alias is absent from the selected request.");
-                    VerifyPayload(resource, token);
+                    if (string.IsNullOrEmpty(query.VerifyRetainedView)) VerifyPayload(resource, token);
+                    else VerifyView(resource, query.VerifyRetainedView, token);
                 }
                 response.Operations = DescribeIdentities(trace, entry => new[] { entry.ToolCallId }, aliases.Operation);
                 response.Evidence = DescribeIdentities(trace, entry =>
@@ -190,8 +193,24 @@ namespace RNAssistant.Office.Services
                 row.RevisionMetadata = revisions.GetRevision(scope, row.Resource);
                 row.RevisionRecorded = row.RevisionMetadata != null;
                 if (row.RevisionMetadata != null)
+                {
                     row.PayloadAvailability = row.RevisionMetadata.Payload == null
                         ? ModelContextPayloadAvailability.NotRetained : ModelContextPayloadAvailability.Unchecked;
+                    var names = row.Observations.SelectMany(item =>
+                        new[] { item.View }.Concat(item.ReadMetadata?.DescriptorAtRead?.Representations ??
+                            new string[0]).Concat(item.ReadMetadata?.DescriptorAtRead?.ViewCapabilities?
+                            .Select(view => view.View) ?? new string[0]))
+                        .Where(name => !string.IsNullOrWhiteSpace(name)).Distinct(StringComparer.Ordinal).ToArray();
+                    row.RetainedViews = names.Select(name => revisions.GetView(scope, row.Resource, name))
+                        .Where(view => view != null)
+                        .Select(view => new ModelContextRetainedViewDto { View = view.View, Coverage = view.Coverage,
+                            PayloadAvailability = view.Payload == null ? ModelContextPayloadAvailability.NotRetained :
+                                ModelContextPayloadAvailability.Unchecked,
+                            PartsCount = view.Parts.Count,
+                            PartsAvailability = view.Parts.Count == 0 ? (ModelContextPayloadAvailability?)null :
+                                ModelContextPayloadAvailability.Unchecked, Retained = view })
+                        .ToArray();
+                }
             }
             var head = _authority.Store.GetHead(scope, row.Resource.Identity);
             if (head == null) return;
@@ -213,20 +232,44 @@ namespace RNAssistant.Office.Services
             // No caller-provided CAS address, provider read or head publication.
             var payload = row.RevisionMetadata?.Payload;
             if (payload == null) return;
+            row.PayloadAvailability = VerifyBlob(payload, token);
+            token.ThrowIfCancellationRequested();
+            row.PayloadCheckedUtc = DateTime.UtcNow;
+        }
+
+        private void VerifyView(ModelContextResourceDto row, string name, CancellationToken token)
+        {
+            var item = (row.RetainedViews ?? new ModelContextRetainedViewDto[0])
+                .SingleOrDefault(view => view.View == name);
+            if (item?.Retained == null)
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: retained view is absent from this request and scope.");
+            var retained = item.Retained;
+            if (retained.Payload != null) item.PayloadAvailability = VerifyBlob(retained.Payload, token);
+            if (retained.Parts.Count != 0)
+            {
+                item.PartsAvailability = ModelContextPayloadAvailability.Verified;
+                foreach (var part in retained.Parts)
+                    if (VerifyBlob(part, token) != ModelContextPayloadAvailability.Verified)
+                    { item.PartsAvailability = ModelContextPayloadAvailability.Unavailable; break; }
+            }
+            token.ThrowIfCancellationRequested();
+            if (retained.Payload != null || retained.Parts.Count != 0) item.CheckedUtc = DateTime.UtcNow;
+        }
+
+        private ModelContextPayloadAvailability VerifyBlob(PayloadRef payload, CancellationToken token)
+        {
             try
             {
                 // OpenVerifiedRead authenticates the full pinned file before returning;
                 // disposing it does not materialize a body or create a download lease.
                 using (_payloads.OpenVerifiedRead(payload.ToBlobReference(), Math.Max(1, payload.ByteLength), token)) { }
-                row.PayloadAvailability = ModelContextPayloadAvailability.Verified;
+                return ModelContextPayloadAvailability.Verified;
             }
             catch (Exception error) when (error is IOException || error is InvalidDataException ||
                 error is UnauthorizedAccessException || error is CryptographicException)
             {
-                row.PayloadAvailability = ModelContextPayloadAvailability.Unavailable;
+                return ModelContextPayloadAvailability.Unavailable;
             }
-            token.ThrowIfCancellationRequested();
-            row.PayloadCheckedUtc = DateTime.UtcNow;
         }
 
         // Ordinals are derived from append-only request events in sequence order. No

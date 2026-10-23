@@ -723,6 +723,17 @@ Inspector display. This snapshot describes claims made at that read, including
 application-only views; it proves neither current view availability nor model
 readability, transformation provenance or token cost. Missing fields in older
 traces remain unknown.
+
+For a selected saved request, the Inspector may look up retained view metadata
+for names in its exact observations and read-time descriptor, within the same
+authorized authority scope. This finds at most one retained coverage variant per
+name, not an exhaustive inventory; an omitted name is unknown, not proof that a
+live provider cannot read it. Metadata-only inspection does not authenticate CAS
+bytes. Explicit checks verify either the revision payload or one selected view
+payload and all its parts by full hash and length. They record transient
+per-body status and check time; a valid view does not establish currentness,
+semantic transformation validity or delivery to the model.
+
 An adaptive first window retains the original whole-read intent rather than
 rewriting it to the provider's chosen window. Completeness of that chosen fragment
 does not prove completion of the original whole-read request. EOF can shorten

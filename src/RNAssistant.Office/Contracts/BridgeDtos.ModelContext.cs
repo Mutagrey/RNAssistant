@@ -13,6 +13,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("requestEventId")] public string RequestEventId { get; set; }
         [JsonProperty("alias")] public string Alias { get; set; }
         [JsonProperty("verifyResourceAlias")] public string VerifyResourceAlias { get; set; }
+        [JsonProperty("verifyRetainedView")] public string VerifyRetainedView { get; set; }
     }
     public sealed class ModelContextPayloadQuery : ChatPayload
     {
@@ -53,6 +54,18 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("canonicalId")] public string CanonicalId { get; set; }
     }
 
+    public sealed class ModelContextRetainedViewDto
+    {
+        [JsonProperty("view")] public string View { get; set; }
+        [JsonProperty("coverage")] public ResourceCoverage Coverage { get; set; }
+        [JsonProperty("payloadAvailability")] public ModelContextPayloadAvailability PayloadAvailability { get; set; }
+        [JsonProperty("partsCount")] public int PartsCount { get; set; }
+        [JsonProperty("partsAvailability", NullValueHandling = NullValueHandling.Ignore)]
+        public ModelContextPayloadAvailability? PartsAvailability { get; set; }
+        [JsonProperty("checkedUtc", NullValueHandling = NullValueHandling.Ignore)] public DateTime? CheckedUtc { get; set; }
+        [JsonIgnore] internal ResourceRevisionView Retained { get; set; }
+    }
+
     public sealed class ModelContextResourceDto
     {
         [JsonProperty("alias")] public string Alias { get; set; }
@@ -63,6 +76,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("revisionMetadata")] public ResourceRevisionMetadata RevisionMetadata { get; set; }
         [JsonProperty("payloadAvailability")] public ModelContextPayloadAvailability PayloadAvailability { get; set; }
         [JsonProperty("payloadCheckedUtc")] public DateTime? PayloadCheckedUtc { get; set; }
+        [JsonProperty("retainedViews", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<ModelContextRetainedViewDto> RetainedViews { get; set; }
         [JsonProperty("observations")] public IReadOnlyList<ModelContextResourceObservationDto> Observations { get; set; }
     }
     public sealed class ModelContextResponse

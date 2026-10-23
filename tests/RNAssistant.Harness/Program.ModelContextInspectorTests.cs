@@ -333,10 +333,13 @@ namespace RNAssistant.Harness
                 var restored = new ResourceRef(identity.Uri, "revision-restored");
                 var otherRef = new ResourceRef(other.Uri, "revision-a");
                 var body = PayloadRef.FromBlob(payloads.StoreText("same bytes", "text/plain"));
+                var viewPart = PayloadRef.FromBlob(payloads.StoreText("retained view part", "text/plain"));
                 foreach (var reference in new[] { first, second, restored })
                     store.RegisterRevision(scope, new ResourceRevisionMetadata(reference, body.Sha256, body,
                         parent: reference == restored ? second : null, restoredFrom: reference == restored ? first : null,
                         dependencies: new[] { new ResourceDependency(otherRef, "text", ResourceCoverage.Whole(), "source") }));
+                store.RegisterView(scope, new ResourceRevisionView(first, "text", body.Sha256, body,
+                    ResourceCoverage.Whole(), new[] { viewPart }));
                 store.Publish(ResourceAuthorityCommit.Create(scope, 0, null,
                     new[] { new ResourceHeadChange(identity, null, ResourceHeadState.Known(restored, 1)) },
                     AuthorityCommitReason.InitialObservation));
@@ -372,16 +375,54 @@ namespace RNAssistant.Harness
                         "partial observed coverage and non-delivery remain distinct from retained revision metadata");
                     AssertEqual(ModelContextPayloadAvailability.Unchecked, original.Resources[0].PayloadAvailability,
                         "metadata-only inspection does not verify source bytes");
+                    AssertEqual("text", original.Resources[0].RetainedViews.Single().View,
+                        "inspector finds retained metadata for the observed exact view");
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked,
+                        original.Resources[0].RetainedViews.Single().PartsAvailability.Value,
+                        "view parts are not verified during metadata-only inspection");
                     AssertTrue(original.Resources[0].PayloadCheckedUtc == null, "no invented verification timestamp");
                     Func<string, string, ModelContextResourceDto> verify = (eventId, alias) => inspector().Query(session,
                         new ModelContextQuery { RequestEventId = eventId, VerifyResourceAlias = alias }, CancellationToken.None)
                         .Resources.Single(row => row.Alias == alias);
+                    Func<string, string, string, ModelContextResourceDto> verifyView = (eventId, alias, view) => inspector().Query(session,
+                        new ModelContextQuery { RequestEventId = eventId, VerifyResourceAlias = alias,
+                            VerifyRetainedView = view }, CancellationToken.None).Resources.Single(row => row.Alias == alias);
                     var verified = verify(q1.EventId, "R1@v1");
                     AssertEqual(ModelContextPayloadAvailability.Verified, verified.PayloadAvailability, "explicit CAS verification");
                     AssertTrue(verified.PayloadCheckedUtc.HasValue, "verification has a time rather than perpetual availability");
                     AssertEqual(body.Sha256, verified.RevisionMetadata.Payload.Sha256, "exact authority payload supplies verification");
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked,
+                        verified.RetainedViews.Single().PartsAvailability.Value,
+                        "revision verification does not check retained view parts");
+                    var checkedView = verifyView(q1.EventId, "R1@v1", "text");
+                    AssertEqual(ModelContextPayloadAvailability.Verified,
+                        checkedView.RetainedViews.Single().PayloadAvailability, "view payload is checked independently");
+                    AssertEqual(ModelContextPayloadAvailability.Verified,
+                        checkedView.RetainedViews.Single().PartsAvailability.Value, "every retained view part is checked");
+                    AssertTrue(checkedView.RetainedViews.Single().CheckedUtc.HasValue,
+                        "view verification has its own timestamp");
+                    var viewJson = Newtonsoft.Json.JsonConvert.SerializeObject(checkedView);
+                    AssertContains(viewJson, "\"partsAvailability\":\"Verified\"",
+                        "typed bridge serializes selected view-part verification");
+                    AssertTrue(!viewJson.Contains(viewPart.Sha256),
+                        "retained part CAS addresses stay runtime-only in the typed bridge response");
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked, checkedView.PayloadAvailability,
+                        "view verification does not claim to check the revision payload");
                     AssertEqual(ModelContextCurrentness.Superseded, verified.Currentness, "CAS validity does not move the head");
                     AssertTrue(verified.Observations[0].BodyIncludedInMessage == false, "CAS validity does not imply delivery");
+                    var partPath = payloads.PathFor(viewPart.Sha256);
+                    var partBytes = System.IO.File.ReadAllBytes(partPath);
+                    System.IO.File.Delete(partPath);
+                    var damaged = verifyView(q1.EventId, "R1@v1", "text");
+                    AssertEqual(ModelContextPayloadAvailability.Unchecked, damaged.PayloadAvailability,
+                        "missing view part does not manufacture a revision-payload check");
+                    AssertEqual(ModelContextPayloadAvailability.Unavailable,
+                        damaged.RetainedViews.Single().PartsAvailability.Value,
+                        "a missing view part cannot be reported as available");
+                    System.IO.File.WriteAllBytes(partPath, partBytes);
+                    RuntimeThrows<InvalidOperationException>(() => verifyView(q1.EventId, "R1@v1", "unadvertised"));
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                        new ModelContextQuery { RequestEventId = q1.EventId, VerifyRetainedView = "text" }, CancellationToken.None));
                     RuntimeThrows<InvalidOperationException>(() => verify(q1.EventId, "R2@v1"));
                     RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
                         new ModelContextQuery { VerifyResourceAlias = "R1@v1", KnownRevision = session.Revision }, CancellationToken.None));
@@ -392,6 +433,17 @@ namespace RNAssistant.Harness
                     store.RegisterRevision(scope, new ResourceRevisionMetadata(otherRef));
                     AssertEqual(ModelContextPayloadAvailability.NotRetained, verify(q2.EventId, "R2@v1").PayloadAvailability,
                         "registered payload-free revision differs from unknown metadata");
+                    store.RegisterView(scope, new ResourceRevisionView(otherRef, "text", body.Sha256, null,
+                        ResourceCoverage.Whole(), new[] { viewPart }));
+                    var viewOnly = verifyView(q2.EventId, "R2@v1", "text");
+                    AssertEqual(ModelContextPayloadAvailability.NotRetained, viewOnly.PayloadAvailability,
+                        "view payload does not manufacture a revision payload");
+                    AssertEqual(ModelContextPayloadAvailability.NotRetained,
+                        viewOnly.RetainedViews.Single().PayloadAvailability,
+                        "parts-only view does not manufacture a view payload");
+                    AssertEqual(ModelContextPayloadAvailability.Verified,
+                        viewOnly.RetainedViews.Single().PartsAvailability.Value,
+                        "retained view parts can be checked without a revision or view payload");
                     var next = inspector().Query(session, new ModelContextQuery { RequestEventId = q3.EventId }, CancellationToken.None);
                     AssertEqual("Q3", next.Events[0].Alias, "request aliases survive intervening requests");
                     AssertEqual("R1@v2", next.Resources[0].Alias, "revisions are numbered within their resource");
@@ -418,6 +470,23 @@ namespace RNAssistant.Harness
                         "older aliases stay stable after later observations");
                     AssertEqual("Q2", inspector().Query(session, new ModelContextQuery { BeforeSequence = q3.Sequence }, CancellationToken.None)
                         .Events[0].Alias, "pagination does not renumber aliases");
+                    store.RegisterView(scope, new ResourceRevisionView(first, "outline", body.Sha256, body,
+                        ResourceCoverage.Whole()));
+                    var advertised = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
+                        new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N"),
+                            ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
+                                new ContextMessagePresentation { Role = "tool",
+                                    EvidenceLinks = new System.Collections.Generic.List<ContextEvidenceLink> {
+                                        new ContextEvidenceLink { ScopeId = scope, EvidenceId = "advertised-view",
+                                            Resource = first, View = "text", ReadMetadata = new ResourceReadMetadata(
+                                                descriptorAtRead: new ResourceReadDescriptorSnapshot(
+                                                    representations: new[] { "text", "outline" })) } } } } },
+                        "{}", "application/json", "run", "turn", "advertised");
+                    var advertisedRow = inspector().Query(session, new ModelContextQuery {
+                        RequestEventId = advertised.EventId }, CancellationToken.None).Resources.Single();
+                    AssertTrue(advertisedRow.RetainedViews.Select(view => view.View).OrderBy(view => view)
+                        .SequenceEqual(new[] { "outline", "text" }),
+                        "read-time descriptor can discover another exact retained view without a live provider read");
                     var foreign = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
                         new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N"),
                             ContextMessages = new System.Collections.Generic.List<ContextMessagePresentation> {
@@ -438,6 +507,9 @@ namespace RNAssistant.Harness
                         "a saved link cannot authorize another document's payload verification");
                     AssertTrue(foreignVerification.RevisionMetadata == null && foreignVerification.PayloadCheckedUtc == null,
                         "foreign metadata is not exposed by payload verification");
+                    AssertTrue(foreignVerification.RetainedViews == null,
+                        "foreign scope cannot expose retained view metadata");
+                    RuntimeThrows<InvalidOperationException>(() => verifyView(foreign.EventId, "R3@v1", "text"));
                     AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery {
                         Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,
                         "new scope does not renumber an older alias");

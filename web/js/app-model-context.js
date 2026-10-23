@@ -305,11 +305,14 @@
   }
 
   function referenceText(ref) { return (ref.uri || "?") + (ref.revision ? " @ " + ref.revision : ""); }
-  async function verifyResource(c, row, control, note) {
+  async function verifyResource(c, row, control, note, retainedView) {
     var version = c.version, eventId = c.selected;
-    c.follow = false; control.disabled = true; note.textContent = "Проверка полного сохранённого тела…";
+    c.follow = false; control.disabled = true; note.textContent = retainedView ?
+      "Проверка сохранённого view…" : "Проверка полного сохранённого тела…";
     try {
-      var response = await call(c, "getModelContext", { requestEventId: eventId, verifyResourceAlias: row.alias });
+      var query = { requestEventId: eventId, verifyResourceAlias: row.alias };
+      if (retainedView) query.verifyRetainedView = retainedView;
+      var response = await call(c, "getModelContext", query);
       if (!valid(c, version) || c.selected !== eventId) return;
       var updated = (response.resources || []).find(function (item) { return item.alias === row.alias; });
       if (response.chatId !== c.chatId || !updated || !(response.events || []).some(function (item) { return item.eventId === eventId; }))
@@ -340,6 +343,26 @@
     var note = el("p", "CAS: " + (availability[row.payloadAvailability] || availability.Unknown) +
       (row.payloadCheckedUtc ? " · " + new Date(row.payloadCheckedUtc).toLocaleString() : ""));
     body.appendChild(note);
+    (row.retainedViews || []).forEach(function (view) {
+      var viewAvailability = { Unknown: "тело не проверено", NotRetained: "основной payload не зарегистрирован",
+        Unchecked: "тело не проверено", Verified: "хеш и длина тела проверены",
+        Unavailable: "тело отсутствует, повреждено или недоступно" };
+      var partsAvailability = { Unchecked: "части не проверены", Verified: "хеши и длины всех частей проверены",
+        Unavailable: "одна или более частей отсутствует, повреждена или недоступна" };
+      var viewNote = el("p", "Сохранённое view " + view.view +
+        (view.coverage ? " · покрытие " + JSON.stringify(view.coverage) : "") +
+        " · " + (viewAvailability[view.payloadAvailability] || viewAvailability.Unknown) +
+        (view.partsCount ? " · частей: " + view.partsCount + " · " +
+          (partsAvailability[view.partsAvailability] || "состояние частей неизвестно") : "") +
+        (view.checkedUtc ? " · " + new Date(view.checkedUtc).toLocaleString() : ""));
+      body.appendChild(viewNote);
+      if (view.payloadAvailability !== "NotRetained" || view.partsCount > 0) {
+        var checkView = button("Проверить view " + view.view, function () {
+          return verifyResource(c, row, checkView, viewNote, view.view);
+        });
+        body.appendChild(checkView);
+      }
+    });
     if (payload) {
       var check = button("Проверить сохранённое тело", function () { return verifyResource(c, row, check, note); });
       body.appendChild(check);
@@ -348,7 +371,7 @@
   function resources(c, root) {
     var rows = c.detail && c.detail.resources || [];
     if (!rows.length) { root.appendChild(el("p", "У этого запроса нет сохранённых связей с ресурсами.")); return; }
-    root.appendChild(el("p", "Ревизии из выбранного запроса. Проверка CAS проверяет только сохранённый payload ревизии. Представления, зависимости и live-источник отдельно не проверяются; доставка модели определяется наблюдениями ниже.", "model-context-note"));
+    root.appendChild(el("p", "Ревизии из выбранного запроса. Найденные сохранённые views относятся только к именам из наблюдений и descriptor; это не полный список. Явные проверки CAS отдельно проверяют payload ревизии или выбранного view со всеми его частями. Live-источник и зависимости не проверяются; доставка модели определяется наблюдениями ниже.", "model-context-note"));
     var currentness = { Current: "Текущая", Superseded: "Устаревшая", Removed: "Удалена",
       Unavailable: "Недоступна", Unknown: "Неизвестна" };
     rows.forEach(function (row) {

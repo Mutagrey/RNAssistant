@@ -43,8 +43,11 @@ page errors. Причина не установлена; при следующе
    selection/representation/source от evidence до receipt и Inspector.
    Для принятых common reads теперь сохраняется заявленный провайдером снимок
    kind/MIME/byteLength/views/capabilities; он не доказывает доступность сейчас
-   или возможность чтения моделью. Остаются cost конкретных views,
-   availability остальных views/parts и live providers, provenance преобразований;
+   или возможность чтения моделью. Inspector теперь находит до одного
+   сохранённого варианта по каждому известному имени view и по явному запросу
+   отдельно проверяет его payload/части через CAS. Остаются полный постраничный
+   inventory views/coverage, cost конкретных views, availability live providers,
+   provenance преобразований;
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
    над canonical IDs без собственного CAS-доступа или model-facing адресации.

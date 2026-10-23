@@ -22,7 +22,7 @@ class Node {
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
 function fixture(withAliases = false) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
-  const verification = { availability: "Verified", hold: null };
+  const verification = { availability: "Verified", partsAvailability: "Verified", hold: null };
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
   const requestText = '{"model":"test","messages":[{"role":"system","content":"rules"},{"role":"user","content":"' + "語😀".repeat(110000) + '"}],"seed":9007199254740993123456789}';
   const events = [{ eventId: "r1", sequence: 3, createdUtc: "2026-10-02T10:00:00Z", type: "llm.request", hasPayload: true, trace: { RequestId: "one", Model: "test", Streaming: true } }];
@@ -44,6 +44,8 @@ function fixture(withAliases = false) {
             parent: { uri: "rna://vba/module", revision: "prior" }, restoredFrom: { uri: "rna://vba/module", revision: "original" },
             dependencies: [{ resource: { uri: "rna://state/source", revision: "dependency" }, kind: "source", view: "text" }] },
           payloadAvailability: "Unchecked",
+          retainedViews: [{ view: "source", coverage: { kind: "whole" }, payloadAvailability: "Unchecked",
+            partsCount: 2, partsAvailability: "Unchecked" }],
           observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "source",
             coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null,
             readMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 6 },
@@ -69,8 +71,15 @@ function fixture(withAliases = false) {
           if (verification.hold) await verification.hold;
           assert.equal(query.requestEventId, "r1");
           assert.equal(query.verifyResourceAlias, "R1@v1");
-          resources[0].payloadAvailability = verification.availability;
-          resources[0].payloadCheckedUtc = "2026-10-02T11:00:00Z";
+          if (query.verifyRetainedView) {
+            assert.equal(query.verifyRetainedView, "source");
+            resources[0].retainedViews[0].payloadAvailability = "Verified";
+            resources[0].retainedViews[0].partsAvailability = verification.partsAvailability;
+            resources[0].retainedViews[0].checkedUtc = "2026-10-02T11:00:00Z";
+          } else {
+            resources[0].payloadAvailability = verification.availability;
+            resources[0].payloadCheckedUtc = "2026-10-02T11:00:00Z";
+          }
         }
         if (query.alias) {
           if (!withAliases || !["Q1", "O1", "E1", "R1@v1"].includes(query.alias)) throw new Error("RESOURCE_NOT_FOUND");
@@ -252,12 +261,15 @@ function fixture(withAliases = false) {
     .children[1].children.map(node => node.textContent).join(" ");
   const checkButton = f => f.get("modelContextBody").children.find(node => node.tag === "details")
     .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить сохранённое тело");
+  const viewButton = f => f.get("modelContextBody").children.find(node => node.tag === "details")
+    .children[1].children.find(node => node.tag === "button" && node.textContent === "Проверить view source");
   assert.match(resourceText(), /Предыдущая ревизия:.*prior.*Восстановлена из:.*original.*Зависимость:.*dependency/);
   assert.match(resourceText(), /1234 байт.*text\/plain.*payload-hash.*сохранённое тело не проверено/);
   assert.match(resourceText(), /Запрошено:.*"end":6.*Покрытие в источнике:.*"end":2/);
   assert.match(resourceText(), /Выбранный фрагмент: полностью.*Представление: не полностью.*Источник: неизвестно/);
   assert.match(resourceText(), /Заявлено провайдером при чтении: провайдер vba; тип module; MIME text\/plain; 1234 байт; представления source, outline; операции read/);
   assert.match(resourceText(), /параметры views source \(смещение, поток, байт за раз ≤ 65536\); текущая доступность не проверена; возможность чтения моделью не подтверждена/);
+  assert.match(resourceText(), /Сохранённое view source · покрытие \{"kind":"whole"\} · тело не проверено · частей: 2 · части не проверены/);
   assert.match(resourceText(), /Запрошено: процедура Value \(property-get\)/);
   assert.match(resourceText(), /JSON Pointer "\/data", глубина 2, дети \[1, 3\)/);
   assert.match(resourceText(), /YAML pointer "\/config", глубина 1, дети \[0, 2\)/);
@@ -265,12 +277,20 @@ function fixture(withAliases = false) {
   await checkButton(linked).fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.verifyResourceAlias, "R1@v1");
   assert.match(resourceText(), /хеш и длина сохранённого тела проверены/);
+  assert.match(resourceText(), /Сохранённое view source.*части не проверены/,
+    "revision check does not claim view-part availability");
+  await viewButton(linked).fire("click"); await flush();
+  assert.equal(linked.calls.at(-1).query.verifyRetainedView, "source");
+  assert.match(resourceText(), /Сохранённое view source.*хеш и длина тела проверены.*хеши и длины всех частей проверены/);
   assert.match(resourceText(), /доставка неизвестна/, "CAS validity never manufactures model delivery");
   await linked.get("modelContextRefresh").fire("click"); await flush();
   assert.match(resourceText(), /сохранённое тело не проверено/, "refresh does not leave a stale verification label on screen");
   linked.verification.availability = "Unavailable";
+  linked.verification.partsAvailability = "Unavailable";
   await checkButton(linked).fire("click"); await flush();
   assert.match(resourceText(), /отсутствует, повреждено или недоступно/);
+  await viewButton(linked).fire("click"); await flush();
+  assert.match(resourceText(), /одна или более частей отсутствует, повреждена или недоступна/);
   linked.get("modelContextAliasSearch").value = "E1";
   await linked.get("modelContextAliasFind").fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.alias, "E1", "search resolves through the typed bridge");
