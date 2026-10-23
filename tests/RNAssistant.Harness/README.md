@@ -912,7 +912,8 @@ The latter builds host-neutral Core, Office and Workspace sources. The controlle
 `python3 -B tests/cli/response_mode_smoke.py` exercises v8 through actual
 CLI/HTTP requests. `interrupted_run_smoke.py`, `compaction_resume_smoke.py`
 and `run_control_smoke.py` cover process loss, compaction, confirmation and
-cancellation/continuation on the candidate branch. The full Harness still contains v7 test fixtures and does
+cancellation/continuation; `mode_questions_smoke.py` covers typed questions
+and answer/restart on the candidate branch. The full Harness still contains v7 test fixtures and does
 not compile in the candidate branch; these focused checks do not replace its
 integration coverage at cutover.
 

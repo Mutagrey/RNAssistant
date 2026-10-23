@@ -34,6 +34,8 @@ an irreparable obstacle without reporting success or replaying a tool.
 - `dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore`:
   passes. Controlled CLI/HTTP smokes pass:
   `response_mode_smoke.py` (response modes, result roles, approval),
+  `mode_questions_smoke.py` (Plan/Agent typed questions, answer/restart and
+  old-run evidence isolation),
   `interrupted_run_smoke.py` (process death and source revalidation),
   `compaction_resume_smoke.py` (checkpoint, source drift, honest failure,
   native result pairing), and `run_control_smoke.py` (cancel/continue, exact
