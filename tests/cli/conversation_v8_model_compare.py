@@ -226,7 +226,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
     usages = [item["usage"] for item in http if item["usage"]]
     responses = [response_envelope((captures / ("%04d.response.body" % item["index"])).read_bytes())[0]
                  for item in http if item["path"].startswith("/v1/chat/completions")]
-    proposed_calls = [call for item in responses if isinstance(item, dict) and item.get("action") == "execute"
+    proposed_calls = [call for item in responses if isinstance(item, dict) and item.get("action") in ("execute", "tool")
                       for call in item.get("tool_calls", []) if isinstance(call, dict)]
     signatures = [json.dumps(call, sort_keys=True, ensure_ascii=False) for call in proposed_calls]
     terminal_results = {}
