@@ -624,14 +624,19 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("common.html_workspace_authoring"),
-                    "{\"message\":\"Создаю локальный HTML.\",\"action\":\"tool\",\"tool_calls\":[{\"name\":\"common.html_workspace_write_file\",\"arguments\":{\"path\":\"index.html\",\"content\":\"<main>Offline</main>\"}}]}",
-                    "{\"message\":\"Локальный HTML готов.\",\"action\":\"done\",\"tool_calls\":[]}"
+                    ModelProtocolWire.WriteAcceptedCall("Create the local HTML file.", "Создаю локальный HTML.",
+                        new ConversationToolCall { Name = "common.html_workspace_write_file",
+                            Arguments = new JObject { ["path"] = "index.html", ["content"] = "<main>Offline</main>" } }),
+                    null
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls.Add(messages.ToList());
-                    return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                    var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
+                        "The local HTML write has a terminal result.", "Локальный HTML готов.",
+                        "The requested HTML file was created.", "common.html_workspace_write_file");
+                    return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
 
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
