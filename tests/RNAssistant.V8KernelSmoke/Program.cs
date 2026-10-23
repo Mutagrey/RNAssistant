@@ -79,7 +79,11 @@ internal static class Program
         Expect(ConversationFinishEvidenceAdmission.Evaluate(empty, Session, Run, Run,
             new string[0], new ConversationResultClaim[0], null).Accepted, "direct finish");
         Expect(ConversationFinishEvidenceAdmission.Evaluate(empty, Session, Run, Run,
-            new string[0], new[] { new ConversationResultClaim("x", new string[0], ConversationAssessment.Unverified) }, null).Code == "unknown_evidence", "old-run claim rejected");
+            new string[0], new[] { new ConversationResultClaim("Direct answer", new string[0], ConversationAssessment.Unverified) }, null).Accepted,
+            "direct finish may include an evidence-free model claim");
+        Expect(ConversationFinishEvidenceAdmission.Evaluate(empty, Session, Run, Run,
+            new string[0], new[] { new ConversationResultClaim("Old result", new[] { CallId }, ConversationAssessment.Unverified) }, null).Code == "unknown_evidence",
+            "direct finish cannot cite a foreign or previous-run call");
         PromptSmoke();
         KernelSmoke();
         SteerSmoke();

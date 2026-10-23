@@ -27,8 +27,6 @@ namespace RNAssistant.Core.Persistence
             var expected = new HashSet<string>(acceptedCallIds, StringComparer.Ordinal);
             if (expected.Count != acceptedCallIds.Count)
                 throw new InvalidOperationException("Current-run accepted call IDs are ambiguous.");
-            if (expected.Count == 0 && results.Count != 0)
-                return FinishAdmission.Reject("unknown_evidence", "This run accepted no tool calls; finish with results=[].");
             if (expected.Count != 0 && results.Count == 0)
                 return FinishAdmission.Reject("missing_finish_results", "Report the outcomes of the accepted calls before finish.");
             var references = results.SelectMany(item => item.Evidence).Distinct(StringComparer.Ordinal).ToArray();
