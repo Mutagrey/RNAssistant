@@ -40,9 +40,14 @@ an irreparable obstacle without reporting success or replaying a tool.
   `compaction_resume_smoke.py` (checkpoint, source drift, honest failure,
   native result pairing), and `run_control_smoke.py` (cancel/continue, exact
   cursor, lease, approved write with no replay).
+- `python3 -B tests/cli/conversation_v8_finish_smoke.py`: controlled HTTP/CLI
+  file analogue of the phase-0 failure. After one verified write, an empty
+  `finish.results` receives `missing_finish_results`; the rejected proposal is
+  absent from accepted model context. The run then performs a second write and
+  finishes with both terminal IDs, without replaying the first write.
 
 The full Harness still has legacy v7 fixtures and cannot compile as a whole.
-The phase-0 premature-finish HTTP reproducer and a focused steer/UI
+The original phase-0 fake-Excel premature-finish reproducer and a focused steer/UI
 integration check are not yet migrated. Playwright layout qualification is
 unavailable in this worktree (`playwright` module absent); Windows x64 +
 Office x64 + WebView2 and real-model comparisons remain open.

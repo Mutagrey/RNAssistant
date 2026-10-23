@@ -449,6 +449,8 @@ reset and composer status alongside the existing responsive layout.
 formats/result roles. The former Chat-only and implicit-auto-confirm assumptions
 are not the new contract.
 `mode_questions_smoke.py` verifies Plan/Agent typed questions across processes.
+`conversation_v8_finish_smoke.py` checks rejection of an empty v8 finish after
+a verified CLI write, feedback to the model and continuation without write replay.
 `dotnet run --project demo/RNAssistant.MockDemo -- --unified-agent-test` exercises
 the actual controller with a fake host, including permission snapshot cloning,
 approval after settings changes/restart, AutoConfirm and planning wrappers.
