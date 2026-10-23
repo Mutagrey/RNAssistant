@@ -37,7 +37,8 @@ Reflection decision/provenance now has a focused compaction/reload check, and
 the workspace renderer has a separate UI check. A combined process/browser
 scenario remains open. The full
 [phase readiness review](conversation-v8/PHASE4.md#specification-reconciliation--2026-10-23)
-also retains the real-model benchmark and Windows qualification gates.
+also retains the representative real-model and Windows qualification gates;
+the [local CLI comparisons](conversation-v8/PHASE5_PILOT.md) are exploratory.
 
 ## Harness bridge cancellation flake — 2026-10-23
 

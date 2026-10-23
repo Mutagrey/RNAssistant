@@ -22,12 +22,19 @@ The host-neutral Harness builds and focused v8 workflow/replay scenarios pass.
 The latest complete run had 986 passed / 18 failed / 1004 total. All previously
 red v8 lifecycle/history fixtures now pass; three remaining failures depend on a
 missing local Data Templates package, and independent resource/tool/bridge cases
-still need triage. The Outlook archive/CAS pointer-lock failure was fixed and
-passed targeted checks after that full run. An [isolated pinned real-model pilot](conversation-v8/PHASE5_PILOT.md)
-passed all three synthetic tasks on v8 after a workspace read-selector fix,
-while v7 completed none. This is not the required three-way/ablation benchmark
-or Windows/Office qualification. Accepted v8 replay now sanitizes runtime
-references in model-visible prose while preserving exact call arguments.
+still need triage. Six failures from that run subsequently passed targeted
+checks: Outlook archive/CAS, R61 Excel Agent, three built-in catalog fixtures,
+and bounded artifact search. The full suite has not been repeated. Accepted
+v8 replay now sanitizes runtime references in model-visible prose while
+preserving exact call arguments.
+
+[Pinned real-model comparisons](conversation-v8/PHASE5_PILOT.md) now include
+two repetitions of three synthetic tasks for v7 (0/6 accepted), ordinary v8
+(6/6), and v8 without the reflection schema branch (5/6). On the same v8
+binary, both field orders passed 6/6; a model-facing no-`reason` shim passed
+4/6 against 6/6 ordinary v8. Failed runs did not become accepted false
+successes. No ordinary v8 run selected reflection, and these small local CLI
+samples cannot isolate protocol effects or qualify Windows/Office/WebView2.
 Main remains v7. Owner: Core chat/run projection, Office transcript and
 Workspace/CLI recovery. Formal phase-5, steer/UI and target-host gates remain open.
 
