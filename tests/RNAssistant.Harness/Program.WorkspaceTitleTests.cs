@@ -121,6 +121,30 @@ namespace RNAssistant.Harness
                             AssertTrue(legacy.Summary.AssistantMessage.Contains("Создайте новый чат"),
                                 "incompatible history gives an explicit recovery action");
                         }
+                        var forged = new ChatStore(paths).Load(sessionId);
+                        var forgedResult = forged.Messages.First(message => message.Role == "tool" &&
+                            message.ToolName == "common.resources_find");
+                        forgedResult.ToolName = "different.tool";
+                        new ChatStore(paths).Commit(forged,
+                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { forgedResult }));
+                        using (var invalidService = new WorkspaceConversationService(paths))
+                        {
+                            var rejected = false;
+                            try
+                            {
+                                invalidService.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                                    SessionId = sessionId, Message = "После подмены результата", Mode = ChatModes.Agent
+                                }, settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
+                                    .GetAwaiter().GetResult();
+                            }
+                            catch (InvalidOperationException error)
+                            {
+                                rejected = error.Message.Contains("Stored workspace tool result is invalid") &&
+                                    error.Message.Contains("canonical tool name");
+                            }
+                            AssertTrue(rejected, "a result whose saved tool name differs from its wire is refused before replay");
+                            AssertEqual(3, served, "corrupt result cannot cause another model request");
+                        }
                     }
                     finally { listener.Stop(); }
                 }

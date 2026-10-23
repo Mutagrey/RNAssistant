@@ -76,11 +76,17 @@ class Scenario:
             def do_POST(self):
                 try:
                     assert self.path == "/v1/chat/completions"
-                    owner.requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-                    owner.before_response()
-                    assert owner.responses, "Unexpected request after pause/terminal result"
-                    response = owner.responses.pop(0)
-                    body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
+                    request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                    title_request = any((message.get("content") or "").startswith("# Chat title")
+                                        for message in request["messages"])
+                    if title_request:
+                        content = "Scenario title"
+                    else:
+                        owner.requests.append(request)
+                        owner.before_response()
+                        assert owner.responses, "Unexpected request after pause/terminal result"
+                        content = json.dumps(owner.responses.pop(0))
+                    body = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")
                     self.send_header("Content-Length", str(len(body)))

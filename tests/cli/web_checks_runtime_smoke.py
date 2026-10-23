@@ -60,19 +60,27 @@ def run_case(root, ending):
             pass
 
         def do_POST(self):
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-            index = len(requests) - 1
-            assert self.path == "/v1/chat/completions" and index < len(responses)
-            if index == 2:
-                checks.write_text("{}")  # The admitted contract must not be reread.
-                # Only app.js is read next. The failed verification must still
-                # refresh its other source dependencies before compiling context.
-                style = workspace / "styles.css"
-                style.write_text(style.read_text() + "\n/* external edit after verification */\n")
-            if index == 6 and ending == "late_edit":
-                script = workspace / "app.js"
-                script.write_text(script.read_text().replace("count += 1", "count += 0"))
-            body = json.dumps({"choices": [{"message": {"role": "assistant", "content": responses[index] if isinstance(responses[index], str) else json.dumps(responses[index])}}]}).encode()
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            title_request = any((message.get("content") or "").startswith("# Chat title")
+                                for message in request["messages"])
+            assert self.path == "/v1/chat/completions"
+            if title_request:
+                content = "Web check test"
+            else:
+                requests.append(request)
+                index = len(requests) - 1
+                assert index < len(responses)
+                if index == 2:
+                    checks.write_text("{}")  # The admitted contract must not be reread.
+                    # Only app.js is read next. The failed verification must still
+                    # refresh its other source dependencies before compiling context.
+                    style = workspace / "styles.css"
+                    style.write_text(style.read_text() + "\n/* external edit after verification */\n")
+                if index == 6 and ending == "late_edit":
+                    script = workspace / "app.js"
+                    script.write_text(script.read_text().replace("count += 1", "count += 0"))
+                content = responses[index] if isinstance(responses[index], str) else json.dumps(responses[index])
+            body = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))

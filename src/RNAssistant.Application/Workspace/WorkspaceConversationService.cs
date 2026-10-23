@@ -468,8 +468,9 @@ namespace RNAssistant.Runtime
             foreach (var fact in session.Messages.Where(item => writeRuns.Contains(item.RunId) &&
                 item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId)))
             {
-                var wire = ToolResultWire.Read(fact.Content);
-                if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                ToolResultWireReadResult wire; string readError;
+                if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError) ||
+                    wire.Result.Status != ToolResultStatus.Ok) continue;
                 if (fact.ToolName != null && fact.ToolName.StartsWith("files.", StringComparison.Ordinal) &&
                     (fact.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                         fact.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored))
@@ -528,8 +529,9 @@ namespace RNAssistant.Runtime
             foreach (var fact in session.Messages.Where(item => item.RunId == runId && item.ProtocolMessage &&
                 item.ToolName == "common.resources_read" && !string.IsNullOrWhiteSpace(item.ToolCallId)))
             {
-                var wire = ToolResultWire.Read(fact.Content);
-                if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) continue;
+                ToolResultWireReadResult wire; string readError;
+                if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError) ||
+                    wire.Result.Status != ToolResultStatus.Ok) continue;
                 var data = JsonConvert.DeserializeObject<ResourceReadProjection>(wire.Result.DataJson);
                 if (data?.Type != "file") continue;
                 if (string.IsNullOrWhiteSpace(data.Target))
@@ -597,8 +599,9 @@ namespace RNAssistant.Runtime
                 item.ProtocolMessage && item.ToolName == "web.verify" &&
                 !string.IsNullOrWhiteSpace(item.ToolCallId));
             if (fact == null) return false;
-            var wire = ToolResultWire.Read(fact.Content);
-            if (!wire.Success || wire.Result.Status != ToolResultStatus.Ok) return false;
+            ToolResultWireReadResult wire; string readError;
+            if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError) ||
+                wire.Result.Status != ToolResultStatus.Ok) return false;
             if (wire.Result.Resources.Count != 1) return false;
             var record = snapshots.ReadVerification(workspace, wire.Result.Resources.Single());
             if (record.State != WebVerificationState.Passed || record.Historical ||
@@ -722,9 +725,9 @@ namespace RNAssistant.Runtime
                 }
                 if (item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId))
                 {
-                    var parsed = ToolResultWire.Read(item.Content);
-                    if (!parsed.Success || parsed.ToolCallId != item.ToolCallId)
-                        throw new InvalidOperationException("Stored workspace tool result is invalid.");
+                    ToolResultWireReadResult parsed; string readError;
+                    if (!ToolResultHistoryReader.TryRead(item, out parsed, out readError))
+                        throw new InvalidOperationException("Stored workspace tool result is invalid: " + readError);
                     history.Add(AgentMessage.AcceptedToolResult(item.ToolCallId, parsed.Result.Message,
                         item.Content, item.ExecutionProgress, item.ResourceEvidence, item.ResourceEffect));
                 }
@@ -1286,8 +1289,8 @@ namespace RNAssistant.Runtime
                 var paths = new HashSet<string>(_observed.Keys, StringComparer.Ordinal);
                 foreach (var fact in active)
                 {
-                    var wire = ToolResultWire.Read(fact.Content);
-                    if (!wire.Success) continue;
+                    ToolResultWireReadResult wire; string readError;
+                    if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError)) continue;
                     if (fact.ToolName == "web.verify" && fact.ResourceEvidence?.Count > 0)
                     {
                         var verification = JsonConvert.DeserializeObject<WebVerificationToolData>(wire.Result.DataJson);
@@ -1372,9 +1375,9 @@ namespace RNAssistant.Runtime
                     }
                     else if (!string.IsNullOrEmpty(item.ToolCallId))
                     {
-                        var wire = ToolResultWire.Read(item.Content);
-                        if (!wire.Success || wire.ToolCallId != item.ToolCallId)
-                            throw new InvalidOperationException("Accepted tool result has no matching terminal body.");
+                        ToolResultWireReadResult wire; string readError;
+                        if (!ToolResultHistoryReader.TryRead(item, out wire, out readError))
+                            throw new InvalidOperationException("Accepted tool result has no matching terminal body: " + readError);
                         var result = HistoricalContextProjector.Project(item);
                         result.Role = role; result.ToolResultRole = role;
                         result.Content = role == ToolResultRoles.Tool ? item.Content : "TOOL_RESULT:\n" + item.Content;

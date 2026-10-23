@@ -54,15 +54,22 @@ def run_case(root, ending):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             assert self.path == "/v1/chat/completions", self.path
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
-            index = len(requests) - 1
-            if index == 6 and ending != "early":
-                (workspace / "other.txt").write_text("external edit during format repair")
-            if index == first_done and ending == "late_edit":
-                (workspace / "app.txt").write_text("external edit during final model wait")
-            response = responses[index] if index < len(responses) else DONE
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            title_request = any((message.get("content") or "").startswith("# Chat title")
+                                for message in request["messages"])
+            if title_request:
+                content = "Read acceptance test"
+            else:
+                requests.append(request)
+                index = len(requests) - 1
+                if index == 6 and ending != "early":
+                    (workspace / "other.txt").write_text("external edit during format repair")
+                if index == first_done and ending == "late_edit":
+                    (workspace / "app.txt").write_text("external edit during final model wait")
+                response = responses[index] if index < len(responses) else DONE
+                content = json.dumps(response)
             body = json.dumps({"choices": [{"message": {"role": "assistant",
-                "content": json.dumps(response)}}]}).encode()
+                "content": content}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))

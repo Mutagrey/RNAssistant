@@ -2010,6 +2010,10 @@ Owner: Conversation/model context; совместные границы — Core 
   No-call ответ остаётся в durable истории как v7 JSON, но в model-context
   поступает только проверенный текст `message` как обычная реплика assistant.
   Подготовка запроса не переписывает сохранённое событие.
+- Сохранённые workspace tool results проходят общий `ToolResultHistoryReader`
+  перед replay, model-context и подсчётом подтверждённых файловых чтений,
+  изменений и web.verify. Он сверяет версию, роль, call ID и canonical имя tool
+  с wire body; неподтверждённый результат не даёт acceptance evidence.
 - Core `ContextWorkingSet` общий для Office request/preview и CLI. Он передаёт
   исходные архивные кандидаты compiler, без provider calls и второго store.
   `ModelContextCompiler` единолично проверяет актуальность, устраняет дубликаты
