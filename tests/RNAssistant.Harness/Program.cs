@@ -484,6 +484,7 @@ namespace RNAssistant.Harness
                 Test("storage: event log is canonical", SessionEventLogIsCanonical),
                 Test("storage: typed event port preserves classified wire", TypedEventPortPreservesClassifiedWire),
                 Test("event feed: bounded pages and idle polling", EventFeedPagesAndPollsWithoutHistoryMaterialization),
+                Test("event feed: commit operation notices", EventFeedCommitOperationNotices),
                 Test("event feed: changed and incomplete history", EventFeedRejectsChangedOrIncompleteHistory),
                 Test("event feed: subscription backpressure and cancellation", EventFeedSubscriptionBackpressureAndCancellation),
                 Test("storage: accepted call operation ignores result role", AcceptedCallOperationIgnoresResultRole),

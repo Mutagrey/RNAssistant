@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 
@@ -81,6 +83,47 @@ namespace RNAssistant.Harness
                 AssertEqual(ConversationResyncReason.DifferentSession, feed.Read(session, ConversationEventFeed.Cursor(other)).Reason,
                     "cross-session anchor rejected");
             });
+        }
+
+        private static void EventFeedCommitOperationNotices()
+        {
+            var session = new ChatSession { Id = "event-feed-operations", Host = "Word", DocumentKey = "Events.docx",
+                Revision = 1, StorageHeadHash = new string('a', 64) };
+            var initial = ConversationEventFeed.Cursor(session);
+            var commit = new SessionEvent { SessionId = session.Id, Sequence = 2, Hash = new string('b', 64),
+                Type = SessionEventTypes.SessionCommit, Data = JToken.FromObject(new { Operations = new object[]
+                {
+                    null,
+                    new { Type = SessionOperationTypes.RunUpdated, Data = new { Value = "ignored body" } },
+                    new { Type = SessionOperationTypes.RunUpdated, Data = new { Value = "another body" } },
+                    new { Type = SessionOperationTypes.MessageUpdated, Data = new { Value = "third body" } }
+                } }) };
+            var feed = new ConversationEventFeed(new EventFeedPageStore(commit));
+            var page = feed.Read(session, initial);
+            AssertTrue(!page.ResyncRequired && page.Events.Count == 1, "commit notice is readable");
+            AssertTrue(page.Events[0].Operations.SequenceEqual(new[]
+            { SessionOperationTypes.RunUpdated, SessionOperationTypes.MessageUpdated }),
+                "commit notices retain distinct operation types in first-seen order");
+
+            commit.Data = JToken.FromObject(new { Operations = new object[] { 42 } });
+            AssertEqual(ConversationResyncReason.HistoryUnavailable, feed.Read(session, initial).Reason,
+                "malformed commit operation fails the feed closed");
+        }
+
+        private sealed class EventFeedPageStore : IEventStore, ISessionEventReader
+        {
+            private readonly SessionEvent _fact;
+            public EventFeedPageStore(SessionEvent fact) { _fact = fact; }
+            public ISessionEventReader OpenReader(ChatSession session) { return this; }
+            public SessionEventSlice Read(SessionEventPosition after, SessionEventPosition through, int limit,
+                CancellationToken cancellationToken)
+            {
+                var position = new SessionEventPosition(_fact.SessionId, _fact.Sequence, _fact.Hash);
+                return new SessionEventSlice { Events = new[] { _fact }, HighWater = position, Next = position };
+            }
+            public SessionEvent Append(ChatSession session, SessionEventWrite write) { throw new NotSupportedException(); }
+            public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { throw new NotSupportedException(); }
+            public string ReadPayload(ChatSession session, SessionEvent sessionEvent) { throw new NotSupportedException(); }
         }
 
         private static void EventFeedSubscriptionBackpressureAndCancellation()

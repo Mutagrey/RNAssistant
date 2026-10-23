@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 
@@ -46,7 +47,7 @@ namespace RNAssistant.Core.Services
                     Sequence = item.Sequence, EventId = item.EventId, CreatedUtc = item.CreatedUtc, Type = item.Type,
                     RunId = item.RunId, TurnId = item.TurnId, StepId = item.StepId,
                     Operations = item.Type == SessionEventTypes.SessionCommit
-                        ? (item.Data.ToObject<CommitData>()?.Operations ?? new List<SessionOperation>()).Select(op => op.Type).Distinct().ToArray()
+                        ? CommitOperationTypes(item.Data)
                         : new string[0]
                 }).ToArray();
             }
@@ -115,7 +116,28 @@ namespace RNAssistant.Core.Services
             return ConversationResyncReason.None;
         }
 
-        private sealed class CommitData
-        { public List<SessionOperation> Operations { get; set; } }
+        private static string[] CommitOperationTypes(JToken data)
+        {
+            var root = data as JObject;
+            if (root == null) throw new JsonException("Session commit data must be an object.");
+            var token = root["Operations"];
+            if (token == null || token.Type == JTokenType.Null) return new string[0];
+            var operations = token as JArray;
+            if (operations == null) throw new JsonException("Session commit operations must be an array.");
+            var types = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in operations)
+            {
+                if (item == null || item.Type == JTokenType.Null) continue;
+                var operation = item as JObject;
+                if (operation == null) throw new JsonException("Session commit operation must be an object.");
+                var type = operation["Type"];
+                if (type == null || type.Type == JTokenType.Null) continue;
+                if (type.Type != JTokenType.String) throw new JsonException("Session commit operation type must be a string.");
+                var name = (string)type;
+                if (seen.Add(name)) types.Add(name);
+            }
+            return types.ToArray();
+        }
     }
 }
