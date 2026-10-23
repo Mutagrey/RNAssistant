@@ -547,8 +547,10 @@ no plaintext temporary file, head, second store or read evidence is created.
 The index has no configured whole-source byte ceiling; long lines remain addressable by parts. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
 from the same exact source; unavailable source bytes fail closed.
 
-`common.resources_find` discovers semantic targets under its existing bounded
-cross-resource budget. `common.resources_search(target, query)` scans one selected
+`common.resources_find` discovers semantic targets under a one-million-character
+cross-resource budget; unindexed inline bodies contribute at most 128,000
+characters each. A prefix-only negative reports incomplete coverage.
+`common.resources_search(target, query)` scans one selected
 indexed text completely and returns bounded literal
 snippets, a total match count, `scanComplete`, `sourceComplete` and a matching
 `partNumber`. A negative result proves absence only when `scanComplete=true`.
