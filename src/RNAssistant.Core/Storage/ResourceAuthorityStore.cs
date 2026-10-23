@@ -474,9 +474,13 @@ namespace RNAssistant.Core.Storage
                 // This sibling owner scans exact cache pointers separately. Other
                 // nested files, including renamed journals, remain blocking sources.
                 var parent = Path.GetDirectoryName(Path.GetFullPath(path));
-                return string.Equals(Path.GetDirectoryName(parent),
-                    Path.Combine(Path.GetFullPath(_directory), "outlook-archive-cache"), StringComparison.Ordinal) &&
-                    name.EndsWith(".ref.json", StringComparison.Ordinal);
+                if (!string.Equals(Path.GetDirectoryName(parent),
+                    Path.Combine(Path.GetFullPath(_directory), "outlook-archive-cache"), StringComparison.Ordinal) ||
+                    !IsCanonicalScopeHash(Path.GetFileName(parent))) return false;
+                var suffix = name.EndsWith(".ref.json.lock", StringComparison.Ordinal)
+                    ? ".ref.json.lock" : name.EndsWith(".ref.json", StringComparison.Ordinal)
+                    ? ".ref.json" : null;
+                return suffix != null && IsCanonicalScopeHash(name.Substring(0, name.Length - suffix.Length));
             }
             if (name == "authority.lck" || name == "documents.json" || name == "documents.json.lck" ||
                 name == "mutation-attempts.jsonl" || name == "mutation-attempts.jsonl.lck") return true;

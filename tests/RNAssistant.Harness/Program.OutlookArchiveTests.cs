@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Models;
@@ -58,10 +59,18 @@ namespace RNAssistant.Harness
                 AssertTrue(raced, "stale writer cannot replace a newer checkpoint");
                 var maintenance = CasService(paths, new ChatStore(paths), new VbaJournalStore(paths),
                     () => StorageProtector.None);
-                AssertTrue(maintenance.Audit().CanGarbageCollect, "archive pointer can be scanned for CAS reachability");
+                var audit = maintenance.Audit();
+                AssertTrue(audit.CanGarbageCollect, "archive pointer can be scanned for CAS reachability: " +
+                    string.Join("; ", audit.Issues.Select(issue => issue.Kind + ": " + issue.Message)));
                 AssertTrue(maintenance.Collect().Completed, "CAS collection completes with archive index");
                 AssertEqual("Pump failed; repair approved.", index.ReadBody(index.ReadPage(complete, 0)[0]),
                     "archive body survives CAS collection");
+                var unexpected = Path.Combine(paths.ResourceAuthorityDirectory, "outlook-archive-cache",
+                    AppDataPaths.SafeFileName(mailbox), "unexpected.ref.json.lock");
+                File.WriteAllText(unexpected, string.Empty);
+                AssertTrue(!maintenance.Audit().CanGarbageCollect,
+                    "noncanonical archive-cache siblings still block CAS collection");
+                File.Delete(unexpected);
                 AssertTrue(!index.Open(mailbox, from, to, true, true).Complete,
                     "explicit refresh starts a new scan");
             });

@@ -94,7 +94,8 @@ Authority, revision and view journals must remain directly under
 `.revisions.jsonl` or `.views.jsonl`. Renamed, case-changed or nested journals block
 collection, including unpublished revision/view roots. Only known sibling
 document metadata, lock files, the mutation journal and
-`outlook-archive-cache/<document>/<id>.ref.json` pointers are admitted; the existing
+`outlook-archive-cache/<64-hex-document>/<64-hex-id>.ref.json` pointers and their
+`.ref.json.lock` siblings are admitted; the existing
 mutation/cache owners scan their references. Unsupported names and unreadable or
 linked paths block authority replay before it can open companion journals. Audit
 and collection do not move or repair these sources.
