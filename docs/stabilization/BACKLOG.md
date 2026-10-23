@@ -31,10 +31,10 @@
    не подменять unknown предположением. При необходимости проверить старые traces
    и compaction/restart на реальном архиве. UI остаётся производной projection
    над canonical IDs без собственного CAS-доступа или model-facing адресации.
-   Отдельный остаток: diagnostic body download всё ещё ограничен Web downloader
-   50 MiB и backend `ReadPrefix`/Int32 materialization; потоковая CAS-проверка этого
-   лимита не имеет. Перевести диагностическое скачивание на существующий streaming
-   data plane, сохранив точные байты, integrity и отмену.
+   Diagnostic body download переведён на проверенный CAS stream и file-backed
+   последовательную запись без прежнего 50-MiB source ceiling. Для старых WebView
+   без file picker остаётся whole-Blob fallback; его memory profile и реальное
+   Windows/WebView2 поведение требуют target-host evidence.
 2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
    resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
    coverage будущих специализированных selectors и cost/capabilities конкретных

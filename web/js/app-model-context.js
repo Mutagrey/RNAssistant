@@ -394,8 +394,30 @@
   }
   async function downloadEvent(c, eventId) {
     var version = c.version;
-    try { var value = await payload(c, eventId, undefined, version); if (valid(c, version)) save(value, eventId + ".json"); }
+    // Start the picker while this click still has user activation. Open the
+    // lease only after a file is chosen, then close it on every outcome.
+    var data;
+    try {
+      var handle = window.showSaveFilePicker ?
+        await window.showSaveFilePicker({ suggestedName: eventId + ".json" }) : null;
+      var response = await call(c, "getModelContextPayload", { eventId: eventId });
+      data = response && response.data;
+      if (!valid(c, version) || response.chatId !== c.chatId || response.eventId !== eventId || !data)
+        throw new Error("RESOURCE_DOWNLOAD_INVALID");
+      if (handle) {
+        var writable = await handle.createWritable();
+        await window.RNAssistantResourceDownload.save(data, { fetch: window.fetch.bind(window),
+          signal: c.abort.signal, isCurrent: function () { return valid(c, version); }, writable: writable });
+      } else {
+        // Older WebViews lack a file stream; their native Blob save is a fallback.
+        var bytes = await window.RNAssistantResourceDownload.read(data, { fetch: window.fetch.bind(window),
+          signal: c.abort.signal, isCurrent: function () { return valid(c, version); }, maxBytes: Number.MAX_SAFE_INTEGER });
+        if (valid(c, version)) save({ bytes: bytes, contentType: data.payload.contentType }, eventId + ".json");
+      }
+    }
     catch (error) { status(c, error.message); }
+    finally { if (data && data.leaseId) await send("resourceDataClose", { chatId: c.chatId,
+      workspaceId: "model-context", leaseId: data.leaseId }).catch(function () {}); }
   }
   async function select(c, eventId) {
     var same = c.selected === eventId && c.detail;

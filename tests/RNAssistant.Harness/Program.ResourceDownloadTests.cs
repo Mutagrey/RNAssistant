@@ -46,6 +46,8 @@ namespace RNAssistant.Harness
                             var response = router.Handle("GET", download.Data.Url + "?offset=" + offset + "&count=" + count, CancellationToken.None);
                             AssertEqual(200, response.StatusCode, "bounded binary GET uses the same router");
                             AssertEqual("application/zip", response.ContentType, "ZIP MIME remains explicit");
+                            AssertContains(response.Headers, "X-RNAssistant-Chunk-SHA256: ",
+                                "file-backed consumers can verify each bounded chunk before writing");
                             using (response.Body) { AssertEqual((long)count, response.Body.Length, "exact batch byte bound"); response.Body.CopyTo(bytes); }
                             offset += count;
                         }
@@ -139,6 +141,63 @@ namespace RNAssistant.Harness
                 data.Dispose();
                 RuntimeThrows<ObjectDisposedException>(() => data.ReadDownload(lease.LeaseId, 0, 1, CancellationToken.None, out mime));
             }
+        }
+
+        private static void ModelContextLargeVerifiedDownload()
+        {
+            WithTempPaths(paths =>
+            {
+                var sourcePath = Path.Combine(paths.ChatBlobDirectory, "large-diagnostic-source.bin");
+                using (var source = File.Create(sourcePath)) source.SetLength(51L * 1024 * 1024);
+                var blobs = new ChatBlobStore(paths);
+                var stored = blobs.StoreFile(sourcePath, "application/octet-stream");
+                var session = new ChatSession();
+                using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    var opened = data.OpenDownload(session, ModelContextInspectorService.Owner,
+                        Math.Max(1, stored.ByteLength), token => new ResourceDownloadContent {
+                            VerifiedStream = blobs.OpenVerifiedRead(stored, Math.Max(1, stored.ByteLength), token),
+                            VerifiedPayload = PayloadRef.FromBlob(stored), ContentType = stored.ContentType
+                        });
+                    AssertEqual(stored.ByteLength, opened.Payload.ByteLength,
+                        "a diagnostic lease can expose an exact body above the former 50 MiB ceiling");
+                    AssertEqual(stored.Sha256, opened.Payload.Sha256, "streamed lease retains the CAS identity");
+                    using (var hash = SHA256.Create())
+                    {
+                        for (long offset = 0; offset < opened.Payload.ByteLength;)
+                        {
+                            string mime;
+                            var count = (int)Math.Min(256 * 1024, opened.Payload.ByteLength - offset);
+                            var chunk = data.ReadDownload(opened.LeaseId, offset, count, CancellationToken.None, out mime);
+                            AssertEqual(stored.ContentType, mime, "streamed chunks retain exact MIME");
+                            hash.TransformBlock(chunk, 0, chunk.Length, null, 0);
+                            offset += chunk.Length;
+                        }
+                        hash.TransformFinalBlock(new byte[0], 0, 0);
+                        AssertEqual(stored.Sha256, BitConverter.ToString(hash.Hash).Replace("-", string.Empty).ToLowerInvariant(),
+                            "all bounded chunks reproduce the verified original");
+                    }
+                    data.Close(session.Id, ModelContextInspectorService.Owner, opened.LeaseId);
+                    string ignored;
+                    AssertEqual("RESOURCE_LEASE_EXPIRED", RuntimeThrows<ResourceRequestException>(() =>
+                        data.ReadDownload(opened.LeaseId, 0, 1, CancellationToken.None, out ignored)).ErrorCode,
+                        "close revokes the streamed capability");
+                    var shortStream = new MemoryStream(new byte[] { 1 });
+                    var truncated = data.OpenDownload(session, ModelContextInspectorService.Owner, 2, token =>
+                        new ResourceDownloadContent { VerifiedStream = shortStream,
+                            VerifiedPayload = new PayloadRef(stored.Sha256, 2, stored.ContentType), ContentType = stored.ContentType });
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                        data.ReadDownload(truncated.LeaseId, 0, 2, CancellationToken.None, out ignored)).ErrorCode,
+                        "a verified-stream owner that ends early cannot report a successful download");
+                    AssertTrue(!shortStream.CanRead, "failed streamed delivery closes its source handle");
+                    var drifted = data.OpenDownload(session, ModelContextInspectorService.Owner, 2, token =>
+                        new ResourceDownloadContent { VerifiedStream = new MemoryStream(new byte[] { 1, 2 }),
+                            VerifiedPayload = new PayloadRef(stored.Sha256, 2, stored.ContentType), ContentType = stored.ContentType });
+                    AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() =>
+                        data.ReadDownload(drifted.LeaseId, 0, 2, CancellationToken.None, out ignored)).ErrorCode,
+                        "the final chunk cannot succeed when its bytes differ from the pinned CAS hash");
+                }
+            });
         }
     }
 }

@@ -90,7 +90,9 @@ function fixture(withAliases = false) {
     },
     fetch: async url => { const parsed = new URL(url), bytes = leases.get(parsed.pathname.split("/").pop());
       const offset = Number(parsed.searchParams.get("offset")), count = Number(parsed.searchParams.get("count"));
-      return new Response(bytes.subarray(offset, offset + count), { headers: { "Content-Type": "application/json" } }); }
+      const chunk = bytes.subarray(offset, offset + count);
+      return new Response(chunk, { headers: { "Content-Type": "application/json",
+        "X-RNAssistant-Chunk-SHA256": crypto.createHash("sha256").update(chunk).digest("hex") } }); }
   });
   c.window = c;
   c.RNAssistantViewerRegistry = { mount(kind, node, options) { mounts.push({ kind, node, options }); }, unmount() {} };
@@ -127,6 +129,24 @@ function fixture(withAliases = false) {
   assert.equal(history.get("modelContextPreviewOption").disabled, false);
   history.c.RNAssistantModelContext.close();
   console.log("PASS model context: history keeps saved requests and refuses future-request previews locally");
+
+  const streamed = fixture(), saved = []; let chosen = false, committed = false;
+  streamed.c.showSaveFilePicker = async () => {
+    chosen = streamed.calls.filter(call => call.type === "getModelContextPayload").length === 1;
+    return { async createWritable() { return { async write(chunk) { saved.push(Buffer.from(chunk)); },
+      async close() { committed = true; }, async abort() { throw new Error("unexpected abort"); } }; } };
+  };
+  streamed.c.RNAssistantModelContext.open(); await flush();
+  const previousCloses = streamed.closes.length;
+  await streamed.get("modelContextDownload").fire("click"); await flush();
+  for (let attempt = 0; attempt < 100 && !committed && streamed.closes.length === previousCloses; attempt++)
+    await new Promise(resolve => setTimeout(resolve, 5));
+  assert.equal(chosen, true, "file picker starts before the new download lease is opened");
+  assert.equal(committed, true, streamed.get("modelContextStatus").textContent);
+  assert.equal(Buffer.concat(saved).toString(), streamed.requestText);
+  assert.equal(streamed.closes.length, previousCloses + 1, "streamed save closes its one-off lease");
+  streamed.c.RNAssistantModelContext.close();
+  console.log("PASS model context: file-backed save keeps an exact chunked body and closes its lease");
 
   const emptyHistory = fixture();
   emptyHistory.events.length = 0;

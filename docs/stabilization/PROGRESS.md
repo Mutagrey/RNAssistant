@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Resource Context streamed diagnostic body download — 2026-10-23
+
+Owner: Model Context Inspector and shared resource download data plane. Saved
+model-event/original bodies now open a hash-verified CAS stream and travel through
+sequential 256-KiB leases without the former 50-MiB or `Int32` source ceiling.
+The file-backed Web download checks each chunk before writing, aborts a failed
+save and closes the lease; older WebViews retain a whole-Blob fallback. The
+Inspector's 50-MiB in-memory viewer bound remains a display bound, not a source
+or download bound. Focused 51-MiB CAS, lease lifecycle, router and Web checks
+passed host-neutral. Real Windows/WebView2 file-picker behavior remains unqualified.
+
 ## Resource Context exact PDF page text — 2026-10-23
 
 Owner: Core PDF extractor and workspace file owner, Office artifact provider, and

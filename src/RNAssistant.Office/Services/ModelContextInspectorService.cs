@@ -99,14 +99,19 @@ namespace RNAssistant.Office.Services
                 source = entries[index].OriginalPayload?.ToBlobReference();
             }
             if (source == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: saved body unavailable.");
-            if (source.ByteLength > AttachmentStore.MaxMessageBytes)
-                throw new InvalidOperationException("RESOURCE_BATCH_TOO_LARGE: payload exceeds the shared 50 MiB transfer budget; no truncated body was returned.");
             var lease = _data.OpenDownload(session, Owner, Math.Max(1, source.ByteLength), cancellation =>
             {
-                var bytes = _payloads.ReadPrefix(source, checked((int)Math.Max(1, source.ByteLength)), cancellation);
-                if (bytes == null || bytes.LongLength != source.ByteLength)
-                    throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: payload is missing, corrupt or inaccessible.");
-                return new ResourceDownloadContent { Bytes = bytes, ContentType = source.ContentType ?? "application/json" };
+                try
+                {
+                    return new ResourceDownloadContent {
+                        VerifiedStream = _payloads.OpenVerifiedRead(source, Math.Max(1, source.ByteLength), cancellation),
+                        VerifiedPayload = PayloadRef.FromBlob(source),
+                        ContentType = source.ContentType ?? "application/json"
+                    };
+                }
+                catch (Exception error) when (error is IOException || error is InvalidDataException ||
+                    error is UnauthorizedAccessException || error is CryptographicException)
+                { throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: payload is missing, corrupt or inaccessible.", error); }
             }, token);
             try
             {

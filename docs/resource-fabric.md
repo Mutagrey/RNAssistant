@@ -1775,6 +1775,15 @@ and explicit truncation marker. No full intermediate JSON string is built. This
 closes the Inspector serialization-allocation defect host-neutral, not the memory
 cost of the existing compiler/input snapshot or real WebView2 qualification.
 
+Saved Model Context event and original bodies use a separate opt-in download lease.
+The owner opens the exact retained CAS body with full hash verification before
+exposing any bytes; the shared data plane keeps that stream and serves sequential
+256-KiB chunks without a whole-body allocation or a 50-MiB source ceiling. The
+file-backed Web save checks each chunk hash before writing, aborts on failure and
+closes the lease. WebViews without a file picker use the legacy whole-Blob save;
+the Inspector's 50-MiB in-memory viewer bound applies only to rendering, not to
+file download. Windows/WebView2 file-picker behavior still needs target-host evidence.
+
 The unused `getRuntimeLog`/`clearRuntimeLog` bridge commands, inline response DTO
 and exclusive tail/clear helpers are removed, not replaced by a new download.
 The existing UI log is WebView-session-local (`app-core.js`/`app-logs.js`), with no

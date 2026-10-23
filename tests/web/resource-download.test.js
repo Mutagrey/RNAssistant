@@ -23,7 +23,9 @@ function fixture() {
       calls.push({ offset, count });
       assert.equal(config.credentials, "omit");
       assert.equal(config.redirect, "error");
-      return new Response(bytes.slice(offset, offset + count), { headers: { "Content-Type": "application/zip" } });
+      const chunk = bytes.slice(offset, offset + count);
+      return new Response(chunk, { headers: { "Content-Type": "application/zip",
+        "X-RNAssistant-Chunk-SHA256": crypto.createHash("sha256").update(chunk).digest("hex") } });
     } };
   return { context, data, options, calls, read: () => context.RNAssistantResourceDownload.read(data, options) };
 }
@@ -44,6 +46,22 @@ function fixture() {
     assert.deepEqual(await reading, bytes);
     assert.deepEqual(f.calls, [{ offset: 0, count: 3 }, { offset: 3, count: 3 }, { offset: 6, count: 1 }]);
     console.log("PASS download: sequential bounded bytes and exact full-payload integrity");
+  }
+  {
+    const f = fixture(), chunks = []; let closed = false, aborted = false;
+    f.options.writable = { async write(value) { chunks.push(Uint8Array.from(value)); },
+      async close() { closed = true; }, async abort() { aborted = true; } };
+    await f.context.RNAssistantResourceDownload.save(f.data, f.options);
+    assert.deepEqual(Buffer.concat(chunks), Buffer.from(bytes));
+    assert.equal(closed, true); assert.equal(aborted, false);
+    assert.deepEqual(f.calls, [{ offset: 0, count: 3 }, { offset: 3, count: 3 }, { offset: 6, count: 1 }]);
+    const corrupt = fixture(); let committed = 0, cancelled = false;
+    corrupt.options.writable = { async write() { committed++; }, async close() {}, async abort() { cancelled = true; } };
+    corrupt.options.fetch = async () => new Response(new Uint8Array([1, 2, 3]), { headers: {
+      "Content-Type": "application/zip", "X-RNAssistant-Chunk-SHA256": "b".repeat(64) } });
+    await assert.rejects(corrupt.context.RNAssistantResourceDownload.save(corrupt.data, corrupt.options), /RESOURCE_INTEGRITY_MISMATCH/);
+    assert.equal(committed, 0); assert.equal(cancelled, true);
+    console.log("PASS download: file writer receives bounded verified chunks and aborts on corruption");
   }
   {
     const f = fixture();

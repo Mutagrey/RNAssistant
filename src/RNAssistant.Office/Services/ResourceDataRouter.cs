@@ -2,6 +2,7 @@ using RNAssistant.Core.Models;
 using System;
 using System.Globalization;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
@@ -105,7 +106,13 @@ namespace RNAssistant.Office.Services
             if (error != null) return error;
             string contentType;
             var bytes = _data.ReadDownload(id, offset, count, token, out contentType);
-            return new ResourceStreamResponse { StatusCode = 200, Reason = "OK", ContentType = contentType, Body = new MemoryStream(bytes, false) };
+            string hash;
+            using (var sha = SHA256.Create())
+                hash = BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+            return new ResourceStreamResponse { StatusCode = 200, Reason = "OK", ContentType = contentType,
+                AllowedHeaders = "Access-Control-Expose-Headers: X-RNAssistant-Chunk-SHA256\r\n" +
+                    "X-RNAssistant-Chunk-SHA256: " + hash + "\r\n",
+                Body = new MemoryStream(bytes, false) };
         }
 
         private static ResourceStreamResponse TransferBounds(Uri uri, int maximumCount, out long offset, out int count)
