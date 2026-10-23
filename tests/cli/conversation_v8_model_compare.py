@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pinned, isolated CLI task comparison with exact local HTTP evidence.
 
-This is an exploratory runner, not the phase-5 qualification gate: a separate
-reflection policy and field-order/reason ablations still need distinct variants.
+This is an exploratory runner, not the phase-5 qualification gate: field-order
+and reason ablations still need distinct variants and target-host checks.
 """
 
 import argparse
@@ -44,6 +44,12 @@ def sha256(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def binary_hashes(dll):
+    return {path.name: sha256(path.read_bytes()) for path in sorted(dll.parent.iterdir())
+            if path.is_file() and (path.suffix == ".dll" or
+            path.name in (dll.stem + ".deps.json", dll.stem + ".runtimeconfig.json"))}
+
+
 def model_digest(origin, model):
     with urlopen(origin + "/api/tags", timeout=10) as response:
         tags = json.load(response)
@@ -54,6 +60,11 @@ def model_digest(origin, model):
 
 
 def response_action(body):
+    envelope, usage = response_envelope(body)
+    return (envelope.get("action") if isinstance(envelope, dict) else None), usage
+
+
+def response_envelope(body):
     try:
         obj = json.loads(body)
         choice = obj["choices"][0]
@@ -69,9 +80,23 @@ def response_action(body):
         except (ValueError, KeyError, IndexError, TypeError, UnicodeDecodeError):
             return None, None
     try:
-        return json.loads(content).get("action"), usage
+        return json.loads(content), usage
     except (ValueError, TypeError):
         return None, usage
+
+
+def apply_request_policy(body, policy):
+    if policy != "no_reflection_schema":
+        return body
+    request = json.loads(body)
+    schema = request["response_format"]["json_schema"]["schema"]
+    branches = schema["anyOf"]
+    selected = [branch for branch in branches
+                if branch["properties"]["action"].get("const") != "reflection"]
+    if len(branches) - len(selected) != 1 or len(selected) < 1:
+        raise ValueError("Expected exactly one reflection branch in v8 schema")
+    schema["anyOf"] = selected
+    return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
 class CaptureProxy(BaseHTTPRequestHandler):
@@ -87,7 +112,8 @@ class CaptureProxy(BaseHTTPRequestHandler):
         pass
 
     def forward(self):
-        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        client_body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        body = apply_request_policy(client_body, self.server.request_policy) if self.path.startswith("/v1/chat/completions") else client_body
         headers = {key: value for key, value in self.headers.items()
                    if key.lower() not in ("host", "content-length", "connection", "accept-encoding", "authorization")}
         headers["Accept-Encoding"] = "identity"
@@ -106,11 +132,14 @@ class CaptureProxy(BaseHTTPRequestHandler):
             index = self.server.capture_count
             self.server.capture_count += 1
         stem = "%04d" % index
+        if client_body != body:
+            (self.server.capture_dir / (stem + ".client_request.body")).write_bytes(client_body)
         (self.server.capture_dir / (stem + ".request.body")).write_bytes(body)
         (self.server.capture_dir / (stem + ".response.body")).write_bytes(payload)
         action, usage = response_action(payload) if self.path.startswith("/v1/chat/completions") else (None, None)
         record = {"index": index, "method": self.command, "path": self.path, "status": status,
-                  "seconds": elapsed, "request_sha256": sha256(body), "response_sha256": sha256(payload),
+                  "seconds": elapsed, "request_sha256": sha256(body),
+                  "client_request_sha256": sha256(client_body), "response_sha256": sha256(payload),
                   "action": action, "usage": usage}
         with self.server.capture_lock:
             with (self.server.capture_dir / "requests.jsonl").open("a", encoding="utf-8") as output:
@@ -141,6 +170,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
         (workspace / relative).write_bytes(content.encode("utf-8"))
     proxy = CaptureServer(("127.0.0.1", 0), CaptureProxy)
     proxy.origin, proxy.capture_dir = origin, captures
+    proxy.request_policy = "no_reflection_schema" if name == "v8_direct" else "unchanged"
     proxy.capture_count, proxy.capture_lock = 0, threading.Lock()
     thread = threading.Thread(target=proxy.serve_forever, daemon=True)
     thread.start()
@@ -174,9 +204,31 @@ def run_case(name, dll, task_name, task, output, origin, model):
     capture_index = captures / "requests.jsonl"
     http = [json.loads(line) for line in capture_index.read_text().splitlines()] if capture_index.exists() else []
     usages = [item["usage"] for item in http if item["usage"]]
+    responses = [response_envelope((captures / ("%04d.response.body" % item["index"])).read_bytes())[0]
+                 for item in http if item["path"].startswith("/v1/chat/completions")]
+    proposed_calls = [call for item in responses if isinstance(item, dict) and item.get("action") == "execute"
+                      for call in item.get("tool_calls", []) if isinstance(call, dict)]
+    signatures = [json.dumps(call, sort_keys=True, ensure_ascii=False) for call in proposed_calls]
+    terminal_results = {}
+    for item in http:
+        if not item["path"].startswith("/v1/chat/completions"):
+            continue
+        request = json.loads((captures / ("%04d.request.body" % item["index"])).read_bytes())
+        for message in request.get("messages", []):
+            content = message.get("content")
+            if isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
+                try:
+                    result = json.loads(content[len("TOOL_RESULT:\n"):])
+                    terminal_results[result["tool_call_id"]] = result.get("status")
+                except (ValueError, KeyError, TypeError):
+                    pass
+    claims = [claim for item in responses if isinstance(item, dict) and item.get("action") == "finish"
+              for claim in item.get("results", []) if isinstance(claim, dict)]
+    citations = [citation for claim in claims for citation in claim.get("evidence", []) if isinstance(citation, str)]
     external_success = all(exact.values()) and all(unchanged.values())
     readback_met = (terminal.get("completeFileReads") or 0) >= task["min_reads"]
-    summary = {"variant": name, "task": task_name, "dll_sha256": sha256(dll.read_bytes()),
+    summary = {"variant": name, "request_policy": proxy.request_policy, "task": task_name,
+               "dll_sha256": sha256(dll.read_bytes()),
                "exit": exit_code, "seconds": round(time.monotonic() - started, 2),
                "external_exact_files": exact, "external_inputs_unchanged": unchanged,
                "external_artifact_success": external_success,
@@ -188,6 +240,11 @@ def run_case(name, dll, task_name, task, output, origin, model):
                "lifecycle": terminal.get("lifecycle"), "reason": terminal.get("reason"),
                "acceptance": terminal.get("acceptance"), "iterations": terminal.get("IterationsUsed"),
                "tool_steps": terminal.get("ToolStepsUsed"), "tool_counts": terminal.get("ToolCounts"),
+               "reflection_count": sum(item == "reflection" for item in (entry.get("action") for entry in responses if isinstance(entry, dict))),
+               "repeated_identical_calls": len(signatures) - len(set(signatures)),
+               "uncited_terminal_ids": sorted(set(terminal_results) - set(citations)),
+               "invalid_evidence_ids": sorted(set(citations) - set(terminal_results)),
+               "satisfied_claim_without_external_artifact": any(claim.get("assessment") == "satisfied" for claim in claims) and not external_success,
                "http_actions": [item["action"] for item in http if item["path"].startswith("/v1/chat/completions")],
                "prompt_tokens": sum(item.get("prompt_tokens", 0) for item in usages) if usages else None,
                "completion_tokens": sum(item.get("completion_tokens", 0) for item in usages) if usages else None}
@@ -205,7 +262,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--tasks", default="ready,uppercase,two_files")
     parser.add_argument("--repeats", type=int, default=1)
-    parser.add_argument("--variants", default="v7,v8", help="Comma-separated v7 and/or v8 variants")
+    parser.add_argument("--variants", default="v7,v8", help="Comma-separated v7, v8 and/or v8_direct variants")
     parser.add_argument("--start-v8", action="store_true", help="Reverse the first pair to balance order across runs")
     parser.add_argument("--v7-revision", required=True, help="Exact source revision used to build the v7 CLI")
     parser.add_argument("--v8-revision", required=True, help="Exact source revision used to build the v8 CLI")
@@ -217,8 +274,8 @@ def main():
         parser.error("--tasks must select ready, uppercase and/or two_files")
     selected_variants = args.variants.split(",")
     if not selected_variants or len(selected_variants) != len(set(selected_variants)) or \
-            any(variant not in ("v7", "v8") for variant in selected_variants):
-        parser.error("--variants must select v7 and/or v8 without duplicates")
+            any(variant not in ("v7", "v8", "v8_direct") for variant in selected_variants):
+        parser.error("--variants must select v7, v8 and/or v8_direct without duplicates")
     if args.output.exists():
         parser.error("--output must be a new directory")
     for dll in (args.v7, args.v8):
@@ -231,11 +288,12 @@ def main():
     manifest = {"model": args.model, "digest": observed, "origin": args.origin,
                 "platform": platform.platform(), "python": sys.version.split()[0],
                 "v7_revision": args.v7_revision, "v8_revision": args.v8_revision,
+                "binary_hashes": {"v7": binary_hashes(args.v7), "v8": binary_hashes(args.v8)},
                 "settings": {"response_mode": "json_schema", "instruction_role": "developer",
                              "tool_result_role": "user", "reasoning_mode": "reasoning_effort",
                              "thinking": "off", "context_tokens": 32768},
                 "tasks": {task: TASKS[task] for task in tasks}, "runs": []}
-    variants = [(name, dll) for name, dll in (("v7", args.v7), ("v8", args.v8))
+    variants = [(name, dll) for name, dll in (("v7", args.v7), ("v8", args.v8), ("v8_direct", args.v8))
                 if name in selected_variants]
     for repeat in range(args.repeats):
         for task_index, task_name in enumerate(tasks):
