@@ -290,8 +290,7 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadToolSchemaResponse(UserQuestionToolCatalog.AskToolId),
-                    ModelProtocolWire.Write("Нужен выбор.", new[]
-                    {
+                    ModelProtocolWire.WriteAcceptedCall("The scope needs the user's choice.", "Нужен выбор.",
                         new ConversationToolCall
                         {
                             Name = UserQuestionToolCatalog.AskToolId,
@@ -315,8 +314,7 @@ namespace RNAssistant.Harness
                                         })
                                 })
                             }
-                        }
-                    })
+                        })
                 });
                 IReadOnlyList<ChatMessage> lastRequest = null;
                 LlmCompletionDelegate completion =
@@ -372,7 +370,10 @@ namespace RNAssistant.Harness
                 AssertEqual(RunViewLifecycles.AwaitingUser, reloaded.Messages.Last(message =>
                     message.RunViewState != null).RunViewState.Lifecycle,
                     "the paused message projection is durable without a new terminal message");
-                responses.Enqueue(ModelProtocolWire.WriteAction("Учту выбранную область Core.", ConversationResponse.DoneAction));
+                responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                    "The user selected Core after the question.", "Учту выбранную область Core.",
+                    results: new[] { new ConversationResultClaim("Scope selected: Core.",
+                        new[] { acceptedCall.ToolCallId }, ConversationAssessment.Satisfied) }));
                 var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Plan, "Core", reloaded, NewContext(adapter),
                     new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 }, tools, null).GetAwaiter().GetResult();
