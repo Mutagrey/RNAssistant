@@ -89,8 +89,19 @@ def apply_request_policy(body, policy):
     if policy != "no_reflection_schema":
         return body
     request = json.loads(body)
-    schema = request["response_format"]["json_schema"]["schema"]
-    branches = schema["anyOf"]
+    schema = (request.get("response_format") or {}).get("json_schema", {}).get("schema")
+    if schema is None:
+        # Compatibility probes and JSON-object fallbacks have no branch schema.
+        # Only task requests with the v8 guidance need a prompt-level policy.
+        if not any("conversation-response-v8" in str(message.get("content", ""))
+                   for message in request.get("messages", [])):
+            return body
+        request["messages"].append({"role": "developer", "content":
+                                    "Benchmark policy: reflection is unavailable. Choose execute or finish."})
+        return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    branches = schema.get("anyOf")
+    if not isinstance(branches, list):
+        return body
     selected = [branch for branch in branches
                 if branch["properties"]["action"].get("const") != "reflection"]
     if len(branches) - len(selected) != 1 or len(selected) < 1:
@@ -113,7 +124,13 @@ class CaptureProxy(BaseHTTPRequestHandler):
 
     def forward(self):
         client_body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
-        body = apply_request_policy(client_body, self.server.request_policy) if self.path.startswith("/v1/chat/completions") else client_body
+        try:
+            body = apply_request_policy(client_body, self.server.request_policy) if self.path.startswith("/v1/chat/completions") else client_body
+        except (ValueError, KeyError, TypeError) as error:
+            with self.server.capture_lock:
+                self.server.policy_errors.append(str(error))
+            self.send_error(502, "Benchmark request policy rejected the request")
+            return
         headers = {key: value for key, value in self.headers.items()
                    if key.lower() not in ("host", "content-length", "connection", "accept-encoding", "authorization")}
         headers["Accept-Encoding"] = "identity"
@@ -138,7 +155,8 @@ class CaptureProxy(BaseHTTPRequestHandler):
         (self.server.capture_dir / (stem + ".response.body")).write_bytes(payload)
         action, usage = response_action(payload) if self.path.startswith("/v1/chat/completions") else (None, None)
         record = {"index": index, "method": self.command, "path": self.path, "status": status,
-                  "seconds": elapsed, "request_sha256": sha256(body),
+                  "seconds": elapsed, "request_policy_transformed": client_body != body,
+                  "request_sha256": sha256(body),
                   "client_request_sha256": sha256(client_body), "response_sha256": sha256(payload),
                   "action": action, "usage": usage}
         with self.server.capture_lock:
@@ -171,7 +189,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
     proxy = CaptureServer(("127.0.0.1", 0), CaptureProxy)
     proxy.origin, proxy.capture_dir = origin, captures
     proxy.request_policy = "no_reflection_schema" if name == "v8_direct" else "unchanged"
-    proxy.capture_count, proxy.capture_lock = 0, threading.Lock()
+    proxy.capture_count, proxy.capture_lock, proxy.policy_errors = 0, threading.Lock(), []
     thread = threading.Thread(target=proxy.serve_forever, daemon=True)
     thread.start()
     command = ["dotnet", str(dll), "run", "--workspace", str(workspace), "--message", task["prompt"],
@@ -194,6 +212,8 @@ def run_case(name, dll, task_name, task, output, origin, model):
         proxy.shutdown()
         proxy.server_close()
         thread.join()
+    if proxy.policy_errors:
+        raise RuntimeError("Benchmark request policy failed: " + "; ".join(proxy.policy_errors))
     records = [json.loads(line) for line in (output / "stdout.jsonl").read_text().splitlines() if line.strip()]
     terminal = next((item["data"] for item in reversed(records) if item.get("type") == "run.completed"), {})
     exact = {relative: (workspace / relative).is_file() and
