@@ -167,12 +167,14 @@ an irreparable obstacle without reporting success or replaying a tool.
   The context-continuity Harness fixture checks reflection compaction and reload.
 
 The full Harness still has legacy v7 wire bodies and assertions outside these
-migrated groups; its complete test suite is not yet green. A full-run attempt
-reached a v7-only plugin source-chat fixture after four passes; that fixture
-was migrated and passes in isolation. Do not count that interrupted run as a
-full-suite result.
+migrated groups; its complete test suite is not yet green. An interrupted
+full-run attempt completed 1206 cases with 41 failures, largely unmigrated v7
+fixtures; this is not a full-suite result. Since that attempt, targeted checks
+pass for the steered confirmation using the original run ID, the Office sheet
+write with a terminal evidence citation, direct no-call finish, format repair,
+and project-chat file upload. The full suite has not been rerun after these fixes.
 The original v7 red audit and its route have been retired; its captured evidence
-remains historical. The full Harness suite and Office
-steer/UI integration checks are not yet migrated. Playwright layout qualification is
+remains historical. The full Harness suite and target-host Office
+steer/UI integration checks are not yet qualified. Playwright layout qualification is
 unavailable in this worktree (`playwright` module absent); Windows x64 +
 Office x64 + WebView2 and real-model comparisons remain open.
