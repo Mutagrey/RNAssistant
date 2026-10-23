@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Pinned, isolated CLI task comparison with exact local HTTP evidence.
 
-This is an exploratory runner, not the phase-5 qualification gate: field-order
-and reason ablations still need distinct variants and target-host checks.
+This is an exploratory runner, not the phase-5 qualification gate: the reason
+ablation still needs an isolated variant, and target-host checks remain open.
 """
 
 import argparse
@@ -86,10 +86,13 @@ def response_envelope(body):
 
 
 def apply_request_policy(body, policy):
-    if policy != "no_reflection_schema":
+    if policy not in ("no_reflection_schema", "message_first_schema"):
         return body
     request = json.loads(body)
     schema = (request.get("response_format") or {}).get("json_schema", {}).get("schema")
+    message_first = policy == "message_first_schema"
+    old_order = "Order fields: action, reason, action-specific fields, message last."
+    new_order = "Order fields: message first, then action, reason, and action-specific fields."
     if schema is None:
         # Compatibility probes and JSON-object fallbacks have no branch schema.
         # Only task requests with the v8 guidance need a prompt-level policy.
@@ -97,11 +100,25 @@ def apply_request_policy(body, policy):
                    for message in request.get("messages", [])):
             return body
         request["messages"].append({"role": "developer", "content":
+                                    "Benchmark policy: return message as the first JSON field." if message_first else
                                     "Benchmark policy: reflection is unavailable. Choose execute or finish."})
         return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     branches = schema.get("anyOf")
     if not isinstance(branches, list):
         return body
+    if message_first:
+        schema["description"] = schema.get("description", "").replace(old_order, new_order)
+        for branch in branches:
+            properties = branch["properties"]
+            if list(properties)[:2] != ["action", "reason"] or list(properties)[-1] != "message":
+                raise ValueError("Unexpected v8 property order in field-order ablation")
+            branch["properties"] = {"message": properties["message"],
+                                    **{key: value for key, value in properties.items() if key != "message"}}
+            branch["required"] = list(branch["properties"])
+        for message in request.get("messages", []):
+            if isinstance(message.get("content"), str):
+                message["content"] = message["content"].replace(old_order, new_order)
+        return json.dumps(request, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     selected = [branch for branch in branches
                 if branch["properties"]["action"].get("const") != "reflection"]
     if len(branches) - len(selected) != 1 or len(selected) < 1:
@@ -188,7 +205,8 @@ def run_case(name, dll, task_name, task, output, origin, model):
         (workspace / relative).write_bytes(content.encode("utf-8"))
     proxy = CaptureServer(("127.0.0.1", 0), CaptureProxy)
     proxy.origin, proxy.capture_dir = origin, captures
-    proxy.request_policy = "no_reflection_schema" if name == "v8_direct" else "unchanged"
+    proxy.request_policy = {"v8_direct": "no_reflection_schema",
+                            "v8_message_first": "message_first_schema"}.get(name, "unchanged")
     proxy.capture_count, proxy.capture_lock, proxy.policy_errors = 0, threading.Lock(), []
     thread = threading.Thread(target=proxy.serve_forever, daemon=True)
     thread.start()
@@ -265,6 +283,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
                "uncited_terminal_ids": sorted(set(terminal_results) - set(citations)),
                "invalid_evidence_ids": sorted(set(citations) - set(terminal_results)),
                "satisfied_claim_without_external_artifact": any(claim.get("assessment") == "satisfied" for claim in claims) and not external_success,
+               "message_first_envelopes": sum(next(iter(item), None) == "message" for item in responses if isinstance(item, dict)),
                "http_actions": [item["action"] for item in http if item["path"].startswith("/v1/chat/completions")],
                "prompt_tokens": sum(item.get("prompt_tokens", 0) for item in usages) if usages else None,
                "completion_tokens": sum(item.get("completion_tokens", 0) for item in usages) if usages else None}
@@ -282,7 +301,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--tasks", default="ready,uppercase,two_files")
     parser.add_argument("--repeats", type=int, default=1)
-    parser.add_argument("--variants", default="v7,v8", help="Comma-separated v7, v8 and/or v8_direct variants")
+    parser.add_argument("--variants", default="v7,v8", help="Comma-separated v7, v8, v8_direct and/or v8_message_first variants")
     parser.add_argument("--start-v8", action="store_true", help="Reverse the first pair to balance order across runs")
     parser.add_argument("--v7-revision", required=True, help="Exact source revision used to build the v7 CLI")
     parser.add_argument("--v8-revision", required=True, help="Exact source revision used to build the v8 CLI")
@@ -294,8 +313,8 @@ def main():
         parser.error("--tasks must select ready, uppercase and/or two_files")
     selected_variants = args.variants.split(",")
     if not selected_variants or len(selected_variants) != len(set(selected_variants)) or \
-            any(variant not in ("v7", "v8", "v8_direct") for variant in selected_variants):
-        parser.error("--variants must select v7, v8 and/or v8_direct without duplicates")
+            any(variant not in ("v7", "v8", "v8_direct", "v8_message_first") for variant in selected_variants):
+        parser.error("--variants must select v7, v8, v8_direct and/or v8_message_first without duplicates")
     if args.output.exists():
         parser.error("--output must be a new directory")
     for dll in (args.v7, args.v8):
@@ -313,7 +332,8 @@ def main():
                              "tool_result_role": "user", "reasoning_mode": "reasoning_effort",
                              "thinking": "off", "context_tokens": 32768},
                 "tasks": {task: TASKS[task] for task in tasks}, "runs": []}
-    variants = [(name, dll) for name, dll in (("v7", args.v7), ("v8", args.v8), ("v8_direct", args.v8))
+    variants = [(name, dll) for name, dll in (("v7", args.v7), ("v8", args.v8),
+                ("v8_direct", args.v8), ("v8_message_first", args.v8))
                 if name in selected_variants]
     for repeat in range(args.repeats):
         for task_index, task_name in enumerate(tasks):
