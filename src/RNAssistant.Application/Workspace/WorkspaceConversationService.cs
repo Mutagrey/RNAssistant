@@ -1005,9 +1005,7 @@ namespace RNAssistant.Runtime
                     properties["target"]["description"] = "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves.";
                     properties["version"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
                         ["description"] = "Optional user-visible historical version; a historical read never changes the selected plan." };
-                    var textSelectors = (JObject)ResourceVariant(false, false, maximumFileReadCharacters)["properties"];
-                    foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount" })
-                        properties[name] = textSelectors[name].DeepClone();
+                    return TextReadSelectorAlternatives(schema, maximumFileReadCharacters);
                 }
                 return schema;
             }
@@ -1030,20 +1028,37 @@ namespace RNAssistant.Runtime
                 {
                     properties["target"]["description"] = skill ? "Enabled skill ID from discovery or the catalog." : "Workspace-relative file path, for example notes.txt or src/app.js.";
                     if (skill) properties["referencePath"]["description"] = "One listed reference path of this skill. Omit or use null to read its core instructions.";
-                    {
-                        properties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
-                            ["description"] = "First line, 1-based. Supply together with lineCount; omitted means whole file." };
-                        properties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1, ["maximum"] = int.MaxValue,
-                            ["description"] = "Number of lines. Selected text must fit this run's model input budget; each read checks the current version." };
-                        properties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
-                            ["maximum"] = WorkspaceFileService.MaximumWindowTextCharacters,
-                            ["description"] = "Zero-based UTF-16 character offset. Supply together with charCount, without line selectors." };
-                        properties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
-                            ["maximum"] = maximumFileReadCharacters,
-                            ["description"] = "Maximum UTF-16 characters in this excerpt, bounded by this run's model input budget. Each read checks the current version." };
-                    }
+                    return TextReadSelectorAlternatives(schema, maximumFileReadCharacters);
                 }
                 return schema;
+            }
+
+            private static JObject TextReadSelectorAlternatives(JObject whole, int maximumFileReadCharacters)
+            {
+                var lines = (JObject)whole.DeepClone();
+                var lineProperties = (JObject)lines["properties"];
+                lineProperties["startLine"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
+                    ["description"] = "First line, 1-based; use only with lineCount." };
+                lineProperties["lineCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
+                    ["maximum"] = int.MaxValue,
+                    ["description"] = "Number of lines; the selected text must fit this run's model input budget." };
+                ((JArray)lines["required"]).Add("startLine");
+                ((JArray)lines["required"]).Add("lineCount");
+
+                var chars = (JObject)whole.DeepClone();
+                var charProperties = (JObject)chars["properties"];
+                charProperties["startChar"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
+                    ["maximum"] = WorkspaceFileService.MaximumWindowTextCharacters,
+                    ["description"] = "Zero-based UTF-16 character offset; use only with charCount." };
+                charProperties["charCount"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
+                    ["maximum"] = maximumFileReadCharacters,
+                    ["description"] = "Maximum UTF-16 characters in the selected excerpt." };
+                ((JArray)chars["required"]).Add("startChar");
+                ((JArray)chars["required"]).Add("charCount");
+
+                return new JObject { ["type"] = "object", ["properties"] = new JObject(),
+                    ["required"] = new JArray(), ["additionalProperties"] = false,
+                    ["anyOf"] = new JArray(whole, lines, chars) };
             }
 
             private SkillCatalogSnapshot VisibleSkills(SkillCatalogSnapshot published)
