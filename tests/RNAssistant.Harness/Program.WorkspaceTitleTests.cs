@@ -148,6 +148,42 @@ namespace RNAssistant.Harness
                         new ChatStore(paths).Commit(forged,
                             new RNAssistant.Core.Persistence.ConversationCommit(new[] { repairedCall }));
                         forged = new ChatStore(paths).Load(sessionId);
+                        var sibling = forged.Messages.Where(message => message.Role == "assistant" &&
+                            message.ToolCalls != null && message.ToolCalls.Count > 0).Skip(1).First();
+                        var siblingOrigin = sibling.AcceptedCallOrigin;
+                        sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
+                            siblingOrigin.ModelAttemptId, siblingOrigin.CallIndex + 2);
+                        new ChatStore(paths).Commit(forged,
+                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
+                        using (var batchService = new WorkspaceConversationService(paths))
+                        {
+                            var invalidBatch = new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, RequestId = "invalid-batch-origin",
+                                Message = "После подмены пакета", Mode = ChatModes.Agent
+                            };
+                            var rejected = false;
+                            try
+                            {
+                                batchService.SubmitInputAsync(workspace, invalidBatch, settings, () => "test-key",
+                                    cancellationToken: new CancellationTokenSource(3000).Token)
+                                    .GetAwaiter().GetResult();
+                            }
+                            catch (InvalidOperationException error)
+                            {
+                                rejected = error.Message.Contains("Создайте новый чат") &&
+                                    error.Message.Contains("Batch origin");
+                            }
+                            AssertTrue(rejected, "calls from a broken batch sequence cannot be rejoined");
+                            AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
+                                "bad batch origin does not accept a new input");
+                            AssertEqual(3, served, "bad batch origin cannot cause a model request");
+                        }
+                        forged = new ChatStore(paths).Load(sessionId);
+                        sibling = forged.Messages.Single(message => message.Id == sibling.Id);
+                        sibling.AcceptedCallOrigin = siblingOrigin;
+                        new ChatStore(paths).Commit(forged,
+                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
+                        forged = new ChatStore(paths).Load(sessionId);
                         var forgedResult = forged.Messages.First(message => message.Role == "tool" &&
                             message.ToolName == "common.resources_find");
                         forgedResult.ToolName = "different.tool";

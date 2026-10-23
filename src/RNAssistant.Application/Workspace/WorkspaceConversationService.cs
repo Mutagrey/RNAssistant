@@ -682,36 +682,48 @@ namespace RNAssistant.Runtime
 
         private static IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session)
         {
+            const string recovery = "История чата содержит неполную запись вызова. " +
+                "Создайте новый чат; старая история сохранена. ";
             var history = new List<AgentMessage>();
+            ChatMessage previousBatchCall = null;
             foreach (var item in session.Messages ?? new List<ChatMessage>())
             {
-                if (item == null || item.ExcludeFromModelContext) continue;
+                if (item == null || item.ExcludeFromModelContext) { previousBatchCall = null; continue; }
                 if (item.Role == "user" && !item.ProtocolMessage)
                 {
                     history.Add(AgentMessage.User(item.Content));
+                    previousBatchCall = null;
                     continue;
                 }
                 if (item.Role == "assistant" && item.ProtocolMessage)
                 {
                     var parsed = ConversationResponseHistoryReader.Read(item);
-                    if (!parsed.Success) throw new InvalidOperationException(
-                        "История чата содержит неполную запись вызова. Создайте новый чат; старая история сохранена. " + parsed.Error);
+                    if (!parsed.Success) throw new InvalidOperationException(recovery + parsed.Error);
                     var calls = parsed.Response.ToolCalls.ToList();
                     // Durable batch projections are per call; the kernel's
                     // accepted history represents the original response as one
                     // batch followed by its results. Rejoin adjacent siblings.
                     var previous = history.LastOrDefault();
                     var narration = parsed.Response.Message;
+                    if (calls.Count > 0 && string.IsNullOrWhiteSpace(item.RunId))
+                        throw new InvalidOperationException(recovery + "Accepted call has no run ID.");
                     if (calls.Count > 0 && previous?.Kind == AgentMessageKind.Assistant && previous.ToolCalls.Count > 0)
                     {
-                        if (previous.Action != parsed.Response.Action ||
+                        var origin = item.AcceptedCallOrigin;
+                        var priorOrigin = previousBatchCall?.AcceptedCallOrigin;
+                        if (priorOrigin == null || origin.CallIndex != priorOrigin.CallIndex + 1 ||
+                            origin.StepId != priorOrigin.StepId || origin.ModelAttemptId != priorOrigin.ModelAttemptId ||
+                            item.RunId != previousBatchCall.RunId || previous.Action != parsed.Response.Action ||
                             !string.IsNullOrEmpty(narration) && previous.Text != narration)
-                            throw new InvalidOperationException("Adjacent workspace batch calls have inconsistent response metadata.");
+                            throw new InvalidOperationException(recovery + "Batch origin or response metadata disagree.");
                         calls.InsertRange(0, previous.ToolCalls);
                         narration = previous.Text;
                         history.RemoveAt(history.Count - 1);
                     }
+                    else if (calls.Count > 0 && item.AcceptedCallOrigin.CallIndex != 0)
+                        throw new InvalidOperationException(recovery + "Call batch does not begin at index zero.");
                     history.Add(AgentMessage.Assistant(new AgentResponse(narration, calls, parsed.Response.Action)));
+                    previousBatchCall = calls.Count > 0 ? item : null;
                     continue;
                 }
                 if (item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId))
@@ -722,6 +734,7 @@ namespace RNAssistant.Runtime
                     history.Add(AgentMessage.AcceptedToolResult(item.ToolCallId, parsed.Result.Message,
                         item.Content, item.ExecutionProgress, item.ResourceEvidence, item.ResourceEffect));
                 }
+                previousBatchCall = null;
             }
             return history;
         }
