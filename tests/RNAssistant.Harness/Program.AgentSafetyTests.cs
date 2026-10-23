@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
             return AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall
             {
                 Id = id, Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
-            }, "Read.", null, role, origin ?? FixtureCallOrigin());
+            }, "Read.", "Inspect the requested sheets.", null, role, origin ?? FixtureCallOrigin());
         }
 
         private static ChatSession ContextContinuationSession()
@@ -109,7 +109,9 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     rawCalls++;
-                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Done", null) });
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "No tool call is needed.", "Done",
+                        results: new ConversationResultClaim[0]) });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
@@ -231,7 +233,9 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     rawCalls++;
-                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Done", null) });
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "No tool call is needed.", "Done",
+                        results: new ConversationResultClaim[0]) });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
@@ -305,7 +309,9 @@ namespace RNAssistant.Harness
                 var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
                 {
                     rawCalls++;
-                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.Write("Done", null) });
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
+                        ConversationResponse.FinishAction, "No tool call is needed.", "Done",
+                        results: new ConversationResultClaim[0]) });
                 });
                 var result = await protocol.GetResponseAsync(request, new ModelProtocolProgress
                 {
@@ -1594,13 +1600,15 @@ namespace RNAssistant.Harness
 
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer })
             {
-                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role, FixtureCallOrigin());
+                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.",
+                    "Inspect the requested sheets.", null, role, FixtureCallOrigin());
                 var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, result, role);
                 AssertTrue(callMessage.ToolCalls.Count == 0, role + " uses JSON envelope history");
                 var envelope = JObject.Parse(callMessage.Content);
-                AssertTrue(envelope["status"] == null && (string)envelope["action"] == "tool" &&
+                AssertTrue(envelope["status"] == null && (string)envelope["action"] == ConversationResponse.ExecuteAction &&
+                    (string)envelope["reason"] == "Inspect the requested sheets." &&
                     envelope["tool_calls"][0]["id"] == null,
-                    role + " replays only the v7 envelope, without runtime metadata fields");
+                    role + " replays only the v8 execute envelope, without runtime metadata fields");
                 AssertEqual(call.Id, ConversationResponseHistoryReader.Read(callMessage).Response.ToolCalls.Single().Id,
                     role + " restores runtime identity from accepted metadata");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, callMessage.ResponseProtocolVersion,
@@ -1611,7 +1619,8 @@ namespace RNAssistant.Harness
                 AssertContains(resultMessage.Content, "TOOL_RESULT:", role + " result prefix");
             }
 
-            var nativeCall = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, ToolResultRoles.Tool, FixtureCallOrigin());
+            var nativeCall = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.",
+                "Inspect the requested sheets.", null, ToolResultRoles.Tool, FixtureCallOrigin());
             var nativeResult = AgentJsonProtocol.CreateToolResultMessage(command, result, ToolResultRoles.Tool);
             var api = new LlmMessageBuilder().Build(new[] { nativeCall, nativeResult }, new AppSettings());
             var assistant = (JObject)api.Messages[0];
@@ -1642,7 +1651,8 @@ namespace RNAssistant.Harness
                 var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Read evidence", InlineText = "Exact resource body" };
                 session.Artifacts.Add(artifact);
                 var reference = ArtifactReference(session, artifact);
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.", null, role, FixtureCallOrigin());
+                var accepted = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.",
+                    "Inspect the requested sheets.", null, role, FixtureCallOrigin());
                 var completed = AgentJsonProtocol.CreateToolResultMessage(command,
                     TerminalToolResult.Ok(result.Message, result.DataJson, new[] { reference }), role);
                 accepted.RunId = completed.RunId = "projection_" + role;
@@ -1694,7 +1704,8 @@ namespace RNAssistant.Harness
                 AssertTrue(replay.Messages.All(message => message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
                     "serialized current history retains its result protocol marker");
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "Another request" });
-                session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(call, "Reading again.", null, role, FixtureCallOrigin()));
+                session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(call, "Reading again.",
+                    "Inspect the requested sheets again.", null, role, FixtureCallOrigin()));
                 session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command, result, role));
                 ConversationProtocolContext.EnsureCurrentHistory(session);
                 session.Messages.Add(new ChatMessage { Role = "user", Content = "A request without an accepted call" });
@@ -1940,7 +1951,7 @@ namespace RNAssistant.Harness
             var wordCall = AgentJsonProtocol.CreateToolCallMessage(
                 new AgentToolCall { Id = "word_hash", Name = WordToolIds.ReplaceText,
                     Arguments = new Dictionary<string, object> { ["find"] = "old", ["replace"] = "new" } },
-                "Replacing text.", null, ToolResultRoles.User, FixtureCallOrigin());
+                "Replacing text.", "Apply the requested replacement.", null, ToolResultRoles.User, FixtureCallOrigin());
             var wordResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = "word_hash", ToolId = WordToolIds.ReplaceText },
                 TerminalToolResult.Ok("Word replacements completed: 2.",
@@ -1983,6 +1994,7 @@ namespace RNAssistant.Harness
                         Arguments = new Dictionary<string, object>()
                     },
                     "Inspecting " + genericReference.Uri + ".",
+                    "Find the requested resource.",
                     null,
                     ToolResultRoles.User,
                     FixtureCallOrigin()));
@@ -2014,7 +2026,7 @@ namespace RNAssistant.Harness
                 new AgentToolCall { Id = "old_html", Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
                     Arguments = new Dictionary<string, object> {
                         ["path"] = "index.html", ["content"] = "<main>saved</main>"
-                    } }, "Saving HTML.", null, ToolResultRoles.User, FixtureCallOrigin());
+                    } }, "Saving HTML.", "Save the requested HTML.", null, ToolResultRoles.User, FixtureCallOrigin());
             var oldHtmlResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = "old_html", ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId },
                 TerminalToolResult.Ok(oldHtmlMessage, "{\"target\":\"index.html\"}"));
@@ -2038,6 +2050,7 @@ namespace RNAssistant.Harness
                         ["query"] = "Literal " + genericReference.Uri + " " + runtimeHash
                     } },
                 "Inspecting " + genericReference.Uri + " and " + runtimeHash + ".",
+                "Find the requested resource.",
                 null, ToolResultRoles.User, FixtureCallOrigin());
             var replayResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = "replay_find", ToolId = ResourceToolCatalog.FindToolId },
@@ -2089,7 +2102,7 @@ namespace RNAssistant.Harness
                     {
                         ["name"] = "Report"
                     }
-                }, "Adding sheet.", null, ToolResultRoles.User,
+                }, "Adding sheet.", "Create the requested sheet.", null, ToolResultRoles.User,
                 FixtureCallOrigin());
             var mutationResult = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation
@@ -2614,7 +2627,8 @@ namespace RNAssistant.Harness
 
         private static void ModelProviderErrorsRejectCompletion()
         {
-            var answer = ModelProtocolWire.Write("Done.", new ConversationToolCall[0]);
+            var answer = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                "No tool call is needed.", "Done.", results: new ConversationResultClaim[0]);
             var delta = new JObject { ["choices"] = new JArray(new JObject {
                 ["delta"] = new JObject { ["content"] = answer } }) }.ToString(Formatting.None);
             const string error = "{\"error\":{\"message\":\"Unexpected value: 3d_scene_authoring\",\"type\":\"invalid_request\"}}";
