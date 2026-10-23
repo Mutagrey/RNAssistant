@@ -86,6 +86,8 @@ namespace RNAssistant.Harness
                             AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Text,
                                 "plugin chat presents the accepted narration after a tool call");
                         }
+                        string oldCallMessageId = null, oldCallId = null, oldToolName = null;
+                        AcceptedToolCallOrigin oldOrigin = null;
                         using (var reopened = new WorkspaceConversationService(paths))
                         {
                             var next = reopened.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
@@ -103,6 +105,10 @@ namespace RNAssistant.Harness
                                 "model projection leaves the durable v7 response intact");
                             var oldCall = legacy.Messages.First(message => message.Role == "assistant" &&
                                 message.ToolCalls != null && message.ToolCalls.Count > 0);
+                            oldCallMessageId = oldCall.Id;
+                            oldCallId = oldCall.ToolCallId;
+                            oldToolName = oldCall.ToolName;
+                            oldOrigin = oldCall.AcceptedCallOrigin;
                             oldCall.ToolCallId = null; oldCall.ToolName = null; oldCall.AcceptedCallOrigin = null;
                             AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(oldCall).Text,
                                 "old workspace records still display their accepted narration");
@@ -112,16 +118,36 @@ namespace RNAssistant.Harness
                         server.GetAwaiter().GetResult();
                         using (var legacyService = new WorkspaceConversationService(paths))
                         {
-                            var legacy = legacyService.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
-                                SessionId = sessionId, Message = "Ещё раз", Mode = ChatModes.Agent
-                            }, settings, () => "test-key", cancellationToken: new CancellationTokenSource(3000).Token)
-                                .GetAwaiter().GetResult();
-                            AssertEqual(RunLifecycle.Failed, legacy.Summary.Lifecycle,
-                                "incomplete old call history cannot silently enter model context");
-                            AssertTrue(legacy.Summary.AssistantMessage.Contains("Создайте новый чат"),
-                                "incompatible history gives an explicit recovery action");
+                            var invalidRequest = new WorkspaceSubmitInputRequest {
+                                SessionId = sessionId, RequestId = "invalid-history-retry",
+                                Message = "Ещё раз", Mode = ChatModes.Agent
+                            };
+                            var rejected = false;
+                            try
+                            {
+                                legacyService.SubmitInputAsync(workspace, invalidRequest, settings, () => "test-key",
+                                    cancellationToken: new CancellationTokenSource(3000).Token)
+                                    .GetAwaiter().GetResult();
+                            }
+                            catch (InvalidOperationException error)
+                            {
+                                rejected = error.Message.Contains("Создайте новый чат") &&
+                                    error.Message.Contains("runtime ID");
+                            }
+                            AssertTrue(rejected, "incomplete accepted call history is refused before another input is recorded");
+                            AssertTrue(legacyService.FindAcceptedInput(workspace, invalidRequest) == null,
+                                "rejected history leaves no accepted input receipt");
                         }
                         var forged = new ChatStore(paths).Load(sessionId);
+                        AssertTrue(!forged.Messages.Any(message => message.Role == "user" && message.Content == "Ещё раз"),
+                            "invalid response history does not accept another user turn");
+                        var repairedCall = forged.Messages.Single(message => message.Id == oldCallMessageId);
+                        repairedCall.ToolCallId = oldCallId;
+                        repairedCall.ToolName = oldToolName;
+                        repairedCall.AcceptedCallOrigin = oldOrigin;
+                        new ChatStore(paths).Commit(forged,
+                            new RNAssistant.Core.Persistence.ConversationCommit(new[] { repairedCall }));
+                        forged = new ChatStore(paths).Load(sessionId);
                         var forgedResult = forged.Messages.First(message => message.Role == "tool" &&
                             message.ToolName == "common.resources_find");
                         forgedResult.ToolName = "different.tool";

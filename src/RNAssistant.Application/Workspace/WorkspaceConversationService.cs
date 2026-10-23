@@ -693,19 +693,10 @@ namespace RNAssistant.Runtime
                 }
                 if (item.Role == "assistant" && item.ProtocolMessage)
                 {
-                    var parsed = ConversationResponseJson.Read(item.Content);
-                    if (!parsed.Success) throw new InvalidOperationException("Stored workspace response is invalid: " + parsed.Error);
-                    var saved = item.ToolCalls ?? new List<LlmToolCall>();
-                    if (saved.Count != parsed.Response.ToolCalls.Count)
-                        throw new InvalidOperationException("Stored workspace accepted-call IDs are incomplete.");
-                    var calls = new List<ToolCall>();
-                    for (var i = 0; i < saved.Count; i++)
-                    {
-                        if (saved[i]?.Id == null || saved[i].Name != parsed.Response.ToolCalls[i].Name ||
-                            saved[i].ArgumentsJson != parsed.Response.ToolCalls[i].Arguments.ToString(Formatting.None))
-                            throw new InvalidOperationException("Stored workspace accepted call differs from response.");
-                        calls.Add(new ToolCall(saved[i].Id, saved[i].Name, saved[i].ArgumentsJson));
-                    }
+                    var parsed = ConversationResponseHistoryReader.Read(item);
+                    if (!parsed.Success) throw new InvalidOperationException(
+                        "История чата содержит неполную запись вызова. Создайте новый чат; старая история сохранена. " + parsed.Error);
+                    var calls = parsed.Response.ToolCalls.ToList();
                     // Durable batch projections are per call; the kernel's
                     // accepted history represents the original response as one
                     // batch followed by its results. Rejoin adjacent siblings.
