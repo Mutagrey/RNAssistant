@@ -99,6 +99,8 @@ namespace RNAssistant.Harness
                 AssertEqual(JsonConvert.SerializeObject(selected.Result.Tree),
                     new ChatBlobStore(paths).ReadText(selected.Evidence.Single().Payload.ToBlobReference()),
                     "CAS stores selected YAML view, not source bytes");
+                AssertEqual("application/json; charset=utf-8", selected.Evidence.Single().Payload.ContentType,
+                    "workspace tree payload identifies serialized JSON rather than source YAML");
                 var handler = new WorkspaceResourceHandler(provider, null, () => null,
                     new Dictionary<string, ResourceEvidence>(), false, null, 2000);
                 var execution = new ToolRuntimeFixture().Context(toolId: ResourceToolCatalog.ReadToolId);
@@ -132,6 +134,8 @@ namespace RNAssistant.Harness
                 AssertTrue(selection.Result.Tree.Format == "yaml" && selection.Result.Tree.Nodes.Any(node => node.Pointer == "/data/1") &&
                     evidence.Coverage.Kind == ResourceCoverageKinds.YamlPath && !evidence.Complete,
                     "paged Office YAML source retains one exact partial revision");
+                AssertEqual("application/json; charset=utf-8", evidence.Payload.ContentType,
+                    "Office tree payload identifies serialized JSON rather than source YAML");
                 var runtime = executor.CreateNativeRuntime(session, executor.GetControllerTools().ToList(),
                     new AppSettings(), ChatModes.Agent, false);
                 var execution = ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,

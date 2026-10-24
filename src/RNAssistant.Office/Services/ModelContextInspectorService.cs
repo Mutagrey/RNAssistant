@@ -289,17 +289,20 @@ namespace RNAssistant.Office.Services
         }
 
         // Same uncalibrated UTF-8 bytes/4 baseline as ModelContextBudget, for the
-        // retained body only. Indexes/parts and non-UTF-8 claims cannot represent
-        // a direct model-readable text body or its eventual request cost.
+        // retained text or serialized tree body only. Indexes/parts and non-UTF-8
+        // claims cannot represent a direct body or its eventual request cost.
         private static long? EstimateTextBodyTokens(ResourceRevisionView view)
         {
+            var tree = view?.View == ResourceRepresentations.Tree;
             if (view?.Payload == null || view.Parts.Count != 0 ||
-                view.View != ResourceRepresentations.Text && view.View != ResourceRepresentations.Source ||
+                (!tree && view.View != ResourceRepresentations.Text && view.View != ResourceRepresentations.Source) ||
                 view.Payload.ByteLength < 0) return null;
             var mime = view.Payload.ContentType;
             if (string.IsNullOrWhiteSpace(mime)) return null;
             var fields = mime.Split(';');
-            if (!fields[0].Trim().StartsWith("text/", StringComparison.OrdinalIgnoreCase)) return null;
+            var mediaType = fields[0].Trim();
+            if (tree ? !string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase) :
+                !mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase)) return null;
             var utf8 = false;
             foreach (var field in fields.Skip(1))
             {

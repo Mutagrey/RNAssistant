@@ -166,7 +166,10 @@ namespace RNAssistant.Office.Services
             var scope = ScopeFor(session, result.Resource.Reference, live);
             result.Coverage = result.Coverage ?? CoverageFor(result);
             if (result.Payload == null && result.Text != null && _payloads != null)
-                result.Payload = PayloadRef.FromBlob(_payloads.StoreText(result.Text, result.Resource.MimeType ?? "text/plain; charset=utf-8"));
+                result.Payload = PayloadRef.FromBlob(_payloads.StoreText(result.Text,
+                    result.Representation == ResourceRepresentations.Tree && result.Tree != null
+                        ? "application/json; charset=utf-8"
+                        : result.Resource.MimeType ?? "text/plain; charset=utf-8"));
             _revisions.RegisterView(scope, new ResourceRevisionView(result.Resource.Reference,
                 result.RetainedViewKey ?? result.Representation,
                 result.ContentSha256, result.Payload, result.Coverage));

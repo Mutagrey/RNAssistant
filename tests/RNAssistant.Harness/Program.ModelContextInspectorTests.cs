@@ -699,6 +699,27 @@ namespace RNAssistant.Harness
                         ViewInventorySnapshotCount = 27 });
                     AssertTrue(unknownCost.Items.Single().EstimatedTextBodyTokens == null,
                         "non-UTF-8 charset leaves token cost unknown");
+                    var treeBody = PayloadRef.FromBlob(payloads.StoreText("{\"nodes\":[]}",
+                        "application/json; charset=utf-8"));
+                    store.RegisterView(scope, new ResourceRevisionView(first, "tree", treeBody.Sha256,
+                        treeBody, new ResourceCoverage(ResourceCoverageKinds.JsonPath, path: "/items")));
+                    var treeCost = inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 27,
+                        ViewInventorySnapshotCount = 28 });
+                    AssertEqual((treeBody.ByteLength + 3) / 4,
+                        treeCost.Items.Single().EstimatedTextBodyTokens.Value,
+                        "serialized UTF-8 tree JSON has a retained-body estimate");
+                    AssertEqual((treeBody.ByteLength + 3) / 4,
+                        verifyVariant(q1.EventId, "R1@v1", 27, 28).ViewVariantVerification.Variant
+                            .EstimatedTextBodyTokens.Value,
+                        "exact tree variant verification uses the same body estimate");
+                    var oldTreeBody = PayloadRef.FromBlob(payloads.StoreText("{\"legacy\":[]}", "application/yaml"));
+                    store.RegisterView(scope, new ResourceRevisionView(first, "tree", oldTreeBody.Sha256,
+                        oldTreeBody, new ResourceCoverage(ResourceCoverageKinds.YamlPath, path: "/old")));
+                    AssertTrue(inventory(new ModelContextQuery { RequestEventId = q1.EventId,
+                        ViewInventoryAlias = "R1@v1", ViewInventoryOffset = 28,
+                        ViewInventorySnapshotCount = 29 }).Items.Single().EstimatedTextBodyTokens == null,
+                        "old tree payload with source MIME does not gain an inferred body estimate");
                     var replayed = new ResourceAuthorityStore(paths).ReadViews(scope, first, 20, 20, firstPage.SnapshotCount);
                     AssertTrue(replayed.Items.Select(view => view.Coverage.Start).SequenceEqual(
                         secondPage.Items.Select(item => item.Coverage.Start)),
