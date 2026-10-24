@@ -64,6 +64,8 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("messageCount")] public int MessageCount { get; set; }
         public WorkspaceRunPresentation Presentation { get; set; }
         [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceModelProgress ModelProgress { get; set; }
+        [JsonProperty("modelProgressUnavailable", DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool ModelProgressUnavailable { get; set; }
     }
 
     // Transient preview, scoped to one live attempt. Never durable history or authority.

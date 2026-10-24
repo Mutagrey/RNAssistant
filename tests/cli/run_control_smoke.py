@@ -185,6 +185,7 @@ def run_case(root):
         process.kill(); process.communicate(timeout=5); process = None
         released.set()
         assert cli("cancel", *control(checkpoint), code=3)["Status"] == "Unconfirmed"
+        assert inspect(session2)["modelProgressUnavailable"] is True
         reply(DONE)
         result = cli("resume", "--continue", *control(checkpoint))
         assert result["RunId"] == checkpoint["RunId"] and result["IterationsUsed"] == 2

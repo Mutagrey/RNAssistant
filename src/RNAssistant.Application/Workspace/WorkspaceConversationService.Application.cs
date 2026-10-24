@@ -86,6 +86,7 @@ namespace RNAssistant.Runtime
 
         internal WorkspaceSessionSnapshot ReadState(WorkspaceDescriptor workspace, ChatSession session)
         {
+            var preview = ModelProgress(session);
             return new WorkspaceSessionSnapshot
             {
                 Id = session.Id, WorkspaceId = session.WorkspaceId, Title = session.Title,
@@ -105,7 +106,8 @@ namespace RNAssistant.Runtime
                 UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
                 InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
                 InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count,
-                Presentation = Presentation(workspace, session), ModelProgress = ModelProgress(session)
+                Presentation = Presentation(workspace, session), ModelProgress = preview.Progress,
+                ModelProgressUnavailable = !preview.ReachedOwner
             };
         }
 

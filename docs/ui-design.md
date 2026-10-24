@@ -142,8 +142,11 @@ snapshot сообщает running. Он начинает наблюдение и
 предпросмотр модели проекту и плагину через общий ChatView owner. Каждое событие
 проверяется по workspace/session/run и монотонному номеру предпросмотра; опрос
 остаётся для reconnect и восполнения пропущенного события. При смене ChatView owner или
-сворачивании панели плагина скрытый observer останавливается. Другой процесс пока
-не передаёт живые токены панели; сохранённые сообщения и статус читаются из stream.
+сворачивании панели плагина скрытый observer останавливается. Запуск в другом
+процессе отдаёт текущий предпросмотр через ограниченное чтение IPC при опросе состояния;
+сохранённые сообщения и статус читаются из event stream. Промежуточные токены не
+становятся историей чата. Если владелец run недоступен, снимок явно сбрасывает
+старый предпросмотр, хотя состояние журнала до восстановления ещё может быть running.
 Разделитель предпросмотра и чата плагина использует общий `.splitter` и
 `RNAssistantSplitter` из `app-layout.js`, как дерево и правая панель: одна линия
 1 px с прозрачной областью захвата 11 px. Отдельных стилей/drag handlers плагина
@@ -1042,7 +1045,8 @@ Office accepted reflection and tool steps keep provider reasoning through live
 handoff/reopen; a tool batch shows it once, on its first activity.
 Workspace/project/plugin messages have stable identities and retain unchanged DOM
 nodes when new activity arrives. Their run snapshot exposes transient, bounded model
-preview only for the exact locally owned run/attempt; acceptance replaces it with
-saved messages. An old-format workspace chat is explicitly read-only; unsupported
+preview only for the exact running run/attempt, including a run owned by another
+local process through read-only IPC; acceptance replaces it with saved messages.
+An old-format workspace chat is explicitly read-only; unsupported
 protocol bodies display a notice, never raw JSON or a silently migrated response.
 Real WebView2/Office behavior remains a target-host qualification gate.

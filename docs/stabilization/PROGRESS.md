@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Workspace cross-process live preview — 2026-10-24
+
+Owner: Application workspace chat / run control. A read-only request on the
+existing current-user run pipe now returns the owning process's bounded transient
+model preview for the exact workspace/session/run. Project/plugin ChatView polling
+can show live tokens from a CLI or other local process without a second event
+format or durable store; the event stream remains authoritative for reconnect and
+history. A missing owner returns no preview within 250 ms and explicitly clears a
+stale browser preview while leaving the durable run status to recovery. A
+separate-process CLI streaming/inspect smoke checks live text, repeated inert reads,
+completed response and retirement of preview; the existing cross-process
+cancellation smoke checks owner loss. The browser progress check covers stale
+preview removal. The first nonempty text or reasoning delta publishes immediately;
+subsequent deltas retain the existing coalescing limit.
+Windows/Office/WebView2 delivery remains unverified.
+
 ## Workspace live progress delivery — 2026-10-24
 
 Owner: Application workspace chat / Office bridge / shared Web ChatView. Project
@@ -10,8 +26,8 @@ monotonic transient sequence prevents a delayed event or same-revision poll from
 replacing newer preview. Read-only polling remains the reconnect path, and hidden
 project/plugin observers stop on owner changes. The preview is never persisted as
 chat history. Focused Harness HTTP/bridge and Chrome project/plugin progress and
-navigation-race checks pass. Cross-process live token delivery and Windows/Office/
-WebView2 qualification remain open.
+navigation-race checks pass. Cross-process preview is covered above; Windows/Office/
+WebView2 qualification remains open.
 
 ## Unified chat message views and history — 2026-10-24
 

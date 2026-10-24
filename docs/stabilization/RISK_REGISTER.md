@@ -17,12 +17,13 @@ workspace accepted metadata and stable rendering, local-run preview and explicit
 read-only/unsupported history. Shared typed terminal run notices and the composer
 anchor were fixed independently in the shared-shell commits. The subsequent
 shared-chat cutover removed `PluginChatMessageDto` and added common browser message
-views and 80-record history pages for project/plugin. Remaining: actual reported
-endpoint/model evidence, Windows/Office/WebView2 qualification and live token
-delivery between processes. Full Office/workspace delivery and action parity is
-not claimed by these targeted repairs.
-Local project/plugin runs now forward model preview through the shared bridge;
-cross-process live tokens remain unavailable until a durable response is read.
+views and 80-record history pages for project/plugin. A read-only request on the
+existing run IPC now exposes bounded live preview across local processes; a CLI
+streaming/inspect smoke covers that path. Remaining: actual reported endpoint/model
+evidence and Windows/Office/WebView2 qualification. Full Office/workspace delivery
+and action parity is not claimed by these targeted repairs.
+Local project/plugin runs forward model preview through the shared bridge;
+cross-process runs expose it through the same read-only state polling.
 Per-message workspace run outcomes and pre-response terminal diagnostics now
 survive history paging and later runs; the earlier current-snapshot-only failure
 presentation is no longer the working baseline.

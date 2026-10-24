@@ -58,9 +58,12 @@ const { chromium } = require('playwright');
         state: { status: 'running', runId: 'run', revision: 5,
           modelProgress: { RunId: 'run', Sequence: 2, Message: 'Older poll.' } } };
       const ordered = RNAssistantWorkspaceChat.latestSnapshot(newer, older).state.modelProgress.Message === 'Latest event.';
+      const lostOwner = RNAssistantWorkspaceChat.latestSnapshot(newer, { project: { workspaceId: 'workspace' },
+        sessionId: 'progress-test', messages: [], state: { status: 'running', runId: 'run', revision: 5,
+          modelProgressUnavailable: true } }).state.modelProgress == null;
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
-      return { retained, replaced, updated, reset, finished, scoped, ordered, zero };
+      return { retained, replaced, updated, reset, finished, scoped, ordered, lostOwner, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);
     for (const owner of ['project', 'plugin']) {

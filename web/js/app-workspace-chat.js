@@ -131,7 +131,8 @@
     var currentPreview = field(currentState, "modelProgress"), incomingPreview = field(incomingState, "modelProgress");
     if (previousRevision === nextRevision && field(currentState, "status") === "running" &&
         field(incomingState, "status") === "running" && field(currentState, "runId") === field(incomingState, "runId") &&
-        currentPreview && (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
+        currentPreview && !field(incomingState, "modelProgressUnavailable") &&
+        (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
       incomingState.modelProgress = currentPreview;
     var currentStart = field(current, "messageStartIndex"), incomingStart = field(incoming, "messageStartIndex");
     var currentTotal = field(current, "messageTotalCount"), incomingTotal = field(incoming, "messageTotalCount");

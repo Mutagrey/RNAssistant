@@ -82,6 +82,7 @@ namespace RNAssistant.Runtime
             return new WorkspaceRunControl(_paths.WorkspaceDirectory, session.Id, session.LastRun.RunId,
                 cursor => session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Running &&
                     session.Revision > initialRevision && ConversationEventFeed.Cursor(session) == cursor,
+                () => LocalModelProgress(session),
                 cancellationToken);
         }
 

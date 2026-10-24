@@ -314,8 +314,13 @@ history, including exchanges before the checkpoint. Neither compaction nor resum
 can grant mutation authority from a summary or reset acceptance requirements.
 
 `CancelRunAsync` is a bounded local signal to the process holding the run lease.
-Its ephemeral current-user named pipe carries only an exact cursor and an
-acknowledgement; no mailbox or second durable store is created. Both the caller
+Its ephemeral current-user named pipe carries an exact cursor and acknowledgement.
+The same pipe also answers a read-only `preview` request with the owning process's
+current bounded `WorkspaceModelProgress` snapshot. `ReadState` uses that snapshot
+only for the matching running session/run when no local preview exists; a missing
+owner or timed-out read returns no preview within 250 ms and marks the transient
+owner unavailable, so a stale browser preview is cleared. Preview reads never
+append events, cancel a run or create a second durable store. Both the caller
 and owner check run/checkpoint scope. The owner requires an append after invocation
 start, so an old request cannot cancel a later continuation of the same run.
 Cursor drift returns `StaleState`; refresh state before making another explicit
@@ -324,8 +329,8 @@ owner, delivery timeout or a run whose kernel start has not yet been recorded;
 it never means the run stopped. `AlreadyStopped` leaves pending approvals intact.
 Only the owning kernel persists cancellation and effect evidence. CLI run, answer,
 approval and continuation share this cancellation lifetime and Ctrl+C handling.
-Mac process/HTTP checks qualify this transport locally; Windows/Office delivery
-remains unverified.
+Mac process/HTTP checks qualify cancellation and cross-process preview locally;
+Windows/Office delivery remains unverified.
 
 The default SHA-256 hash-chain detects accidental edits, truncation in the middle of the log, and reordered records. Optional HMAC-SHA256 prevents recomputing valid edited records without the selected secret. Neither mode prevents deletion of an unanchored final suffix.
 

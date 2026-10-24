@@ -58,11 +58,20 @@ namespace RNAssistant.Runtime
             else { WorkspaceModelProgress removed; _liveModels.TryRemove(sessionId, out removed); }
         }
 
-        private WorkspaceModelProgress ModelProgress(ChatSession session)
+        private WorkspaceModelProgress LocalModelProgress(ChatSession session)
         {
             WorkspaceModelProgress value;
             return session.LastRun?.Status == "running" && _liveModels.TryGetValue(session.Id, out value) &&
                 value.RunId == session.LastRun.RunId ? value : null;
+        }
+
+        private WorkspaceRunPreviewRead ModelProgress(ChatSession session)
+        {
+            var local = LocalModelProgress(session);
+            if (local != null || session.LastRun?.Status != "running" || string.IsNullOrWhiteSpace(session.LastRun.RunId))
+                return new WorkspaceRunPreviewRead(true, local);
+            return WorkspaceRunControl.ReadPreviewAsync(_paths.WorkspaceDirectory, session.Id,
+                session.LastRun.RunId).GetAwaiter().GetResult();
         }
 
         private readonly ConcurrentDictionary<string, byte> _pendingTitles =
@@ -1571,10 +1580,13 @@ namespace RNAssistant.Runtime
                         if (update == null) return;
                         var content = extractor.Add(update.ContentDelta);
                         var thoughts = update.ReasoningDelta ?? string.Empty;
+                        var firstMessage = text.Length == 0 && content.Length > 0;
+                        var firstReasoning = reasoning.Length == 0 && thoughts.Length > 0;
                         text.Append(content, 0, Math.Min(content.Length, Math.Max(0, 24000 - text.Length)));
                         var take = Math.Min(thoughts.Length, Math.Max(0, 24000 - reasoning.Length));
                         reasoning.Append(thoughts, 0, take); truncated |= take < thoughts.Length;
-                        pending += content.Length + thoughts.Length; publish(update.Completed);
+                        pending += content.Length + thoughts.Length;
+                        publish(update.Completed || firstMessage || firstReasoning);
                     },
                     AttemptCompleted = () => publish(true)
                 };
