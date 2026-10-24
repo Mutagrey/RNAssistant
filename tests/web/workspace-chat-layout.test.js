@@ -270,6 +270,7 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('#pluginChatHistory').click();
     await page.locator('#pluginChatHistoryList > button').first().waitFor();
     assert.equal(await page.locator('#pluginChatHistoryList > button').count(),2,'history remains available during a run');
+    await page.locator('#pluginPreviewMount iframe').evaluate(frame => { frame.dataset.routeProbe = 'same-instance'; });
     await page.evaluate(([workspace,session])=>RNAssistantProjectChats.open(workspace,session),[sourceWorkspace,secondSession]);
     await page.locator('#messages').getByText('Второе обсуждение плагина',{exact:true}).waitFor();
     const sourceTree=page.locator('[data-tree-key="project:'+sourceWorkspace+'"]');
@@ -286,10 +287,14 @@ fs.mkdirSync(captures, {recursive:true});
     await firstRow.getByRole('button',{name:'Открыть чат в плагине',exact:true}).click();
     await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
     assert.equal(await page.locator('#chatInput').inputValue(),'Неотправленный черновик первой беседы','returning to a source chat restores its own draft');
+    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('data-route-probe'),'same-instance',
+      'opening another source chat keeps the live plugin frame');
     await page.locator('#pluginChatHistory').click();
     await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
     await page.locator('[data-plugin-id="data-templates"]').click();
     await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
+    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('data-route-probe'),'same-instance',
+      'reselecting the current plugin does not reopen its frame');
     // Reopening the same session must also restore the transcript after its DOM was cleared.
     await page.mouse.move(680,500);
     await page.locator('[data-plugin-id="data-templates"]').hover();

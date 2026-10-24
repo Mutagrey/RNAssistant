@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Unified Shell: selected plugin frame reuse — 2026-10-24
+
+Owner: Web plugin navigation / shared ChatView. Reselecting a plugin with a live
+release or preview now keeps its exact iframe/instance and refreshes only the
+selected source chat; an explicit chat target changes the session without
+reopening the surface. A different plugin, source revision or explicit preview
+refresh still follows the existing close/open path. Browser route, session-draft
+and plugin lifecycle checks pass. Unsent drafts remain in the open WebView only;
+protected persistence across WebView recreation is still an open shell gate.
+Windows/Office/WebView2 delivery remains unverified.
+
 ## Unified Shell: explicit plugin source chats — 2026-10-24
 
 Owner: Application plugin source / shared Web ChatView. Opening development now
