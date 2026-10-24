@@ -529,6 +529,14 @@ this target through `ChatArtifactResourceProvider` without enumerating the docum
 catalog. Unavailable unrelated records therefore cannot block this selected input.
 Reads, within-file search, outline and copy share that resolution path.
 
+HTML visual selections from the Office preview use this same staged-attachment
+and CAS path. The trusted controller pins the addressed chat's active HTML
+artifact revision in attachment metadata and the accepted user-message link;
+the bounded JSON body contains DOM evidence and a semantic source title, never
+the runtime URI. Intake rejects a draft after the active source revision changes.
+The model discovers and reads the selection through `common.resources_*`, and a
+selection by itself is not authority to edit an inferred source file.
+
 The provider still verifies document ownership, committed publication, original
 metadata and explicit removal; content reads retain exact hash/length checks.
 Missing links/metadata, ambiguous labels and damaged originals fail explicitly;

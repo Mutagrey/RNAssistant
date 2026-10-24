@@ -80,6 +80,16 @@ namespace RNAssistant.Office
                 "text/plain", System.Text.Encoding.UTF8.GetBytes(text)) };
         }
 
+        public ChatResourceDraftResponse StageHtmlVisualSelection(StageHtmlVisualSelectionPayload request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
+                throw new ArgumentException("Требуется чат HTML-preview.");
+            var session = LoadAddressedSession(request.ChatId);
+            ConversationRunPolicy.RequireCurrentSession(session);
+            EnsureCurrentDocument(session);
+            return new ChatResourceDraftResponse { Resource = _chatResourceIngestion.StageHtmlVisualSelection(session, request) };
+        }
+
         public ChatInboxResponse SubmitChatInput(SubmitChatInputPayload request,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {

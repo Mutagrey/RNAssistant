@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Visual Inspector: HTML selection in the shared Office composer — 2026-10-24
+
+Owner: Web HTML preview / Office resource ingestion / shared ChatView. **В чат**
+stages the selected bounded element as an ordinary JSON attachment; the same
+Office draft, remove/send/retry path owns it. The user's comment is the ordinary
+composer text, and several selections can share one message. Native staging derives
+the exact active HTML artifact reference from the addressed chat and verifies its
+revision; sending refuses a draft whose source is no longer active. The accepted
+input and user message retain the source reference, while the selection body uses
+the existing attachment CAS and exposes no runtime URI to the model. The DOM is
+untrusted evidence and source mapping is unverified; this does not implement an
+edit workflow or plugin/workspace annotation ingestion.
+
+Focused host-neutral staging/CAS/stale-source, shared-draft routing and Chrome
+inspector/layout checks pass. Office controller/WebView2 delivery, plugin frame capture, scope-aware
+workspace ingestion, source resolution/edit read-back and Windows qualification
+remain open.
+
 ## Visual Inspector: HTML preview inspect-only slice — 2026-10-24
 
 Owner: Web HTML preview / shared visual-inspector JS. The existing isolated HTML
@@ -8,12 +26,12 @@ a bounded read-only selection, Escape or the button exits. Frame messages are
 accepted only from the current iframe/generation; replacing its source revokes
 the old inspector. The overlay does not intercept ordinary clicks while off,
 and selection excludes form values and sensitive descendants. Standalone HTML
-exports do not include the inspector. No annotation is yet attached to a chat,
-persisted, sent to the model, or used to edit a source file.
+exports do not include the inspector. The later Office draft slice above adds
+chat attachment and persistence; source editing remains open.
 
 Focused Chrome inspector/viewport and host-neutral HTML preview/export checks
-pass. Plugin-frame injection, typed annotation draft/ingestion, revision-pinned
-resolution and source-edit verification remain the next scoped work. Windows
+pass. Plugin-frame injection, scope-aware workspace ingestion, revision-pinned
+source resolution and source-edit verification remain the next scoped work. Windows
 WebView2/CSP/frame lifecycle qualification is open.
 
 ## Unified Shell: protected chat-input recovery — 2026-10-24

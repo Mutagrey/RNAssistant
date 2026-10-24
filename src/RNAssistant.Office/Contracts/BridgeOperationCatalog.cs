@@ -158,6 +158,7 @@ namespace RNAssistant.Office.Contracts
         InspectPromptContext,
         GetAgentArsenal,
         StageSelectionInput,
+        StageHtmlVisualSelection,
         AddSelectionContext,
         AddTextContext,
         RemoveContextItem,

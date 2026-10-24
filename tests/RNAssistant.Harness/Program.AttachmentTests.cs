@@ -12,6 +12,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
+using RNAssistant.Office.Contracts;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
 using UglyToad.PdfPig.Writer;
@@ -157,6 +158,80 @@ namespace RNAssistant.Harness
                     "committed attachment has content hash");
                 AssertTrue(string.IsNullOrWhiteSpace(message.Attachments[0].DraftChatId),
                     "staging ownership is removed from committed resource metadata");
+            });
+        }
+
+        private static void HtmlVisualSelectionPinsSourceAndRejectsStaleDraft()
+        {
+            WithTempPaths(delegate(AppDataPaths paths)
+            {
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var source = new ChatArtifact { Id = "html-snapshot-1", Kind = ChatArtifactKinds.HtmlWorkspace,
+                    Title = "Sample page", Revision = 1, DocumentAuthorityId = session.DocumentAuthorityId };
+                session.Artifacts.Add(source);
+                session.ActiveHtmlArtifactId = source.Id;
+                var exact = ChatResourceUri.CreateArtifactRevision(session, source);
+                var selection = new HtmlVisualSelection {
+                    Tag = "button", StableUiId = "save", Selector = "html > body > button:nth-of-type(1)",
+                    Attributes = new Dictionary<string, string> { { "data-ui-id", "save" } },
+                    Ancestry = new List<HtmlVisualAncestor> { new HtmlVisualAncestor { Tag = "body",
+                        Attributes = new Dictionary<string, string>() } }, TextExcerpt = "Save",
+                    Rect = new HtmlVisualRect { X = 10, Y = 20, Width = 80, Height = 30 },
+                    Viewport = new HtmlVisualViewport { Width = 800, Height = 600, Dpr = 1 }
+                };
+                var bytes = HtmlVisualSelectionPolicy.Capture(selection, source.Title);
+                AssertTrue(!System.Text.Encoding.UTF8.GetString(bytes).Contains(exact.Uri),
+                    "model-facing selection body contains no runtime URI");
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(paths),
+                    new ChatStore(paths).DocumentArtifacts);
+                var request = new StageHtmlVisualSelectionPayload { ChatId = session.Id,
+                    ArtifactId = source.Id, ArtifactRevision = 1, PreviewGeneration = 3, Selection = selection };
+                var draft = ingestion.StageHtmlVisualSelection(session, request);
+                AssertEqual(exact.Uri, ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Uri,
+                    "draft retains exact host-selected source");
+                request.ArtifactRevision = 2;
+                RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
+                request.ArtifactRevision = 1;
+                session.ActiveHtmlArtifactId = "other-snapshot";
+                RuntimeThrows<InvalidOperationException>(() => ingestion.LoadDrafts(session, new[] { draft.Id }));
+                session.ActiveHtmlArtifactId = source.Id;
+                source.Revision = 2;
+                RuntimeThrows<InvalidOperationException>(() => ingestion.LoadDrafts(session, new[] { draft.Id }));
+                source.Revision = 1;
+                selection.Attributes["id"] = "secret-token";
+                RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.Capture(selection, source.Title));
+                selection.Attributes.Remove("id");
+                selection.StableUiId = "different";
+                RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.Capture(selection, source.Title));
+                selection.StableUiId = "save";
+                var message = new ChatMessage { Role = "user", Content = "Change this button",
+                    Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                session.Messages.Add(message);
+                ingestion.CommitAndLink(session, message, 0);
+                AssertTrue(message.ResourceRefs.Any(reference => reference.Uri == exact.Uri && reference.Revision == exact.Revision),
+                    "accepted user message links the exact HTML source");
+                AssertTrue(new AttachmentStore(paths).ReadBytes(message.Attachments.Single()).SequenceEqual(bytes),
+                    "selection body is committed unchanged to existing CAS");
+                var cloned = ChatCloneService.CloneMessages(new[] { message }).Single().Attachments.Single();
+                AssertEqual(exact.Uri, cloned.VisualSelectionSource.Uri, "chat copy retains selection provenance");
+                AssertTrue(!object.ReferenceEquals(cloned.VisualSelectionSource, message.Attachments.Single().VisualSelectionSource),
+                    "chat copy detaches the source reference");
+
+                var chatOwned = new ChatArtifact { Id = "copied-html", Kind = ChatArtifactKinds.HtmlWorkspace,
+                    Revision = 1, Title = "Copied page" };
+                var originalChatReference = ChatResourceUri.CreateArtifactRevision(session, chatOwned);
+                var fork = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                fork.DocumentAuthorityId = session.DocumentAuthorityId;
+                fork.Artifacts.Add(chatOwned);
+                var copiedMessage = new ChatMessage { Role = "user", ProtocolMessage = true,
+                    Attachments = new List<ChatAttachment> { new ChatAttachment { VisualSelectionSource = originalChatReference } },
+                    ResourceRefs = new List<ResourceRef> { originalChatReference } };
+                fork.Messages.Add(copiedMessage);
+                ChatResourceReferenceService.LinkMessageResources(fork, 0);
+                var forkReference = ChatResourceUri.CreateArtifactRevision(fork, chatOwned);
+                AssertEqual(forkReference.Uri, copiedMessage.Attachments.Single().VisualSelectionSource.Uri,
+                    "chat-owned selection source rebases with copied history");
             });
         }
 

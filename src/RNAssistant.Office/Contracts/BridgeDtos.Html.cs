@@ -9,6 +9,49 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class StageHtmlVisualSelectionPayload : ChatPayload
+    {
+        [JsonProperty("artifactId")] public string ArtifactId { get; set; }
+        [JsonProperty("artifactRevision")] public int ArtifactRevision { get; set; }
+        // UI frame correlation only. Native source authority comes from the
+        // addressed chat's active artifact and exact revision.
+        [JsonProperty("previewGeneration")] public int PreviewGeneration { get; set; }
+        [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
+    }
+
+    public sealed class HtmlVisualSelection
+    {
+        [JsonProperty("tag")] public string Tag { get; set; }
+        [JsonProperty("stableUiId")] public string StableUiId { get; set; }
+        [JsonProperty("attributes")] public Dictionary<string, string> Attributes { get; set; }
+        [JsonProperty("selector")] public string Selector { get; set; }
+        [JsonProperty("ancestry")] public List<HtmlVisualAncestor> Ancestry { get; set; }
+        [JsonProperty("textExcerpt")] public string TextExcerpt { get; set; }
+        [JsonProperty("rect")] public HtmlVisualRect Rect { get; set; }
+        [JsonProperty("viewport")] public HtmlVisualViewport Viewport { get; set; }
+    }
+
+    public sealed class HtmlVisualAncestor
+    {
+        [JsonProperty("tag")] public string Tag { get; set; }
+        [JsonProperty("attributes")] public Dictionary<string, string> Attributes { get; set; }
+    }
+
+    public sealed class HtmlVisualRect
+    {
+        [JsonProperty("x")] public double X { get; set; }
+        [JsonProperty("y")] public double Y { get; set; }
+        [JsonProperty("width")] public double Width { get; set; }
+        [JsonProperty("height")] public double Height { get; set; }
+    }
+
+    public sealed class HtmlVisualViewport
+    {
+        [JsonProperty("width")] public double Width { get; set; }
+        [JsonProperty("height")] public double Height { get; set; }
+        [JsonProperty("dpr")] public double Dpr { get; set; }
+    }
+
     public sealed class HtmlFetchRequest
     {
         [JsonProperty("url")]

@@ -485,6 +485,16 @@ namespace RNAssistant.Office.Services
                 .Select(group => group.First())
                 .ToList();
 
+            foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+            {
+                var source = attachment?.VisualSelectionSource;
+                if (source == null || RNAssistant.Core.Storage.DocumentArtifactStore.Owns(session, source)) continue;
+                var current = ChatResourceUri.RebaseArtifactRevision(source, session.Id);
+                string artifactId;
+                if (current != null && ChatResourceUri.TryGetCurrentArtifactId(session, current, out artifactId))
+                    attachment.VisualSelectionSource = current;
+            }
+
             var resultPrefix = string.Equals(message.Role, ToolResultRoles.Tool, StringComparison.OrdinalIgnoreCase) &&
                 message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion ? null : "TOOL_RESULT:";
             message.Content = RebaseJsonText(session, message.Content, resultPrefix);

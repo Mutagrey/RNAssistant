@@ -97,11 +97,85 @@
     return true;
   }
 
+  var stagingVisualSelection = false;
   var visualInspector = window.RNAssistantVisualInspector.createHost({
     frame: $("htmlWorkspacePreviewFrame"), button: $("inspectHtmlWorkspaceButton"),
-    status: $("htmlWorkspaceInspectStatus")
+    status: $("htmlWorkspaceInspectStatus"),
+    onSelectionChanged: function (selected) {
+      $("attachHtmlWorkspaceSelectionButton").disabled = !selected || stagingVisualSelection;
+    }
   });
   window.deactivateHtmlWorkspaceInspector = visualInspector.deactivate;
+  $("attachHtmlWorkspaceSelectionButton").addEventListener("click", async function () {
+    if (stagingVisualSelection) return;
+    var record = visualInspector.selectionRecord();
+    var chat = state.activeChatId, sourceId = state.activeHtmlArtifactId;
+    var queue = state.chatResourceIngestions || (state.chatResourceIngestions = {});
+    if (state.bridgeUnavailable || state.chatReadOnly || state.chatDetailPending ||
+        state.chatNavigationPending || queue[chat] || isPendingChatSubmit(chat) || hasActiveMessageEdit()) {
+      $("htmlWorkspaceInspectStatus").textContent = "Дождитесь завершения текущего действия с чатом.";
+      return;
+    }
+    var source = (state.artifacts || []).filter(function (item) {
+      return artifactId(item) === sourceId && artifactKind(item) === "html_workspace";
+    });
+    var revision = source.length === 1 ? Number(prop(source[0], "Revision", "revision", 0)) : 0;
+    if (!record || !chat || !sourceId || !Number.isSafeInteger(revision) || revision < 1) {
+      $("htmlWorkspaceInspectStatus").textContent = "Источник выделения недоступен. Обновите просмотр.";
+      return;
+    }
+    var completeIngestion;
+    var ingestion = new Promise(function (resolve) { completeIngestion = resolve; });
+    queue[chat] = ingestion;
+    stagingVisualSelection = true;
+    this.disabled = true;
+    updateComposerInputState();
+    var attachment = null, attached = false, succeeded = false;
+    try {
+      var response = await send("stageHtmlVisualSelection", { chatId: chat, artifactId: sourceId,
+        artifactRevision: revision, previewGeneration: record.generation, selection: record.selection });
+      attachment = response && (response.resource || response.Resource);
+      if (!attachment) throw new Error("Приложение не вернуло подготовленный элемент.");
+      if (chat !== state.activeChatId || sourceId !== state.activeHtmlArtifactId ||
+          record.generation !== visualInspector.generation())
+        throw new Error("Просмотр изменился. Выберите элемент заново.");
+      var currentDraft = readOfficeDraft(chat);
+      var attachments = currentDraft && currentDraft.attachments || [];
+      if (attachments.length >= ATTACHMENT_MAX_FILES)
+        throw new Error("В одном сообщении можно выбрать не более 10 элементов и файлов.");
+      saveOfficeDraft(chat, officeChatDraftText(), attachments.concat(attachment), true);
+      attached = true;
+      await window.RNAssistantChatDrafts.flushOffice(chat);
+      if (chat !== state.activeChatId || sourceId !== state.activeHtmlArtifactId ||
+          record.generation !== visualInspector.generation()) {
+        succeeded = true; return;
+      }
+      visualInspector.deactivate();
+      if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
+      switchTab("chat");
+      restoreChatDraft(chat);
+      $("chatInput").focus();
+      succeeded = true;
+    } catch (error) {
+      if (attachment && !attached)
+        await send("discardChatResourceDraft", { chatId: chat, id: attachmentId(attachment) }).catch(function () {});
+      var message = error.detail || error.message || "Не удалось добавить элемент.";
+      if (attached && state.activeChatId === chat) {
+        visualInspector.deactivate();
+        if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
+        switchTab("chat");
+        restoreChatDraft(chat);
+        setAttachmentStatus(chat, message, "error");
+      } else if (attached) setAttachmentStatus(chat, message, "error");
+      else $("htmlWorkspaceInspectStatus").textContent = message;
+    } finally {
+      completeIngestion(succeeded);
+      if (queue[chat] === ingestion) delete queue[chat];
+      stagingVisualSelection = false;
+      this.disabled = !visualInspector.selectionRecord();
+      updateComposerInputState();
+    }
+  });
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
     state: state,
     model: workspaceModel,

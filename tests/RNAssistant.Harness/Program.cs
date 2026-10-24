@@ -601,6 +601,7 @@ namespace RNAssistant.Harness
                 Test("attachments: upload lease bounds cancellation and expiry", ResourceUploadLeaseLifecycle),
                 Test("attachments: upload discards cancelled completion", ResourceUploadDiscardsCancelledCompletion),
                 Test("attachments: resource link precedes model dispatch", AttachmentPromotionLinksResourceBeforeModelDispatch),
+                Test("visual selection: exact HTML source and bounded CAS draft", HtmlVisualSelectionPinsSourceAndRejectsStaleDraft),
                 Test("attachments: message targets isolate exact originals", MessageAttachmentTargetsIsolateOriginals),
                 Test("document originals: survive origin deletion restart and GC", DocumentOriginalsSurviveChatDeletionAndRestart),
                 Test("document originals: idempotent concurrent publication", DocumentOriginalPublicationIsIdempotentAndConcurrent),

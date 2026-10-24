@@ -28,7 +28,8 @@ const { chromium } = require("playwright");
       window.RNAssistantHtmlVendorRuntime = { used: () => [] };
       const frame = document.getElementById("preview");
       window.inspector = RNAssistantVisualInspector.createHost({ frame,
-        button: document.getElementById("toggle"), status: document.getElementById("status") });
+        button: document.getElementById("toggle"), status: document.getElementById("status"),
+        onSelectionChanged: available => { window.selectionAvailable = available; } });
       window.loadPreview = () => {
         const generation = inspector.reset();
         frame.srcdoc = RNAssistantHtmlWorkspacePreview.build({
@@ -54,6 +55,10 @@ const { chromium } = require("playwright");
     assert.equal(beforeScroll.pointerEvents, "none");
     await frame.locator("#card").click({ position: { x: 5, y: 5 } });
     const selection = await page.evaluate(() => inspector.selection());
+    const selectionRecord = await page.evaluate(() => inspector.selectionRecord());
+    assert.equal(selectionRecord.generation, await page.evaluate(() => inspector.generation()));
+    assert.deepEqual(selectionRecord.selection, selection, "composer capture binds the current frame generation");
+    assert.equal(await page.evaluate(() => selectionAvailable), true);
     assert.equal(selection.stableUiId, "safe-card");
     assert.equal(selection.tag, "section");
     assert.ok(selection.selector.includes("section:nth-of-type"));
@@ -80,6 +85,7 @@ const { chromium } = require("playwright");
     await page.locator("#status").getByText(/недоступен/).waitFor();
     await frame.locator("#nested").click();
     assert.equal(await page.evaluate(() => inspector.selection()), null, "nested frame is explicitly unsupported");
+    assert.equal(await page.evaluate(() => inspector.selectionRecord()), null);
     assert.match(await page.locator("#status").textContent(), /недоступен/);
 
     await frame.locator("#card").hover();
@@ -90,6 +96,7 @@ const { chromium } = require("playwright");
     assert.ok(afterScroll < beforeScroll.top, "overlay follows scrolling without changing layout");
     await frame.locator("#action").press("Escape");
     assert.equal(await page.locator("#toggle").getAttribute("aria-pressed"), "false");
+    assert.equal(await page.evaluate(() => selectionAvailable), false);
     await frame.locator("#action").click();
     assert.equal(await frame.locator("#count").textContent(), "2", "Escape restores ordinary clicks");
     assert.equal(await frame.locator('[aria-hidden="true"][style*="z-index"]').evaluate(node => node.style.display), "none");
@@ -123,7 +130,7 @@ const { chromium } = require("playwright");
     for (const width of [1100, 760, 420]) {
       await layout.setViewportSize({ width, height: 760 });
       const bounds = await layout.locator("#htmlWorkspaceEditor").boundingBox();
-      for (const id of ["inspectHtmlWorkspaceButton", "htmlWorkspaceMoreActions"]) {
+      for (const id of ["inspectHtmlWorkspaceButton", "attachHtmlWorkspaceSelectionButton", "htmlWorkspaceMoreActions"]) {
         const box = await layout.locator("#" + id).boundingBox();
         assert.ok(box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width + 1,
           id + " fits at " + width + "px");

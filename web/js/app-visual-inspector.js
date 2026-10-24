@@ -167,6 +167,7 @@
     var frame = options.frame, button = options.button, status = options.status;
     var generation = 0, ready = false, active = false, selected = null;
     if (!frame || !button || !status) throw new Error("Visual inspector host is incomplete.");
+    function changed() { if (typeof options.onSelectionChanged === "function") options.onSelectionChanged(!!(active && ready && selected)); }
     function control(operation) {
       if (frame.contentWindow) frame.contentWindow.postMessage({
         type: "rnassistant-visual-inspector-control", generation: generation, operation: operation }, "*");
@@ -179,26 +180,28 @@
     }
     function reset() {
       if (ready) control("dispose");
-      generation++; ready = false; active = false; selected = null; paint();
+      generation++; ready = false; active = false; selected = null; paint(); changed();
       return generation;
     }
     function onLoad() {
       if (!generation) return;
-      ready = false; active = false; selected = null; paint();
+      ready = false; active = false; selected = null; paint(); changed();
       control("probe");
     }
     function onMessage(event) {
       var message = event.data;
       if (!message || event.source !== frame.contentWindow || message.generation !== generation) return;
       if (message.type === "rnassistant-visual-inspector-ready") { ready = true; paint(); return; }
-      if (message.type === "rnassistant-visual-inspector-stopped") { active = false; selected = null; paint(); return; }
+      if (message.type === "rnassistant-visual-inspector-stopped") { active = false; selected = null; paint(); changed(); return; }
       if (!active || !ready) return;
       if (message.type === "rnassistant-visual-inspector-unsupported") {
         selected = null;
+        changed();
         status.textContent = "Этот элемент недоступен для выбора."; return;
       }
       if (message.type === "rnassistant-visual-inspector-invalidated") {
         selected = null;
+        changed();
         status.textContent = "Выбранный элемент исчез из просмотра."; return;
       }
       if (message.type !== "rnassistant-visual-inspector-selected") return;
@@ -211,6 +214,7 @@
       try { if (new TextEncoder().encode(JSON.stringify(value)).length > 16384) return; }
       catch (_) { return; }
       selected = value;
+      changed();
       status.textContent = "Элемент (только просмотр): " + value.tag +
         (value.stableUiId ? " · " + value.stableUiId.slice(0, 128) : "") +
         (value.textExcerpt ? " · " + value.textExcerpt.slice(0, 80) : "");
@@ -221,11 +225,12 @@
       if (!active) selected = null;
       control(active ? "activate" : "deactivate");
       paint();
+      changed();
       if (active) status.textContent = "Наведите и нажмите на элемент. Escape — выход.";
     }
     function deactivate() {
       if (!active) return;
-      active = false; selected = null; control("deactivate"); paint();
+      active = false; selected = null; control("deactivate"); paint(); changed();
     }
     frame.addEventListener("load", onLoad);
     window.addEventListener("message", onMessage);
@@ -233,6 +238,7 @@
     paint();
     return { reset: reset, deactivate: deactivate, generation: function () { return generation; },
       selection: function () { return selected; },
+      selectionRecord: function () { return active && ready && selected ? { generation: generation, selection: selected } : null; },
       dispose: function () {
         reset(); frame.removeEventListener("load", onLoad);
         window.removeEventListener("message", onMessage); button.removeEventListener("click", onClick);

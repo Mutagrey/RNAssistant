@@ -866,6 +866,11 @@ namespace RNAssistant.Office.WebView
                         var stagedSelection = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.StageSelectionInput(stagedSelection.Mode, stagedSelection.ChatId);
                         break;
+                    case BridgeOperationId.StageHtmlVisualSelection:
+                        var htmlSelection = Payload<StageHtmlVisualSelectionPayload>(payload);
+                        responsePayload = await RunBridgeWorkAsync(
+                            () => _controller.StageHtmlVisualSelection(htmlSelection), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.AddSelectionContext:
                         var selectionContext = Payload<SelectionContextPayload>(payload);
                         responsePayload = _controller.AddSelectionContextFromBridge(selectionContext.Mode, selectionContext.ChatId);

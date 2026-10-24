@@ -12,6 +12,15 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Chat input delivery fixture after protected drafts — 2026-10-24
+
+Owner: Web test fixtures. `tests/web/chat-input-delivery.test.js` starts the
+isolated composer without hydrating the protected draft store, then waits for an
+Office submit that now correctly requires `flushOffice`. It times out waiting
+for a bridge acknowledgement; the same guard and submit path are present at
+HEAD before the HTML selection change. Initialize the draft fixture explicitly
+so this test again covers queue/steer and late acknowledgement behavior.
+
 ## CLI smoke v7 fixtures after v8 cutover — 2026-10-23
 
 Owner: Workspace/CLI test fixtures. Static post-merge review found v7 response

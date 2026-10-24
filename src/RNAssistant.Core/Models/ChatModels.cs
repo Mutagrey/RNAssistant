@@ -211,6 +211,10 @@ namespace RNAssistant.Core.Models
         public int PageCount { get; set; }
         public List<int> PageTextLengths { get; set; }
         public string ExtractionWarning { get; set; }
+        // Host-verified source of a visual selection. The bounded DOM evidence is
+        // kept in the attachment CAS body, not duplicated in chat metadata.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public ResourceRef VisualSelectionSource { get; set; }
         public string Status { get; set; }
         public string Error { get; set; }
         public DateTime CreatedUtc { get; set; }
