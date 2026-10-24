@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Visual Inspector: HTML preview inspect-only slice — 2026-10-24
+
+Owner: Web HTML preview / shared visual-inspector JS. The existing isolated HTML
+preview now offers **Выбрать элемент**: hover outlines a DOM element, click shows
+a bounded read-only selection, Escape or the button exits. Frame messages are
+accepted only from the current iframe/generation; replacing its source revokes
+the old inspector. The overlay does not intercept ordinary clicks while off,
+and selection excludes form values and sensitive descendants. Standalone HTML
+exports do not include the inspector. No annotation is yet attached to a chat,
+persisted, sent to the model, or used to edit a source file.
+
+Focused Chrome inspector/viewport and host-neutral HTML preview/export checks
+pass. Plugin-frame injection, typed annotation draft/ingestion, revision-pinned
+resolution and source-edit verification remain the next scoped work. Windows
+WebView2/CSP/frame lifecycle qualification is open.
+
 ## Unified Shell: protected chat-input recovery — 2026-10-24
 
 Owner: Core chat-input storage / Office typed bridge / shared Web ChatView. Office

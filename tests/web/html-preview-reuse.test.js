@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
-let builds = 0, closes = 0, loads = 0, ready = true;
+let builds = 0, closes = 0, loads = 0, resets = 0, ready = true;
 const frame = { classList: { toggle() {}, add() {} }, removeAttribute() {},
   set srcdoc(value) { loads++; } };
 const detail = { classList: { toggle() {}, remove() {} }, replaceChildren() {} };
@@ -15,7 +15,10 @@ context.window = context;
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-html-workspace-editor.js"), "utf8"), context);
 const editor = context.RNAssistantHtmlWorkspaceEditor.create({ state,
   source: { current: () => ready, ready: () => ready, message: () => "Loading" },
-  preview: { build: () => { builds++; return "same markup"; } },
+  preview: { missingVendors: () => [], build: options => {
+    assert.equal(options.inspectGeneration, resets + 1); builds++; return "same markup";
+  } },
+  inspector: { reset: () => { resets++; }, generation: () => resets },
   closeResources: () => { closes++; },
   model: { selectedItem: () => ({ type: "file", item: files[0] }), workspace: () => ({ activeFileId: "file1" }),
     files: () => files, dataSources: () => bindings } });
@@ -34,4 +37,5 @@ for (let i = 0; i < 200; i++) editor.renderPreview();
 assert.deepEqual([builds, closes, loads], [6, 8, 8], "edit updates do not repeatedly navigate an empty iframe");
 state.htmlWorkspaceMode = "preview"; editor.renderPreview();
 assert.deepEqual([builds, closes, loads], [7, 9, 9], "return from cleared edit preview rebuilds");
+assert.equal(resets, closes, "each invalidation revokes the old inspector generation once");
 console.log("PASS HTML preview: unchanged updates reuse iframe; source/binding/owner/mode invalidation replaces it");

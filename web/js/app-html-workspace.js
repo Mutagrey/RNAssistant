@@ -97,10 +97,16 @@
     return true;
   }
 
+  var visualInspector = window.RNAssistantVisualInspector.createHost({
+    frame: $("htmlWorkspacePreviewFrame"), button: $("inspectHtmlWorkspaceButton"),
+    status: $("htmlWorkspaceInspectStatus")
+  });
+  window.deactivateHtmlWorkspaceInspector = visualInspector.deactivate;
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
     state: state,
     model: workspaceModel,
     preview: htmlPreview,
+    inspector: visualInspector,
     source: workspaceSource,
     closeResources: closePreviewResources,
     artifacts: workspaceArtifacts,

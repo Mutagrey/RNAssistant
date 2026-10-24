@@ -17,6 +17,7 @@
     function invalidatePreview() {
       renderedPreviewKey = null;
       renderedPreviewContents = null;
+      if (options.inspector) options.inspector.reset();
       if (options.closeResources) options.closeResources();
     }
     function clearPreview(frame) {
@@ -438,6 +439,7 @@
       // copy of the workspace on every chat-state update.
       if (renderedPreviewKey === previewKey && renderedPreviewContents &&
           workspaceFiles.every(function (file, index) { return renderedPreviewContents[index] === file.content; })) return;
+      if (options.inspector) previewInput.inspectGeneration = options.inspector.generation() + 1;
       var previewHtml = htmlPreview.build(previewInput);
       invalidatePreview();
       frame.removeAttribute("src");

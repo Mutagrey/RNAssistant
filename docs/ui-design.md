@@ -1053,3 +1053,20 @@ local process through read-only IPC; acceptance replaces it with saved messages.
 An old-format workspace chat is explicitly read-only; unsupported
 protocol bodies display a notice, never raw JSON or a silently migrated response.
 Real WebView2/Office behavior remains a target-host qualification gate.
+
+## Визуальный инспектор HTML-preview — 2026-10-24
+
+Кнопка «Выбрать элемент» работает только в просмотре HTML-проекта. Наведение
+показывает рамку, клик — краткое описание выбранного элемента; Escape или
+повторное нажатие выключает режим. Пока это только просмотр: выбор не добавляется
+к сообщению и не даёт агенту права менять исходник. Обычные клики вне режима
+остаются действиями самой страницы. Смена HTML-источника или режима отзывает
+выбор; автономный экспорт не содержит инспектора.
+
+`app-visual-inspector.js` инъецируется существующим HTML snapshot assembler только
+в sandbox iframe. Parent принимает ответы лишь от текущего кадра и поколения;
+DOM остаётся недоверенным. Снимок ограничен 16 KiB UTF-8, текстом до 512 символов,
+селектором до 1024, 8 предками и разрешёнными атрибутами. Значения форм и текст
+чувствительных потомков исключены; `outerHTML` и файлы не читаются. Следующий
+этап — typed draft в общем composer, scope-aware ingestion и проверка revision,
+затем отдельная привязка plugin frame и Windows/WebView2 qualification.

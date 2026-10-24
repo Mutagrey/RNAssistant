@@ -261,9 +261,11 @@
     var file = activeHtmlFile(files, options.activeFileId || "");
     var html = file ? fileContent(file) : "";
     var hostBridge = options.hostBridge === false ? "" : networkBridgeScript() + "\n";
+    var inspector = options.inspectGeneration && options.hostBridge !== false
+      ? "<script>" + safeScript(window.RNAssistantVisualInspector.script(options.inspectGeneration)) + "<\/script>\n" : "";
     var vendorRuntime = vendorHead(files);
     var headInject = '<meta charset="utf-8">' + previewContentSecurityPolicy(options.hostBridge === false) + "\n" + previewViewportReset() + "\n" +
-      vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + hostBridge + "\n" + cssBlock(files);
+      inspector + vendorRuntime + (vendorRuntime ? "\n" : "") + resourceScript(dataSources, options.resourceSnapshot) + hostBridge + "\n" + cssBlock(files);
     var bodyInject = scriptBlock(files);
     if (!html.trim()) {
       html = "<div style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">HTML workspace пуст.</div>";

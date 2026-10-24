@@ -51,13 +51,15 @@ cannot replace it`; обновить assertion отдельной правкой
 остальные четыре случая `plan mode:` прошли; это расхождение текста, не закрытый
 Windows/Office gate.
 
-## Shell audit: preview fixture и одиночная JS-ошибка — 2026-10-23
+## Shell audit: preview fixtures и одиночная JS-ошибка — 2026-10-23
 
-Owner: HTML preview tests / plugin preview lifecycle. В
-[аудите фазы 0](../architecture/visual-annotator-audit.md) существующий
-`tests/web/html-preview-reuse.test.js` падает до reuse assertions: его stub не
-задаёт `preview.missingVendors`, который читает editor. Обновить fixture отдельно,
-сохранив проверки reuse; этот сбой не доказывает дефект product lifecycle.
+Owner: HTML preview tests / plugin preview lifecycle. Fixture
+`tests/web/html-preview-reuse.test.js` исправлен в inspect-only срезе и снова
+проверяет reuse/invalidations. `tests/web/html-workspace-layout.test.js` проходит
+границы toolbar/menu, затем ждёт скрытый `.html-workspace-create-menu > summary`
+в автономной panel fixture; то же происходит на базовом HEAD до инспектора.
+Согласовать fixture с текущим состоянием каталога отдельно. Адресная Chrome
+проверка нового Inspector проверяет размеры toolbar на 1100/760/420 px.
 
 Один полный rapid-navigation probe дал `Cannot read properties of undefined
 (reading 'create')` без stack. Повтор со stack-capture завершил 12 циклов без

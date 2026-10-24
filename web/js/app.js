@@ -54,6 +54,9 @@ function switchTab(name) {
   var section = name === "instructions" ? "library" : name;
   var active = document.querySelector(".panel.active");
   var changed = !active || active.id !== "tab-" + name;
+  if (changed && active && active.id === "tab-artifacts" && typeof deactivateHtmlWorkspaceInspector === "function") {
+    deactivateHtmlWorkspaceInspector();
+  }
   if (changed && active && active.id === "tab-settings" && typeof discardModelCatalogPreview === "function") {
     discardModelCatalogPreview();
   }

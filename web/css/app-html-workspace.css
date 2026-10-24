@@ -281,6 +281,17 @@
   background: var(--surface);
 }
 
+.html-workspace-inspect-status {
+  max-width: min(18vw, 240px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.html-workspace-inspect-status:empty { display: none; }
+
 .html-workspace-frame {
   display: block;
   width: 100%;

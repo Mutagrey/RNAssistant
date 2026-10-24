@@ -93,6 +93,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     dataSources: resourceExport.bindings.map(item => ({ name: item.name })), resourceSnapshot: snapshot, hostBridge: false
   });
   assert.ok(!offlineHtml.includes(textValue), "script and comment delimiters stay inert");
+  assert.ok(!offlineHtml.includes("rnassistant-visual-inspector"), "standalone export omits host-only inspector");
   assert.match(offlineHtml, /<head>\s*<meta charset="utf-8">/, "exported part hashes survive full-document UTF-8 decoding");
   const elements = new Map(); let decodes = 0;
   const offline = vm.createContext({ addEventListener() {}, setTimeout, clearTimeout, atob, TextEncoder, crypto,
@@ -295,7 +296,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-html-workspace-actio
     .forEach(asset => assert.ok(index.includes(asset + "?v=binary-chunks-20260906-1"), asset));
   ["app-html-workspace-actions.js", "app-html-workspace.js"]
     .forEach(asset => assert.ok(index.includes(asset + "?v=" +
-      (asset === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "html-memory-20261002-1")), asset));
+      (asset === "app-html-workspace-actions.js" ? "html-action-guard-20260908-1" : "single-composer-20261023-1")), asset));
   assert.ok(index.indexOf("app-html-resource-export.js?v=") < index.indexOf("app-html-workspace-preview.js?v="));
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
   assert.ok(index.includes(
