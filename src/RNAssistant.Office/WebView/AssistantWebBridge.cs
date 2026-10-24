@@ -180,7 +180,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
                     case BridgeOperationId.BeginProjectChatFileUpload: case BridgeOperationId.WriteProjectChatFileChunk:
                     case BridgeOperationId.CompleteProjectChatFileUpload: case BridgeOperationId.CancelProjectChatFileUpload:
-                        responsePayload = await HandlePluginAsync(type, payload, cancellationToken).ConfigureAwait(false);
+                        responsePayload = await HandlePluginAsync(id, type, payload, cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetWorkspaceState:
                         responsePayload = await RunBridgeWorkAsync(_workspaces.ReadState, cancellationToken).ConfigureAwait(false);

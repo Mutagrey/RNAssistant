@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Workspace live progress delivery — 2026-10-24
+
+Owner: Application workspace chat / Office bridge / shared Web ChatView. Project
+and plugin submits and approval continuations now forward their existing runtime
+model-preview events through the Office `progress` bridge envelope. The shared
+ChatView routes only to the mounted owner and exact workspace/session/run; a
+monotonic transient sequence prevents a delayed event or same-revision poll from
+replacing newer preview. Read-only polling remains the reconnect path, and hidden
+project/plugin observers stop on owner changes. The preview is never persisted as
+chat history. Focused Harness HTTP/bridge and Chrome project/plugin progress and
+navigation-race checks pass. Cross-process live token delivery and Windows/Office/
+WebView2 qualification remain open.
+
 ## Unified chat message views and history — 2026-10-24
 
 Owner: Core browser projection / Application workspace chat / shared Web ChatView.

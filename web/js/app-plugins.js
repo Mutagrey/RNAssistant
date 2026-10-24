@@ -88,7 +88,7 @@
     renderNavigation();
   });
   async function run(action){if(busy)return;busy=true;controls();try{await action();}catch(error){status(error.message,true);}finally{busy=false;controls();}}
-  function controls(){runObserver.select(chat,chatBusy);['Preview','Apply','Reopen','Disable'].forEach(function(id){el(id).disabled=busy||previewBusy||!selected||
+  function controls(){runObserver.select(developmentOpen&&ownsChat()?chat:null,chatBusy);['Preview','Apply','Reopen','Disable'].forEach(function(id){el(id).disabled=busy||previewBusy||!selected||
     id==='Apply'&&(!candidate||!candidate.hasChanges||!!browsingRelease)||(id==='Reopen'||id==='Disable')&&!selected.enabled;});
     el('Apply').hidden=!candidate||!candidate.hasChanges||!selected||!!browsingRelease;
     el('RestoreVersion').hidden=!browsingRelease;el('RestoreVersion').disabled=busy||previewBusy||!selected;
@@ -128,6 +128,7 @@
     }catch(error){if(current===epoch)status('Не удалось проверить изменения исходников: '+error.message,true);}}
   function startSourceWatch(){clearInterval(sourceTimer);sourceTimer=setInterval(function(){pollSource();},1200);}
   function updateDevelopment(refresh){var open=developmentOpen;el('Chat').hidden=!open;el('DevelopmentSplitter').hidden=!open;
+    if(!open)runObserver.select(null,false);
     developmentToggle.sync();
     el('Workbench').classList.toggle('plugin-developing',open);
     if(open){window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
@@ -154,7 +155,7 @@
     if(developmentOpen&&publishedSourceStamps[id]!==sourceStamp)await checkAndPreview(sourceStamp);
     startSourceWatch();await readChat();});}finally{selecting=false;
       if(selected&&!el('Workbench').hidden&&developmentOpen&&(!view||!view.preview)&&publishedSourceStamps[id]!==sourceStamp)checkAndPreview(sourceStamp);}}
-  function renderChat(){runObserver.select(chat,chatBusy);if(!chat||!ownsChat())return;
+  function renderChat(){runObserver.select(developmentOpen&&ownsChat()?chat:null,chatBusy);if(!chat||!ownsChat())return;
     el('ChatTitle').textContent=chat.state.title||chat.state.Title||'Чат исходников';
     el('ChatTitle').title=el('ChatTitle').textContent;
     window.RNAssistantWorkspaceChat.renderMessages(el('Messages'),chat);
@@ -416,6 +417,7 @@
     el('ChatHistory').onclick=openHistory;
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
     window.RNAssistantWorkspaceChat.registerActions('plugin',{
+      suspend: function(){runObserver.select(null,false);},
       loadPrevious: async function(){if(!chat||!chat.messageStartIndex)return;
         var workspaceId=chat.project.workspaceId,sessionId=chat.sessionId,beforeIndex=chat.messageStartIndex,current=chatEpoch;
         try{var page=await send('getPreviousProjectChatMessages',{workspaceId:workspaceId,sessionId:sessionId,beforeIndex:beforeIndex});
@@ -437,7 +439,8 @@
           if(chat&&chat.sessionId===sessionId&&current===chatEpoch){chat=window.RNAssistantWorkspaceChat.latestSnapshot(chat,result);renderChat();}}
         catch(error){if(current===chatEpoch)chatStatus(error.message);}},
       resolve: function(approve){if(!chat||!chat.pendingId)return;var pending=chat.pendingId;
-        chatAction(function(workspaceId,sessionId){return send('resolveProjectChat',{workspaceId:workspaceId,sessionId:sessionId,pendingId:pending,approve:approve});});}
+        chatAction(function(workspaceId,sessionId){return send('resolveProjectChat',{workspaceId:workspaceId,sessionId:sessionId,pendingId:pending,approve:approve});});},
+      progress: runObserver.acceptProgress
     });
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();

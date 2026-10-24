@@ -214,7 +214,8 @@
     return { project: clone(entry), sessionId: chat.Id,
       state: { id: chat.Id, workspaceId: entry.workspaceId, title: chat.Title,
         status: run ? "running" : chat.RunStatus, runId: run && run.runId || null,
-        cursor: run && run.cursor || "preview-project-cursor", userInput: null },
+        cursor: run && run.cursor || "preview-project-cursor", userInput: null,
+        modelProgress: run && run.modelProgress || null },
       pendingId: null, pendingTool: null, pendingArguments: null,
       messages: clone(projectMessages[chat.Id] || []), messageStartIndex: 0,
       messageTotalCount: (projectMessages[chat.Id] || []).length };
@@ -412,7 +413,7 @@
       skill: clone(selected), path: payload.path, deleted: true, reference: null };
   }
 
-  async function dispatch(type, payload) {
+  async function dispatch(type, payload, requestId) {
     if (type === "init") return { bridgeToken: token, bridgeContract: contract,
       init: Object.assign({ appVersion: "preview", host: "Excel", title: fixtures.document,
         settings: clone(settings), prompts: promptLibrary(), hasApiKey: true, hasHistorySecret: false }, chatState()) };
@@ -674,6 +675,16 @@
         projectMessages[submitting.Id].push({ Id: input.requestId, Role: "user", Content: input.message });
         var run = { runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
         projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
+        ["Проверяю запрос…", "Готовлю ответ проекта…"].forEach(function (message, index) {
+          setTimeout(function () {
+            if (projectRuns[submitting.Id] !== run) return;
+            run.modelProgress = { RunId: run.runId, StepId: "preview-step", AttemptId: "preview-attempt",
+              Sequence: index + 1, Message: message, Reasoning: "" };
+            emit({ type: "progress", id: requestId, payload: { workspaceId: payload.workspaceId,
+              sessionId: submitting.Id, runId: run.runId, phase: "model_progress",
+              modelProgress: run.modelProgress } });
+          }, 180 + index * 420);
+        });
         await new Promise(function (resolve) { setTimeout(resolve, 1800); });
         if (projectRuns[submitting.Id] === run) {
           var sourcePlugin = requireWorkspace(payload).pluginId;
@@ -1078,7 +1089,7 @@
         await ready;
         if (request.contractVersion !== 2 || request.type !== "init" && request.bridgeToken !== token)
           fail("Контракт просмотра изменился.", "preview_contract_mismatch");
-        return dispatch(request.type, request.payload || {});
+        return dispatch(request.type, request.payload || {}, request.id);
       }).then(function (payload) {
         emit({ id: request.id, ok: true, payload: payload });
       }, function (error) {

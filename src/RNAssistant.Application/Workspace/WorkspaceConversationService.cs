@@ -46,10 +46,15 @@ namespace RNAssistant.Runtime
         private readonly CancellationTokenSource _titleLifetime = new CancellationTokenSource();
         private readonly ConcurrentDictionary<string, WorkspaceModelProgress> _liveModels =
             new ConcurrentDictionary<string, WorkspaceModelProgress>(StringComparer.Ordinal);
+        private long _modelProgressSequence;
 
         private void SetModelProgress(string sessionId, WorkspaceModelProgress value)
         {
-            if (value != null) _liveModels[sessionId] = value;
+            if (value != null)
+            {
+                value.Sequence = Interlocked.Increment(ref _modelProgressSequence);
+                _liveModels[sessionId] = value;
+            }
             else { WorkspaceModelProgress removed; _liveModels.TryRemove(sessionId, out removed); }
         }
 

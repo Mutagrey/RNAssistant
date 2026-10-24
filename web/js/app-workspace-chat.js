@@ -43,6 +43,7 @@
     if (!view || !list || !form || !input || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
     if (owner !== "office" && !container) return false;
     var changed = activeOwner !== owner;
+    if (changed && activeOwner !== "office") dispatch("suspend");
     if (activeOwner === "office" && owner !== "office") {
       if (!officeComposerAnchor) {
         officeComposerAnchor = document.createComment("Office composer");
@@ -126,6 +127,12 @@
     var nextRevision = field(field(incoming, "state"), "revision");
     if (Number.isSafeInteger(previousRevision) && (!Number.isSafeInteger(nextRevision) || nextRevision < previousRevision))
       return current;
+    var currentState = field(current, "state"), incomingState = field(incoming, "state");
+    var currentPreview = field(currentState, "modelProgress"), incomingPreview = field(incomingState, "modelProgress");
+    if (previousRevision === nextRevision && field(currentState, "status") === "running" &&
+        field(incomingState, "status") === "running" && field(currentState, "runId") === field(incomingState, "runId") &&
+        currentPreview && (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
+      incomingState.modelProgress = currentPreview;
     var currentStart = field(current, "messageStartIndex"), incomingStart = field(incoming, "messageStartIndex");
     var currentTotal = field(current, "messageTotalCount"), incomingTotal = field(incoming, "messageTotalCount");
     if (Number.isSafeInteger(currentStart) && Number.isSafeInteger(incomingStart) &&
@@ -149,25 +156,46 @@
     return current;
   }
   function createRunObserver(read, changed, failed) {
-    var target = null, timer = null;
+    var target = null, selected = null, timer = null, inFlight = null, refreshAfter = false;
     async function tick(current) {
       if (target !== current) return;
-      timer = null;
+      timer = null; inFlight = current;
       try {
         var snapshot = await read(current);
         if (target === current) changed(snapshot);
       } catch (error) { if (target === current) failed(error); }
-      if (target === current) timer = setTimeout(function () { tick(current); }, 1200);
+      if (inFlight === current) inFlight = null;
+      if (target === current) {
+        timer = setTimeout(function () { tick(current); }, refreshAfter ? 0 : 1200);
+        refreshAfter = false;
+      }
+    }
+    function refresh() {
+      if (!target) return;
+      if (inFlight === target) { refreshAfter = true; return; }
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () { tick(target); }, 0);
     }
     return { select: function (snapshot, pending) {
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
       var observe = workspaceId && sessionId && (pending || field(field(snapshot, "state"), "status") === "running");
+      selected = snapshot;
       if (observe && target && target.workspaceId === workspaceId && target.sessionId === sessionId) return;
       if (timer) clearTimeout(timer);
-      timer = null; target = null;
+      timer = null; target = null; refreshAfter = false;
       if (!observe) return;
       var current = target = { workspaceId: workspaceId, sessionId: sessionId };
       timer = setTimeout(function () { tick(current); }, 1200);
+    }, acceptProgress: function (payload) {
+      if (!target || target.workspaceId !== field(payload, "workspaceId") ||
+          target.sessionId !== field(payload, "sessionId")) return;
+      var preview = field(payload, "modelProgress"), state = field(selected, "state");
+      if (!preview || !state || field(state, "status") !== "running" ||
+          field(state, "runId") !== field(preview, "runId")) { refresh(); return; }
+      var existing = field(state, "modelProgress");
+      if (existing && field(existing, "sequence") >= field(preview, "sequence")) return;
+      state.modelProgress = preview;
+      changed(selected);
     } };
   }
   function button(label, className, icon, action) {
@@ -386,5 +414,6 @@
     registerActions: registerActions, bindActions: bindActions,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,
-    createRunObserver: createRunObserver, readOnly: readOnly, runNotice: runNotice };
+    createRunObserver: createRunObserver, acceptProgress: function (payload) { dispatch("progress", payload); },
+    readOnly: readOnly, runNotice: runNotice };
 }());

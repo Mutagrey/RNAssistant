@@ -6,12 +6,13 @@ using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Runtime;
 namespace RNAssistant.Office.WebView
 {
     public sealed partial class AssistantWebBridge
     {
         public PluginApplicationService Plugins { get; set; }
-        private Task<object> HandlePluginAsync(BridgeOperationId operation, JToken payload, CancellationToken token)
+        private Task<object> HandlePluginAsync(string id, BridgeOperationId operation, JToken payload, CancellationToken token)
         {
             if(Plugins==null)throw new PluginException("plugins_unavailable","Plugin host is unavailable.");
             return Task.Run(async ()=> {
@@ -53,16 +54,34 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.RenameProjectChat: return Plugins.RenameProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectChat: return Plugins.DeleteProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectHistory: return Plugins.DeleteProjectHistory(Payload<ProjectChatRequest>(payload));
-                    case BridgeOperationId.SubmitProjectChat: return await Plugins.SubmitProjectChatAsync(Payload<ProjectChatRequest>(payload),settings.Load(),settings.LoadApiKey,token);
+                    case BridgeOperationId.SubmitProjectChat:
+                        var submit = Payload<ProjectChatRequest>(payload);
+                        return await Plugins.SubmitProjectChatAsync(submit, settings.Load(), settings.LoadApiKey, token,
+                            progress => ReportWorkspaceProgress(id, submit, progress));
                     case BridgeOperationId.BeginProjectChatFileUpload: return Plugins.BeginProjectChatFileUpload(Payload<ProjectChatUploadOpenRequest>(payload));
                     case BridgeOperationId.WriteProjectChatFileChunk: return Plugins.WriteProjectChatFileChunk(Payload<ProjectChatUploadChunkRequest>(payload));
                     case BridgeOperationId.CompleteProjectChatFileUpload: return Plugins.CompleteProjectChatFileUpload(Payload<ProjectChatUploadLeaseRequest>(payload),token);
                     case BridgeOperationId.CancelProjectChatFileUpload: return Plugins.CancelProjectChatFileUpload(Payload<ProjectChatUploadLeaseRequest>(payload));
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
-                        return await Plugins.ControlProjectChatAsync(Payload<ProjectChatRequest>(payload),operation==BridgeOperationId.CancelProjectChat,settings.Load(),settings.LoadApiKey,token);
+                        var control = Payload<ProjectChatRequest>(payload);
+                        return await Plugins.ControlProjectChatAsync(control, operation==BridgeOperationId.CancelProjectChat,
+                            settings.Load(), settings.LoadApiKey, token,
+                            progress => ReportWorkspaceProgress(id, control, progress));
                     default:throw new InvalidOperationException("Unknown plugin bridge operation.");
                 }
             },token);
+        }
+
+        private void ReportWorkspaceProgress(string id, ProjectChatRequest request, WorkspaceRunEvent progress)
+        {
+            if (_postMessageJson == null || progress?.ModelProgress == null) return;
+            _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(new ProgressMessage
+            {
+                Type = "progress", Id = id,
+                Payload = new ProgressPayload { WorkspaceId = request.WorkspaceId, SessionId = request.SessionId,
+                    Phase = "model_progress", RunId = progress.ModelProgress.RunId,
+                    ModelProgress = progress.ModelProgress }
+            }));
         }
     }
 }

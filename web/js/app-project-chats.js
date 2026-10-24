@@ -151,7 +151,7 @@
     });
   }
   function render() {
-    runObserver.select(project() && project().available ? active : null, busy);
+    runObserver.select(ownsView() && project() && project().available ? active : null, busy);
     el("New").disabled = busy || !project() || !project().available;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
@@ -389,6 +389,7 @@
       finally { busy = false; render(); }
     });
     window.RNAssistantWorkspaceChat.registerActions("project", {
+      suspend: function () { runObserver.select(null, false); },
       loadPrevious: async function () {
         if (!active || !active.messageStartIndex) return;
         var pid = projectId(), sid = currentId(), beforeIndex = active.messageStartIndex;
@@ -432,7 +433,8 @@
       resolve: function (approve) {
         var pendingId = active && active.pendingId;
         if (pendingId) runChat(function (pid, sid) { return send("resolveProjectChat", { workspaceId: pid, sessionId: sid, pendingId: pendingId, approve: approve }); });
-      }
+      },
+      progress: runObserver.acceptProgress
     });
     render();
   }

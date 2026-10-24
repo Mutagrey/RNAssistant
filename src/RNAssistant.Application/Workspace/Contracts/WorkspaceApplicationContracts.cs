@@ -69,6 +69,7 @@ namespace RNAssistant.Runtime.Contracts
     // Transient preview, scoped to one live attempt. Never durable history or authority.
     public sealed class WorkspaceModelProgress
     {
+        public long Sequence { get; set; }
         public string RunId { get; set; }
         public string StepId { get; set; }
         public string AttemptId { get; set; }

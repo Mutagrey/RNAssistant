@@ -51,12 +51,55 @@ const { chromium } = require('playwright');
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const scoped = !list.textContent.includes('Stale preview.');
       list.remove();
+      const newer = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test', messages: [],
+        state: { status: 'running', runId: 'run', revision: 5,
+          modelProgress: { RunId: 'run', Sequence: 3, Message: 'Latest event.' } } };
+      const older = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test', messages: [],
+        state: { status: 'running', runId: 'run', revision: 5,
+          modelProgress: { RunId: 'run', Sequence: 2, Message: 'Older poll.' } } };
+      const ordered = RNAssistantWorkspaceChat.latestSnapshot(newer, older).state.modelProgress.Message === 'Latest event.';
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
-      return { retained, replaced, updated, reset, finished, scoped, zero };
+      return { retained, replaced, updated, reset, finished, scoped, ordered, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);
+    for (const owner of ['project', 'plugin']) {
+      if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
+      else {
+        await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+        await page.locator('#pluginDevelop').click();
+      }
+      await page.waitForFunction(expected => RNAssistantWorkspaceChat.owner() === expected &&
+        RNAssistantWorkspaceChat.selectedSession(expected === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace'), owner);
+      await page.evaluate(() => {
+        window.__workspaceProgress = [];
+        chrome.webview.addEventListener('message', event => {
+          if (event.data.type === 'progress' && event.data.payload.workspaceId)
+            window.__workspaceProgress.push(event.data.payload);
+        });
+      });
+      await page.locator('#chatInput').fill('Проверка живого ответа');
+      await page.locator('#chatInput').press('Enter');
+      await page.waitForFunction(() => document.querySelector('#messages .agent-stream-step')?.textContent.includes('Готовлю ответ проекта'));
+      const delivered = await page.evaluate(() => {
+        const events = window.__workspaceProgress;
+        const last = events[events.length - 1];
+        const preview = document.querySelector('#messages .agent-stream-step');
+        const before = preview.textContent;
+        RNAssistantWorkspaceChat.acceptProgress({ workspaceId: last.workspaceId, sessionId: last.sessionId,
+          modelProgress: Object.assign({}, last.modelProgress, { Sequence: 1, Message: 'Stale event.' }) });
+        RNAssistantWorkspaceChat.acceptProgress({ workspaceId: 'foreign-workspace', sessionId: last.sessionId,
+          modelProgress: Object.assign({}, last.modelProgress, { Sequence: 999, Message: 'Foreign event.' }) });
+        return { count: events.length, unchanged: preview.textContent === before,
+          scope: last.workspaceId === (RNAssistantWorkspaceChat.owner() === 'project'
+            ? 'preview-data-workspace' : 'preview-plugin-workspace') };
+      });
+      assert.ok(delivered.count >= 2, owner + ': native-shaped progress events reached the browser');
+      assert.equal(delivered.scope, true, owner + ': event has exact workspace scope');
+      assert.equal(delivered.unchanged, true, owner + ': stale and foreign events do not replace preview');
+      await page.waitForFunction(() => !document.querySelector('#messages .agent-stream-step'));
+    }
     assert.deepEqual(errors, []);
-    console.log('PASS workspace progress: scoped live preview, retry reset, accepted reasoning, stable focus/DOM and reflection depth zero');
+    console.log('PASS workspace progress: project/plugin bridge events, scoped live preview, retry reset, accepted reasoning and stable DOM');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

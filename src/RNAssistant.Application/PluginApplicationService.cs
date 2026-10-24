@@ -807,7 +807,7 @@ namespace RNAssistant.Application
         }
 
         public async Task<ProjectChatStateDto> SubmitProjectChatAsync(ProjectChatRequest request, AppSettings settings,
-            Func<string> key, CancellationToken token)
+            Func<string> key, CancellationToken token, Action<WorkspaceRunEvent> progress = null)
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
@@ -819,7 +819,7 @@ namespace RNAssistant.Application
             try
             {
                 await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
-                    cancellationToken: token).ConfigureAwait(false);
+                    progress: progress, cancellationToken: token).ConfigureAwait(false);
             }
             catch (WorkspaceSessionLeaseUnavailableException)
             {
@@ -831,7 +831,7 @@ namespace RNAssistant.Application
         }
 
         public async Task<ProjectChatStateDto> ControlProjectChatAsync(ProjectChatRequest request, bool cancel,
-            AppSettings settings, Func<string> key, CancellationToken token)
+            AppSettings settings, Func<string> key, CancellationToken token, Action<WorkspaceRunEvent> progress = null)
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
@@ -846,7 +846,8 @@ namespace RNAssistant.Application
                 try
                 {
                     await Conversations.ResolvePendingAsync(workspace, session.Id, request.PendingId, request.Approve,
-                        settings, key, cancellationToken: token, modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
+                        settings, key, progress: progress, cancellationToken: token,
+                        modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
                 }
                 catch (WorkspaceSessionLeaseUnavailableException)
                 {

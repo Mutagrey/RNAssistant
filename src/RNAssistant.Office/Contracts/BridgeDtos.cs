@@ -7,6 +7,7 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Office.Contracts
 {
@@ -87,6 +88,15 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ProgressPayload
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)]
+        public string WorkspaceId { get; set; }
+
+        [JsonProperty("sessionId", NullValueHandling = NullValueHandling.Ignore)]
+        public string SessionId { get; set; }
+
+        [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)]
+        public WorkspaceModelProgress ModelProgress { get; set; }
+
         [JsonProperty("chatId")]
         public string ChatId { get; set; }
 

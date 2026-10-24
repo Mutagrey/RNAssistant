@@ -21,6 +21,8 @@ views and 80-record history pages for project/plugin. Remaining: actual reported
 endpoint/model evidence, Windows/Office/WebView2 qualification and live token
 delivery between processes. Full Office/workspace delivery and action parity is
 not claimed by these targeted repairs.
+Local project/plugin runs now forward model preview through the shared bridge;
+cross-process live tokens remain unavailable until a durable response is read.
 Per-message workspace run outcomes and pre-response terminal diagnostics now
 survive history paging and later runs; the earlier current-snapshot-only failure
 presentation is no longer the working baseline.

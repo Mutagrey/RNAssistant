@@ -19,6 +19,9 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Runtime.Contracts;
+using RNAssistant.Runtime;
+using RNAssistant.Office;
+using RNAssistant.Office.WebView;
 
 namespace RNAssistant.Harness
 {
@@ -106,26 +109,50 @@ namespace RNAssistant.Harness
                             var plugin = service.Create(new PluginCreateRequest { Name = "Source scope",
                                 RootPath = Path.Combine(paths.Root, "plugin-source"), Description = "Test" });
                             var source = service.ChatState(plugin.PluginId);
+                            var sourceProgress = new System.Collections.Generic.List<WorkspaceRunEvent>();
                             var sourceReply = service.SubmitProjectChatAsync(new ProjectChatRequest {
                                 WorkspaceId = source.Project.WorkspaceId, SessionId = source.SessionId,
                                 Input = new WorkspaceSubmitInputRequest { SessionId = source.SessionId,
                                     Message = "Edit the plugin", Mode = ChatModes.Agent }
-                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            }, settings, () => "test-key", CancellationToken.None, sourceProgress.Add).GetAwaiter().GetResult();
                             AssertTrue(sourceReply.State.Office == null && office.Captures == 0 && office.Binds == 0,
                                 "plugin source run never captures or binds an Office document");
+                            var sourcePreview = sourceProgress.Where(item => item.ModelProgress != null).ToArray();
+                            AssertTrue(sourcePreview.Length > 0 && sourcePreview[0].ModelProgress.Sequence > 0 &&
+                                sourcePreview.All(item => item.ModelProgress.RunId == sourceReply.State.RunId),
+                                "plugin source forwards ordered, run-scoped model preview");
 
                             var projectRoot = Path.Combine(paths.Root, "ordinary-project");
                             Directory.CreateDirectory(projectRoot);
                             var workspaceId = service.ConnectProjectWorkspace(new ProjectConnectionRequest {
                                 RootPath = projectRoot }).SelectedWorkspaceId;
                             var project = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
-                            var projectReply = service.SubmitProjectChatAsync(new ProjectChatRequest {
-                                WorkspaceId = workspaceId, SessionId = project.SessionId,
-                                Input = new WorkspaceSubmitInputRequest { SessionId = project.SessionId,
-                                    Message = "Inspect this project", Mode = ChatModes.Agent }
-                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
-                            AssertTrue(projectReply.State.Office != null && office.Captures == 1 && office.Binds == 1,
-                                "ordinary project chat still captures its Office target");
+                            new SettingsService(paths).Save(settings);
+                            var progressMessages = new System.Collections.Generic.List<string>();
+                            using (var bridge = new AssistantWebBridge(new AssistantController(paths), progressMessages.Add))
+                            {
+                                bridge.Plugins = service;
+                                var bridgeRequest = WorkspaceBridgeRequest(BridgeToken(bridge), "submitProjectChat",
+                                    new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = project.SessionId,
+                                        Input = new WorkspaceSubmitInputRequest { SessionId = project.SessionId,
+                                            Message = "Inspect this project", Mode = ChatModes.Agent } });
+                                var reply = JObject.Parse(bridge.HandleMessageAsync(bridgeRequest).GetAwaiter().GetResult());
+                                AssertTrue((bool)reply["ok"], "project chat submits through the shared bridge");
+                                var projectReply = service.ProjectChat(new ProjectChatRequest {
+                                    WorkspaceId = workspaceId, SessionId = project.SessionId });
+                                AssertTrue(projectReply.State.Office != null && office.Captures == 1 && office.Binds == 1,
+                                    "ordinary project chat still captures its Office target");
+                                var preview = progressMessages.Select(JObject.Parse)
+                                    .Where(item => (string)item["payload"]?["modelProgress"]?["RunId"] == projectReply.State.RunId)
+                                    .ToArray();
+                                AssertTrue(preview.Length > 0 && preview.All(item =>
+                                    (string)item["id"] == (string)JObject.Parse(bridgeRequest)["id"] &&
+                                    (string)item["type"] == "progress" &&
+                                    (string)item["payload"]?["workspaceId"] == workspaceId &&
+                                    (string)item["payload"]?["sessionId"] == project.SessionId &&
+                                    (long)item["payload"]?["modelProgress"]?["Sequence"] > sourcePreview.Last().ModelProgress.Sequence),
+                                    "project bridge delivers ordered model preview for the exact workspace/session");
+                            }
                         }
                         server.GetAwaiter().GetResult();
                         var sourcePrompt = string.Join("\n", ((JArray)JObject.Parse(requests[0])["messages"])
