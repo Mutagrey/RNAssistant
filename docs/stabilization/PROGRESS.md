@@ -1,5 +1,69 @@
 # Stabilization progress
 
+## HTML annotation editor and shared composer list — 2026-10-24
+
+Owner: Web visual annotation UI / Core selection body / Office chat draft projection.
+The right HTML browser now opens a small host-owned comment editor by a selected
+element. Done stages the selection and comment in the existing CAS attachment,
+adds one entry to the shared Office composer, and leaves a clickable number on
+the page. The marker follows page scroll; Show resolves the same unique DOM
+selector, and the list marks missing or offscreen targets. Its editor and the
+composer list can edit or remove the same draft attachment. Editing stages a replacement before
+discarding the old draft. The inspector waits for an activation acknowledgement,
+so a click made immediately after toggling does not race its capture listener.
+Draft numbering is protected with the existing chat draft; native hydration
+projects completed annotation details from the CAS body.
+
+Focused Core/CAS and browser editor, marker, scroll, edit/delete checks pass.
+Typing in an unfinished open editor is not yet durable; sent annotations do not
+yet reopen from the immutable message on the page. Plugin capture, source edit
+read-back and Windows/Office/WebView2 qualification remain open.
+
+## Authored HTML beside the shared Office chat — 2026-10-24
+
+Owner: Web shell route / existing authored HTML preview owner. The current
+revision of an Office chat's HTML workspace opens on the right from Materials or
+its chat card. The exact existing iframe, Inspector controls and resource renderer
+move between Materials and the shared chat; no second frame or chat is created.
+The browser and chat diagnostics use the same right slot. Hide/show keeps the live
+frame and chat draft; explicit close, Materials navigation or changed chat/revision
+returns the frame and revokes the old preview. The initial split is 58/42 with
+shared keyboard/drag resizing, a wider mode and a narrow overlay. The browser
+header now shows title/path, reload, an Inspector mode button styled as
+"Аннотировать", size, hide and close actions. The Materials view retains
+"В чат" for attaching a selection without a comment.
+
+Focused browser routing/geometry, Inspector, HTML reuse, shared-chat and product
+mock checks pass. Historical HTML/resource routes, back/forward, restored open
+state, plugin-frame capture and real Windows/Office/WebView2 qualification remain
+open. The later annotation editor slice is described above.
+
+## Preview surfaces: shared location, loading and reload — 2026-10-24
+
+Owner: Web preview presentation / existing plugin and authored HTML frame owners.
+One small preview-surface control presents the exact resource label and loading or
+error state for both frames. The plugin's existing refresh action now lives inside
+its right preview; HTML has an explicit reload through its existing snapshot
+renderer, which revokes inspector generation and resource leases once. Neither
+path creates another iframe, bridge or resource store. Focused plugin layout and
+lifecycle, HTML preview reuse and browser integration checks pass. The later
+authored-HTML route is described above. General resource routing, back/forward,
+restoration and Windows/WebView2 lifecycle qualification remain open.
+The later numbered annotation editor, page markers and composer list are described
+above; their UX contract remains in `docs/ui-design.md`.
+
+## Unified Shell: central plugin chat and right preview — 2026-10-24
+
+Owner: Web shell layout / plugin navigation / shared ChatView. Selecting a plugin
+temporarily collapses its tree without overwriting the saved navigation preference.
+The same ChatView stays in the center; the existing plugin iframe occupies the
+right preview, and its toggle hides only that preview. Reopening it preserves the
+live iframe, chat draft and run observer. The shared splitter keeps a separate
+chat/browser width preference. Focused Chrome chat-layout and plugin lifecycle
+checks pass. The reusable right SurfaceHost for HTML/resources, browser navigation
+and restoration, plugin-frame Inspector capture, and Windows/WebView2 qualification
+remain open.
+
 ## Visual Inspector: workspace selection intake and model read — 2026-10-24
 
 Owner: Core chat-attachment binding / Application workspace resource provider.

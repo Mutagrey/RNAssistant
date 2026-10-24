@@ -75,7 +75,6 @@ const root = path.resolve(__dirname, '../..');
       chatViewTest.pendingWorkspace = 'preview-plugin-workspace';
       return RNAssistantPlugins.select('data-templates');
     });
-    await page.locator('#pluginDevelop').click();
     await page.locator('#workspaceChatReject').waitFor({state:'visible'});
     await page.locator('#workspaceChatReject').click();
     await page.waitForFunction(() => chatViewTest.calls.length === 3);

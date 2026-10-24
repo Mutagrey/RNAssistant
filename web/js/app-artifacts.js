@@ -456,7 +456,7 @@
     card.type = "button";
     card.className = "chat-artifact-card kind-" + kind + " category-" + kindCategory(artifact);
     card.dataset.artifactId = artifactId(artifact);
-    card.title = removed ? "Ресурс удалён" : "Открыть во вкладке «Артефакты»";
+    card.title = removed ? "Ресурс удалён" : kind === "html_workspace" ? "Открыть HTML" : "Открыть в «Материалах»";
     card.setAttribute("aria-label", removed
       ? "Ресурс удалён: " + artifactTitle(artifact)
       : "Открыть " + kindLabel(kind) + " «" + artifactTitle(artifact) + "»");
@@ -492,7 +492,11 @@
       card.title = "Метаданные ресурса недоступны. Ссылку можно убрать через «Ресурсы».";
       card.setAttribute("aria-label", card.title);
     }
-    if (!removed && !unavailable) card.addEventListener("click", function () { openArtifactResource(artifact); });
+    if (!removed && !unavailable) card.addEventListener("click", function () {
+      if (kind === "html_workspace" && window.RNAssistantChatBrowser &&
+          window.RNAssistantChatBrowser.openArtifact(artifact)) return;
+      openArtifactResource(artifact);
+    });
     return card;
   }
 

@@ -107,6 +107,7 @@ namespace RNAssistant.Core.Storage
                     (item.Mode != "agent" && item.Mode != "plan") || item.PendingOfficeInput != null)) ||
                 item.ResourceDraftIds == null || item.ResourceDraftIds.Count > 10 ||
                 item.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
+                (item.Owner == "office" && (item.NextAnnotationNumber < 1 || item.NextAnnotationNumber > 1000001)) ||
                 (item.Owner == "workspace" && item.ResourceDraftIds.Count != 0))
                 throw new InvalidDataException("Chat draft has an invalid identity or content.");
             var pending = item.PendingInput;
@@ -140,10 +141,11 @@ namespace RNAssistant.Core.Storage
         public string Mode { get; set; }
         public bool Reasoning { get; set; }
         public List<string> ResourceDraftIds { get; set; } = new List<string>();
+        public int NextAnnotationNumber { get; set; } = 1;
         public PendingChatInput PendingInput { get; set; }
         public PendingOfficeChatInput PendingOfficeInput { get; set; }
         [JsonIgnore]
-        public bool IsEmpty { get { return string.IsNullOrEmpty(Text) && ResourceDraftIds.Count == 0 && PendingInput == null &&
+        public bool IsEmpty { get { return string.IsNullOrEmpty(Text) && ResourceDraftIds.Count == 0 && NextAnnotationNumber == 1 && PendingInput == null &&
             PendingOfficeInput == null && (Owner == "office" || (Mode == "agent" && !Reasoning)); } }
     }
 

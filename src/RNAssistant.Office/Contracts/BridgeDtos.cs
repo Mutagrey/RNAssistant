@@ -43,6 +43,9 @@ namespace RNAssistant.Office.Contracts
         public string Kind { get; set; }
         public long Size { get; set; }
         public string ExtractionWarning { get; set; }
+        public HtmlVisualAnnotation VisualAnnotation { get; set; }
+        public string VisualSourceArtifactId { get; set; }
+        public int VisualSourceRevision { get; set; }
 
         public static ChatDraftAttachmentView From(ChatAttachment attachment)
         {

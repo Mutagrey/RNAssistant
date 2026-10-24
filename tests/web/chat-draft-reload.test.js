@@ -33,7 +33,6 @@ const root = path.resolve(__dirname, '../..');
     });
 
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    await page.locator('#pluginDevelop').click();
     await page.locator('#chatInput').waitFor({state:'visible'});
     const workspaceId = 'preview-plugin-workspace';
     await page.waitForFunction(id => !!RNAssistantWorkspaceChat.selectedSession(id), workspaceId);
@@ -54,7 +53,6 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик Office после reload');
     assert.equal(await page.evaluate(() => state.inboxSubmissions['preview-chat'].OperationId), 'office-retry-id');
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    await page.locator('#pluginDevelop').click();
     await page.waitForFunction(target => RNAssistantWorkspaceChat.selectedSession(target.workspaceId) === target.sessionId,
       {workspaceId, sessionId});
     assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик workspace после reload');
@@ -79,7 +77,6 @@ const root = path.resolve(__dirname, '../..');
     await page.reload();
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    await page.locator('#pluginDevelop').click();
     await page.waitForFunction(target => RNAssistantWorkspaceChat.selectedSession(target.workspaceId) === target.sessionId,
       {workspaceId, sessionId});
     assert.equal(await page.locator('#chatInput').inputValue(), '', 'accepted draft stays cleared after reload');

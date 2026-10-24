@@ -80,7 +80,6 @@ const root = path.resolve(__dirname, '../..');
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
         await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-        await page.locator('#pluginDevelop').click();
       }
       const notice = page.locator('#workspaceChatNotice');
       await page.waitForFunction(() => document.querySelector('#workspaceChatNotice').textContent ===

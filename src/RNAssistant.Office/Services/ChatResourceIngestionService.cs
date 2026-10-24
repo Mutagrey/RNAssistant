@@ -52,7 +52,8 @@ namespace RNAssistant.Office.Services
             if (matches.Length != 1)
                 throw new InvalidOperationException("Версия HTML-источника изменилась. Выберите элемент заново.");
             var source = ChatResourceUri.CreateArtifactRevision(session, matches[0]);
-            var body = HtmlVisualSelectionPolicy.Capture(request.Selection, matches[0].Title);
+            var body = HtmlVisualSelectionPolicy.Capture(request.Selection, matches[0].Title,
+                request.Comment, request.AnnotationNumber);
             var draft = Stage(session, "html-selection-" + request.Selection.Tag + ".json",
                 "application/json", body, source);
             if (draft.Status != "error") return draft;

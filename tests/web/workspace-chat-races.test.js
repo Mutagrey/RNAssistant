@@ -25,7 +25,6 @@ const root = path.resolve(__dirname, '../..');
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
         await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-        await page.locator('#pluginDevelop').click();
       }
       await page.evaluate(() => {
         const original = send;
@@ -66,7 +65,6 @@ const root = path.resolve(__dirname, '../..');
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
         await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-        await page.locator('#pluginDevelop').click();
       }
       await page.evaluate(owner => {
         const workspaceId = owner === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace';
@@ -87,7 +85,6 @@ const root = path.resolve(__dirname, '../..');
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    await page.locator('#pluginDevelop').click();
     await page.evaluate(() => {
       const original = send;
       window.selectionRace = {release:null, delivered:false};

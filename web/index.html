@@ -31,7 +31,8 @@
   <link rel="stylesheet" href="css/app-context-chips.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-models.css?v=model-tables-20260930-1">
   <link rel="stylesheet" href="css/app-workspace.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-plugins.css?v=questions-20261023-1">
+  <link rel="stylesheet" href="css/app-plugins.css?v=preview-surface-20261024-1">
+  <link rel="stylesheet" href="css/app-preview-surface.css?v=preview-surface-20261024-2">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
@@ -57,6 +58,8 @@
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-screens.css?v=questions-20261023-1">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
+  <link rel="stylesheet" href="css/app-chat-browser.css?v=html-right-20261024-2">
+  <link rel="stylesheet" href="css/app-visual-annotations.css?v=annotation-editor-20261024-1">
 </head>
 <body>
   <div class="shell app-shell">
@@ -96,6 +99,7 @@
             <span id="activeChatSubtitle"></span>
           </div>
           <div class="chatbar-actions">
+            <button type="button" class="button compact chat-browser-toggle" id="chatBrowserToggle" aria-controls="chatBrowser" aria-label="Показать предпросмотр" title="Показать предпросмотр" hidden><svg data-rna-icon="panel" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Предпросмотр</span></button>
             <button id="toggleChatInspectorButton"></button>
           </div>
         </div>
@@ -362,6 +366,8 @@
               <div id="modelContextBody" class="model-context-body" role="tabpanel" aria-labelledby="modelContextMessagesTab" tabindex="0"></div>
             </section>
           </aside>
+          <div class="splitter chat-browser-splitter" id="chatBrowserSplitter" role="separator" aria-orientation="vertical" aria-controls="chatBrowser" aria-label="Ширина браузера" tabindex="0"></div>
+          <aside class="chat-browser" id="chatBrowser" aria-label="Предпросмотр HTML" aria-hidden="true"><div class="chat-browser-frame-mount" id="chatBrowserFrameMount"></div></aside>
         </div>
         <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="310" data-min-left="240" hidden>
           <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
@@ -609,9 +615,9 @@
               <button id="pluginPreview" class="icon-btn" type="button" title="Обновить предпросмотр из исходников" aria-label="Обновить предпросмотр"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
               <details class="plugin-version-menu" id="pluginVersions"><summary class="button compact ghost" aria-label="Сохранённые версии плагина"><svg data-rna-icon="clock" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Версии</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><div class="plugin-version-caption">Сохранённые публикации</div><div id="pluginVersionItems" class="plugin-version-items"></div><button id="pluginVersionMore" class="plugin-version-more" type="button" hidden>Показать ещё</button></div></details>
               <details class="plugin-actions-menu plugin-toolbar-actions"><summary class="icon-btn" title="Действия с плагином" aria-label="Действия с плагином"><svg data-rna-icon="more" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button id="pluginReopen" type="button" aria-label="Открыть активную версию"><svg data-rna-icon="open" viewBox="0 0 24 24" aria-hidden="true"></svg>Открыть активную</button><button id="pluginDisable" type="button" aria-label="Отключить плагин"><svg data-rna-icon="pause" viewBox="0 0 24 24" aria-hidden="true"></svg>Отключить</button></div></details>
-              <button id="pluginDevelop"></button>
+              <button id="pluginSurfaceToggle"></button>
             </div>
-            <div class="plugin-body split-layout" id="pluginBody" data-split-key="plugin-development" data-default-ratio="0.56" data-min-left="240" data-min-right="300" data-max-ratio="0.95"><div class="plugin-preview" id="pluginPreviewMount"></div><div class="splitter" id="pluginDevelopmentSplitter" role="separator" aria-orientation="vertical" aria-controls="pluginChat" aria-label="Ширина панели разработки" tabindex="0" hidden></div><aside class="plugin-chat chat-main" id="pluginChat" hidden></aside></div></div>
+            <div class="plugin-body split-layout" id="pluginBody" data-split-key="plugin-chat-browser" data-default-ratio="0.58" data-min-left="300" data-min-right="300" data-max-ratio="0.7"><aside class="plugin-chat chat-main" id="pluginChat"></aside><div class="splitter" id="pluginSurfaceSplitter" role="separator" aria-orientation="vertical" aria-controls="pluginChat" aria-label="Ширина чата плагина" tabindex="0" hidden></div><div class="plugin-preview" id="pluginPreviewMount" hidden><div class="plugin-preview-frame-host" id="pluginPreviewFrameHost"></div></div></div></div>
           </div>
         </div>
       </section>
@@ -685,6 +691,7 @@
                 </div>
                 <button class="button compact html-workspace-inspect-button" id="inspectHtmlWorkspaceButton" type="button" aria-pressed="false" disabled>Выбрать элемент</button>
                 <button class="button compact html-workspace-inspect-button" id="attachHtmlWorkspaceSelectionButton" type="button" disabled>В чат</button>
+                <button class="button compact" id="openHtmlWorkspaceRightButton" type="button" hidden>Открыть справа</button>
                 <span class="html-workspace-inspect-status" id="htmlWorkspaceInspectStatus" role="status"></span>
                 <div class="resource-editor-actions">
                   <button class="icon-btn html-workspace-icon" id="copyHtmlWorkspaceButton" type="button" title="Копировать исходный текст" aria-label="Копировать исходный текст"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -1125,14 +1132,15 @@
   <script src="js/app-core.js?v=workspace-progress-20261024-1"></script>
   <script src="js/app-icons.js?v=shared-icons-20261019-1"></script>
   <script src="js/app-panel-toggle.js"></script>
+  <script src="js/app-preview-surface.js?v=preview-surface-20261024-2"></script>
   <script src="js/app-rail-popovers.js"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
   <script src="js/app-library-groups.js"></script>
   <script src="js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=conversation-v8-20261023-1"></script>
-  <script src="js/app-layout.js"></script>
-  <script src="js/app-chat-inspector.js?v=inspector-request-20261023-3"></script>
+  <script src="js/app-layout.js?v=plugin-right-preview-20261024-1-html-right-1"></script>
+  <script src="js/app-chat-inspector.js?v=inspector-request-20261023-3-html-right-1"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
@@ -1168,17 +1176,19 @@
   <script src="js/app-vba-project.js?v=vba-upload-20260906-1"></script>
   <script src="js/app-vba.js?v=shared-editor-tabs-20261019-1"></script>
   <script src="js/app-html-resource-export.js?v=binary-chunks-20260906-1"></script>
-  <script src="js/app-visual-inspector.js?v=inspector-draft-20261024-1"></script>
+  <script src="js/app-visual-inspector.js?v=inspector-draft-20261024-1-browser-chrome-2"></script>
+  <script src="js/app-visual-annotations.js?v=annotation-editor-20261024-1"></script>
   <script src="js/app-html-workspace-preview.js?v=binary-chunks-20260906-1-vendors-1-visual-inspector-1"></script>
   <script src="js/app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1"></script>
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
-  <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1-large-chat-1-vendors-1-artifact-tree-20261013-1-visual-inspector-1"></script>
+  <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1-preview-surface-20261024-1-html-right-2"></script>
   <script src="js/app-tree-adapter.js?v=artifact-gallery-20260902-1-artifact-tree-20261013-1"></script>
   <script src="js/app-html-workspace-tree.js?v=html-memory-20261002-1-artifact-tree-20261013-1"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1"></script>
-  <script src="js/app-html-workspace.js?v=visual-selection-draft-20261024-1"></script>
+  <script src="js/app-html-workspace.js?v=html-memory-20261002-1-preview-surface-20261024-1-html-right-2"></script>
+  <script src="js/app-chat-browser.js?v=html-right-20261024-2"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
   <script src="js/app-model-context.js?v=inspector-request-20261023-3"></script>
   <script src="js/app-context-inspector.js?v=single-composer-20261023-1"></script>
@@ -1186,7 +1196,7 @@
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
   <script src="js/app-agent-model.js?v=catalog-display-chat-20260908-1-run-isolation-1"></script>
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
-  <script src="js/app-artifacts.js?v=artifact-links-20261014-1-image-display-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-artifacts.js?v=artifact-links-20261014-1-image-display-1-artifact-tree-20261013-1-html-right-1"></script>
   <script src="js/app-artifact-versions.js?v=artifact-versions-20261014-1"></script>
   <script src="js/app-artifact-catalog.js?v=artifact-versions-20261014-1"></script>
   <script src="js/app-task-list.js?v=run-outcome-20261013-1"></script>
@@ -1205,8 +1215,8 @@
   <script src="js/app-chat.js?v=chat-view-actions-20261023-1"></script>
   <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
   <script src="js/app-workspace-chat.js?v=workspace-progress-20261024-1"></script>
-  <script src="js/app-plugins.js?v=draft-recovery-20261024-1"></script>
+  <script src="js/app-plugins.js?v=preview-surface-20261024-1"></script>
   <script src="js/app-project-chats.js?v=draft-recovery-20261024-1"></script>
-  <script src="js/app.js?v=rail-popovers-20261019-1-visual-inspector-1"></script>
+  <script src="js/app.js?v=plugin-right-preview-20261024-1-html-right-1"></script>
 </body>
 </html>

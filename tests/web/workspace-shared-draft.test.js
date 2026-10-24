@@ -24,7 +24,6 @@ const root = path.resolve(__dirname, '../..');
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    await page.locator('#pluginDevelop').click();
     await page.locator('#chatInput').waitFor({state:'visible'});
     const viewIdentity = await page.evaluate(() => {
       const view = document.querySelector('#workspaceChatView');

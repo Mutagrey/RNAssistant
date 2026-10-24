@@ -3,7 +3,8 @@
   var items=[],selected=null,candidate=null,view=null,chat=null,busy=false,chatBusy=false,epoch=0;
   var previewBusy=false,selecting=false,sourceStamp=null,candidateStamp=null,sourceTimer=null,sourceDebounce=null;
   var chatComposer=null,chatEpoch=0,stopTitleWatch=null;
-  var developmentOpen=false,developmentToggle=null;
+  var previewOpen=false,previewToggle=null;
+  var previewSurface=null;
   var runObserver=window.RNAssistantWorkspaceChat.createRunObserver(
     function(target){return send('getProjectChat',target);},
     function(snapshot){chat=window.RNAssistantWorkspaceChat.latestSnapshot(chat,snapshot);renderChat();},
@@ -88,7 +89,7 @@
     renderNavigation();
   });
   async function run(action){if(busy)return;busy=true;controls();try{await action();}catch(error){status(error.message,true);}finally{busy=false;controls();}}
-  function controls(){runObserver.select(developmentOpen&&ownsChat()?chat:null,chatBusy);['Preview','Apply','Reopen','Disable'].forEach(function(id){el(id).disabled=busy||previewBusy||!selected||
+  function controls(){runObserver.select(ownsChat()?chat:null,chatBusy);['Preview','Apply','Reopen','Disable'].forEach(function(id){el(id).disabled=busy||previewBusy||!selected||
     id==='Apply'&&(!candidate||!candidate.hasChanges||!!browsingRelease)||(id==='Reopen'||id==='Disable')&&!selected.enabled;});
     el('Apply').hidden=!candidate||!candidate.hasChanges||!selected||!!browsingRelease;
     el('RestoreVersion').hidden=!browsingRelease;el('RestoreVersion').disabled=busy||previewBusy||!selected;
@@ -103,14 +104,18 @@
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
     var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconSvg,item.iconColor);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
   });if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
-  async function closeView(){frameReady=false;pendingNavigation=null;if(!view)return;var old=view;view=null;el('PreviewMount').replaceChildren();await send('closePlugin',{instanceId:old.instanceId});}
-  async function showView(preview,releaseId){var current=epoch,previous=view,opened=await send('openPlugin',{
-      pluginId:selected.pluginId,candidateId:preview&&!releaseId?candidate.candidateId:null,releaseId:releaseId||null});
+  async function closeView(){frameReady=false;pendingNavigation=null;previewSurface.clear();var old=view;view=null;el('PreviewFrameHost').replaceChildren();if(old)await send('closePlugin',{instanceId:old.instanceId});}
+  async function showView(preview,releaseId){var current=epoch,previous=view,opened;
+    var label=selected.name+(releaseId?' · сохранённая версия':preview?' · предпросмотр':' · активная версия');
+    try{opened=await send('openPlugin',{
+      pluginId:selected.pluginId,candidateId:preview&&!releaseId?candidate.candidateId:null,releaseId:releaseId||null});}
+    catch(error){if(current===epoch)previewSurface.fail(label,error.detail||error.message);throw error;}
     if(current!==epoch){await send('closePlugin',{instanceId:opened.instanceId});return;}
     view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
     var frame=document.createElement('iframe');frame.title=selected.name+(releaseId?' — сохранённая версия':preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
     if(dataPlugin())frame.addEventListener('load',syncAppearance);
-    frame.src=view.entryUrl;el('PreviewMount').replaceChildren(frame);
+    previewSurface.watch(frame,label);
+    frame.src=view.entryUrl;el('PreviewFrameHost').replaceChildren(frame);
     if(previous)await send('closePlugin',{instanceId:previous.instanceId});
     status('');}
   function stopSourceWatch(){clearInterval(sourceTimer);clearTimeout(sourceDebounce);sourceTimer=null;sourceDebounce=null;sourceStamp=null;}
@@ -120,56 +125,57 @@
       candidate=checked;candidateStamp=source;await showView(true);sourceStamp=source;delete publishedSourceStamps[id];status('');}
     catch(error){if(current===epoch){candidate=null;candidateStamp=null;status('Предпросмотр не обновлён: '+error.message,true);}}
     finally{previewBusy=false;controls();
-      if(current!==epoch&&!selecting&&selected&&(!view||!view.preview)&&!el('Workbench').hidden&&developmentOpen)checkAndPreview(sourceStamp);}}
-  async function pollSource(){if(!selected||busy||browsingRelease||el('Workbench').hidden||!developmentOpen||document.hidden||!el('Workbench').closest('.panel.active')||previewBusy)return;
+      if(current!==epoch&&!selecting&&selected&&(!view||!view.preview)&&!el('Workbench').hidden&&previewOpen)checkAndPreview(sourceStamp);}}
+  async function pollSource(){if(!selected||busy||browsingRelease||el('Workbench').hidden||!previewOpen||document.hidden||!el('Workbench').closest('.panel.active')||previewBusy)return;
     var id=selected.pluginId,current=epoch;
     try{var state=await send('getPluginSourceState',{pluginId:id});if(current!==epoch||!selected||selected.pluginId!==id||state.stamp===sourceStamp)return;
       sourceStamp=state.stamp;clearTimeout(sourceDebounce);sourceDebounce=setTimeout(function(){checkAndPreview(state.stamp);},450);
     }catch(error){if(current===epoch)status('Не удалось проверить изменения исходников: '+error.message,true);}}
   function startSourceWatch(){clearInterval(sourceTimer);sourceTimer=setInterval(function(){pollSource();},1200);}
-  function updateDevelopment(refresh){var open=developmentOpen;el('Chat').hidden=!open;el('DevelopmentSplitter').hidden=!open;
-    if(!open)runObserver.select(null,false);
-    developmentToggle.sync();
-    el('Workbench').classList.toggle('plugin-developing',open);
-    if(open){window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
-      if(chat)renderChat();
-      else{chatComposer.select(null);chatComposer.lock(true);el('Messages').replaceChildren();el('Messages')._chatSignature=null;
-        el('ChatTitle').textContent='Чат исходников';window.RNAssistantWorkspaceChat.renderWorkspaceControls(null);
-        el('Send').disabled=true;chatStatus('Загружаю чат…');}
-      refreshSplitPanes();}
-    if(refresh&&open&&!browsingRelease){if(!view||!view.preview)checkAndPreview();else pollSource();}}
+  function updateSurface(refresh){var open=previewOpen;el('PreviewMount').hidden=!open;el('SurfaceSplitter').hidden=!open;
+    previewToggle.sync();
+    el('Workbench').classList.toggle('plugin-surface-open',open);
+    window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
+    if(chat)renderChat();
+    else{chatComposer.select(null);chatComposer.lock(true);el('Messages').replaceChildren();el('Messages')._chatSignature=null;
+      el('ChatTitle').textContent='Чат исходников';window.RNAssistantWorkspaceChat.renderWorkspaceControls(null);
+      el('Send').disabled=true;chatStatus('Загружаю чат…');}
+    if(open)refreshSplitPanes();
+    if(refresh&&open&&!browsingRelease){if(!view)checkAndPreview();else pollSource();}}
   async function select(id,sessionId){
     if(!busy&&selected&&selected.pluginId===id&&view&&!el('Workbench').hidden){
       switchTab('plugins');
+      if(window.RNAssistantShellLayout)window.RNAssistantShellLayout.collapseForPlugin();
       var workspaceId=selected.sourceWorkspaceId,targetSession=sessionId||window.RNAssistantWorkspaceChat.selectedSession(workspaceId)||null;
-      if(sessionId)developmentOpen=true;
+      previewOpen=true;
       if(!chat||chat.sessionId!==targetSession){
         chat=null;chatEpoch++;chatBusy=false;runObserver.select(null,false);closeHistory();
         if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
-        updateDevelopment(false);
-      }else if(sessionId)updateDevelopment(false);
-      try{await readChat(sessionId);if(developmentOpen)await pollSource();}
-      catch(error){if(developmentOpen)chatStatus(error.detail||error.message,true);else status(error.detail||error.message,true);}
+        updateSurface(false);
+      }else updateSurface(false);
+      try{await readChat(sessionId);await pollSource();}
+      catch(error){chatStatus(error.detail||error.message,true);}
       return;
     }
     selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;candidateStamp=null;browsingRelease=null;versionEpoch++;versionCursor=null;el('Versions').open=false;chat=null;chatEpoch++;chatBusy=false;runObserver.select(null,false);
     closeHistory();
     if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
-    if(sessionId)developmentOpen=true;
+    previewOpen=true;
     switchTab('plugins');el('Manager').hidden=true;el('Workbench').hidden=false;el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;el('Source').textContent=selected.sourceRoot;
+    if(window.RNAssistantShellLayout)window.RNAssistantShellLayout.collapseForPlugin();
     el('ChatSource').textContent=selected.sourceRoot;el('ChatSource').title=selected.sourceRoot;
     if(ownsChat()){el('Messages').replaceChildren();el('Messages')._chatSignature=null;}
     el('Workbench').classList.toggle('plugin-data-templates',dataPlugin());el('Workbench').classList.toggle('split-layout',dataPlugin());
     if(typeof refreshSplitPanes==='function')refreshSplitPanes();
     navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};el('ProjectName').textContent=dataPlugin()?selected.name:'';el('Title').textContent=dataPlugin()?navigation.projectName:selected.name;renderNavigation();
     if(window.RNAssistantShellLayout)window.RNAssistantShellLayout.refresh();
-    if(selected.enabled)await showView(false);else developmentOpen=true;
-    updateDevelopment(false);
+    if(selected.enabled)await showView(false);
+    updateSurface(false);
     try{sourceStamp=(await send('getPluginSourceState',{pluginId:id})).stamp;}catch(error){status(error.message,true);}
-    if(developmentOpen&&publishedSourceStamps[id]!==sourceStamp)await checkAndPreview(sourceStamp);
+    if(previewOpen&&publishedSourceStamps[id]!==sourceStamp)await checkAndPreview(sourceStamp);
     startSourceWatch();await readChat(sessionId);});}finally{selecting=false;
-      if(selected&&!el('Workbench').hidden&&developmentOpen&&(!view||!view.preview)&&publishedSourceStamps[id]!==sourceStamp)checkAndPreview(sourceStamp);}}
-  function renderChat(){runObserver.select(developmentOpen&&ownsChat()?chat:null,chatBusy);if(!chat||!ownsChat())return;
+      if(selected&&!el('Workbench').hidden&&previewOpen&&(!view||!view.preview)&&publishedSourceStamps[id]!==sourceStamp)checkAndPreview(sourceStamp);}}
+  function renderChat(){runObserver.select(ownsChat()?chat:null,chatBusy);if(!chat||!ownsChat())return;
     var s=chat.state||{},empty=!chat.sessionId;
     el('ChatTitle').textContent=empty?'Чат исходников':s.title||s.Title||'Чат исходников';
     el('ChatTitle').title=el('ChatTitle').textContent;
@@ -359,6 +365,7 @@
     });
   }
   function bind(){
+    previewSurface=window.RNAssistantPreviewSurface.attach(el('PreviewMount'),{reloadButton:el('Preview')});
     registerRailPopovers();
     new MutationObserver(function(){syncAppearance();renderIconChoices();el('Rail').querySelectorAll('[data-plugin-id]').forEach(function(node){var item=items.find(function(value){return value.pluginId===node.dataset.pluginId;});if(item)node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconSvg,item.iconColor);});}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
     el('NavigationProject').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
@@ -381,7 +388,7 @@
         editingPlugin=null;await refresh();busy=false;await select(changed.pluginId);status('Название и иконка сохранены.');return;
       }
       var created=await send(connecting?'connectPlugin':'createPlugin',{name:el('Name').value,rootPath:connecting||customSource?el('Root').value.trim():null,description:task,iconDescription:iconBrief,iconId:selectedIconId,iconColor:iconColor()});
-      await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);developmentToggle.setOpen(true);
+      await refresh();status((connecting?'Исходники подключены: ':'Исходники созданы: ')+created.sourceRoot);busy=false;await select(created.pluginId);
       if(!connecting&&(task||iconBrief)){var message='Загрузи навыки workspace.plugin_authoring и workspace.files. Прочитай README.md и plugin.json. ';
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
@@ -415,16 +422,16 @@
     el('Versions').addEventListener('keydown',function(event){if(event.key==='Escape'&&this.open){this.open=false;this.querySelector('summary').focus();event.preventDefault();event.stopPropagation();}});
     el('Reopen').onclick=function(){el('Reopen').closest('details').open=false;run(async function(){await showView(false);browsingRelease=null;candidate=null;candidateStamp=null;publishedSourceStamps[selected.pluginId]=sourceStamp;});};
     el('Disable').onclick=function(){el('Disable').closest('details').open=false;run(async function(){selected=await send('disablePlugin',{pluginId:selected.pluginId});candidate=null;candidateStamp=null;browsingRelease=null;await closeView();await refresh();status('Плагин отключён. Исходники и данные сохранены.');});};
-    developmentToggle=window.RNAssistantPanelToggle.bind(el('Develop'),{
-      controls:'pluginChat',isOpen:function(){return developmentOpen;},
-      setOpen:function(open){developmentOpen=open;updateDevelopment(true);}
+    previewToggle=window.RNAssistantPanelToggle.bind(el('SurfaceToggle'),{
+      controls:'pluginPreviewMount',isOpen:function(){return previewOpen;},
+      setOpen:function(open){previewOpen=open;updateSurface(true);}
     });
     el('Chat').addEventListener('keydown',function(event){
       if(event.key!=='Escape'||event.defaultPrevented)return;
       if(!el('ChatHistoryList').hidden){closeHistory();el('ChatHistory').focus();event.preventDefault();event.stopPropagation();return;}
       var menu=el('Chat').querySelector('.plugin-actions-menu[open]');
       if(menu){menu.open=false;menu.querySelector('summary').focus();}
-      else developmentToggle.setOpen(false);
+      else return;
       event.preventDefault();event.stopPropagation();
     });
     chatComposer=window.RNAssistantWorkspaceChat.bindComposer(el('Form'));
@@ -461,5 +468,5 @@
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }
-  window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){if(!selected){el('Manager').hidden=false;el('Workbench').hidden=true;}else if(developmentOpen)updateDevelopment(false);},select:select,selectedId:function(){return selected&&selected.pluginId;}};
+  window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){if(!selected){el('Manager').hidden=false;el('Workbench').hidden=true;}else{updateSurface(false);if(!el('Workbench').hidden&&window.RNAssistantShellLayout)window.RNAssistantShellLayout.collapseForPlugin();}},select:select,selectedId:function(){return selected&&selected.pluginId;}};
 })();

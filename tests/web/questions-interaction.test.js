@@ -126,7 +126,6 @@ const root = path.resolve(__dirname, "../..");
       questionTest.holdSubmit = false; questionTest.keepPending = false;
       questionTest.set.questions[1].selection = "multiple";
       return RNAssistantPlugins.select("data-templates"); });
-    await page.locator("#pluginDevelop").click();
     await form.waitFor();
     assert.equal(await form.locator("input:checked").count(), 0, "another owner never adopts the project answer");
     assert.equal(await form.locator("textarea").inputValue(), "");

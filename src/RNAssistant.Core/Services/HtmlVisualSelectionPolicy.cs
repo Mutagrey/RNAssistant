@@ -17,29 +17,47 @@ namespace RNAssistant.Core.Services
 
         public static string ReadCapturedBody(byte[] bytes)
         {
+            ValidateBody(bytes);
+            return new UTF8Encoding(false, true).GetString(bytes);
+        }
+
+        public static HtmlVisualAnnotation ReadAnnotation(byte[] bytes)
+        {
+            var envelope = ValidateBody(bytes);
+            return new HtmlVisualAnnotation { Selection = envelope["selection"].ToObject<HtmlVisualSelection>(),
+                Comment = (string)envelope["comment"] ?? "",
+                AnnotationNumber = (int?)envelope["annotationNumber"] ?? 0 };
+        }
+
+        private static JObject ValidateBody(byte[] bytes)
+        {
             if (bytes == null || bytes.Length == 0 || bytes.Length > MaximumBodyBytes)
                 throw new InvalidOperationException("Снимок HTML-элемента недействителен.");
-            string text;
             JObject envelope;
             try
             {
-                text = new UTF8Encoding(false, true).GetString(bytes);
-                envelope = JObject.Parse(text);
+                envelope = JObject.Parse(new UTF8Encoding(false, true).GetString(bytes));
                 if ((string)envelope["type"] != "rnassistant.html-visual-selection" ||
                     (int?)envelope["version"] != 1 || envelope["selection"]?.Type != JTokenType.Object ||
                     envelope["source"]?.Type != JTokenType.String ||
                     !bytes.SequenceEqual(Capture(envelope["selection"].ToObject<HtmlVisualSelection>(),
-                        (string)envelope["source"])))
+                        (string)envelope["source"], (string)envelope["comment"],
+                        (int?)envelope["annotationNumber"] ?? 0)))
                     throw new InvalidOperationException("Снимок HTML-элемента недействителен.");
             }
             catch (Exception error) when (error is JsonException || error is DecoderFallbackException ||
                 error is FormatException || error is InvalidCastException || error is ArgumentException)
             { throw new InvalidOperationException("Снимок HTML-элемента недействителен.", error); }
-            return text;
+            return envelope;
         }
 
-        public static byte[] Capture(HtmlVisualSelection selection, string sourceTitle)
+        public static byte[] Capture(HtmlVisualSelection selection, string sourceTitle,
+            string comment = null, int annotationNumber = 0)
         {
+            if (annotationNumber < 0 || annotationNumber > 1000000 ||
+                (annotationNumber == 0 && comment != null) ||
+                (annotationNumber > 0 && (comment == null || comment.Length > 2048)))
+                throw new InvalidOperationException("Комментарий аннотации недействителен.");
             if (selection == null || !Tag(selection.Tag) || selection.Selector == null ||
                 selection.Selector.Length > 1024 || selection.StableUiId == null || selection.StableUiId.Length > 128 ||
                 selection.TextExcerpt == null || selection.TextExcerpt.Length > 512 ||
@@ -67,8 +85,9 @@ namespace RNAssistant.Core.Services
             if (title.Length > 256) title = title.Substring(0, 256);
             var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new {
                 type = "rnassistant.html-visual-selection", version = 1,
-                source = title, evidence = "untrusted preview DOM; source mapping unverified", selection
-            }));
+                source = title, evidence = "untrusted preview DOM; source mapping unverified", selection,
+                comment, annotationNumber = annotationNumber > 0 ? (int?)annotationNumber : null
+            }, new JsonSerializerSettings { NullValueHandling = NullValueHandling.Ignore }));
             if (bytes.Length > MaximumBodyBytes)
                 throw new InvalidOperationException("Снимок HTML-элемента слишком велик.");
             return bytes;

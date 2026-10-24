@@ -194,6 +194,17 @@ namespace RNAssistant.Harness
                 var draft = ingestion.StageHtmlVisualSelection(session, request);
                 AssertEqual(exact.Uri, ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Uri,
                     "draft retains exact host-selected source");
+                request.Comment = "Make the button green";
+                request.AnnotationNumber = 2;
+                var annotated = ingestion.StageHtmlVisualSelection(session, request);
+                var annotation = HtmlVisualSelectionPolicy.ReadAnnotation(new AttachmentStore(paths).ReadBytes(annotated));
+                AssertEqual("Make the button green", annotation.Comment,
+                    "the user's comment is in the immutable model-readable selection body");
+                AssertEqual(2, annotation.AnnotationNumber, "the UI number belongs to the same body");
+                request.Comment = new string('x', 2049);
+                RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
+                request.Comment = null;
+                request.AnnotationNumber = 0;
                 request.ArtifactRevision = 2;
                 RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
                 request.ArtifactRevision = 1;

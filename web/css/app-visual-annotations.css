@@ -1,0 +1,28 @@
+.chat-browser-frame-mount{position:relative}
+.chat-browser-frame-mount .html-workspace-frame.annotation-editing{pointer-events:none}
+.visual-annotation-layer{position:absolute;inset:0;z-index:18;pointer-events:none;overflow:hidden}
+.visual-annotation-marker,.visual-annotation-number{display:inline-grid;place-items:center;flex:none;min-width:23px;height:23px;padding:0 5px;border-radius:999px;background:#315f43;color:#fff;font-size:11px;font-weight:700;line-height:1}
+.visual-annotation-marker{position:absolute;border:2px solid #fff;box-shadow:0 2px 8px #102d1f55;cursor:pointer;pointer-events:auto}
+.visual-annotation-marker:hover,.visual-annotation-marker:focus-visible{background:#214a33;transform:scale(1.08)}
+.visual-annotation-editor{position:absolute;z-index:2;display:grid;gap:9px;padding:11px;border:1px solid #bcd0c2;border-radius:11px;background:var(--surface);box-shadow:0 12px 30px #142a1533;pointer-events:auto}
+.visual-annotation-editor-head{display:flex;align-items:center;gap:7px;min-width:0}
+.visual-annotation-target{overflow:hidden;color:var(--ink-muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.visual-annotation-editor textarea{box-sizing:border-box;width:100%;min-height:66px;max-height:170px;resize:vertical;padding:8px 9px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);font:inherit;font-size:12px}
+.visual-annotation-editor-actions{display:flex;justify-content:flex-end;gap:6px}
+.visual-annotation-editor-actions button{min-height:27px;padding:4px 10px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:var(--ink);cursor:pointer;font-size:11px}
+.visual-annotation-editor-actions button.primary{border-color:#315f43;background:#315f43;color:#fff}
+.visual-annotation-editor-actions button:disabled{opacity:.55;cursor:wait}
+.chat-browser #attachHtmlWorkspaceSelectionButton{display:none}
+.visual-annotation-list{position:relative;width:max-content;max-width:100%;font-size:11px}
+.attachment-drafts.has-visual-annotations{overflow:visible;flex-wrap:wrap}
+.visual-annotation-list>summary{padding:5px 9px;border:1px solid #bcd0c2;border-radius:7px;background:#e9f3ed;color:#315f43;cursor:pointer;font-weight:700;list-style:none}
+.visual-annotation-list>summary::-webkit-details-marker{display:none}
+.visual-annotation-list-body{position:absolute;z-index:30;bottom:calc(100% + 5px);left:0;display:grid;gap:5px;width:min(420px,calc(100vw - 30px));max-height:230px;overflow:auto;padding:7px;border:1px solid var(--line);border-radius:9px;background:var(--surface);box-shadow:var(--shadow)}
+.visual-annotation-list:not([open])>.visual-annotation-list-body{display:none}
+.visual-annotation-list-row{display:flex;align-items:center;gap:6px;min-width:0;padding:4px;border-radius:6px}
+.visual-annotation-list-row:hover{background:var(--surface-hover)}
+.visual-annotation-list-copy{display:grid;flex:1;min-width:0;gap:2px}
+.visual-annotation-list-copy strong,.visual-annotation-list-copy span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visual-annotation-list-copy span{color:var(--ink-muted)}
+.visual-annotation-list-copy .visual-annotation-target-state{color:#a2602f}
+.visual-annotation-list-row button{padding:3px 4px;border:0;background:transparent;color:var(--accent);cursor:pointer;font-size:11px}

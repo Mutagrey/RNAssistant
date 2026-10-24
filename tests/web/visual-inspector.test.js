@@ -46,6 +46,7 @@ const { chromium } = require("playwright");
     assert.equal(await frame.locator("#count").textContent(), "1", "ordinary click works while off");
 
     await page.locator("#toggle").click();
+    await page.waitForFunction(() => document.getElementById("toggle").getAttribute("aria-pressed") === "true");
     assert.equal(await page.locator("#toggle").getAttribute("aria-pressed"), "true");
     await frame.locator("#card").hover();
     const beforeScroll = await frame.locator("html").evaluate(node => {

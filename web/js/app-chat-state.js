@@ -106,6 +106,7 @@ function persistentDraft(key) {
     var chatIdValue = key.slice(7), officePending = (state.inboxSubmissions || {})[chatIdValue];
     return { Owner: "office", ChatId: chatIdValue, Text: saved ? saved.text : "",
       ResourceDraftIds: saved ? (saved.attachments || []).map(officeDraftAttachmentId) : [],
+      NextAnnotationNumber: saved ? saved.nextAnnotationNumber || 1 : 1,
       PendingOfficeInput: officePending && !officePending.Answers ? { OperationId: officePending.OperationId,
         Text: officePending.Text, ResourceDraftIds: officePending.Attachments.map(officeDraftAttachmentId),
         Delivery: officePending.Delivery } : null };
@@ -156,7 +157,8 @@ async function hydrateChatDrafts() {
           { Id: id, FileName: "Недоступное вложение", Kind: "file", Size: 0,
             ExtractionWarning: "Подготовленный файл недоступен. Проверьте историю отправки или удалите вложение.", unavailable: true };
       });
-      chatDraftStore()[key] = { text: item.Text || "", attachments: restoredAttachments, version: ++chatDraftVersion };
+      chatDraftStore()[key] = { text: item.Text || "", attachments: restoredAttachments,
+        nextAnnotationNumber: item.NextAnnotationNumber || 1, version: ++chatDraftVersion };
       var officePending = item.PendingOfficeInput;
       if (officePending) {
         var attachmentIds = officePending.ResourceDraftIds || [];
@@ -278,13 +280,14 @@ function retainUnsentInputAttachments(drafts, sent) {
   });
 }
 
-function saveOfficeDraft(chatIdValue, text, attachments, changed) {
+function saveOfficeDraft(chatIdValue, text, attachments, changed, nextAnnotationNumber) {
   var key = officeDraftKey(chatIdValue);
   if (!key) return null;
   var drafts = chatDraftStore();
   var previous = drafts[key];
   attachments = (attachments || []).slice();
-  if (!text && !attachments.length) {
+  nextAnnotationNumber = nextAnnotationNumber || previous && previous.nextAnnotationNumber || 1;
+  if (!text && !attachments.length && nextAnnotationNumber === 1) {
     delete drafts[key];
     persistDraft(key).catch(function () {});
     return null;
@@ -294,7 +297,8 @@ function saveOfficeDraft(chatIdValue, text, attachments, changed) {
       (previous.attachments || []).every(function (item, index) {
         return officeDraftAttachmentId(item) === officeDraftAttachmentId(attachments[index]);
       })) return previous;
-  drafts[key] = { text: text, attachments: attachments, version: ++chatDraftVersion };
+  drafts[key] = { text: text, attachments: attachments,
+    nextAnnotationNumber: nextAnnotationNumber, version: ++chatDraftVersion };
   persistDraft(key).catch(function () {});
   return drafts[key];
 }
@@ -302,13 +306,23 @@ function saveOfficeDraft(chatIdValue, text, attachments, changed) {
 function acceptOfficeDraft(chatIdValue, text, version, sentAttachments) {
   var draft = readOfficeDraft(chatIdValue);
   if (!draft) return null;
+  var remaining = retainUnsentInputAttachments(draft.attachments, sentAttachments);
   return saveOfficeDraft(chatIdValue, draft.version === version && draft.text.trim() === text ? "" : draft.text,
-    retainUnsentInputAttachments(draft.attachments, sentAttachments), false);
+    remaining, false, remaining.length ? draft.nextAnnotationNumber : 1);
+}
+
+function reserveOfficeAnnotationNumber(chatIdValue) {
+  var draft = readOfficeDraft(chatIdValue);
+  var next = draft && draft.nextAnnotationNumber || 1;
+  if (next > 1000000) throw new Error("Лимит номеров аннотаций достигнут.");
+  saveOfficeDraft(chatIdValue, draft ? draft.text : "", draft ? draft.attachments : [], true, next + 1);
+  return next;
 }
 
 window.RNAssistantChatDrafts.readOffice = readOfficeDraft;
 window.RNAssistantChatDrafts.saveOffice = saveOfficeDraft;
 window.RNAssistantChatDrafts.acceptOffice = acceptOfficeDraft;
+window.RNAssistantChatDrafts.reserveOfficeAnnotationNumber = reserveOfficeAnnotationNumber;
 window.RNAssistantChatDrafts.forgetOffice = forgetOfficeDraft;
 
 function captureChatDraft(chatIdValue, changed) {

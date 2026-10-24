@@ -51,6 +51,7 @@ function switchTab(name) {
   }
   if (name === "tools") name = "instructions";
   if (name === "html") name = "artifacts";
+  if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.onTabChange(name);
   var section = name === "instructions" ? "library" : name;
   var active = document.querySelector(".panel.active");
   var changed = !active || active.id !== "tab-" + name;
@@ -69,6 +70,9 @@ function switchTab(name) {
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
+  if (changed && active && active.id === "tab-plugins" && name !== "plugins" && window.RNAssistantShellLayout) {
+    window.RNAssistantShellLayout.restoreAfterPlugin();
+  }
   var selectedPanel = document.getElementById("tab-" + name);
   if (changed && selectedPanel && document.querySelector(".shell.layout-ready") &&
       !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -158,6 +162,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindSkillActions();
   bindProductNavSearches();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
+  if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.bind();
   if (typeof initializeSplitPanes === "function") {
     initializeSplitPanes();
   }

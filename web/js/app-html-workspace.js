@@ -98,88 +98,128 @@
   }
 
   var stagingVisualSelection = false;
+  var visualAnnotations = null;
   var visualInspector = window.RNAssistantVisualInspector.createHost({
     frame: $("htmlWorkspacePreviewFrame"), button: $("inspectHtmlWorkspaceButton"),
     status: $("htmlWorkspaceInspectStatus"),
-    onSelectionChanged: function (selected) {
+    onSelectionChanged: function (selected, reason) {
       $("attachHtmlWorkspaceSelectionButton").disabled = !selected || stagingVisualSelection;
-    }
+      if (visualAnnotations) visualAnnotations.onSelection(selected ? visualInspector.selectionRecord() : null, reason);
+    },
+    onLocations: function (locations) { if (visualAnnotations) visualAnnotations.onLocations(locations); },
+    onReveal: function (result) { if (visualAnnotations) visualAnnotations.onReveal(result); }
   });
   window.deactivateHtmlWorkspaceInspector = visualInspector.deactivate;
-  $("attachHtmlWorkspaceSelectionButton").addEventListener("click", async function () {
-    if (stagingVisualSelection) return;
-    var record = visualInspector.selectionRecord();
+  async function stageVisualSelection(record, comment, number, replacing, stayInBrowser) {
+    if (stagingVisualSelection) return null;
     var chat = state.activeChatId, sourceId = state.activeHtmlArtifactId;
     var queue = state.chatResourceIngestions || (state.chatResourceIngestions = {});
     if (state.bridgeUnavailable || state.chatReadOnly || state.chatDetailPending ||
         state.chatNavigationPending || queue[chat] || isPendingChatSubmit(chat) || hasActiveMessageEdit()) {
       $("htmlWorkspaceInspectStatus").textContent = "Дождитесь завершения текущего действия с чатом.";
-      return;
+      return null;
     }
     var source = (state.artifacts || []).filter(function (item) {
       return artifactId(item) === sourceId && artifactKind(item) === "html_workspace";
     });
     var revision = source.length === 1 ? Number(prop(source[0], "Revision", "revision", 0)) : 0;
-    if (!record || !chat || !sourceId || !Number.isSafeInteger(revision) || revision < 1) {
+    if (!record || !chat || !sourceId || !Number.isSafeInteger(revision) || revision < 1 ||
+        (record.sourceId && (record.sourceId !== sourceId || record.sourceRevision !== revision))) {
       $("htmlWorkspaceInspectStatus").textContent = "Источник выделения недоступен. Обновите просмотр.";
-      return;
+      return null;
     }
     var completeIngestion;
     var ingestion = new Promise(function (resolve) { completeIngestion = resolve; });
     queue[chat] = ingestion;
     stagingVisualSelection = true;
-    this.disabled = true;
+    $("attachHtmlWorkspaceSelectionButton").disabled = true;
     updateComposerInputState();
     var attachment = null, attached = false, succeeded = false;
     try {
       var response = await send("stageHtmlVisualSelection", { chatId: chat, artifactId: sourceId,
-        artifactRevision: revision, previewGeneration: record.generation, selection: record.selection });
+        artifactRevision: revision, previewGeneration: record.generation, selection: record.selection,
+        comment: number ? String(comment || "") : null, annotationNumber: number || 0 });
       attachment = response && (response.resource || response.Resource);
       if (!attachment) throw new Error("Приложение не вернуло подготовленный элемент.");
+      if (number) attachment.visualAnnotation = { selection: record.selection,
+        comment: String(comment || ""), annotationNumber: number };
+      if (number) {
+        attachment.visualSourceArtifactId = sourceId;
+        attachment.visualSourceRevision = revision;
+      }
       if (chat !== state.activeChatId || sourceId !== state.activeHtmlArtifactId ||
           record.generation !== visualInspector.generation())
         throw new Error("Просмотр изменился. Выберите элемент заново.");
       var currentDraft = readOfficeDraft(chat);
       var attachments = currentDraft && currentDraft.attachments || [];
-      if (attachments.length >= ATTACHMENT_MAX_FILES)
+      var replaceIndex = replacing ? attachments.findIndex(function (item) {
+        return attachmentId(item) === attachmentId(replacing);
+      }) : -1;
+      if (replacing && replaceIndex < 0) throw new Error("Аннотация больше не находится в черновике.");
+      if (!replacing && attachments.length >= ATTACHMENT_MAX_FILES)
         throw new Error("В одном сообщении можно выбрать не более 10 элементов и файлов.");
-      saveOfficeDraft(chat, officeChatDraftText(), attachments.concat(attachment), true);
+      var updated = attachments.slice();
+      if (replacing) updated[replaceIndex] = attachment;
+      else updated.push(attachment);
+      saveOfficeDraft(chat, officeChatDraftText(), updated, true);
       attached = true;
       await window.RNAssistantChatDrafts.flushOffice(chat);
+      if (replacing) {
+        try { await send("discardChatResourceDraft", { chatId: chat, id: attachmentId(replacing) }); }
+        catch (_) { setAttachmentStatus(chat, "Старый снимок аннотации не удалён; новый черновик сохранён.", "warning"); }
+      }
       if (chat !== state.activeChatId || sourceId !== state.activeHtmlArtifactId ||
           record.generation !== visualInspector.generation()) {
-        succeeded = true; return;
+        succeeded = true; return attachment;
       }
-      visualInspector.deactivate();
-      if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
-      switchTab("chat");
       restoreChatDraft(chat);
-      $("chatInput").focus();
+      if (!stayInBrowser) {
+        visualInspector.deactivate();
+        if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
+        switchTab("chat");
+        $("chatInput").focus();
+      }
       succeeded = true;
+      return attachment;
     } catch (error) {
       if (attachment && !attached)
         await send("discardChatResourceDraft", { chatId: chat, id: attachmentId(attachment) }).catch(function () {});
       var message = error.detail || error.message || "Не удалось добавить элемент.";
       if (attached && state.activeChatId === chat) {
-        visualInspector.deactivate();
-        if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
-        switchTab("chat");
+        if (!stayInBrowser) {
+          visualInspector.deactivate();
+          if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.setScope("office");
+          switchTab("chat");
+        }
         restoreChatDraft(chat);
         setAttachmentStatus(chat, message, "error");
       } else if (attached) setAttachmentStatus(chat, message, "error");
       else $("htmlWorkspaceInspectStatus").textContent = message;
+      if (stayInBrowser) throw error;
+      return null;
     } finally {
       completeIngestion(succeeded);
       if (queue[chat] === ingestion) delete queue[chat];
       stagingVisualSelection = false;
-      this.disabled = !visualInspector.selectionRecord();
+      $("attachHtmlWorkspaceSelectionButton").disabled = !visualInspector.selectionRecord();
       updateComposerInputState();
     }
+  }
+  $("attachHtmlWorkspaceSelectionButton").addEventListener("click", function () {
+    return stageVisualSelection(visualInspector.selectionRecord(), null, 0, null, false);
+  });
+  if (window.RNAssistantVisualAnnotations) visualAnnotations = window.RNAssistantVisualAnnotations.create({
+    frame: $("htmlWorkspacePreviewFrame"), inspector: visualInspector, stage: stageVisualSelection
+  });
+  window.RNAssistantHtmlWorkspaceAnnotations = visualAnnotations;
+  var previewSurface = window.RNAssistantPreviewSurface.attach($("htmlWorkspacePreview"), {
+    reload: function () { if (workspaceEditor) workspaceEditor.reloadPreview(); }
   });
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
     state: state,
     model: workspaceModel,
     preview: htmlPreview,
+    previewSurface: previewSurface,
     inspector: visualInspector,
     source: workspaceSource,
     closeResources: closePreviewResources,
@@ -558,6 +598,10 @@
   }
 
   function renderHtmlWorkspace() {
+    if (window.RNAssistantChatBrowser && window.RNAssistantChatBrowser.hasSource()) {
+      window.RNAssistantChatBrowser.syncSource();
+      if (window.RNAssistantChatBrowser.hasSource()) workspaceEditor.renderPreview();
+    }
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
     workspace();
     ensureSelection();
@@ -730,6 +774,29 @@
   }
 
   window.renderHtmlWorkspace = renderHtmlWorkspace;
+  window.RNAssistantHtmlWorkspaceSurface = {
+    prepare: function () {
+      if (state.htmlWorkspaceDirty || !state.activeChatId || !state.activeHtmlArtifactId) return null;
+      var available = files(), selected = selectedItem();
+      if (!available.some(function (file) { return fileKind(file) === "html"; })) return null;
+      if (!selected || selected.type !== "file") {
+        var entry = available.find(function (file) { return fileId(file) === workspace().activeFileId; }) ||
+          available.find(function (file) { return fileKind(file) === "html"; });
+        state.htmlWorkspaceSelection = { type: "file", id: fileId(entry) };
+      }
+      state.htmlWorkspaceMode = "preview";
+      workspaceSource.ensure(available);
+      return { chatId: state.activeChatId, artifactId: state.activeHtmlArtifactId };
+    },
+    binding: function () {
+      if (!state.activeChatId || !state.activeHtmlArtifactId || state.htmlWorkspaceDirty ||
+          state.htmlWorkspaceMode !== "preview" || !files().some(function (file) { return fileKind(file) === "html"; })) return null;
+      return { chatId: state.activeChatId, artifactId: state.activeHtmlArtifactId };
+    },
+    reload: workspaceEditor.reloadPreview,
+    suspend: workspaceEditor.suspendPreview,
+    refreshInspectorControl: visualInspector.refresh
+  };
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;
   window.cancelHtmlWorkspaceWrite = workspaceActions.cancelWrite;

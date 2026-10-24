@@ -70,7 +70,6 @@ const { chromium } = require('playwright');
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
         await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-        await page.locator('#pluginDevelop').click();
       }
       await page.waitForFunction(expected => RNAssistantWorkspaceChat.owner() === expected &&
         RNAssistantWorkspaceChat.selectedSession(expected === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace'), owner);

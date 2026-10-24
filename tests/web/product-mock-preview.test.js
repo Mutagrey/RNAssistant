@@ -327,6 +327,9 @@ async function serve() {
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').hover();
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).waitFor();
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').click();
+    assert.equal(await normal.evaluate(() => RNAssistantShellLayout.isNavigationOpen()), false,
+      'plugin selection collapses its tree by default');
+    await normal.locator('#productMobileMenuButton').click();
     await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').waitFor();
     await normal.locator('#pluginNavigationTree [data-tree-key="sources"] > .navigation-tree-row').click();
     await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
@@ -340,6 +343,7 @@ async function serve() {
     assert.equal(await normal.locator("#pluginNavigationToggle, #pluginNavigationClose").count(), 0,
       "Data Templates uses the shared panel button");
     assert.equal(await normal.locator("#productMobileMenuButton").getAttribute("aria-controls"), "pluginNavigationPane");
+    await normal.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
     assert.deepEqual(await normal.evaluate(() => {
       const rect = selector => document.querySelector(selector).getBoundingClientRect();
       const nav = rect("#pluginNavigationPane .product-nav-heading"), header = rect("#pluginWorkbench .plugin-toolbar"),
@@ -376,7 +380,8 @@ async function serve() {
     await normal.setViewportSize({ width: 1280, height: 720 });
     await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-wide"));
     await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
-    await normal.locator('#pluginDevelop').click();
+    assert.equal(await normal.locator('#pluginSurfaceToggle').getAttribute('aria-expanded'), 'true',
+      'plugin opens with its right preview visible');
     await normal.waitForFunction(() => document.querySelector('#pluginPreviewMount iframe')?.title.includes('предпросмотр'));
     assert.equal(await normal.locator('#pluginProject').count(), 0,
       'Data Templates has no duplicate Project button in the toolbar');

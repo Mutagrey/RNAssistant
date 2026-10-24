@@ -13,14 +13,17 @@
     var renderedPreviewKey = null;
     var renderedPreviewContents = null;
     var previewCleared = false;
+    var previewEpoch = 0;
 
     function invalidatePreview() {
+      previewEpoch++;
       renderedPreviewKey = null;
       renderedPreviewContents = null;
       if (options.inspector) options.inspector.reset();
       if (options.closeResources) options.closeResources();
     }
     function clearPreview(frame) {
+      if (options.previewSurface) options.previewSurface.clear();
       if (previewCleared) return;
       invalidatePreview();
       frame.removeAttribute("src");
@@ -52,6 +55,13 @@
     var setDataJson = model.setDataJson;
     var selectedItem = model.selectedItem;
     var snapshotLabel = model.snapshotLabel;
+    function previewLabel(selected) {
+      var root = (state.artifacts || []).find(function (item) {
+        return model.artifactId(item) === state.activeHtmlArtifactId;
+      });
+      var title = root ? artifactTitle(root) : "HTML";
+      return { title: title, path: selected && selected.type === "file" ? filePath(selected.item) : "" };
+    }
 
     function renderRedoBranches(selected) {
       var select = $("redoHtmlWorkspaceBranchSelect");
@@ -360,6 +370,9 @@
           selected && selected.type === "file" && !source.ready(selected.item);
       }
       var isWorkspace = !!selected && !isPlan && !isArtifact && !isCollection;
+      var openRight = $("openHtmlWorkspaceRightButton");
+      if (openRight) openRight.hidden = !isWorkspace || state.htmlWorkspaceMode !== "preview" ||
+        !files().some(function (file) { return fileKind(file) === "html"; });
       ["refreshHtmlDataButton", "reloadHtmlWorkspaceSourceButton", "exportHtmlWorkspaceButton"].forEach(function (id) {
         if ($(id)) $(id).classList.toggle("hidden", !isWorkspace);
       });
@@ -390,7 +403,8 @@
       if (!frame || !detail) {
         return;
       }
-      if ($("htmlWorkspaceEditor") && $("htmlWorkspaceEditor").hidden) { clearPreview(frame); return; }
+      if ($("htmlWorkspaceEditor") && $("htmlWorkspaceEditor").hidden &&
+          !(window.RNAssistantChatBrowser && window.RNAssistantChatBrowser.hasSource())) { clearPreview(frame); return; }
       var selected = selectedItem();
       var special = selected && (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection");
       frame.classList.toggle("hidden", !!special);
@@ -406,17 +420,23 @@
       if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
         clearPreview(frame);
         detail.classList.remove("hidden"); detail.textContent = source.message(); frame.classList.add("hidden");
+        if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), source.message());
         return;
       }
       if (htmlPreview.missingVendors(workspaceFiles).length) {
         invalidatePreview();
+        var vendorEpoch = previewEpoch;
+        if (options.previewSurface) options.previewSurface.waiting(previewLabel(selected), "Загрузка зависимостей…");
         frame.removeAttribute("src");
         frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#475467\">Загрузка зависимостей...</body></html>";
         previewCleared = false;
         htmlPreview.ensureVendors(workspaceFiles).then(function () {
+          if (vendorEpoch !== previewEpoch) return;
           if (typeof window.renderHtmlWorkspace === "function") window.renderHtmlWorkspace();
           else renderHtmlWorkspacePreview();
         }).catch(function (error) {
+          if (vendorEpoch !== previewEpoch) return;
+          if (options.previewSurface) options.previewSurface.fail(previewLabel(selected), error && error.message);
           frame.srcdoc = "<!doctype html><html><body style=\"font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#b42318\">" +
             String(error && error.message || "Зависимость не загружена.").replace(/[&<>]/g, function (character) {
               return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[character];
@@ -442,6 +462,7 @@
       if (options.inspector) previewInput.inspectGeneration = options.inspector.generation() + 1;
       var previewHtml = htmlPreview.build(previewInput);
       invalidatePreview();
+      if (options.previewSurface) options.previewSurface.watch(frame, previewLabel(selected));
       frame.removeAttribute("src");
       frame.srcdoc = previewHtml;
       previewCleared = false;
@@ -451,6 +472,7 @@
 
     return {
       suspendPreview: function () { clearPreview($("htmlWorkspacePreviewFrame")); },
+      reloadPreview: function () { renderedPreviewKey = null; renderedPreviewContents = null; renderHtmlWorkspacePreview(); },
       applyMode: applyHtmlWorkspaceMode,
       confirmDiscard: confirmDiscardHtmlWorkspaceChanges,
       markDirty: markHtmlWorkspaceDirty,

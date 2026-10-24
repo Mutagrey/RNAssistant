@@ -17,6 +17,8 @@ namespace RNAssistant.Office.Contracts
         // addressed chat's active artifact and exact revision.
         [JsonProperty("previewGeneration")] public int PreviewGeneration { get; set; }
         [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
+        [JsonProperty("comment")] public string Comment { get; set; }
+        [JsonProperty("annotationNumber")] public int AnnotationNumber { get; set; }
     }
 
     public sealed class HtmlFetchRequest

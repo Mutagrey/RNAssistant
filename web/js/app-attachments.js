@@ -247,7 +247,14 @@ function renderAttachmentDrafts() {
   if (!box) return;
   box.innerHTML = "";
   box.classList.toggle("hidden", !state.draftAttachments.length);
-  state.draftAttachments.forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft")); });
+  var visual = window.RNAssistantVisualAnnotations;
+  var annotations = visual ? state.draftAttachments.filter(function (item) { return !!visual.annotation(item); }) : [];
+  box.classList.toggle("has-visual-annotations", annotations.length > 0);
+  if (visual && annotations.length && window.RNAssistantHtmlWorkspaceAnnotations)
+    window.RNAssistantHtmlWorkspaceAnnotations.renderDrafts(box, annotations);
+  state.draftAttachments.filter(function (item) { return annotations.indexOf(item) < 0; })
+    .forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft")); });
+  if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
   updateComposerInputState();
 }
 

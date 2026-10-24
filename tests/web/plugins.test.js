@@ -71,6 +71,8 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
       switch(type){
+        case 'getChatDrafts':return {drafts:[]};
+        case 'saveChatDraft':return {saved:true};
         case 'getPlugins':return {defaultSourceParent:'C:\\Users\\Demo\\AppData\\Roaming\\RNAssistant\\plugin-workspaces',items:item.hidden?[]:[{...item}]};
         case 'getRemovedPlugins':return {items:item.hidden?[{...item}]:[]};
         case 'getPluginIcons':return {items:savedIcons.slice()};
@@ -97,7 +99,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         default:throw Error('Unexpected host call '+type);
       }
     });
-    await page.evaluate(()=>{window.send=window.testPluginHost;return RNAssistantPlugins.refresh();});
+    await page.evaluate(async()=>{window.send=window.testPluginHost;await RNAssistantChatDrafts.hydrate();return RNAssistantPlugins.refresh();});
     const railWidths={};
     for(const [section,label] of [['chat','Рабочая область'],['artifacts','Материалы'],['library','Библиотека'],['vba','VBA'],['settings','Настройки']]){
       await page.locator('.section-rail [data-section="'+section+'"]').hover();
@@ -171,7 +173,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(sourceChatCreateCalls,1,'creation task explicitly opens one source chat before submit');
     assert.equal(await page.locator('#pluginCheck').count(),0,'package check is integrated into preview refresh');
     assert.equal(await page.locator('#pluginPreview').getAttribute('aria-label'),'Обновить предпросмотр');
-    const splitter=page.locator('#pluginDevelopmentSplitter');
+    const splitter=page.locator('#pluginSurfaceSplitter');
     const splitBefore=Number(await splitter.getAttribute('aria-valuenow'));
     await splitter.press('ArrowLeft');
     assert.ok(Number(await splitter.getAttribute('aria-valuenow'))<splitBefore,'development split resizes from the keyboard');

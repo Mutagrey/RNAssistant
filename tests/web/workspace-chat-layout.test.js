@@ -159,27 +159,43 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('#workspaceChatNotice').getByText('Проверка ошибки отправки').waitFor();
     assert.equal(await page.locator('#chatInput').inputValue(),'Черновик рабочего проекта','failed delivery preserves the draft');
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    const pluginToggle=page.locator('#pluginDevelop');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'false');
-    assert.equal(await pluginToggle.getAttribute('aria-controls'),'pluginChat');
-    assert.deepEqual(await toggleMetrics('#pluginDevelop'),officeToggle,'plugin reuses the same right-panel button geometry and icon');
-    await checkToggleFocus('#pluginDevelop');
+    const pluginToggle=page.locator('#pluginSurfaceToggle');
+    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','plugin opens with the right preview');
+    assert.equal(await pluginToggle.getAttribute('aria-controls'),'pluginPreviewMount');
+    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),false,'plugin opens with its tree collapsed');
+    assert.deepEqual((await toggleMetrics('#pluginSurfaceToggle')).filter((_,index)=>index!==5),
+      officeToggle.filter((_,index)=>index!==5),'plugin reuses the same right-panel button geometry and icon');
+    await checkToggleFocus('#pluginSurfaceToggle');
+    await pluginToggle.click();
     await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-closed.png')});
     await pluginToggle.press('Enter');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Enter opens the right panel once');
+    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Enter opens the right preview once');
     await page.waitForFunction(() => RNAssistantWorkspaceChat.owner()==='plugin' && document.querySelector('#workspaceChatView').parentElement.id==='pluginChat');
+    assert.equal(await page.locator('#pluginChat').isVisible(),true,'the shared chat stays visible');
     await page.locator('#messages .message.user').first().waitFor();
     assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
       document.querySelector('#messages').dataset.testIdentity]), ['workspaceChatTranscriptMount',transcriptIdentity],
       'plugin mounts the same physical transcript');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor({state:'visible'});
+    assert.equal(await page.locator('#pluginPreview').evaluate(node=>node.parentElement.classList.contains('preview-surface-bar')),true,
+      'the existing refresh action belongs to the right preview');
+    assert.match(await page.locator('#pluginPreviewMount .preview-surface-location').textContent(),/Данные и шаблоны/,
+      'the right preview identifies its resource');
     await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
+    await page.evaluate(() => switchTab('chat'));
+    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),true,
+      'leaving the plugin restores the prior tree preference');
+    await page.evaluate(() => switchTab('plugins'));
+    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),false,
+      'returning to the plugin collapses its tree again');
+    assert.ok((await page.locator('#pluginChat').boundingBox()).x < (await page.locator('#pluginPreviewMount').boundingBox()).x,
+      'the shared chat is centered before the right preview');
     assert.deepEqual(await dimensions('#chatForm','#messages'), office, 'plugin uses the same message/composer metrics');
     const pluginTitleInset = () => page.locator('#pluginChatTitle').evaluate(node => node.getBoundingClientRect().left-node.parentElement.getBoundingClientRect().left);
     assert.equal(await pluginTitleInset(),12,'nested chat header has no navigation-toggle reservation on desktop');
     await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-open.png')});
     await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin.png')});
-    const splitter=page.locator('#pluginDevelopmentSplitter'), splitBox=await splitter.boundingBox();
+    const splitter=page.locator('#pluginSurfaceSplitter'), splitBox=await splitter.boundingBox();
     const navWidth=(await page.locator('#pluginNavigationPane').boundingBox()).width;
     assert.equal(await splitter.getAttribute('class'),'splitter','plugin uses the common splitter element');
     assert.equal(splitBox.width,1,'development divider is one visible pixel');
@@ -203,20 +219,25 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal((await splitter.boundingBox()).width,1);
     await pluginToggle.click();
     await page.evaluate(() => refreshSplitPanes());
-    assert.equal(await splitter.isVisible(),false,'common layout refresh respects a closed development pane');
+    assert.equal(await splitter.isVisible(),false,'common layout refresh respects a closed preview');
+    assert.equal(await page.locator('#pluginChat').isVisible(),true,'closing the preview keeps the chat');
     assert.equal(await pluginToggle.getAttribute('aria-expanded'),'false');
     await pluginToggle.press('Space');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Space opens the right panel once');
+    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Space opens the right preview once');
     await page.locator('#productMobileMenuButton').click();
     await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
     const history=page.locator('#messages .is-activity-message');
     assert.match(await history.textContent(),/common.resources_read/,'saved tool activity uses the common renderer');
     await page.locator('#chatInput').fill('Черновик плагина');
     await page.locator('#chatInput').press('Escape');
-    assert.equal(await page.locator('#pluginChat').isVisible(),false,'Escape from the chat closes its panel');
-    assert.equal(await pluginToggle.evaluate(node=>node===document.activeElement),true,'closing returns focus to the shared toggle');
+    assert.equal(await page.locator('#pluginChat').isVisible(),true,'Escape does not close the central chat');
+    await page.locator('#pluginPreviewMount iframe').evaluate(frame => { frame.dataset.toggleProbe = 'same-instance'; });
+    await pluginToggle.click();
+    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик плагина','closing the preview keeps the chat draft');
     await pluginToggle.press('Enter');
-    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик плагина','reopening keeps the chat draft');
+    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик плагина','reopening the preview keeps the chat draft');
+    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('data-toggle-probe'),'same-instance',
+      'reopening the right preview keeps its live iframe');
     await page.locator('#chatInput').press('Shift+Enter');
     assert.match(await page.locator('#chatInput').inputValue(),/\n$/,'Shift+Enter inserts a line break');
     await page.locator('#chatInput').press('Enter');
@@ -236,7 +257,7 @@ fs.mkdirSync(captures, {recursive:true});
     assert.notEqual(await page.evaluate(() => chatTest.requests.at(-1).payload.input.requestId),firstRequest,'changed preferences get a new request identity');
     await page.setViewportSize({width:390,height:844});
     await page.locator('#chatInput').scrollIntoViewIfNeeded();
-    assert.ok((await page.locator('#pluginPreviewMount').boundingBox()).y < (await page.locator('#pluginChat').boundingBox()).y,'narrow plugin keeps preview before chat');
+    assert.ok((await page.locator('#pluginChat').boundingBox()).y < (await page.locator('#pluginPreviewMount').boundingBox()).y,'narrow plugin keeps chat before preview');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth),true,'plugin chat fits a narrow viewport');
     assert.equal(await pluginTitleInset(),12,'narrow chat title keeps its normal inset');
     await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin-narrow.png')});
@@ -276,6 +297,7 @@ fs.mkdirSync(captures, {recursive:true});
     const sourceTree=page.locator('[data-tree-key="project:'+sourceWorkspace+'"]');
     await page.waitForFunction(workspace=>document.querySelectorAll('[data-tree-key^="project-chat:'+workspace+':"]').length===2,sourceWorkspace);
     assert.equal(await sourceTree.locator('[data-tree-key^="project-chat:"]').count(),2,'main tree lists both source chats');
+    if(!await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()))await page.locator('#productMobileMenuButton').click();
     await page.screenshot({animations:'disabled',path:path.join(captures,'plugin-chat-history.png')});
     const firstRow=page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+firstSession+'"]');
     await firstRow.locator('> .navigation-tree-row > .navigation-tree-label').click();

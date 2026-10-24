@@ -478,6 +478,7 @@
   }
 
   function setOpen(value) {
+    if (value && window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.hide();
     if (!value && requestView) {
       window.RNAssistantModelContext.close();
       setOpen(false);
@@ -664,7 +665,7 @@
     sync();
   }
 
-  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync, openActivity: openActivity,
+  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync, setOpen: setOpen, openActivity: openActivity,
     showRequest: showRequest, hideRequest: hideRequest, setRequestLayout: requestLayout,
     restoreRequestLayout: function () { requestLayout(requestRestoreMode); } };
 }());

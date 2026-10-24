@@ -17,6 +17,14 @@ namespace RNAssistant.Core.Models
         [JsonProperty("viewport")] public HtmlVisualViewport Viewport { get; set; }
     }
 
+    // A read-only projection of the immutable selection body for the composer.
+    public sealed class HtmlVisualAnnotation
+    {
+        [JsonProperty("selection")] public HtmlVisualSelection Selection { get; set; }
+        [JsonProperty("comment")] public string Comment { get; set; }
+        [JsonProperty("annotationNumber")] public int AnnotationNumber { get; set; }
+    }
+
     public sealed class HtmlVisualAncestor
     {
         [JsonProperty("tag")] public string Tag { get; set; }

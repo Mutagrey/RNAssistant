@@ -39,6 +39,7 @@ context.RNAssistantHtmlWorkspaceActions = { create: () => ({}) };
 context.RNAssistantHtmlWorkspaceArtifacts = {};
 context.RNAssistantHtmlWorkspaceTree = {};
 context.RNAssistantHtmlWorkspacePreview = {};
+context.RNAssistantPreviewSurface = { attach: () => ({}) };
 context.RNAssistantProjectChats = { setScope: scope => navigation.push(scope) };
 context.RNAssistantChatDrafts = { flushOffice: async () => {} };
 context.RNAssistantVisualInspector = { createHost: options => {

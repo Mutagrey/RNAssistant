@@ -11,6 +11,7 @@ using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
@@ -100,8 +101,26 @@ namespace RNAssistant.Office.WebView
                 {
                     foreach (var id in record.ResourceDraftIds)
                     {
-                        try { view.Attachments.AddRange(attachments.LoadDrafts(new[] { id }, record.ChatId)
-                            .Select(ChatDraftAttachmentView.From)); }
+                        try
+                        {
+                            foreach (var attachment in attachments.LoadDrafts(new[] { id }, record.ChatId))
+                            {
+                                var projected = ChatDraftAttachmentView.From(attachment);
+                                if (attachment.VisualSelectionSource != null)
+                                {
+                                    var annotation = HtmlVisualSelectionPolicy.ReadAnnotation(attachments.ReadBytes(attachment));
+                                    if (annotation.AnnotationNumber > 0) projected.VisualAnnotation = annotation;
+                                    string sourceOwner, sourceId; int sourceRevision;
+                                    if (ChatResourceUri.TryParseArtifactRevision(attachment.VisualSelectionSource,
+                                        out sourceOwner, out sourceId, out sourceRevision))
+                                    {
+                                        projected.VisualSourceArtifactId = sourceId;
+                                        projected.VisualSourceRevision = sourceRevision;
+                                    }
+                                }
+                                view.Attachments.Add(projected);
+                            }
+                        }
                         catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is UnauthorizedAccessException)
                         { view.AttachmentError = "Часть вложений черновика недоступна; проверьте их перед отправкой."; }
                     }
