@@ -56,6 +56,7 @@
     return new Date(value).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   }
   function clearView(c) {
+    if (c.captureMessages) { c.captureMessages(); c.captureMessages = null; }
     c.viewVersion = (c.viewVersion || 0) + 1;
     c.mounts.forEach(function (node) { window.RNAssistantViewerRegistry.unmount(node); }); c.mounts = [];
     $("modelContextBody").replaceChildren(); $("modelContextBody").classList.remove("product-viewer");
@@ -252,8 +253,16 @@
     try { fields = members(text); } catch (error) { root.appendChild(el("p", error.message)); return mount(c, root, text, true); }
     var raw = field(fields, "messages");
     if (!raw) { root.appendChild(el("p", "В payload нет массива messages. Откройте JSON запроса.")); return; }
-    var listRoot = el("section"); root.appendChild(listRoot);
+    var listRoot = el("section", undefined, "model-context-messages"); root.appendChild(listRoot);
     var list = members(raw), count = 0;
+    var mode = c.mode, source = mode === "preview" ? c.previewVersion : c.selected, rows = [];
+    var saved = c.messageViews && c.messageViews[mode];
+    if (saved && saved.source !== source) saved = null;
+    c.captureMessages = function () {
+      if (!c.messageViews) c.messageViews = {};
+      c.messageViews[mode] = { source: source, count: count, scroll: root.scrollTop,
+        expanded: rows.filter(function (row) { return row.open; }).map(function (row) { return Number(row.dataset.messageIndex); }) };
+    };
     var roles = { system: "Инструкции", developer: "Приложение",
       user: "Пользователь", assistant: "Модель", tool: "Инструмент", function: "Функция" };
     var more = button("Показать ещё сообщения", page);
@@ -264,12 +273,20 @@
         var entry = (entries || []).find(function (item) { return item.MessageIndex === index; });
         var content = field(parts, "content"), contentValue = decoded(content);
         var detail = el("details", undefined, "model-context-message is-message"), summary = el("summary");
+        detail.dataset.messageIndex = String(index); detail.dataset.role = role;
+        rows.push(detail);
         summary.appendChild(el("span", String(index + 1), "model-context-message-number"));
         var heading = el("span"), label = el("span", undefined, "model-context-message-label");
         label.appendChild(el("span", roles[role] || role, "model-context-message-title"));
         label.appendChild(el("span", message.raw.length.toLocaleString("ru-RU") + " симв. JSON", "model-context-message-size"));
+        summary.title = message.raw.length.toLocaleString("ru-RU") + " символов в JSON сообщения";
         heading.appendChild(label);
-        var excerpt = typeof contentValue === "string" ? contentValue.slice(0, 300).replace(/\s+/g, " ").trim() :
+        var excerptValue = contentValue;
+        if (role === "assistant" && typeof contentValue === "string") {
+          var envelope = modelDecision(contentValue);
+          if (envelope) excerptValue = envelope.message || envelope.reason || envelope.decision || contentValue;
+        }
+        var excerpt = typeof excerptValue === "string" ? excerptValue.slice(0, 300).replace(/\s+/g, " ").trim() :
           Array.isArray(contentValue) ? "Составное содержимое: текст и вложения" : "Служебные поля сообщения";
         if (excerpt) heading.appendChild(el("span", excerpt, "model-context-message-preview"));
         if (entry && entry.Presentation && entry.Presentation !== "Unknown") {
@@ -281,14 +298,17 @@
         var body = el("div", undefined, "model-context-message-body"); detail.appendChild(body);
         var loaded = false;
         detail.addEventListener("toggle", function () {
-          if (!detail.open || loaded) return; loaded = true;
-          if (typeof contentValue === "string") {
+          if (!detail.open || loaded || !live(c) || !detail.isConnected) return; loaded = true;
+          if (role === "assistant" && typeof contentValue === "string" && modelDecision(contentValue)) {
+            modelMessage(c, body, contentValue);
+          } else if (typeof contentValue === "string") {
             var contentNode = el("div"); body.appendChild(contentNode); mount(c, contentNode, contentValue, false);
           } else if (content) lazy(c, body, "Части содержимого · JSON", function () { return content; }, true);
           var metadata = el("details", undefined, "model-context-meta");
           metadata.appendChild(el("summary", "Данные сообщения")); body.appendChild(metadata);
           metadata.appendChild(el("p", "Роль: " + role + " · " +
             (entry && entry.Presentation && entry.Presentation !== "Unknown" ? note(entry) : "полнота исходных источников не сохранена")));
+          metadata.appendChild(el("p", "Размер сообщения в JSON: " + message.raw.length.toLocaleString("ru-RU") + " символов."));
           if (entry && entry.Reason) metadata.appendChild(el("p", entry.Reason, "model-context-note"));
           if (entry && entry.ToolCallId) metadata.appendChild(el("p", "Операция: " +
             (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
@@ -316,10 +336,20 @@
             }, false);
           }
         });
+        if (saved && saved.expanded.indexOf(index) >= 0) detail.open = true;
       });
       count += 50; if (count < list.length) listRoot.appendChild(more);
     }
-    listRoot.appendChild(el("p", list.length + " сообщений · порядок отправки", "model-context-note")); page();
+    var overview = el("div", undefined, "model-context-overview"), heading = el("div");
+    heading.appendChild(el("h3", "Состав запроса"));
+    heading.appendChild(el("p", list.length + " сообщений · исходный порядок", "model-context-note"));
+    overview.appendChild(heading);
+    var collapse = button("Свернуть", function () {
+      listRoot.querySelectorAll("details[open]").forEach(function (detail) { detail.open = false; });
+    });
+    collapse.title = "Свернуть все сообщения"; collapse.classList.add("model-context-collapse");
+    overview.appendChild(collapse); listRoot.appendChild(overview); page();
+    while (saved && count < saved.count && count < list.length) page();
     var parameters = fields.filter(function (part) { return part.key !== "messages"; });
     if (parameters.length) {
       var settings = el("details", undefined, "model-context-meta");
@@ -338,6 +368,50 @@
         }
       });
     }
+    if (saved) {
+      var viewVersion = c.viewVersion;
+      setTimeout(function () { if (live(c) && c.viewVersion === viewVersion) root.scrollTop = saved.scroll; }, 0);
+    }
+  }
+  function modelDecision(text) {
+    var value = decoded(text);
+    if (value && Object.keys(value).length === 1 && value.response && typeof value.response === "object") value = value.response;
+    return value && typeof value.message === "string" && typeof value.action === "string" ? value : null;
+  }
+  function modelMessage(c, body, text) {
+    var decision = modelDecision(text), narration = decision ? decision.message : text;
+    if (narration.trim()) {
+      var view = el("div"); body.appendChild(view); mount(c, view, narration, false);
+    }
+    if (decision) {
+      var labels = { execute: "Запрос вызова инструментов", reflection: "Промежуточное решение", finish: "Завершение по ответу модели" };
+      var info = el("details", undefined, "model-context-decision");
+      info.appendChild(el("summary", labels[decision.action] || "Действие модели: " + decision.action));
+      if (typeof decision.reason === "string" && decision.reason.trim()) info.appendChild(el("p", decision.reason));
+      if (typeof decision.decision === "string" && decision.decision.trim()) info.appendChild(el("p", decision.decision));
+      if (Array.isArray(decision.tool_calls) && decision.tool_calls.length) {
+        var calls = el("ul");
+        decision.tool_calls.forEach(function (call) {
+          if (call && typeof call.name === "string") calls.appendChild(el("li", call.name));
+        });
+        info.appendChild(calls);
+      }
+      if (Array.isArray(decision.results) && decision.results.length) {
+        var outcomes = el("ul"), assessments = { satisfied: "выполнено", partially_satisfied: "выполнено частично",
+          unverified: "не проверено", not_satisfied: "не выполнено" };
+        decision.results.forEach(function (result) {
+          if (!result || typeof result.summary !== "string") return;
+          var row = el("li", result.summary);
+          if (typeof result.assessment === "string") row.appendChild(el("small",
+            "Оценка модели: " + (assessments[result.assessment] || result.assessment), "model-context-result-assessment"));
+          outcomes.appendChild(row);
+        });
+        info.appendChild(outcomes);
+      }
+      if (!narration.trim()) info.open = true;
+      body.appendChild(info);
+    } else if (!narration.trim()) body.appendChild(el("p", "Текстовое сообщение отсутствует.", "model-context-note"));
+    return !!decision;
   }
   function responseBody(c, body, value) {
     var text = value.text, fields = members(text), content = field(fields, "Content") || field(fields, "content");
@@ -348,10 +422,7 @@
     }
     var messageText = decoded(content);
     if (typeof messageText !== "string") { mount(c, body, text, true); return; }
-    var envelope = decoded(messageText), narration = envelope && envelope.message;
-    var view = el("div"); body.appendChild(view);
-    mount(c, view, typeof narration === "string" ? narration : messageText, false);
-    if (typeof narration === "string") lazy(c, body, "Сообщение модели · исходный JSON", function () { return messageText; }, true);
+    if (modelMessage(c, body, messageText)) lazy(c, body, "Сообщение модели · исходный JSON", function () { return messageText; }, true);
     lazy(c, body, "Полный ответ · исходный JSON", function () { return text; }, true);
   }
 
@@ -587,17 +658,21 @@
     var request = c.detail.events.find(function (e) { return e.eventId === c.selected; });
     if (c.tab === "response") {
       var events = c.detail.events.filter(function (e) { return e.type !== "llm.request"; });
-      if (!events.length) root.textContent = "Ответ ещё не сохранён. Подготовка запроса не доказывает доставку модели.";
+      if (!events.length) { notice(c, "Ответ ещё не сохранён", "Проверьте ход работы или обновите историю запросов."); return; }
       events.forEach(function (event) {
         var streaming = request.trace.Streaming === true || c.detail.events.some(function (e) { return e.type === "assistant.chunk"; });
         var title = event.type === "llm.response" ? (streaming ? "Собранный потоковый ответ" : request.trace.Streaming === false ? "Ответ провайдера" : "Сохранённый ответ · формат записи не указан") :
           event.type === "assistant.chunk" ? "Исходные SSE data-фрагменты" : event.type;
-        var body = el("section"); root.appendChild(body);
-        body.appendChild(el("h3", title + " · " + new Date(event.createdUtc).toLocaleTimeString("ru-RU")));
+        var body = el("section", undefined, "model-context-response"); root.appendChild(body);
+        var head = el("div", undefined, "model-context-response-head"), heading = el("div");
+        heading.appendChild(el("h3", title));
+        heading.appendChild(el("small", dateText(event.createdUtc)));
+        head.appendChild(heading); body.appendChild(head);
         if (event.trace.Error) body.appendChild(el("p", event.trace.Error));
         if (event.hasPayload) {
-          lazy(c, body, "Содержимое", function () { return payload(c, event.eventId, undefined, version); }, true, event.type === "llm.response" ? responseBody : null);
-          body.appendChild(button("Скачать полностью", function () { downloadEvent(c, event.eventId); }));
+          var content = lazy(c, body, "Содержимое", function () { return payload(c, event.eventId, undefined, version); }, true, event.type === "llm.response" ? responseBody : null);
+          if (event.type === "llm.response") { content.parentElement.classList.add("model-context-response-content"); content.parentElement.open = true; }
+          head.appendChild(button("Скачать", function () { downloadEvent(c, event.eventId); }));
         } else body.appendChild(el("p", "Тело не сохранено."));
       }); return;
     }
@@ -770,6 +845,7 @@
   }
   async function preview(c) {
     c.version++; var version = c.version; c.preview = null; c.previewError = ""; clearView(c);
+    c.previewVersion = version;
     previewAvailability(c);
     if (state.chatReadOnly) {
       status(c, "Этот чат доступен только для чтения. Для нового запроса создайте новый чат.");

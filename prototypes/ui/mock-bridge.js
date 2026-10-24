@@ -994,7 +994,8 @@
         { role: "user", content: "Сначала покажи основные изменения, затем поясни возможные причины." }];
       if (type === "inspectModelContextPreview" && payload.text) exampleMessages.push({ role: "user", content: payload.text });
       var exampleText = JSON.stringify(type === "inspectModelContextPreview" || payload.eventId === requestEvent.eventId ? { model: "preview-model", messages: exampleMessages } :
-        { Content: JSON.stringify({ message: "Выручка выросла на **18,4%**. Основной вклад дали количество заказов и средний чек.", action: "done", tool_calls: [] }) });
+        { Content: JSON.stringify({ action: "finish", reason: "Показатели двух месяцев сопоставлены.", results: [],
+          message: "Выручка выросла на **18,4%**. Основной вклад дали количество заказов и средний чек." }) });
       var exampleData = download(exampleText, "application/json"); exampleData.payload.sha256 = await hash(exampleText);
       if (type === "inspectModelContextPreview") return { chatId: activeChatId, rawData: exampleData,
         generatedUtc: new Date().toISOString(), resourceContextReceipt: { Messages: [] } };

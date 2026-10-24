@@ -511,6 +511,7 @@
 
   function setWidth(value, persist, layoutOnly) {
     var layout = document.getElementById("chatLayout"), bounds = widthBounds();
+    if (layoutOnly && layout && !layout.clientWidth) return;
     var next = Math.max(bounds.min, Math.min(bounds.max, value));
     // Responsive clamping changes the visible size, not the user's chosen width.
     if (!layoutOnly) { if (requestView && requestMode === "wide") requestWidth = next; else width = next; }

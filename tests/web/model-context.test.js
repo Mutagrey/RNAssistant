@@ -11,6 +11,7 @@ class Node {
   set textContent(value) { this.text = value; this.children = []; }
   get textContent() { return this.text || ""; }
   appendChild(node) { this.children.push(node); node.parent = this; return node; }
+  get parentElement() { return this.parent; }
   replaceChildren() { this.children.forEach(n => n.isConnected = false); this.children = []; this.text = ""; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(n => n !== this); this.isConnected = false; }
   setAttribute() {}
@@ -27,7 +28,7 @@ function fixture(withAliases = false, pdf = false) {
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
   const requestText = '{"model":"test","messages":[{"role":"system","content":"rules"},{"role":"user","content":"' + "語😀".repeat(110000) + '"}],"seed":9007199254740993123456789}';
   const events = [{ eventId: "r1", sequence: 3, createdUtc: "2026-10-02T10:00:00Z", type: "llm.request", hasPayload: true, trace: { RequestId: "one", Model: "test", Streaming: true } }];
-  let revision = 3, hold = null, leaseCount = 0;
+  let revision = 3, hold = null, leaseCount = 0, responseText = '{"Content":"# Answer"}';
   const c = vm.createContext({ AbortController, TextDecoder, TextEncoder, Uint8Array, Blob, URL, Response,
     setTimeout: (fn, ms) => { timers.set(++timer, { fn, ms }); return timer; }, clearTimeout: id => timers.delete(id),
     crypto: crypto.webcrypto, state: { activeChatId: "chat", draftAttachments: [] }, $: get,
@@ -136,7 +137,7 @@ function fixture(withAliases = false, pdf = false) {
         return query.knownRevision === revision ? { chatId: "chat", revision, unchanged: true } : { chatId: "chat", revision, events: events.filter(e => e.type === "llm.request").slice().reverse() };
       }
       if (hold) await hold;
-      const text = type === "inspectModelContextPreview" ? '{"messages":[{"role":"user","content":"draft"}]}' : query.eventId === "response1" ? '{"Content":"# Answer"}' : requestText;
+      const text = type === "inspectModelContextPreview" ? '{"messages":[{"role":"user","content":"draft"}]}' : query.eventId === "response1" ? responseText : requestText;
       const bytes = Buffer.from(text), id = (++leaseCount).toString(16).padStart(64, "0"); leases.set(id, bytes);
       const data = { leaseId: id, url: "https://rnassistant.local-resource/v1/download/" + id, maxChunkBytes: 65536,
         payload: { sha256: crypto.createHash("sha256").update(bytes).digest("hex"), byteLength: bytes.length, contentType: "application/json" } };
@@ -155,7 +156,7 @@ function fixture(withAliases = false, pdf = false) {
   for (const name of ["app-resource-download.js", "app-model-context.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
   c.bindModelContextActions();
   return { c, get, mounts, calls, closes, requestText, events, timers, verification,
-    bump() { revision++; }, hold(value) { hold = value; },
+    bump() { revision++; }, hold(value) { hold = value; }, response(value) { responseText = value; },
     async tick() { const entry = Array.from(timers).find(([, t]) => t.ms === 2000); timers.delete(entry[0]); entry[1].fn(); await flush(); }
   };
 }
@@ -497,4 +498,34 @@ function fixture(withAliases = false, pdf = false) {
     "cancelling an old save dialog cannot replace the new preview status");
   cancelledSave.c.RNAssistantModelContext.close();
   console.log("PASS model context: refresh disclosures, mode-change races, stale errors and failed request selection");
+
+  for (const action of ["execute", "reflection", "finish"]) {
+    const wrapped = action !== "execute", decision = fixture(), inner = action === "finish"
+      ? { action: "finish", reason: "Исходные данные неполны.", results: [{ summary: "Подсчитаны только доступные строки.",
+        assessment: "partially_satisfied", evidence: ["call-1"] }], message: "" }
+      : action === "reflection"
+      ? { action: "reflection", reason: "Нужно уточнить диапазон.", decision: "Проверить заголовки таблицы.", message: "" }
+      : { action: "execute", reason: "Нужно прочитать таблицу.", tool_calls: [{ name: "common.resources_read", arguments: {} }], message: "" };
+    const source = JSON.stringify({ Content: JSON.stringify(wrapped ? { response: inner } : inner) });
+    decision.response(source);
+    decision.events.push({ eventId: "response1", sequence: 6, type: "llm.response", hasPayload: true,
+      createdUtc: "2026-10-02T10:00:30Z", trace: { RequestId: "one" } });
+    decision.c.RNAssistantModelContext.open(); await flush();
+    await decision.get("modelContextResponseTab").fire("click");
+    const content = decision.get("modelContextBody").children[0].children.find(node => node.tag === "details");
+    assert.equal(content.open, true, "saved response opens without another disclosure click");
+    await content.fire("toggle"); await flush();
+    const nodes = descendants(content), info = nodes.find(node => node.className === "model-context-decision");
+    assert.equal(info.open, true, "an empty v8 message exposes its recorded action and decision basis");
+    assert.ok(descendants(info).some(node => node.textContent === inner.reason));
+    assert.ok(descendants(info).some(node => node.textContent === (action === "finish" ? inner.results[0].summary :
+      action === "reflection" ? inner.decision : "common.resources_read")));
+    if (action === "finish") assert.ok(descendants(info).some(node => /Оценка модели: выполнено частично/.test(node.textContent)));
+    assert.equal(decision.mounts.some(mount => mount.kind === "markdown" && !mount.options.text), false);
+    const raw = nodes.find(node => node.tag === "details" && node.children[0]?.textContent === "Полный ответ · исходный JSON");
+    raw.open = true; await raw.fire("toggle"); await flush();
+    assert.equal(decision.mounts.at(-1).options.text, source, "readable v8 projection preserves the exact transport");
+    decision.c.RNAssistantModelContext.close();
+  }
+  console.log("PASS model context: readable v8 empty messages, strict wrapper and exact raw response");
 })().catch(error => { console.error(error); process.exitCode = 1; });

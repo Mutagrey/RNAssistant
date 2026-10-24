@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Request Inspector reading and hidden-panel layout — 2026-10-24
+
+Owner: Web model-context reader / chat Inspector presentation. Ordered input
+messages now use compact divided rows, shared typography and a clear reading
+area; raw metadata stays behind disclosures. The response opens immediately.
+The reader handles v8 `response` wrappers and empty `message` fields by showing
+the recorded action, reason, decision and model assessments without claiming
+runtime success. Exact source JSON and exports remain unchanged. Returning from
+another content tab restores expanded input messages and their reading position.
+
+Closed HTML browser overlay rules no longer override Inspector columns after a
+hidden section, and hidden layouts do not clamp the chosen panel width to zero
+space. Targeted model-context and browser layout/HTML handoff checks cover these
+changes. Windows/Office/WebView2 qualification remains open.
+
 ## HTML annotation editor and shared composer list — 2026-10-24
 
 Owner: Web visual annotation UI / Core selection body / Office chat draft projection.
