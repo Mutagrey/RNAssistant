@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Services
@@ -12,6 +13,31 @@ namespace RNAssistant.Core.Services
     // source separately; this payload never grants file or mutation authority.
     public static class HtmlVisualSelectionPolicy
     {
+        public const int MaximumBodyBytes = 20480;
+
+        public static string ReadCapturedBody(byte[] bytes)
+        {
+            if (bytes == null || bytes.Length == 0 || bytes.Length > MaximumBodyBytes)
+                throw new InvalidOperationException("Снимок HTML-элемента недействителен.");
+            string text;
+            JObject envelope;
+            try
+            {
+                text = new UTF8Encoding(false, true).GetString(bytes);
+                envelope = JObject.Parse(text);
+                if ((string)envelope["type"] != "rnassistant.html-visual-selection" ||
+                    (int?)envelope["version"] != 1 || envelope["selection"]?.Type != JTokenType.Object ||
+                    envelope["source"]?.Type != JTokenType.String ||
+                    !bytes.SequenceEqual(Capture(envelope["selection"].ToObject<HtmlVisualSelection>(),
+                        (string)envelope["source"])))
+                    throw new InvalidOperationException("Снимок HTML-элемента недействителен.");
+            }
+            catch (Exception error) when (error is JsonException || error is DecoderFallbackException ||
+                error is FormatException || error is InvalidCastException || error is ArgumentException)
+            { throw new InvalidOperationException("Снимок HTML-элемента недействителен.", error); }
+            return text;
+        }
+
         public static byte[] Capture(HtmlVisualSelection selection, string sourceTitle)
         {
             if (selection == null || !Tag(selection.Tag) || selection.Selector == null ||
@@ -39,10 +65,13 @@ namespace RNAssistant.Core.Services
             var title = (sourceTitle ?? "HTML-проект").Trim();
             if (title.Length == 0) title = "HTML-проект";
             if (title.Length > 256) title = title.Substring(0, 256);
-            return Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new {
+            var bytes = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new {
                 type = "rnassistant.html-visual-selection", version = 1,
                 source = title, evidence = "untrusted preview DOM; source mapping unverified", selection
             }));
+            if (bytes.Length > MaximumBodyBytes)
+                throw new InvalidOperationException("Снимок HTML-элемента слишком велик.");
+            return bytes;
         }
 
         private static bool Tag(string value)

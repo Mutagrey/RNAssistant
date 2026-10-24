@@ -8,6 +8,17 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Workspace file resource schema branches — 2026-10-24
+
+Owner: Application `WorkspacePorts.ResourceVariant`. An existing focused Harness
+check, `resources: VBA procedure workspace streaming`, fails at schema admission
+for `procedure`. The file-read branch returns `TextReadSelectorAlternatives`
+before the later `AddProcedureVariant`/`AddTreeVariant`/`AddPdfPageVariant` calls;
+the same unreachable order is present in the pre-change `HEAD`. This is a file
+selector admission defect, separate from the visual-selection attachment path.
+Next scoped fix: build complete file alternatives and run the existing VBA,
+JSON-tree and workspace PDF schema checks before claiming those selectors work.
+
 ## Conversation v8 / shared-chat incident audit — 2026-10-23
 
 **Follow-up 2026-10-24:** the baseline findings below are historical. The current

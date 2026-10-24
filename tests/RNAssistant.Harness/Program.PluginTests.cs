@@ -13,6 +13,7 @@ using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -174,6 +175,166 @@ namespace RNAssistant.Harness
                 }
             });
         }
+        private static void WorkspaceVisualSelectionUsesSharedChat()
+        {
+            WithPluginPaths(paths =>
+            {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var plugin = PluginFixture(service, paths, false);
+                    var sessionId = service.CreateProjectChat(new ProjectChatRequest {
+                        WorkspaceId = plugin.SourceWorkspaceId }).SessionId;
+                    var selection = new HtmlVisualSelection {
+                        Tag = "button", StableUiId = "save", Selector = "html > body > button:nth-of-type(1)",
+                        Attributes = new System.Collections.Generic.Dictionary<string, string> { { "data-ui-id", "save" } },
+                        Ancestry = new System.Collections.Generic.List<HtmlVisualAncestor>(), TextExcerpt = "Save",
+                        Rect = new HtmlVisualRect { X = 10, Y = 20, Width = 80, Height = 30 },
+                        Viewport = new HtmlVisualViewport { Width = 800, Height = 600, Dpr = 1 }
+                    };
+                    var body = HtmlVisualSelectionPolicy.Capture(selection, "Test plugin");
+                    AssertEqual(Encoding.UTF8.GetString(body), HtmlVisualSelectionPolicy.ReadCapturedBody(body),
+                        "shared Core policy admits the exact captured body");
+                    var forged = JObject.Parse(Encoding.UTF8.GetString(body));
+                    forged["extra"] = "forged";
+                    RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.ReadCapturedBody(
+                        Encoding.UTF8.GetBytes(forged.ToString(Formatting.None))));
+                    forged.Remove("extra");
+                    forged["version"] = "invalid";
+                    RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.ReadCapturedBody(
+                        Encoding.UTF8.GetBytes(forged.ToString(Formatting.None))));
+                    var attachments = new AttachmentStore(paths);
+                    var draft = attachments.Import("selection.json", "application/json", body, sessionId);
+                    draft.VisualSelectionSource = new ResourceRef(ResourceUri.Create("plugin", plugin.PluginId,
+                        "release", plugin.ReleaseId), "1");
+                    attachments.SaveDraftMetadata(draft);
+
+                    var portProbe = new TcpListener(IPAddress.Loopback, 0);
+                    portProbe.Start();
+                    var port = ((IPEndPoint)portProbe.LocalEndpoint).Port;
+                    portProbe.Stop();
+                    using (var listener = new HttpListener())
+                    {
+                        listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
+                        listener.Start();
+                        string modelRequest = null;
+                        var server = Task.Run(async () =>
+                        {
+                            var context = await listener.GetContextAsync().ConfigureAwait(false);
+                            using (var reader = new StreamReader(context.Request.InputStream))
+                                modelRequest = await reader.ReadToEndAsync().ConfigureAwait(false);
+                            var response = new JObject { ["choices"] = new JArray(new JObject {
+                                ["message"] = new JObject { ["content"] =
+                                    ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                        "The reply needs no tools.", "Готово.", results: new ConversationResultClaim[0]) } })
+                            }.ToString(Formatting.None);
+                            var bytes = Encoding.UTF8.GetBytes(response);
+                            context.Response.ContentType = "application/json";
+                            context.Response.ContentLength64 = bytes.Length;
+                            await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                            context.Response.Close();
+                        });
+                        try
+                        {
+                            var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                                Model = "test-model", StreamResponses = false, AutoCompressContext = false,
+                                SmartChatTitles = false };
+                            service.SubmitProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId,
+                                Input = new WorkspaceSubmitInputRequest { SessionId = sessionId, RequestId = "visual-once",
+                                    Message = "Inspect this button", Mode = ChatModes.Agent,
+                                    ResourceDraftIds = new System.Collections.Generic.List<string> { draft.Id } }
+                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            server.GetAwaiter().GetResult();
+                            service.SubmitProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId,
+                                Input = new WorkspaceSubmitInputRequest { SessionId = sessionId, RequestId = "visual-once",
+                                    Message = "Inspect this button", Mode = ChatModes.Agent,
+                                    ResourceDraftIds = new System.Collections.Generic.List<string> { draft.Id } }
+                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            var session = new ChatStore(paths).Load(sessionId);
+                            var user = session.Messages.Single(item => item.Role == "user");
+                            var committed = user.Attachments.Single();
+                            AssertTrue(modelRequest.Contains("Current user visual selections") &&
+                                modelRequest.Contains("\\\"attachment\\\"") &&
+                                !modelRequest.Contains("rnassistant.html-visual-selection") &&
+                                !modelRequest.Contains(draft.VisualSelectionSource.Uri) &&
+                                committed.ContentSha256 != null && committed.DraftChatId == null,
+                                "model receives a read target without implicit DOM body or runtime source URI");
+                            AssertTrue(user.ResourceRefs.Any(item => item.Uri == draft.VisualSelectionSource.Uri) &&
+                                new AttachmentStore(paths).ReadBytes(committed).SequenceEqual(body),
+                                "accepted message retains exact plugin source and selection body");
+                            var provider = new WorkspaceChatAttachmentResourceProvider(paths, session);
+                            var found = provider.Find(null);
+                            AssertEqual(1, found.Items.Count, "accepted selection is discoverable");
+                            var target = found.Items.Single().Target;
+                            var ports = typeof(WorkspaceConversationService).GetNestedType("WorkspacePorts",
+                                System.Reflection.BindingFlags.NonPublic);
+                            var schema = JObject.Parse((string)ports.GetMethod("ResourceSchema",
+                                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                                .Invoke(null, new object[] { false, true, false, 16000 }));
+                            string schemaError;
+                            AssertTrue(ToolSchemaSupport.ValidateArguments(new JObject {
+                                ["type"] = "attachment", ["target"] = target }, schema, false, out schemaError),
+                                "shared workspace read schema admits selection targets");
+                            AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject {
+                                ["type"] = "attachment", ["target"] = target, ["scope"] = "document"
+                            }, schema, false, out schemaError), "schema rejects a foreign selector");
+                            var findHandler = new WorkspaceResourceHandler(null, null, () => null,
+                                new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), true, null, 16000,
+                                chatAttachments: provider);
+                            var execution = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                            var foundByTool = findHandler.ExecuteAsync(new ToolHandlerContext(execution,
+                                new System.Collections.Generic.Dictionary<string, object> { ["type"] = "attachment" }),
+                                CancellationToken.None).GetAwaiter().GetResult();
+                            AssertTrue(foundByTool.Result.Status == ToolResultStatus.Ok &&
+                                foundByTool.Result.DataJson.Contains(target),
+                                "common.resources_find discovers the accepted target");
+                            AssertEqual(body.Length, provider.Read(target, 16000).Result.CompleteViewPayload.ByteLength,
+                                "resource read owns the original body");
+                            var handler = new WorkspaceResourceHandler(null, null, () => null,
+                                new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), false, null, 16000,
+                                chatAttachments: provider);
+                            var read = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                                new System.Collections.Generic.Dictionary<string, object> {
+                                    ["type"] = "attachment", ["target"] = target }), CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            AssertEqual(ToolResultStatus.Ok, read.Result.Status,
+                                "common.resources_read returns the committed selection");
+                            AssertTrue(read.Result.DataJson.Contains("rnassistant.html-visual-selection") &&
+                                read.ResourceEvidence.Single().Immutable,
+                                "model read carries exact immutable evidence");
+                            var bounded = new WorkspaceResourceHandler(null, null, () => null,
+                                new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), false, null, 64,
+                                chatAttachments: provider).ExecuteAsync(new ToolHandlerContext(execution,
+                                new System.Collections.Generic.Dictionary<string, object> {
+                                    ["type"] = "attachment", ["target"] = target }), CancellationToken.None)
+                                .GetAwaiter().GetResult();
+                            AssertTrue(!(bool)JObject.Parse(bounded.Result.DataJson)["complete"] &&
+                                bounded.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind ==
+                                    ResourceCoverageKinds.Whole,
+                                "automatic excerpt records whole-read intent without claiming whole evidence");
+                            var wrongSelector = handler.ExecuteAsync(new ToolHandlerContext(execution,
+                                new System.Collections.Generic.Dictionary<string, object> {
+                                    ["type"] = "attachment", ["target"] = target, ["scope"] = "document" }),
+                                CancellationToken.None).GetAwaiter().GetResult();
+                            AssertEqual(ToolResultStatus.Error, wrongSelector.Result.Status,
+                                "foreign resource selectors fail closed");
+                            var duplicate = JsonConvert.DeserializeObject<ChatAttachment>(JsonConvert.SerializeObject(committed));
+                            duplicate.Id = Guid.NewGuid().ToString("N");
+                            var second = new ChatMessage { Id = Guid.NewGuid().ToString("N"), Role = "user",
+                                CreatedUtc = user.CreatedUtc, Attachments = new System.Collections.Generic.List<ChatAttachment> { duplicate } };
+                            session.Messages.Add(second);
+                            ChatMessageAttachmentService.Link(session, second);
+                            var collision = new WorkspaceChatAttachmentResourceProvider(paths, session).Find(null);
+                            AssertTrue(!collision.Complete && collision.Items.Count == 0,
+                                "ambiguous semantic targets are withheld from discovery");
+                        }
+                        finally { listener.Stop(); }
+                    }
+                }
+            });
+        }
+
         private static PluginItemDto PluginFixture(PluginApplicationService service,AppDataPaths paths,bool data=true)
         {
             var item=service.Create(new PluginCreateRequest{Name="Test plugin",RootPath=Path.Combine(paths.Root,"source"),Description="Test"});

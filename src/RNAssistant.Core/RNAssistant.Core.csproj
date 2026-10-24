@@ -253,6 +253,7 @@
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Services\ChatResourceUri.cs" />
+    <Compile Include="Services\ChatMessageAttachmentService.cs" />
     <Compile Include="Services\HtmlVisualSelectionPolicy.cs" />
     <Compile Include="Services\ArtifactWorkingSet.cs" />
     <Compile Include="Services\ChatSessionHeaderFactory.cs" />

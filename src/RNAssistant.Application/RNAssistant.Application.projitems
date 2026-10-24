@@ -30,6 +30,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspacePlanService.cs" Link="Application\Workspace\WorkspacePlanService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspacePlanningObserver.cs" Link="Application\Workspace\WorkspacePlanningObserver.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceResourceHandler.cs" Link="Application\Workspace\WorkspaceResourceHandler.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceChatAttachmentResourceProvider.cs" Link="Application\Workspace\WorkspaceChatAttachmentResourceProvider.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceRunControl.cs" Link="Application\Workspace\WorkspaceRunControl.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceTaskListObserver.cs" Link="Application\Workspace\WorkspaceTaskListObserver.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceWebVerificationContracts.cs" Link="Application\Workspace\Contracts\WorkspaceWebVerificationContracts.cs" />

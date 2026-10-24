@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Visual Inspector: workspace selection intake and model read — 2026-10-24
+
+Owner: Core chat-attachment binding / Application workspace resource provider.
+Workspace input now accepts only same-session visual-selection drafts whose exact
+plugin release belongs to that source workspace. The input event and user message
+retain one attachment identity; the body uses the existing chat CAS. Shared Core
+linking replaces the Office-only copy. Workspace `common.resources_find/read`
+discovers the accepted semantic target and reads its verified immutable body,
+including bounded text windows. Ambiguous targets and foreign selectors are
+refused. Focused host-neutral intake, duplicate submit, model prompt and resource
+read checks pass. Native plugin-frame capture, shared-composer staging, source
+mapping/edit read-back and Windows/WebView2 qualification remain open.
+
 ## Visual Inspector: one DOM evidence contract in Core — 2026-10-24
 
 Owner: Core selection DTO/admission, Office chat ingestion. The bounded DOM
@@ -7,10 +20,9 @@ selection schema and its validation/CAS-body encoding now live once in Core;
 Office keeps only its typed source-binding bridge payload. This removes the
 Office assembly dependency from the future plugin/workspace capture path without
 changing the current HTML selection wire format or Office chat behavior. Focused
-host-neutral selection/CAS and bridge-contract check passes. Workspace attachment
-discovery/read, exact plugin-frame capture, source mapping/edit verification and
-Windows WebView2 qualification remain open; merely accepting workspace draft IDs
-would leave the model unable to read the selection.
+host-neutral selection/CAS and bridge-contract check passes. The workspace read
+path was added in the later slice above; plugin-frame capture, source mapping/edit
+verification and Windows WebView2 qualification remain open.
 
 ## Visual Inspector: HTML selection in the shared Office composer — 2026-10-24
 

@@ -521,10 +521,10 @@ intact. Current image/audio/PDF delivery keeps its existing routing.
 
 Committed attachments of user messages expose a scoped semantic target:
 `message attachment: <filename> [sent <UTC timestamp>; uploaded <UTC timestamp>]`.
-`ChatResourceReferenceService` derives it from the retained message and attachment
-metadata and binds it to that message's exact document `ResourceRef`; it creates
-no registry or durable alias. The prompt index prioritizes the latest input and
-discovery returns the same target for locally linked originals. Gateway resolves
+Core `ChatMessageAttachmentService` derives it from the retained message and attachment
+metadata and binds it to that message's exact artifact `ResourceRef`; it creates
+no registry or durable alias. The Office prompt index prioritizes the latest input and
+discovery returns the same target for locally linked originals. Its Gateway resolves
 this target through `ChatArtifactResourceProvider` without enumerating the document
 catalog. Unavailable unrelated records therefore cannot block this selected input.
 Reads, within-file search, outline and copy share that resolution path.
@@ -536,10 +536,16 @@ the bounded JSON body contains DOM evidence and a semantic source title, never
 the runtime URI. Intake rejects a draft after the active source revision changes.
 The model discovers and reads the selection through `common.resources_*`, and a
 selection by itself is not authority to edit an inferred source file.
-The selection DTO and bounded-body admission policy are shared Core owners;
-the Office bridge payload supplies only the Office-specific source binding.
-Workspace/plugin ingestion still needs its own scope-aware attachment resource
-provider before such a selection can be accepted into a workspace chat.
+The selection DTO, bounded-body admission policy and message/artifact link are
+shared Core owners; the Office bridge payload supplies only the Office-specific
+source binding. Workspace input can accept a staged visual-selection draft bound
+to the exact chat and a retained plugin release in that workspace. The accepted
+input event and user message carry the same attachment metadata; the body stays
+in the existing immutable attachment CAS. `WorkspaceChatAttachmentResourceProvider`
+derives the semantic target from the accepted user message, verifies its artifact
+link and exact body, and serves it through workspace `common.resources_find/read`.
+Ambiguous targets, missing bodies and foreign selectors fail explicitly. This is
+backend intake/read only: plugin-frame capture and composer staging are still open.
 
 The provider still verifies document ownership, committed publication, original
 metadata and explicit removal; content reads retain exact hash/length checks.

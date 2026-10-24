@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -10,6 +11,8 @@ namespace RNAssistant.Runtime.Contracts
         public string SessionId { get; set; }
         public string RequestId { get; set; }
         public string Message { get; set; }
+        [JsonProperty("resourceDraftIds", NullValueHandling = NullValueHandling.Ignore)]
+        public List<string> ResourceDraftIds { get; set; }
         public string Mode { get; set; }
         public MutationPolicy? MutationPolicy { get; set; }
         public bool? AutoConfirmToolActions { get; set; }

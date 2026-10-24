@@ -23,13 +23,15 @@ namespace RNAssistant.Runtime
         private readonly bool _find;
         private readonly WorkspacePlanService _plans;
         private readonly IReadOnlyToolHandler _office;
+        private readonly WorkspaceChatAttachmentResourceProvider _chatAttachments;
         private readonly int _maximumTextReadCharacters;
 
         internal WorkspaceResourceHandler(WorkspaceFileResourceProvider files, SkillPublicationService publications,
             Func<SkillCatalogSnapshot> skills, Dictionary<string, ResourceEvidence> observed, bool find,
-            WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null)
+            WorkspacePlanService plans, int maximumTextReadCharacters, IReadOnlyToolHandler office = null,
+            WorkspaceChatAttachmentResourceProvider chatAttachments = null)
         { _files = files; _publications = publications; _skills = skills; _observed = observed; _find = find; _plans = plans;
-            _office = office;
+            _office = office; _chatAttachments = chatAttachments;
             if (maximumTextReadCharacters < 1 || maximumTextReadCharacters > WorkspaceFileService.MaximumWindowTextCharacters)
                 throw new ArgumentOutOfRangeException(nameof(maximumTextReadCharacters));
             _maximumTextReadCharacters = maximumTextReadCharacters; }
@@ -47,12 +49,23 @@ namespace RNAssistant.Runtime
                     if (_find && string.IsNullOrEmpty(Value(context, "scope"))) context.Arguments["scope"] = "document";
                     return _office.ExecuteAsync(context, cancellationToken);
                 }
-                if (type != "file" && type != "skill" && type != "plan") throw Error("Unknown resource type.", "RESOURCE_NOT_FOUND");
+                if (type != "file" && type != "skill" && type != "plan" && type != "attachment")
+                    throw Error("Unknown resource type.", "RESOURCE_NOT_FOUND");
+                if (type == "attachment" && _chatAttachments == null)
+                    throw Error("Workspace attachment resources are unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE");
                 if (type == "file" && !string.IsNullOrEmpty(Value(context, "referencePath")) ||
                     type == "skill" && !string.IsNullOrEmpty(Value(context, "directory")))
                     throw Error("The selected resource type does not support this selector.", "RESOURCE_REQUEST_INVALID");
                 if (_find)
                 {
+                    if (type == "attachment")
+                    {
+                        if (context.Arguments.Keys.Any(key => key != "type" && key != "query"))
+                            throw Error("Attachment discovery accepts only a query.", "RESOURCE_REQUEST_INVALID");
+                        var attachments = _chatAttachments.Find(Value(context, "query"));
+                        return Return(ToolResult.Ok(ResourceFindProjection.Message(attachments),
+                            ResourceFindProjection.Serialize(attachments), attachments.ResourceRefs));
+                    }
                     var page = type == "plan" ? _plans.Find(Value(context, "query")) : type == "file" ? _files.Find(Value(context, "directory"), Value(context, "query")) :
                         SkillCatalogService.Find(_skills(), Value(context, "query"));
                     if (type == "file")
@@ -94,6 +107,55 @@ namespace RNAssistant.Runtime
                 var depth = Number(context, "depth") ?? 1;
                 var treeOffset = Number(context, "offset") ?? 0;
                 var treeLimit = Number(context, "limit") ?? 100;
+                if (type == "attachment")
+                {
+                    if (string.IsNullOrWhiteSpace(target) ||
+                        context.Arguments.Keys.Any(key => key != "type" && key != "target" &&
+                            key != "representation" && key != "startLine" && key != "lineCount" &&
+                            key != "startChar" && key != "charCount") ||
+                        (Value(context, "representation") != string.Empty &&
+                            Value(context, "representation") != ResourceRepresentations.Text) ||
+                        isTree || hasPointer || pageRange || pageIndex.HasValue ||
+                        context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") ||
+                        !string.IsNullOrEmpty(referencePath) || context.Arguments.ContainsKey("version") ||
+                        startLine.HasValue != lineCount.HasValue || startChar.HasValue != charCount.HasValue ||
+                        startLine.HasValue && startChar.HasValue)
+                        throw Error("Attachment reads require one semantic target and optional text window.",
+                            "RESOURCE_REQUEST_INVALID");
+                    read = _chatAttachments.Read(target, _maximumTextReadCharacters,
+                        startLine, lineCount, startChar, charCount);
+                    var selected = startChar.HasValue
+                        ? ResourceReadProjection.FromCharacters(read.Result, target, "attachment", "conversation",
+                            startChar.Value, charCount.Value)
+                        : startLine.HasValue
+                        ? ResourceReadProjection.FromLines(read.Result, target, "attachment", "conversation",
+                            startLine.Value, lineCount.Value)
+                        : ResourceReadProjection.From(read.Result, target, "attachment", "conversation");
+                    selected.SourceComplete = read.Result.Complete;
+                    if (!read.Result.Complete)
+                    {
+                        selected.SourceCoverage = read.Result.Coverage;
+                        selected.SourceEndChar = read.Result.TotalCharacters;
+                        if (!startChar.HasValue && !startLine.HasValue)
+                        {
+                            selected.SelectionComplete = true;
+                            selected.StartChar = 0;
+                            selected.RequestedCharacters = _maximumTextReadCharacters;
+                        }
+                    }
+                    var attachmentRequestedCoverage = startChar.HasValue
+                        ? new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: startChar,
+                            end: (long)startChar.Value + charCount.Value)
+                        : startLine.HasValue
+                        ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: startLine,
+                            end: (long)startLine.Value + lineCount.Value)
+                        : ResourceCoverage.Whole();
+                    read = read.WithReadMetadata(selected, attachmentRequestedCoverage);
+                    if (read.Result.Complete) read.RequireCompleteExactText();
+                    return Return(ToolResult.Ok(read.Result.Complete ? "Complete visual selection read." :
+                        "Exact bounded visual selection excerpt read.", JsonConvert.SerializeObject(selected),
+                        new[] { read.Result.Resource.Reference }), read.Evidence);
+                }
                 if (isTree && (type != "file" || !hasPointer || depth < 0 || treeOffset < 0 || treeLimit < 1 ||
                     startLine.HasValue || lineCount.HasValue || startChar.HasValue || charCount.HasValue ||
                     context.Arguments.ContainsKey("procedure") || context.Arguments.ContainsKey("procedureKind") ||

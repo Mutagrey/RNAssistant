@@ -1,5 +1,9 @@
 # RNAssistant Harness
 
+`visual selection: workspace intake and common resource read` checks one accepted
+workspace attachment identity through input journal, chat CAS, model prompt and
+`common.resources_read`, plus duplicate submission and ambiguous-target refusal.
+
 `v8 recovery:` checks configurable/frozen reflection depth, separate format retries,
 strict response transport, bounded output truncation, accepted reasoning after
 persisted reopen, and workspace live/saved presentation. Run

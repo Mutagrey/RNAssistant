@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
@@ -13,16 +12,10 @@ namespace RNAssistant.Office.Services
 {
     internal static class ChatResourceReferenceService
     {
-        internal const string MessageAttachmentPrefix = "message attachment: ";
+        internal const string MessageAttachmentPrefix = ChatMessageAttachmentService.TargetPrefix;
 
-        // Derived addresses of immutable user inputs, not a second registry. The
-        // message timestamp fixes the source message; a later upload cannot rebind it.
         internal static string MessageAttachmentTarget(ChatMessage message, ChatAttachment attachment)
-        {
-            return MessageAttachmentPrefix + (attachment.FileName ?? string.Empty).Trim() +
-                " [sent " + message.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) +
-                "; uploaded " + attachment.CreatedUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) + "]";
-        }
+        { return ChatMessageAttachmentService.Target(message, attachment); }
 
         internal sealed class MessageAttachmentBinding
         {
@@ -105,7 +98,7 @@ namespace RNAssistant.Office.Services
                 message.ResourceRefs = message.ResourceRefs ?? new List<ResourceRef>();
                 RebaseReferences(session, message);
                 if (message.ProtocolMessage) continue;
-                LinkAttachments(session, message);
+                ChatMessageAttachmentService.Link(session, message);
                 LinkHtmlWorkspace(session, message);
                 LinkTaskList(session, message);
                 LinkPlanDocument(session, message);
@@ -249,87 +242,6 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static void LinkAttachments(ChatSession session, ChatMessage message)
-        {
-            var attachments = (message.Attachments ?? new List<ChatAttachment>())
-                .Where(item => item != null && !string.IsNullOrWhiteSpace(item.Id))
-                .ToList();
-            if (attachments.Count == 0) return;
-
-            var sourceMessages = (session.Messages ?? new List<ChatMessage>())
-                .Where(item => item != null && string.Equals(item.Id, message.Id, StringComparison.OrdinalIgnoreCase))
-                .Take(2)
-                .ToList();
-            if (sourceMessages.Count != 1)
-            {
-                throw new InvalidOperationException("Attachment source message identity is ambiguous.");
-            }
-            var attachmentIds = attachments
-                .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase);
-            if (attachmentIds.Any(group => group.Count() != 1))
-            {
-                throw new InvalidOperationException("Attachment identity is ambiguous within its source message.");
-            }
-            foreach (var attachment in attachments)
-            {
-                var id = "attachment_" + attachment.Id;
-                var matches = session.Artifacts.Where(item => item != null &&
-                    string.Equals(item.Id, id, StringComparison.OrdinalIgnoreCase)).Take(2).ToList();
-                if (matches.Count > 1)
-                {
-                    throw new InvalidOperationException("Attachment artifact identity is ambiguous: " + id);
-                }
-                var artifact = matches.Count == 1 ? matches[0] : null;
-                // Keep existing exact provenance; unavailable metadata cannot be rebuilt from a message.
-                if (artifact != null && !string.IsNullOrEmpty(artifact.AvailabilityIssue)) continue;
-                var expectedKind = string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)
-                    ? ChatArtifactKinds.Image
-                    : ChatArtifactKinds.Attachment;
-                if (artifact == null)
-                {
-                    artifact = new ChatArtifact
-                    {
-                        Id = id,
-                        Kind = expectedKind,
-                        Title = string.IsNullOrWhiteSpace(attachment.FileName) ? "Вложение" : attachment.FileName,
-                        MimeType = attachment.ContentType,
-                        SourceMessageId = message.Id,
-                        RelativePath = attachment.RelativePath,
-                        ContentSha256 = attachment.ContentSha256,
-                        ContentByteLength = attachment.ContentByteLength,
-                        MetadataJson = JsonConvert.SerializeObject(new
-                        {
-                            attachmentId = attachment.Id,
-                            attachment.Kind,
-                            attachment.Size,
-                            attachment.PageCount,
-                            attachment.ExtractedCharCount,
-                            attachment.TextTruncated
-                        })
-                    };
-                    session.Artifacts.Add(artifact);
-                }
-                else
-                {
-                    if (!string.Equals(artifact.Kind, expectedKind, StringComparison.OrdinalIgnoreCase) ||
-                        ((artifact.DocumentAuthorityId != session.DocumentAuthorityId || string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId)) &&
-                            !string.Equals(artifact.SourceMessageId, message.Id, StringComparison.OrdinalIgnoreCase)) ||
-                        !string.Equals(artifact.MimeType, attachment.ContentType, StringComparison.OrdinalIgnoreCase) ||
-                        string.IsNullOrWhiteSpace(artifact.ContentSha256) ||
-                        !string.Equals(artifact.ContentSha256, attachment.ContentSha256, StringComparison.OrdinalIgnoreCase) ||
-                        !artifact.ContentByteLength.HasValue ||
-                        !attachment.ContentByteLength.HasValue ||
-                        artifact.ContentByteLength.Value != attachment.ContentByteLength.Value ||
-                        !string.Equals(AttachmentId(artifact), attachment.Id, StringComparison.OrdinalIgnoreCase))
-                    {
-                        throw new InvalidOperationException(
-                            "Attachment artifact cannot be rebound to different immutable evidence: " + id);
-                    }
-                }
-                AddReference(session, message, artifact);
-            }
-        }
-
         private static void LinkHtmlWorkspace(ChatSession session, ChatMessage message)
         {
             // Publication owns attribution. Preserve exact runtime references and
@@ -427,19 +339,6 @@ namespace RNAssistant.Office.Services
                 StringComparison.OrdinalIgnoreCase)
                     ? matches[0]
                     : null;
-        }
-
-        private static string AttachmentId(ChatArtifact artifact)
-        {
-            try
-            {
-                return (string)JObject.Parse(artifact == null ? "{}" : artifact.MetadataJson ?? "{}")
-                    .GetValue("attachmentId", StringComparison.OrdinalIgnoreCase) ?? string.Empty;
-            }
-            catch (JsonException)
-            {
-                return string.Empty;
-            }
         }
 
         private static void AddReference(ChatSession session, ChatMessage message, ChatArtifact artifact)

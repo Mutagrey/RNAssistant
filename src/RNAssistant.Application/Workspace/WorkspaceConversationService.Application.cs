@@ -182,8 +182,15 @@ namespace RNAssistant.Runtime
             if (request.RequestId != null && (string.IsNullOrWhiteSpace(request.RequestId) || request.RequestId.Length > 128 ||
                 string.IsNullOrWhiteSpace(request.SessionId)))
                 throw new ArgumentException("A request ID must be 1–128 characters and requires an existing --session (use session create first).");
-            if (request.Answers == null && string.IsNullOrWhiteSpace(request.Message)) throw new ArgumentException("A task message is required.");
-            if (request.Answers != null && (string.IsNullOrWhiteSpace(request.SessionId) || request.Message != null))
+            var draftIds = request.ResourceDraftIds ?? new System.Collections.Generic.List<string>();
+            if (draftIds.Count > AttachmentStore.MaxFilesPerMessage ||
+                draftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
+                draftIds.Distinct(StringComparer.OrdinalIgnoreCase).Count() != draftIds.Count ||
+                draftIds.Count > 0 && string.IsNullOrWhiteSpace(request.SessionId))
+                throw new ArgumentException("Workspace resource drafts require unique IDs and an existing session.");
+            if (request.Answers == null && string.IsNullOrWhiteSpace(request.Message) && draftIds.Count == 0)
+                throw new ArgumentException("A task message or resource is required.");
+            if (request.Answers != null && (string.IsNullOrWhiteSpace(request.SessionId) || request.Message != null || draftIds.Count > 0))
                 throw new ArgumentException("Typed answers require an existing session and cannot include a task message.");
             if (request.Mode != null) ConversationRunPolicy.For(request.Mode);
             if (request.MutationPolicy.HasValue && !Enum.IsDefined(typeof(MutationPolicy), request.MutationPolicy.Value))
@@ -196,6 +203,7 @@ namespace RNAssistant.Runtime
             // Transport identity is bound to submitted intent. Environment/model
             // settings are execution configuration; a duplicate never reapplies them.
             var canonical = new WorkspaceSubmitInputRequest { Message = request.Message,
+                ResourceDraftIds = request.ResourceDraftIds?.Count > 0 ? request.ResourceDraftIds : null,
                 Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), MutationPolicy = request.MutationPolicy,
                 AutoConfirmToolActions = request.AutoConfirmToolActions, ReasoningEnabled = request.ReasoningEnabled,
                 Answers = request.Answers, Acceptance = PrepareAcceptance(request.Acceptance) };

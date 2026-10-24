@@ -89,8 +89,9 @@ format-8 persistence/UI и восстановление в отдельном wo
 Owner — application/chat UI. Фаза 0 завершена, RFC принят; срез 1a общего
 черновика и единый ChatView controller для Office, проекта и плагина в 1b
 реализованы host-neutral. HTML-preview получил инспектор и подготовку выбранного
-элемента как ресурсного чипа общего Office-чата; plugin-frame integration,
-workspace ingestion и проверенная правка исходника ещё открыты.
+элемента как ресурсного чипа общего Office-чата. Workspace backend принимает
+привязанный draft и читает его через общий `common.resources_*`; plugin-frame
+integration, staging в общем composer и проверенная правка исходника ещё открыты.
 После реализации документы остаются историей решения; текущие контракты переходят в
 UI design, Plugins, Resource Fabric и Session events, статус — в PROGRESS.
 
