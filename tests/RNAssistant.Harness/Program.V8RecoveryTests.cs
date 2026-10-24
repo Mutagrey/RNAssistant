@@ -213,6 +213,52 @@ namespace RNAssistant.Harness
                         AssertEqual(2, stored.Length, "reflection and finish retained once");
                         AssertTrue(stored.All(message => message.ReasoningContent == "Workspace reasoning." && message.CompletionTokens == 25),
                             "accepted workspace messages retain reasoning and usage");
+                        AssertEqual(RunViewLifecycles.Completed, stored.Last().RunViewState?.Lifecycle,
+                            "workspace persists the terminal run outcome on its visible accepted response");
+                        server.GetAwaiter().GetResult();
+                    } finally { listener.Stop(); }
+                }
+            });
+        }
+
+        private static void V8RecoveryWorkspaceFailureHistory()
+        {
+            WithTempPaths(paths => {
+                var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                using (var service = new WorkspaceConversationService(paths))
+                using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                    var server = Task.Run(async () => {
+                        var context = await listener.GetContextAsync();
+                        var bytes = Encoding.UTF8.GetBytes("{\"error\":{\"message\":\"fixture refusal\"}}");
+                        context.Response.StatusCode = 401;
+                        context.Response.ContentType = "application/json";
+                        context.Response.ContentLength64 = bytes.Length;
+                        await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length);
+                        context.Response.Close();
+                    });
+                    try {
+                        var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "failed-run"));
+                        var session = service.CreateSession(workspace, "Failure history");
+                        var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                            Model = "fixture", StreamResponses = false, SmartChatTitles = false,
+                            AutoCompressContext = false, ContextWindowOverrideTokens = 131072,
+                            AgentResponseMode = AgentResponseModes.JsonObject };
+                        var result = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
+                            SessionId = session.Id, Message = "Answer directly." }, settings,
+                            () => "fixture-key", cancellationToken: timeout.Token).GetAwaiter().GetResult();
+                        AssertEqual(RunLifecycle.Failed, result.Summary.Lifecycle,
+                            "provider refusal is a failed runtime outcome");
+                        var saved = service.GetSession(workspace, session.Id).Messages.Last();
+                        AssertEqual("diagnostic", saved.Activity?.Kind,
+                            "workspace appends a visible terminal record when no model response was accepted");
+                        AssertEqual(RunViewLifecycles.Failed, saved.RunViewState?.Lifecycle,
+                            "the terminal message carries the typed run outcome");
+                        AssertEqual("diagnostic", PluginApplicationService.PresentWorkspaceMessage(saved).Activity?.Kind,
+                            "the shared message view shows the saved failure after reopen");
                         server.GetAwaiter().GetResult();
                     } finally { listener.Stop(); }
                 }
@@ -224,11 +270,16 @@ namespace RNAssistant.Harness
             var message = new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run",
                 ResponseProtocolVersion = 8, ResponseModelAttemptId = "attempt", Content = RecoveryReflection(),
                 ReasoningContent = "Saved reasoning.", ReasoningTokens = 7 };
+            message.RunViewState = new RunViewState("run", "turn", "Saved outcome.",
+                RunViewLifecycles.Failed, RunViewHealth.Clean, 0, 0, 0, 0, 0, 0,
+                null, "provider", "Saved outcome.", DateTime.UtcNow);
             var view = PluginApplicationService.PresentWorkspaceMessage(message);
             AssertEqual(message.Id, view.Id, "project and plugin receive stable canonical message identity");
             AssertEqual("run", view.RunId, "message belongs to exact run");
             AssertEqual("Saved reasoning.", view.ReasoningContent, "workspace retains accepted reasoning");
             AssertEqual("Read before changing.", view.ReflectionDecision, "reflection survives projection");
+            AssertEqual(RunViewLifecycles.Failed, view.RunViewState?.Lifecycle,
+                "workspace projection retains the per-message outcome for history paging");
             message.ResponseProtocolVersion = 7;
             view = PluginApplicationService.PresentWorkspaceMessage(message);
             AssertTrue(!view.Content.Contains("\"action\"") && view.Content.Contains("неподдерживаемый"), "old JSON is explicitly skipped without migration");

@@ -628,6 +628,7 @@ namespace RNAssistant.Application
                 return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
                     StepId = message.AcceptedCallOrigin?.StepId,
                     CreatedUtc = message.CreatedUtc, Content = accepted.Response.Message,
+                    RunViewState = message.RunViewState,
                     ReasoningContent = message.ReasoningContent, ReasoningTokens = message.ReasoningTokens,
                     ReasoningTruncated = message.ReasoningTruncated,
                     ReflectionDecision = accepted.Response.Action == ConversationResponse.ReflectionAction

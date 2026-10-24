@@ -431,7 +431,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   return details;
 }
 
-function appendAgentRunViewState(parent, runViewState, runId) {
+function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
   var modelResults = runViewState && runViewState.modelResults || [];
@@ -494,7 +494,7 @@ function appendAgentRunViewState(parent, runViewState, runId) {
     details.appendChild(list);
     copy.appendChild(details);
   }
-  if (runId) {
+  if (runId && showJournal !== false) {
     var openJournal = document.createElement("button");
     openJournal.type = "button";
     openJournal.className = "agent-details-link";

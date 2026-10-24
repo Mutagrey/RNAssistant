@@ -13,6 +13,11 @@ retain already loaded pages, and a stale page cannot replace a newer revision.
 Office and workspace transcripts now use the same keyed DOM reconciliation and
 live model output painter. Replacing a saved message preserves an open reasoning
 disclosure and its keyboard focus; unchanged messages stay mounted.
+Workspace runs now persist the same typed per-message `RunViewState` as Office.
+A failed run with no accepted model response appends a visible terminal diagnostic;
+older failures and unknown effects remain visible after another run or history paging.
+The terminal diagnostic classification is shared with Office, preserving its
+existing native-refusal status path.
 
 Focused Harness projection/history and v8 recovery checks, Node reconciliation
 checks and Chrome project/plugin layout, paging, progress and reconnect checks

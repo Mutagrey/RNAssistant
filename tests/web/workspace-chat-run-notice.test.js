@@ -28,10 +28,15 @@ const root = path.resolve(__dirname, '../..');
         const original = send;
         window.send = async function (type, payload) {
           if (type === 'getPreviousProjectChatMessages') return {
-            chatId: payload.sessionId, sessionRevision: 5, startIndex: 0, totalCount: 7,
+            chatId: payload.sessionId, sessionRevision: 5, startIndex: 0, totalCount: 8,
             messages: [
               { Id: 'old-user', Role: 'user', Content: 'Earlier question.' },
-              { Id: 'old-answer', Role: 'assistant', Content: 'Earlier answer.' }
+              { Id: 'old-answer', Role: 'assistant', RunId: 'old-run', Content: 'Earlier answer.',
+                RunViewState: { RunId: 'old-run', TurnId: 'old-turn', Narrative: 'Earlier answer.',
+                  Lifecycle: 'completed', ExecutionHealth: 'unknown', GoalVerification: 'not_assessed',
+                  ModelResults: [], SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0,
+                  UnverifiedWrites: 1, FailedCalls: 0, UnknownEffects: 1,
+                  Reason: 'model_done', CurrentAction: 'Earlier answer.', StartedUtc: '2026-10-22T00:00:00Z' } }
             ]
           };
           const result = await original(type, payload);
@@ -39,7 +44,7 @@ const root = path.resolve(__dirname, '../..');
             result.state.status = 'failed';
             result.state.revision = 5;
             result.messageStartIndex = 2;
-            result.messageTotalCount = 7;
+            result.messageTotalCount = 8;
             result.messages = [
               { Id: 'user', Role: 'user', Content: 'Check the chart.' },
               { Id: 'reflection', Role: 'assistant', Content: '',
@@ -51,6 +56,14 @@ const root = path.resolve(__dirname, '../..');
               { Id: 'finish', Role: 'assistant', Content: 'Chart remains unfinished.', Results: [
                 { Summary: 'Chart absent', Assessment: 'partially_satisfied', Evidence: ['call-1'] }
               ] },
+              { Id: 'diagnostic', Role: 'assistant', RunId: 'failed-run', Content: '', Activity: {
+                RunId: 'failed-run', Kind: 'diagnostic', Title: 'Выполнение остановлено',
+                Status: 'failed', ResultMessage: 'Provider failed.' },
+                RunViewState: { RunId: 'failed-run', TurnId: 'failed-turn', Narrative: 'Provider failed.',
+                  Lifecycle: 'failed', ExecutionHealth: 'clean', GoalVerification: 'not_assessed',
+                  ModelResults: [], SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0,
+                  UnverifiedWrites: 0, FailedCalls: 0, UnknownEffects: 0,
+                  Reason: 'provider', CurrentAction: 'Provider failed.', StartedUtc: '2026-10-23T00:00:00Z' } },
               { Id: 'protocol', Role: 'assistant', ProtocolMessage: true, Content: 'private v8 JSON' }
             ];
             result.state.runViewState = {
@@ -77,10 +90,14 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
       assert.equal(await page.locator('#messages').getByText('common.resources_read').count() > 0, true,
         owner + ': saved tool activity uses the common message renderer');
+      await page.locator('#messages .agent-run-notice').getByText('Не удалось получить ответ от сервиса модели.', { exact: false }).waitFor();
       assert.equal((await page.locator('#messages').textContent()).includes('private v8 JSON'), false,
         owner + ': protocol body stays hidden');
       await page.locator('#messages .chat-history-more').click();
       await page.locator('#messages').getByText('Earlier answer.').waitFor();
+      await page.locator('#messages .agent-run-notice').getByText('Есть действия с неподтверждённым результатом', { exact: false }).waitFor();
+      assert.equal(await page.locator('#messages .agent-details-link').count(), 0,
+        owner + ': historical workspace outcome cannot open an Office-only journal');
       assert.equal(await page.locator('#messages .chat-history-more').count(), 0,
         owner + ': oldest page removes the history control');
       assert.deepEqual(errors, [], owner + ': no page errors');

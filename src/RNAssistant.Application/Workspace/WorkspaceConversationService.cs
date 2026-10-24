@@ -1680,7 +1680,24 @@ namespace RNAssistant.Runtime
                         RunId = fact.Summary.RunId
                     });
                 }
-                _chats.CommitRun(_session, new ConversationRunCommit(fact, _session.Messages.Skip(firstMessage), activity));
+                if (fact.Kind == AgentRunEventKind.SummaryChanged)
+                {
+                    var diagnostic = RunViewStateProjector.TerminalDiagnostic(fact.Summary);
+                    if (diagnostic != null || fact.Summary.Reason == "provider_refused")
+                        _session.Messages.Add(new ChatMessage
+                        {
+                            Role = "assistant", Content = fact.Summary.AssistantMessage,
+                            RuntimeProjection = true, ExcludeFromModelContext = true,
+                            RunId = fact.Summary.RunId, Activity = diagnostic,
+                            ResponseStatus = fact.Summary.Reason == "provider_refused"
+                                ? AgentResponseStatuses.Refused : null
+                        });
+                }
+                var runView = RunViewStateProjector.StampCurrentRun(_session, includeProtocolResponses: true);
+                var projected = _session.Messages.LastOrDefault(message => runView != null &&
+                    ReferenceEquals(message.RunViewState, runView));
+                _chats.CommitRun(_session, new ConversationRunCommit(fact, _session.Messages.Skip(firstMessage),
+                    activity, updated: projected == null ? null : new[] { projected }));
                 _cursor++;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted || fact.Summary.Lifecycle != RunLifecycle.Running)
                     _modelProgress?.Invoke(null);

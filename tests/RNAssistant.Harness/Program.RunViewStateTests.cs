@@ -34,6 +34,24 @@ namespace RNAssistant.Harness
             AssertEqual(1, view.UnknownEffects, "unknown effects projected");
             AssertEqual("Model says everything succeeded.", view.Narrative, "narrative is preserved as data");
 
+            var accepted = new ChatMessage { Role = "assistant", RunId = "run-view", ProtocolMessage = true,
+                ResponseProtocolVersion = 8, Content = "accepted response" };
+            session.Messages.Add(accepted);
+            RunViewStateProjector.StampCurrentRun(session);
+            AssertTrue(accepted.RunViewState == null && session.Messages[2].RunViewState != null,
+                "Office stamps its visible activity instead of the protocol envelope");
+            RunViewStateProjector.StampCurrentRun(session, includeProtocolResponses: true);
+            AssertEqual(RunViewHealth.Unknown, accepted.RunViewState.ExecutionHealth,
+                "workspace stamps the accepted response that its shared view presents");
+            var failed = new RunSummary("failed-run", "failed-turn", RunLifecycle.Failed,
+                new ToolCounts(), 0, 0, "Model response failed.", "ProtocolExhausted", null);
+            AssertEqual("invalid_model_response", RunViewStateProjector.TerminalDiagnostic(failed).ExecutionStatus,
+                "Office and workspace use one terminal diagnostic classification");
+            var refused = new RunSummary("refused-run", "refused-turn", RunLifecycle.Failed,
+                new ToolCounts(), 0, 0, "Model refused.", "provider_refused", null);
+            AssertTrue(RunViewStateProjector.TerminalDiagnostic(refused) == null,
+                "a native refusal keeps its existing response-status path");
+
             var unverified = RunViewSession(new RunSummary("run-unverified", "turn-unverified", RunLifecycle.Completed,
                 new ToolCounts(writeOk: 1), 1, 1, "Changed.", null, null));
             unverified.Messages.Add(EffectMessage("run-unverified", "legacy-write", ToolEffectEvidence.Unreported));

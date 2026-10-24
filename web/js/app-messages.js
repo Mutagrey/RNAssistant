@@ -543,6 +543,7 @@ function renderMessageArticle(message, index, options) {
         activityArticle.insertBefore(activityReasoning, activityBody || activityArticle.firstChild);
       }
     }
+    if (options.workspace) appendWorkspaceRunOutcome(activityArticle, message);
     return activityArticle;
   }
   if (typeof appendMessageMediaGallery === "function") appendMessageMediaGallery(node, message);
@@ -564,6 +565,7 @@ function renderMessageArticle(message, index, options) {
   if (!options.workspace || messageContent(message).trim()) appendChatMessageText(node, message);
   appendAcceptedResponseDetails(node, message);
   if (options.workspace) {
+    appendWorkspaceRunOutcome(node, message);
     if (messageContent(message).trim()) {
       var footer = document.createElement("div"); footer.className = "message-footer";
       var actions = document.createElement("div"); actions.className = "message-actions";
@@ -572,6 +574,14 @@ function renderMessageArticle(message, index, options) {
     }
   } else appendMessageFooter(node, message, index, null);
   return node;
+}
+
+function appendWorkspaceRunOutcome(node, message) {
+  var runView = window.RNAssistantRunViewState.fromMessage(message);
+  if (runView && ["completed", "failed", "cancelled"].indexOf(runView.lifecycle) >= 0 &&
+      (runView.lifecycle !== "completed" || runView.executionHealth !== "clean")) {
+    appendAgentRunViewState(node, runView, messageRunId(message), false);
+  }
 }
 
 function appendAcceptedResponseDetails(node, message) {

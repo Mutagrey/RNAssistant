@@ -62,15 +62,35 @@ namespace RNAssistant.Core.Services
                 modelResults: FinishResults(messages, summary));
         }
 
-        public static RunViewState StampCurrentRun(ChatSession session)
+        public static RunViewState StampCurrentRun(ChatSession session, bool includeProtocolResponses = false)
         {
             var state = Create(session);
             if (state == null || session.Messages == null) return state;
-            var target = session.Messages.LastOrDefault(message => message != null && !message.ProtocolMessage &&
+            var target = session.Messages.LastOrDefault(message => message != null &&
+                (!message.ProtocolMessage || includeProtocolResponses &&
+                    message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion) &&
                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(message.RunId, state.RunId, StringComparison.Ordinal));
             if (target != null) target.RunViewState = state;
             return state;
+        }
+
+        public static ChatActivity TerminalDiagnostic(RunSummary summary)
+        {
+            if (summary == null || summary.Lifecycle == RunLifecycle.Running ||
+                summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
+                summary.Lifecycle == RunLifecycle.Completed ||
+                summary.Reason == "provider_refused") return null;
+            return new ChatActivity
+            {
+                RunId = summary.RunId, Kind = "diagnostic", Title = "Выполнение остановлено",
+                Status = summary.Lifecycle.ToString().ToLowerInvariant(),
+                ExecutionStatus = summary.Reason == "ProtocolExhausted" ? "invalid_model_response"
+                    : summary.Reason == "PromptBudgetExceeded" ? "prompt_budget_exceeded"
+                    : summary.Reason == "iteration_limit" || summary.Reason == "tool_step_limit"
+                        ? "step_limit_reached" : summary.Reason,
+                ResultMessage = summary.AssistantMessage
+            };
         }
 
         private static string Lifecycle(RunSummary summary)

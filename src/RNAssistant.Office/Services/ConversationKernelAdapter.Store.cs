@@ -265,19 +265,11 @@ namespace RNAssistant.Office.Services
         {
             if (summary.Lifecycle == RunLifecycle.Running || summary.Lifecycle == RunLifecycle.AwaitingConfirmation ||
                 summary.Reason == "awaiting_user") return;
-            ChatActivity diagnostic = null;
+            var diagnostic = RunViewStateProjector.TerminalDiagnostic(summary);
             string responseStatus = null;
             if (summary.Reason == "provider_refused") responseStatus = AgentResponseStatuses.Refused;
             else if (summary.Lifecycle == RunLifecycle.Completed)
                 responseStatus = AgentResponseStatuses.Completed;
-            else diagnostic = new ChatActivity
-            {
-                Kind = "diagnostic", Title = "Выполнение остановлено", Status = ConversationRunProjection.Status(summary),
-                ExecutionStatus = summary.Reason == "ProtocolExhausted" ? "invalid_model_response"
-                    : summary.Reason == "PromptBudgetExceeded" ? "prompt_budget_exceeded"
-                    : summary.Reason == "iteration_limit" || summary.Reason == "tool_step_limit" ? "step_limit_reached" : summary.Reason,
-                ResultMessage = summary.AssistantMessage
-            };
             var message = AgentTranscript.CreateAssistantMessage(
                 ConversationRunProjection.AssistantMessage(summary),
                 diagnostic != null || _lastModel == null ? null : _lastModel.Completion, diagnostic, responseStatus);

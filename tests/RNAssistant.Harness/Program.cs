@@ -275,6 +275,7 @@ namespace RNAssistant.Harness
                 Test("v8 recovery: strict schema transport and repair", V8RecoveryStrictTransport),
                 Test("v8 recovery: bounded output limit correction", V8RecoveryOutputLimit),
                 Test("v8 recovery: workspace live and accepted reasoning", V8RecoveryWorkspaceStream),
+                Test("v8 recovery: workspace terminal failure remains in history", V8RecoveryWorkspaceFailureHistory),
                 Test("v8 recovery: workspace message identity and compatibility", V8RecoveryWorkspacePresentation),
                 Test("conversation v8: status-free round trip", ConversationV8RoundTripsWithoutStatus),
                 Test("conversation v8: reads all accepted history forms", ConversationHistoryReadsAcceptedForms),
