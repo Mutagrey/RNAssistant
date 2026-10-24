@@ -13,6 +13,7 @@ namespace RNAssistant.Office.Contracts
         [BridgeOperationPolicy(false, 30)] Init,
         GetPlugins, GetPluginIcons, SavePluginIcon, DeletePluginIcon, UpdatePluginAppearance, [BridgeOperationPolicy(true, 360)] DrawPluginIcon,
         CreatePlugin, ConnectPlugin, GetPluginSourceState, CheckPlugin, ApplyPlugin, GetPluginVersions, RestorePluginVersion, OpenPlugin, ClosePlugin, DisablePlugin,
+        StagePluginVisualSelection, DiscardPluginVisualSelection,
         GetRemovedPlugins, [BridgeOperationPolicy(true, 300)] RemovePlugin, RestorePlugin,
         GetPluginChat,
         GetPluginVendors, ImportPluginVendor, ResolveHtmlVendor,

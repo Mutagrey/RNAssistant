@@ -191,7 +191,7 @@ namespace RNAssistant.Harness
                         Rect = new HtmlVisualRect { X = 10, Y = 20, Width = 80, Height = 30 },
                         Viewport = new HtmlVisualViewport { Width = 800, Height = 600, Dpr = 1 }
                     };
-                    var body = HtmlVisualSelectionPolicy.Capture(selection, "Test plugin");
+                    var body = HtmlVisualSelectionPolicy.Capture(selection, "Test plugin", "Fix button", 2);
                     AssertEqual(Encoding.UTF8.GetString(body), HtmlVisualSelectionPolicy.ReadCapturedBody(body),
                         "shared Core policy admits the exact captured body");
                     var forged = JObject.Parse(Encoding.UTF8.GetString(body));
@@ -202,11 +202,37 @@ namespace RNAssistant.Harness
                     forged["version"] = "invalid";
                     RuntimeThrows<InvalidOperationException>(() => HtmlVisualSelectionPolicy.ReadCapturedBody(
                         Encoding.UTF8.GetBytes(forged.ToString(Formatting.None))));
-                    var attachments = new AttachmentStore(paths);
-                    var draft = attachments.Import("selection.json", "application/json", body, sessionId);
-                    draft.VisualSelectionSource = new ResourceRef(ResourceUri.Create("plugin", plugin.PluginId,
-                        "release", plugin.ReleaseId), "1");
-                    attachments.SaveDraftMetadata(draft);
+                    var opened = service.Open(new PluginOpenRequest { PluginId = plugin.PluginId });
+                    var selectionRequest = new PluginVisualSelectionRequest { InstanceId = opened.InstanceId,
+                        WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId, PreviewGeneration = 1,
+                        Selection = selection, Comment = "Fix button", AnnotationNumber = 2 };
+                    var draft = service.StageVisualSelection(selectionRequest);
+                    AssertEqual(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri,
+                        new AttachmentStore(paths).LoadDrafts(new[] { draft.Id }, sessionId).Single().VisualSelectionSource.Uri,
+                        "native staging pins the bound plugin release without exposing its URI to the browser");
+                    var checkedCandidate = service.Check(plugin.PluginId);
+                    var preview = service.Open(new PluginOpenRequest { PluginId = plugin.PluginId,
+                        CandidateId = checkedCandidate.CandidateId });
+                    selectionRequest.InstanceId = preview.InstanceId;
+                    var candidateDraft = service.StageVisualSelection(selectionRequest);
+                    AssertTrue(preview.ReleaseId != plugin.ReleaseId &&
+                        new AttachmentStore(paths).LoadDrafts(new[] { candidateDraft.Id }, sessionId).Single()
+                            .VisualSelectionSource.Uri == PluginStore.ReleaseRef(plugin.PluginId, preview.ReleaseId).Uri,
+                        "checked candidate preview keeps its own retained release identity");
+                    service.DiscardVisualSelection(new PluginVisualDraftRequest { WorkspaceId = plugin.SourceWorkspaceId,
+                        SessionId = sessionId, Id = candidateDraft.Id });
+                    service.CloseInstanceAsync(preview.InstanceId).GetAwaiter().GetResult();
+                    PluginFailure(() => service.StageVisualSelection(selectionRequest), "plugin_selection_changed");
+                    selectionRequest.InstanceId = opened.InstanceId;
+                    PluginFailure(() => service.StageVisualSelection(new PluginVisualSelectionRequest {
+                        InstanceId = "unknown", WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId,
+                        PreviewGeneration = 1, Selection = selection, AnnotationNumber = 3 }), "plugin_selection_changed");
+                    var disposable = service.StageVisualSelection(selectionRequest);
+                    AssertTrue(service.DiscardVisualSelection(new PluginVisualDraftRequest {
+                        WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId, Id = disposable.Id }).Discarded,
+                        "discard acknowledges a staged draft in its chat");
+                    RuntimeThrows<InvalidOperationException>(() => new AttachmentStore(paths).LoadDrafts(
+                        new[] { disposable.Id }, sessionId));
 
                     var portProbe = new TcpListener(IPAddress.Loopback, 0);
                     portProbe.Start();
@@ -253,14 +279,21 @@ namespace RNAssistant.Harness
                             }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
                             var session = new ChatStore(paths).Load(sessionId);
                             var user = session.Messages.Single(item => item.Role == "user");
+                            var historyView = service.ProjectChat(new ProjectChatRequest {
+                                WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId });
+                            var visualView = historyView.Messages.Single(item => item.Role == "user").Attachments.Single();
+                            AssertEqual("Fix button", visualView.VisualAnnotation.Comment,
+                                "shared project chat projects the immutable sent annotation");
+                            AssertEqual(plugin.ReleaseId, visualView.VisualSourceArtifactId,
+                                "sent annotation remains pinned to the retained release");
                             var committed = user.Attachments.Single();
                             AssertTrue(modelRequest.Contains("Current user visual selections") &&
                                 modelRequest.Contains("\\\"attachment\\\"") &&
                                 !modelRequest.Contains("rnassistant.html-visual-selection") &&
-                                !modelRequest.Contains(draft.VisualSelectionSource.Uri) &&
+                                !modelRequest.Contains(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri) &&
                                 committed.ContentSha256 != null && committed.DraftChatId == null,
                                 "model receives a read target without implicit DOM body or runtime source URI");
-                            AssertTrue(user.ResourceRefs.Any(item => item.Uri == draft.VisualSelectionSource.Uri) &&
+                            AssertTrue(user.ResourceRefs.Any(item => item.Uri == PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri) &&
                                 new AttachmentStore(paths).ReadBytes(committed).SequenceEqual(body),
                                 "accepted message retains exact plugin source and selection body");
                             var provider = new WorkspaceChatAttachmentResourceProvider(paths, session);

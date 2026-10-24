@@ -46,33 +46,33 @@
     transitionTimer = setTimeout(function () { layout.classList.remove("browser-transition"); }, 240);
   }
   function paint() {
-    var layout = el("chatLayout"), panel = el("chatBrowser"), toggle = el("chatBrowserToggle");
+    var layout = el("chatLayout"), panel = el("chatBrowser");
     layout.classList.toggle("with-browser", open);
     panel.inert = !open;
     panel.setAttribute("aria-hidden", String(!open));
-    toggle.hidden = !owner;
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.setAttribute("aria-label", open ? "Свернуть предпросмотр" : "Показать предпросмотр");
-    toggle.title = toggle.getAttribute("aria-label");
-    var hide = el("chatBrowserHide");
-    hide.setAttribute("aria-label", "Свернуть предпросмотр");
-    hide.title = "Свернуть предпросмотр";
     var expand = el("chatBrowserExpand");
     expand.setAttribute("aria-pressed", String(expanded));
     expand.setAttribute("aria-label", expanded ? "Вернуть размер браузера" : "Развернуть браузер");
     expand.title = expand.getAttribute("aria-label");
     expand.innerHTML = window.RNAssistantIcons.render(expanded ? "compress" : "fit");
     refresh();
+    if (window.RNAssistantChatInspector) {
+      window.RNAssistantChatInspector.syncToggle();
+      window.RNAssistantChatInspector.syncSwitcher();
+    }
   }
   function setOpen(value) {
     if (value && !current()) return false;
     if (open === !!value) return true;
     if (value && window.RNAssistantChatInspector) window.RNAssistantChatInspector.setOpen(false);
+    var returnFocus = !value && el("chatBrowser").contains(document.activeElement);
     if (!value) {
-      if (el("chatBrowser").contains(document.activeElement)) el("chatBrowserToggle").focus({ preventScroll: true });
+      if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.collapseEditor();
       if (typeof window.deactivateHtmlWorkspaceInspector === "function") window.deactivateHtmlWorkspaceInspector();
     }
-    animate(); open = !!value; paint(); return true;
+    animate(); open = !!value; paint();
+    if (returnFocus) el("toggleChatInspectorButton").focus({ preventScroll: true });
+    return true;
   }
   function restoreHome() {
     var root = el("htmlWorkspacePreview"), editor = el("htmlWorkspaceEditor");
@@ -82,11 +82,11 @@
     ["inspectHtmlWorkspaceButton", "attachHtmlWorkspaceSelectionButton"].forEach(function (id) {
       toolbar.insertBefore(el(id), el("openHtmlWorkspaceRightButton"));
     });
+    el("attachHtmlWorkspaceSelectionButton").hidden = false;
     toolbar.insertBefore(status, toolbar.querySelector(".resource-editor-actions"));
     el("inspectHtmlWorkspaceButton").dataset.browserControl = "false";
     previewOwner().refreshInspectorControl();
     el("chatBrowserExpand").hidden = true;
-    el("chatBrowserHide").hidden = true;
     el("chatBrowserMenu").hidden = true;
   }
   function release() {
@@ -101,16 +101,15 @@
   }
   function mount() {
     var root = el("htmlWorkspacePreview"), bar = root.querySelector(".preview-surface-bar");
+    var actions = bar.querySelector(".preview-surface-actions");
     el("chatBrowserFrameMount").appendChild(root);
-    ["inspectHtmlWorkspaceButton", "attachHtmlWorkspaceSelectionButton"].forEach(function (id) {
-      bar.appendChild(el(id));
-    });
+    actions.appendChild(el("inspectHtmlWorkspaceButton"));
+    el("attachHtmlWorkspaceSelectionButton").hidden = true;
     el("inspectHtmlWorkspaceButton").dataset.browserControl = "true";
     previewOwner().refreshInspectorControl();
     el("chatBrowser").appendChild(el("htmlWorkspaceInspectStatus"));
-    bar.append(el("chatBrowserExpand"), el("chatBrowserHide"), el("chatBrowserMenu"));
+    actions.append(el("chatBrowserExpand"), el("chatBrowserMenu"));
     el("chatBrowserExpand").hidden = false;
-    el("chatBrowserHide").hidden = false;
     el("chatBrowserMenu").hidden = false;
   }
   function openCurrent() {
@@ -124,6 +123,7 @@
     switchTab("chat");
     setOpen(true);
     if (!reused) previewOwner().reload();
+    if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return true;
   }
   function openArtifact(artifact) {
@@ -144,14 +144,13 @@
   function bind() {
     if (bound) return;
     bound = true;
-    var bar = el("htmlWorkspacePreview").querySelector(".preview-surface-bar");
-    ["Expand", "Hide"].forEach(function (kind) {
+    var bar = el("htmlWorkspacePreview").querySelector(".preview-surface-actions");
+    ["Expand"].forEach(function (kind) {
       var button = document.createElement("button");
       button.type = "button"; button.id = "chatBrowser" + kind; button.className = "icon-btn";
       button.hidden = true;
       bar.appendChild(button);
     });
-    el("chatBrowserHide").innerHTML = window.RNAssistantIcons.render("right");
     var menu = document.createElement("details");
     menu.id = "chatBrowserMenu"; menu.className = "chat-browser-menu"; menu.hidden = true;
     menu.innerHTML = '<summary class="icon-btn" aria-label="Действия с браузером" title="Действия с браузером">' +
@@ -159,8 +158,6 @@
       '<button type="button" id="chatBrowserOpenMaterials">Открыть в Материалах</button>' +
       '<button type="button" id="chatBrowserClose">Закрыть просмотр</button></div>';
     bar.appendChild(menu);
-    el("chatBrowserToggle").addEventListener("click", function () { setOpen(!open); });
-    el("chatBrowserHide").addEventListener("click", function () { setOpen(false); });
     el("chatBrowserExpand").addEventListener("click", function () { expanded = !expanded; animate(); paint(); });
     el("chatBrowserClose").addEventListener("click", release);
     el("chatBrowserOpenMaterials").addEventListener("click", function () {
@@ -182,7 +179,8 @@
   }
 
   window.RNAssistantChatBrowser = {
-    bind: bind, hasSource: function () { return !!owner; }, syncSource: syncSource,
+    bind: bind, hasSource: function () { return !!owner; }, isOpen: function () { return open; },
+    setOpen: setOpen, syncSource: syncSource,
     openCurrent: openCurrent, openArtifact: openArtifact, hide: function () { setOpen(false); }, refresh: refresh,
     onTabChange: function (name) { if (name === "artifacts") release(); else if (name !== "chat") setOpen(false); }
   };

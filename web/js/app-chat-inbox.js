@@ -94,6 +94,10 @@ function inboxOperationId() {
 }
 async function submitInboxMessage(text, attachments, chatId, delivery, answers) {
   if (isPendingChatSubmit(chatId)) return;
+  if (!answers && readOfficeDraft(chatId) && readOfficeDraft(chatId).pendingVisualAnnotation) {
+    setAttachmentStatus(chatId, "Завершите или удалите незавершённую аннотацию перед отправкой.", "warning");
+    return false;
+  }
   attachments = (attachments || []).slice();
   setPendingChatSubmit(chatId, true);
   renderSendControls();

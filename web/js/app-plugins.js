@@ -5,6 +5,8 @@
   var chatComposer=null,chatEpoch=0,stopTitleWatch=null;
   var previewOpen=false,previewToggle=null;
   var previewSurface=null;
+  var pluginInspector=null,pluginAnnotations=null,pluginAnnotateButton=null,pluginInspectStatus=null,pluginDraftBox=null;
+  var visualSessionId=null;
   var runObserver=window.RNAssistantWorkspaceChat.createRunObserver(
     function(target){return send('getProjectChat',target);},
     function(snapshot){chat=window.RNAssistantWorkspaceChat.latestSnapshot(chat,snapshot);renderChat();},
@@ -96,26 +98,107 @@
     if(ownsChat()){
       if(chatComposer)chatComposer.lock(window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!chat||!chat.sessionId||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
       el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||!chat||!chat.sessionId;
-      el('Send').disabled=window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!selected||!chat||!chat.sessionId||!el('Input').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
+      var draft=pluginChatTarget()&&window.RNAssistantChatDrafts.readWorkspace(pluginChatTarget());
+      el('Send').disabled=window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!selected||!chat||!chat.sessionId||
+        (!el('Input').value.trim()&&!(draft&&draft.attachments&&draft.attachments.length))||
+        !!(draft&&draft.pendingVisualAnnotation)||!!(chat&&chat.pendingId)||
+        !!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
     }
+    if(pluginInspector)pluginInspector.refresh();
     el('CreateSubmit').disabled=busy;}
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
     var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconSvg,item.iconColor);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
   });if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
-  async function closeView(){frameReady=false;pendingNavigation=null;previewSurface.clear();var old=view;view=null;el('PreviewFrameHost').replaceChildren();if(old)await send('closePlugin',{instanceId:old.instanceId});}
+  function pluginChatTarget(){return chat&&chat.project&&chat.sessionId ?
+    {workspaceId:chat.project.workspaceId,sessionId:chat.sessionId}:null;}
+  function pluginDraft(){return window.RNAssistantChatDrafts.readWorkspace(pluginChatTarget())||null;}
+  function renderVisualDrafts(){
+    if(!pluginDraftBox)return;
+    pluginDraftBox.replaceChildren();
+    var visible=ownsChat()&&pluginAnnotations&&pluginChatTarget();
+    var items=visible?pluginAnnotations.visibleDrafts():[];
+    pluginDraftBox.hidden=!visible||!items.length;
+    if(items.length)pluginAnnotations.renderDrafts(pluginDraftBox,items);
+    if(pluginAnnotations)pluginAnnotations.sync();
+  }
+  function createVisual(frame){
+    pluginInspector=window.RNAssistantVisualInspector.createHost({frame:frame,button:pluginAnnotateButton,
+      status:pluginInspectStatus,enabled:function(){return ownsChat()&&!!pluginChatTarget()&&!!view&&
+        !window.RNAssistantWorkspaceChat.readOnly(chat)&&previewOpen;},
+      onSelectionChanged:function(available,reason){
+        if(pluginAnnotations)pluginAnnotations.onSelection(available?pluginInspector.selectionRecord():null,reason);
+      },onLocations:function(items){if(pluginAnnotations)pluginAnnotations.onLocations(items);},
+      onReveal:function(result){if(pluginAnnotations)pluginAnnotations.onReveal(result);}});
+    var context={mount:el('PreviewFrameHost'),browser:el('PreviewMount'),button:pluginAnnotateButton,
+      statusNode:pluginInspectStatus,draftBox:pluginDraftBox,
+      sessionId:function(){var target=pluginChatTarget();return target&&target.sessionId;},
+      isOpen:function(){return previewOpen&&!el('PreviewMount').hidden&&
+        el('PreviewFrameHost').contains(frame);},
+      source:function(){return view&&selected&&view.pluginId===selected.pluginId?
+        {id:view.releaseId,revision:1}:null;},
+      pending:function(){var draft=pluginDraft();return draft&&draft.pendingVisualAnnotation||null;},
+      setPending:function(value){var target=pluginChatTarget();if(target)window.RNAssistantChatDrafts.updateWorkspace(target,
+        {pendingVisualAnnotation:value});},
+      drafts:function(){var draft=pluginDraft();return draft&&draft.attachments||[];},
+      messages:function(){return chat&&chat.messages||[];},
+      updated:function(){renderVisualDrafts();controls();},
+      remove:function(item){var target=pluginChatTarget();if(!target)return;
+        var remaining=context.drafts().filter(function(candidate){return attachmentId(candidate)!==attachmentId(item);});
+        window.RNAssistantChatDrafts.updateWorkspace(target,{attachments:remaining});
+        renderVisualDrafts();controls();
+        window.RNAssistantChatDrafts.flushWorkspace(target).then(function(){return send('discardPluginVisualSelection',
+          {workspaceId:target.workspaceId,sessionId:target.sessionId,id:attachmentId(item)});}).catch(function(error){
+          chatStatus(error.detail||error.message,true);});},
+      reserve:function(){return window.RNAssistantChatDrafts.reserveWorkspaceAnnotationNumber(pluginChatTarget());},
+      openSource:function(){if(!view)return false;setPreviewOpen(true);return true;},
+      status:function(message){chatStatus(message,true);}};
+    pluginAnnotations=window.RNAssistantVisualAnnotations.create({frame:frame,inspector:pluginInspector,
+      context:context,stage:async function(record,comment,number,replacing){
+        var target=pluginChatTarget(),source=view;
+        if(!target||!source||record.sessionId!==target.sessionId||record.sourceId!==source.releaseId||
+            record.generation!==pluginInspector.generation())throw new Error('Предпросмотр изменился. Выберите элемент заново.');
+        var attachment=await send('stagePluginVisualSelection',{instanceId:source.instanceId,
+          workspaceId:target.workspaceId,sessionId:target.sessionId,previewGeneration:record.generation,
+          selection:record.selection,comment:comment,annotationNumber:number});
+        if(!attachment||!attachment.Id)throw new Error('Аннотация не была подготовлена.');
+        function discardNew(){return send('discardPluginVisualSelection',{workspaceId:target.workspaceId,
+          sessionId:target.sessionId,id:attachment.Id}).catch(function(){/* The staged draft expires. */});}
+        if(view!==source||!pluginChatTarget()||pluginChatTarget().sessionId!==target.sessionId||
+            !pluginInspector||pluginInspector.generation()!==record.generation){await discardNew();
+          throw new Error('Предпросмотр или чат изменились. Выберите элемент заново.');
+        }
+        attachment.visualAnnotation={selection:record.selection,comment:comment,annotationNumber:number};
+        attachment.visualSourceArtifactId=source.releaseId;attachment.visualSourceRevision=1;
+        var drafts=context.drafts(),index=replacing?drafts.findIndex(function(item){return attachmentId(item)===attachmentId(replacing);}):-1;
+        if(index<0&&drafts.length>=10){await discardNew();throw new Error('В сообщении может быть не более 10 аннотаций.');}
+        var next=drafts.slice();if(index>=0)next.splice(index,1,attachment);else next.push(attachment);
+        window.RNAssistantChatDrafts.updateWorkspace(target,{attachments:next,pendingVisualAnnotation:null});
+        await window.RNAssistantChatDrafts.flushWorkspace(target);
+        if(index>=0)send('discardPluginVisualSelection',{workspaceId:target.workspaceId,
+          sessionId:target.sessionId,id:attachmentId(replacing)}).catch(function(error){chatStatus(error.message,true);});
+        return attachment;}});
+    window.RNAssistantPluginAnnotations=pluginAnnotations;
+    pluginInspector.reset();
+    renderVisualDrafts();
+  }
+  function disposeVisual(){if(pluginAnnotations){pluginAnnotations.dispose();pluginAnnotations=null;}if(pluginInspector){pluginInspector.dispose();pluginInspector=null;}window.RNAssistantPluginAnnotations=null;}
+  async function closeView(){frameReady=false;pendingNavigation=null;disposeVisual();previewSurface.clear();var old=view;view=null;el('PreviewFrameHost').replaceChildren();syncPanelView();if(old)await send('closePlugin',{instanceId:old.instanceId});}
   async function showView(preview,releaseId){var current=epoch,previous=view,opened;
-    var label=selected.name+(releaseId?' · сохранённая версия':preview?' · предпросмотр':' · активная версия');
+    var label={title:selected.name,path:releaseId?'Сохранённая версия':preview?'Неприменённые исходники':'Активная версия'};
     try{opened=await send('openPlugin',{
       pluginId:selected.pluginId,candidateId:preview&&!releaseId?candidate.candidateId:null,releaseId:releaseId||null});}
     catch(error){if(current===epoch)previewSurface.fail(label,error.detail||error.message);throw error;}
     if(current!==epoch){await send('closePlugin',{instanceId:opened.instanceId});return;}
-    view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
+    disposeVisual();view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
     var frame=document.createElement('iframe');frame.title=selected.name+(releaseId?' — сохранённая версия':preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
     if(dataPlugin())frame.addEventListener('load',syncAppearance);
     previewSurface.watch(frame,label);
-    frame.src=view.entryUrl;el('PreviewFrameHost').replaceChildren(frame);
+    el('PreviewFrameHost').replaceChildren(frame);
+    createVisual(frame);
+    frame.src=view.entryUrl;
+    syncPanelView();
     if(previous)await send('closePlugin',{instanceId:previous.instanceId});
     status('');}
   function stopSourceWatch(){clearInterval(sourceTimer);clearTimeout(sourceDebounce);sourceTimer=null;sourceDebounce=null;sourceStamp=null;}
@@ -132,15 +215,35 @@
       sourceStamp=state.stamp;clearTimeout(sourceDebounce);sourceDebounce=setTimeout(function(){checkAndPreview(state.stamp);},450);
     }catch(error){if(current===epoch)status('Не удалось проверить изменения исходников: '+error.message,true);}}
   function startSourceWatch(){clearInterval(sourceTimer);sourceTimer=setInterval(function(){pollSource();},1200);}
-  function updateSurface(refresh){var open=previewOpen;el('PreviewMount').hidden=!open;el('SurfaceSplitter').hidden=!open;
-    previewToggle.sync();
-    el('Workbench').classList.toggle('plugin-surface-open',open);
+  function syncPanelView(){
+    if(!previewOpen&&pluginInspector)pluginInspector.deactivate();
+    if(pluginAnnotateButton)pluginAnnotateButton.hidden=!view;
+    if(pluginInspectStatus)pluginInspectStatus.hidden=!view;
+    el('Preview').hidden=!previewOpen;
+    if(ownsChat())window.RNAssistantChatInspector.syncSwitcher();
+  }
+  function refreshPanelLayout(){
+    var diagnostics=ownsChat()&&window.RNAssistantChatInspector.isOpen();
+    if(diagnostics&&pluginInspector)pluginInspector.deactivate();
+    el('PreviewMount').hidden=!previewOpen||diagnostics;
+    el('SurfaceSplitter').hidden=!(previewOpen||diagnostics);
+    el('Workbench').classList.toggle('plugin-surface-open',previewOpen||diagnostics);
+    if(previewToggle)previewToggle.sync();
+    syncPanelView();
+  }
+  function setPreviewOpen(value){
+    previewOpen=!!value;
+    if(previewOpen&&ownsChat())window.RNAssistantChatInspector.setOpen(false);
+    updateSurface(true);
+  }
+  function updateSurface(refresh){var open=previewOpen;
     window.RNAssistantWorkspaceChat.mount('plugin',el('Chat'));
     if(chat)renderChat();
     else{chatComposer.select(null);chatComposer.lock(true);el('Messages').replaceChildren();el('Messages')._chatSignature=null;
       el('ChatTitle').textContent='Чат исходников';window.RNAssistantWorkspaceChat.renderWorkspaceControls(null);
       el('Send').disabled=true;chatStatus('Загружаю чат…');}
-    if(open)refreshSplitPanes();
+    refreshPanelLayout();
+    if(open||window.RNAssistantChatInspector.isOpen())refreshSplitPanes();
     if(refresh&&open&&!browsingRelease){if(!view)checkAndPreview();else pollSource();}}
   async function select(id,sessionId){
     if(!busy&&selected&&selected.pluginId===id&&view&&!el('Workbench').hidden){
@@ -153,11 +256,12 @@
         if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
         updateSurface(false);
       }else updateSurface(false);
+      window.RNAssistantChatInspector.setOpen(false);
       try{await readChat(sessionId);await pollSource();}
       catch(error){chatStatus(error.detail||error.message,true);}
       return;
     }
-    selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});candidate=null;candidateStamp=null;browsingRelease=null;versionEpoch++;versionCursor=null;el('Versions').open=false;chat=null;chatEpoch++;chatBusy=false;runObserver.select(null,false);
+    selecting=true;switchTab('plugins');try{await run(async function(){epoch++;stopSourceWatch();await closeView();selected=items.find(function(item){return item.pluginId===id;});syncPanelView();candidate=null;candidateStamp=null;browsingRelease=null;versionEpoch++;versionCursor=null;el('Versions').open=false;chat=null;chatEpoch++;chatBusy=false;runObserver.select(null,false);
     closeHistory();
     if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
     previewOpen=true;
@@ -171,11 +275,14 @@
     if(window.RNAssistantShellLayout)window.RNAssistantShellLayout.refresh();
     if(selected.enabled)await showView(false);
     updateSurface(false);
+    window.RNAssistantChatInspector.setOpen(false);
     try{sourceStamp=(await send('getPluginSourceState',{pluginId:id})).stamp;}catch(error){status(error.message,true);}
     if(previewOpen&&publishedSourceStamps[id]!==sourceStamp)await checkAndPreview(sourceStamp);
     startSourceWatch();await readChat(sessionId);});}finally{selecting=false;
       if(selected&&!el('Workbench').hidden&&previewOpen&&(!view||!view.preview)&&publishedSourceStamps[id]!==sourceStamp)checkAndPreview(sourceStamp);}}
   function renderChat(){runObserver.select(ownsChat()?chat:null,chatBusy);if(!chat||!ownsChat())return;
+    if(visualSessionId!==chat.sessionId){if(pluginAnnotations)pluginAnnotations.collapseEditor();
+      visualSessionId=chat.sessionId;}
     var s=chat.state||{},empty=!chat.sessionId;
     el('ChatTitle').textContent=empty?'Чат исходников':s.title||s.Title||'Чат исходников';
     el('ChatTitle').title=el('ChatTitle').textContent;
@@ -186,8 +293,10 @@
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
       (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':''),!!runNotice);
     chatComposer.select(empty?null:{workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
+    renderVisualDrafts();if(pluginInspector)pluginInspector.refresh();
     window.RNAssistantWorkspaceChat.renderWorkspaceControls(chat,function(answers,requestId){
       return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:requestId,answers:answers}});},true);});
+    window.RNAssistantChatInspector.render();
     controls();
   }
   async function readChat(sessionId){if(!selected)return;
@@ -365,7 +474,17 @@
     });
   }
   function bind(){
-    previewSurface=window.RNAssistantPreviewSurface.attach(el('PreviewMount'),{reloadButton:el('Preview')});
+    previewSurface=window.RNAssistantPreviewSurface.attach(el('PreviewMount'),{
+      reloadButton:el('Preview'),reloadLabel:'Проверить исходники и обновить предпросмотр'});
+    pluginAnnotateButton=document.createElement('button');pluginAnnotateButton.type='button';
+    pluginAnnotateButton.className='icon-btn';pluginAnnotateButton.dataset.browserControl='true';
+    pluginAnnotateButton.disabled=true;previewSurface.actions.prepend(pluginAnnotateButton);
+    pluginInspectStatus=document.createElement('span');pluginInspectStatus.className='html-workspace-inspect-status';
+    pluginInspectStatus.setAttribute('role','status');previewSurface.actions.prepend(pluginInspectStatus);
+    pluginDraftBox=document.createElement('div');pluginDraftBox.className='attachment-drafts has-visual-annotations';
+    pluginDraftBox.id='pluginAnnotationDrafts';pluginDraftBox.hidden=true;
+    el('Form').querySelector('#attachmentDrafts').after(pluginDraftBox);
+    syncPanelView();
     registerRailPopovers();
     new MutationObserver(function(){syncAppearance();renderIconChoices();el('Rail').querySelectorAll('[data-plugin-id]').forEach(function(node){var item=items.find(function(value){return value.pluginId===node.dataset.pluginId;});if(item)node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon||'puzzle',item.iconSvg,item.iconColor);});}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme','data-accent']});
     el('NavigationProject').onclick=function(){var frame=el('PreviewMount').querySelector('iframe');if(frame&&frame.contentWindow)frame.contentWindow.postMessage({type:'rna.dataTemplates.project'},'*');};
@@ -423,8 +542,9 @@
     el('Reopen').onclick=function(){el('Reopen').closest('details').open=false;run(async function(){await showView(false);browsingRelease=null;candidate=null;candidateStamp=null;publishedSourceStamps[selected.pluginId]=sourceStamp;});};
     el('Disable').onclick=function(){el('Disable').closest('details').open=false;run(async function(){selected=await send('disablePlugin',{pluginId:selected.pluginId});candidate=null;candidateStamp=null;browsingRelease=null;await closeView();await refresh();status('Плагин отключён. Исходники и данные сохранены.');});};
     previewToggle=window.RNAssistantPanelToggle.bind(el('SurfaceToggle'),{
-      controls:'pluginPreviewMount',isOpen:function(){return previewOpen;},
-      setOpen:function(open){previewOpen=open;updateSurface(true);}
+      controls:window.RNAssistantChatInspector.panelControls,isOpen:window.RNAssistantChatInspector.panelOpen,
+      label:function(open){return open?'Свернуть боковую панель':'Показать боковую панель';},
+      setOpen:window.RNAssistantChatInspector.togglePanel
     });
     el('Chat').addEventListener('keydown',function(event){
       if(event.key!=='Escape'||event.defaultPrevented)return;
@@ -439,6 +559,7 @@
     el('ChatHistory').onclick=openHistory;
     document.addEventListener('pointerdown',function(event){if(!event.target.closest('.plugin-history-menu'))closeHistory();});
     window.RNAssistantWorkspaceChat.registerActions('plugin',{
+      snapshot:function(){return chat;},
       suspend: function(){runObserver.select(null,false);},
       loadPrevious: async function(){if(!chat||!chat.messageStartIndex)return;
         var workspaceId=chat.project.workspaceId,sessionId=chat.sessionId,beforeIndex=chat.messageStartIndex,current=chatEpoch;
@@ -448,7 +569,7 @@
         catch(error){if(chatEpoch===current)chatStatus(error.detail||error.message,true);}},
       input: function(){controls();},
       submit: function(){var message=el('Input').value.trim();
-        if(!message||el('Send').disabled||!chat)return;
+        if(el('Send').disabled||!chat)return;
         var sessionId=chat.sessionId,target={workspaceId:chat.project.workspaceId,sessionId:sessionId};
         var draftVersion=chatComposer.draftVersion(),request=chatComposer.prepareInput(target,message);
         chatAction(async function(workspaceId){await window.RNAssistantChatDrafts.flushWorkspace(target);
@@ -468,5 +589,6 @@
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }
-  window.RNAssistantPlugins={bind:bind,refresh:refresh,show:function(){if(!selected){el('Manager').hidden=false;el('Workbench').hidden=true;}else{updateSurface(false);if(!el('Workbench').hidden&&window.RNAssistantShellLayout)window.RNAssistantShellLayout.collapseForPlugin();}},select:select,selectedId:function(){return selected&&selected.pluginId;}};
+  window.RNAssistantPlugins={preview:{hasSource:function(){return !!selected;},isOpen:function(){return previewOpen;},
+    setOpen:setPreviewOpen,hide:function(){previewOpen=false;refreshPanelLayout();},refreshLayout:refreshPanelLayout},bind:bind,refresh:refresh,show:function(){if(!selected){el('Manager').hidden=false;el('Workbench').hidden=true;}else{updateSurface(false);if(!el('Workbench').hidden&&window.RNAssistantShellLayout)window.RNAssistantShellLayout.collapseForPlugin();}},select:select,selectedId:function(){return selected&&selected.pluginId;}};
 })();

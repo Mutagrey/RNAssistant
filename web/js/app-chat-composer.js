@@ -242,6 +242,7 @@ function updateSendButtonAvailability(hasContent) {
 
   var editingTarget = hasActiveMessageEdit() ? findEditingMessage() : null;
   var canSaveEdit = !!editingTarget && canSaveMessageEdit(editingTarget.message, editingTarget.index);
+  var unfinishedAnnotation = readOfficeDraft(state.activeChatId);
   sendButton.disabled = state.chatReadOnly ||
     !!state.chatNavigationPending || !!state.initializePromise ||
     !!state.chatDetailPending || !!state.chatDetailError ||
@@ -251,6 +252,7 @@ function updateSendButtonAvailability(hasContent) {
     state.reasoningSaving ||
     state.bridgeUnavailable ||
     !state.activeChatId ||
+    !!(unfinishedAnnotation && unfinishedAnnotation.pendingVisualAnnotation && !hasActiveMessageEdit()) ||
     (hasActiveMessageEdit() ? !canSaveEdit : !hasContent);
 }
 

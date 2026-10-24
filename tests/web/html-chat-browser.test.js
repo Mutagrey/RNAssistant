@@ -30,6 +30,7 @@ const path = require("node:path");
         sourceReadKey: "rna://chat/preview-chat/html/file1@r1",
         sha256: "a".repeat(64), byteLength: html.length, characters: html.length };
       state.activeHtmlArtifactId = "html-r1";
+      state.artifacts = [{ Id: "html-r1", Kind: "html_workspace", Title: "Проверка HTML", Revision: 1 }];
       state.htmlWorkspace = { revisionArtifactId: "html-r1", activeFileId: "file1", files: [file],
         dataSources: [], history: [], redoHistory: [], redoBranches: [],
         recovery: { status: "empty", canMutate: true, candidates: [] } };
@@ -47,13 +48,22 @@ const path = require("node:path");
       document.getElementById("inspectHtmlWorkspaceButton").parentElement.className,
       document.getElementById("chatForm").dataset.identity,
       document.getElementById("chatInput").value
-    ]), [1, "chatBrowserFrameMount", "preview-surface-bar", formIdentity, "Черновик рядом с HTML"],
+    ]), [1, "chatBrowserFrameMount", "preview-surface-actions", formIdentity, "Черновик рядом с HTML"],
     "right browser reuses the frame and central composer");
-    assert.equal(await page.locator("#chatBrowser .preview-surface-title").textContent(), "HTML");
+    const panelToggle = page.locator("#toggleChatInspectorButton");
+    assert.equal(await page.locator("#chatBrowserToggle").count(), 0,
+      "the chat header has one right-panel button");
+    assert.equal(await panelToggle.getAttribute("aria-controls"), "chatBrowser");
+    assert.equal(await panelToggle.getAttribute("aria-label"), "Свернуть боковую панель");
+    assert.equal(await page.locator("#chatBrowserHide").count(), 0,
+      "the browser has no separate arrow for hiding it");
+    assert.equal(await page.locator("#chatBrowser").evaluate(node => getComputedStyle(node).borderLeftWidth), "0px",
+      "the splitter is the single full-height border beside the browser");
+    assert.equal(await page.locator("#chatBrowser .preview-surface-title").textContent(), "Проверка HTML");
     assert.equal(await page.locator("#chatBrowser .preview-surface-path").textContent(), "index.html");
     assert.equal(await page.locator("#inspectHtmlWorkspaceButton").textContent(), "Аннотировать");
     assert.equal(await page.locator("#attachHtmlWorkspaceSelectionButton").isVisible(), false,
-      "chat attachment action appears only after an element is selected");
+      "the browser header has no duplicate attach action");
     if (process.env.RNA_HTML_BROWSER_SCREENSHOT) await page.screenshot({
       path: process.env.RNA_HTML_BROWSER_SCREENSHOT, animations: "disabled" });
     await page.locator("#inspectHtmlWorkspaceButton").click();
@@ -72,19 +82,36 @@ const path = require("node:path");
       window.loadAfterOpen = 0;
       frame.addEventListener("load", () => { window.loadAfterOpen++; });
     });
-    await page.locator("#chatBrowserHide").click();
-    assert.equal(await page.locator("#chatBrowserToggle").getAttribute("aria-expanded"), "false");
-    await page.locator("#chatBrowserToggle").click();
+    await panelToggle.click();
+    assert.equal(await panelToggle.getAttribute("aria-expanded"), "false");
+    await panelToggle.click();
     assert.deepEqual(await page.evaluate(() => [
       document.getElementById("htmlWorkspacePreviewFrame").contentWindow === window.frameBeforeHide,
       window.loadAfterOpen, document.getElementById("chatInput").value
     ]), [true, 0, "Черновик рядом с HTML"], "hide/show keeps the live frame and draft");
-    await page.locator("#toggleChatInspectorButton").click();
-    assert.equal(await page.locator("#chatBrowserToggle").getAttribute("aria-expanded"), "false",
-      "diagnostics takes the same right slot");
-    await page.locator("#chatBrowserToggle").click();
-    assert.equal(await page.locator("#toggleChatInspectorButton").getAttribute("aria-expanded"), "false",
-      "returning to the browser closes diagnostics");
+    assert.equal(await page.locator("#chatInspectorSwitcher").evaluate(node => node.closest("#chatBrowser") !== null), true,
+      "one section switcher moves into the browser header");
+    assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Предпросмотр");
+    await page.locator("#chatInspectorSwitcher summary").click();
+    if (process.env.RNA_HTML_BROWSER_MENU_SCREENSHOT) await page.screenshot({
+      path: process.env.RNA_HTML_BROWSER_MENU_SCREENSHOT, animations: "disabled" });
+    await page.locator('[data-chat-inspector-view="activity"]').click();
+    assert.equal(await panelToggle.getAttribute("aria-controls"), "chatInspector");
+    assert.equal(await panelToggle.getAttribute("aria-expanded"), "true",
+      "activity takes the same right slot");
+    assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Ход работы");
+    await page.locator("#chatInspectorSwitcher summary").click();
+    await page.locator('[data-chat-inspector-view="preview"]').click();
+    assert.equal(await panelToggle.getAttribute("aria-controls"), "chatBrowser");
+    assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Предпросмотр");
+    await page.locator("#chatInspectorSwitcher summary").click();
+    await page.locator('[data-chat-inspector-view="context"]').click();
+    assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Контекст");
+    await panelToggle.click();
+    assert.equal(await panelToggle.getAttribute("aria-controls"), "chatBrowser");
+    await panelToggle.click();
+    assert.equal(await panelToggle.getAttribute("aria-expanded"), "true",
+      "the same button returns to the browser after closing diagnostics");
     const splitter = page.locator("#chatBrowserSplitter");
     const before = Number(await splitter.getAttribute("aria-valuenow"));
     await splitter.press("ArrowLeft");
@@ -92,6 +119,8 @@ const path = require("node:path");
       "shared splitter resizes the browser");
     await page.setViewportSize({ width: 680, height: 800 });
     await page.waitForFunction(() => document.getElementById("chatLayout").classList.contains("browser-overlay"));
+    assert.equal(await page.locator("#chatBrowser").evaluate(node => getComputedStyle(node).borderLeftWidth), "1px",
+      "the overlay keeps a border when its splitter is absent");
     assert.ok((await page.locator("#chatBrowser").boundingBox()).width >= 500,
       "narrow browser uses the available work area, not an empty grid track");
     await page.setViewportSize({ width: 1360, height: 900 });
@@ -99,8 +128,9 @@ const path = require("node:path");
     assert.deepEqual(await page.evaluate(() => [
       document.getElementById("htmlWorkspacePreview").parentElement.id,
       document.getElementById("inspectHtmlWorkspaceButton").parentElement.className,
-      document.getElementById("chatBrowserToggle").hidden
-    ]), ["htmlWorkspaceEditor", "html-workspace-toolbar", true],
+      document.getElementById("attachHtmlWorkspaceSelectionButton").hidden,
+      document.getElementById("toggleChatInspectorButton").getAttribute("aria-controls")
+    ]), ["htmlWorkspaceEditor", "html-workspace-toolbar", false, "chatInspector"],
     "Materials gets the same frame and controls back");
     await page.evaluate(() => {
       document.getElementById("artifactCatalogOverview").hidden = true;
@@ -108,29 +138,28 @@ const path = require("node:path");
       document.getElementById("htmlWorkspaceEditor").hidden = false;
     });
     await page.locator("#openHtmlWorkspaceRightButton").click();
-    assert.equal(await page.locator("#chatBrowserToggle").getAttribute("aria-expanded"), "true",
+    assert.equal(await panelToggle.getAttribute("aria-expanded"), "true",
       "Materials opens the exact current HTML on the right");
     await page.locator('.section-rail [data-tab="artifacts"]').click();
     await page.evaluate(() => {
       switchTab("chat");
-      state.artifacts.push({ Id: "html-r1", Kind: "html_workspace", Title: "Проверка HTML" });
       appendMessageArtifactCards(document.getElementById("messages"), { ArtifactIds: ["html-r1"] });
       document.querySelector("#messages .chat-artifact-card.kind-html_workspace").id = "browserArtifactCard";
     });
     await page.locator("#browserArtifactCard").click();
-    assert.equal(await page.locator("#chatBrowserToggle").getAttribute("aria-expanded"), "true",
+    assert.equal(await panelToggle.getAttribute("aria-expanded"), "true",
       "current HTML chat card opens the right browser");
     await page.locator("#chatBrowserMenu > summary").click();
     await page.locator("#chatBrowserClose").click();
-    assert.equal(await page.locator("#chatBrowserToggle").isVisible(), false,
-      "explicit close releases the current browser route");
+    assert.equal(await panelToggle.getAttribute("aria-controls"), "chatInspector",
+      "explicit close releases the browser route from the shared button");
     assert.equal(await page.evaluate(() => RNAssistantChatBrowser.openCurrent()), true);
     await page.evaluate(() => { state.activeHtmlArtifactId = "html-r2"; renderHtmlWorkspace(); });
     assert.deepEqual(await page.evaluate(() => [
       document.getElementById("htmlWorkspacePreview").parentElement.id,
-      document.getElementById("chatBrowserToggle").hidden,
+      document.getElementById("toggleChatInspectorButton").getAttribute("aria-controls"),
       document.getElementById("chatInput").value
-    ]), ["htmlWorkspaceEditor", true, "Черновик рядом с HTML"],
+    ]), ["htmlWorkspaceEditor", "chatInspector", "Черновик рядом с HTML"],
     "a different revision revokes the browser without touching the chat draft");
     await page.evaluate(() => {
       state.activeHtmlArtifactId = "html-r1";

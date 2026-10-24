@@ -3,13 +3,13 @@
 .shell.navigation-closed #tab-chat .chat-workspace.with-browser{grid-template-columns:0px 0px minmax(0,1fr) 1px var(--browser-width,420px)!important}
 .shell #tab-chat .chat-browser-splitter{display:none;grid-column:4;grid-row:1}
 .shell #tab-chat .chat-workspace.with-browser>.chat-browser-splitter:not([hidden]){display:block}
-.shell #tab-chat .chat-browser{position:relative;grid-column:5;grid-row:1;min-width:0;min-height:0;overflow:hidden;visibility:hidden;opacity:0;background:var(--surface);border-left:1px solid var(--line)}
+.shell #tab-chat .chat-browser{position:relative;grid-column:5;grid-row:1;min-width:0;min-height:0;overflow:hidden;visibility:hidden;opacity:0;background:var(--surface)}
 .shell #tab-chat .chat-workspace.with-browser>.chat-browser{visibility:visible;opacity:1}
 .shell #tab-chat .chat-workspace.with-browser>.chat-inspector,.shell #tab-chat .chat-workspace.with-browser>.chat-inspector-splitter{display:none}
 .chat-browser-frame-mount{height:100%;min-height:0}
 .chat-browser-frame-mount>.html-workspace-preview{height:100%;min-height:0}
-.preview-surface-bar>#chatBrowserExpand[hidden],.preview-surface-bar>#chatBrowserHide[hidden]{display:none}
-.preview-surface-bar>#chatBrowserMenu[hidden]{display:none}
+.preview-surface-actions>#chatBrowserExpand[hidden]{display:none}
+.preview-surface-actions>#chatBrowserMenu[hidden]{display:none}
 .chat-browser-menu{position:relative;flex:none}
 .chat-browser-menu>summary{display:grid;place-items:center;width:28px;height:28px;list-style:none;cursor:pointer}
 .chat-browser-menu>summary::-webkit-details-marker{display:none}
@@ -18,20 +18,20 @@
 .chat-browser-menu>.popover-menu>button{padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--ink);font-size:12px;text-align:left}
 .chat-browser-menu>.popover-menu>button:hover{background:var(--surface-hover)}
 .chat-browser .preview-surface-bar{min-height:52px;gap:5px}
-.chat-browser .preview-surface-location{font-size:12px}
-.shell #tab-chat .chat-browser-toggle{gap:5px;min-height:29px;padding:5px 8px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink-muted);font-size:11px}
-.shell #tab-chat .chat-browser-toggle:hover,.shell #tab-chat .chat-browser-toggle[aria-expanded="true"]{background:var(--accent-soft);color:var(--accent)}
-.shell #tab-chat .chat-browser-toggle svg{width:15px;height:15px}
-.shell #tab-chat .chat-browser-toggle[hidden]{display:none}
-.chat-browser .chat-browser-annotate{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line-strong);border-radius:7px;background:var(--surface);color:var(--ink);font-weight:600}
-.chat-browser .chat-browser-annotate:hover,.chat-browser .chat-browser-annotate[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent)}
+.chat-browser .preview-surface-location{display:flex;flex-direction:column;justify-content:center;gap:0;overflow:visible;font-size:12px}
+.chat-browser .chat-inspector-switcher{flex:none;width:100%;margin:0}
+.chat-browser .chat-inspector-switcher>summary{min-height:19px;padding:0;font-size:11px}
+.chat-browser .chat-inspector-switcher .popover-menu{min-width:210px;right:auto;top:25px}
+.chat-browser .preview-surface-title{font-size:11px;font-weight:400;color:var(--ink-muted)}
+.chat-browser .preview-surface-path{display:none}
+.chat-browser .chat-browser-annotate{display:inline-flex;align-items:center;gap:5px;font-weight:600}
 .chat-browser .chat-browser-annotate svg{width:14px;height:14px;flex:none}
 .chat-browser #attachHtmlWorkspaceSelectionButton:disabled{display:none}
 .chat-browser>.html-workspace-inspect-status{position:absolute;z-index:8;right:12px;bottom:12px;max-width:min(320px,calc(100% - 24px));padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:var(--surface);box-shadow:var(--shadow);pointer-events:none}
 .chat-browser>.html-workspace-inspect-status:empty{display:none}
-.chat-browser .preview-surface-bar>.button{flex:none;min-height:28px;padding:5px 7px;font-size:11px}
-.chat-browser .preview-surface-bar>.icon-btn{width:28px;height:28px;padding:5px}
-.chat-browser .preview-surface-bar>.icon-btn svg{width:16px;height:16px}
+.chat-browser .preview-surface-actions>.button{flex:none;min-height:28px;padding:5px 7px;font-size:11px}
+.chat-browser .preview-surface-actions>.icon-btn{width:28px;height:28px;padding:5px}
+.chat-browser .preview-surface-actions>.icon-btn svg{width:16px;height:16px}
 .chat-browser .html-workspace-frame{border-radius:0}
 @media(prefers-reduced-motion:no-preference){
   .shell #tab-chat .chat-workspace.browser-transition{transition:grid-template-columns 220ms cubic-bezier(.2,.8,.2,1)}
@@ -41,8 +41,8 @@
 .shell #tab-chat .chat-workspace.with-browser.browser-overlay{position:relative;grid-template-columns:var(--split-left,var(--nav-width)) 1px minmax(0,1fr) 0px 0px}
 .shell.navigation-closed #tab-chat .chat-workspace.with-browser.browser-overlay{grid-template-columns:0px 0px minmax(0,1fr) 0px 0px!important}
 .shell #tab-chat .chat-workspace.browser-overlay>.chat-browser-splitter{display:none!important}
-.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{position:absolute;grid-column:auto;grid-row:auto;z-index:12;top:0;right:0;bottom:0;width:calc(100% - var(--split-left,var(--nav-width)) - 1px);box-shadow:-12px 0 30px #142a151a;transform:translateX(100%)}
+.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{position:absolute;grid-column:auto;grid-row:auto;z-index:12;top:0;right:0;bottom:0;width:calc(100% - var(--split-left,var(--nav-width)) - 1px);border-left:1px solid var(--line);box-shadow:-12px 0 30px #142a151a;transform:translateX(100%)}
 .shell.navigation-closed #tab-chat .chat-workspace.browser-overlay>.chat-browser{width:100%}
 .shell #tab-chat .chat-workspace.browser-overlay.with-browser>.chat-browser{transform:translateX(0)}
 @media(prefers-reduced-motion:no-preference){.shell #tab-chat .chat-workspace.browser-overlay.browser-transition>.chat-browser{transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 160ms ease,visibility 0s linear 220ms}.shell #tab-chat .chat-workspace.browser-overlay.browser-transition.with-browser>.chat-browser{transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 160ms ease,visibility 0s}}
-@media(max-width:620px){.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{width:100%}.chat-browser .preview-surface-bar>.button{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.shell #tab-chat .chat-browser-toggle span{display:none}}
+@media(max-width:620px){.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{width:100%}.chat-browser .preview-surface-actions>.button{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}

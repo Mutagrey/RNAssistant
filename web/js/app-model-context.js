@@ -877,7 +877,8 @@
     c.timer = setTimeout(function () { tick(c); }, 2000);
   }
   function open(options) {
-    if (!state.activeChatId || state.bridgeUnavailable) return;
+    if (!state.activeChatId || state.bridgeUnavailable ||
+        (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")) return;
     var scope = options && options.runId && options.stepId ? options : null;
     if (scope && scope.chatId !== state.activeChatId) return;
     var trigger = document.activeElement;

@@ -232,6 +232,30 @@ namespace RNAssistant.Harness
                 AssertEqual(exact.Uri, cloned.VisualSelectionSource.Uri, "chat copy retains selection provenance");
                 AssertTrue(!object.ReferenceEquals(cloned.VisualSelectionSource, message.Attachments.Single().VisualSelectionSource),
                     "chat copy detaches the source reference");
+                var annotatedMessage = new ChatMessage { Role = "user", Content = "Make the button green",
+                    Attachments = ingestion.LoadDrafts(session, new[] { annotated.Id }).ToList() };
+                session.Messages.Add(annotatedMessage);
+                ingestion.CommitAndLink(session, annotatedMessage, 1);
+                var projected = ChatCloneService.CloneMessagesForBridge(session,
+                    new[] { annotatedMessage }, new AttachmentStore(paths)).Single().Attachments.Single();
+                AssertEqual("Make the button green", projected.VisualAnnotation.Comment,
+                    "sent annotation is projected from committed CAS into browser history");
+                AssertEqual(2, projected.VisualAnnotation.AnnotationNumber,
+                    "sent annotation preserves its number");
+                AssertEqual(source.Id, projected.VisualSourceArtifactId,
+                    "sent annotation keeps its exact HTML source");
+                AssertEqual(1, projected.VisualSourceRevision,
+                    "sent annotation keeps its source revision");
+                var history = ChatCloneService.ClonePreviousMessagesForBridge(session, session.Messages.Count,
+                    new AttachmentStore(paths));
+                AssertEqual("Make the button green", history.Messages.Last().Attachments.Single().VisualAnnotation.Comment,
+                    "paged message history restores the same immutable annotation");
+                var unavailableMessage = ChatCloneService.CloneMessages(new[] { annotatedMessage }).Single();
+                unavailableMessage.Attachments.Single().ContentByteLength = 0;
+                var unavailable = ChatCloneService.CloneMessagesForBridge(session,
+                    new[] { unavailableMessage }, new AttachmentStore(paths)).Single().Attachments.Single();
+                AssertTrue(unavailable.VisualAnnotationUnavailable && unavailable.VisualAnnotation == null,
+                    "invalid committed metadata is visible as an unavailable annotation");
 
                 var chatOwned = new ChatArtifact { Id = "copied-html", Kind = ChatArtifactKinds.HtmlWorkspace,
                     Revision = 1, Title = "Copied page" };

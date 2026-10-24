@@ -33,28 +33,28 @@
 .shell #tab-chat .project-chat-composer textarea { resize: none; }
 .shell #tab-chat .project-chat-context-note { flex: 1; min-width: 0; overflow: hidden; color: var(--ink-muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .shell #tab-chat .chat-workspace.with-inspector { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--inspector-width); }
-.shell #tab-chat .chat-inspector { display: flex; grid-column: 5; grid-row: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; visibility: hidden; opacity: 0; background: var(--surface-subtle); }
-.shell #tab-chat .with-inspector .chat-inspector { visibility: visible; opacity: 1; }
-.shell #tab-chat .chat-inspector[hidden], .shell #tab-chat .chat-inspector-splitter[hidden] { display: none; }
-.shell #tab-chat .chat-inspector-splitter { grid-column: 4; grid-row: 1; visibility: hidden; }
-.shell #tab-chat .with-inspector .chat-inspector-splitter { visibility: visible; }
-.shell #tab-chat .chat-inspector-head { display: flex; align-items: center; gap: 5px; flex: 0 0 52px; min-height: 52px; padding: 5px var(--panel-toggle-inset); border-bottom: 1px solid var(--line); }
-.shell #tab-chat .chat-inspector-head, .shell #tab-chat .chat-inspector-body { width: var(--inspector-width); }
-.shell #tab-chat .chat-inspector-back { display: none; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 0; background: transparent; }
-.shell #tab-chat .chat-inspector-switcher { margin: 0; }
-.shell #tab-chat .chat-inspector-switcher .popover-menu { z-index: 50; }
-.shell #tab-chat .chat-inspector-body { flex: 1; min-height: 0; padding: 12px 14px 16px; overflow: auto; }
-.shell #tab-chat .chat-inspector-body h3 { margin: 16px 0 4px; font-size: 12px; font-weight: 600; }
-.shell #tab-chat .chat-inspector-body h3:first-child { margin-top: 0; }
-.shell #tab-chat .chat-inspector-body p { margin: 0 0 10px; color: var(--ink-muted); font-size: 11px; line-height: 1.6; }
-.shell #tab-chat .chat-inspector-info { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.shell #tab-chat .chat-inspector-info > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: var(--ink-muted); }
-.shell #tab-chat .chat-inspector-info > span { display: grid; gap: 2px; min-width: 0; }
-.shell #tab-chat .chat-inspector-info strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
-.shell #tab-chat .chat-inspector-info small { color: var(--ink-muted); font-size: 11px; }
-.shell #tab-chat .chat-inspector-action { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 11px; text-align: left; }
-.shell #tab-chat .chat-inspector-action:hover { background: var(--surface-hover); }
-.shell #tab-chat .chat-inspector-action svg { width: 15px; height: 15px; }
+.shell .chat-inspector { display: flex; grid-column: 5; grid-row: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; visibility: hidden; opacity: 0; background: var(--surface-subtle); }
+.shell .with-inspector .chat-inspector { visibility: visible; opacity: 1; }
+.shell .chat-inspector[hidden], .shell .chat-inspector-splitter[hidden] { display: none; }
+.shell .chat-inspector-splitter { grid-column: 4; grid-row: 1; visibility: hidden; }
+.shell .with-inspector .chat-inspector-splitter { visibility: visible; }
+.shell .chat-inspector-head { display: flex; align-items: center; gap: 5px; flex: 0 0 52px; min-height: 52px; padding: 5px var(--panel-toggle-inset); border-bottom: 1px solid var(--line); }
+.shell .chat-inspector-head, .shell .chat-inspector-body { width: var(--inspector-width); }
+.shell .chat-inspector-back { display: none; flex: 0 0 30px; width: 30px; height: 30px; padding: 0; border: 0; background: transparent; }
+.shell .chat-inspector-switcher { margin: 0; }
+.shell .chat-inspector-switcher .popover-menu { z-index: 50; }
+.shell .chat-inspector-body { flex: 1; min-height: 0; padding: 12px 14px 16px; overflow: auto; }
+.shell .chat-inspector-body h3 { margin: 16px 0 4px; font-size: 12px; font-weight: 600; }
+.shell .chat-inspector-body h3:first-child { margin-top: 0; }
+.shell .chat-inspector-body p { margin: 0 0 10px; color: var(--ink-muted); font-size: 11px; line-height: 1.6; }
+.shell .chat-inspector-info { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.shell .chat-inspector-info > svg { flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: var(--ink-muted); }
+.shell .chat-inspector-info > span { display: grid; gap: 2px; min-width: 0; }
+.shell .chat-inspector-info strong { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.shell .chat-inspector-info small { color: var(--ink-muted); font-size: 11px; overflow-wrap: anywhere; }
+.shell .chat-inspector-action { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 11px; text-align: left; }
+.shell .chat-inspector-action:hover { background: var(--surface-hover); }
+.shell .chat-inspector-action svg { width: 15px; height: 15px; }
 .shell.navigation-closed #tab-chat .chat-workspace { grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important; }
 .shell.navigation-closed #tab-chat .chat-workspace.with-inspector { grid-template-columns: 0px 0px minmax(0, 1fr) 1px var(--inspector-width) !important; }
 .shell.navigation-closed #tab-chat .chat-workspace .chat-main { grid-column: 3 !important; }
@@ -219,5 +219,7 @@
 }
 @media (max-width: 620px) {
   .shell #tab-chat .chat-workspace.with-inspector .chat-inspector { width: 100%; }
-  .shell:has(#tab-chat.active #chatLayout.with-inspector) .product-mobile-menu-button { display: none; }
+  .shell:has(#tab-chat.active .chat-workspace.with-inspector) .product-mobile-menu-button { display: none; }
 }
+
+.shell #workspaceInspectorToggle { margin-left: auto; }

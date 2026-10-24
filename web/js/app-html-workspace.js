@@ -161,7 +161,8 @@
       var updated = attachments.slice();
       if (replacing) updated[replaceIndex] = attachment;
       else updated.push(attachment);
-      saveOfficeDraft(chat, officeChatDraftText(), updated, true);
+      saveOfficeDraft(chat, officeChatDraftText(), updated, true,
+        currentDraft && currentDraft.nextAnnotationNumber, number ? null : undefined);
       attached = true;
       await window.RNAssistantChatDrafts.flushOffice(chat);
       if (replacing) {
@@ -213,7 +214,8 @@
   });
   window.RNAssistantHtmlWorkspaceAnnotations = visualAnnotations;
   var previewSurface = window.RNAssistantPreviewSurface.attach($("htmlWorkspacePreview"), {
-    reload: function () { if (workspaceEditor) workspaceEditor.reloadPreview(); }
+    reload: function () { if (workspaceEditor) workspaceEditor.reloadPreview(); },
+    reloadLabel: "Обновить HTML"
   });
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
     state: state,

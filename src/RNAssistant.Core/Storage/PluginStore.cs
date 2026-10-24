@@ -376,7 +376,7 @@ namespace RNAssistant.Core.Storage
         { if (!PluginPackageFiles.ValidId(id)) throw new PluginException("plugin_id_invalid", "Invalid plugin ID."); }
         private static ResourceRef RegistrationRef(string id, string revision)
         { RequireId(id); return new ResourceRef(ResourceUri.Create("plugin", id, "registration", "current"), revision); }
-        private static ResourceRef ReleaseRef(string id, string release)
+        public static ResourceRef ReleaseRef(string id, string release)
         { RequireId(id); return new ResourceRef(ResourceUri.Create("plugin", id, "release", release), "1"); }
         public static string Mime(string path)
         {

@@ -15,14 +15,17 @@
     var status = document.createElement("span");
     status.className = "preview-surface-status";
     status.setAttribute("role", "status");
+    var actions = document.createElement("div");
+    actions.className = "preview-surface-actions";
     var reload = options.reloadButton || document.createElement("button");
     var currentLabel = null;
+    var reloadLabel = options.reloadLabel || "Обновить предпросмотр";
+    reload.setAttribute("aria-label", reloadLabel);
+    reload.title = reloadLabel;
     if (!options.reloadButton) {
       reload.type = "button";
       reload.className = "icon-btn";
       reload.innerHTML = window.RNAssistantIcons.render("refresh");
-      reload.setAttribute("aria-label", "Обновить предпросмотр");
-      reload.title = "Обновить предпросмотр";
       reload.addEventListener("click", function () {
         try {
           var result = options.reload();
@@ -32,7 +35,8 @@
         } catch (error) { fail(currentLabel, error && error.message); }
       });
     }
-    bar.append(location, status, reload);
+    actions.appendChild(reload);
+    bar.append(location, status, actions);
     root.insertBefore(bar, root.firstChild);
 
     var pending = null;
@@ -53,6 +57,7 @@
       var value = label && typeof label === "object" ? label : { title: label };
       title.textContent = value.title || "Предпросмотр";
       path.textContent = value.path || "";
+      location.title = title.textContent + (path.textContent ? " · " + path.textContent : "");
       path.hidden = !path.textContent;
       setStatus(message, false);
       reload.disabled = false;
@@ -75,10 +80,11 @@
       frame.addEventListener("error", current.error);
     }
     return {
+      actions: actions,
       watch: watch,
       waiting: function (label, message) { detach(); show(label, message || "Загрузка…"); },
       fail: fail,
-      clear: function () { if (bar.hidden && !pending) return; detach(); bar.hidden = true; currentLabel = null; title.textContent = ""; path.textContent = ""; path.hidden = true; setStatus("", false); reload.disabled = true; }
+      clear: function () { if (bar.hidden && !pending) return; detach(); bar.hidden = true; currentLabel = null; title.textContent = ""; path.textContent = ""; location.title = ""; path.hidden = true; setStatus("", false); reload.disabled = true; }
     };
   }
 

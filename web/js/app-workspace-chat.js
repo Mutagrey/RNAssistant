@@ -67,6 +67,9 @@
     }
     activeOwner = owner;
     form.dataset.owner = owner;
+    document.getElementById("attachmentDrafts").hidden = owner !== "office";
+    var pluginDrafts = document.getElementById("pluginAnnotationDrafts");
+    if (pluginDrafts) pluginDrafts.hidden = owner !== "plugin" || pluginDrafts.childElementCount === 0;
     form.classList.toggle("project-chat-composer", owner !== "office");
     if (owner === "office") {
       if (form.parentNode !== document.getElementById("chatDropZone"))
@@ -80,6 +83,7 @@
       }
       renderSendControls();
       list.setAttribute("aria-label", "Сообщения чата");
+      window.RNAssistantChatInspector.mount(owner);
       return changed;
     }
     if (view.parentNode !== container) container.appendChild(view);
@@ -106,6 +110,8 @@
     input.setAttribute("aria-label", plugin ? "Сообщение в чат исходников" : "Сообщение в чат проекта");
     list.setAttribute("aria-label", plugin ? "Сообщения чата исходников" : "Сообщения чата проекта");
     if (sharedComposer) sharedComposer.refresh();
+    document.getElementById("workspaceInspectorToggle").hidden = plugin;
+    window.RNAssistantChatInspector.mount(owner);
     return changed;
   }
   function rememberSession(workspaceId, sessionId) {
@@ -205,7 +211,7 @@
     node.innerHTML = window.RNAssistantIcons.render(icon); node.onclick = action; return node;
   }
   function renderMessages(list, chat) {
-    var key = JSON.stringify([field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
+    var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
     var snapshot = field(chat, "state"), live = field(snapshot, "modelProgress");
     if (field(snapshot, "status") !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
@@ -232,7 +238,7 @@
     var visible = (chat.messages || []).filter(function (message) {
       return !message.ProtocolMessage && (!!(message.Content || "").trim() || !!message.Activity ||
         !!message.ReflectionDecision || !!message.ReasoningContent ||
-        !!(message.Results && message.Results.length));
+        !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
     });
     if (!visible.length && !start && !live) {
       appendMessageUnit(units, "empty", "empty", function () { return renderChatEmptyState(!field(chat, "sessionId")
@@ -414,6 +420,7 @@
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     registerActions: registerActions, bindActions: bindActions,
+    snapshot: function () { return dispatch("snapshot"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,
     createRunObserver: createRunObserver, acceptProgress: function (payload) { dispatch("progress", payload); },

@@ -13,6 +13,7 @@ using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -390,6 +391,45 @@ namespace RNAssistant.Application
             }
         }
 
+        public PluginVisualSelectionDraftDto StageVisualSelection(PluginVisualSelectionRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths)) lock (_sync)
+            {
+                RequireOpen();
+                if (request == null || request.PreviewGeneration < 1 || request.AnnotationNumber < 1 ||
+                    string.IsNullOrWhiteSpace(request.InstanceId))
+                    throw new PluginException("plugin_selection_invalid", "Откройте точный предпросмотр и выберите элемент заново.");
+                PluginInstance instance;
+                if (!_instances.TryGetValue(request.InstanceId, out instance) || instance.CommandOperation ||
+                    instance.Token.IsCancellationRequested)
+                    throw new PluginException("plugin_selection_changed", "Предпросмотр изменился. Выберите элемент заново.");
+                var workspace = RequireProjectWorkspace(request.WorkspaceId);
+                var session = Conversations.GetSession(workspace, request.SessionId);
+                if (session == null || instance.Release.SourceWorkspaceId != workspace.WorkspaceId ||
+                    _store.Get(instance.Release.PluginId)?.SourceWorkspaceId != workspace.WorkspaceId)
+                    throw new PluginException("plugin_selection_changed", "Предпросмотр и чат принадлежат разным проектам.");
+                // The DOM payload has no authority. The exact retained release comes only from the bound instance.
+                var draft = new AttachmentStore(_paths).StageVisualSelection(session.Id, request.Selection,
+                    instance.Manifest.Name, request.Comment, request.AnnotationNumber,
+                    PluginStore.ReleaseRef(instance.Release.PluginId, instance.Release.ReleaseId));
+                return new PluginVisualSelectionDraftDto { Id = draft.Id, FileName = draft.FileName,
+                    Kind = draft.Kind, Size = draft.Size };
+            }
+        }
+        public PluginVisualDraftDiscardDto DiscardVisualSelection(PluginVisualDraftRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                if (request == null || string.IsNullOrWhiteSpace(request.Id))
+                    throw new PluginException("plugin_selection_invalid", "Укажите подготовленную аннотацию.");
+                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+                if (Conversations.GetSession(workspace, request.SessionId) == null)
+                    throw new PluginException("project_chat_missing", "Чат аннотации не найден.");
+                return new PluginVisualDraftDiscardDto { Discarded = new AttachmentStore(_paths)
+                    .DeleteDraft(request.Id, request.SessionId) };
+            }
+        }
+
         public PluginInstance FindInstance(string origin)
         { lock (_sync) { return _disposed ? null : _instances.Values.FirstOrDefault(instance => instance.Origin == origin && !instance.Token.IsCancellationRequested); } }
         public Stream DownloadResult(PluginInstance instance, string id) { return _results.OpenDownload(instance,id); }
@@ -648,12 +688,41 @@ namespace RNAssistant.Application
                     Content = "Сообщение использует неподдерживаемый протокол и пропущено. Исходная запись сохранена." };
             return ChatMessageViewDto.From(message);
         }
-        private static ChatMessageWindowViewDto PresentWorkspaceWindow(ChatSession session, int beforeIndex)
+        private ChatMessageWindowViewDto PresentWorkspaceWindow(WorkspaceDescriptor workspace, ChatSession session, int beforeIndex)
         {
             try
             {
+                var attachments = new AttachmentStore(_paths);
                 return ChatMessageWindowProjector.Project<ChatMessageWindowViewDto>(session, beforeIndex,
-                    (owner, messages) => messages.Select(PresentWorkspaceMessage).ToArray());
+                    (owner, messages) => messages.Select(message => {
+                        var view = PresentWorkspaceMessage(message);
+                        if (view?.Attachments == null) return view;
+                        for (var index = 0; index < view.Attachments.Count; index++)
+                        {
+                            var item = message.Attachments[index];
+                            if (item?.VisualSelectionSource == null) continue;
+                            ResourceAddress address;
+                            ResourceRef source = null;
+                            string releaseId = null;
+                            if (item.VisualSelectionSource.IsExact &&
+                                ResourceUri.TryParse(item.VisualSelectionSource.Uri, out address) &&
+                                address.Provider == "plugin" && address.Segments.Count == 3 &&
+                                address.Segments[1] == "release" && item.VisualSelectionSource.Revision == "1")
+                            {
+                                try
+                                {
+                                    var release = _store.ReadRelease(new PluginReleaseIdentity(address.Segments[0], address.Segments[2]));
+                                    if (release.SourceWorkspaceId == workspace.WorkspaceId &&
+                                        _store.Get(address.Segments[0])?.SourceWorkspaceId == workspace.WorkspaceId)
+                                    { source = PluginStore.ReleaseRef(address.Segments[0], address.Segments[2]); releaseId = address.Segments[2]; }
+                                }
+                                catch (InvalidOperationException) { }
+                                catch (IOException) { }
+                            }
+                            ChatVisualAnnotationProjection.Apply(item, view.Attachments[index], attachments, source, releaseId, 1);
+                        }
+                        return view;
+                    }).ToArray());
             }
             catch (ArgumentOutOfRangeException)
             { throw new PluginException("project_chat_invalid", "The history cursor is outside this chat."); }
@@ -733,7 +802,7 @@ namespace RNAssistant.Application
             var session = Conversations.GetSession(workspace, request.SessionId);
             if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
             var snapshot = Conversations.ReadState(workspace, session);
-            var messages = PresentWorkspaceWindow(session, session.Messages.Count);
+            var messages = PresentWorkspaceWindow(workspace, session, session.Messages.Count);
             return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
                 State = snapshot,
                 PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
@@ -753,7 +822,7 @@ namespace RNAssistant.Application
                 var workspace = RequireProjectWorkspace(request.WorkspaceId);
                 var session = Conversations.GetSession(workspace, request.SessionId);
                 if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
-                return PresentWorkspaceWindow(session, request.BeforeIndex);
+                return PresentWorkspaceWindow(workspace, session, request.BeforeIndex);
             }
         }
 

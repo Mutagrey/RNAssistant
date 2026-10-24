@@ -201,6 +201,9 @@ async function removeDraftAttachment(item) {
 
 function attachmentCard(item, removable, lifecycle) {
   lifecycle = lifecycle || (removable ? "draft" : "committed");
+  var visual = window.RNAssistantVisualAnnotations;
+  if (!removable && lifecycle === "committed" && visual && visual.annotation(item))
+    return visual.messageCard(item);
   var card = document.createElement("div");
   card.className = (removable ? "attachment-draft" : "message-attachment") + " lifecycle-" + lifecycle;
   var thumb = document.createElement("div");
@@ -225,7 +228,8 @@ function attachmentCard(item, removable, lifecycle) {
   var warning = attachmentValue(item, "ExtractionWarning", "extractionWarning", "");
   var lifecycleLabels = { draft: "Не отправлено", preparing: "Подготовка", committed: "Оригинал" };
   meta.textContent = (lifecycleLabels[lifecycle] || lifecycleLabels.committed) + " · " +
-    formatAttachmentSize(attachmentSize(item)) + (warning ? " · требуется внимание" : "");
+    formatAttachmentSize(attachmentSize(item)) + (warning ? " · требуется внимание" : "") +
+    (item.visualAnnotationUnavailable || item.VisualAnnotationUnavailable ? " · аннотация недоступна" : "");
   if (warning) meta.title = warning;
   copy.appendChild(meta);
   card.appendChild(copy);
@@ -246,15 +250,16 @@ function renderAttachmentDrafts() {
   var box = $("attachmentDrafts");
   if (!box) return;
   box.innerHTML = "";
-  box.classList.toggle("hidden", !state.draftAttachments.length);
   var visual = window.RNAssistantVisualAnnotations;
-  var annotations = visual ? state.draftAttachments.filter(function (item) { return !!visual.annotation(item); }) : [];
+  var controller = window.RNAssistantHtmlWorkspaceAnnotations;
+  var annotations = controller ? controller.visibleDrafts() :
+    visual ? state.draftAttachments.filter(function (item) { return !!visual.annotation(item); }) : [];
+  box.classList.toggle("hidden", !state.draftAttachments.length && !annotations.length);
   box.classList.toggle("has-visual-annotations", annotations.length > 0);
-  if (visual && annotations.length && window.RNAssistantHtmlWorkspaceAnnotations)
-    window.RNAssistantHtmlWorkspaceAnnotations.renderDrafts(box, annotations);
-  state.draftAttachments.filter(function (item) { return annotations.indexOf(item) < 0; })
+  if (controller && annotations.length) controller.renderDrafts(box, annotations);
+  state.draftAttachments.filter(function (item) { return !(controller && visual && visual.annotation(item)); })
     .forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft")); });
-  if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
+  if (controller) controller.sync();
   updateComposerInputState();
 }
 

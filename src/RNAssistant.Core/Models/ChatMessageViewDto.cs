@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 
 namespace RNAssistant.Core.Models
 {
@@ -119,6 +121,10 @@ namespace RNAssistant.Core.Models
         public string Kind { get; set; }
         public long Size { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string ExtractionWarning { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public HtmlVisualAnnotation VisualAnnotation { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string VisualSourceArtifactId { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public int VisualSourceRevision { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)] public bool VisualAnnotationUnavailable { get; set; }
 
         public static ChatAttachmentViewDto From(ChatAttachment attachment)
         {
@@ -131,6 +137,38 @@ namespace RNAssistant.Core.Models
                 Size = attachment.Size,
                 ExtractionWarning = attachment.ExtractionWarning
             };
+        }
+    }
+
+    public static class ChatVisualAnnotationProjection
+    {
+        public static void Apply(ChatAttachment attachment, ChatAttachmentViewDto view,
+            AttachmentStore attachments, ResourceRef exactSource, string sourceId, int sourceRevision)
+        {
+            if (attachment?.VisualSelectionSource == null || view == null) return;
+            if (exactSource != null && attachment.VisualSelectionSource.IsExact &&
+                attachment.VisualSelectionSource.Uri == exactSource.Uri &&
+                attachment.VisualSelectionSource.Revision == exactSource.Revision &&
+                !string.IsNullOrWhiteSpace(attachment.ContentSha256) &&
+                attachment.ContentByteLength == attachment.Size && attachment.Size > 0 &&
+                attachment.Size <= HtmlVisualSelectionPolicy.MaximumBodyBytes)
+            {
+                try
+                {
+                    var annotation = HtmlVisualSelectionPolicy.ReadAnnotation(attachments.ReadBytes(attachment));
+                    if (annotation.AnnotationNumber > 0)
+                    {
+                        view.VisualAnnotation = annotation;
+                        view.VisualSourceArtifactId = sourceId;
+                        view.VisualSourceRevision = sourceRevision;
+                        return;
+                    }
+                }
+                catch (InvalidOperationException) { }
+                catch (System.IO.IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            view.VisualAnnotationUnavailable = true;
         }
     }
 

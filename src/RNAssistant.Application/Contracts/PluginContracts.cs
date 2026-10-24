@@ -63,6 +63,30 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("candidateId")] public string CandidateId { get; set; }
         [JsonProperty("releaseId")] public string ReleaseId { get; set; }
     }
+    public sealed class PluginVisualSelectionRequest
+    {
+        [JsonProperty("instanceId", Required = Required.Always)] public string InstanceId { get; set; }
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("previewGeneration", Required = Required.Always)] public int PreviewGeneration { get; set; }
+        [JsonProperty("selection", Required = Required.Always)] public HtmlVisualSelection Selection { get; set; }
+        [JsonProperty("comment")] public string Comment { get; set; }
+        [JsonProperty("annotationNumber")] public int AnnotationNumber { get; set; }
+    }
+    public sealed class PluginVisualDraftRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("id", Required = Required.Always)] public string Id { get; set; }
+    }
+    public sealed class PluginVisualSelectionDraftDto
+    {
+        public string Id { get; set; }
+        public string FileName { get; set; }
+        public string Kind { get; set; }
+        public long Size { get; set; }
+    }
+    public sealed class PluginVisualDraftDiscardDto { public bool Discarded { get; set; } }
     public sealed class PluginReleaseHistoryRequest
     {
         [JsonProperty("pluginId", Required = Required.Always)] public string PluginId { get; set; }

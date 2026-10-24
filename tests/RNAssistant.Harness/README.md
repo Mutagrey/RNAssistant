@@ -2,7 +2,9 @@
 
 `visual selection: workspace intake and common resource read` checks one accepted
 workspace attachment identity through input journal, chat CAS, model prompt and
-`common.resources_read`, plus duplicate submission and ambiguous-target refusal.
+`common.resources_read`, plus native plugin-instance staging for active and checked
+candidate releases, browser-safe draft projection, duplicate submission and
+ambiguous-target refusal.
 
 `v8 recovery:` checks configurable/frozen reflection depth, separate format retries,
 strict response transport, bounded output truncation, accepted reasoning after
@@ -218,6 +220,11 @@ the shared panel buttons (geometry, Enter/Space/Escape, pointer focus after keyb
 plugin name/icon/color editing and creation (including rendered SVG color pixels and neutral defaults following the theme), new source chats, navigation through the main history tree,
 history access during a run, draft restoration and late replies after switching chats.
 `RNA_CHAT_SCREENSHOTS` saves the visual review captures.
+`node tests/web/workspace-inspector.test.js` checks the shared Office/project/plugin
+Inspector DOM, exact workspace/session/run/step routing, stale owner rejection,
+draft and live preview frame preservation, and narrow/light/dark layouts.
+`INSPECTOR_SCREENSHOTS` saves these captures. Workspace request/usage/journal
+contracts and native Windows/WebView2 qualification remain open.
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin
 view and composer, one session draft and preferences across both screens, appended file reference, failed retry
 identity, double submit and late acknowledgement with identical later text.

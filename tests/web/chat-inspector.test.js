@@ -33,7 +33,9 @@ const { chromium } = require("playwright");
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       await page.screenshot({ path: path.join(process.env.INSPECTOR_SCREENSHOTS, name + ".png"), animations: "disabled" });
     };
-    assert.deepEqual(await page.locator("[data-chat-inspector-view]").evaluateAll(buttons => buttons.map(b => b.querySelectorAll("svg").length)), [1, 1, 1, 1]);
+    assert.deepEqual(await page.locator("[data-chat-inspector-view]").evaluateAll(buttons => buttons.map(b => b.querySelectorAll("svg").length)), [1, 1, 1, 1, 1]);
+    assert.equal(await page.locator('[data-chat-inspector-view="preview"]').isVisible(), false,
+      "preview is offered only while its exact browser source is available");
     await page.locator("#chatInspectorSwitcher summary").click(); await screenshot("menu");
     await page.locator('[data-chat-inspector-view="usage"]').click();
     await page.locator(".chat-inspector-composition-chart").waitFor();

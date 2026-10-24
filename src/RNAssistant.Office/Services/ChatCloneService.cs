@@ -5,6 +5,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
 
 namespace RNAssistant.Office.Services
@@ -12,19 +13,19 @@ namespace RNAssistant.Office.Services
     public static class ChatCloneService
     {
         public static IReadOnlyList<ChatMessageViewDto> CloneRecentMessagesForBridge(
-            ChatSession session, out int startIndex)
+            ChatSession session, out int startIndex, AttachmentStore attachments = null)
         {
             var page = ChatMessageWindowProjector.Project<ChatMessagePageDto>(session,
-                session?.Messages?.Count ?? 0, CloneMessagesForBridge);
+                session?.Messages?.Count ?? 0, (current, messages) => CloneMessagesForBridge(current, messages, attachments));
             startIndex = page.StartIndex;
             return page.Messages;
         }
 
         public static ChatMessagePageDto ClonePreviousMessagesForBridge(
-            ChatSession session, int beforeIndex)
+            ChatSession session, int beforeIndex, AttachmentStore attachments = null)
         {
             return ChatMessageWindowProjector.Project<ChatMessagePageDto>(session, beforeIndex,
-                CloneMessagesForBridge);
+                (current, messages) => CloneMessagesForBridge(current, messages, attachments));
         }
 
         public static ChatSession CloneSessionSnapshot(ChatSession session)
@@ -107,7 +108,8 @@ namespace RNAssistant.Office.Services
                 : messages.Select(CloneMessage).ToList();
         }
 
-        public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(ChatSession session, IEnumerable<ChatMessage> messages)
+        public static IReadOnlyList<ChatMessageViewDto> CloneMessagesForBridge(ChatSession session,
+            IEnumerable<ChatMessage> messages, AttachmentStore attachments = null)
         {
             return (messages ?? new ChatMessage[0])
                 .Select(message =>
@@ -117,9 +119,25 @@ namespace RNAssistant.Office.Services
                     var ids = ChatResourceUri.CurrentArtifactIds(session,
                         (message.ResourceRefs ?? new List<ResourceRef>()).Concat(new[] { message.HtmlWorkspaceCheckpoint }));
                     view.ArtifactIds = ids.Count == 0 ? null : ids;
+                    if (attachments != null && view.Attachments != null)
+                    {
+                        for (var index = 0; index < view.Attachments.Count; index++)
+                            ProjectVisualAnnotation(session, message.Attachments[index], view.Attachments[index], attachments);
+                    }
                     return view;
                 })
                 .ToList();
+        }
+
+        private static void ProjectVisualAnnotation(ChatSession session, ChatAttachment attachment,
+            ChatAttachmentViewDto view, AttachmentStore attachments)
+        {
+            if (attachment?.VisualSelectionSource == null || view == null) return;
+            string owner, artifactId; int revision;
+            var source = ChatResourceUri.TryParseArtifactRevision(attachment.VisualSelectionSource,
+                out owner, out artifactId, out revision) && owner == session.DocumentAuthorityId
+                ? attachment.VisualSelectionSource : null;
+            ChatVisualAnnotationProjection.Apply(attachment, view, attachments, source, artifactId, revision);
         }
 
         public static List<ContextCheckpoint> CloneContextCheckpoints(IEnumerable<ContextCheckpoint> checkpoints, IEnumerable<ChatMessage> messages)

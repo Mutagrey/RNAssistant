@@ -38,6 +38,10 @@ namespace RNAssistant.Office.WebView
                         if(Plugins.Executor==null)throw new PluginException("plugins_unavailable",Plugins.StartupError ?? "Plugin browser host is unavailable.");
                         return Plugins.Open(Payload<PluginOpenRequest>(payload));
                     case BridgeOperationId.ClosePlugin: await Plugins.CloseInstanceAsync(Payload<PluginCloseRequest>(payload).InstanceId); return new PluginFrameResult();
+                    case BridgeOperationId.StagePluginVisualSelection:
+                        return Plugins.StageVisualSelection(Payload<PluginVisualSelectionRequest>(payload));
+                    case BridgeOperationId.DiscardPluginVisualSelection:
+                        return Plugins.DiscardVisualSelection(Payload<PluginVisualDraftRequest>(payload));
                     case BridgeOperationId.DisablePlugin: return await Plugins.DisableAsync(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.RemovePlugin: return await Plugins.RemoveAsync(Payload<PluginIdRequest>(payload).PluginId);
                     case BridgeOperationId.RestorePlugin: return Plugins.Restore(Payload<PluginIdRequest>(payload).PluginId);

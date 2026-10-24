@@ -400,15 +400,15 @@ function appendMessageFooter(node, message, index, activity) {
 }
 
 function appendMessageInspectorAction(parent, message, activity) {
-  if (!window.RNAssistantChatInspector || typeof window.RNAssistantChatInspector.openActivity !== "function" || !officeTranscriptActive() ||
+  if (!window.RNAssistantChatInspector || typeof window.RNAssistantChatInspector.openActivity !== "function" ||
       (!activity && messageRole(message) !== "assistant")) return;
-  var chatId = state.activeChatId;
+  var target = window.RNAssistantChatInspector.target();
   var runId = messageRunId(message) || (activity && activityValue(activity, "RunId", "runId", ""));
-  if (!chatId || !runId) return;
+  if ((!target.chatId && (!target.workspaceId || !target.sessionId)) || !runId) return;
   var stepId = activity ? activityStepId(activity) : "";
   var button = smallIconButton(stepId ? "Открыть шаг" : "Открыть ход работы", "clock", function (event) {
     event.preventDefault(); event.stopPropagation();
-    window.RNAssistantChatInspector.openActivity({ chatId: chatId, runId: runId, stepId: stepId }, button);
+    window.RNAssistantChatInspector.openActivity(Object.assign({}, target, { runId: runId, stepId: stepId }), button);
   });
   button.classList.add("message-inspect-action");
   parent.appendChild(button);
@@ -460,6 +460,11 @@ function renderActivityArticle(message, index, activity, options) {
 
   if (message && !options.live && !options.workspace) {
     appendMessageFooter(node, message, index, activity);
+  } else if (message && !options.live && options.workspace && !activityStepId(activity)) {
+    var footer = document.createElement("div"); footer.className = "message-footer";
+    var actions = document.createElement("div"); actions.className = "message-actions";
+    appendMessageInspectorAction(actions, message, activity);
+    footer.appendChild(actions); node.appendChild(footer);
   }
 
   enhanceActivity(body);
@@ -570,6 +575,7 @@ function renderMessageArticle(message, index, options) {
       var footer = document.createElement("div"); footer.className = "message-footer";
       var actions = document.createElement("div"); actions.className = "message-actions";
       actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () { copyChatMessage(messageContent(message)); }));
+      appendMessageInspectorAction(actions, message, null);
       footer.appendChild(actions); node.appendChild(footer);
     }
   } else appendMessageFooter(node, message, index, null);
@@ -1121,6 +1127,7 @@ function renderMessages(options) {
       retry.addEventListener("click", retryChatDetail);
       box.appendChild(retry);
     }
+    if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return;
   }
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
@@ -1132,6 +1139,7 @@ function renderMessages(options) {
     renderAgentPlanDock();
     renderAgentApprovalDock();
     syncChatScroll(false, false);
+    if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return;
   }
 
@@ -1145,4 +1153,5 @@ function renderMessages(options) {
     chatScrollPosition = box.scrollTop;
   } else if (!shouldScroll) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false);
+  if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
 }

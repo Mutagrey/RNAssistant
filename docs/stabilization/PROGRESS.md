@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## Shared context and activity Inspector — 2026-10-24
+
+Owner: Web chat Inspector presentation. One dock and section switcher now follow
+the Office, project and plugin chat. Workspace context reads the selected session
+snapshot; the common activity renderer filters by RunId and opens exact steps
+from the transcript. The separate plugin activity renderer is removed. Routes
+check owner/workspace/session identity, including a shared session moving between
+project and plugin; Office request inspection cannot open in a workspace chat.
+Switching from an Office request closes its reader and releases Focus isolation.
+
+Plugin preview keeps its frame and document when switching sections. Drafts stay
+with the existing chat owner; narrow diagnostics uses the full pane with a return
+button. `workspace-inspector.test.js` covers these boundaries and light/dark/narrow
+layout; the existing Office request layout and plugin browser suites also pass.
+Workspace request/response, usage, capabilities and journal presentation are the
+next bounded contract-parity slice; their Office data is never substituted.
+Windows/Office/WebView2 qualification remains open.
+
+## Plugin iframe visual annotations — 2026-10-24
+
+Owner: native plugin frame transport / shared visual Inspector and composer /
+workspace chat attachment intake. The bound frame receives the shared Inspector;
+the numbered editor stages a bounded DOM selection against its immutable release,
+including checked candidate previews. The protected workspace draft preserves
+unfinished annotations and staged attachments. Attachment-only input appears in
+the shared transcript; sent annotations project from CAS and show page markers
+only on the matching release. Focused host-neutral and Chromium plugin UI checks
+pass. Real Windows WebView2 injection and Office delivery remain open evidence.
+
 ## Request Inspector reading and hidden-panel layout — 2026-10-24
 
 Owner: Web model-context reader / chat Inspector presentation. Ordered input
@@ -15,9 +44,44 @@ hidden section, and hidden layouts do not clamp the chosen panel width to zero
 space. Targeted model-context and browser layout/HTML handoff checks cover these
 changes. Windows/Office/WebView2 qualification remains open.
 
+## HTML Inspector hover guidance and toggle state — 2026-10-24
+
+Owner: shared visual Inspector / Web button presentation. With annotation mode
+active, pointer hover now outlines the exact element using the selected UI accent
+and shows its safe tag/ID and dimensions beside the outline. Leaving the preview
+clears hover; scrolling resolves the element currently under a stationary pointer.
+The shared pressed-button style makes the active mode visible in the right browser
+and Materials. Ordinary page clicks still work with the mode off. Focused Chromium
+Inspector and annotation checks pass; target-host WebView2 delivery remains open.
+
+## Right panel sections and sent HTML annotation markers — 2026-10-24
+
+Owner: shared Web chat shell / Office message projection / plugin preview UI.
+The right HTML pane now exposes Preview, Context, Agent abilities, Context usage
+and Activity from one header switcher; the existing chat button only opens or
+collapses the pane. The plugin pane uses the same header and section pattern for
+its available Preview and Activity views. Activity is derived from the selected
+source chat; switching views keeps the exact live plugin frame. Reload remains
+beside the preview. Sent Office HTML annotations are projected from their
+committed CAS body into the immutable message and shown as read-only numbered
+markers on the matching HTML revision. The page watches at most 100 loaded
+annotations at once; an older message can pin its annotation for inspection.
+The later plugin iframe annotation slice is recorded above. Windows/WebView2
+delivery remains unqualified.
+
 ## HTML annotation editor and shared composer list — 2026-10-24
 
 Owner: Web visual annotation UI / Core selection body / Office chat draft projection.
+Unfinished selection and comment edits now live in the same protected Office
+chat draft as the composer input. Browser hide, mode exit and WebView recreation
+retain the text and exact source; an unfinished annotation blocks send until
+Done or Delete. Completing it transfers the record to the existing staged CAS
+attachment in one draft update. The existing chat side-panel button opens and
+closes the browser or chat diagnostics; the browser has no separate hide arrow
+or duplicate preview button. Sections are selected in the right header.
+The unused Materials attach control stays out of the browser bar. Number badges have
+fixed square geometry in the page, editor and composer list.
+
 The right HTML browser now opens a small host-owned comment editor by a selected
 element. Done stages the selection and comment in the existing CAS attachment,
 adds one entry to the shared Office composer, and leaves a clickable number on
@@ -29,9 +93,9 @@ so a click made immediately after toggling does not race its capture listener.
 Draft numbering is protected with the existing chat draft; native hydration
 projects completed annotation details from the CAS body.
 
-Focused Core/CAS and browser editor, marker, scroll, edit/delete checks pass.
-Typing in an unfinished open editor is not yet durable; sent annotations do not
-yet reopen from the immutable message on the page. Plugin capture, source edit
+Focused Core/CAS, protected draft recovery and browser editor, marker, scroll,
+edit/delete checks pass. Sent annotations reopen read-only from the immutable
+message on the matching page. Plugin capture, source edit
 read-back and Windows/Office/WebView2 qualification remain open.
 
 ## Authored HTML beside the shared Office chat — 2026-10-24
@@ -44,8 +108,9 @@ The browser and chat diagnostics use the same right slot. Hide/show keeps the li
 frame and chat draft; explicit close, Materials navigation or changed chat/revision
 returns the frame and revokes the old preview. The initial split is 58/42 with
 shared keyboard/drag resizing, a wider mode and a narrow overlay. The browser
-header now shows title/path, reload, an Inspector mode button styled as
-"Аннотировать", size, hide and close actions. The Materials view retains
+header now shows a section switcher, title/path, reload, an Inspector mode button
+styled as "Аннотировать", size and a menu with Materials and close actions.
+The Materials view retains
 "В чат" for attaching a selection without a comment.
 
 Focused browser routing/geometry, Inspector, HTML reuse, shared-chat and product
@@ -57,8 +122,9 @@ open. The later annotation editor slice is described above.
 
 Owner: Web preview presentation / existing plugin and authored HTML frame owners.
 One small preview-surface control presents the exact resource label and loading or
-error state for both frames. The plugin's existing refresh action now lives inside
-its right preview; HTML has an explicit reload through its existing snapshot
+error state for both frames. Both preview headers align with the chat/project header;
+the plugin's existing refresh action now lives inside its right preview. HTML has
+an explicit reload through its existing snapshot
 renderer, which revokes inspector generation and resource leases once. Neither
 path creates another iframe, bridge or resource store. Focused plugin layout and
 lifecycle, HTML preview reuse and browser integration checks pass. The later

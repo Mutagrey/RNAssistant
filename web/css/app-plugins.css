@@ -13,9 +13,17 @@
 .plugin-workbench[hidden],.plugin-chat[hidden],.plugin-manager[hidden]{display:none}
 .plugin-toolbar{display:flex;gap:8px;align-items:center}
 .plugin-source{font-size:11px;display:block;color:var(--ink-muted);overflow-wrap:anywhere}
-.plugin-body{display:grid;grid-template-columns:minmax(0,1fr);min-height:0;flex:1}
+.plugin-body{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:var(--page-header-height,52px) minmax(0,1fr);min-height:0;flex:1}
 .plugin-preview{min-height:0;overflow:hidden;background:var(--surface)}
 .plugin-preview iframe{display:block;width:100%;height:100%;border:0}
+.plugin-preview .preview-surface-location{display:flex;flex-direction:column;justify-content:center;gap:0;overflow:visible}
+/* The preview and diagnostics share the same section switcher and keep the frame mounted. */
+.plugin-preview .chat-inspector-switcher{flex:none;width:min(220px,100%);margin:0}
+.plugin-preview .chat-inspector-switcher>summary{min-height:19px;padding:0;font-size:11px}
+.plugin-preview .chat-inspector-switcher .popover-menu{min-width:210px;right:auto;top:25px;z-index:50}
+.plugin-preview .preview-surface-title{display:none}
+.plugin-preview .preview-surface-path{font-size:11px}
+.plugin-preview-frame-host[hidden]{display:none}
 .plugin-chat{display:flex;min-height:0;flex-direction:column}
 .plugin-shell :is(.plugin-manager,.workspace-chat-control,.workspace-chat-questions) button:not(.button):not(.plugin-create-mark){padding:7px 11px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:inherit;cursor:pointer}
 .plugin-shell button:disabled{opacity:.45;cursor:default}
@@ -142,6 +150,10 @@
 .plugin-toolbar .plugin-source{display:none}
 .plugin-body{grid-template-columns:minmax(0,1fr);gap:0}
 .plugin-surface-open .plugin-body{grid-template-columns:minmax(0,var(--split-left,58%)) 1px minmax(0,1fr)}
+.plugin-body>.plugin-toolbar{grid-column:1;grid-row:1;min-width:0}
+.plugin-body>.plugin-chat{grid-column:1;grid-row:2}
+.plugin-body>.splitter{grid-column:2;grid-row:1/3}
+.plugin-body>.plugin-preview{grid-column:3;grid-row:1/3}
 .plugin-preview{min-height:0;border:0;border-radius:0}
 .plugin-preview[hidden]{display:none}
 .plugin-chat{gap:0;padding:0;min-width:0;border-left:0;background:var(--surface)}
@@ -170,8 +182,8 @@
 .plugin-chat-context-note{flex:1;min-width:0;color:var(--ink-muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .plugin-shell .plugin-actions-menu .popover-menu>button{padding:7px 9px;border:0;border-radius:5px;background:transparent;font:inherit;font-size:12px;text-align:left}
 .plugin-shell .plugin-actions-menu .popover-menu>button:hover{background:var(--surface-hover)}
-@media(max-width:1000px){.plugin-data-templates.plugin-surface-open .plugin-body{grid-template-columns:minmax(0,1fr);overflow:auto}.plugin-data-templates .plugin-body>.splitter{display:none}.plugin-data-templates.plugin-surface-open .plugin-preview{height:50vh;min-height:270px}.plugin-data-templates.plugin-surface-open .plugin-chat{min-height:380px}}
-@media(max-width:700px){.plugin-surface-open .plugin-body{grid-template-columns:minmax(0,1fr);overflow:auto}.plugin-body>.splitter{display:none}.plugin-surface-open .plugin-preview{height:50vh;min-height:270px}.plugin-surface-open .plugin-chat{min-height:380px}}
+@media(max-width:1000px){.plugin-data-templates.plugin-surface-open .plugin-body{grid-template-columns:minmax(0,1fr);grid-template-rows:var(--page-header-height,52px) minmax(380px,1fr) auto;overflow:auto}.plugin-data-templates .plugin-body>.splitter{display:none}.plugin-data-templates.plugin-surface-open .plugin-preview{grid-column:1;grid-row:3;height:50vh;min-height:270px}.plugin-data-templates.plugin-surface-open .plugin-chat{min-height:380px}}
+@media(max-width:700px){.plugin-surface-open .plugin-body{grid-template-columns:minmax(0,1fr);grid-template-rows:var(--page-header-height,52px) minmax(380px,1fr) auto;overflow:auto}.plugin-body>.splitter{display:none}.plugin-surface-open .plugin-preview{grid-column:1;grid-row:3;height:50vh;min-height:270px}.plugin-surface-open .plugin-chat{min-height:380px}}
 .plugin-source-location strong{font-size:12px;font-weight:600}
 .plugin-source-location span{font-size:12px;color:var(--ink-muted);overflow-wrap:anywhere}
 .plugin-source-location small{font-size:11px;color:var(--ink-muted)}
@@ -198,3 +210,19 @@
 .plugin-icon-color label{display:grid;gap:6px;font-size:12px}
 .plugin-icon-color select{height:34px;padding:0 10px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:inherit;font:inherit}
 .plugin-manager .plugin-icon-color input[type=color]{width:42px;height:34px;padding:3px;cursor:pointer}
+
+/* One inspector DOM follows the active Office, project or plugin chat. */
+.shell #tab-plugins .plugin-body > .chat-inspector { grid-column: 3; grid-row: 1 / 3; border-left: 1px solid var(--line); }
+.shell #tab-plugins .chat-inspector-head, .shell #tab-plugins .chat-inspector-body { width: 100%; }
+.shell #tab-plugins .chat-inspector-back { display: grid; place-items: center; }
+.shell #tab-plugins .plugin-body:not(.with-inspector) > .chat-inspector { display: none; }
+@media (max-width: 1000px) {
+  .shell #tab-plugins .plugin-data-templates .plugin-body.with-inspector { position: relative; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--page-header-height, 52px) minmax(0, 1fr); overflow: hidden; }
+  .shell #tab-plugins .plugin-data-templates .plugin-body.with-inspector > .chat-inspector { position: absolute; inset: 0 0 0 auto; grid-column: auto; grid-row: auto; width: min(360px, 100%); z-index: 10; box-shadow: -12px 0 30px #142a151a; }
+}
+@media (max-width: 700px) {
+  .shell #tab-plugins .plugin-body.with-inspector { position: relative; grid-template-columns: minmax(0, 1fr); grid-template-rows: var(--page-header-height, 52px) minmax(0, 1fr); overflow: hidden; }
+  .shell #tab-plugins .plugin-body.with-inspector > .chat-inspector,
+  .shell #tab-plugins .plugin-data-templates .plugin-body.with-inspector > .chat-inspector { position: absolute; inset: 0; grid-column: auto; grid-row: auto; width: 100%; z-index: 10; }
+  .shell:has(#tab-plugins.active .plugin-body.with-inspector) .product-mobile-menu-button { display: none; }
+}

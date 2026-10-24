@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Newtonsoft.Json;
+using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -107,13 +109,14 @@ namespace RNAssistant.Core.Storage
                     (item.Mode != "agent" && item.Mode != "plan") || item.PendingOfficeInput != null)) ||
                 item.ResourceDraftIds == null || item.ResourceDraftIds.Count > 10 ||
                 item.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
-                (item.Owner == "office" && (item.NextAnnotationNumber < 1 || item.NextAnnotationNumber > 1000001)) ||
-                (item.Owner == "workspace" && item.ResourceDraftIds.Count != 0))
+                item.NextAnnotationNumber < 1 || item.NextAnnotationNumber > 1000001)
                 throw new InvalidDataException("Chat draft has an invalid identity or content.");
             var pending = item.PendingInput;
             if (pending != null && (item.Owner != "workspace" || string.IsNullOrWhiteSpace(pending.RequestId) ||
                 pending.RequestId.Length > 128 || pending.Message == null || pending.Message.Length > MaxTextLength ||
-                (pending.Mode != "agent" && pending.Mode != "plan")))
+                (pending.Mode != "agent" && pending.Mode != "plan") ||
+                pending.ResourceDraftIds == null || pending.ResourceDraftIds.Count > 10 ||
+                pending.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128)))
                 throw new InvalidDataException("Chat draft pending input is invalid.");
             var officePending = item.PendingOfficeInput;
             if (officePending != null && (item.Owner != "office" || string.IsNullOrWhiteSpace(officePending.OperationId) ||
@@ -122,6 +125,21 @@ namespace RNAssistant.Core.Storage
                 officePending.ResourceDraftIds == null || officePending.ResourceDraftIds.Count > 10 ||
                 officePending.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128)))
                 throw new InvalidDataException("Chat draft pending Office input is invalid.");
+            var visual = item.PendingVisualAnnotation;
+            if (visual != null)
+            {
+                if (string.IsNullOrWhiteSpace(visual.ArtifactId) ||
+                    visual.ArtifactId.Length > 256 || visual.ArtifactRevision < 1 ||
+                    visual.Number < 1 || visual.Number >= item.NextAnnotationNumber ||
+                    visual.Comment == null || visual.Comment.Length > 2048 ||
+                    (visual.ReplacingDraftId != null &&
+                     (visual.ReplacingDraftId.Length == 0 || visual.ReplacingDraftId.Length > 128 ||
+                      !item.ResourceDraftIds.Contains(visual.ReplacingDraftId))))
+                    throw new InvalidDataException("Pending visual annotation is invalid.");
+                try { HtmlVisualSelectionPolicy.Capture(visual.Selection, "HTML", visual.Comment, visual.Number); }
+                catch (InvalidOperationException error)
+                { throw new InvalidDataException("Pending visual annotation is invalid.", error); }
+            }
         }
 
         private sealed class ChatDraftEnvelope
@@ -142,17 +160,29 @@ namespace RNAssistant.Core.Storage
         public bool Reasoning { get; set; }
         public List<string> ResourceDraftIds { get; set; } = new List<string>();
         public int NextAnnotationNumber { get; set; } = 1;
+        public PendingVisualAnnotation PendingVisualAnnotation { get; set; }
         public PendingChatInput PendingInput { get; set; }
         public PendingOfficeChatInput PendingOfficeInput { get; set; }
         [JsonIgnore]
-        public bool IsEmpty { get { return string.IsNullOrEmpty(Text) && ResourceDraftIds.Count == 0 && NextAnnotationNumber == 1 && PendingInput == null &&
+        public bool IsEmpty { get { return string.IsNullOrEmpty(Text) && ResourceDraftIds.Count == 0 && NextAnnotationNumber == 1 && PendingVisualAnnotation == null && PendingInput == null &&
             PendingOfficeInput == null && (Owner == "office" || (Mode == "agent" && !Reasoning)); } }
+    }
+
+    public sealed class PendingVisualAnnotation
+    {
+        public string ArtifactId { get; set; }
+        public int ArtifactRevision { get; set; }
+        public int Number { get; set; }
+        public string Comment { get; set; }
+        public HtmlVisualSelection Selection { get; set; }
+        public string ReplacingDraftId { get; set; }
     }
 
     public sealed class PendingChatInput
     {
         public string RequestId { get; set; }
         public string Message { get; set; }
+        public List<string> ResourceDraftIds { get; set; } = new List<string>();
         public string Mode { get; set; }
         public bool Reasoning { get; set; }
     }

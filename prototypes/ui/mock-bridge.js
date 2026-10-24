@@ -435,6 +435,7 @@
       var key = previewDraftKey(payload);
       previewDrafts = previewDrafts.filter(function (draft) { return previewDraftKey(draft) !== key; });
       if (payload.Text || (payload.ResourceDraftIds || []).length || payload.PendingInput || payload.PendingOfficeInput ||
+          payload.PendingVisualAnnotation ||
           payload.Owner === "office" && payload.NextAnnotationNumber > 1 ||
           payload.Owner === "workspace" && (payload.Mode !== "agent" || payload.Reasoning)) previewDrafts.push(clone(payload));
       savePreviewDrafts(); return { saved: true };

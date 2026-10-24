@@ -199,6 +199,7 @@
         buttons: suggestions
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
+    window.RNAssistantChatInspector.render();
     if (!busy && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
     else if (!busy && !noticeError && statusText()) notice(statusText());
     else notice(noticeText, noticeError);
@@ -391,6 +392,7 @@
       finally { busy = false; render(); }
     });
     window.RNAssistantWorkspaceChat.registerActions("project", {
+      snapshot: function () { return active; },
       suspend: function () { runObserver.select(null, false); },
       loadPrevious: async function () {
         if (!active || !active.messageStartIndex) return;

@@ -163,8 +163,9 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','plugin opens with the right preview');
     assert.equal(await pluginToggle.getAttribute('aria-controls'),'pluginPreviewMount');
     assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),false,'plugin opens with its tree collapsed');
-    assert.deepEqual((await toggleMetrics('#pluginSurfaceToggle')).filter((_,index)=>index!==5),
-      officeToggle.filter((_,index)=>index!==5),'plugin reuses the same right-panel button geometry and icon');
+    // Office was closed; the plugin preview is open, so active foreground/background differ.
+    assert.deepEqual((await toggleMetrics('#pluginSurfaceToggle')).filter((_,index)=>index!==4&&index!==5),
+      officeToggle.filter((_,index)=>index!==4&&index!==5),'plugin reuses the same right-panel button geometry and icon');
     await checkToggleFocus('#pluginSurfaceToggle');
     await pluginToggle.click();
     await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-closed.png')});
@@ -177,7 +178,7 @@ fs.mkdirSync(captures, {recursive:true});
       document.querySelector('#messages').dataset.testIdentity]), ['workspaceChatTranscriptMount',transcriptIdentity],
       'plugin mounts the same physical transcript');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor({state:'visible'});
-    assert.equal(await page.locator('#pluginPreview').evaluate(node=>node.parentElement.classList.contains('preview-surface-bar')),true,
+    assert.equal(await page.locator('#pluginPreview').evaluate(node=>node.parentElement.classList.contains('preview-surface-actions')),true,
       'the existing refresh action belongs to the right preview');
     assert.match(await page.locator('#pluginPreviewMount .preview-surface-location').textContent(),/Данные и шаблоны/,
       'the right preview identifies its resource');
@@ -196,6 +197,19 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-open.png')});
     await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin.png')});
     const splitter=page.locator('#pluginSurfaceSplitter'), splitBox=await splitter.boundingBox();
+    const seam=await splitter.evaluate(node=>{
+      const handle=node.getBoundingClientRect(),toolbar=document.querySelector('.plugin-toolbar').getBoundingClientRect();
+      const body=document.querySelector('#pluginBody').getBoundingClientRect();
+      const preview=document.querySelector('#pluginPreviewMount .preview-surface-bar').getBoundingClientRect();
+      return {top:handle.top,headerTop:toolbar.top,previewTop:preview.top,
+        previewHeight:preview.height,bottom:handle.bottom,bodyBottom:body.bottom};
+    });
+    assert.ok(Math.abs(seam.top-seam.headerTop)<1 && Math.abs(seam.top-seam.previewTop)<1 &&
+      Math.abs(seam.bottom-seam.bodyBottom)<1 && Math.abs(seam.previewHeight-52)<1,
+      'plugin chat and preview have aligned top headers and one full-height divider');
+    await page.mouse.move(splitBox.x-4,seam.headerTop+26);
+    assert.equal(await splitter.evaluate(node=>node.matches(':hover')),true,
+      'the header continuation keeps the same transparent resize target');
     const navWidth=(await page.locator('#pluginNavigationPane').boundingBox()).width;
     assert.equal(await splitter.getAttribute('class'),'splitter','plugin uses the common splitter element');
     assert.equal(splitBox.width,1,'development divider is one visible pixel');

@@ -107,6 +107,7 @@ function persistentDraft(key) {
     return { Owner: "office", ChatId: chatIdValue, Text: saved ? saved.text : "",
       ResourceDraftIds: saved ? (saved.attachments || []).map(officeDraftAttachmentId) : [],
       NextAnnotationNumber: saved ? saved.nextAnnotationNumber || 1 : 1,
+      PendingVisualAnnotation: saved ? saved.pendingVisualAnnotation || null : null,
       PendingOfficeInput: officePending && !officePending.Answers ? { OperationId: officePending.OperationId,
         Text: officePending.Text, ResourceDraftIds: officePending.Attachments.map(officeDraftAttachmentId),
         Delivery: officePending.Delivery } : null };
@@ -114,8 +115,11 @@ function persistentDraft(key) {
   var pair = JSON.parse(key.slice(10)), pending = workspacePendingInputs[key];
   return { Owner: "workspace", WorkspaceId: pair[0], SessionId: pair[1],
     Text: saved ? saved.text : "", Mode: saved ? saved.mode : "agent", Reasoning: saved ? saved.reasoning : false,
-    ResourceDraftIds: [], PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message,
-      Mode: pending.Mode, Reasoning: pending.ReasoningEnabled } : null };
+    ResourceDraftIds: saved ? (saved.attachments || []).map(officeDraftAttachmentId) : [],
+    NextAnnotationNumber: saved ? saved.nextAnnotationNumber || 1 : 1,
+    PendingVisualAnnotation: saved ? saved.pendingVisualAnnotation || null : null,
+    PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message,
+      ResourceDraftIds: pending.ResourceDraftIds || [], Mode: pending.Mode, Reasoning: pending.ReasoningEnabled } : null };
 }
 function persistDraft(key) {
   if (!key || !draftStoreReady) return Promise.resolve();
@@ -158,7 +162,8 @@ async function hydrateChatDrafts() {
             ExtractionWarning: "Подготовленный файл недоступен. Проверьте историю отправки или удалите вложение.", unavailable: true };
       });
       chatDraftStore()[key] = { text: item.Text || "", attachments: restoredAttachments,
-        nextAnnotationNumber: item.NextAnnotationNumber || 1, version: ++chatDraftVersion };
+        nextAnnotationNumber: item.NextAnnotationNumber || 1,
+        pendingVisualAnnotation: item.PendingVisualAnnotation || null, version: ++chatDraftVersion };
       var officePending = item.PendingOfficeInput;
       if (officePending) {
         var attachmentIds = officePending.ResourceDraftIds || [];
@@ -180,10 +185,16 @@ async function hydrateChatDrafts() {
       }
     } else if (item.Owner === "workspace") {
       chatDraftStore()[key] = { text: item.Text || "", mode: item.Mode || "agent",
-        reasoning: !!item.Reasoning, version: ++chatDraftVersion };
+        reasoning: !!item.Reasoning, attachments: (item.ResourceDraftIds || []).map(function (id) {
+          return (view.attachments || []).find(function (attachment) { return officeDraftAttachmentId(attachment) === id; }) ||
+            { Id: id, FileName: "Недоступная аннотация", unavailable: true };
+        }), nextAnnotationNumber: item.NextAnnotationNumber || 1,
+        pendingVisualAnnotation: item.PendingVisualAnnotation || null, version: ++chatDraftVersion };
       var pending = item.PendingInput;
       if (pending) workspacePendingInputs[key] = { sessionId: item.SessionId, requestId: pending.RequestId,
-        message: pending.Message, Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning };
+        message: pending.Message, ResourceDraftIds: pending.ResourceDraftIds || [],
+        Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning };
+      if (view.attachmentError) log(view.attachmentError, "warning");
     }
   });
   draftStoreReady = true;
@@ -221,16 +232,32 @@ function readWorkspaceDraft(target) {
 function saveWorkspaceDraft(target, draft) {
   var key = workspaceDraftKey(target);
   if (!key) return null;
+  var prior = chatDraftStore()[key] || {};
   var saved = { text: draft.text || "", mode: draft.mode === "plan" ? "plan" : "agent",
-    reasoning: !!draft.reasoning, version: ++chatDraftVersion };
+    reasoning: !!draft.reasoning,
+    attachments: draft.attachments === undefined ? prior.attachments || [] : draft.attachments,
+    nextAnnotationNumber: draft.nextAnnotationNumber === undefined ? prior.nextAnnotationNumber || 1 : draft.nextAnnotationNumber,
+    pendingVisualAnnotation: draft.pendingVisualAnnotation === undefined ? prior.pendingVisualAnnotation || null : draft.pendingVisualAnnotation,
+    version: ++chatDraftVersion };
   chatDraftStore()[key] = saved;
   persistDraft(key).catch(function () {});
   return saved;
 }
+function updateWorkspaceDraft(target, changes) {
+  var saved = readWorkspaceDraft(target) || { text: "", mode: "agent", reasoning: false };
+  return saveWorkspaceDraft(target, Object.assign({}, saved, changes));
+}
+function reserveWorkspaceAnnotationNumber(target) {
+  var saved = readWorkspaceDraft(target) || { nextAnnotationNumber: 1 };
+  var number = saved.nextAnnotationNumber || 1;
+  updateWorkspaceDraft(target, { nextAnnotationNumber: number + 1 });
+  return number;
+}
 function acceptWorkspaceDraft(target, text, version) {
   var saved = readWorkspaceDraft(target);
   if (!saved || saved.version !== version || saved.text.trim() !== text) return null;
-  return saveWorkspaceDraft(target, { text: "", mode: saved.mode, reasoning: saved.reasoning });
+  return saveWorkspaceDraft(target, { text: "", mode: saved.mode, reasoning: saved.reasoning,
+    attachments: [], pendingVisualAnnotation: null, nextAnnotationNumber: saved.nextAnnotationNumber });
 }
 function forgetWorkspaceDraft(target) {
   var key = workspaceDraftKey(target);
@@ -238,9 +265,11 @@ function forgetWorkspaceDraft(target) {
 }
 function prepareWorkspaceInput(target, text, options) {
   var key = workspaceDraftKey(target), pending = workspacePendingInputs[key];
-  if (!pending || pending.message !== text || pending.Mode !== options.Mode || pending.ReasoningEnabled !== options.ReasoningEnabled)
+  var ids = ((readWorkspaceDraft(target) || {}).attachments || []).map(officeDraftAttachmentId);
+  if (!pending || pending.message !== text || pending.Mode !== options.Mode ||
+      pending.ReasoningEnabled !== options.ReasoningEnabled || JSON.stringify(pending.ResourceDraftIds || []) !== JSON.stringify(ids))
     pending = workspacePendingInputs[key] = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
-      message: text, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled };
+      message: text, ResourceDraftIds: ids, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled };
   persistDraft(key).catch(function () {});
   return pending;
 }
@@ -249,6 +278,7 @@ function acknowledgeWorkspaceInput(target, input) {
   if (workspacePendingInputs[key] === input) { delete workspacePendingInputs[key]; persistDraft(key).catch(function () {}); }
 }
 window.RNAssistantChatDrafts = { readWorkspace: readWorkspaceDraft, saveWorkspace: saveWorkspaceDraft,
+  updateWorkspace: updateWorkspaceDraft, reserveWorkspaceAnnotationNumber: reserveWorkspaceAnnotationNumber,
   acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft,
   prepareWorkspaceInput: prepareWorkspaceInput, acknowledgeWorkspaceInput: acknowledgeWorkspaceInput,
   flushWorkspace: flushWorkspaceDraft, flushOffice: flushOfficeDraft,
@@ -280,14 +310,16 @@ function retainUnsentInputAttachments(drafts, sent) {
   });
 }
 
-function saveOfficeDraft(chatIdValue, text, attachments, changed, nextAnnotationNumber) {
+function saveOfficeDraft(chatIdValue, text, attachments, changed, nextAnnotationNumber, pendingVisualAnnotation) {
   var key = officeDraftKey(chatIdValue);
   if (!key) return null;
   var drafts = chatDraftStore();
   var previous = drafts[key];
   attachments = (attachments || []).slice();
   nextAnnotationNumber = nextAnnotationNumber || previous && previous.nextAnnotationNumber || 1;
-  if (!text && !attachments.length && nextAnnotationNumber === 1) {
+  if (pendingVisualAnnotation === undefined)
+    pendingVisualAnnotation = previous && previous.pendingVisualAnnotation || null;
+  if (!text && !attachments.length && nextAnnotationNumber === 1 && !pendingVisualAnnotation) {
     delete drafts[key];
     persistDraft(key).catch(function () {});
     return null;
@@ -298,7 +330,8 @@ function saveOfficeDraft(chatIdValue, text, attachments, changed, nextAnnotation
         return officeDraftAttachmentId(item) === officeDraftAttachmentId(attachments[index]);
       })) return previous;
   drafts[key] = { text: text, attachments: attachments,
-    nextAnnotationNumber: nextAnnotationNumber, version: ++chatDraftVersion };
+    nextAnnotationNumber: nextAnnotationNumber,
+    pendingVisualAnnotation: pendingVisualAnnotation, version: ++chatDraftVersion };
   persistDraft(key).catch(function () {});
   return drafts[key];
 }
@@ -308,7 +341,14 @@ function acceptOfficeDraft(chatIdValue, text, version, sentAttachments) {
   if (!draft) return null;
   var remaining = retainUnsentInputAttachments(draft.attachments, sentAttachments);
   return saveOfficeDraft(chatIdValue, draft.version === version && draft.text.trim() === text ? "" : draft.text,
-    remaining, false, remaining.length ? draft.nextAnnotationNumber : 1);
+    remaining, false, remaining.length || draft.pendingVisualAnnotation ? draft.nextAnnotationNumber : 1,
+    draft.pendingVisualAnnotation || null);
+}
+
+function setPendingOfficeAnnotation(chatIdValue, pending) {
+  var draft = readOfficeDraft(chatIdValue);
+  return saveOfficeDraft(chatIdValue, draft ? draft.text : "", draft ? draft.attachments : [],
+    true, draft ? draft.nextAnnotationNumber : 1, pending || null);
 }
 
 function reserveOfficeAnnotationNumber(chatIdValue) {
@@ -323,6 +363,7 @@ window.RNAssistantChatDrafts.readOffice = readOfficeDraft;
 window.RNAssistantChatDrafts.saveOffice = saveOfficeDraft;
 window.RNAssistantChatDrafts.acceptOffice = acceptOfficeDraft;
 window.RNAssistantChatDrafts.reserveOfficeAnnotationNumber = reserveOfficeAnnotationNumber;
+window.RNAssistantChatDrafts.setPendingOfficeAnnotation = setPendingOfficeAnnotation;
 window.RNAssistantChatDrafts.forgetOffice = forgetOfficeDraft;
 
 function captureChatDraft(chatIdValue, changed) {

@@ -11,6 +11,8 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     const listeners=[];window.chrome.webview={addEventListener:(name,fn)=>listeners.push(fn),
       postMessage:async message=>{try{const reply=await window.nativePluginMessage(JSON.parse(message));if(reply)listeners.forEach(fn=>fn({data:reply}));}catch(error){console.error(error.message);}}};
   });
+  await context.addInitScript({content:'if(location.hostname.endsWith(".rnassistant-plugin.invalid") && location.pathname==="/index.html") {'+
+    read('js/app-visual-inspector.js').toString()+'\nwindow.RNAssistantVisualInspector.install(1);\n}'});
   async function rpc(realm,request){
     const response={version:1,requestId:request.requestId,ok:true,result:{}};
     switch(request.method){
@@ -64,9 +66,10 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
       'commands.js':Buffer.from('RNPluginCommands.register("echo",async args=>({text:args.text+" '+version+'"}));')
     })[name];
     assert.deepEqual(JSON.parse(await execute(fixture('v1'),'echo','{"text":"worker"}')),{text:'worker v1'});
-    const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
+    const page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack||error.message));
     await page.goto('file://'+path.join(web,'index.html'));assert.equal(await page.title(),'RN Assistant');
     let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[],drawCalls=0,sourceChatCreated=false,sourceChatCreateCalls=0;
+    let visualAttachment=null,visualSent=false,visualRequest=null;
     const publishedVersions=[];
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
@@ -86,12 +89,22 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'createProjectChat':assert.equal(payload.workspaceId,'source-1');sourceChatCreated=true;sourceChatCreateCalls++;
           return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[],state:{Status:'idle'}};
         case 'getProjectChat':return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{Id:'ready',Role:'assistant',Content:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
-        case 'submitProjectChat':assert.equal(payload.sessionId,'source-chat-1');assert.equal(payload.input.sessionId,payload.sessionId);iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[{Id:'answer',Role:'assistant',Content:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
+        case 'submitProjectChat':assert.equal(payload.sessionId,'source-chat-1');assert.equal(payload.input.sessionId,payload.sessionId);
+          if((payload.input.ResourceDraftIds||[]).length){assert.deepEqual(payload.input.ResourceDraftIds,[visualAttachment.Id]);visualSent=true;
+            return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[
+              {Id:'visual-user',Role:'user',Content:'',Attachments:[visualAttachment]}],state:{Status:'completed'}};}
+          iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[
+          {Id:'step',Role:'assistant',RunId:'plugin-test-run',Activity:{RunId:'plugin-test-run',StepId:'check',Kind:'tool',Title:'Проверка исходников',Status:'completed',ToolId:'common.resources_read'}},
+          {Id:'answer',Role:'assistant',Content:'SVG-иконка смоделирована.'}],state:{Status:'completed',runId:'plugin-test-run',runViewState:{RunId:'plugin-test-run',TurnId:'turn',Lifecycle:'completed',ExecutionHealth:'clean',SuccessfulReads:1,VerifiedWrites:0,NoChangeWrites:0,UnverifiedWrites:0,FailedCalls:0,UnknownEffects:0}}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,hasChanges:!item.enabled||version!==active,files:3,bytes:100};
         case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14"/></svg>';publishedVersions.unshift({releaseId:item.releaseId,name:item.name,version:'1.0.0',capturedUtc:new Date().toISOString()});return {...item};
         case 'getPluginVersions':{const offset=payload.cursor?Number(payload.cursor):0;return {items:publishedVersions.slice(offset,offset+12).map(saved=>({...saved,active:item.enabled&&saved.releaseId===item.releaseId})),nextCursor:publishedVersions.length>offset+12?String(offset+12):null};}
         case 'restorePluginVersion':{assert.equal(payload.expectedActiveReleaseId,item.releaseId);const saved=publishedVersions.find(entry=>entry.releaseId===payload.releaseId);assert.ok(saved);item.releaseId=saved.releaseId;item.enabled=true;active=Number(saved.releaseId.split('-').pop());publishedVersions.splice(publishedVersions.indexOf(saved),1);publishedVersions.unshift(saved);return {...item};}
-        case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';const openedVersion=payload.releaseId?Number(payload.releaseId.split('-').pop()):active;realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+openedVersion)});return {instanceId:origin,entryUrl:origin+'/index.html',releaseId:payload.releaseId||'release-'+version,preview:!!payload.candidateId||!!payload.releaseId};}
+        case 'openPlugin':{const origin='https://view-'+(++sequence)+'.rnassistant-plugin.invalid';const openedVersion=payload.releaseId?Number(payload.releaseId.split('-').pop()):active;realms.set(origin,{origin,files:fixture(payload.candidateId?'preview-v'+version:'v'+openedVersion)});return {instanceId:origin,pluginId:'example',entryUrl:origin+'/index.html',releaseId:payload.releaseId||'release-'+version,preview:!!payload.candidateId||!!payload.releaseId};}
+        case 'stagePluginVisualSelection':assert.equal(payload.workspaceId,'source-1');assert.equal(payload.sessionId,'source-chat-1');assert.ok(payload.instanceId.startsWith('https://view-'));assert.equal(payload.selection.tag,'h1');visualRequest=payload;
+          visualAttachment={Id:'visual-draft-1',FileName:'html-selection-h1.json',Kind:'text',Size:300,visualAnnotation:{selection:payload.selection,comment:payload.comment,annotationNumber:payload.annotationNumber},visualSourceArtifactId:'release-1',visualSourceRevision:1};
+          return {Id:visualAttachment.Id,FileName:visualAttachment.FileName,Kind:visualAttachment.Kind,Size:visualAttachment.Size};
+        case 'discardPluginVisualSelection':return true;
         case 'closePlugin':realms.delete(payload.instanceId);return {};
         case 'disablePlugin':item.enabled=false;return {...item};
         case 'removePlugin':assert.equal(payload.pluginId,'example');item.hidden=true;return {pluginId:'example',hidden:true};
@@ -172,7 +185,22 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.waitForFunction(()=>document.querySelector('#messages')?.textContent.includes('SVG-иконка смоделирована.'));
     assert.equal(sourceChatCreateCalls,1,'creation task explicitly opens one source chat before submit');
     assert.equal(await page.locator('#pluginCheck').count(),0,'package check is integrated into preview refresh');
-    assert.equal(await page.locator('#pluginPreview').getAttribute('aria-label'),'Обновить предпросмотр');
+    assert.equal(await page.locator('#pluginPreview').getAttribute('aria-label'),'Проверить исходники и обновить предпросмотр');
+    assert.equal(await page.locator('#chatInspectorViewTitle').textContent(),'Предпросмотр');
+    const visibleFrame=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
+    await page.locator('#chatInspectorSwitcher summary').click();
+    await page.screenshot({path:path.join(captures,'plugin-panel-sections.png'),animations:'disabled'});
+    await page.locator('[data-chat-inspector-view="activity"]').click();
+    assert.equal(await page.locator('#chatInspectorBody').isVisible(),true,'plugin activity uses the same right slot');
+    assert.match(await page.locator('#chatInspectorBody').textContent(),/Проверка исходников/,
+      'plugin activity derives from the selected chat history');
+    assert.equal(await page.locator('#chatInspectorViewTitle').textContent(),'Ход работы');
+    assert.equal(await page.locator('#pluginPreview').isVisible(),false,'refresh belongs only to preview');
+    await page.screenshot({path:path.join(captures,'plugin-activity.png'),animations:'disabled'});
+    await page.locator('#chatInspectorSwitcher summary').click();
+    await page.locator('[data-chat-inspector-view="preview"]').click();
+    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('src'),visibleFrame,
+      'switching right-panel sections keeps the exact plugin frame');
     const splitter=page.locator('#pluginSurfaceSplitter');
     const splitBefore=Number(await splitter.getAttribute('aria-valuenow'));
     await splitter.press('ArrowLeft');
@@ -181,6 +209,26 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.match(iconPrompt,/Сводка продаж/);
     assert.doesNotMatch(iconPrompt,/Таблица с восходящей линией/,'created icon is already in source');
     assert.equal(drawCalls,1,'creation reuses the drawn icon');
+    await page.locator('#pluginPreviewMount .chat-browser-annotate').waitFor({state:'visible'});
+    await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount .chat-browser-annotate').disabled);
+    await page.locator('#pluginPreviewMount .chat-browser-annotate').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('h1').hover();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('h1').click();
+    await page.locator('#pluginPreviewFrameHost .visual-annotation-editor textarea').fill('Fix the heading');
+    await page.screenshot({path:path.join(captures,'plugin-annotation-editor.png'),animations:'disabled'});
+    await page.locator('#pluginPreviewFrameHost .visual-annotation-editor button.primary').click();
+    await page.locator('#pluginAnnotationDrafts .visual-annotation-list').waitFor();
+    assert.equal(visualRequest.selection.tag,'h1','the shared inspector captures the plugin DOM target');
+    assert.equal(visualRequest.annotationNumber,1,'plugin annotations use the shared numbered draft');
+    assert.equal(await page.locator('#sendButton').isEnabled(),true,'an annotation can be sent without extra text');
+    await page.locator('#sendButton').click();
+    await page.waitForFunction(()=>document.querySelector('#messages')?.textContent.includes('Fix the heading'));
+    assert.equal(visualSent,true,'the shared chat submits the exact staged attachment ID');
+    await page.locator('#pluginPreviewFrameHost .visual-annotation-marker.is-sent').waitFor();
+    await page.screenshot({path:path.join(captures,'plugin-annotation-sent.png'),animations:'disabled'});
+    await page.locator('#pluginPreviewMount .chat-browser-annotate').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
     const refreshPreview=async()=>{const previous=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
       await page.locator('#pluginPreview').click();
       await page.waitForFunction(value=>document.querySelector('#pluginPreviewMount iframe')?.getAttribute('src')!==value,previous);};

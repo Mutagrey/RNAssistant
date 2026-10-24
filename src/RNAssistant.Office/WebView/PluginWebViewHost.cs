@@ -23,6 +23,7 @@ namespace RNAssistant.Office.WebView
         private readonly CoreWebView2 _main;
         private readonly IntPtr _parent;
         private readonly string _assets;
+        private readonly string _inspectorScript;
         private readonly SynchronizationContext _ui;
         private readonly List<Transport> _transports = new List<Transport>();
         private readonly HashSet<Task> _runs = new HashSet<Task>();
@@ -31,8 +32,10 @@ namespace RNAssistant.Office.WebView
         public PluginWebViewHost(PluginApplicationService service, CoreWebView2 main, IntPtr parent, string webRoot)
         {
             _service=service; _main=main; _parent=parent; _assets=Path.Combine(webRoot,"plugin-host");
+            _inspectorScript=File.ReadAllText(Path.Combine(webRoot,"js","app-visual-inspector.js"))+
+                "\nwindow.RNAssistantVisualInspector.install(1);";
             _ui=SynchronizationContext.Current ?? throw new InvalidOperationException("UI dispatcher required.");
-            _transports.Add(new Transport(service,main,_assets,null));
+            _transports.Add(new Transport(service,main,_assets,null,_inspectorScript));
             service.Executor=this; service.ProjectPicker=this;
         }
         public bool CanNavigateFrame(string url)
@@ -70,7 +73,7 @@ namespace RNAssistant.Office.WebView
                     if(_closed) throw new OperationCanceledException();
                     controller.IsVisible=false; controller.Bounds=new Rectangle(0,0,1,1);
                     var core=controller.CoreWebView2;
-                    transport=new Transport(_service,core,_assets,operation); _transports.Add(transport);
+                    transport=new Transport(_service,core,_assets,operation,null); _transports.Add(transport);
                     var entry=operation.Origin+"/.host/runner.html";
                     core.NavigationStarting+=(s,e)=> { if(e.Uri!=entry) {e.Cancel=true;completion.TrySetException(new PluginException("plugin_navigation_denied","Command navigation denied."));} };
                     core.NavigationCompleted+=(s,e)=> { if(!e.IsSuccess) completion.TrySetException(new PluginException("plugin_load_failed","Command host failed to load.")); };
@@ -142,6 +145,7 @@ namespace RNAssistant.Office.WebView
             private readonly CoreWebView2 _core;
             private readonly string _assets;
             private readonly PluginInstance _operation;
+            private readonly string _inspectorScript;
             private readonly SynchronizationContext _ui = SynchronizationContext.Current;
             private readonly Dictionary<CoreWebView2Frame,PluginInstance> _frames=new Dictionary<CoreWebView2Frame,PluginInstance>();
             private readonly HashSet<string> _claimed=new HashSet<string>();
@@ -152,9 +156,9 @@ namespace RNAssistant.Office.WebView
             private bool _closed;
             private readonly TaskCompletionSource<bool> _drained=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public Task Drained {get{return _drained.Task;}}
-            public Transport(PluginApplicationService service,CoreWebView2 core,string assets,PluginInstance operation)
+            public Transport(PluginApplicationService service,CoreWebView2 core,string assets,PluginInstance operation,string inspectorScript)
             {
-                _service=service;_core=core;_assets=assets;_operation=operation;
+                _service=service;_core=core;_assets=assets;_operation=operation;_inspectorScript=inspectorScript;
                 core.AddWebResourceRequestedFilter(operation==null ? "https://*.rnassistant-plugin.invalid/*" : "*",CoreWebView2WebResourceContext.All,CoreWebView2WebResourceRequestSourceKinds.All);
                 core.WebResourceRequested+=OnResource;
                 if(operation==null)core.FrameCreated+=OnFrame;
@@ -171,6 +175,13 @@ namespace RNAssistant.Office.WebView
                     if(instance==null)return; // existing HTML material sandbox has its own policy
                     if(instance.CommandOperation || e.Uri!=instance.EntryUrl || !_claimed.Add(instance.Id)){e.Cancel=true;return;}
                     _frames.Add(frame,instance);
+                };
+                frame.NavigationCompleted+=async (s,e)=> {
+                    PluginInstance instance;
+                    if(_closed || !e.IsSuccess || _inspectorScript==null || frame.IsDestroyed() ||
+                        !_frames.TryGetValue(frame,out instance) || instance.Token.IsCancellationRequested)return;
+                    try { await frame.ExecuteScriptAsync(_inspectorScript); }
+                    catch(Exception error) { Diagnostics.RuntimeLog.Error("Plugin visual inspector injection failed.",error); }
                 };
                 frame.WebMessageReceived+=async (s,e)=> {
                     PluginInstance instance;

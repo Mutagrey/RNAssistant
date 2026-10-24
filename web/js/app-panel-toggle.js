@@ -17,7 +17,7 @@
     }
     function sync() {
       var open = !!options.isOpen(), target = controls();
-      var label = left ? (open ? "Свернуть навигацию" : "Открыть навигацию")
+      var label = options.label ? options.label(open) : left ? (open ? "Свернуть навигацию" : "Открыть навигацию")
         : (open ? "Скрыть боковую панель" : "Показать боковую панель");
       button.setAttribute("aria-expanded", String(open));
       button.setAttribute("aria-label", label);

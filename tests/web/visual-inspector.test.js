@@ -16,6 +16,10 @@ const { chromium } = require("playwright");
     const web = path.resolve(__dirname, "../../web/js");
     await page.addScriptTag({ path: path.join(web, "app-visual-inspector.js") });
     await page.addScriptTag({ path: path.join(web, "app-html-workspace-preview.js") });
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--accent", "#3A63F2");
+      document.documentElement.style.setProperty("--accent-ink", "#FFFFFF");
+    });
     const markup = '<!doctype html><html><head><title>Fixture</title></head><body style="margin:0;height:900px">' +
       '<section id="card" data-ui-id="safe-card" style="margin:30px;padding:12px;border:1px solid">' +
       '<span>Visible text</span><input id="secret" value="private-password">' +
@@ -48,12 +52,31 @@ const { chromium } = require("playwright");
     await page.locator("#toggle").click();
     await page.waitForFunction(() => document.getElementById("toggle").getAttribute("aria-pressed") === "true");
     assert.equal(await page.locator("#toggle").getAttribute("aria-pressed"), "true");
-    await frame.locator("#card").hover();
+    await frame.locator("#card").hover({ position: { x: 5, y: 5 } });
     const beforeScroll = await frame.locator("html").evaluate(node => {
-      const box = node.querySelector('[aria-hidden="true"][style*="z-index"]');
-      return box && { top: box.getBoundingClientRect().top, pointerEvents: getComputedStyle(box).pointerEvents };
+      const box = node.querySelector('[data-rna-visual-highlight]');
+      const tip = node.querySelector('[data-rna-visual-tooltip]');
+      return box && tip && { top: box.getBoundingClientRect().top,
+        pointerEvents: getComputedStyle(box).pointerEvents,
+        border: getComputedStyle(box).borderTopColor, label: tip.textContent };
     });
     assert.equal(beforeScroll.pointerEvents, "none");
+    assert.equal(beforeScroll.border, "rgb(58, 99, 242)", "hover follows the selected UI accent");
+    assert.match(beforeScroll.label, /section#card\s+\d+ × \d+/, "hover names the exact element and its size");
+    assert.doesNotMatch(beforeScroll.label, /private|password/i, "hover label omits sensitive data");
+    await page.evaluate(() => {
+      document.documentElement.style.setProperty("--accent", "#9BC8A5");
+      document.documentElement.style.setProperty("--accent-ink", "#101216");
+    });
+    await frame.locator('[data-rna-visual-highlight]').evaluate(() => new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await frame.locator('[data-rna-visual-highlight]').evaluate(node => getComputedStyle(node).borderTopColor),
+      "rgb(155, 200, 165)", "active highlight follows an accent/theme change");
+    await page.mouse.move(5, 5);
+    await frame.locator('[data-rna-visual-highlight]').evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    assert.equal(await frame.locator('[data-rna-visual-highlight]').evaluate(node => node.style.display), "none",
+      "hover clears when the pointer leaves the preview before selection");
+    await frame.locator("#card").hover({ position: { x: 5, y: 5 } });
     await frame.locator("#card").click({ position: { x: 5, y: 5 } });
     const selection = await page.evaluate(() => inspector.selection());
     const selectionRecord = await page.evaluate(() => inspector.selectionRecord());
@@ -66,10 +89,10 @@ const { chromium } = require("playwright");
     assert.ok(selection.textExcerpt.includes("Visible text"));
     assert.ok(!/private|password/i.test(JSON.stringify(selection)), "sensitive descendants and values are absent");
     assert.ok(!/private|password/i.test(await page.locator("#status").textContent()));
-    const beforeResize = await frame.locator('[aria-hidden="true"][style*="z-index"]').evaluate(node => node.getBoundingClientRect().width);
+    const beforeResize = await frame.locator('[data-rna-visual-highlight]').evaluate(node => node.getBoundingClientRect().width);
     await page.locator("#preview").evaluate(node => { node.style.width = "500px"; });
     await frame.locator("html").evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const afterResize = await frame.locator('[aria-hidden="true"][style*="z-index"]').evaluate(node => node.getBoundingClientRect().width);
+    const afterResize = await frame.locator('[data-rna-visual-highlight]').evaluate(node => node.getBoundingClientRect().width);
     assert.ok(afterResize < beforeResize, "overlay follows viewport resize");
     await frame.locator("#action").click();
     assert.equal(await frame.locator("#count").textContent(), "1", "active inspector captures clicks");
@@ -93,14 +116,18 @@ const { chromium } = require("playwright");
     await frame.locator("body").evaluate(node => node.ownerDocument.defaultView.scrollTo(0, 20));
     await frame.locator("html").evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const afterScroll = await frame.locator("html").evaluate(node =>
-      node.querySelector('[aria-hidden="true"][style*="z-index"]').getBoundingClientRect().top);
+      node.querySelector('[data-rna-visual-highlight]').getBoundingClientRect().top);
     assert.ok(afterScroll < beforeScroll.top, "overlay follows scrolling without changing layout");
+    await frame.locator("body").evaluate(node => node.ownerDocument.defaultView.scrollTo(0, 300));
+    await frame.locator("html").evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.match(await frame.locator('[data-rna-visual-tooltip]').textContent(), /^body\s+/,
+      "stationary pointer inspects the element now beneath it after scrolling");
     await frame.locator("#action").press("Escape");
     assert.equal(await page.locator("#toggle").getAttribute("aria-pressed"), "false");
     assert.equal(await page.evaluate(() => selectionAvailable), false);
     await frame.locator("#action").click();
     assert.equal(await frame.locator("#count").textContent(), "2", "Escape restores ordinary clicks");
-    assert.equal(await frame.locator('[aria-hidden="true"][style*="z-index"]').evaluate(node => node.style.display), "none");
+    assert.equal(await frame.locator('[data-rna-visual-highlight]').evaluate(node => node.style.display), "none");
 
     await page.locator("#toggle").click();
     const old = await page.evaluate(() => inspector.generation());
@@ -128,6 +155,11 @@ const { chromium } = require("playwright");
       html.indexOf('<section class="panel" id="tab-settings">'));
     const layout = await browser.newPage();
     await layout.setContent('<style>' + css + '\nbody{display:block}#tab-artifacts{display:flex;height:100vh}</style>' + panel);
+    const toggle = layout.locator("#inspectHtmlWorkspaceButton");
+    const offBackground = await toggle.evaluate(node => getComputedStyle(node).backgroundColor);
+    await toggle.evaluate(node => node.setAttribute("aria-pressed", "true"));
+    assert.notEqual(await toggle.evaluate(node => getComputedStyle(node).backgroundColor), offBackground,
+      "the shared toggle style also marks selection in Materials");
     for (const width of [1100, 760, 420]) {
       await layout.setViewportSize({ width, height: 760 });
       const bounds = await layout.locator("#htmlWorkspaceEditor").boundingBox();

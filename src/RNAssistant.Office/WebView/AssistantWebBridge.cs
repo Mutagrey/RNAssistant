@@ -97,13 +97,14 @@ namespace RNAssistant.Office.WebView
             foreach (var record in records)
             {
                 var view = new ChatDraftView { Draft = record, Attachments = new List<ChatDraftAttachmentView>() };
-                if (record.Owner == "office")
+                if (record.Owner == "office" || record.Owner == "workspace")
                 {
                     foreach (var id in record.ResourceDraftIds)
                     {
                         try
                         {
-                            foreach (var attachment in attachments.LoadDrafts(new[] { id }, record.ChatId))
+                            foreach (var attachment in attachments.LoadDrafts(new[] { id },
+                                record.Owner == "office" ? record.ChatId : record.SessionId))
                             {
                                 var projected = ChatDraftAttachmentView.From(attachment);
                                 if (attachment.VisualSelectionSource != null)
@@ -116,6 +117,18 @@ namespace RNAssistant.Office.WebView
                                     {
                                         projected.VisualSourceArtifactId = sourceId;
                                         projected.VisualSourceRevision = sourceRevision;
+                                    }
+                                    else
+                                    {
+                                        ResourceAddress address;
+                                        if (attachment.VisualSelectionSource.IsExact &&
+                                            ResourceUri.TryParse(attachment.VisualSelectionSource.Uri, out address) &&
+                                            address.Provider == "plugin" && address.Segments.Count == 3 &&
+                                            address.Segments[1] == "release" && attachment.VisualSelectionSource.Revision == "1")
+                                        {
+                                            projected.VisualSourceArtifactId = address.Segments[2];
+                                            projected.VisualSourceRevision = 1;
+                                        }
                                     }
                                 }
                                 view.Attachments.Add(projected);
@@ -211,7 +224,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CreatePlugin: case BridgeOperationId.ConnectPlugin:
                     case BridgeOperationId.GetPluginSourceState: case BridgeOperationId.CheckPlugin: case BridgeOperationId.ApplyPlugin:
                     case BridgeOperationId.GetPluginVersions: case BridgeOperationId.RestorePluginVersion: case BridgeOperationId.OpenPlugin:
-                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin:
+                    case BridgeOperationId.ClosePlugin: case BridgeOperationId.DisablePlugin: case BridgeOperationId.StagePluginVisualSelection:
+                    case BridgeOperationId.DiscardPluginVisualSelection:
                     case BridgeOperationId.GetRemovedPlugins: case BridgeOperationId.RemovePlugin: case BridgeOperationId.RestorePlugin:
                     case BridgeOperationId.GetPluginChat:
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:

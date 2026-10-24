@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
@@ -87,6 +88,24 @@ namespace RNAssistant.Core.Storage
             return attachment;
         }
 
+        public ChatAttachment StageVisualSelection(string chatId, HtmlVisualSelection selection,
+            string sourceTitle, string comment, int annotationNumber, ResourceRef source)
+        {
+            if (source == null || !source.IsExact)
+                throw new InvalidOperationException("An exact visual selection source is required.");
+            var body = HtmlVisualSelectionPolicy.Capture(selection, sourceTitle, comment, annotationNumber);
+            var draft = Import("html-selection-" + selection.Tag + ".json", "application/json", body, chatId);
+            draft.VisualSelectionSource = source.Copy();
+            try
+            {
+                if (draft.Status == "error")
+                    throw new InvalidOperationException("Не удалось подготовить снимок элемента.");
+                SaveDraftMetadata(draft);
+                return draft;
+            }
+            catch { DeleteDraftFiles(draft.Id); throw; }
+        }
+
         public List<ChatAttachment> LoadDrafts(IEnumerable<string> ids, string draftChatId)
         {
             draftChatId = RequireDraftChatId(draftChatId);
@@ -133,23 +152,24 @@ namespace RNAssistant.Core.Storage
                 new UTF8Encoding(false));
         }
 
-        public void DeleteDraft(string id, string draftChatId)
+        public bool DeleteDraft(string id, string draftChatId)
         {
             draftChatId = RequireDraftChatId(draftChatId);
             if (!IsSafeId(id) || !Directory.Exists(StagingDirectory()))
             {
-                return;
+                return false;
             }
             var metadata = LoadMetadata(id);
             if (metadata == null)
             {
-                return;
+                return false;
             }
             if (!string.Equals(metadata.DraftChatId, draftChatId, StringComparison.OrdinalIgnoreCase))
             {
                 throw new InvalidOperationException("Resource draft does not belong to the active chat: " + id);
             }
             DeleteDraftFiles(id);
+            return true;
         }
 
         public void CommitToCas(ChatMessage message)

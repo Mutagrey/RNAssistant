@@ -6,7 +6,9 @@
   function install(generation) {
     if (!Number.isSafeInteger(generation) || generation < 1) return;
     var active = false, disposed = false, hovered = null, selectedNode = null;
-    var overlay = null, frame = 0, unsupportedFrame = false, observer = null;
+    var pointer = null, pointerInside = false;
+    var overlay = null, tooltip = null, frame = 0, unsupportedFrame = false, observer = null;
+    var accent = "#35684b", accentInk = "#ffffff";
     var watches = [], watchObserver = null;
     var allowed = ["id", "class", "role", "data-ui-id", "data-testid"];
     var sensitive = "input,textarea,select,option,[contenteditable],[data-private],[data-sensitive],script,style,template,noscript";
@@ -90,25 +92,60 @@
           dpr: number(window.devicePixelRatio || 1) } };
       return new TextEncoder().encode(JSON.stringify(result)).length <= 16384 ? result : null;
     }
+    function palette(value) {
+      if (!value || !/^#[0-9a-f]{6}$/i.test(value.accent || "") ||
+          !/^#[0-9a-f]{6}$/i.test(value.ink || "")) return;
+      accent = value.accent; accentInk = value.ink;
+      if (hovered) show(hovered);
+    }
     function show(node) {
       hovered = node && node.isConnected ? node : null;
-      if (!hovered) { if (overlay) overlay.style.display = "none"; return; }
+      if (!hovered) {
+        if (overlay) overlay.style.display = "none";
+        if (tooltip) tooltip.style.display = "none";
+        return;
+      }
       if (!overlay) {
         overlay = document.createElement("div");
+        overlay.dataset.rnaVisualHighlight = "true";
         overlay.setAttribute("aria-hidden", "true");
-        overlay.style.cssText = "position:fixed;pointer-events:none;z-index:2147483647;border:2px solid #438b61;background:rgba(67,139,97,.10);box-sizing:border-box;display:none";
+        overlay.style.cssText = "position:fixed;pointer-events:none;z-index:2147483646;box-sizing:border-box;display:none";
         document.documentElement.appendChild(overlay);
       }
       var rect = hovered.getBoundingClientRect();
+      var rgb = [1, 3, 5].map(function (at) { return parseInt(accent.slice(at, at + 2), 16); }).join(",");
+      overlay.style.border = "2px solid " + accent;
+      overlay.style.background = "rgba(" + rgb + ",.08)";
+      overlay.style.boxShadow = "0 0 0 3px rgba(" + rgb + ",.18)";
+      overlay.style.borderRadius = getComputedStyle(hovered).borderRadius;
       overlay.style.left = rect.left + "px"; overlay.style.top = rect.top + "px";
       overlay.style.width = rect.width + "px"; overlay.style.height = rect.height + "px";
-      overlay.style.display = rect.width && rect.height ? "block" : "none";
+      var visible = rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0 &&
+        rect.top < innerHeight && rect.left < innerWidth;
+      overlay.style.display = visible ? "block" : "none";
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.dataset.rnaVisualTooltip = "true";
+        tooltip.setAttribute("aria-hidden", "true");
+        tooltip.style.cssText = "position:fixed;pointer-events:none;z-index:2147483647;max-width:calc(100vw - 8px);padding:4px 7px;border-radius:5px;font:600 11px/1.35 system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 8px #0003;display:none";
+        document.documentElement.appendChild(tooltip);
+      }
+      var safe = attributes(hovered), label = hovered.localName.toLowerCase();
+      if (safe.id) label += "#" + safe.id.slice(0, 48);
+      else if (safe["data-ui-id"]) label += " [" + safe["data-ui-id"].slice(0, 48) + "]";
+      tooltip.textContent = label + "  " + Math.round(rect.width) + " × " + Math.round(rect.height);
+      tooltip.style.background = accent; tooltip.style.color = accentInk;
+      tooltip.style.display = visible ? "block" : "none";
+      tooltip.style.left = Math.max(4, Math.min(rect.left, innerWidth - tooltip.offsetWidth - 4)) + "px";
+      tooltip.style.top = Math.max(4, Math.min(rect.top >= 30 ? rect.top - tooltip.offsetHeight - 5 : rect.bottom + 5,
+        innerHeight - tooltip.offsetHeight - 4)) + "px";
     }
     function target(event) {
       var node = document.elementFromPoint(event.clientX, event.clientY);
       return node === overlay ? null : node;
     }
     function onMove(event) {
+      pointer = { x: event.clientX, y: event.clientY }; pointerInside = true;
       var node = target(event);
       if (node && node.localName === "iframe") {
         show(null);
@@ -119,6 +156,10 @@
       unsupportedFrame = false;
       show(node);
     }
+    function onOut(event) {
+      if (!event.relatedTarget) { pointerInside = false; show(selectedNode); }
+    }
+    function onLeave() { pointerInside = false; show(selectedNode); }
     function onClick(event) {
       var node = target(event);
       event.preventDefault(); event.stopImmediatePropagation();
@@ -129,7 +170,14 @@
     }
     function refresh() {
       if (frame) return;
-      frame = requestAnimationFrame(function () { frame = 0; if (active) show(hovered); emitLocations(); });
+      frame = requestAnimationFrame(function () {
+        frame = 0;
+        if (active) {
+          var current = pointerInside && pointer ? document.elementFromPoint(pointer.x, pointer.y) : selectedNode;
+          show(current === overlay || current === tooltip || current && current.localName === "iframe" ? null : current);
+        }
+        emitLocations();
+      });
     }
     function onKey(event) {
       if (event.key !== "Escape") return;
@@ -141,11 +189,16 @@
       active = true;
       document.addEventListener("pointermove", onMove, true);
       document.addEventListener("pointerover", onMove, true);
+      document.addEventListener("pointerout", onOut, true);
+      document.documentElement.addEventListener("pointerleave", onLeave);
       document.addEventListener("click", onClick, true);
       document.addEventListener("keydown", onKey, true);
       observer = new MutationObserver(function () {
-        if (!selectedNode || selectedNode.isConnected) return;
-        selectedNode = null; show(null); emit("invalidated");
+        if (selectedNode && !selectedNode.isConnected) {
+          selectedNode = null; show(null); emit("invalidated"); return;
+        }
+        if (hovered && !hovered.isConnected) show(null);
+        else refresh();
       });
       observer.observe(document.documentElement, { childList: true, subtree: true });
     }
@@ -154,12 +207,15 @@
       active = false;
       document.removeEventListener("pointermove", onMove, true);
       document.removeEventListener("pointerover", onMove, true);
+      document.removeEventListener("pointerout", onOut, true);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
       document.removeEventListener("click", onClick, true);
       document.removeEventListener("keydown", onKey, true);
       if (observer) { observer.disconnect(); observer = null; }
       selectedNode = null;
       if (frame) { cancelAnimationFrame(frame); frame = 0; }
       unsupportedFrame = false;
+      pointer = null; pointerInside = false;
       show(null);
     }
     document.addEventListener("scroll", refresh, true);
@@ -169,7 +225,9 @@
       if (disposed || event.source !== window.parent || !message ||
           message.type !== "rnassistant-visual-inspector-control" || message.generation !== generation) return;
       if (message.operation === "probe") emit("ready");
-      else if (message.operation === "activate") { start(); emit("activated"); }
+      else if (message.operation === "activate") { palette(message.palette); start(); emit("activated"); }
+      else if (message.operation === "palette") palette(message.palette);
+      else if (message.operation === "pointer-exit") { pointerInside = false; show(selectedNode); }
       else if (message.operation === "deactivate") stop();
       else if (message.operation === "watch") {
         watches = Array.isArray(message.watches) ? message.watches.filter(function (item) {
@@ -177,7 +235,7 @@
             typeof item.selector === "string" && item.selector.length <= 1024 &&
             typeof item.tag === "string" && item.tag.length <= 32 &&
             (!item.stableUiId || typeof item.stableUiId === "string" && item.stableUiId.length <= 128);
-        }).slice(0, 10) : [];
+        }).slice(0, 100) : [];
         if (watchObserver) { watchObserver.disconnect(); watchObserver = null; }
         if (watches.length) {
           watchObserver = new MutationObserver(function (changes) {
@@ -202,27 +260,36 @@
         window.removeEventListener("resize", refresh);
         if (watchObserver) { watchObserver.disconnect(); watchObserver = null; }
         if (overlay) { overlay.remove(); overlay = null; }
+        if (tooltip) { tooltip.remove(); tooltip = null; }
       }
     }
     window.addEventListener("message", onControl);
+    emit("ready");
   }
 
   function createHost(options) {
     var frame = options.frame, button = options.button, status = options.status;
     var generation = 0, ready = false, active = false, activating = false, selected = null, watched = [];
-    var pendingReveal = null;
+    var pendingReveal = null, lastParentPointerExit = 0;
+    var themeObserver = null;
     if (!frame || !button || !status) throw new Error("Visual inspector host is incomplete.");
     function changed(reason) {
       if (typeof options.onSelectionChanged === "function")
         options.onSelectionChanged(!!(active && ready && selected), reason || "state");
     }
     function control(operation, id) {
+      var palette = null;
+      if (operation === "activate" || operation === "palette") {
+        var style = getComputedStyle(document.documentElement);
+        palette = { accent: style.getPropertyValue("--accent").trim() || "#35684b",
+          ink: style.getPropertyValue("--accent-ink").trim() || "#ffffff" };
+      }
       if (frame.contentWindow) frame.contentWindow.postMessage({
         type: "rnassistant-visual-inspector-control", generation: generation, operation: operation,
-        watches: operation === "watch" ? watched : undefined, id: id }, "*");
+        watches: operation === "watch" ? watched : undefined, id: id, palette: palette }, "*");
     }
     function paint() {
-      button.disabled = !ready || activating;
+      button.disabled = !ready || activating || typeof options.enabled === "function" && !options.enabled();
       button.setAttribute("aria-pressed", active ? "true" : "false");
       if (button.dataset.browserControl === "true" && window.RNAssistantIcons) {
         button.classList.add("chat-browser-annotate");
@@ -300,7 +367,7 @@
         (value.textExcerpt ? " · " + value.textExcerpt.slice(0, 80) : "");
     }
     function onClick() {
-      if (!ready || activating) return;
+      if (!ready || activating || button.disabled) return;
       if (!active) {
         activating = true; control("activate"); paint();
         status.textContent = "Включаем выбор элемента…";
@@ -310,23 +377,40 @@
       if (!active && !activating) return;
       active = false; activating = false; selected = null; control("deactivate"); paint(); changed("deactivate");
     }
+    function onParentPointerMove() {
+      var now = Date.now();
+      if (!active || !ready || now - lastParentPointerExit < 120) return;
+      lastParentPointerExit = now; control("pointer-exit");
+    }
+    function onWindowBlur() { if (active && ready) control("pointer-exit"); }
+    function onVisibilityChange() { if (document.hidden) onWindowBlur(); }
     frame.addEventListener("load", onLoad);
     window.addEventListener("message", onMessage);
+    window.addEventListener("pointermove", onParentPointerMove, true);
+    window.addEventListener("blur", onWindowBlur);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     button.addEventListener("click", onClick);
+    themeObserver = new MutationObserver(function () { if (ready && active) control("palette"); });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme", "data-accent", "style"] });
     paint();
     return { reset: reset, deactivate: deactivate, refresh: paint, generation: function () { return generation; },
-      watch: function (items) { watched = Array.isArray(items) ? items.slice(0, 10) : []; if (ready) control("watch"); },
+      watch: function (items) { watched = Array.isArray(items) ? items.slice(0, 100) : []; if (ready) control("watch"); },
       reveal: function (id) { if (ready) control("reveal", id); else pendingReveal = id; },
       selection: function () { return selected; },
       selectionRecord: function () { return active && ready && selected ? { generation: generation, selection: selected } : null; },
       dispose: function () {
         reset(); frame.removeEventListener("load", onLoad);
         window.removeEventListener("message", onMessage); button.removeEventListener("click", onClick);
+        window.removeEventListener("pointermove", onParentPointerMove, true);
+        window.removeEventListener("blur", onWindowBlur);
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+        themeObserver.disconnect();
       } };
   }
 
   window.RNAssistantVisualInspector = {
     script: function (generation) { return "(" + install.toString() + ")(" + JSON.stringify(generation) + ");"; },
+    install: install,
     createHost: createHost
   };
 }());
