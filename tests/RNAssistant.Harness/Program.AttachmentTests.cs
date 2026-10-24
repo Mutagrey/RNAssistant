@@ -187,6 +187,10 @@ namespace RNAssistant.Harness
                     new ChatStore(paths).DocumentArtifacts);
                 var request = new StageHtmlVisualSelectionPayload { ChatId = session.Id,
                     ArtifactId = source.Id, ArtifactRevision = 1, PreviewGeneration = 3, Selection = selection };
+                var acceptedWire = JsonConvert.DeserializeObject<StageHtmlVisualSelectionPayload>(
+                    JsonConvert.SerializeObject(request));
+                AssertEqual("save", acceptedWire.Selection.StableUiId,
+                    "Office bridge uses the shared Core selection contract");
                 var draft = ingestion.StageHtmlVisualSelection(session, request);
                 AssertEqual(exact.Uri, ingestion.LoadDrafts(session, new[] { draft.Id }).Single().VisualSelectionSource.Uri,
                     "draft retains exact host-selected source");

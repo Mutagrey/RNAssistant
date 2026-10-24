@@ -1075,5 +1075,7 @@ DOM остаётся недоверенным. Снимок ограничен 1
 при подготовке и при отправке. Тело selection остаётся в существующем CAS
 вложения; runtime URI в модельный текст не попадает. Это не разрешение на правку:
 DOM — недоверенное свидетельство, точная привязка к исходному HTML/CSS/JS и
-проверка результата пока открыты. Workspace/plugin scope-aware ingestion,
+проверка результата пока открыты. Typed selection и единая проверка размеров/
+атрибутов находятся в Core; Office bridge добавляет только привязку к своему
+источнику. Workspace/plugin scope-aware ingestion,
 plugin-frame capture и Windows/WebView2 qualification — следующие срезы.

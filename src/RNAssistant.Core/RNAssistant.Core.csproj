@@ -127,6 +127,7 @@
     <Compile Include="Services\StrictJsonSourceReader.cs" />
     <Compile Include="Models\AgentResponseModels.cs" />
     <Compile Include="Models\ChatModels.cs" />
+    <Compile Include="Models\HtmlVisualSelection.cs" />
     <Compile Include="Models\ChatMessageViewDto.cs" />
     <Compile Include="Models\PluginModels.cs" />
     <Compile Include="Models\WorkspaceModels.cs" />
@@ -252,6 +253,7 @@
     <Compile Include="Services\ChatTitleBuilder.cs" />
     <Compile Include="Services\ChatSessionNormalizer.cs" />
     <Compile Include="Services\ChatResourceUri.cs" />
+    <Compile Include="Services\HtmlVisualSelectionPolicy.cs" />
     <Compile Include="Services\ArtifactWorkingSet.cs" />
     <Compile Include="Services\ChatSessionHeaderFactory.cs" />
     <Compile Include="Services\RunViewStateProjector.cs" />

@@ -536,6 +536,10 @@ the bounded JSON body contains DOM evidence and a semantic source title, never
 the runtime URI. Intake rejects a draft after the active source revision changes.
 The model discovers and reads the selection through `common.resources_*`, and a
 selection by itself is not authority to edit an inferred source file.
+The selection DTO and bounded-body admission policy are shared Core owners;
+the Office bridge payload supplies only the Office-specific source binding.
+Workspace/plugin ingestion still needs its own scope-aware attachment resource
+provider before such a selection can be accepted into a workspace chat.
 
 The provider still verifies document ownership, committed publication, original
 metadata and explicit removal; content reads retain exact hash/length checks.

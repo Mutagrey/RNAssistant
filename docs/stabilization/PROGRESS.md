@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Visual Inspector: one DOM evidence contract in Core — 2026-10-24
+
+Owner: Core selection DTO/admission, Office chat ingestion. The bounded DOM
+selection schema and its validation/CAS-body encoding now live once in Core;
+Office keeps only its typed source-binding bridge payload. This removes the
+Office assembly dependency from the future plugin/workspace capture path without
+changing the current HTML selection wire format or Office chat behavior. Focused
+host-neutral selection/CAS and bridge-contract check passes. Workspace attachment
+discovery/read, exact plugin-frame capture, source mapping/edit verification and
+Windows WebView2 qualification remain open; merely accepting workspace draft IDs
+would leave the model unable to read the selection.
+
 ## Visual Inspector: HTML selection in the shared Office composer — 2026-10-24
 
 Owner: Web HTML preview / Office resource ingestion / shared ChatView. **В чат**
