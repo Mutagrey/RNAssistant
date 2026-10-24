@@ -612,8 +612,10 @@ namespace RNAssistant.Application
                 var workspace = _workspaces.ConnectProject(source.Workspace.RootPath, false);
                 if (workspace.WorkspaceId != registration.SourceWorkspaceId)
                     throw new PluginException("plugin_source_changed", "Source workspace identity changed.");
-                var sessionId = Conversations.ListSessions(workspace).FirstOrDefault()?.Id ??
-                    Conversations.CreateSession(workspace, "Новый чат").Id;
+                var sessionId = Conversations.ListSessions(workspace).FirstOrDefault()?.Id;
+                if (sessionId == null)
+                    return new ProjectChatStateDto { Project = ProjectChatProject(workspace),
+                        Messages = Array.Empty<ChatMessageViewDto>() };
                 return ProjectChat(new ProjectChatRequest { WorkspaceId = workspace.WorkspaceId, SessionId = sessionId });
             }
         }

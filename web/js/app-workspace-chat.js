@@ -235,8 +235,9 @@
         !!(message.Results && message.Results.length));
     });
     if (!visible.length && !start && !live) {
-      appendMessageUnit(units, "empty", "empty", function () { return renderChatEmptyState({ title: "С чего начнём?",
-        text: "Опишите изменение плагина или задайте вопрос об исходниках." }); });
+      appendMessageUnit(units, "empty", "empty", function () { return renderChatEmptyState(!field(chat, "sessionId")
+        ? { title: "Чатов пока нет", text: "Нажмите «+», чтобы создать чат." }
+        : { title: "С чего начнём?", text: "Опишите задачу или задайте вопрос." }); });
     }
     visible.forEach(function (message, index) {
       appendMessageUnit(units, "message:" + (message.Id || "fixture:" + index), JSON.stringify(message),

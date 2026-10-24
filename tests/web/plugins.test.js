@@ -66,7 +66,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.deepEqual(JSON.parse(await execute(fixture('v1'),'echo','{"text":"worker"}')),{text:'worker v1'});
     const page=await context.newPage();page.on('pageerror',error=>errors.push(error.message));
     await page.goto('file://'+path.join(web,'index.html'));assert.equal(await page.title(),'RN Assistant');
-    let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[],drawCalls=0;
+    let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[],drawCalls=0,sourceChatCreated=false,sourceChatCreateCalls=0;
     const publishedVersions=[];
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
     await page.exposeFunction('testPluginHost',async (type,payload)=>{
@@ -79,7 +79,11 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'drawPluginIcon':assert.equal(payload.description,'Таблица с восходящей линией');drawCalls++;{const saved={id:'icon-drawn',name:payload.name,svg:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 4h18v16H3z M3 10h18M9 4v16"/></svg>'};savedIcons=[saved];return saved;}
         case 'createPlugin':assert.equal(payload.name,'Example');assert.equal(payload.rootPath,null);assert.equal(payload.iconId,'icon-drawn');assert.equal(payload.iconDescription,'');return {...item};
         case 'getPluginSourceState':return {pluginId:payload.pluginId,stamp:'source-'+version};
-        case 'getPluginChat':case 'getProjectChat':return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{Id:'ready',Role:'assistant',Content:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
+        case 'getPluginChat':return sourceChatCreated?{project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{Id:'ready',Role:'assistant',Content:'Исходники готовы к изменению.'}],state:{Status:'idle'}}:
+          {project:{workspaceId:'source-1'},sessionId:null,messages:[],state:null};
+        case 'createProjectChat':assert.equal(payload.workspaceId,'source-1');sourceChatCreated=true;sourceChatCreateCalls++;
+          return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[],state:{Status:'idle'}};
+        case 'getProjectChat':return {project:{workspaceId:'source-1'},sessionId:'source-chat-1',messages:[{Id:'ready',Role:'assistant',Content:'Исходники готовы к изменению.'}],state:{Status:'idle'}};
         case 'submitProjectChat':assert.equal(payload.sessionId,'source-chat-1');assert.equal(payload.input.sessionId,payload.sessionId);iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[{Id:'answer',Role:'assistant',Content:'SVG-иконка смоделирована.'}],state:{Status:'completed'}};
         case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,hasChanges:!item.enabled||version!==active,files:3,bytes:100};
         case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14"/></svg>';publishedVersions.unshift({releaseId:item.releaseId,name:item.name,version:'1.0.0',capturedUtc:new Date().toISOString()});return {...item};
@@ -104,6 +108,11 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.locator('.rail-hover-card').count(),1,'rail uses one shared popover');
     assert.equal(await page.locator('.rail-hover-title').evaluate(node=>getComputedStyle(node).fontWeight),'400','menu labels use regular weight');
     assert.equal(await page.locator('.section-rail [data-section="chat"]').getAttribute('title'),null,'native rail tooltip is replaced');
+    await page.evaluate(()=>RNAssistantPlugins.select('example'));
+    await page.locator('#messages').getByText('Чатов пока нет').waitFor();
+    assert.equal(sourceChatCreateCalls,0,'opening development does not create a source chat');
+    assert.equal(await page.locator('#sendButton').isDisabled(),true,'empty source chat locks the composer');
+    assert.equal(await page.locator('#pluginChatNew').isEnabled(),true,'explicit creation remains available');
     await page.locator('#pluginAdd').hover();
     await page.locator('.rail-hover-card').getByText('Удалённых с панели плагинов нет.').waitFor();
     assert.equal(await page.locator('.rail-hover-title').textContent(),'Добавить плагины');
@@ -159,6 +168,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.locator('#pluginRoot').isVisible(),false,'returning to the default path hides the custom input');
     await page.locator('#pluginCreateForm button[type=submit]').click();
     await page.waitForFunction(()=>document.querySelector('#messages')?.textContent.includes('SVG-иконка смоделирована.'));
+    assert.equal(sourceChatCreateCalls,1,'creation task explicitly opens one source chat before submit');
     assert.equal(await page.locator('#pluginCheck').count(),0,'package check is integrated into preview refresh');
     assert.equal(await page.locator('#pluginPreview').getAttribute('aria-label'),'Обновить предпросмотр');
     const splitter=page.locator('#pluginDevelopmentSplitter');

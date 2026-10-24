@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Unified Shell: explicit plugin source chats — 2026-10-24
+
+Owner: Application plugin source / shared Web ChatView. Opening development now
+connects the source workspace and reads its latest session without creating one.
+An empty history stays visible with a locked composer and an enabled `+`; a task
+entered while creating a plugin explicitly creates its chat before submission.
+The same project-chat contract, storage and renderer remain in use. Focused
+host-neutral Harness and browser checks pass. Windows/Office/WebView2 delivery
+remains unverified.
+
 ## Workspace cross-process live preview — 2026-10-24
 
 Owner: Application workspace chat / run control. A read-only request on the

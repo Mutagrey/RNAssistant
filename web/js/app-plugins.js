@@ -93,9 +93,9 @@
     el('Apply').hidden=!candidate||!candidate.hasChanges||!selected||!!browsingRelease;
     el('RestoreVersion').hidden=!browsingRelease;el('RestoreVersion').disabled=busy||previewBusy||!selected;
     if(ownsChat()){
-      if(chatComposer)chatComposer.lock(window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!chat||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
-      el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||!chat;
-      el('Send').disabled=window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!selected||!chat||!el('Input').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
+      if(chatComposer)chatComposer.lock(window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!chat||!chat.sessionId||!!chat.pendingId||!!(chat.state&&(chat.state.Status||chat.state.status)==='running'));
+      el('ChatNew').disabled=busy||chatBusy||!selected;el('ChatHistory').disabled=busy||!chat||!chat.sessionId;
+      el('Send').disabled=window.RNAssistantWorkspaceChat.readOnly(chat)||chatBusy||!selected||!chat||!chat.sessionId||!el('Input').value.trim()||!!(chat&&chat.pendingId)||!!(chat&&chat.state&&(chat.state.Status||chat.state.status)==='running');
     }
     el('CreateSubmit').disabled=busy;}
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
@@ -156,15 +156,16 @@
     startSourceWatch();await readChat();});}finally{selecting=false;
       if(selected&&!el('Workbench').hidden&&developmentOpen&&(!view||!view.preview)&&publishedSourceStamps[id]!==sourceStamp)checkAndPreview(sourceStamp);}}
   function renderChat(){runObserver.select(developmentOpen&&ownsChat()?chat:null,chatBusy);if(!chat||!ownsChat())return;
-    el('ChatTitle').textContent=chat.state.title||chat.state.Title||'Чат исходников';
+    var s=chat.state||{},empty=!chat.sessionId;
+    el('ChatTitle').textContent=empty?'Чат исходников':s.title||s.Title||'Чат исходников';
     el('ChatTitle').title=el('ChatTitle').textContent;
     window.RNAssistantWorkspaceChat.renderMessages(el('Messages'),chat);
-    var s=chat.state||{},running=(s.Status||s.status)==='running';
+    var running=(s.Status||s.status)==='running';
     var runNotice=window.RNAssistantWorkspaceChat.runNotice(chat);
-    chatStatus((runNotice ? runNotice.title+'. '+runNotice.text : '')|| (chat.pendingId?'Нужно подтвердить действие агента.':
+    chatStatus(empty?'Нажмите «+», чтобы создать чат исходников.':(runNotice ? runNotice.title+'. '+runNotice.text : '')|| (chat.pendingId?'Нужно подтвердить действие агента.':
       s.interruptedEffectPossible?'Возможное изменение требует проверки. Не повторяйте действие автоматически.':
       (s.Status||s.status)==='interrupted'?'Выполнение прервано. Проверьте ход работы.':running?'Агент работает…':''),!!runNotice);
-    chatComposer.select({workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
+    chatComposer.select(empty?null:{workspaceId:chat.project.workspaceId,sessionId:chat.sessionId},s);
     window.RNAssistantWorkspaceChat.renderWorkspaceControls(chat,function(answers,requestId){
       return chatAction(function(workspaceId,sessionId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,input:{sessionId:sessionId,requestId:requestId,answers:answers}});},true);});
     controls();
@@ -174,7 +175,7 @@
     var remember=!sessionId;sessionId=sessionId||window.RNAssistantWorkspaceChat.selectedSession(workspaceId);
     var value=await send(sessionId?'getProjectChat':'getPluginChat',sessionId?{workspaceId:workspaceId,sessionId:sessionId}:{pluginId:id});
     if(selected&&id===selected.pluginId&&current===chatEpoch){chat=window.RNAssistantWorkspaceChat.latestSnapshot(chat,value);
-      if(remember)window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();}}
+      if(remember)window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId||null);renderChat();}}
   function closeHistory(){el('ChatHistoryList').hidden=true;el('ChatHistory').setAttribute('aria-expanded','false');}
   async function openHistory(){
     if(!chat||!selected||!ownsChat())return;
@@ -243,14 +244,14 @@
       versionCursor=null;el('VersionMore').hidden=true;
     }}
   }
-  async function createChat(){if(chatBusy||busy||!selected)return;
+  async function createChat(){if(chatBusy||busy||!selected)return null;
     closeHistory();
     var id=selected.pluginId,workspaceId=selected.sourceWorkspaceId,current=++chatEpoch;
     if(stopTitleWatch){stopTitleWatch();stopTitleWatch=null;}
     chatBusy=true;controls();
     try{var value=await send('createProjectChat',{workspaceId:workspaceId,title:'Новый чат'});
       if(selected&&selected.pluginId===id&&current===chatEpoch){chat=window.RNAssistantWorkspaceChat.latestSnapshot(chat,value);
-        window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Input').focus();}}
+        window.RNAssistantWorkspaceChat.rememberSession(workspaceId,value.sessionId);renderChat();el('Input').focus();return value;}}
     catch(error){if(current===chatEpoch)chatStatus(error.message);}
     finally{if(current===chatEpoch){chatBusy=false;controls();}}}
   async function chatAction(action,reportFailure){if(chatBusy||!selected||!chat)return false;
@@ -372,6 +373,7 @@
         if(task)message+='Создай плагин по задаче: '+task+'. ';
         if(iconBrief)message+='Нарисуй SVG-иконку по описанию: '+iconBrief+'. Создай icon.svg, добавь его в files и укажи в plugin.json. ';
         message+='После изменений проверь пакет и предпросмотр; применяй только после подтверждения.';
+        if(!chat||!chat.sessionId){if(!await createChat())return;}
         el('Input').value=message;el('Input').dispatchEvent(new Event('input',{bubbles:true}));el('Form').requestSubmit();}
       el('CreateForm').reset();el('IconDescription').value='';el('IconImportName').value='';el('IconImportSvg').value='';
       selectedIconId='puzzle';customSource=false;renderIconChoices();el('Connect').onchange();

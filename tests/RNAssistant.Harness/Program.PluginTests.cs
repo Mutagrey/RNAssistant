@@ -108,7 +108,11 @@ namespace RNAssistant.Harness
                                 SmartChatTitles = false };
                             var plugin = service.Create(new PluginCreateRequest { Name = "Source scope",
                                 RootPath = Path.Combine(paths.Root, "plugin-source"), Description = "Test" });
-                            var source = service.ChatState(plugin.PluginId);
+                            var initialSource = service.ChatState(plugin.PluginId);
+                            AssertTrue(initialSource.SessionId == null && initialSource.Messages.Count == 0,
+                                "opening plugin source does not create a chat");
+                            var source = service.CreateProjectChat(new ProjectChatRequest {
+                                WorkspaceId = plugin.SourceWorkspaceId });
                             var sourceProgress = new System.Collections.Generic.List<WorkspaceRunEvent>();
                             var sourceReply = service.SubmitProjectChatAsync(new ProjectChatRequest {
                                 WorkspaceId = source.Project.WorkspaceId, SessionId = source.SessionId,
@@ -429,7 +433,11 @@ namespace RNAssistant.Harness
                 using (var service = new PluginApplicationService(paths))
                 {
                     item = PluginFixture(service, paths, false);
-                    var first = service.ChatState(item.PluginId); firstId = first.SessionId;
+                    var empty = service.ChatState(item.PluginId);
+                    AssertTrue(empty.SessionId == null && empty.Messages.Count == 0 &&
+                        service.ProjectChats().Projects.Single(value => value.WorkspaceId == item.SourceWorkspaceId).Chats.Count == 0,
+                        "opening source development keeps an empty workspace empty");
+                    var first = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId }); firstId = first.SessionId;
                     AssertEqual(item.SourceWorkspaceId, first.Project.WorkspaceId, "source chat uses the common workspace identity");
                     var workspace = new WorkspaceStore(paths).OpenConnected(item.SourceWorkspaceId);
                     var session = service.Conversations.GetSession(workspace, firstId);
@@ -460,9 +468,13 @@ namespace RNAssistant.Harness
                     PluginFailure(() => reopened.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId, SessionId = secondId }), "project_chat_missing");
                     reopened.DeleteProjectHistory(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId });
                     var fresh = reopened.ChatState(item.PluginId);
-                    AssertTrue(fresh.SessionId != firstId && fresh.Messages.Count == 0, "explicit reopen after history deletion starts a fresh session");
-                    AssertEqual(1, reopened.ProjectChats().Projects.Single(value => value.WorkspaceId == item.SourceWorkspaceId).Chats.Count,
-                        "explicit source chat reopen restores its workspace in the common tree");
+                    AssertTrue(fresh.SessionId == null && fresh.Messages.Count == 0,
+                        "reopening after history deletion does not create a replacement chat");
+                    AssertEqual(0, reopened.ProjectChats().Projects.Single(value => value.WorkspaceId == item.SourceWorkspaceId).Chats.Count,
+                        "source workspace returns to the tree without a new chat");
+                    var afterDelete = reopened.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId });
+                    AssertTrue(afterDelete.SessionId != firstId && afterDelete.Messages.Count == 0,
+                        "explicit creation after history deletion starts a fresh session");
                 }
             });
         }
@@ -518,7 +530,7 @@ namespace RNAssistant.Harness
                 using (var service = new PluginApplicationService(paths))
                 {
                     var item = PluginFixture(service, paths, false);
-                    var chat = service.ChatState(item.PluginId);
+                    var chat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId });
                     var leaseDirectory = Path.Combine(paths.WorkspaceDirectory, "run-leases");
                     Directory.CreateDirectory(leaseDirectory);
                     var leasePath = Path.Combine(leaseDirectory,
@@ -553,7 +565,7 @@ namespace RNAssistant.Harness
                 {
                     item = PluginFixture(service, paths, false);
                     open = PluginOpen(service, item.PluginId);
-                    sourceChat = service.ChatState(item.PluginId).SessionId;
+                    sourceChat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId }).SessionId;
                     var sourceManifest = File.ReadAllText(Path.Combine(item.SourceRoot, "plugin.json"));
                     var icon = service.SaveIcon(new PluginIconSaveRequest { Name = "Outline", Svg =
                         "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><circle cx=\"12\" cy=\"12\" r=\"8\"/></svg>" });
