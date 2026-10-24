@@ -96,6 +96,118 @@ function chatDraftStore() {
 
 var chatDraftVersion = 0;
 var workspacePendingInputs = Object.create(null);
+var draftWrites = Object.create(null);
+var draftStoreReady = false;
+var draftStoreLoadError = null;
+var draftStoreGeneration = 0;
+function persistentDraft(key) {
+  var saved = chatDraftStore()[key];
+  if (key.indexOf("office:") === 0) {
+    var chatIdValue = key.slice(7), officePending = (state.inboxSubmissions || {})[chatIdValue];
+    return { Owner: "office", ChatId: chatIdValue, Text: saved ? saved.text : "",
+      ResourceDraftIds: saved ? (saved.attachments || []).map(officeDraftAttachmentId) : [],
+      PendingOfficeInput: officePending && !officePending.Answers ? { OperationId: officePending.OperationId,
+        Text: officePending.Text, ResourceDraftIds: officePending.Attachments.map(officeDraftAttachmentId),
+        Delivery: officePending.Delivery } : null };
+  }
+  var pair = JSON.parse(key.slice(10)), pending = workspacePendingInputs[key];
+  return { Owner: "workspace", WorkspaceId: pair[0], SessionId: pair[1],
+    Text: saved ? saved.text : "", Mode: saved ? saved.mode : "agent", Reasoning: saved ? saved.reasoning : false,
+    ResourceDraftIds: [], PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message,
+      Mode: pending.Mode, Reasoning: pending.ReasoningEnabled } : null };
+}
+function persistDraft(key) {
+  if (!key || !draftStoreReady) return Promise.resolve();
+  var entry = draftWrites[key] || (draftWrites[key] = { revision: 0, saved: 0, running: null });
+  ++entry.revision;
+  if (!entry.running) {
+    var generation = draftStoreGeneration;
+    entry.running = (async function () {
+      while (entry.saved !== entry.revision && generation === draftStoreGeneration) {
+        var revision = entry.revision, snapshot = persistentDraft(key);
+        var result = await send("saveChatDraft", snapshot);
+        if (!result || result.saved !== true) throw new Error("Черновик не был сохранён.");
+        entry.saved = revision;
+      }
+    })();
+    entry.running.then(function () { entry.running = null; }, function (error) {
+      entry.running = null;
+      log("Черновик не сохранён: " + (error.detail || error.message), "error");
+    });
+  }
+  return entry.running;
+}
+function requirePersistedDraft(key) {
+  if (!draftStoreReady) return Promise.reject(draftStoreLoadError || new Error("Черновики ещё не восстановлены."));
+  return persistDraft(key);
+}
+function flushWorkspaceDraft(target) { return requirePersistedDraft(workspaceDraftKey(target)); }
+function flushOfficeDraft(chatIdValue) { return requirePersistedDraft(officeDraftKey(chatIdValue)); }
+async function hydrateChatDrafts() {
+  if (draftStoreReady) return;
+  var response = await send("getChatDrafts", {});
+  (response.drafts || []).forEach(function (view) {
+    var item = view.draft || {}, key = item.Owner === "office" ? officeDraftKey(item.ChatId) :
+      workspaceDraftKey({ workspaceId: item.WorkspaceId, sessionId: item.SessionId });
+    if (!key || chatDraftStore()[key]) return;
+    if (item.Owner === "office") {
+      var restoredAttachments = (item.ResourceDraftIds || []).map(function (id) {
+        return (view.attachments || []).find(function (attachment) { return officeDraftAttachmentId(attachment) === id; }) ||
+          { Id: id, FileName: "Недоступное вложение", Kind: "file", Size: 0,
+            ExtractionWarning: "Подготовленный файл недоступен. Проверьте историю отправки или удалите вложение.", unavailable: true };
+      });
+      chatDraftStore()[key] = { text: item.Text || "", attachments: restoredAttachments, version: ++chatDraftVersion };
+      var officePending = item.PendingOfficeInput;
+      if (officePending) {
+        var attachmentIds = officePending.ResourceDraftIds || [];
+        var pendingAttachments = attachmentIds.map(function (id) {
+          return restoredAttachments.find(function (attachment) { return officeDraftAttachmentId(attachment) === id; }) ||
+            { Id: id, unavailable: true };
+        });
+        var fingerprint = JSON.stringify([item.ChatId, officePending.Text, attachmentIds, officePending.Delivery, null]);
+        var submission = { fingerprint: fingerprint, OperationId: officePending.OperationId,
+          Text: officePending.Text, Attachments: pendingAttachments, Delivery: officePending.Delivery,
+          Answers: null, localStatus: "unconfirmed" };
+        state.inboxSubmissions = state.inboxSubmissions || {};
+        state.inboxSubmissions[item.ChatId] = submission;
+        if (typeof chatInputEchoes === "function") chatInputEchoes(item.ChatId).push(submission);
+      }
+      if (view.attachmentError) {
+        if (typeof setAttachmentStatus === "function") setAttachmentStatus(item.ChatId, view.attachmentError, "warning");
+        else log(view.attachmentError, "warning");
+      }
+    } else if (item.Owner === "workspace") {
+      chatDraftStore()[key] = { text: item.Text || "", mode: item.Mode || "agent",
+        reasoning: !!item.Reasoning, version: ++chatDraftVersion };
+      var pending = item.PendingInput;
+      if (pending) workspacePendingInputs[key] = { sessionId: item.SessionId, requestId: pending.RequestId,
+        message: pending.Message, Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning };
+    }
+  });
+  draftStoreReady = true;
+  draftStoreLoadError = null;
+  if (state.activeChatId) restoreChatDraft(state.activeChatId);
+}
+function resetChatDrafts() {
+  ++draftStoreGeneration;
+  state.chatDrafts = {};
+  state.inboxSubmissions = {};
+  state.chatInputEchoes = {};
+  workspacePendingInputs = Object.create(null);
+  draftWrites = Object.create(null);
+  draftStoreReady = true;
+  draftStoreLoadError = null;
+}
+function failChatDraftHydration(error) { draftStoreLoadError = error; }
+function flushAllChatDrafts() {
+  return Promise.all(Object.keys(draftWrites).map(function (key) {
+    return draftWrites[key].running || Promise.resolve();
+  }));
+}
+function forgetOfficeDraft(chatIdValue) {
+  var key = officeDraftKey(chatIdValue);
+  if (key) { delete chatDraftStore()[key]; persistDraft(key).catch(function () {}); }
+}
 function workspaceDraftKey(target) {
   return target && target.workspaceId && target.sessionId
     ? "workspace:" + JSON.stringify([target.workspaceId, target.sessionId]) : null;
@@ -110,6 +222,7 @@ function saveWorkspaceDraft(target, draft) {
   var saved = { text: draft.text || "", mode: draft.mode === "plan" ? "plan" : "agent",
     reasoning: !!draft.reasoning, version: ++chatDraftVersion };
   chatDraftStore()[key] = saved;
+  persistDraft(key).catch(function () {});
   return saved;
 }
 function acceptWorkspaceDraft(target, text, version) {
@@ -119,22 +232,26 @@ function acceptWorkspaceDraft(target, text, version) {
 }
 function forgetWorkspaceDraft(target) {
   var key = workspaceDraftKey(target);
-  if (key) { delete chatDraftStore()[key]; delete workspacePendingInputs[key]; }
+  if (key) { delete chatDraftStore()[key]; delete workspacePendingInputs[key]; persistDraft(key).catch(function () {}); }
 }
 function prepareWorkspaceInput(target, text, options) {
   var key = workspaceDraftKey(target), pending = workspacePendingInputs[key];
   if (!pending || pending.message !== text || pending.Mode !== options.Mode || pending.ReasoningEnabled !== options.ReasoningEnabled)
     pending = workspacePendingInputs[key] = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
       message: text, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled };
+  persistDraft(key).catch(function () {});
   return pending;
 }
 function acknowledgeWorkspaceInput(target, input) {
   var key = workspaceDraftKey(target);
-  if (workspacePendingInputs[key] === input) delete workspacePendingInputs[key];
+  if (workspacePendingInputs[key] === input) { delete workspacePendingInputs[key]; persistDraft(key).catch(function () {}); }
 }
 window.RNAssistantChatDrafts = { readWorkspace: readWorkspaceDraft, saveWorkspace: saveWorkspaceDraft,
   acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft,
-  prepareWorkspaceInput: prepareWorkspaceInput, acknowledgeWorkspaceInput: acknowledgeWorkspaceInput };
+  prepareWorkspaceInput: prepareWorkspaceInput, acknowledgeWorkspaceInput: acknowledgeWorkspaceInput,
+  flushWorkspace: flushWorkspaceDraft, flushOffice: flushOfficeDraft,
+  flushAll: flushAllChatDrafts, hydrate: hydrateChatDrafts, hydrationFailed: failChatDraftHydration,
+  reset: resetChatDrafts };
 
 function officeDraftKey(chatIdValue) { return chatIdValue ? "office:" + chatIdValue : null; }
 function readOfficeDraft(chatIdValue) {
@@ -169,6 +286,7 @@ function saveOfficeDraft(chatIdValue, text, attachments, changed) {
   attachments = (attachments || []).slice();
   if (!text && !attachments.length) {
     delete drafts[key];
+    persistDraft(key).catch(function () {});
     return null;
   }
   if (!changed && previous && previous.text === text &&
@@ -176,7 +294,9 @@ function saveOfficeDraft(chatIdValue, text, attachments, changed) {
       (previous.attachments || []).every(function (item, index) {
         return officeDraftAttachmentId(item) === officeDraftAttachmentId(attachments[index]);
       })) return previous;
-  return drafts[key] = { text: text, attachments: attachments, version: ++chatDraftVersion };
+  drafts[key] = { text: text, attachments: attachments, version: ++chatDraftVersion };
+  persistDraft(key).catch(function () {});
+  return drafts[key];
 }
 
 function acceptOfficeDraft(chatIdValue, text, version, sentAttachments) {
@@ -189,6 +309,7 @@ function acceptOfficeDraft(chatIdValue, text, version, sentAttachments) {
 window.RNAssistantChatDrafts.readOffice = readOfficeDraft;
 window.RNAssistantChatDrafts.saveOffice = saveOfficeDraft;
 window.RNAssistantChatDrafts.acceptOffice = acceptOfficeDraft;
+window.RNAssistantChatDrafts.forgetOffice = forgetOfficeDraft;
 
 function captureChatDraft(chatIdValue, changed) {
   if (!chatIdValue) return null;
@@ -338,7 +459,7 @@ function retainHtmlWorkspaceSources(current, incoming) {
   return current;
 }
 
-function applyChatState(response) {
+function applyChatState(response, skipDraftCapture) {
   response = response || {};
   var detailDeferred = !!(response.detailDeferred || response.DetailDeferred);
   var previousChatId = state.activeChatId || "";
@@ -355,7 +476,7 @@ function applyChatState(response) {
   state.chatStateApplyVersion = (state.chatStateApplyVersion || 0) + 1;
   var chatChanged = previousChatId !== nextChatId;
   if (chatChanged) {
-    captureChatDraft(previousChatId);
+    if (!skipDraftCapture) captureChatDraft(previousChatId);
     if (typeof cancelVbaModuleRead === "function") cancelVbaModuleRead();
     if (typeof cancelVbaModuleWrite === "function") cancelVbaModuleWrite();
     if (typeof cancelSkillSourceRead === "function") cancelSkillSourceRead();

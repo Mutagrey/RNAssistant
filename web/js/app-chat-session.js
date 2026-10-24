@@ -3,9 +3,9 @@ function beginChatNavigation() {
   return state.chatNavigationVersion;
 }
 
-function applyChatNavigationState(response, version) {
+function applyChatNavigationState(response, version, type) {
   if (version !== state.chatNavigationVersion) return false;
-  return applyChatState(response);
+  return applyChatState(response, type === "deleteChat");
 }
 
 function sendChatPreference(type, payload) {
@@ -49,9 +49,9 @@ function navigateChat(type, payload) {
     var selectedState = response && (response.state || response);
     var appliedNavigation = true;
     if (type === "init" || response.init) applyInitState(response.init || response);
-    else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version);
+    else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version, type);
     else if (response.activeChatId !== undefined)
-      appliedNavigation = applyChatNavigationState(selectedState, version);
+      appliedNavigation = applyChatNavigationState(selectedState, version, type);
     if (type === "selectChat" && !appliedNavigation && state.chatDetailPending &&
         state.activeChatId === payload.chatId) {
       state.chatDetailPending = false;
@@ -350,7 +350,9 @@ async function deleteChat(chatIdValue) {
   }
 
   try {
+    await window.RNAssistantChatDrafts.flushOffice(targetChatId);
     await navigateChat("deleteChat", { chatId: targetChatId });
+    window.RNAssistantChatDrafts.forgetOffice(targetChatId);
     clearSendError();
     log("Чат удален.");
   } catch (error) {
@@ -663,6 +665,11 @@ async function initialize() {
   state.initializePromise = (async function () {
     try {
       await navigateChat("init");
+      try { await window.RNAssistantChatDrafts.hydrate(); }
+      catch (error) {
+        window.RNAssistantChatDrafts.hydrationFailed(error);
+        log("Не удалось восстановить черновики: " + (error.detail || error.message), "error");
+      }
     } catch (error) {
       applyBridgeUnavailableState(error);
     } finally {
@@ -680,7 +687,11 @@ async function clearRuntimeData() {
 
   setControlBusy("clearRuntimeDataButton", true);
   try {
+    await window.RNAssistantChatDrafts.flushAll();
     var init = await send("clearRuntimeData", {});
+    window.RNAssistantChatDrafts.reset();
+    state.activeChatId = "";
+    state.draftAttachments = [];
     applyInitState(init);
     log("Локальные данные очищены.");
   } catch (error) {

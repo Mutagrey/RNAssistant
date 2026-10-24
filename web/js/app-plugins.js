@@ -444,7 +444,8 @@
         if(!message||el('Send').disabled||!chat)return;
         var sessionId=chat.sessionId,target={workspaceId:chat.project.workspaceId,sessionId:sessionId};
         var draftVersion=chatComposer.draftVersion(),request=chatComposer.prepareInput(target,message);
-        chatAction(function(workspaceId){return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,
+        chatAction(async function(workspaceId){await window.RNAssistantChatDrafts.flushWorkspace(target);
+          return send('submitProjectChat',{workspaceId:workspaceId,sessionId:sessionId,
           input:request}).then(function(result){
           chatComposer.accepted(target,message,draftVersion,request);
           return result;});});},

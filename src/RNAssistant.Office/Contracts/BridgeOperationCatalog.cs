@@ -38,6 +38,8 @@ namespace RNAssistant.Office.Contracts
         GetWorkspaceSourceQueue,
         ControlWorkspaceSourceQueue,
         ListChats,
+        GetChatDrafts,
+        SaveChatDraft,
         GetChatState,
         GetPreviousChatMessages,
         [BridgeOperationPolicy(true, 300)] GetChatTrajectory,

@@ -323,6 +323,7 @@
     <Compile Include="Storage\JsonlRecordReader.cs" />
     <Compile Include="Storage\JsonlRecordWriter.cs" />
     <Compile Include="Storage\ProtectedSecretStore.cs" />
+    <Compile Include="Storage\ProtectedChatDraftStore.cs" />
     <Compile Include="Storage\SettingsService.cs" />
     <Compile Include="Storage\StorageProtection.cs" />
     <Compile Include="Storage\SkillStore.cs" />

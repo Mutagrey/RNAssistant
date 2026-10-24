@@ -29,6 +29,9 @@ const context = vm.createContext({
   window: { requestAnimationFrame(fn) { fn(); } }
 });
 vm.runInContext(fs.readFileSync("web/js/app-chat-state.js", "utf8"), context);
+// Inbox-specific VM keeps protected storage outside this test; the browser reload
+// check covers the real composer/bridge draft persistence path.
+context.window.RNAssistantChatDrafts.flushOffice = async () => {};
 vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
 context.renderChatSessions = () => {};
 (async () => {
@@ -83,6 +86,7 @@ context.renderChatSessions = () => {};
   context.$("chatInput").value = "submitted";
   context.state.draftAttachments = [{ Id: "first" }];
   const submitting = context.submitInboxMessage("submitted", context.state.draftAttachments, "b", "Queue");
+  await new Promise(resolve => setImmediate(resolve));
   const operationId = calls.at(-1).payload.operationId;
   assert.equal(context.pendingChatInputs().at(-1).localStatus, "submitting", "bubble appears before acknowledgement");
   context.$("chatInput").value = "new draft typed while sending";
@@ -97,6 +101,7 @@ context.renderChatSessions = () => {};
   transport = () => new Promise(resolve => { resolveSend = resolve; });
   context.$("chatInput").value = "same text";
   const sameTextSend = context.submitInboxMessage("same text", [], "b", "Queue");
+  await new Promise(resolve => setImmediate(resolve));
   context.$("chatInput").value = "new work";
   context.captureChatDraft("b", true);
   context.$("chatInput").value = "same text";
@@ -109,6 +114,7 @@ context.renderChatSessions = () => {};
   context.captureChatDraft("b");
   transport = () => new Promise(resolve => { resolveSend = resolve; });
   const backgroundSend = context.submitInboxMessage("same text", [], "b", "Queue");
+  await new Promise(resolve => setImmediate(resolve));
   context.state.activeChatId = "other";
   context.$("chatInput").value = "other chat";
   context.saveOfficeDraft("b", "new work", [], true);
@@ -168,6 +174,7 @@ context.renderChatSessions = () => {};
   context.$("chatInput").value = "remove before acknowledgement";
   transport = () => new Promise(resolve => { resolveSend = resolve; });
   const lateSubmit = context.submitInboxMessage(context.$("chatInput").value, [], "receipts", "Queue");
+  await new Promise(resolve => setImmediate(resolve));
   const lateOperation = calls.at(-1).payload.operationId;
   const accepted = { Id: "late", OperationId: lateOperation, Revision: 1, Text: "remove before acknowledgement", Status: "Pending" };
   context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 1, items: [accepted], running: false });
@@ -209,6 +216,7 @@ context.renderChatSessions = () => {};
 
   transport = () => new Promise(resolve => { resolveSend = resolve; });
   const staleSend = context.submitInboxMessage("accepted before push", [], "receipts", "Queue");
+  await new Promise(resolve => setImmediate(resolve));
   const staleOperation = calls.at(-1).payload.operationId;
   context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 8, items: [], running: true });
   resolveSend({ chatId: "receipts", epoch: "e", revision: 7, items: [], acceptedInput: {

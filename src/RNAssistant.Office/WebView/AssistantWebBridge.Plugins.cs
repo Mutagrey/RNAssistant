@@ -52,8 +52,16 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.GetPreviousProjectChatMessages: return Plugins.ProjectChatMessages(Payload<ProjectChatHistoryRequest>(payload));
                     case BridgeOperationId.RenameProjectChat: return Plugins.RenameProjectChat(Payload<ProjectChatRequest>(payload));
-                    case BridgeOperationId.DeleteProjectChat: return Plugins.DeleteProjectChat(Payload<ProjectChatRequest>(payload));
-                    case BridgeOperationId.DeleteProjectHistory: return Plugins.DeleteProjectHistory(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.DeleteProjectChat:
+                        var deletedChat = Payload<ProjectChatRequest>(payload);
+                        var chatCatalog = Plugins.DeleteProjectChat(deletedChat);
+                        new ProtectedChatDraftStore(_controller.StoragePaths).DeleteWorkspace(deletedChat.WorkspaceId, deletedChat.SessionId);
+                        return chatCatalog;
+                    case BridgeOperationId.DeleteProjectHistory:
+                        var deletedHistory = Payload<ProjectChatRequest>(payload);
+                        var historyCatalog = Plugins.DeleteProjectHistory(deletedHistory);
+                        new ProtectedChatDraftStore(_controller.StoragePaths).DeleteWorkspace(deletedHistory.WorkspaceId);
+                        return historyCatalog;
                     case BridgeOperationId.SubmitProjectChat:
                         var submit = Payload<ProjectChatRequest>(payload);
                         return await Plugins.SubmitProjectChatAsync(submit, settings.Load(), settings.LoadApiKey, token,

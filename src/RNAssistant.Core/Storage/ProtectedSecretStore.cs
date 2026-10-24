@@ -6,6 +6,16 @@ namespace RNAssistant.Core.Storage
 {
     public sealed class ProtectedSecretStore
     {
+        public static byte[] ProtectBytes(byte[] bytes)
+        {
+            return ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+        }
+
+        public static byte[] UnprotectBytes(byte[] bytes)
+        {
+            return ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser);
+        }
+
         private readonly string _path;
 
         public ProtectedSecretStore(string path)
@@ -28,7 +38,7 @@ namespace RNAssistant.Core.Storage
                 }
 
                 var protectedBytes = File.ReadAllBytes(_path);
-                var bytes = ProtectedData.Unprotect(protectedBytes, null, DataProtectionScope.CurrentUser);
+                var bytes = UnprotectBytes(protectedBytes);
                 return Encoding.UTF8.GetString(bytes);
             }
             catch (IOException)
@@ -55,7 +65,7 @@ namespace RNAssistant.Core.Storage
             }
 
             var bytes = Encoding.UTF8.GetBytes(value ?? string.Empty);
-            var protectedBytes = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
+            var protectedBytes = ProtectBytes(bytes);
             StorageFileSystem.WriteAtomic(_path, tempPath => File.WriteAllBytes(tempPath, protectedBytes));
         }
     }

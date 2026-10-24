@@ -8,6 +8,8 @@ namespace RNAssistant.Core.Storage
     // silently consume a secret file: those paths require Windows validation.
     public sealed class ProtectedSecretStore
     {
+        public static byte[] ProtectBytes(byte[] bytes) { throw new NotSupportedException("Draft encryption requires Windows DPAPI validation."); }
+        public static byte[] UnprotectBytes(byte[] bytes) { throw new NotSupportedException("Draft decryption requires Windows DPAPI validation."); }
         private readonly string _path;
 
         public ProtectedSecretStore(string path) { _path = path; }

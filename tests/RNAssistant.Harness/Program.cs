@@ -543,6 +543,7 @@ namespace RNAssistant.Harness
                 Test("storage: CAS maintenance always uses gate", CasMaintenanceAlwaysUsesGate),
                 Test("storage: CAS rejects reparse traversal", CasMaintenanceRejectsReparsePointTraversal),
                 Test("storage: managed roots reject reparse points", ManagedStorageRejectsReparseRoots),
+                Test("storage: protected chat drafts keep exact identity and refuse corruption", ProtectedChatDraftsRoundTrip),
                 Test("storage: deletes document event logs", DeletesDocumentEventLogs),
                 Test("storage: delete preserves shared CAS", DeletesDocumentChats),
                 Test("storage: artifact bodies use CAS", ArtifactBodiesUseContentAddressing),

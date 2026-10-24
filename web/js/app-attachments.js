@@ -180,7 +180,8 @@ async function removeDraftAttachment(item) {
   var targetChatId = state.activeChatId;
   if (!targetChatId || isPendingChatSubmit(targetChatId)) return;
   try {
-    await send("discardChatResourceDraft", { chatId: targetChatId, id: attachmentId(item) });
+    if (!item.unavailable)
+      await send("discardChatResourceDraft", { chatId: targetChatId, id: attachmentId(item) });
   } catch (error) {
     log(error.detail || error.message, "error");
     return;

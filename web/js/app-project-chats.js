@@ -273,7 +273,8 @@
   }
   async function remove(entry, chat) {
     if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
-    try { catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
+    try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
+      catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
@@ -284,7 +285,8 @@
   }
   async function removeHistory(entry) {
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
-    try { catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
+    try { await window.RNAssistantChatDrafts.flushAll();
+      catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
       (entry.chats || []).forEach(function (chat) {
         window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       });
@@ -409,7 +411,8 @@
         var pid = projectId(), sid = currentId();
         var target = { workspaceId: pid, sessionId: sid }, draftVersion = composer.draftVersion();
         var request = composer.prepareInput(target, text);
-        runChat(function () { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
+        runChat(async function () { await window.RNAssistantChatDrafts.flushWorkspace(target);
+          return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
           input: request }).then(function (result) {
           composer.accepted(target, text, draftVersion, request);
           return result;

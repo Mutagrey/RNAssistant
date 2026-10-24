@@ -7,6 +7,12 @@
   var contract = window.__RNAMockBridgeContract;
   var token = "local-preview-session";
   var listeners = [];
+  // Preview-only stand-in for the native protected draft store across page reloads.
+  var draftStorageKey = "rnassistant-preview-chat-drafts";
+  var previewDrafts = JSON.parse(sessionStorage.getItem(draftStorageKey) || "[]");
+  function previewDraftKey(item) { return item.Owner === "office" ? "office:" + item.ChatId :
+    "workspace:" + JSON.stringify([item.WorkspaceId, item.SessionId]); }
+  function savePreviewDrafts() { sessionStorage.setItem(draftStorageKey, JSON.stringify(previewDrafts)); }
   var downloads = Object.create(null);
   var viewerBatches = Object.create(null);
   var uploads = Object.create(null);
@@ -417,6 +423,21 @@
     if (type === "init") return { bridgeToken: token, bridgeContract: contract,
       init: Object.assign({ appVersion: "preview", host: "Excel", title: fixtures.document,
         settings: clone(settings), prompts: promptLibrary(), hasApiKey: true, hasHistorySecret: false }, chatState()) };
+    if (type === "getChatDrafts") {
+      if (scenario === "draft-read-error") fail("Черновики недоступны.", "preview_draft_read_failed");
+      return { drafts: previewDrafts.map(function (draft) {
+        return { draft: clone(draft), attachments: [],
+          attachmentError: draft.Owner === "office" && (draft.ResourceDraftIds || []).length
+            ? "Часть вложений черновика недоступна; проверьте их перед отправкой." : null }; }) };
+    }
+    if (type === "saveChatDraft") {
+      if (scenario === "draft-save-error") fail("Черновик не сохранён.", "preview_draft_save_failed");
+      var key = previewDraftKey(payload);
+      previewDrafts = previewDrafts.filter(function (draft) { return previewDraftKey(draft) !== key; });
+      if (payload.Text || (payload.ResourceDraftIds || []).length || payload.PendingInput || payload.PendingOfficeInput ||
+          payload.Owner === "workspace" && (payload.Mode !== "agent" || payload.Reasoning)) previewDrafts.push(clone(payload));
+      savePreviewDrafts(); return { saved: true };
+    }
     if (type === "getModelCatalog") {
       if (scenario === "error") fail("Демонстрационная ошибка чтения каталога моделей.", "preview_read_failed");
       return { catalog: { default_model: "demo-balanced", models: scenario === "empty" ? [] : [
@@ -650,7 +671,10 @@
       var chatWorkspace = requireWorkspace(payload); requireProjectChat(payload);
       if (projectRuns[payload.sessionId]) fail("Сначала остановите чат.", "preview_run_busy");
       chatWorkspace.chats = chatWorkspace.chats.filter(function (item) { return item.Id !== payload.sessionId; });
-      delete projectMessages[payload.sessionId]; return projectCatalog();
+      delete projectMessages[payload.sessionId];
+      previewDrafts = previewDrafts.filter(function (draft) { return !(draft.Owner === "workspace" &&
+        draft.WorkspaceId === payload.workspaceId && draft.SessionId === payload.sessionId); });
+      savePreviewDrafts(); return projectCatalog();
     }
     if (type === "deleteProjectHistory") {
       var historyWorkspace = requireWorkspace(payload);
@@ -660,6 +684,8 @@
       historyWorkspace.chats = [];
       workspaceProjects = workspaceProjects.filter(function (item) { return item !== historyWorkspace; });
       hiddenWorkspaceProjects.push(historyWorkspace);
+      previewDrafts = previewDrafts.filter(function (draft) { return draft.WorkspaceId !== payload.workspaceId; });
+      savePreviewDrafts();
       return projectCatalog();
     }
     if (type === "submitProjectChat") {

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -85,6 +86,29 @@ namespace RNAssistant.Office.WebView
             _resourceChangesTimer = new Timer(ignored => FlushResourceChanges(), null, Timeout.Infinite, Timeout.Infinite);
             _controller.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
             _controller.ResourceAuthorityChanged += ReportResourceChanged;
+        }
+
+        private ChatDraftsResponse ReadChatDrafts()
+        {
+            var records = new ProtectedChatDraftStore(_controller.StoragePaths).Load();
+            var attachments = new AttachmentStore(_controller.StoragePaths);
+            var result = new ChatDraftsResponse { Drafts = new List<ChatDraftView>() };
+            foreach (var record in records)
+            {
+                var view = new ChatDraftView { Draft = record, Attachments = new List<ChatDraftAttachmentView>() };
+                if (record.Owner == "office")
+                {
+                    foreach (var id in record.ResourceDraftIds)
+                    {
+                        try { view.Attachments.AddRange(attachments.LoadDrafts(new[] { id }, record.ChatId)
+                            .Select(ChatDraftAttachmentView.From)); }
+                        catch (Exception ex) when (ex is IOException || ex is InvalidOperationException || ex is UnauthorizedAccessException)
+                        { view.AttachmentError = "Часть вложений черновика недоступна; проверьте их перед отправкой."; }
+                    }
+                }
+                result.Drafts.Add(view);
+            }
+            return result;
         }
 
         public Task<string> HandleMessageAsync(string requestJson)
@@ -269,6 +293,16 @@ namespace RNAssistant.Office.WebView
                             () => _controller.ListChats(),
                             cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.GetChatDrafts:
+                        responsePayload = await RunBridgeWorkAsync(() => ReadChatDrafts(), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case BridgeOperationId.SaveChatDraft:
+                        var chatDraft = Payload<ChatInputDraft>(payload);
+                        responsePayload = await RunBridgeWorkAsync(() => {
+                            new ProtectedChatDraftStore(_controller.StoragePaths).Save(chatDraft);
+                            return new ChatDraftSavedResponse { Saved = true };
+                        }, cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.GetChatState:
                         var getChat = Payload<ChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
@@ -431,8 +465,12 @@ namespace RNAssistant.Office.WebView
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.DeleteChat:
-                        responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.DeleteChat(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
+                        var deletedChatId = Payload<ChatPayload>(payload).ChatId;
+                        responsePayload = await RunBridgeWorkAsync(() => {
+                            var result = _controller.DeleteChat(deletedChatId);
+                            new ProtectedChatDraftStore(_controller.StoragePaths).DeleteOffice(deletedChatId);
+                            return result;
+                        }, cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.StopChatInbox:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.StopChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);

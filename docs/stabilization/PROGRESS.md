@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Unified Shell: protected chat-input recovery — 2026-10-24
+
+Owner: Core chat-input storage / Office typed bridge / shared Web ChatView. Office
+and workspace unsent text, workspace mode/reasoning, and Office staged-resource IDs
+now persist in a separate CurrentUser-DPAPI file, keyed by exact Office chat or
+workspace/session. The bridge reloads and validates staged Office attachments;
+missing attachments produce a visible warning rather than fabricated content.
+Unconfirmed workspace request IDs and Office inbox operation IDs survive a WebView
+recreation, and both send paths require a confirmed draft save before dispatch.
+Late acknowledgements still clear only the submitted draft version. Native chat
+deletion and runtime-data clearing remove corresponding drafts. This file is UI
+input state, not another conversation history or resource-body store; no draft
+content goes to browser localStorage.
+
+Focused host-neutral storage and browser reload/shared-draft checks pass. Windows
+DPAPI, Office/WebView2 lifecycle, staging retention after a long shutdown, and
+abrupt-close timing remain unverified target-host evidence.
+
 ## Unified Shell: selected plugin frame reuse — 2026-10-24
 
 Owner: Web plugin navigation / shared ChatView. Reselecting a plugin with a live
@@ -7,8 +25,7 @@ release or preview now keeps its exact iframe/instance and refreshes only the
 selected source chat; an explicit chat target changes the session without
 reopening the surface. A different plugin, source revision or explicit preview
 refresh still follows the existing close/open path. Browser route, session-draft
-and plugin lifecycle checks pass. Unsent drafts remain in the open WebView only;
-protected persistence across WebView recreation is still an open shell gate.
+and plugin lifecycle checks pass. Protected draft recovery is described above.
 Windows/Office/WebView2 delivery remains unverified.
 
 ## Unified Shell: explicit plugin source chats — 2026-10-24

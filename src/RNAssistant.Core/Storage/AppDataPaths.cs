@@ -16,6 +16,7 @@ namespace RNAssistant.Core.Storage
         public string SkillsDirectory { get; private set; }
         public string VbaJournalDirectory { get; private set; }
         public string ChatDirectory { get; private set; }
+        public string ChatDraftFile { get; private set; }
         public string ChatBlobDirectory { get; private set; }
         public string WebViewUserDataDirectory { get; private set; }
         public string AttachmentDirectory { get; private set; }
@@ -47,6 +48,7 @@ namespace RNAssistant.Core.Storage
                 SkillsDirectory = Path.Combine(root, "skills"),
                 VbaJournalDirectory = Path.Combine(root, "vba-journals"),
                 ChatDirectory = Path.Combine(root, "chats"),
+                ChatDraftFile = Path.Combine(root, "chat-drafts.bin"),
                 ChatBlobDirectory = Path.Combine(root, "chat-blobs"),
                 AttachmentDirectory = Path.Combine(root, "attachments"),
                 ResourceAuthorityDirectory = Path.Combine(root, "resource-authority"),
@@ -85,11 +87,15 @@ namespace RNAssistant.Core.Storage
                 EnsureManagedDirectory(VbaJournalDirectory);
                 EnsureManagedDirectory(AttachmentDirectory);
                 EnsureManagedDirectory(ResourceAuthorityDirectory);
+                if (File.Exists(ChatDraftFile) && StorageFileSystem.IsReparsePoint(ChatDraftFile))
+                    throw new IOException("Chat draft file cannot be a reparse point.");
                 ClearDirectory(ChatDirectory);
                 ClearDirectory(ChatBlobDirectory);
                 ClearDirectory(VbaJournalDirectory);
                 ClearDirectory(AttachmentDirectory);
                 ClearDirectory(ResourceAuthorityDirectory);
+                using (StorageFileSystem.AcquireWriteLock(ChatDraftFile + ".lck"))
+                    if (File.Exists(ChatDraftFile)) File.Delete(ChatDraftFile);
             }
         }
 

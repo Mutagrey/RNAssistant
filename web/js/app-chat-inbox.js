@@ -113,6 +113,7 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
   var submittedDraft = !answers && state.activeChatId === chatId ? captureChatDraft(chatId) : readOfficeDraft(chatId);
   if (state.activeChatId === chatId) renderChatInbox({ forceScroll: true });
   try {
+    if (!answers) await window.RNAssistantChatDrafts.flushOffice(chatId);
     var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
       text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery, answers: answers });
     pending.localStatus = "syncing";

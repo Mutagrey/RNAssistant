@@ -6,11 +6,51 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Storage;
 using RNAssistant.Core.Services;
 using RNAssistant.Runtime.Contracts;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ChatDraftsResponse
+    {
+        [JsonProperty("drafts")]
+        public List<ChatDraftView> Drafts { get; set; }
+    }
+
+    public sealed class ChatDraftSavedResponse
+    {
+        [JsonProperty("saved")]
+        public bool Saved { get; set; }
+    }
+
+    public sealed class ChatDraftView
+    {
+        [JsonProperty("draft")]
+        public ChatInputDraft Draft { get; set; }
+
+        [JsonProperty("attachments")]
+        public List<ChatDraftAttachmentView> Attachments { get; set; }
+
+        [JsonProperty("attachmentError", NullValueHandling = NullValueHandling.Ignore)]
+        public string AttachmentError { get; set; }
+    }
+
+    public sealed class ChatDraftAttachmentView
+    {
+        public string Id { get; set; }
+        public string FileName { get; set; }
+        public string Kind { get; set; }
+        public long Size { get; set; }
+        public string ExtractionWarning { get; set; }
+
+        public static ChatDraftAttachmentView From(ChatAttachment attachment)
+        {
+            return new ChatDraftAttachmentView { Id = attachment.Id, FileName = attachment.FileName,
+                Kind = attachment.Kind, Size = attachment.Size, ExtractionWarning = attachment.ExtractionWarning };
+        }
+    }
+
     public sealed class BridgeRequest
     {
         [JsonProperty("contractVersion")]
