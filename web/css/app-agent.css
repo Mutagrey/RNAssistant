@@ -230,22 +230,22 @@
 
 .agent-run-history-state {
   width: 10px;
-  color: #98a2b3;
+  color: var(--ink-faint);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
 }
 
 .agent-run-history-state.status-waiting {
-  color: #b54708;
+  color: var(--warning);
 }
 
 .agent-run-history-state.status-warning {
-  color: #a15c07;
+  color: var(--warning);
 }
 
 .agent-run-history-state.status-failed {
-  color: #d92d20;
+  color: var(--danger);
 }
 
 .agent-run-history-title {
@@ -390,7 +390,7 @@
 
 .agent-run-empty {
   padding-left: 0;
-  color: #98a2b3;
+  color: var(--ink-faint);
   font-size: 11px;
 }
 
@@ -527,11 +527,11 @@
 }
 
 .agent-plan-card.status-completed .agent-plan-count {
-  color: #268653;
+  color: var(--success);
 }
 
 .agent-plan-card.status-blocked .agent-plan-count {
-  color: #c36a08;
+  color: var(--warning);
 }
 
 .agent-plan-caret {
@@ -655,9 +655,9 @@
 }
 
 .agent-plan-step.status-completed .agent-plan-step-mark {
-  border-color: #3a9b68;
-  background: #3a9b68;
-  color: #fff;
+  border-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success);
 }
 
 .agent-plan-step.status-completed .agent-plan-step-text,
@@ -667,9 +667,9 @@
 }
 
 .agent-plan-step.status-blocked .agent-plan-step-mark {
-  border-color: #d97706;
-  background: #d97706;
-  color: #fff;
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .agent-plan-step.status-cancelled .agent-plan-step-mark {

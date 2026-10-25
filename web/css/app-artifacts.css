@@ -143,13 +143,8 @@
   color: var(--accent);
 }
 
-.category-files .artifact-type-icon {
-  background: color-mix(in srgb, #0e9f6e 11%, transparent);
-  color: #0b8a60;
-}
-
 .category-system .artifact-type-icon {
-  background: color-mix(in srgb, #7c8798 12%, transparent);
+  background: var(--surface-hover);
   color: var(--muted);
 }
 

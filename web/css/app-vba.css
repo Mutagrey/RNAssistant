@@ -42,7 +42,7 @@ li.CodeMirror-hint-active {
 .vba-editor-head {
   align-items: center;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(226, 231, 239, 0.72);
+  border-bottom: 1px solid var(--line);
 }
 
 .vba-editor.is-empty .resource-editor-actions,
@@ -141,7 +141,7 @@ li.CodeMirror-hint-active {
   width: max-content;
   min-width: 100%;
   min-height: 22px;
-  border-bottom: 1px solid rgba(226, 231, 239, 0.68);
+  border-bottom: 1px solid var(--line);
 }
 
 .vba-diff-line code {
@@ -153,38 +153,38 @@ li.CodeMirror-hint-active {
 .vba-diff-marker {
   padding: 3px 0;
   text-align: center;
-  color: #98a2b3;
+  color: var(--ink-faint);
   user-select: none;
 }
 
 .vba-diff-line-number {
   padding: 3px 6px;
-  border-right: 1px solid rgba(226, 231, 239, 0.72);
-  color: #98a2b3;
+  border-right: 1px solid var(--line);
+  color: var(--ink-faint);
   font-variant-numeric: tabular-nums;
   text-align: right;
   user-select: none;
 }
 
 .vba-diff-line.add {
-  background: #eaf8f0;
+  background: var(--success-soft);
 }
 
 .vba-diff-line.add .vba-diff-marker {
-  color: #16835d;
+  color: var(--success);
   font-weight: var(--title-font-weight);
 }
 
 .vba-diff-line.add code {
-  color: #0f5132;
+  color: var(--success);
 }
 
 .vba-diff-line.add .vba-diff-new-line {
-  color: #16835d;
+  color: var(--success);
 }
 
 .vba-diff-line.remove {
-  background: #fff0ef;
+  background: var(--danger-soft);
 }
 
 .vba-diff-line.remove .vba-diff-marker {
@@ -193,7 +193,7 @@ li.CodeMirror-hint-active {
 }
 
 .vba-diff-line.remove code {
-  color: #842029;
+  color: var(--danger);
 }
 
 .vba-diff-line.remove .vba-diff-old-line {

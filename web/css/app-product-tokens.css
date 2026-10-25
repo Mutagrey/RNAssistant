@@ -1,5 +1,5 @@
 /* One visual palette for the prototype and every product screen. */
-:root {
+:root, .theme-preview-light {
   color-scheme: light;
   --canvas: #eef0ef;
   --surface: #ffffff;
@@ -38,6 +38,12 @@
   --scrim: #1d242255;
   --shadow: 0 12px 40px #2028251c;
   --focus: var(--accent);
+}
+:root {
+  --focus-ring-tight: var(--focus);
+  --actionbar-bg: var(--surface);
+  --scrollbar-thumb: color-mix(in srgb, var(--ink-muted) 42%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--ink-muted) 68%, transparent);
   --font: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --text-xs: 11px;
@@ -69,7 +75,7 @@
   --motion-duration: 240ms;
   --motion-ease: cubic-bezier(.2, .8, .2, 1);
 }
-html[data-theme="dark"] {
+html[data-theme="dark"], .theme-preview-dark {
   color-scheme: dark;
   --canvas: #16181b;
   --surface: #202328;
@@ -109,15 +115,9 @@ html[data-theme="dark"] {
   --user-bubble-text: color-mix(in srgb, var(--accent) 18%, var(--ink));
 }
 
-/* The prototype sets its accent through data-accent; the product sets --accent in app-accent.js. */
-html[data-accent="blue"] { --accent: var(--palette-blue); }
-html[data-accent="violet"] { --accent: var(--palette-violet); }
-html[data-accent="rose"] { --accent: var(--palette-rose); }
-html[data-accent="amber"] { --accent: var(--palette-amber); }
-html[data-theme="dark"][data-accent="blue"] { --accent: #a4bffc; }
-html[data-theme="dark"][data-accent="violet"] { --accent: #c7adf2; }
-html[data-theme="dark"][data-accent="rose"] { --accent: #f0aec3; }
-html[data-theme="dark"][data-accent="amber"] { --accent: #eac38c; }
+/* Both entrypoints use app-accent.js; previews resolve the same accent for their own theme. */
+.theme-preview-light { --accent: var(--accent-light); }
+.theme-preview-dark { --accent: var(--accent-dark); }
 html[data-theme="dark"][data-accent="white"] { --accent-hover: #d9e0da; }
 html { --chat-text: 14px; --composer-text: 13px; --tree-text: 12px; }
 html[data-text-size="large"] { --text-base: 16px; --text-sm: 13px; --text-xs: 12px; --chat-text: 16px; --composer-text: 15px; --tree-text: 14px; }

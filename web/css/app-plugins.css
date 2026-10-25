@@ -84,7 +84,8 @@
 .plugin-version-caption{padding:5px 8px;color:var(--ink-muted);font-size:11px}
 .plugin-version-items{display:grid;gap:2px}
 .plugin-version-items>button{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;width:100%;padding:8px;border:0;border-radius:6px;background:transparent;color:var(--ink);text-align:left;cursor:pointer}
-.plugin-version-items>button:hover,.plugin-version-items>button.is-selected{background:var(--surface-hover)}
+.plugin-version-items>button:hover{background:var(--surface-hover)}
+.plugin-version-items>button.is-selected{background:var(--surface-selected)}
 .plugin-version-items>button.is-active{background:var(--surface-selected)}
 .plugin-version-items>button strong{font-size:12px;font-weight:600}
 .plugin-version-items>button small{grid-column:1/-1;color:var(--ink-muted);font-size:11px}

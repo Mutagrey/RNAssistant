@@ -189,7 +189,7 @@
   flex: 0 0 auto;
   max-width: 50%;
   overflow-wrap: anywhere;
-  color: #8250df;
+  color: var(--syntax-key);
 }
 
 .rn-json-index,
@@ -199,16 +199,16 @@
 }
 
 .rn-json-string {
-  color: #0a7b48;
+  color: var(--syntax-string);
 }
 
 .rn-json-number {
-  color: #0969da;
+  color: var(--syntax-number);
 }
 
 .rn-json-boolean,
 .rn-json-null {
-  color: #cf222e;
+  color: var(--syntax-literal);
 }
 
 .rn-json-value {
@@ -222,8 +222,8 @@
 .rn-json-duplicate {
   padding: 1px 4px;
   border-radius: 8px;
-  background: rgba(245, 158, 11, .14);
-  color: #9a6700;
+  background: var(--warning-soft);
+  color: var(--warning);
   font-size: .7857rem;
 }
 
@@ -253,13 +253,6 @@
 .rn-json-more {
   margin: 6px 8px;
 }
-
-html[data-theme="dark"] .rn-json-key { color: #d2a8ff; }
-html[data-theme="dark"] .rn-json-string { color: #7ee2a8; }
-html[data-theme="dark"] .rn-json-number { color: #79c0ff; }
-html[data-theme="dark"] .rn-json-boolean,
-html[data-theme="dark"] .rn-json-null { color: #ff7b72; }
-html[data-theme="dark"] .rn-json-duplicate { color: #f2cc60; }
 
 @media (max-width: 720px) {
   .rn-json-toolbar {

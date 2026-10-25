@@ -301,7 +301,7 @@
   transform-origin: 12px 12px;
   transition: stroke-dashoffset .2s ease;
 }
-.context-meter[data-level="warn"] { color: #d97706; }
+.context-meter[data-level="warn"] { color: var(--warning); }
 .context-meter[data-level="danger"] { color: var(--danger); }
 
 .composer-tooltip {
@@ -632,23 +632,8 @@
   white-space: nowrap;
 }
 
-.composer-model-badge.is-reasoning {
-  background: #fff4d7;
-  color: #9a6508;
-}
-
 .composer-model-badge.is-reasoning::before {
   content: "◉";
-}
-
-.composer-model-badge.is-vision {
-  background: #eaf2ff;
-  color: #365f9f;
-}
-
-.composer-model-badge.is-audio {
-  background: #f1ebff;
-  color: #6947a4;
 }
 
 .composer-input-wrap {
@@ -763,16 +748,12 @@
 
 .composer-reasoning-button:hover:not(:disabled) {
   background: var(--composer-control-hover);
-  color: #b7791f;
+  color: var(--warning);
 }
 
 .composer-reasoning-button.active {
-  background: #fff3cf;
-  color: #c47b08;
-}
-
-.composer-reasoning-button.active svg {
-  filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.5));
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .composer-reasoning-button:disabled {
@@ -782,13 +763,13 @@
 }
 
 .composer-reasoning-button.active:disabled {
-  background: #fff3cf;
-  color: #c47b08;
+  background: var(--warning-soft);
+  color: var(--warning);
   opacity: 0.82;
 }
 
 .composer-reasoning-button:focus-visible {
-  outline: 2px solid rgba(217, 119, 6, 0.2);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -835,7 +816,7 @@
 }
 
 .composer-stop-button:focus-visible {
-  outline: 2px solid rgba(180, 35, 24, 0.16);
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
 }
 
@@ -890,11 +871,6 @@
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer {
   --composer-shadow: 0 4px 14px rgba(0, 0, 0, 0.32);
   --composer-shadow-focus: 0 5px 18px rgba(0, 0, 0, 0.4);
-}
-
-:where(html[data-theme="dark"], body[data-theme="dark"]) .composer-reasoning-button.active {
-  background: #4b3a19;
-  color: #f4b942;
 }
 
 :where(html[data-theme="dark"], body[data-theme="dark"]) .composer-picker-menu {

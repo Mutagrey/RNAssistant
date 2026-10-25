@@ -6,7 +6,7 @@
   min-width: 0;
   margin: 4px 0 0;
   padding: 4px 0 0;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid var(--line);
   background: transparent;
 }
 
@@ -38,7 +38,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: #6b7482;
+  color: var(--ink-muted);
 }
 
 .context-manage-button:hover {
@@ -166,7 +166,7 @@
 .context-popover-preview {
   max-height: 180px;
   overflow: auto;
-  color: #2e3848;
+  color: var(--ink);
   font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
   font-size: 11.5px;
   line-height: 1.45;

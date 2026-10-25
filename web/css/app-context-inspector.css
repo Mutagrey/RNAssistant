@@ -187,7 +187,7 @@
 }
 
 .prompt-context-budget-track[data-level="warn"] > i {
-  background: #b7791f;
+  background: var(--warning);
 }
 
 .prompt-context-budget-track[data-level="danger"] > i {
@@ -434,7 +434,7 @@ html[data-theme="dark"] .prompt-context-inspector {
   box-shadow: -12px 0 30px rgba(0, 0, 0, .38);
 }
 html[data-theme="dark"] .prompt-context-budget-track[data-level="warn"] > i {
-  background: #d69e4b;
+  background: var(--warning);
 }
 
 @media (max-width: 620px) {

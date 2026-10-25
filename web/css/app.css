@@ -1,40 +1,7 @@
 :root {
   --ui-font-scale: 1;
-  --bg: #f6f7f9;
-  --panel: #ffffff;
-  --text: #17202e;
-  --muted: #6b7482;
-  --line: #e2e7ef;
-  --line-strong: #cbd3df;
-  --danger: #b42318;
-  --success: #16835d;
-  --code: #f6f8fb;
-  --code-border: #d6deea;
-  --code-text: #202938;
-  --radius: 8px;
-  --shadow: 0 12px 28px rgba(16, 24, 39, 0.14);
-  --control-height: 30px;
-  --control-radius: 6px;
-  --control-border: #d9e0ea;
-  --control-border-hover: #cbd5e1;
-  --secondary-bg: #f7f9fc;
-  --secondary-bg-hover: #eef2f7;
-  --button-bg: #f8fafc;
-  --button-bg-hover: #eef2f7;
-  --button-border: #d9e0ea;
-  --button-border-hover: #cbd5e1;
-  --button-text: #243044;
-  --button-danger-bg-hover: #8f1d13;
-  --button-danger-soft-bg: #fff8f7;
-  --button-danger-soft-bg-hover: #fff1ef;
-  --section-line: rgba(226, 231, 239, 0.72);
-  --actionbar-bg: linear-gradient(180deg, rgba(246, 247, 249, 0.88), var(--bg) 42%);
   --button-font-weight: 450;
-  --label-font-weight: 450;
-  --title-font-weight: 500;
   --meta-font-weight: 400;
-  --scrollbar-thumb: rgba(100, 116, 139, 0.42);
-  --scrollbar-thumb-hover: rgba(71, 85, 105, 0.68);
 }
 
 * {

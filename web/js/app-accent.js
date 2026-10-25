@@ -1,8 +1,8 @@
 (function () {
-  // Swatches are sampled from the supplied palette screenshot. Light accents are
-  // adjusted for readable text and controls; dark accents retain the swatch color.
+  // Keep the supplied swatches; interface tones share the demo palette and use
+  // readable variants for each theme. Both the demo and product consume this catalog.
   var choices = [
-    { id: "blue", label: "Синий", swatch: "#3A63F2", light: "#3A63F2", dark: "#3A63F2" },
+    { id: "blue", label: "Синий", swatch: "#3A63F2", light: "#355FBA", dark: "#A4BFFC" },
     { id: "turquoise", label: "Бирюзовый", swatch: "#03B0FD", light: "#007AAE", dark: "#03B0FD" },
     { id: "green", label: "Зеленый", swatch: "#35684B", light: "#35684B", dark: "#9BC8A5" },
     { id: "lime", label: "Лаймовый", swatch: "#B6D905", light: "#687A00", dark: "#B6D905" },
@@ -10,7 +10,7 @@
     { id: "orange", label: "Оранжевый", swatch: "#F98367", light: "#B64B35", dark: "#F98367" },
     { id: "pink", label: "Розовый", swatch: "#FB4DAF", light: "#AF2870", dark: "#FB4DAF" },
     { id: "magenta", label: "Пурпурный", swatch: "#D96CD5", light: "#92349A", dark: "#D96CD5" },
-    { id: "violet", label: "Фиолетовый", swatch: "#A45CFD", light: "#7435C4", dark: "#A45CFD" },
+    { id: "violet", label: "Фиолетовый", swatch: "#A45CFD", light: "#7550AD", dark: "#C7ADF2" },
     { id: "white", label: "Белый", lightLabel: "Черный", swatch: "#FFFFFF", light: "#30343B", dark: "#FFFFFF" }
   ];
 
@@ -42,6 +42,8 @@
     var accent = choice[theme];
     var foreground = foregroundFor(accent);
     root.style.setProperty("--accent", accent);
+    root.style.setProperty("--accent-light", choice.light);
+    root.style.setProperty("--accent-dark", choice.dark);
     root.style.setProperty("--accent-on", foreground);
     root.style.setProperty("--accent-ink", foreground);
     root.style.setProperty("--button-primary-text", foreground);
@@ -51,7 +53,9 @@
     return id;
   }
 
-  window.RNAssistantAccents = { choices: choices, normalize: normalize, apply: apply };
+  window.RNAssistantAccents = { choices: choices, normalize: normalize, apply: apply, foregroundFor: foregroundFor };
+  // The demo owns its appearance storage; it applies the shared palette explicitly.
+  if (document.documentElement.getAttribute("data-ui-prototype") != null) return;
   var saved = "green";
   try { saved = localStorage.getItem("rnassistant.ui.accent") || saved; } catch (error) { /* WebView profile reset. */ }
   apply(saved, false);

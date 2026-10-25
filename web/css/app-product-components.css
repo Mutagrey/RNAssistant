@@ -5,13 +5,14 @@
 .button:hover, .icon-btn:hover, summary.icon-btn:hover { background: var(--surface-hover); }
 .button.primary { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .button.primary:hover { background: var(--accent-hover); }
+input::placeholder, textarea::placeholder { color: var(--ink-faint); opacity: 1; }
 .button.ghost { background: transparent; border-color: transparent; color: var(--ink-muted); }
 .button.ghost:hover { background: var(--surface-hover); color: var(--ink); }
 .button.danger { color: var(--danger); border-color: var(--danger); }
 .button.soft { color: var(--accent); border-color: transparent; background: var(--accent-soft); }
 .button.soft:hover { background: var(--surface-selected); }
-.button:not(.primary)[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
-.button:not(.primary)[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--accent) 20%, var(--surface)); }
+.button:not(.primary)[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); background: var(--surface-selected); }
+.button:not(.primary)[aria-pressed="true"]:hover { background: var(--surface-selected); }
 .icon-btn, summary.icon-btn { display: inline-grid; flex: 0 0 var(--control); place-items: center; width: var(--control); height: var(--control); min-height: var(--control); padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); }
 summary.icon-btn { list-style: none; cursor: pointer; }
 summary.icon-btn::-webkit-details-marker { display: none; }
@@ -65,7 +66,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
   --secondary-bg: var(--surface-subtle); --secondary-bg-hover: var(--surface-hover);
   --code: var(--code-bg); --code-text: var(--ink); --code-border: var(--line);
   --control-radius: 7px; --label-font-weight: 500; --meta-font-weight: 400;
-  --focus-ring: var(--accent);
+  --focus-ring: var(--focus);
 }
 .workspace-heading { display: flex; align-items: center; gap: 6px; flex: 0 0 52px; height: 52px; padding: 0 10px 0 18px; margin: 0 -8px; border-bottom: 1px solid var(--line); }
 .workspace-heading .nav-label { flex: 1; min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: 0; text-overflow: ellipsis; text-transform: none; white-space: nowrap; }
@@ -103,7 +104,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .rna-action-menu-body > button:disabled:hover { background: transparent; }
 .rna-action-menu-check { display: flex; align-items: center; gap: 8px; margin: 0; padding: 9px 10px; color: var(--ink); font-size: 12px; cursor: pointer; }
 .rna-action-menu-check input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-.navigation-tree { flex: 1; min-height: 0; overflow: auto; padding: 0; scrollbar-width: thin; font-size: var(--tree-text); font-weight: 400; }
+.navigation-tree { flex: 1; min-height: 0; overflow: auto; padding: 0; scrollbar-width: thin; font-size: var(--tree-text); font-weight: 400; line-height: 1.55; }
 .navigation-tree-list { list-style: none; margin: 0; padding: 0; }
 .navigation-tree-item { list-style: none; margin: 0; padding: 0; outline: none; }
 .navigation-tree-row, .rna-nav-button { display: flex; align-items: center; gap: 5px; min-height: 36px; padding: 0 6px; border-radius: 7px; position: relative; }
@@ -116,7 +117,8 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-tree-row.selected:hover, .rna-nav-button[aria-current="page"]:hover { background: var(--surface-selected); }
 @media (prefers-reduced-motion: no-preference) { .navigation-tree-row, .rna-nav-button { transition: background-color var(--motion-fast) var(--motion-ease); } }
 .navigation-tree-item:focus-visible > .navigation-tree-row { outline: 2px solid var(--focus); outline-offset: -2px; }
-.navigation-tree-expander { display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 26px; padding: 0; border: 0; background: none; color: var(--ink-muted); }
+/* The row owns hover/selection; nested buttons must not inherit the generic button fill or minimum height. */
+.navigation-tree .navigation-tree-expander { display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 26px; min-height: 0; padding: 0; border: 0; border-radius: 0; background: none; color: var(--ink-muted); }
 .navigation-tree-expander svg { width: 12px; height: 12px; }
 .navigation-tree-icon { display: grid; place-items: center; flex: 0 0 18px; color: var(--ink-muted); }
 .navigation-tree-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
@@ -171,12 +173,12 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .office-app-mark.is-outlook { --office-page: #0078d4; --office-tile: #0364b8; }
 .navigation-tree-badge { flex: none; color: var(--ink-muted); font-size: 10px; }
 .navigation-tree-badge.is-warning, .navigation-tree-badge.is-critical { color: var(--warning); }
-.navigation-tree-label { flex: 1; min-width: 0; display: block; padding: 4px 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; font: inherit; color: var(--ink); }
+.navigation-tree .navigation-tree-label { flex: 1; min-width: 0; min-height: 0; display: block; padding: 4px 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; border-radius: 0; background: none; font: inherit; color: var(--ink); }
 .navigation-tree-item + .navigation-tree-item > .navigation-tree-row.is-group { margin-top: 3px; }
 .navigation-tree-row.is-group .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
 .navigation-tree .tree-actions { display: flex; align-items: center; flex-shrink: 0; width: auto; gap: 0; opacity: 0; visibility: hidden; pointer-events: none; }
 .navigation-tree-row:hover > .tree-actions, .navigation-tree-row.is-focused > .tree-actions { opacity: 1; visibility: visible; pointer-events: auto; }
-.navigation-tree .tree-action { display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); }
+.navigation-tree .tree-action { display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; min-height: 0; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); }
 .navigation-tree .tree-action:hover { color: var(--ink); background: var(--surface-selected); }
 .navigation-tree .tree-action.is-danger:hover { color: var(--danger); }
 .navigation-tree .tree-action:focus-visible { outline-offset: -2px; }
