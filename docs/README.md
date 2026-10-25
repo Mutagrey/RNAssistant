@@ -30,6 +30,7 @@ direct cutover объясняют порядок уже выполненной �
 |---|---|
 | Model loop, modes, tool result/effect | [Conversation protocol](conversation-protocol.md) |
 | Wire JSON v8 | [Conversation response v8](protocols/CONVERSATION_RESPONSE_V8.md); [v7](protocols/CONVERSATION_RESPONSE_V7.md) — исторический формат |
+| Совместимость model endpoint и проверка ролей/формата | [Model endpoint compatibility](model-endpoint-compatibility.md) |
 | Resources, URI, providers, ingestion | [Resource Fabric](resource-fabric.md) |
 | Tool catalog, schemas, authoring | [Tool Library](tool-library.md) |
 | Skills | [Skill Library](skills.md) |

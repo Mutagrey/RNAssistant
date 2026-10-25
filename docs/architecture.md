@@ -96,10 +96,10 @@ active runtime contracts. See [verification](qualification.md) and the
 ## Unified Agent and Plan
 
 New conversations use `Agent` by default and offer a sticky `Plan` toggle. Both use
-`ConversationRunService` and the same conversation-response v7 contract. A final
-answer with zero tool calls completes normally. There is no intent router or
-mandatory planning/model call. Persisted pre-cutover chats, including `Chat`, remain
-read-only history; new turns require a format-7 chat.
+`ConversationRunService` and the same conversation-response v8 contract. A direct
+`finish` with zero tool calls may use `results=[]`. There is no intent router or
+mandatory planning/model call. Earlier stream formats remain readable history but
+cannot start a new run; new turns require a format-8 chat.
 
 `Plan` uses `PlanSystemPrompt`, reads, skills, questions and the built-in Plan/Task
 List updates. It cannot execute other mutations or code. Returning to Agent is an
@@ -132,7 +132,7 @@ in-memory session clone and never persists opaque state into the active chat. Se
 
 Editable general/tool/skill Agent, Plan, title, compaction, and attachment-analysis prompts are stored as Markdown; the old Chat prompt is retained only as an archived library entry. Their instruction role (`developer`/`system`/`user`) is independent from the shared response format (`json_object`/strict `json_schema`) and tool-result role (`user`/`developer`/matched `tool`). Protocol repair and compatibility-probe instructions remain fixed.
 
-`IMaterializedModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The current loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the v3 boundary and remaining controller adapters.
+`IMaterializedModelProtocol` in `Core/ModelProtocol` owns conversation endpoint attempts, local validation/repair, native refusals, prompt-budget checks and format fallback. The current loop receives one accepted response/metadata or typed failure per logical step; it neither counts raw attempts nor executes tools before acceptance. See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md) for the original boundary decision and [Conversation Response v8](protocols/CONVERSATION_RESPONSE_V8.md) for the active wire.
 
 Phase 3B2 connects the pure kernel to production start/confirmation. Its generic
 `IModelProtocol.SendAsync`, `IToolRuntime` and `IRunStore` ports keep materialization,
@@ -148,7 +148,7 @@ See [ADR-0001](decisions/ADR-0001-model-does-not-own-completion.md),
 [ADR-0008](decisions/ADR-0008-unknown-effects-are-not-retried.md) and
 [cutover evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md).
 
-R29 introduced runtime-owned IDs; the current ID-less v7 `ConversationResponse` runs through the single
+R29 introduced runtime-owned IDs; the current ID-less v8 `ConversationResponse` runs through the single
 `Core/ModelProtocol/ModelProtocolWire` owner: schema, local validation and canonical
 JSON writing are shared by the client, loop, transcript and compatibility probes.
 The old model-ID wire/context path is removed. The kernel converts validated
@@ -163,10 +163,10 @@ batch context, not a model-ID registry. It permits only independent local reads
 in one response; every mutation is a singleton with its own guard, verification
 and commit. Full-history and confirmation preflight precede
 controller preparation, manual compaction and pending consumption; incomplete
-CallContext cannot trigger a raw request or format repair. Prompt schema 40 automatically selects current built-in defaults;
-prior texts are archived on settings save.
-No old chat is converted/truncated automatically. See the [v7 contract and
-qualification gates](protocols/CONVERSATION_RESPONSE_V7.md#parsing-history-and-recovery).
+CallContext cannot trigger a raw request or format repair. Current built-in prompt
+defaults use v8 guidance; prior texts receive a recovery copy on settings save.
+No old chat is converted or truncated automatically. See the [v8 contract and
+qualification gates](protocols/CONVERSATION_RESPONSE_V8.md).
 
 These values are internal correlation keys, not domain objects or another state
 machine:
@@ -175,8 +175,8 @@ machine:
 |---|---|
 | `SessionId` | Identifies the chat event stream; it is the chat id, not a second session concept. |
 | `EventId` | Addresses one immutable event and its optional CAS payload. |
-| `RunId` | Identifies one physical invocation; confirmation resume may use another run. |
-| `TurnId` | Keeps one logical user turn continuous across that resume. |
+| `RunId` | Identifies one physical invocation; v8 confirmation resumes the same run. |
+| `TurnId` | Keeps one logical user turn continuous across confirmation and restart. |
 | `StepId` / `ModelAttemptId` | Separates a model step from bounded format/provider attempts inside it. |
 | `ToolCallId` | Pairs one accepted call with confirmation, dispatch and its result. |
 | `DocumentRuntimeId` | Prevents an Office action from silently changing its live target. |
@@ -186,10 +186,12 @@ There is no generic correlation/operation/batch id. These keys stay collapsed in
 ordinary UI; Diagnostics leads with model payload, tool name, arguments, result and
 effect, and exposes IDs only in a technical section.
 
-Both `json_schema` and `json_object` enforce the same v7 contract against the
-current callable tools. `tool` dispatches calls and continues after their results;
-`done`/`blocked`/`needs_input` end the model turn. Progress text accompanies calls
-and cannot trigger an additional model request on its own. Immutable
+Both `json_schema` and `json_object` enforce the same v8 decision contract against
+the current callable tools. Strict `json_schema` transports it inside a required
+`response` wrapper; `json_object` transports the decision directly. `execute`
+proposes calls, `reflection` records a bounded interpretation without dispatch,
+and `finish` supplies model assessments with current-run terminal evidence when
+calls were accepted. A model assessment does not prove the requested effect. Immutable
 `RunViewState` projects lifecycle from `KernelState` and effect health from
 source-owned evidence. `Core.Tools` descriptor/policy/binding and
 `Core.Tools.ToolRuntime` own exact typed registrations. Native
@@ -320,7 +322,7 @@ Windows/Office/WebView2 delivery is a separate qualification gate.
 ## Main code zones
 
 - `src/RNAssistant.Core/Llm`: HTTP transport, message construction, response/reasoning parsing, budgets.
-- `src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs`: strict conversation-response v7 parser; it validates model drafts but neither assigns runtime call IDs nor executes tools.
+- `src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs`: strict conversation-response v8 parser; it validates model drafts but neither assigns runtime call IDs nor executes tools.
 - `src/RNAssistant.Core/Tools/VbaPatchEngine.cs` and `VbaTextCanonicalizer.cs`: pure VBA text operations/representations, shared by parser/storage and Office consumers. JSON/tool mapping, COM, guards and journal orchestration stay outside; Phase 6A preserves algorithms and does not qualify production binding.
 - `src/RNAssistant.Office/AssistantRuntime.cs`: public application/UI lifetime façade for controller and pane construction/disposal; document/tool coordination remains in `Runtime`.
 - `src/RNAssistant.Office/Vba/VbaReader.cs`: единственный host-neutral owner internal VBA list/module command construction, deterministic name fallback and typed snapshot validation. Callers already hold the `HostRuntime` document gate; reader does not own target binding, mutation dispatch, journal persistence or Tool Result v1. Dynamic host COM/VBE now lives only in `src/RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; Office consumes no host helper or duplicate backend.

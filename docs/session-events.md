@@ -556,7 +556,23 @@ remains separate; full context downloads respect the shared 50 MiB transfer budg
 
 ## Format policy
 
-`ChatSession.CurrentFormatVersion` is 7 (unified intent/permissions). Format 6 is retained for history reads only; its mode and pending calls cannot authorize a new run. Normalization never upgrades it. `MutationPolicy` belongs to session metadata and `ConversationPolicy` pins the accepted run, including `AutoConfirmToolActions` (absent means false). Settings changes cannot rewrite a pending run’s approval authority; restart and explicit continuation retain that snapshot. `SessionEvent.CurrentSchemaVersion` remains 4. No historical bytes or CAS payloads are rewritten. See [unified-agent cutover](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13). The active conversation protocol is independently versioned as v7 inside typed message/run operations; R29 added accepted-call origins without a new event envelope, v6 replaced the R72 final flag with explicit response actions, and v7 removes no-call continuation. Unversioned/v2/v3/v4/v5/v6 model history is not converted or inferred from prose: full-history preflight requires an explicit new chat/reset before model preparation. A pending confirmation without current-v7 history, complete call origins and `KernelState` cannot continue and must be cancelled or resubmitted in a new chat. Unsupported event schemas and old snapshot files are refused rather than guessed or migrated. Reset is explicit; upgrades and protocol failures never automatically delete user chats, CAS, settings or keys. See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V7.md).
+`ChatSession.CurrentFormatVersion` is 8. Formats 6 and 7 remain readable history;
+neither can authorize a new run or pending confirmation. Normalization never
+upgrades them. `MutationPolicy` belongs to session metadata and
+`ConversationPolicy` pins the accepted run, including `AutoConfirmToolActions`
+(absent means false). Settings changes cannot rewrite a pending run's approval
+authority; restart and explicit continuation retain that snapshot.
+`SessionEvent.CurrentSchemaVersion` remains 4: v8 changes the response and chat
+stream format, not the event envelope. No historical bytes or CAS payloads are
+rewritten. Full-history preflight requires format-8 accepted responses with
+complete call origins and terminal results for accepted calls before model
+preparation. A pending confirmation without valid v8 history and `KernelState`
+cannot continue and must be cancelled or resubmitted in a new chat. Unsupported
+event schemas and old snapshot files are refused rather than guessed or migrated.
+Reset is explicit;
+protocol failures never automatically delete user chats, CAS, settings or keys.
+See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V8.md)
+and the historical [unified-agent cutover](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13).
 
 ## Conversation input queue
 

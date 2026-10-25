@@ -6,7 +6,8 @@
 и краткий [PROGRESS](PROGRESS.md); новые временные adapters добавляются сюда только
 с owner, consumers и условием удаления.
 
-ModelProtocol работает на v7; старые streams требуют explicit new/reset, pipelines отключены. Phase 3B2 подключает
+ModelProtocol работает на v8; streams прежних форматов доступны только для чтения,
+а новый run требует format-8 chat. Pipelines отключены. Phase 3B2 подключает
 `AgentKernel` к production start/confirmation через Office model/tool/store ports.
 Новый summary replay проверен на существующих events; старый loop, builder,
 mutable ID bookkeeping и Failure.Cause удалены без fallback. Phases 4/8/9 и

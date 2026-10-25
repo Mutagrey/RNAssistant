@@ -357,8 +357,9 @@ parser и общий runtime ради cloud-модели не ослабляют
 catalog, skills, acceptance tests и по возможности temperature/reasoning policy.
 Для каждого run сохранить model/tag и digest, context, response mode, instruction role, thinking/reasoning mode,
 число LLM и tool calls, protocol violations, tool errors, retries, final action,
-результат независимой acceptance-проверки и duration. `action=done` не является
-критерием успеха. Каждый провал пометить хотя бы одной категорией:
+результат независимой acceptance-проверки и duration. Терминальное действие модели
+(текущий v8 `finish`, исторический `done`) не является критерием успеха. Каждый
+провал пометить хотя бы одной категорией:
 `MODEL_ERROR`, `PROTOCOL_ERROR`, `CONTEXT_ERROR`, `TOOL_ERROR`, `HARNESS_ERROR`,
 `STATE_ERROR`, `VERIFICATION_ERROR`, `ENVIRONMENT_ERROR`. Повторение на нескольких
 сильных моделях — повод исследовать RNAssistant/harness; изолированный провал 9B

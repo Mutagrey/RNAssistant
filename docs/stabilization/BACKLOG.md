@@ -323,25 +323,21 @@ scanned PDFs, page boundaries, stale revisions and cross-provider pagination.
 
 ## Artifact UI check fixture drift — 2026-10-13
 
-Owner: Web test fixtures. Rechecked 2026-10-15:
-`artifact-library-projection.test.js` passes; its old asset-key and selection
-failures are closed. `html-preview-reuse.test.js` still omits `missingVendors`
-from its stub and fails before its intended checks. The same source omission in
-`html-workspace-layout.test.js` was rerun on clean `main` and the UI cutover
-checkout on 2026-10-18; both fail at the same missing `missingVendors` stub
-before layout assertions. Refresh this fixture separately.
+Owner: Web test fixtures. The 2026-10-15 failures below are historical, not a
+current suite result. `artifact-library-projection.test.js` passed; both HTML
+preview fixtures now supply `missingVendors`, and the old
+`office-chat-20260930-3` assertion is absent from the HTML source/write tests.
+The current `run-journal.test.js` working-tree edit also removes the dated asset
+key and label assertions; its result is not yet committed or a complete-suite
+qualification. Keep the behavioral, lazy mount/unmount and navigation checks.
 
-The HTML false-success investigation also reached all eight behavioral groups in
-`html-workspace-source.test.js` and `html-workspace-write.test.js` before their
-hard-coded asset-key assertions failed (`office-chat-20260930-3` in the source
-test). These failures do not establish a source/write behavior regression; update
-the delivery-key fixtures separately.
-
-`run-journal.test.js` was rerun: behavioral groups pass before the obsolete
-`action-severity-20260930-1` asset assertion fails; the later old `Журнал запуска`
-label assertion still needs reconciliation. `chat-history-paging.test.js` also
-fails its closed-run commentary expectation. Preserve behavioral checks and lazy
-mount/unmount assertions while aligning fixtures with the canonical transcript.
+The remaining concrete asset-key drift is in
+`artifact-commit-projection.test.js` and `ui-lazy-runtime.test.js`, which still
+expect `office-chat-20260930-3` or `action-severity-20260930-1` while
+`web/index.html` ships newer keys. Align those assertions with the current
+script graph without weakening their behavior checks. Recheck the previously
+reported `chat-history-paging.test.js` closed-run commentary expectation; its
+2026-10-15 result does not establish the state of this working tree.
 
 MockDemo's missing `SettingsService.HasPromptMigrationEvidence` fixture was repaired
 during unified-agent verification. Its artifact removal/restart assertions still

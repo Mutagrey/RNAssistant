@@ -42,7 +42,7 @@ Filters compose with AND:
 - inclusive `minSequence` / `maxSequence`;
 - exact event types;
 - run, turn and step correlation;
-- tool-call id, artifact id, exact canonical `resourceUri`, and status extracted from typed event data, including conversation-response v2 `ResponseStatus` on assistant-message operations;
+- tool-call id, artifact id, exact canonical `resourceUri`, and status extracted from typed event data; retained `ResponseStatus` on older assistant-message operations is diagnostic metadata, not the current run outcome;
 - `current`, `shadowed` or `log-only` visibility;
 - case-insensitive tokenized full-text search over event metadata and materialized event data.
 

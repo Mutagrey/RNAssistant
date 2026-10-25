@@ -1,6 +1,6 @@
 # Conversation Response v6
 
-Status: **historical**. The active contract is [v7](CONVERSATION_RESPONSE_V7.md).
+Status: **historical**. The active contract is [v8](CONVERSATION_RESPONSE_V8.md).
 This document records response protocol `6` and prompt schema `39`.
 The [v5 contract](CONVERSATION_RESPONSE_V5.md) is historical. Existing v5 chats
 require explicit new chat/reset; no automatic conversion or data deletion occurs.

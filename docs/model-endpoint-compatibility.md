@@ -12,9 +12,19 @@ RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 - the selected Agent response format: `json_object` by default or strict `json_schema`;
 - the selected tool-result role: `user` by default, optionally `developer` or a matched `assistant.tool_calls` → `tool` pair.
 
-Chat, Plan, and Agent require the conversation-response v2 `status + message + tool_calls[]` JSON described in [conversation-protocol.md](conversation-protocol.md). Chat receives only read-only resource tools; Plan receives its scoped planning tools; Agent receives its runnable catalog. The response format and tool-result role are explicit settings; RNAssistant does not auto-select them. Optional `json_schema` fallback is limited to an endpoint rejection and lasts only for the current run.
+Current runs use [Conversation Response v8](protocols/CONVERSATION_RESPONSE_V8.md):
+`action`, `reason`, action-specific `tool_calls`, `decision` or `results`, and
+`message`. `execute` proposes calls without model-owned IDs; `reflection` makes no
+tool call; `finish` reports assessments rather than verified effects. In
+`json_object` mode this is the root object. Strict `json_schema` mode requires a
+closed root object with one `response` property containing the decision. The two
+modes share local parsing, evidence admission and runtime-owned call IDs. Plan
+receives only its scoped planning tools; Agent receives its admitted catalog.
+Response format and tool-result role are explicit settings. Configured
+`json_schema` fallback applies only to an explicit format-support rejection; an
+invalid provider schema is a typed failure, not evidence that fallback is safe.
 
-Settings → Agent → «Запустить тест» checks three exact sentinels using the currently selected instruction role, response format, and result role: `ROLE_OK`, the requested `TOOL_OK` Agent JSON call with exact id/name/arguments, and `RESULT_OK` after the chosen result transport. The probes do not execute Office actions.
+Settings → Agent → «Запустить тест» checks three exact sentinels using the currently selected instruction role, response format, and result role: `ROLE_OK`, a v8 `execute` proposal for `compat.echo` with exact name/arguments but no model-owned ID, and a v8 `finish` with `RESULT_OK` after the chosen result transport. Strict-mode probes require the `response` wrapper. The probes do not execute Office actions.
 
 ## Optional capabilities
 
@@ -31,7 +41,9 @@ The chat model consumes every media modality it declares directly in the normal 
 
 ## Failure behavior
 
-- Invalid conversation JSON in either mode receives up to `MaxAgentFormatRetries` clean format-correction requests (1–20, default 10). Raw invalid responses and temporary instructions are not persisted; exhausting the limit stops the run.
-- An explicit endpoint rejection of selected `json_schema` may make one request-local `json_object` retry when fallback is enabled. Network, timeout, rate-limit, server, or provider-refusal errors are returned without an automatic duplicate request.
+- Invalid conversation JSON in either mode receives bounded clean format repair: `MaxAgentFormatRetries` allows 1–20 total protocol responses including the first (default 10). Rejected raw attempts do not become accepted history; exhausting the limit stops the run.
+- `finish_reason=length` permits one shorter complete proposal inside that budget; repeated truncation is a typed failure. A truncated proposal never dispatches tools.
+- Typed timeout, network and transient server failures may retry the exact request at most twice per logical step, after 1s and 2s. Authorization, other HTTP errors, 429, invalid provider envelopes and cancellation do not retry. Tools and uncertain effects never replay because a model request was retried.
+- An explicit format-support rejection of `json_schema` may switch once to `json_object` when fallback is enabled. Invalid schema and ordinary provider errors do not trigger this fallback.
 - Unknown tools and invalid arguments are rejected locally before Office execution.
-- A tool failure is returned to the model as `TOOL_RESULT`; the model decides whether to retry, change arguments, ask the user, or finish.
+- A tool failure is returned as typed Tool Result evidence. The model may propose a next action, but runtime guards prevent automatic repetition of an unknown effect.

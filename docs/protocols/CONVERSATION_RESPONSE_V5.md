@@ -1,7 +1,7 @@
 # Conversation Response v5
 
 Status: **historical R72 response-intent contract**. Response protocol was `5`;
-the active contract is [v6](CONVERSATION_RESPONSE_V6.md).
+the active contract is [v8](CONVERSATION_RESPONSE_V8.md).
 Product version is independent and unchanged by this switch. The
 [v4 specification](CONVERSATION_RESPONSE_V4.md) is historical, not a
 runtime compatibility path. This document records host-neutral behavior; Windows,
