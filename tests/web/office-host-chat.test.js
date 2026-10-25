@@ -16,6 +16,7 @@ function fixture() {
   const context = vm.createContext({ console, Date,
     state: { officeHostChatAvailable: true, host: "Excel", activeChatId: "excel-chat" },
     document: { createElement: () => new Element() },
+    RNAssistantIcons: { render: () => "" },
     currentActiveSend: () => null, hasActiveMessageEdit: () => false,
     confirmDiscardHtmlWorkspaceChanges: () => true, log() {}
   });

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Shared chat integration checkpoint — 2026-10-25
+
+Owner: Web ChatView and project chat routing. Office, project and plugin use one
+transcript/composer; plugin source chats use the project controller. This UI
+integration is implemented, while workspace usage/journal, general resource
+navigation/browser history and Windows/Office/WebView2 qualification remain open.
+Focused browser checks for layout, routing, drafts, session races, Inspector and
+plugins pass; focused host-neutral chat history and source-scope checks pass.
+Three session-isolation races were fixed: a pending reply blocked another chat,
+a late create response changed the selected chat, and a pending cancel disabled
+another chat's Stop or showed it an unrelated error. The Office host chat fixture
+was updated for the shared icon renderer; its checks pass. No full-suite or
+target-host qualification is claimed.
+
 ## Right preview header — 2026-10-25
 
 Owner: Web shared preview surface, plugin and HTML chat browser presentation.

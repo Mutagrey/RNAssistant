@@ -1,6 +1,7 @@
 (function () {
   "use strict";
   var scope = "office", catalog = null, active = null, busy = false, serial = 0, stopTitleWatch = null;
+  var pendingChatRequests = new Set(), pendingCancels = new Set();
   var composer = null, uploadingFiles = false;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
     function (target) { return send("getProjectChat", target); },
@@ -23,6 +24,9 @@
   function project() { return projects().find(function (item) { return item.workspaceId === selectedWorkspaceId; }); }
   function projectId() { return selectedWorkspaceId; }
   function currentId() { return active && active.sessionId; }
+  function chatRequestKey(workspaceId, sessionId) { return JSON.stringify([workspaceId, sessionId]); }
+  function chatBusy() { return !!active && pendingChatRequests.has(chatRequestKey(projectId(), currentId())); }
+  function cancelBusy() { return !!active && pendingCancels.has(chatRequestKey(projectId(), currentId())); }
   function field(value, lower, upper) { return value && (value[lower] !== undefined ? value[lower] : value[upper]); }
   function runState() { return active && active.state; }
   function notice(text, error) {
@@ -163,22 +167,23 @@
   }
   function updateControls() {
     var pluginBusy = !!(window.RNAssistantPlugins && window.RNAssistantPlugins.isChatBusy());
+    var selectedBusy = busy || chatBusy();
     el("New").disabled = busy || !project() || !project().available || pluginBusy;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
     el("ConnectionSubmit").disabled = busy;
     if (!ownsView()) return;
-    if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || busy || pluginBusy || uploadingFiles ||
+    if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy || uploadingFiles ||
       !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
     var target = active && active.sessionId ? { workspaceId: projectId(), sessionId: currentId() } : null;
     var draft = target && window.RNAssistantChatDrafts.readWorkspace(target);
     var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
-    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || pluginBusy || uploadingFiles ||
+    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy || uploadingFiles ||
       !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
       !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || field(runState(), "status", "Status") === "running";
   }
   function render() {
-    runObserver.select(ownsView() && project() && project().available ? active : null, busy);
+    runObserver.select(ownsView() && project() && project().available ? active : null, chatBusy());
     updateControls();
     renderTree();
     if (!ownsView()) return;
@@ -197,6 +202,7 @@
       return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
         input: { sessionId: sid, requestId: requestId, answers: answers } }); }, true);
     });
+    el("Stop").disabled = cancelBusy();
     var messages = el("Messages");
     if (!active || !(active.messages || []).length) {
       messages.replaceChildren(); messages._chatSignature = null;
@@ -226,8 +232,8 @@
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
     window.RNAssistantChatInspector.render();
-    if (!busy && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
-    else if (!busy && !noticeError && statusText()) notice(statusText());
+    if (!busy && !chatBusy() && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
+    else if (!busy && !chatBusy() && !noticeError && statusText()) notice(statusText());
     else notice(noticeText, noticeError);
     if (window.RNAssistantWorkspaceChat.owner() === "plugin" && window.RNAssistantPlugins)
       window.RNAssistantPlugins.onChatSnapshot(active);
@@ -282,17 +288,18 @@
   }
   async function create() {
     if (busy || !project() || !project().available) return;
-    ++serial; busy = true; render(); var pid = projectId();
+    var version = ++serial, pid = projectId(); busy = true; render();
     try {
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
-      if (projectId() === pid) {
+      var selected = version === serial && projectId() === pid;
+      if (selected) {
         active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
         notice(statusText()); render();
-        try { catalog = await send("getProjectChats", {}); render(); }
-        catch (error) { notice("Чат создан, но список не обновлён: " + (error.detail || error.message), true); }
-        return result;
       }
-    } catch (error) { notice(error.detail || error.message, true); }
+      try { catalog = await send("getProjectChats", {}); render(); }
+      catch (error) { if (selected) notice("Чат создан, но список не обновлён: " + (error.detail || error.message), true); }
+      return selected && version === serial && currentId() === result.sessionId ? result : null;
+    } catch (error) { if (version === serial && projectId() === pid) notice(error.detail || error.message, true); }
     finally { busy = false; render(); }
   }
   async function rename(entry, chat) {
@@ -340,7 +347,9 @@
   }
   async function runChat(action, reportFailure) {
     if (busy || !active || !project() || !project().available) return false;
-    busy = true; var pid = projectId(), sid = currentId(); render();
+    var pid = projectId(), sid = currentId(), requestKey = chatRequestKey(pid, sid);
+    if (pendingChatRequests.has(requestKey)) return false;
+    pendingChatRequests.add(requestKey); render();
     try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) {
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
       try { var latestCatalog = await send("getProjectChats", {});
@@ -357,7 +366,7 @@
     } return true; }
     catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true);
       if (reportFailure) throw error; return false; }
-    finally { busy = false; render(); }
+    finally { pendingChatRequests.delete(requestKey); render(); }
   }
   function setScope(next, target) {
     scope = next; ++serial;
@@ -463,7 +472,9 @@
       stop: async function () {
         var state = runState(), pid = projectId(), sid = currentId();
         if (!state || !pid || !sid) return;
-        el("Stop").disabled = true;
+        var requestKey = chatRequestKey(pid, sid);
+        if (pendingCancels.has(requestKey)) return;
+        pendingCancels.add(requestKey); render();
         try {
           var result = await send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
             runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
@@ -472,8 +483,8 @@
             notice(result.cancelStatus === "Requested" && field(result.state, "status", "Status") === "running"
               ? "Отмена запрошена…" : statusText());
           }
-        } catch (error) { notice(error.detail || error.message, true); }
-        finally { el("Stop").disabled = false; }
+        } catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
+        finally { pendingCancels.delete(requestKey); render(); }
       },
       resolve: function (approve) {
         var pendingId = active && active.pendingId;
@@ -493,6 +504,6 @@
   }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,
     snapshot: function () { return active; },
-    isBusy: function () { return busy; },
+    isBusy: function () { return busy || chatBusy(); },
     open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
 }());
