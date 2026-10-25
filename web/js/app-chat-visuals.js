@@ -37,7 +37,7 @@
     doc.head.insertBefore(meta, doc.head.firstChild);
     var style = doc.createElement("style");
     style.textContent = ":root{color-scheme:" + (dark() ? "dark" : "light") + ";}body{margin:16px;font:14px system-ui;background:" +
-      (dark() ? "#171c25;color:#edf1f7" : "#fff;color:#17202e") + ";}svg{max-width:100%}.diagram{display:flex;justify-content:center;align-items:center;min-height:80px}*{box-sizing:border-box}";
+      (dark() ? "transparent;color:#e5e7e8" : "transparent;color:#252b28") + ";}svg{max-width:100%}.diagram{display:flex;justify-content:center;align-items:center;min-height:80px}.diagram svg[aria-roledescription^=flowchart] .node rect{rx:14px;ry:14px}.diagram svg .cluster rect{rx:18px;ry:18px}*{box-sizing:border-box}";
     doc.head.appendChild(style);
     if (interactive) {
       var report = doc.createElement("script");
@@ -61,14 +61,13 @@
     if (!pre.parentNode || pre.closest(".chat-visual")) return false;
     var wrap = document.createElement("section"); wrap.className = "chat-visual";
     var tools = document.createElement("div"); tools.className = "block-tools";
-    var label = document.createElement("span"); label.className = "code-lang"; label.textContent = language;
-    tools.appendChild(label);
+    wrap.setAttribute("aria-label", language === "mermaid" ? "Схема" : "Интерактивный пример");
     var surface = document.createElement("div"); surface.className = "chat-visual-surface";
     var status = document.createElement("div"); status.className = "chat-visual-status"; status.setAttribute("role", "status");
-    var token = 0, disposed = false, seen = false, intersection;
+    var token = 0, disposed = false, seen = false, running = false, intersection;
     function stop() {
       token += 1; surface.replaceChildren();
-      play.disabled = false; stopButton.hidden = true;
+      running = false; buttonLabel(play, "Запустить", "play");
     }
     function fail(error) { status.textContent = "Не удалось показать: " + (error.message || error); pre.hidden = false; }
     function showSource() { pre.hidden = !pre.hidden; codeButton.setAttribute("aria-expanded", String(!pre.hidden)); buttonLabel(codeButton, pre.hidden ? "Показать код" : "Скрыть код", "code"); }
@@ -83,16 +82,17 @@
     wrap.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && wrap.classList.contains("chat-visual-expanded")) { zoom.click(); zoom.focus(); }
     });
-    var play = button("Запустить", "play", function () { startHtml(); });
-    var stopButton = button("Остановить", "stop", function () { stop(); status.textContent = "Просмотр остановлен."; });
-    stopButton.hidden = true;
-    if (language === "html") { tools.appendChild(play); tools.appendChild(stopButton); }
+    var play = button("Запустить", "play", function () {
+      if (running) { stop(); status.textContent = "Просмотр остановлен."; }
+      else startHtml();
+    });
+    if (language === "html") tools.appendChild(play);
     tools.appendChild(codeButton); tools.appendChild(copyButton); tools.appendChild(zoom);
     pre.parentNode.insertBefore(wrap, pre);
     wrap.appendChild(tools); wrap.appendChild(status); wrap.appendChild(surface); wrap.appendChild(pre); pre.hidden = true;
-    status.textContent = language === "html" ? "HTML / JavaScript · без сети · запуск по кнопке ▶" : "Схема ожидает просмотра…";
+    status.textContent = language === "html" ? "Нажмите ▶ для просмотра" : "Схема ожидает просмотра…";
     async function startHtml() {
-      stop(); var current = token; play.disabled = true; stopButton.hidden = false; status.textContent = "Подготовка просмотра…";
+      stop(); var current = token; running = true; buttonLabel(play, "Остановить", "stop"); status.textContent = "Подготовка просмотра…";
       try {
         if (source.length > 200000) throw new Error("HTML превышает лимит 200 000 символов.");
         var js = "";
@@ -104,9 +104,8 @@
         }
         if (disposed || current !== token) return;
         surface.appendChild(makeFrame("HTML-превью без доступа к сети", frameDocument(source, js, true), true));
-        stopButton.hidden = false;
-        status.textContent = "Просмотр запущен · без сети";
-      } catch (error) { if (!disposed && current === token) { play.disabled = false; fail(error); } }
+        status.textContent = "";
+      } catch (error) { if (!disposed && current === token) { stop(); fail(error); } }
     }
     function diagram() {
       var current = ++token; status.textContent = "Построение схемы…";
@@ -119,8 +118,8 @@
           if (disposed || current !== token) return;
           mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", look: "classic",
             themeVariables: { fontFamily: "system-ui", fontSize: "14px",
-              primaryColor: dark() ? "#293b32" : "#edf2ee", primaryTextColor: dark() ? "#e0e8e2" : "#27372e",
-              primaryBorderColor: dark() ? "#688b78" : "#8ca798", lineColor: dark() ? "#9ab1a3" : "#718578" },
+              primaryColor: dark() ? "#2b2f34" : "#ffffff", primaryTextColor: dark() ? "#e5e7e8" : "#252b28",
+              primaryBorderColor: dark() ? "#41484e" : "#d9dfdb", lineColor: dark() ? "#929d96" : "#849087" },
             htmlLabels: false, maxTextSize: 30000, maxEdges: 300, suppressErrorRendering: true, flowchart: { htmlLabels: false } });
           var result = await mermaid.render("rnaDiagram" + (++sequence), source);
           if (disposed || current !== token) return;

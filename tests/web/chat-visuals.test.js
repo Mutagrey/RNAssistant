@@ -46,6 +46,8 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
   assert.equal(await page.locator('.chat-visual iframe').count(),0);
   await page.getByRole('button',{name:'Запустить'}).click();
   await page.frameLocator('.chat-visual iframe').locator('canvas').waitFor();
+  assert.equal(await page.getByRole('button',{name:'Запустить'}).count(),0,'running preview has only Stop');
+  assert.equal(await page.locator('.chat-visual > .block-tools button').count(),4);
   const frame=await page.locator('.chat-visual iframe').elementHandle();
   const content=await frame.contentFrame();
   assert.equal(await content.locator('body').getAttribute('class'),'authored-body');
@@ -66,6 +68,11 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
     window.RNAssistantHtmlVendorRuntime={ensure:()=>new Promise(resolve=>window.resolveVendor=resolve),used:()=>[{}],source:()=>({js:''})};
   });
   await show('```html\n<script>echarts.init()</script>\n```');
+  await page.getByRole('button',{name:'Запустить'}).click();
+  await page.getByRole('button',{name:'Остановить'}).click();
+  assert.equal(await page.getByRole('button',{name:'Запустить'}).count(),1);
+  await page.evaluate(()=>resolveVendor());
+  assert.equal(await page.locator('iframe').count(),0,'Stop cancels pending vendor load');
   await page.getByRole('button',{name:'Запустить'}).click();
   await show('Switched session');
   await page.evaluate(()=>{resolveVendor();window.RNAssistantHtmlVendorRuntime=originalVendorRuntime;});

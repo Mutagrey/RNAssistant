@@ -80,11 +80,12 @@
 }
 .shell .chat-main .composer:focus-within { border-color: var(--accent); box-shadow: 0 3px 14px #16271e0b, 0 0 0 2px var(--accent-soft); }
 .shell #tab-chat .chat-session-list { padding: 8px; }
-.shell .chat-main .messages .table-wrap { margin: 8px 0 12px; padding: 0; border: 0; background: transparent; }
+.shell .chat-main .messages .table-wrap { margin: 12px 0; padding: 6px 12px 0; border: 1px solid var(--line); border-radius: 18px; background: var(--surface-subtle); }
 .shell .chat-main .messages .table-wrap .block-tools { position: static; margin: 0; padding: 0 0 4px; }
 .shell .chat-main .messages .table-wrap table { background: transparent; }
 .shell .chat-main .messages .table-wrap th,
 .shell .chat-main .messages .table-wrap td { font-size: 12px; padding: 7px 10px; border: 0; border-bottom: 1px solid var(--line); background: transparent; }
+.shell .chat-main .messages .table-wrap tr:last-child td { border-bottom: 0; }
 .shell .chat-main .messages .table-wrap th { color: var(--ink-muted); font-size: 11px; font-weight: 500; }
 
 .shell .product-nav-heading strong { flex: 1; font-size: inherit; }
