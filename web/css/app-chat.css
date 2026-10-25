@@ -662,10 +662,12 @@
 .agent-run-notice .agent-details-link { display: inline; margin: 0; padding: 0; font: inherit; }
 .agent-model-results { flex-basis: 100%; min-width: 0; }
 .agent-model-results summary { cursor: pointer; }
+.agent-model-results.is-compact { flex-basis: auto; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.agent-model-results.is-compact p { margin: 5px 0 0; }
 .agent-model-results ol { margin: 4px 0 0; padding-left: 20px; }
 .agent-model-results li { overflow-wrap: anywhere; }
 .agent-model-results small { color: var(--muted); }
-.workspace-reflection-step, .workspace-chat-activity { width: calc(100% - 36px); max-width: 100%; margin: 0 auto 10px; }
+.workspace-chat-activity { width: calc(100% - 36px); max-width: 100%; margin: 0 auto 10px; }
 .workspace-reflection-step { display: grid; gap: 3px; color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .workspace-reflection-step strong { font-weight: 600; }
 @media (max-width: 620px) { .chat-run-notice { width: calc(100% - 16px); } }

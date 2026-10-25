@@ -529,7 +529,8 @@ function renderMessageArticle(message, index, options) {
   var node = document.createElement("article");
   node.className = "message " + messageRole(message) + (message.Pending ? " pending" : "") +
     (message.Failed ? " failed" : "");
-  if (messageRole(message) === "assistant") node.setAttribute("aria-label", "Ответ агента");
+  if (messageRole(message) === "assistant") node.setAttribute("aria-label",
+    message.ReflectionDecision ? "Промежуточное решение агента" : "Ответ агента");
   var activity = messageActivity(message);
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
@@ -567,11 +568,13 @@ function renderMessageArticle(message, index, options) {
 
   if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
 
-  if (!options.workspace || messageContent(message).trim()) appendChatMessageText(node, message);
-  appendAcceptedResponseDetails(node, message);
+  if (!message.ReflectionDecision && (!options.workspace || messageContent(message).trim()))
+    appendChatMessageText(node, message);
+  var runView = options.workspace ? window.RNAssistantRunViewState.fromMessage(message) : null;
+  appendAcceptedResponseDetails(node, message, runView);
   if (options.workspace) {
-    appendWorkspaceRunOutcome(node, message);
-    if (messageContent(message).trim()) {
+    appendWorkspaceRunOutcome(node, message, runView);
+    if (!message.ReflectionDecision && messageContent(message).trim()) {
       var footer = document.createElement("div"); footer.className = "message-footer";
       var actions = document.createElement("div"); actions.className = "message-actions";
       actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () { copyChatMessage(messageContent(message)); }));
@@ -582,39 +585,50 @@ function renderMessageArticle(message, index, options) {
   return node;
 }
 
-function appendWorkspaceRunOutcome(node, message) {
-  var runView = window.RNAssistantRunViewState.fromMessage(message);
+function appendWorkspaceRunOutcome(node, message, runView) {
+  runView = runView || window.RNAssistantRunViewState.fromMessage(message);
   if (runView && ["completed", "failed", "cancelled"].indexOf(runView.lifecycle) >= 0 &&
       (runView.lifecycle !== "completed" || runView.executionHealth !== "clean")) {
     appendAgentRunViewState(node, runView, messageRunId(message), false);
   }
 }
 
-function appendAcceptedResponseDetails(node, message) {
+function appendAcceptedResponseDetails(node, message, runView) {
   if (message.ReflectionDecision) {
     var step = document.createElement("div"); step.className = "workspace-reflection-step";
     var title = document.createElement("strong"); title.textContent = "Промежуточное решение";
     var decision = document.createElement("span"); decision.textContent = message.ReflectionDecision;
-    step.append(title, decision); node.appendChild(step);
+    step.append(title, decision);
+    var commentary = messageContent(message).trim();
+    if (commentary && commentary !== message.ReflectionDecision.trim()) {
+      var messageText = document.createElement("span"); messageText.textContent = commentary;
+      step.appendChild(messageText);
+    }
+    node.appendChild(step);
   }
-  if (message.Results && message.Results.length) node.appendChild(renderModelResultsNotice(message.Results));
+  var claimsInRunNotice = runView && runView.lifecycle === "completed" &&
+    runView.executionHealth !== "clean" && runView.modelResults.some(function (item) {
+      return item.assessment !== "satisfied";
+    });
+  if (message.Results && message.Results.length && !claimsInRunNotice)
+    node.appendChild(renderModelResults(message.Results));
 }
 
-function renderModelResultsNotice(results) {
+function renderModelResults(results) {
   var labels = { satisfied: "выполнено", partially_satisfied: "частично",
     unverified: "не подтверждено", not_satisfied: "не выполнено" };
   var incomplete = results.some(function (item) { return item.Assessment !== "satisfied"; });
-  var note = document.createElement("div");
-  note.className = "message-outcome agent-run-notice " + (incomplete ? "status-warning" : "status-history");
-  note.setAttribute("role", "status");
-  var copy = document.createElement("div"); copy.className = "agent-run-notice-copy";
-  var heading = document.createElement("span");
-  heading.textContent = "Итоги по оценке модели. Достижение цели отдельно не проверено.";
-  copy.appendChild(heading);
   var details = document.createElement("details"); details.className = "agent-model-results";
   details.open = incomplete;
-  var summary = document.createElement("summary"); summary.textContent = "Утверждения и ссылки на результаты";
+  var summary = document.createElement("summary");
+  summary.textContent = incomplete ? "Утверждения и ссылки на результаты" : "Оценка модели и источники";
   details.appendChild(summary);
+  if (!incomplete) {
+    details.classList.add("is-compact");
+    var caveat = document.createElement("p");
+    caveat.textContent = "Достижение цели отдельно не проверено.";
+    details.appendChild(caveat);
+  }
   var list = document.createElement("ol");
   results.forEach(function (item) {
     var row = document.createElement("li");
@@ -625,7 +639,14 @@ function renderModelResultsNotice(results) {
     }
     list.appendChild(row);
   });
-  details.appendChild(list); copy.appendChild(details); note.appendChild(copy);
+  details.appendChild(list);
+  if (!incomplete) return details;
+  var note = document.createElement("div"); note.className = "message-outcome agent-run-notice status-warning";
+  note.setAttribute("role", "status");
+  var copy = document.createElement("div"); copy.className = "agent-run-notice-copy";
+  var heading = document.createElement("span");
+  heading.textContent = "Итоги по оценке модели. Достижение цели отдельно не проверено.";
+  copy.append(heading, details); note.appendChild(copy);
   return note;
 }
 

@@ -50,6 +50,44 @@ const { chromium } = require('playwright');
       chat.state = { runId: 'new-run', status: 'running', modelProgress: { RunId: 'run', Message: 'Stale preview.' } };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const scoped = !list.textContent.includes('Stale preview.');
+      const reflectionList = document.createElement('section');
+      RNAssistantWorkspaceChat.renderMessages(reflectionList, {
+        project: { workspaceId: 'workspace' }, sessionId: 'reflection-message',
+        messages: [{ Id: 'reflection-with-message', Role: 'assistant', Content: 'Проверю источник.',
+          ReflectionDecision: 'Проверю источник.' },
+          { Id: 'reflection-with-commentary', Role: 'assistant', Content: 'Отвечу после чтения.',
+            ReflectionDecision: 'Сначала нужен точный источник.' },
+          { Id: 'finish-clean', Role: 'assistant', Content: 'Готово.', Results: [
+            { Summary: 'Отчёт подготовлен', Assessment: 'satisfied', Evidence: ['call-1'] }] },
+          { Id: 'finish-unclean', Role: 'assistant', Content: 'Часть данных недоступна.', Results: [
+            { Summary: 'Сверка не завершена', Assessment: 'partially_satisfied', Evidence: ['call-2'] }],
+            RunViewState: { RunId: 'run-2', TurnId: 'turn-2', Narrative: 'Часть данных недоступна.',
+              Lifecycle: 'completed', ExecutionHealth: 'errors', GoalVerification: 'not_assessed',
+              ModelResults: [{ Summary: 'Сверка не завершена', Assessment: 'partially_satisfied', Evidence: ['call-2'] }],
+              SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0,
+              FailedCalls: 1, UnknownEffects: 0, Reason: 'model_finish', CurrentAction: '',
+              StartedUtc: '2026-10-25T00:00:00Z' } }],
+        state: { status: 'completed' }
+      });
+      const reflectionSteps = reflectionList.querySelectorAll('.workspace-reflection-step');
+      const reflectionArticles = Array.from(reflectionList.querySelectorAll('article.message'))
+        .filter(article => article.querySelector('.workspace-reflection-step'));
+      const oneReflection = reflectionSteps.length === 2 &&
+        reflectionArticles.every(article => !article.querySelector('.markdown, .message-footer')) &&
+        reflectionSteps[0].textContent.split('Проверю источник.').length === 2 &&
+        reflectionSteps[1].textContent.includes('Сначала нужен точный источник.') &&
+        reflectionSteps[1].textContent.includes('Отвечу после чтения.');
+      const cleanFinish = Array.from(reflectionList.querySelectorAll('article.message'))
+        .find(article => article.textContent.includes('Готово.'));
+      const cleanClaims = !!cleanFinish && !cleanFinish.querySelector('.message-outcome') &&
+        !!cleanFinish.querySelector('.agent-model-results:not([open])') &&
+        cleanFinish.querySelector('.agent-model-results').textContent.includes('call-1');
+      const uncleanFinish = Array.from(reflectionList.querySelectorAll('article.message'))
+        .find(article => article.textContent.includes('Часть данных недоступна.'));
+      const uncleanClaims = !!uncleanFinish &&
+        uncleanFinish.querySelectorAll('.message-outcome').length === 1 &&
+        uncleanFinish.querySelectorAll('.agent-model-results').length === 1 &&
+        uncleanFinish.textContent.includes('call-2');
       list.remove();
       const newer = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test', messages: [],
         state: { status: 'running', runId: 'run', revision: 5,
@@ -63,7 +101,8 @@ const { chromium } = require('playwright');
           modelProgressUnavailable: true } }).state.modelProgress == null;
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
-      return { retained, replaced, updated, reset, finished, scoped, ordered, lostOwner, zero };
+      return { retained, replaced, updated, reset, finished, scoped, oneReflection, cleanClaims, uncleanClaims,
+        ordered, lostOwner, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);
     for (const owner of ['project', 'plugin']) {
