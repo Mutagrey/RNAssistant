@@ -122,6 +122,34 @@ const { chromium } = require("playwright");
       { chatId: "preview-chat", runId: "inspector-run", stepId: "step-2", toolCallId: "call-2" },
       { chatId: "preview-chat", runId: "inspector-run", stepId: "step-2" }
     ]);
+    for (const lifecycle of ["cancelled", "failed", "completed", "running"]) {
+      await page.evaluate(value => {
+        state.activeRunViewState.lifecycle = value;
+        state.liveAgentRun[0].Status = "running"; state.liveAgentRun[1].Status = "waiting";
+        RNAssistantChatInspector.render();
+      }, lifecycle);
+      const expected = lifecycle === "running" ? ["Выполняю", "Нужно подтверждение"] : ["Отменено", "Отменено"];
+      assert.deepEqual(await page.locator(".chat-inspector-step-call > small").allTextContents(), expected,
+        "expanded actions follow the run lifecycle without a stale running or confirmation status");
+      if (lifecycle !== "running") assert.equal(await page.locator(".chat-inspector-step.is-cancelled").count(), 2);
+      assert.deepEqual(await page.evaluate(() => state.liveAgentRun.map(item => item.Status)), ["running", "waiting"],
+        "presentation does not rewrite saved activity statuses");
+    }
+    await page.evaluate(() => {
+      state.activeRunViewState.lifecycle = "cancelled";
+      state.liveAgentRun[1].ExecutionEvidence = { Effect: "Unknown" };
+      RNAssistantChatInspector.render();
+    });
+    assert.equal(await page.locator(".chat-inspector-step.is-unknown").count(), 1);
+    assert.equal(await page.locator(".chat-inspector-step.is-unknown .chat-inspector-step-call > small").textContent(),
+      "Результат требует проверки", "terminal presentation preserves unknown-effect evidence");
+    await screenshot("activity-terminal");
+    await page.evaluate(() => {
+      state.activeRunViewState.lifecycle = "completed";
+      state.liveAgentRun[0].Status = "completed"; state.liveAgentRun[1].Status = "unknown";
+      delete state.liveAgentRun[1].ExecutionEvidence;
+      RNAssistantChatInspector.render();
+    });
     await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
     await page.setViewportSize({ width: 420, height: 780 }); await screenshot("activity-narrow-dark");
     assert.equal(await page.locator("#chatInspectorBody").evaluate(n => n.scrollWidth > n.clientWidth + 1), false);

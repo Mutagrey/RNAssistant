@@ -32,7 +32,8 @@ namespace RNAssistant.Office.Services
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || string.IsNullOrWhiteSpace(eventId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat and event are required.");
             ChatEventPayloadResponse response = null;
-            var lease = _data.OpenDownload(session, Owner, MaximumPreviewBytes, cancellation =>
+            var owner = ChatDiagnosticsScope.DownloadOwner(Owner, session.WorkspaceId);
+            var lease = _data.OpenDownload(session, owner, MaximumPreviewBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var matches = _events.Read(session, SessionEventReadMode.RequireComplete)
@@ -54,7 +55,7 @@ namespace RNAssistant.Office.Services
                 if (count > 0 && char.IsHighSurrogate(characters[count - 1])) count--;
                 var bytes = Utf8.GetBytes(characters, 0, count);
                 cancellation.ThrowIfCancellationRequested();
-                response = new ChatEventPayloadResponse { ChatId = session.Id, EventId = eventId,
+                response = new ChatEventPayloadResponse { ChatId = session.Id, WorkspaceId = session.WorkspaceId, EventId = eventId,
                     Sha256 = source.Sha256, ByteLength = source.ByteLength, ContentType = source.ContentType,
                     ReturnedCharacters = count, TextTruncated = bytes.LongLength < source.ByteLength };
                 return new ResourceDownloadContent { Bytes = bytes, ContentType = "text/plain; charset=utf-8" };
@@ -65,7 +66,7 @@ namespace RNAssistant.Office.Services
                 response.Data = lease;
                 return response;
             }
-            catch { _data.Close(session.Id, Owner, lease.LeaseId); throw; }
+            catch { _data.Close(session.Id, owner, lease.LeaseId); throw; }
         }
     }
 }

@@ -38,11 +38,28 @@ namespace RNAssistant.Harness
                     "application/json", "run", "turn", "step");
                 var foreignEvent = chats.AppendTrace(foreign, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "shared-id" }, "{}", "application/json", "run", "turn", "step");
-                var loaded = ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id);
-                RuntimeThrows<InvalidOperationException>(() => ModelContextInspectorService.ReadWorkspaceSession(paths, chats, other.WorkspaceId, session.Id));
-                RuntimeThrows<InvalidOperationException>(() => ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, ""));
+                var loaded = ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id);
+                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, other.WorkspaceId, session.Id));
+                RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, ""));
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
+                    var eventStore = new ChatEventStoreAdapter(chats);
+                    var journal = new EventStreamTrajectoryQuery().Query(eventStore.Read(loaded, SessionEventReadMode.RequireComplete),
+                        new TrajectoryQueryRequest { RunId = "run", StepId = "step", PageSize = 100 });
+                    AssertTrue(journal.Records.Count > 0 && journal.Records.All(item => item.Event.SessionId == session.Id), "workspace journal stays in its validated session");
+                    var preview = new TrajectoryPayloadService(eventStore, new ChatBlobStore(paths), data)
+                        .Open(loaded, request.EventId, CancellationToken.None);
+                    AssertEqual(workspace.WorkspaceId, preview.WorkspaceId, "event preview echoes workspace identity");
+                    RuntimeThrows<InvalidOperationException>(() => data.Close(session.Id, TrajectoryPayloadService.Owner, preview.Data.LeaseId));
+                    data.Close(session.Id, ChatDiagnosticsScope.DownloadOwner(TrajectoryPayloadService.Owner, workspace.WorkspaceId), preview.Data.LeaseId);
+                    RuntimeThrows<InvalidOperationException>(() => new TrajectoryPayloadService(eventStore, new ChatBlobStore(paths), data)
+                        .Open(loaded, foreignEvent.EventId, CancellationToken.None));
+                    var export = new TrajectoryExportDownloadService(new TrajectoryExportService(paths, null, new EventStreamTrajectoryQuery()), data)
+                        .Open(loaded, () => eventStore.Read(loaded, SessionEventReadMode.RequireComplete),
+                            new TrajectoryExportRequest { RunId = "run", RedactionMode = "metadata" }, CancellationToken.None);
+                    AssertEqual(workspace.WorkspaceId, export.WorkspaceId, "export echoes workspace identity");
+                    RuntimeThrows<InvalidOperationException>(() => data.Close(session.Id, TrajectoryExportDownloadService.Owner, export.Data.LeaseId));
+                    data.Close(session.Id, ChatDiagnosticsScope.DownloadOwner(TrajectoryExportDownloadService.Owner, workspace.WorkspaceId), export.Data.LeaseId);
                     var service = new ModelContextInspectorService(new ChatEventStoreAdapter(chats), new ChatBlobStore(paths), data);
                     var query = new ModelContextQuery { ChatId = session.Id, WorkspaceId = workspace.WorkspaceId, RequestEventId = request.EventId };
                     var detail = service.Query(loaded, query, CancellationToken.None);
@@ -59,7 +76,7 @@ namespace RNAssistant.Harness
                     AssertEqual(body, Encoding.UTF8.GetString(data.ReadDownload(download.Data.LeaseId, 0,
                         (int)download.Data.Payload.ByteLength, CancellationToken.None, out mime)), "exact saved workspace bytes");
                     RuntimeThrows<InvalidOperationException>(() => data.Close(session.Id, ModelContextInspectorService.Owner, download.Data.LeaseId));
-                    data.Close(session.Id, ModelContextInspectorService.DownloadOwner(workspace.WorkspaceId), download.Data.LeaseId);
+                    data.Close(session.Id, ChatDiagnosticsScope.DownloadOwner(ModelContextInspectorService.Owner, workspace.WorkspaceId), download.Data.LeaseId);
                     RuntimeThrows<InvalidOperationException>(() => service.Query(loaded, new ModelContextQuery { ChatId = session.Id }, CancellationToken.None));
                     RuntimeThrows<InvalidOperationException>(() => service.Query(loaded, new ModelContextQuery { ChatId = session.Id, WorkspaceId = other.WorkspaceId }, CancellationToken.None));
                     RuntimeThrows<InvalidOperationException>(() => service.Open(loaded, new ModelContextPayloadQuery { ChatId = foreign.Id,
@@ -69,11 +86,32 @@ namespace RNAssistant.Harness
                     AssertEqual(version, chats.Load(session.Id).Revision, "diagnostic reads do not change history");
                 }
                 System.IO.Directory.Delete(workspace.RootPath, true);
-                AssertEqual(session.Id, ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id).Id,
+                AssertEqual(session.Id, ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id).Id,
                     "saved exchange remains readable while the source folder is unavailable");
                 workspaces.HideProject(workspace.WorkspaceId);
-                RuntimeThrows<System.IO.InvalidDataException>(() => ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id));
+                RuntimeThrows<System.IO.InvalidDataException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id));
             });
+        }
+
+        private static void WorkspaceDiagnosticUsage()
+        {
+            var session = new ChatSession { LastRun = new ChatRunRecord { RunId = "run",
+                ModelConfiguration = new ModelRunMetadata { ContextWindowTokens = 32000 } } };
+            AssertTrue(RNAssistant.Runtime.WorkspaceConversationService.ReadContextUsage(session) == null, "no response is not zero usage");
+            session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run",
+                PromptTokens = 1200, CompletionTokens = 100, TotalTokens = 1300, AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0) });
+            session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run",
+                AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 1) });
+            var usage = RNAssistant.Runtime.WorkspaceConversationService.ReadContextUsage(session);
+            AssertEqual(1200, usage.PromptTokens.Value, "parallel calls retain their one provider completion");
+            AssertEqual("step", usage.StepId, "usage has its accepted source step");
+            AssertEqual(32000, usage.ContextWindowTokens.Value, "window belongs to the same run");
+            session.LastRun.RunId = "next-run";
+            AssertTrue(RNAssistant.Runtime.WorkspaceConversationService.ReadContextUsage(session).ContextWindowTokens == null,
+                "a newer run cannot lend its model window to an older response");
+            session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "next-run", ResponseModelAttemptId = "new-attempt" });
+            AssertTrue(RNAssistant.Runtime.WorkspaceConversationService.ReadContextUsage(session).PromptTokens == null,
+                "missing usage in the last response does not reuse an older count");
         }
 
         private static void ModelContextExactReadMessageCost()

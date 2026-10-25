@@ -348,7 +348,57 @@
     if (excluded.length) sectionDetails(disclosure(body, "excluded", "Не включено в запрос", String(excluded.length) + " разделов"), excluded, false);
   }
 
+  function renderWorkspaceUsage(body) {
+    var current = source(), usage = field(current.snapshot, "contextUsage"), receipt = field(current.snapshot, "contextReceipt");
+    function tokens(value) { return typeof value === "number" && isFinite(value) && value >= 0 ? value : null; }
+    var prompt = tokens(field(usage, "promptTokens")), capacity = tokens(field(usage, "contextWindowTokens"));
+    var runId = field(usage, "runId");
+    heading(body, "Последний принятый ответ · API");
+    info(body, prompt === null ? "API не сообщил число входных токенов" : formatNumber(prompt) +
+      (capacity > 0 ? " / " + formatNumber(capacity) : "") + " токенов",
+      !usage ? "Сохранённого ответа пока нет" : runId && runId !== current.run.runId ? "Предыдущий запуск" : "По сохранённым данным провайдера", "chart");
+    if (prompt !== null && capacity > 0) {
+      var chart = node("div", "chat-inspector-composition-chart"), used = Math.min(prompt, capacity);
+      var percent = Math.round(used * 100 / capacity);
+      chart.setAttribute("role", "img"); chart.setAttribute("aria-label", "Занято " + percent + "% контекстного окна");
+      [used, capacity - used].forEach(function (amount, index) {
+        if (!amount) return;
+        var segment = node("span", "chat-inspector-composition-color " + (index ? "is-available" : "color-0"));
+        segment.style.flexGrow = String(amount); chart.appendChild(segment);
+      });
+      body.appendChild(chart); paragraph(body, "Свободно " + (100 - percent) + "% · окно этого запуска");
+    }
+    if (usage) {
+      var output = disclosure(body, "workspace-usage", "Ответ и общий расход", "Токены API");
+      [["Ответ", "completionTokens"], ["Всего", "totalTokens"]].forEach(function (item) {
+        var amount = tokens(field(usage, item[1])); paragraph(output, item[0] + ": " + (amount === null ? "нет данных" : formatNumber(amount)));
+      });
+    }
+    heading(body, "Подготовленный контекст");
+    var arsenal = field(receipt, "arsenal"), receiptRun = field(arsenal, "runId");
+    if (!receiptRun) paragraph(body, "Состав ещё не сохранён.");
+    else {
+      var estimate = tokens(field(receipt, "estimatedTokens"));
+      paragraph(body, (estimate === null ? "Размер не записан" : "≈ " + formatNumber(estimate) + " токенов") +
+        " · локальная оценка подготовленного запроса" + (receiptRun !== current.run.runId ? " · предыдущий запуск" : ""));
+      var parts = field(receipt, "messages");
+      if (Array.isArray(parts) && parts.length) {
+        var details = disclosure(body, "workspace-receipt", "Сведения о составе", "Записей: " + parts.length);
+        paragraph(details, "Не включено: " + parts.filter(function (part) { return field(part, "presentation") === "Excluded"; }).length);
+        paragraph(details, field(receipt, "compactionApplied") ? "История сжата перед подготовкой запроса." : "Сжатие истории в этом снимке не отмечено.");
+      }
+      action(body, "Сообщения и ресурсы запроса", "braces", function () {
+        if (source().key === current.key) window.RNAssistantModelContext.open(Object.assign(target(), { runId: receiptRun, stepId: field(arsenal, "stepId") }));
+      });
+    }
+    paragraph(body, "Оценка следующего запроса и доли токенов по источникам пока недоступны. Счётчики API и сохранённая оценка относятся к разным этапам.");
+    if (runId) action(body, "Запросы запуска", "braces", function () {
+      if (source().key === current.key) window.RNAssistantModelContext.open(Object.assign(target(), { runId: runId }));
+    });
+  }
+
   function renderUsage(body) {
+    if (owner !== "office") { renderWorkspaceUsage(body); return; }
     heading(body, "Последний запрос · API usage");
     var usage = lastModelUsage(), capacity = Number(promptContextInspectorValue(state.contextUsage, "contextWindowTokens", "ContextWindowTokens", 0));
     var known = usage && typeof usage.prompt === "number" && isFinite(usage.prompt) && usage.prompt >= 0;
@@ -439,16 +489,16 @@
           details.dataset.inspectorSelection = "true";
           details.querySelector("summary").setAttribute("aria-current", "step");
         }
-        actions.forEach(function (activity) {
+        actions.forEach(function (activity, index) {
           var content = node("div", "chat-inspector-step-call");
           content.appendChild(node("strong", "", activityToolId(activity) || activityPrimaryText(activity)));
-          content.appendChild(node("small", "", agentStatusLabel(activityPresentationState(activity))));
+          content.appendChild(node("small", "", agentStatusLabel(states[index])));
           var result = activityDisplayResult(activity);
           if (result) paragraph(content, result);
           var callId = activityToolCallId(activity), callStep = activityStepId(activity);
-          if (current.owner === "office" && (callId || callStep)) action(content, "События действия", "clock", function () {
-            if (source().key === current.key) window.openRunJournal({ chatId: sourceChatId, runId: sourceRunId,
-              stepId: callStep, toolCallId: callId });
+          if (callId || callStep) action(content, "События действия", "clock", function () {
+            if (source().key === current.key) window.openRunJournal(Object.assign(target(), { chatId: sourceChatId, runId: sourceRunId,
+              stepId: callStep, toolCallId: callId }));
           });
           details.appendChild(content);
         });
@@ -475,10 +525,10 @@
       heading(body, "Подробности запуска");
       var chatId = current.chatId, runId = run.runId;
       var selectedStep = activitySelection && activitySelection.stepId || "";
-      if (current.owner === "office") action(body, "История и диагностика", "clock", function () {
-        if (source().key === current.key) window.openRunJournal({ chatId: chatId, runId: runId, stepId: selectedStep });
+      action(body, "История и диагностика", "clock", function () {
+        if (source().key === current.key) window.openRunJournal(Object.assign(target(), { chatId: chatId, runId: runId, stepId: selectedStep }));
       });
-      else action(body, "Запросы / ответы модели", "braces", function () {
+      if (current.owner !== "office") action(body, "Запросы / ответы модели", "braces", function () {
         if (source().key === current.key) window.RNAssistantModelContext.open(Object.assign(target(), { runId: runId }));
       });
     }
@@ -613,7 +663,7 @@
       else summary.prepend(nextIcon);
     }
     switcher.querySelectorAll("[data-chat-inspector-view]").forEach(function (button) {
-      if (button.dataset.chatInspectorView === "usage") button.hidden = owner !== "office";
+      if (button.dataset.chatInspectorView === "usage") button.hidden = false;
       button.setAttribute("aria-checked", String(button.dataset.chatInspectorView === (browserOpen ? "preview" : view)));
     });
   }

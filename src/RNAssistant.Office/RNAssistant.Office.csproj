@@ -304,6 +304,7 @@
     <Compile Include="Services\PromptBudgetComposer.cs" />
     <Compile Include="Services\PromptContextInspectorService.cs" />
     <Compile Include="Services\ModelContextInspectorService.cs" />
+    <Compile Include="Services\ChatDiagnosticsScope.cs" />
     <Compile Include="Contracts\BridgeDtos.ModelContext.cs" />
     <Compile Include="Services\PromptContextInspectorDownloadService.cs" />
     <Compile Include="Services\AttachmentImageService.cs" />

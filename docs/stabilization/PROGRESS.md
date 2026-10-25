@@ -1,11 +1,36 @@
 # Stabilization progress
 
+## Compact chat history — 2026-10-25
+
+Owner: Web trajectory/run journal and shared JSON presentation. History now uses
+flat rows, a compact summary/category selector and shared-style menus for secondary
+actions. Exact navigation has a bounded same-source back stack; changing views
+keeps the selected chat/run. Data, links and loaded bodies share one reader, with
+quiet node actions and retained lossless/copy/completeness behavior. Diagnostic
+controls no longer mark settings dirty. Focused browser and JavaScript checks
+cover layout and transitions; native Windows/WebView2 remains unqualified.
+
+## Workspace usage and saved journal — 2026-10-25
+
+Owner: workspace snapshot / chat diagnostics services and Web Inspector. Project
+and plugin usage now shows the last accepted response's API counts, its same-run
+context window and the separately labelled prepared-context estimate. Missing
+usage never reuses an older response; parallel calls count their one completion.
+Run/action links open the existing journal with exact workspace/session scope.
+Full-chat filters, raw event bodies and ZIP exports retain that scope and close
+their original leases. The shared diagnostics scope replaces Model Context's
+private workspace loader; no store or alternate reader is added. Focused
+host-neutral and browser checks pass. Next-request workspace estimates, complete
+source attribution, compaction/diff and graph remain open; native Windows/Office/
+WebView2 delivery and lease liveness are not qualified.
+
 ## Shared chat integration checkpoint — 2026-10-25
 
 Owner: Web ChatView and project chat routing. Office, project and plugin use one
 transcript/composer; plugin source chats use the project controller. This UI
-integration is implemented, while workspace usage/journal, general resource
-navigation/browser history and Windows/Office/WebView2 qualification remain open.
+integration is implemented; workspace usage/journal is completed in the slice above.
+General resource navigation/browser history and Windows/Office/WebView2
+qualification remain open.
 Focused browser checks for layout, routing, drafts, session races, Inspector and
 plugins pass; focused host-neutral chat history and source-scope checks pass.
 Three session-isolation races were fixed: a pending reply blocked another chat,
@@ -45,7 +70,7 @@ The generic navigation grid no longer overrides workspace chat columns; request
 content retains the Inspector width after the summary rows are hidden.
 
 Focused host-neutral scope/exchange and browser checks cover the new path and the
-existing Office reader. Workspace usage and event journal remain the next slice.
+existing Office reader. Workspace usage and event journal are covered in the slice above.
 Windows/Office/WebView2 controller delivery and lease liveness remain open evidence.
 
 ## Plugin development in the project shell — 2026-10-24

@@ -19,10 +19,20 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
+        private ChatSession LoadDiagnosticsSession(string chatId, string workspaceId)
+        {
+            if (string.IsNullOrWhiteSpace(chatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
+            var session = workspaceId == null ? LoadAddressedSession(chatId) :
+                ChatDiagnosticsScope.ReadWorkspaceSession(_paths, _chatStore, workspaceId, chatId);
+            ChatDiagnosticsScope.Require(session, chatId, workspaceId);
+            return session;
+        }
+
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
             request = request ?? new ChatTrajectoryRequest();
-            var session = LoadAddressedSession(request.ChatId);
+            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
             var events = _eventStore.Read(session, SessionEventReadMode.Validated);
             if (!string.IsNullOrWhiteSpace(request.View) && !TrajectoryViews.IsSupported(request.View))
             {
@@ -35,6 +45,7 @@ namespace RNAssistant.Office
                 return new ChatTrajectoryResponse
                 {
                     ChatId = session.Id,
+                    WorkspaceId = session.WorkspaceId,
                     Revision = session.Revision,
                     View = view,
                     TotalEvents = derived.TotalEvents,
@@ -51,6 +62,7 @@ namespace RNAssistant.Office
             return new ChatTrajectoryResponse
             {
                 ChatId = session.Id,
+                WorkspaceId = session.WorkspaceId,
                 Revision = session.Revision,
                 View = TrajectoryViews.Raw,
                 TotalEvents = page.TotalEvents,
@@ -68,23 +80,23 @@ namespace RNAssistant.Office
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for export.");
-            var session = LoadAddressedSession(request.ChatId);
+            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
             var selection = request.ToExportRequest();
-            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey };
+            var source = new ChatSession { Id = session.Id, WorkspaceId = session.WorkspaceId, Host = session.Host, DocumentKey = session.DocumentKey };
             // Reservation precedes complete stream validation and ZIP construction; no UI/COM
             // work runs in the producer, and the captured stream never changes during delivery.
             return Task.Run(() => new TrajectoryExportDownloadService(_trajectoryExportService, _resourceData).Open(
                 source, () => _eventStore.Read(source, SessionEventReadMode.RequireComplete), selection, token), token);
         }
 
-        public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(string chatId, string eventId, CancellationToken token)
+        public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(ChatEventPayloadRequest request, CancellationToken token)
         {
-            if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(eventId))
+            if (request == null || string.IsNullOrWhiteSpace(request.ChatId) || string.IsNullOrWhiteSpace(request.EventId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat and event are required.");
-            var session = LoadAddressedSession(chatId);
-            var source = new ChatSession { Id = session.Id, Host = session.Host, DocumentKey = session.DocumentKey };
+            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
+            var source = new ChatSession { Id = session.Id, WorkspaceId = session.WorkspaceId, Host = session.Host, DocumentKey = session.DocumentKey };
             return Task.Run(() => new TrajectoryPayloadService(_eventStore, _toolExecutor.Payloads, _resourceData)
-                .Open(source, eventId, token), token);
+                .Open(source, request.EventId, token), token);
         }
 
         public async Task<ChatStateResponse> CompactChatContextAsync(

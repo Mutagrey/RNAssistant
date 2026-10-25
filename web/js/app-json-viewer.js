@@ -391,27 +391,50 @@
       embeddedNodes: 0,
       copyVersion: 0
     };
-    var root = element("section", "rn-json-viewer");
+    var root = element("section", "rn-json-viewer" + (options.compact ? " is-compact" : ""));
     root.setAttribute("data-completeness", state.completeness);
     var toolbar = element("div", "rn-json-toolbar");
     toolbar.setAttribute("role", "toolbar");
     toolbar.setAttribute("aria-label", "JSON viewer");
     var modes = element("div", "rn-json-modes");
-    var treeButton = button("Дерево", "rn-json-mode", function () { setMode("tree"); });
-    var prettyButton = button("Текст", "rn-json-mode", function () { setMode("pretty"); });
-    var rawButton = button("Исходный", "rn-json-mode", function () { setMode("raw"); });
-    modes.appendChild(treeButton); modes.appendChild(prettyButton); modes.appendChild(rawButton);
+    var modeSelect = options.compact ? element("select", "rn-json-mode-select") : null;
+    function modeControl(label, mode) {
+      var control = modeSelect ? element("option", "", label) : button(label, "rn-json-mode", function () { setMode(mode); });
+      control.value = mode;
+      (modeSelect || modes).appendChild(control);
+      return control;
+    }
+    var treeButton = modeControl("Дерево", "tree");
+    var prettyButton = modeControl("Текст", "pretty");
+    var rawButton = modeControl("Исходный", "raw");
+    if (modeSelect) {
+      modeSelect.setAttribute("aria-label", "Вид данных JSON");
+      modeSelect.addEventListener("change", function () { setMode(modeSelect.value); });
+      modes.appendChild(modeSelect);
+    }
     var actions = element("div", "rn-json-actions");
     var collapseButton = button("Свернуть", "rn-json-action", collapseAll);
     var copyButton = button(state.completeness === "full" ? "Копировать всё" : "Копировать фрагмент", "rn-json-action", function () {
       requestCopy(state.source, "source", null);
     });
-    actions.appendChild(collapseButton); actions.appendChild(copyButton);
+    if (options.compact) {
+      var actionMenu = element("details", "popover rna-action-menu");
+      var trigger = element("summary", "rna-action-menu-trigger", "⋯");
+      trigger.setAttribute("aria-label", "Действия с данными");
+      trigger.title = "Действия с данными";
+      var menuBody = element("div", "popover-menu rna-action-menu-body");
+      [collapseButton, copyButton].forEach(function (control) {
+        menuBody.appendChild(control);
+        control.addEventListener("click", function () { actionMenu.open = false; });
+      });
+      actionMenu.appendChild(trigger); actionMenu.appendChild(menuBody); actions.appendChild(actionMenu);
+    } else { actions.appendChild(collapseButton); actions.appendChild(copyButton); }
     toolbar.appendChild(modes); toolbar.appendChild(actions);
     var status = element("div", "rn-json-status");
     status.setAttribute("aria-live", "polite");
     var body = element("div", "rn-json-body");
     root.appendChild(toolbar); root.appendChild(status); root.appendChild(body);
+    if (options.compact) toolbar.insertBefore(status, actions);
 
     function completenessText() {
       var labels = {
@@ -460,6 +483,7 @@
       modeState(treeButton, "tree", !state.document.ok);
       modeState(prettyButton, "pretty", !state.formatted || !state.formatted.ok);
       modeState(rawButton, "raw", false);
+      if (modeSelect) modeSelect.value = state.mode;
       collapseButton.classList.toggle("hidden", state.mode !== "tree");
       if (state.mode === "tree" && state.document.ok) {
         var tree = element("div", "rn-json-tree");
@@ -628,11 +652,15 @@
       var menu = element("summary", "rn-json-copy-menu", "⋯");
       menu.setAttribute("aria-label", "Копирование значения или пути");
       actions.appendChild(menu);
-      actions.appendChild(button("Узел", "rn-json-copy", function () { requestCopy(raw(sourceDocument, node), "node", node); }));
-      actions.appendChild(button("Путь", "rn-json-copy", function () { requestCopy(node.path, "path", node); }));
+      actions.appendChild(button("Узел", "rn-json-copy", function () { actions.open = false; requestCopy(raw(sourceDocument, node), "node", node); }));
+      actions.appendChild(button("Путь", "rn-json-copy", function () { actions.open = false; requestCopy(node.path, "path", node); }));
       if (node.type === "string") {
-        actions.appendChild(button("Текст строки", "rn-json-copy", function () { requestCopy(node.value, "string-value", node); }));
+        actions.appendChild(button("Текст строки", "rn-json-copy", function () { actions.open = false; requestCopy(node.value, "string-value", node); }));
       }
+      actions.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        actions.open = false; menu.focus(); event.stopPropagation();
+      });
       row.appendChild(actions);
     }
 

@@ -229,10 +229,15 @@ Saved request/response checks cover exact workspace routes, pending-read cancell
 Focus isolation, return focus, resizing without rereads and narrow plugin responses.
 `model context: workspace exchange and scope` checks the existing event/CAS reader,
 foreign workspace/event rejection, lease ownership, unchanged history and reads
-while the source folder is unavailable. `model-context.test.js` checks response
+while the source folder is unavailable, plus scoped journal payload and ZIP export.
+`model context: workspace diagnostic usage` checks one count for parallel calls,
+missing usage and same-run window attribution. Workspace Inspector browser coverage
+includes usage, exact journal routes, raw payload, full-chat scope and foreign replies;
+`trajectory-json-viewer.test.js` and `trajectory-payload.test.js` cover workspace
+exports/lease cleanup and rejection before byte reads. `model-context.test.js` checks response
 identity and rejects absent workspace attribution. `INSPECTOR_SCREENSHOTS` saves
-browser captures. Workspace usage/journal and native Windows/WebView2 delivery,
-including controller lease liveness, remain open.
+browser captures. Next-request workspace estimates and native Windows/WebView2
+delivery, including controller lease liveness, remain open.
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin
 view and composer, one session draft and preferences across both screens, appended file reference, failed retry
 identity, double submit and late acknowledgement with identical later text.
@@ -1327,6 +1332,12 @@ as the artifact/diagnostics layout check below.
 artifact names/metadata, single selection, inline JSON values, left-aligned events
 and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set
 `BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
+`tests/web/chat-history-layout.test.js` uses the real preview shell with saved-event
+fixtures: compact wide/narrow light/dark layouts, one technical reader, exact
+navigation/back and retained scope, keyboard node copy, lazy bodies, empty/error
+states and settings-dirty isolation. Use the same `NODE_PATH` / `BROWSER_EXECUTABLE`;
+optional `HISTORY_SCREENSHOTS` writes captures. Pair with `run-journal.test.js`,
+`trajectory-json-viewer.test.js` and `json-viewer.test.js` for reader/lifecycle checks.
 `tests/web/product-shell-parity.test.js` compares shipped palette and joined header/
 splitter geometry in all six sections with the prototype, then checks native project
 tree search/collapse and shared panel toggles, including pointer focus after keyboard use.

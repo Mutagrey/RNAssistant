@@ -7,6 +7,8 @@
   var activeView = "raw";
   var correlationFilter = {};
   var trajectoryChatId = null;
+  var trajectoryWorkspaceId = null, trajectoryOwner = "office", trajectoryLabel = "";
+  var routeHistory = [];
   var trajectoryRequestId = 0;
   var detailRequestId = 0;
   var journalFilter = "all";
@@ -18,16 +20,36 @@
   var detailEvidence = null;
   var detailPayload = null;
 
-  function readPayload(chatId, eventId, signal, isCurrent) {
+  function readPayload(chatId, eventId, signal, isCurrent, workspaceId) {
     return window.RNAssistantTrajectoryPayload.read(chatId, eventId, {
       send: send, cancelRequest: cancelBridgeRequest, fetch: window.fetch.bind(window),
-      signal: signal, isCurrent: isCurrent
+      signal: signal, isCurrent: isCurrent, workspaceId: workspaceId === undefined ? trajectoryWorkspaceId : workspaceId
     });
   }
 
   function value(source, pascal, camel, fallback) {
     source = source || {};
     return source[camel] !== undefined ? source[camel] : (source[pascal] !== undefined ? source[pascal] : fallback);
+  }
+
+  function selectedSource() {
+    var workspace = window.RNAssistantWorkspaceChat, owner = workspace ? workspace.owner() : "office";
+    if (owner === "office") return { owner: owner, chatId: state.activeChatId, workspaceId: null, label: "" };
+    var chat = workspace.snapshot(), project = value(chat, "Project", "project", {}), snapshot = value(chat, "State", "state", {});
+    return { owner: owner, chatId: value(chat, "SessionId", "sessionId", null),
+      workspaceId: value(project, "WorkspaceId", "workspaceId", null),
+      label: value(snapshot, "Title", "title", "Проектный чат"), runId: value(snapshot, "RunId", "runId", "") };
+  }
+  function useSource(source) {
+    trajectoryChatId = source.chatId || null; trajectoryWorkspaceId = source.workspaceId || null;
+    trajectoryOwner = source.owner; trajectoryLabel = source.label || "";
+  }
+  function selectedChatId() { return trajectoryChatId || selectedSource().chatId; }
+  function scopeKey() { return JSON.stringify([trajectoryOwner, trajectoryWorkspaceId, selectedChatId()]); }
+  function sourceSelectionKey() { var source = selectedSource(); return JSON.stringify([source.owner, source.workspaceId, source.chatId]); }
+  function matchesScope(response, chatId, workspaceId) {
+    return response && value(response, "ChatId", "chatId", null) === chatId &&
+      value(response, "WorkspaceId", "workspaceId", null) === workspaceId;
   }
 
   function jsonText(valueToSerialize) {
@@ -43,26 +65,16 @@
     if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount($(targetId));
   }
 
-  function jsonFragment(text, complete) {
-    var parsed = complete && window.RNAssistantJsonViewer.parse(text);
-    return parsed && parsed.ok ? text : jsonText(text);
-  }
-
   function renderDetail() {
     if (!detailData) return;
-    var fields = ['"data":' + jsonFragment(detailData.text, detailData.completeness === "full")];
-    if (detailEvidence) fields.push('"evidence":' + jsonText(detailEvidence));
-    if (detailPayload) {
-      fields.push('"payload":' + jsonFragment(detailPayload.text,
-        !detailPayload.truncated && isJsonContentType(detailPayload.contentType)));
-      fields.push('"payloadInfo":' + jsonText({ contentType: detailPayload.contentType,
-        completeness: detailPayload.error ? "unavailable" : detailPayload.truncated ? "preview" : "full" }));
-    }
-    var registry = window.RNAssistantViewerRegistry;
-    registry.mount("json", $("trajectoryEventData"), {
-      text: "{" + fields.join(",") + "}", mode: "tree", expandedPaths: ['$["data"]', '$["payload"]'],
-      completeness: detailPayload && detailPayload.error ? "unavailable" :
-        detailData.completeness !== "full" || detailPayload && detailPayload.truncated ? "preview" : "full",
+    var part = $("trajectoryDetailPart").value || "data", content = detailData;
+    var payloadOption = $("trajectoryDetailPart").querySelector('option[value="payload"]');
+    if (payloadOption) { payloadOption.disabled = !detailPayload; payloadOption.title = detailPayload ? detailPayload.contentType : ""; }
+    if (part === "evidence") content = { text: jsonText(detailEvidence || {}), completeness: "full" };
+    else if (part === "payload" && detailPayload) content = { text: detailPayload.text,
+      completeness: detailPayload.error ? "unavailable" : detailPayload.truncated ? "preview" : "full" };
+    window.RNAssistantViewerRegistry.mount("json", $("trajectoryEventData"), {
+      text: content.text, mode: "tree", compact: true, completeness: content.completeness,
       onCopy: window.copyTextResult
     });
   }
@@ -74,11 +86,6 @@
 
   function hideEvidence() {
     detailData = detailEvidence = detailPayload = null;
-  }
-
-  function isJsonContentType(contentType) {
-    var mediaType = String(contentType || "").split(";", 1)[0].trim().toLowerCase();
-    return mediaType === "application/json" || /\+json$/.test(mediaType);
   }
 
   function bytesLabel(bytes) {
@@ -94,6 +101,9 @@
   function isRunJournal() { return activeView === "run-causal"; }
 
   function latestKnownRunId() {
+    var source = selectedSource();
+    if (trajectoryChatId && trajectoryChatId !== source.chatId) return "";
+    if (source.owner !== "office") return source.runId || "";
     var active = state.chatRuns && state.activeChatId ? state.chatRuns[state.activeChatId] : null;
     if (active && active.runId) return active.runId;
     for (var index = (state.messages || []).length - 1; index >= 0; index -= 1) {
@@ -122,6 +132,7 @@
     activePayload = null;
     detailPayload = null;
     detailEvidence = null;
+    $("trajectoryDetailPart").value = "data";
     $("trajectoryVbaDiff").replaceChildren();
     $("trajectoryVbaDiff").classList.add("hidden");
     $("loadTrajectoryPayloadButton").classList.add("hidden");
@@ -150,11 +161,33 @@
     });
   }
 
+  function captureRoute() {
+    return { scope: scopeKey(), selection: sourceSelectionKey(), view: $("trajectoryViewInput").value,
+      filter: Object.assign({}, correlationFilter), journalFilter: journalFilter,
+      expanded: Object.assign({}, expandedJournalRows), search: $("trajectorySearchInput").value,
+      type: $("trajectoryTypeInput").value, visibility: $("trajectoryVisibilityInput").value };
+  }
+
+  function updateBackButton() { $("trajectoryBackButton").classList.toggle("hidden", !routeHistory.length); }
+
+  function goBack() {
+    var route = routeHistory.pop();
+    updateBackButton();
+    if (!route || route.scope !== scopeKey() || route.selection !== sourceSelectionKey()) return;
+    correlationFilter = route.filter; journalFilter = route.journalFilter; expandedJournalRows = route.expanded;
+    $("trajectoryViewInput").value = route.view; $("trajectorySearchInput").value = route.search;
+    $("trajectoryTypeInput").value = route.type; $("trajectoryVisibilityInput").value = route.visibility;
+    nextCursor = null; updateViewControls(); refreshTrajectory(false);
+  }
+
   function navigateCorrelation(field, filterValue, targetView, sourceChatId) {
+    var history = routeHistory.concat([captureRoute()]).slice(-20);
+    var source = { owner: trajectoryOwner, workspaceId: trajectoryWorkspaceId,
+      chatId: sourceChatId || selectedChatId(), label: trajectoryLabel };
     if (typeof setDiagnosticsTab === "function") {
       setDiagnosticsTab("trajectory", false);
     }
-    if (targetView !== "run-causal") $("trajectoryAdvancedOptions").open = true;
+    routeHistory = history; updateBackButton();
     correlationFilter = {};
     if (field === "sourceRange") {
       correlationFilter.minSequence = filterValue.min;
@@ -162,7 +195,7 @@
     } else {
       correlationFilter[field] = filterValue;
     }
-    trajectoryChatId = sourceChatId || state.activeChatId;
+    useSource(source);
     $("trajectoryViewInput").value = targetView;
     nextCursor = null;
     updateViewControls();
@@ -173,9 +206,11 @@
     if (!filterValue || typeof filterValue === "object" && (!filterValue.min || !filterValue.max)) return;
     var button = document.createElement("button");
     button.type = "button";
-    button.className = "secondary";
     button.textContent = label;
+    button.title = typeof filterValue === "object" ? "#" + filterValue.min + "…#" + filterValue.max : String(filterValue);
+    var route = scopeKey(), selection = sourceSelectionKey();
     button.addEventListener("click", function () {
+      if (scopeKey() !== route || sourceSelectionKey() !== selection) return;
       navigateCorrelation(field, filterValue, targetView, sourceChatId);
     });
     root.appendChild(button);
@@ -195,7 +230,6 @@
     var parts = Object.keys(correlationFilter).map(function (key) {
       return (labels[key] || key) + "=" + correlationFilter[key];
     });
-    if (trajectoryChatId && trajectoryChatId !== state.activeChatId) parts.push("chat=" + trajectoryChatId);
     return parts.length ? "Фильтр: " + parts.join(" · ") : "";
   }
 
@@ -205,12 +239,6 @@
     var clear = $("clearTrajectoryCorrelationButton");
     root.replaceChildren();
     var active = activeFilterText();
-    if (active) {
-      var chip = document.createElement("span");
-      chip.className = "trajectory-correlation-chip";
-      chip.textContent = active;
-      root.appendChild(chip);
-    }
 
     var sourceChatId = value(item, "SessionId", "sessionId", null);
     var runId = value(item, "RunId", "runId", "");
@@ -218,31 +246,31 @@
     var stepId = value(item, "StepId", "stepId", "");
     var directToolCallId = value(item, "ToolCallId", "toolCallId", "");
     unique(directToolCallId ? [directToolCallId] : value(item, "ToolCallIds", "toolCallIds", []) || []).forEach(function (id) {
-      correlationButton(root, "tool " + id, "toolCallId", id, "tool-execution", sourceChatId);
+      correlationButton(root, "События действия", "toolCallId", id, "tool-execution", sourceChatId);
     });
-    if (runId) correlationButton(root, "run " + runId, "runId", runId, isVbaView() ? "raw" : activeView, sourceChatId);
-    if (turnId) correlationButton(root, "turn " + turnId, "turnId", turnId, isVbaView() ? "raw" : activeView, sourceChatId);
-    if (stepId) correlationButton(root, "step " + stepId, "stepId", stepId, isVbaView() ? "raw" : activeView, sourceChatId);
+    if (runId) correlationButton(root, "Весь запуск", "runId", runId, isVbaView() ? "raw" : activeView, sourceChatId);
+    if (turnId) correlationButton(root, "События запроса", "turnId", turnId, isVbaView() ? "raw" : activeView, sourceChatId);
+    if (stepId) correlationButton(root, "События шага", "stepId", stepId, isVbaView() ? "raw" : activeView, sourceChatId);
 
     var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
     unique(resourceRefs.map(function (reference) { return value(reference, "Uri", "uri", ""); })).forEach(function (uri) {
-      correlationButton(root, "resource " + uri, "resourceUri", uri, "raw", sourceChatId);
+      correlationButton(root, "История ресурса", "resourceUri", uri, "raw", sourceChatId);
     });
     var artifactIds = unique([value(item, "ArtifactId", "artifactId", "")]
       .concat(value(item, "ArtifactIds", "artifactIds", []) || []));
     artifactIds.forEach(function (id) {
-      correlationButton(root, "lineage " + id, "artifactId", id, "artifact-lineage", sourceChatId);
+      correlationButton(root, "Версии артефакта", "artifactId", id, "artifact-lineage", sourceChatId);
     });
     var parentArtifactId = value(item, "ParentArtifactId", "parentArtifactId", "");
     if (parentArtifactId) {
-      correlationButton(root, "parent " + parentArtifactId, "artifactId", parentArtifactId, "artifact-lineage", sourceChatId);
+      correlationButton(root, "Исходный артефакт", "artifactId", parentArtifactId, "artifact-lineage", sourceChatId);
     }
 
     var sourceSeqs = value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [];
     if (!isVbaView() && activeView !== "raw" && sourceSeqs.length) {
       var minimum = Math.min.apply(Math, sourceSeqs);
       var maximum = Math.max.apply(Math, sourceSeqs);
-      correlationButton(root, "source events #" + minimum + (maximum === minimum ? "" : "…#" + maximum),
+      correlationButton(root, "Исходные события #" + minimum + (maximum === minimum ? "" : "…#" + maximum),
         "sourceRange", { min: minimum, max: maximum }, "raw", sourceChatId);
     }
 
@@ -266,26 +294,20 @@
     var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
     $("trajectoryEventTitle").textContent = value(item, "Title", "title", value(item, "Kind", "kind", "row"));
     $("trajectoryEventMeta").textContent = [
-      "seq=" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : ""),
+      "#" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : ""),
       value(item, "Status", "status", ""),
-      value(item, "RunId", "runId", "") ? "run=" + value(item, "RunId", "runId", "") : "",
-      value(item, "TurnId", "turnId", "") ? "turn=" + value(item, "TurnId", "turnId", "") : "",
-      value(item, "StepId", "stepId", "") ? "step=" + value(item, "StepId", "stepId", "") : "",
-      value(item, "ToolId", "toolId", "") ? "tool=" + value(item, "ToolId", "toolId", "") : "",
-      resourceRefs.length ? "resource=" + resourceRefs.map(function (reference) {
-        return value(reference, "Uri", "uri", "");
-      }).filter(Boolean).join(",") : "",
-      value(item, "ArtifactId", "artifactId", "") ? "artifact=" + value(item, "ArtifactId", "artifactId", "") : "",
-      duration === null ? "" : "duration=" + duration + "ms",
-      totalTokens === null ? "" : "tokens=" + totalTokens + " (" + (promptTokens || 0) + "+" + (completionTokens || 0) + ")",
-      costUsd === null ? "" : "cost=$" + costUsd,
-      "sources=" + sourceSeqs.length + "/" + sourceIds.length
+      duration === null ? "" : duration + " мс",
+      totalTokens === null ? "" : totalTokens + " токенов",
+      costUsd === null ? "" : "$" + costUsd
     ].filter(Boolean).join(" · ");
     setDetailData(value(item, "DataJson", "dataJson", "{}"),
       value(item, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
     showEvidence({
       sourceEventSeqs: sourceSeqs,
       sourceEventIds: sourceIds,
+      runId: value(item, "RunId", "runId", null), turnId: value(item, "TurnId", "turnId", null),
+      stepId: value(item, "StepId", "stepId", null), toolId: value(item, "ToolId", "toolId", null),
+      artifactId: value(item, "ArtifactId", "artifactId", null), promptTokens: promptTokens, completionTokens: completionTokens,
       modelAttemptId: value(item, "ModelAttemptId", "modelAttemptId", null),
       toolCallId: value(item, "ToolCallId", "toolCallId", null),
       mutationId: value(item, "MutationId", "mutationId", null),
@@ -354,25 +376,15 @@
     var statuses = value(item, "Statuses", "statuses", []) || [];
     $("trajectoryEventTitle").textContent = "#" + sequence + "  " + type;
     $("trajectoryEventMeta").textContent = [
-      runId ? "run=" + runId : "",
-      turnId ? "turn=" + turnId : "",
-      stepId ? "step=" + stepId : "",
-      visibility || "",
-      toolCallIds.length ? "tool=" + toolCallIds.join(",") : "",
-      resourceRefs.length ? "resource=" + resourceRefs.map(function (reference) {
-        return value(reference, "Uri", "uri", "");
-      }).filter(Boolean).join(",") : "",
-      artifactIds.length ? "artifact=" + artifactIds.join(",") : "",
-      statuses.length ? "status=" + statuses.join(",") : "",
-      previousHash ? "prev=" + previousHash : "root",
-      hash ? "hash=" + hash : "",
-      payloadSize === null ? "" : "payload=" + bytesLabel(payloadSize)
+      value(item, "CreatedUtc", "createdUtc", "") ? new Date(value(item, "CreatedUtc", "createdUtc", "")).toLocaleString("ru-RU") : "",
+      payloadSize === null ? "" : bytesLabel(payloadSize)
     ].filter(Boolean).join(" · ");
     setDetailData(value(item, "DataJson", "dataJson", ""),
       value(item, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
     showEvidence({
       schemaVersion: value(item, "SchemaVersion", "schemaVersion", null),
-      eventId: eventId(item),
+      eventId: eventId(item), runId: runId, turnId: turnId, stepId: stepId, visibility: visibility,
+      toolCallIds: toolCallIds, artifactIds: artifactIds, statuses: statuses,
       sourceEventSeqs: value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [],
       sourceEventIds: value(item, "SourceEventIds", "sourceEventIds", []) || [],
       previousHash: previousHash || null,
@@ -390,7 +402,7 @@
     var payloadButton = $("loadTrajectoryPayloadButton");
     payloadButton.classList.toggle("hidden", payloadSize === null);
     payloadButton.disabled = false;
-    payloadButton.textContent = "Показать полное содержимое";
+    payloadButton.textContent = "Содержимое";
     renderCorrelationActions(item);
   }
 
@@ -408,16 +420,17 @@
     var root = $("trajectoryEvents");
     var adapter = window.RNAssistantRunJournal;
     previousScroll = Number(previousScroll || 0);
-    var responseChatId = value(response, "ChatId", "chatId", trajectoryChatId || state.activeChatId || "");
-    if (journalStateChatId && responseChatId && journalStateChatId !== responseChatId) {
+    var responseChatId = value(response, "ChatId", "chatId", selectedChatId() || "");
+    var responseScope = scopeKey(), responseWorkspace = trajectoryWorkspaceId, sourceSelection = sourceSelectionKey();
+    if (journalStateChatId && journalStateChatId !== responseScope) {
       expandedJournalRows = {};
     }
-    journalStateChatId = responseChatId;
+    journalStateChatId = responseScope;
     selected = null;
     var loadedIds = {};
     events.forEach(function (item) { loadedIds[itemId(item)] = true; });
     Object.keys(expandedJournalRows).forEach(function (id) {
-      if (!loadedIds[id]) delete expandedJournalRows[id];
+      if (!loadedIds[id] && !loadedIds[id.replace(/:technical$/, "")]) delete expandedJournalRows[id];
     });
     root.setAttribute("role", "region");
     root.setAttribute("aria-label", "Хронологический журнал запуска");
@@ -455,12 +468,13 @@
         rerender(true);
       },
       onNavigate: function (field, filterValue, targetView) {
-        navigateCorrelation(field, filterValue, targetView, trajectoryChatId || state.activeChatId);
+        if (scopeKey() !== responseScope || sourceSelectionKey() !== sourceSelection) return;
+        navigateCorrelation(field, filterValue, targetView, selectedChatId());
       },
       onLoadPayload: function (eventId, signal) {
         return readPayload(responseChatId, eventId, signal, function () {
-          return isRunJournal() && (trajectoryChatId || state.activeChatId) === responseChatId;
-        });
+          return isRunJournal() && scopeKey() === responseScope && sourceSelectionKey() === sourceSelection;
+        }, responseWorkspace);
       }
     });
     root.scrollTop = previousScroll;
@@ -470,10 +484,9 @@
     var matches = value(response, "TotalMatches", "totalMatches", total);
     var message = result.error
       ? "Журнал не отображён: " + result.error
-      : "Показано " + result.displayed + " из загруженных " + result.loaded +
-        " · совпадений в projection " + matches + " из " + total +
-        " · пересобрано из проверенного JSONL stream" +
-        (result.truncated || loadedLimitReached ? " · достигнут UI-лимит" : "");
+      : "Показано " + result.displayed + " из " + matches +
+        (result.displayed !== result.loaded ? " · загружено " + result.loaded : "") +
+        (result.truncated || loadedLimitReached ? " · достигнут лимит, уточните поиск" : "");
     $("trajectoryStatus").textContent = message;
     $("loadMoreTrajectoryButton").textContent = "Ещё строки";
     $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore || !!loadedLimitReached);
@@ -544,7 +557,7 @@
       if (activeView === "raw" && value(item, "PayloadByteLength", "payloadByteLength", null) !== null) {
         var payload = document.createElement("span");
         payload.className = "trajectory-event-payload";
-        payload.textContent = "payload";
+        payload.textContent = bytesLabel(value(item, "PayloadByteLength", "payloadByteLength", 0));
         first.appendChild(payload);
       } else if (isVbaView()) {
         var status = document.createElement("span");
@@ -555,7 +568,7 @@
       var second = document.createElement("span");
       second.className = "trajectory-event-time";
       var created = value(item, "CreatedUtc", "createdUtc", "");
-      second.textContent = created ? new Date(created).toLocaleString() : "";
+      second.textContent = created ? new Date(created).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
       button.appendChild(first);
       button.appendChild(second);
       button.addEventListener("click", function () { selectEvent(item, button); });
@@ -568,10 +581,7 @@
     var matches = value(response, "TotalMatches", "totalMatches", events.length);
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
-    var projectionNote = isVbaView()
-      ? " · пересобрано из VBA journal; source из CAS только по запросу"
-      : (activeView === "raw" ? " · payload из CAS только по запросу" : " · пересобрано из JSONL event stream");
-    $("trajectoryStatus").textContent = "Совпадений: " + matches + " из " + total + " · загружено " + events.length + projectionNote;
+    $("trajectoryStatus").textContent = "Показано " + events.length + " из " + matches + (matches !== total ? " · всего " + total : "");
     $("loadMoreTrajectoryButton").textContent = "Старше";
     $("loadMoreTrajectoryButton").classList.toggle("hidden", !hasMore);
     $("trajectoryWorkspace").classList.toggle("hidden", events.length === 0);
@@ -664,6 +674,7 @@
     }
     return applyCorrelation({
       chatId: chatId,
+      workspaceId: trajectoryWorkspaceId,
       view: view,
       cursor: cursor || null,
       pageSize: view === "run-causal" ? 200 : 100,
@@ -696,7 +707,7 @@
 
   function closeExportLease(operation) {
     if (operation && operation.data && operation.data.leaseId)
-      return send("resourceDataClose", { chatId: operation.chatId, workspaceId: "trajectory-export",
+      return send("resourceDataClose", { chatId: operation.chatId, workspaceId: "trajectory-export" + (operation.workspaceId ? ":" + operation.workspaceId : ""),
         leaseId: operation.data.leaseId }).catch(function () {});
     return Promise.resolve();
   }
@@ -711,7 +722,7 @@
   async function exportTrajectory() {
     if (activeExport) return;
     var view = $("trajectoryViewInput").value || "raw";
-    var chatId = trajectoryChatId || state.activeChatId;
+    var chatId = selectedChatId();
     if (view === "vba-mutations") {
       $("trajectoryStatus").textContent = "VBA journal пока не входит в chat trajectory export.";
       return;
@@ -724,13 +735,14 @@
     if (payload.redactionMode === "none" && !window.confirm(
       "Экспорт без redaction содержит расшифрованные prompts, document data и event data. Продолжить?")) return;
     var button = $("exportTrajectoryButton");
-    var operation = { chatId: chatId, abort: new AbortController(), data: null, requestId: null };
+    var operation = { chatId: chatId, workspaceId: trajectoryWorkspaceId, abort: new AbortController(), data: null, requestId: null };
     var selection = JSON.stringify(payload);
+    var sourceSelection = sourceSelectionKey();
     activeExport = operation;
     window.addEventListener("pagehide", cancelTrajectoryExport, { once: true });
     function isCurrent() {
-      return activeExport === operation && !operation.abort.signal.aborted &&
-        (trajectoryChatId || state.activeChatId) === chatId && JSON.stringify(exportPayload(chatId)) === selection;
+      return activeExport === operation && !operation.abort.signal.aborted && sourceSelectionKey() === sourceSelection &&
+        selectedChatId() === chatId && JSON.stringify(exportPayload(chatId)) === selection;
     }
     try {
       button.disabled = true;
@@ -742,7 +754,7 @@
       operation.requestId = null;
       operation.data = response && response.data;
       if (!isCurrent()) throw new Error("RESOURCE_DOWNLOAD_CANCELLED");
-      if (response.chatId !== chatId || response.contentType !== "application/zip" || !operation.data ||
+      if (!matchesScope(response, chatId, operation.workspaceId) || response.contentType !== "application/zip" || !operation.data ||
           !operation.data.payload || operation.data.payload.contentType !== response.contentType ||
           operation.data.payload.byteLength !== response.byteLength || operation.data.payload.sha256 !== response.bundleSha256)
         throw new Error("RESOURCE_DOWNLOAD_INVALID");
@@ -776,12 +788,12 @@
     if (!full) $("trajectoryExportCasInput").checked = false;
     $("exportTrajectoryButton").disabled = vba || !!activeExport;
     $("trajectoryExportNotice").textContent = vba
-      ? "VBA export будет отдельным bundle из journal."
+      ? "Экспорт журнала VBA пока недоступен."
       : (mode === "metadata"
-        ? "Data и CAS bodies не попадут в архив."
+        ? "Тела событий и файлов не попадут в архив."
         : (mode === "secrets"
-          ? "Credential fields скрыты; prompts и document text могут остаться."
-          : "Без redaction: архив содержит чувствительные данные."));
+          ? "Секреты скрыты. Тексты запросов и документов могут остаться."
+          : "Архив включает исходные данные без скрытия секретов."));
   }
 
   function clearTrajectoryRows() {
@@ -803,7 +815,7 @@
     if (!append) cancelTrajectoryExport();
     var requestedView = $("trajectoryViewInput").value || "raw";
     var vba = requestedView === "vba-mutations";
-    var chatId = trajectoryChatId || state.activeChatId;
+    var chatId = selectedChatId();
     var journalScrollTop = requestedView === "run-causal" && (append || preserveJournalScroll)
       ? $("trajectoryEvents").scrollTop : 0;
     if (!append) clearTrajectoryRows();
@@ -812,16 +824,20 @@
       return;
     }
     var requestId = ++trajectoryRequestId;
+    var requestedScope = scopeKey(), workspaceId = trajectoryWorkspaceId, sourceSelection = sourceSelectionKey();
     try {
       setTrajectoryBusy(true);
+      if (vba && workspaceId) throw new Error("Журнал VBA доступен только из Office-чата.");
       $("trajectoryStatus").textContent = vba ? "Читаю VBA mutation journal…" : "Читаю event stream…";
       var response = await send(vba ? "getVbaMutations" : "getChatTrajectory", queryPayload(chatId, append ? nextCursor : null));
       if (requestId !== trajectoryRequestId ||
         requestedView !== ($("trajectoryViewInput").value || "raw") ||
-        (!vba && (trajectoryChatId || state.activeChatId) !== chatId)) return;
+        (!vba && selectedChatId() !== chatId)) return;
+      if (requestedScope !== scopeKey() || sourceSelectionKey() !== sourceSelection) return;
+      if (!vba && !matchesScope(response, chatId, workspaceId)) throw new Error("Ответ журнала относится к другому чату или проекту.");
       renderEvents(response, !!append, journalScrollTop);
     } catch (error) {
-      if (requestId !== trajectoryRequestId) return;
+      if (requestId !== trajectoryRequestId || sourceSelectionKey() !== sourceSelection) return;
       $("trajectoryStatus").textContent = "Не удалось прочитать диагностику: " + error.message;
       $("trajectoryWorkspace").classList.add("hidden");
     } finally {
@@ -831,17 +847,18 @@
 
   async function loadPayload() {
     if (activeView !== "raw" || !selected) return;
-    var chatId = trajectoryChatId || state.activeChatId;
+    var chatId = selectedChatId();
     if (!chatId) return;
     var button = $("loadTrajectoryPayloadButton");
     var selectedId = eventId(selected);
     var requestId = ++detailRequestId;
     if (activePayload) activePayload.abort();
     var operation = new AbortController();
+    var payloadScope = scopeKey(), sourceSelection = sourceSelectionKey();
     activePayload = operation;
     function isCurrent() {
-      return !operation.signal.aborted && requestId === detailRequestId && activeView === "raw" &&
-        selected && eventId(selected) === selectedId && (trajectoryChatId || state.activeChatId) === chatId;
+      return !operation.signal.aborted && scopeKey() === payloadScope && sourceSelectionKey() === sourceSelection && requestId === detailRequestId && activeView === "raw" &&
+        selected && eventId(selected) === selectedId && selectedChatId() === chatId;
     }
     try {
       button.disabled = true;
@@ -853,10 +870,12 @@
       var truncated = value(response, "TextTruncated", "textTruncated", false);
       var contentType = value(response, "ContentType", "contentType", "");
       detailPayload = { text: text, truncated: truncated, contentType: contentType };
+      $("trajectoryDetailPart").value = "payload";
       renderDetail();
-      button.textContent = "Обновить содержимое";
+      button.textContent = "Обновить";
     } catch (error) {
       if (!isCurrent()) return;
+      $("trajectoryDetailPart").value = "payload";
       detailPayload = { text: "Не удалось загрузить содержимое: " + error.message,
         contentType: "text/plain", truncated: false, error: true };
       renderDetail();
@@ -978,13 +997,16 @@
   }
 
   function clearCorrelation() {
+    routeHistory = routeHistory.concat([captureRoute()]).slice(-20); updateBackButton();
     correlationFilter = {};
-    trajectoryChatId = null;
+    updateViewControls();
     nextCursor = null;
     refreshTrajectory(false);
   }
 
   function updateViewControls() {
+    var vbaOption = $("trajectoryViewInput").querySelector('option[value="vba-mutations"]');
+    if (vbaOption) { vbaOption.hidden = !!trajectoryWorkspaceId; vbaOption.disabled = !!trajectoryWorkspaceId; }
     var view = $("trajectoryViewInput").value || "raw";
     var raw = view === "raw";
     var vba = view === "vba-mutations";
@@ -1005,26 +1027,22 @@
     $("trajectoryVbaKindInput").disabled = !vba;
     $("trajectoryVbaStatusField").classList.toggle("hidden", !vba);
     $("trajectoryVbaStatusInput").disabled = !vba;
-    if (raw) {
-      $("trajectoryTitle").textContent = "Исходные события чата";
-      $("trajectoryDescription").textContent = "Записи выбранного чата. Большие данные загружаются только при открытии события.";
-    } else if (vba) {
-      $("trajectoryTitle").textContent = "Журнал VBA и восстановление";
-      $("trajectoryDescription").textContent = "Сохранённые операции текущего документа. Дифф кода удобнее смотреть во вкладке VBA.";
-    } else if (journal) {
-      $("trajectoryTitle").textContent = "История чата";
-      $("trajectoryDescription").textContent = "Сохранённые шаги запуска в порядке выполнения. Раскройте строку для причин, действий и результата.";
-    } else {
-      $("trajectoryTitle").textContent = "История чата";
-      $("trajectoryDescription").textContent = "Выбранная техническая часть сохранённой истории чата.";
-    }
+    $("trajectoryTitle").textContent = "История чата";
+    var scope = correlationFilter.toolCallId ? "Выбранное действие" : correlationFilter.stepId ? "Выбранный шаг" :
+      correlationFilter.runId ? "Выбранный запуск" : correlationFilter.minSequence ? "Выбранные события" : "Весь чат";
+    $("trajectoryDescription").textContent = [trajectoryLabel, vba ? "Операции текущего документа" : scope].filter(Boolean).join(" · ");
+    $("trajectoryDescription").title = activeFilterText();
+    $("trajectoryFiltersButton").classList.toggle("hidden", !raw && !vba);
+    if (!raw && !vba) { $("trajectoryAdvancedOptions").open = false; $("trajectoryAdvancedOptions").classList.add("hidden"); }
+    updateBackButton();
     updateExportControls();
   }
 
   function setDiagnosticsMode(mode, refresh) {
     invalidateTrajectoryRequest();
     correlationFilter = {};
-    trajectoryChatId = null;
+    useSource(selectedSource());
+    routeHistory = [];
     nextCursor = null;
     $("trajectoryViewInput").value = "run-causal";
     var latestRunId = latestKnownRunId();
@@ -1035,13 +1053,22 @@
 
   function openRunJournal(options) {
     options = options || {};
+    var source = selectedSource();
+    if (source.owner !== "office") {
+      if (options.owner !== source.owner || !source.workspaceId || !source.chatId ||
+          options.workspaceId !== source.workspaceId || options.sessionId !== source.chatId) return false;
+    } else {
+      if (options.workspaceId || options.owner && options.owner !== "office") return false;
+      source.chatId = options.chatId || source.chatId;
+    }
+    if (!source.chatId) return false;
     if (typeof switchTab === "function") switchTab("settings");
     var diagnosticsNav = document.querySelector('#settingsNavTree [data-settings-page="service"]');
     if (diagnosticsNav) diagnosticsNav.click();
     if (typeof setDiagnosticsTab === "function") setDiagnosticsTab("trajectory", false);
     invalidateTrajectoryRequest();
     correlationFilter = {};
-    trajectoryChatId = options.chatId || state.activeChatId || null;
+    useSource(source);
     $("trajectoryViewInput").value = "run-causal";
     if (options.runId) correlationFilter.runId = String(options.runId);
     if (options.turnId) correlationFilter.turnId = String(options.turnId);
@@ -1056,10 +1083,20 @@
     nextCursor = null;
     updateViewControls();
     refreshTrajectory(false);
+    return true;
   }
 
   window.bindTrajectoryActions = function () {
     window.addEventListener("pagehide", window.RNAssistantTrajectoryPayload.cancelAll);
+    $("trajectoryDetailPart").addEventListener("change", renderDetail);
+    $("trajectoryBackButton").addEventListener("click", goBack);
+    [["trajectoryFiltersButton", "trajectoryAdvancedOptions"], ["trajectoryExportOptionsButton", "trajectoryExportOptions"]].forEach(function (pair) {
+      $(pair[0]).addEventListener("click", function () {
+        var panel = $(pair[1]); panel.classList.remove("hidden"); panel.open = true;
+        panel.querySelector("summary").focus();
+      });
+      $(pair[1]).addEventListener("toggle", function () { if (!this.open) this.classList.add("hidden"); });
+    });
     var refresh = $("refreshTrajectoryButton");
     var more = $("loadMoreTrajectoryButton");
     var payload = $("loadTrajectoryPayloadButton");
@@ -1080,13 +1117,7 @@
       $(id).addEventListener("change", function () { nextCursor = null; refreshTrajectory(false); });
     });
     $("trajectoryViewInput").addEventListener("change", function () {
-      correlationFilter = {};
-      trajectoryChatId = null;
       nextCursor = null;
-      if ($("trajectoryViewInput").value === "run-causal") {
-        var latestRunId = latestKnownRunId();
-        if (latestRunId) correlationFilter.runId = latestRunId;
-      }
       updateViewControls();
       refreshTrajectory(false);
     });

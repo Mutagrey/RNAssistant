@@ -7,11 +7,12 @@
     if (!chatId || !eventId) throw new Error("RESOURCE_ACCESS_DENIED");
     if (active.size >= 2) throw new Error("RESOURCE_BACKPRESSURE");
     var abort = new AbortController(), requestId = null, data = null, closed = false, result;
+    var workspaceId = options.workspaceId || null;
     function current() { return !abort.signal.aborted && options.isCurrent(); }
     function close() {
       if (closed || !data || !/^[a-f0-9]{64}$/.test(data.leaseId)) return Promise.resolve();
       closed = true;
-      return options.send("resourceDataClose", { chatId: chatId, workspaceId: "trajectory-payload",
+      return options.send("resourceDataClose", { chatId: chatId, workspaceId: "trajectory-payload" + (workspaceId ? ":" + workspaceId : ""),
         leaseId: data.leaseId }).catch(function () {});
     }
     function cancel() {
@@ -24,14 +25,16 @@
     try {
       if (options.signal && options.signal.aborted) cancel();
       if (!current()) throw new Error("RESOURCE_DOWNLOAD_CANCELLED");
-      var request = options.send("getChatEventPayload", { chatId: chatId, eventId: eventId });
+      var query = { chatId: chatId, eventId: eventId };
+      if (workspaceId) query.workspaceId = workspaceId;
+      var request = options.send("getChatEventPayload", query);
       requestId = request.requestId;
       var response = await request;
       requestId = null;
       data = response && response.data;
       if (!current()) throw new Error("RESOURCE_DOWNLOAD_CANCELLED");
       var payload = data && data.payload;
-      if (!response || response.chatId !== chatId || response.eventId !== eventId ||
+      if (!response || response.chatId !== chatId || (response.workspaceId || null) !== workspaceId || response.eventId !== eventId ||
           !/^[a-f0-9]{64}$/.test(response.sha256) || !Number.isInteger(response.byteLength) ||
           response.byteLength < 0 || response.byteLength > 32 * 1024 * 1024 ||
           !Number.isInteger(response.returnedCharacters) || response.returnedCharacters < 0 ||

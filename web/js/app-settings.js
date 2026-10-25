@@ -622,6 +622,7 @@ function bindSettingsActions() {
 
   Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {
     control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
+      if (control.closest(".diagnostics-tab-panel")) return;
       if (control.id === "promptSearchInput" || control.id === "settingsNavSearch" || control.id === "modelCapabilitySearch") {
         return;
       }

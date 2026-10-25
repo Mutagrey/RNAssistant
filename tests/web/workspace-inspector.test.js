@@ -24,11 +24,15 @@ const { chromium } = require("playwright");
       window.inspectorNode = document.getElementById("chatInspector");
       window.workspaceInspectorRequests = [];
       window.workspaceModelRequests = [];
+      window.workspaceJournalRequests = []; window.workspaceLeaseCloses = [];
       const original = send;
       send = async (type, payload) => {
         workspaceInspectorRequests.push(type);
+        if (["getChatTrajectory", "getChatEventPayload"].includes(type)) workspaceJournalRequests.push({ type, ...payload });
+        if (type === "resourceDataClose") workspaceLeaseCloses.push(payload);
         const modelRead = ["getModelContext", "getModelContextPayload"].includes(type) && payload.workspaceId;
         const result = await original(type, payload);
+        if (type === "getChatTrajectory" && window.foreignJournalReply) result.workspaceId = "foreign-workspace";
         if (modelRead) {
           workspaceModelRequests.push({ type, ...payload });
           (result.events || []).forEach(event => { event.trace.RunId = "current-run"; event.trace.StepId = "two"; });
@@ -46,6 +50,8 @@ const { chromium } = require("playwright");
           step("current-run", "one", "Проверка исходников"), step("current-run", "two", "Чтение отчёта"),
           { Id: "final", Role: "assistant", RunId: "current-run", Content: "Проверка завершена", RunViewState: run("current-run") }];
         result.state.runId = "current-run"; result.state.runViewState = run("current-run");
+        result.state.contextUsage = { MessageId: "final", RunId: "current-run", PromptTokens: 8000,
+          CompletionTokens: 400, TotalTokens: 8400, ContextWindowTokens: 32000 };
         result.state.office = { Host: "Excel", DocumentTitle: "Документ выбранного запуска.xlsx" };
         result.state.contextReceipt = result.sessionId === "preview-plan-chat" ? null : { Arsenal: {
           RunId: "current-run", StepId: "two",
@@ -120,7 +126,23 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator(".chat-inspector-step").count(), 2, "latest run excludes historical actions");
     assert.doesNotMatch(await page.locator("#chatInspectorBody").textContent(), /Предыдущий запуск/);
     assert.equal(await page.locator('[data-chat-inspector-view="abilities"]').evaluate(node => node.hidden), false);
-    assert.equal(await page.locator('[data-chat-inspector-view="usage"]').isHidden(), true);
+    assert.equal(await page.locator('[data-chat-inspector-view="usage"]').evaluate(node => node.hidden), false);
+    await page.evaluate(() => {
+      Object.assign(RNAssistantWorkspaceChat.snapshot().state.contextReceipt, { EstimatedTokens: 7200,
+        Messages: [{ Presentation: "Full" }, { Presentation: "Excluded" }], CompactionApplied: true });
+    });
+    await view("usage");
+    assert.match(await abilitiesBody.textContent(), /8.000 \/ 32.000 токенов/);
+    assert.match(await abilitiesBody.textContent(), /7.200 токенов.*локальная оценка/);
+    assert.match(await abilitiesBody.textContent(), /Свободно 75%/);
+    await capture("project-usage");
+    await page.evaluate(() => {
+      RNAssistantWorkspaceChat.snapshot().state.contextUsage.PromptTokens = null;
+      RNAssistantChatInspector.render();
+    });
+    assert.match(await abilitiesBody.textContent(), /API не сообщил/);
+    assert.equal(await page.locator(".chat-inspector-composition-chart").count(), 0, "unknown usage does not become zero or reuse Office tokens");
+    await view("activity");
     await page.locator('#messages [aria-label="Открыть шаг"]').first().click();
     assert.match(await page.locator(".chat-inspector-step.is-selected").textContent(), /Предыдущий запуск/);
     assert.equal(await page.locator(".chat-inspector-step").count(), 1);
@@ -136,6 +158,7 @@ const { chromium } = require("playwright");
     assert.ok((await page.locator("#chatInspector").boundingBox()).width >= 280,
       "the project dock retains its own grid track after fixed-width summary content is hidden");
     assert.equal(await page.locator("#modelContextMode").isDisabled(), true, "workspace cannot use the Office preview compiler");
+    assert.equal(await page.locator("#modelContextMode").isHidden(), true, "workspace does not show a source selector with only one choice");
     assert.equal(await page.locator("#modelContextAttempt").inputValue(), "preview-request");
     const readCount = await page.evaluate(() => workspaceModelRequests.filter(item => item.type === "getModelContextPayload").length);
     await page.locator("#modelContextLayout").selectOption("wide");
@@ -214,6 +237,14 @@ const { chromium } = require("playwright");
     await page.locator("#modelContextResponseTab").click();
     await page.locator("#modelContextBody .rn-markdown-viewer-rendered").first().waitFor();
     await capture("plugin-response-dark-narrow");
+    const requestRow = await page.locator("#modelContextAttempt").boundingBox();
+    const refresh = await page.locator("#modelContextRefresh").boundingBox();
+    const download = await page.locator("#modelContextDownload").boundingBox();
+    assert.ok(Math.abs(requestRow.y - refresh.y) <= 2 && Math.abs(requestRow.y - download.y) <= 2,
+      "request selection and its actions share one narrow row");
+    assert.ok((await page.locator("#modelContextBody").boundingBox()).y -
+      (await page.locator("#modelContextDialog").boundingBox()).y <= 220,
+      "the narrow header leaves more than 600px for reading at 390 by 844");
     assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
     await page.locator("#closeModelContextButton").click();
     await view("preview");
@@ -233,6 +264,41 @@ const { chromium } = require("playwright");
     assert.equal(await page.evaluate(() => workspaceInspectorRequests.some(type => ["getAgentArsenal", "inspectPromptContext", "inspectModelContextPreview"].includes(type))), false, "workspace diagnostics never uses the Office compiler");
     assert.equal(await page.evaluate(() => workspaceModelRequests.every(item => item.workspaceId && item.chatId !== "preview-chat")), true,
       "saved model requests carry the exact workspace session");
+    await page.evaluate(() => {
+      RNAssistantChatInspector.openActivity({ ...RNAssistantChatInspector.target(), runId: "current-run", stepId: "two" });
+    });
+    await page.locator('.chat-inspector-step.is-selected').getByRole("button", { name: "События действия", exact: true }).click();
+    await page.waitForFunction(() => document.getElementById("trajectoryEvents").textContent.includes("Запрос модели"));
+    const journalQuery = await page.evaluate(() => workspaceJournalRequests.at(-1));
+    assert.equal(journalQuery.workspaceId, pluginTarget.workspaceId);
+    assert.equal(journalQuery.chatId, pluginTarget.sessionId);
+    assert.equal(journalQuery.runId, "current-run"); assert.equal(journalQuery.stepId, "two");
+    assert.equal(journalQuery.toolCallId, "call-two");
+    await capture("plugin-journal");
+    assert.deepEqual(await page.locator('#trajectoryViewInput option[value="vba-mutations"]').evaluate(node =>
+      ({ hidden: node.hidden, disabled: node.disabled })), { hidden: true, disabled: true });
+    await page.locator("#trajectoryActionsMenu > summary").click();
+    await page.locator("#clearTrajectoryCorrelationButton").click();
+    await page.waitForFunction(() => !document.getElementById("refreshTrajectoryButton").disabled);
+    assert.equal(await page.evaluate(() => workspaceJournalRequests.at(-1).workspaceId), pluginTarget.workspaceId,
+      "showing the whole chat does not fall back to Office");
+    await page.locator("#trajectoryViewInput").selectOption("raw");
+    await page.locator("#trajectoryEvents .trajectory-event").first().click();
+    await page.locator("#loadTrajectoryPayloadButton").click();
+    await page.waitForFunction(() => document.getElementById("trajectoryDetailPart").value === "payload" && !document.getElementById("loadTrajectoryPayloadButton").disabled);
+    assert.equal(await page.evaluate(() => workspaceJournalRequests.at(-1).workspaceId), pluginTarget.workspaceId);
+    assert.equal(await page.evaluate(id => workspaceLeaseCloses.some(item => item.workspaceId === "trajectory-payload:" + id), pluginTarget.workspaceId), true);
+    await capture("plugin-journal-raw");
+    await page.evaluate(() => { foreignJournalReply = true; });
+    await page.locator("#refreshTrajectoryButton").click();
+    await page.waitForFunction(() => document.getElementById("trajectoryStatus").textContent.includes("другому чату"));
+    assert.equal(await page.locator("#trajectoryWorkspace").isVisible(), false, "foreign events never remain visible");
+    await page.evaluate(() => { foreignJournalReply = false; });
+    assert.equal(await page.evaluate(target => openRunJournal({ ...target, workspaceId: "foreign-workspace" }), pluginTarget), false);
+    await page.evaluate(() => { switchTab("chat"); RNAssistantProjectChats.setScope("office"); RNAssistantModelContext.open(); });
+    await page.locator("#modelContextBody .is-message").first().waitFor();
+    assert.equal(await page.locator("#modelContextMode").isVisible(), true, "returning to Office restores the source selector");
+    assert.equal(await page.locator("#modelContextAttempt").isVisible(), true);
     assert.deepEqual(errors, []);
     console.log("PASS workspace inspector: one dock, exact session/run/step, old route rejection, drafts, preview preservation, narrow/light/dark");
   } finally { if (browser) await browser.close(); server.kill(); }

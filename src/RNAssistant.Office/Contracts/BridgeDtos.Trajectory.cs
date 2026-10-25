@@ -11,12 +11,14 @@ namespace RNAssistant.Office.Contracts
 {
     public sealed class ChatEventPayloadRequest : ChatPayload
     {
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("eventId")]
         public string EventId { get; set; }
     }
 
     public sealed class ChatTrajectoryRequest : ChatPayload
     {
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("view")] public string View { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
         [JsonProperty("pageSize")] public int? PageSize { get; set; }
@@ -80,6 +82,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatTrajectoryExportRequest : ChatPayload
     {
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("view")] public string View { get; set; }
         [JsonProperty("search")] public string Search { get; set; }
         [JsonProperty("minSequence")] public long? MinSequence { get; set; }
@@ -121,6 +124,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatTrajectoryResponse
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("view")] public string View { get; set; }
@@ -136,6 +140,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatTrajectoryExportResponse
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("fileName")] public string FileName { get; set; }
         [JsonProperty("contentType")] public string ContentType { get; set; }
@@ -320,6 +325,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ChatEventPayloadResponse
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("eventId")] public string EventId { get; set; }
         [JsonProperty("sha256")] public string Sha256 { get; set; }

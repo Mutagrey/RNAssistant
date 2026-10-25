@@ -228,13 +228,13 @@
       return "Нужная граница не записана. Это не доказывает ни успех, ни ошибку выполнения.";
     }
     if (kind === "ui.projected") {
-      return "Это подтверждает построение Интерфейс, но не фактическую доставку или отрисовку WebView.";
+      return "Ответ подготовлен. Подтверждения его отображения в окне нет.";
     }
     if (rowStatus(row) === "rejected") {
-      return "Эта попытка отклонена. Следующая попытка или repair показаны отдельными строками и не заменяют исходный ответ.";
+      return "Эта попытка отклонена. Повторные попытки показаны отдельно.";
     }
     if (kind === "domain.effect.verified") {
-      return "Статус взят из сохранённого domain/read-back evidence, а не из текста ответа модели.";
+      return "Статус подтверждён сохранённой проверкой результата.";
     }
     return "";
   }
@@ -262,7 +262,7 @@
     registry.mount("json", host, {
       text: text === null || text === undefined ? "" : String(text),
       completeness: completeness || "full",
-      mode: "pretty",
+      mode: "tree", compact: true,
       onCopy: window.copyTextResult
     });
   }
@@ -290,11 +290,13 @@
       return;
     }
     if (details.getAttribute("data-mounted") === "true") return;
-    var dataHost = details.querySelector(".rn-run-journal-data");
-    var evidenceHost = details.querySelector(".rn-run-journal-evidence");
-    mountJson(dataHost, value(row, "DataJson", "dataJson", "{}"),
-      value(row, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
-    mountJson(evidenceHost, evidenceJson(row), "full");
+    var host = details.querySelector(".rn-run-journal-data");
+    var choice = details.rnaDataKind;
+    var evidence = choice.value === "evidence";
+    mountJson(host, evidence ? evidenceJson(row) : value(row, "DataJson", "dataJson", "{}"),
+      !evidence && value(row, "DataTruncated", "dataTruncated", false) ? "preview" : "full");
+    var toolbar = host.querySelector(".rn-json-toolbar");
+    if (toolbar) toolbar.insertBefore(choice, toolbar.firstElementChild);
     details.setAttribute("data-mounted", "true");
   }
 
@@ -333,11 +335,11 @@
     var definition = payloadAction(row);
     if (!definition || typeof options.onLoadPayload !== "function") return null;
     var section = document.createElement("section");
-    section.className = "rn-run-journal-payload";
+    section.className = "rn-run-journal-payload hidden";
     appendText(section, "h4", "", definition.title);
     var host = document.createElement("div");
     host.className = "rn-run-journal-payload-host";
-    host.textContent = "Полное содержимое загружается по кнопке.";
+    host.textContent = "";
     section.appendChild(host);
 
     var state = "idle";
@@ -347,8 +349,9 @@
       if (pending) pending.abort();
       pending = null;
       state = "idle";
+      section.classList.add("hidden");
       unmountJson(host);
-      host.textContent = "Полное содержимое загружается по кнопке.";
+      host.textContent = "";
       button.disabled = false;
       button.textContent = definition.label;
     }
@@ -356,7 +359,9 @@
       if (state === "loading" || (state === "loaded" && !force)) {
         return Promise.resolve();
       }
+      if (options.onPayloadOpen) options.onPayloadOpen();
       state = "loading";
+      section.classList.remove("hidden");
       var operation = new AbortController();
       pending = operation;
       button.disabled = true;
@@ -373,7 +378,7 @@
         if (/json/i.test(contentType)) {
           mountJson(host, text, truncated ? "preview" : "full");
         } else {
-          host.textContent = text + (truncated ? "\n\n[Показан только bounded preview.]" : "");
+          host.textContent = text + (truncated ? "\n\n[Показан фрагмент.]" : "");
         }
         state = "loaded";
         button.textContent = definition.label;
@@ -406,9 +411,20 @@
     button.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
+      var parent = button.parentNode;
+      if (parent && parent.classList.contains("rna-action-menu-body")) parent.parentNode.open = false;
       onClick();
     });
     return button;
+  }
+
+  function actionMenu(root, label) {
+    var menu = document.createElement("details"); menu.className = "popover rna-action-menu";
+    var trigger = appendText(menu, "summary", "rna-action-menu-trigger", "⋯");
+    trigger.setAttribute("aria-label", label); trigger.title = label;
+    var body = document.createElement("div"); body.className = "popover-menu rna-action-menu-body";
+    menu.appendChild(body); root.appendChild(menu);
+    return body;
   }
 
   function appendNavigationActions(root, row, options) {
@@ -475,10 +491,10 @@
       if (!previous || issuePriority(row) > issuePriority(previous)) groups.set(key, row);
     });
     if (!groups.size) return;
-    var section = document.createElement("section");
+    var section = document.createElement("details");
     section.className = "rn-run-journal-issues";
     section.setAttribute("aria-label", "Причины и последствия");
-    appendText(section, "h3", "", "Причины и последствия");
+    appendText(section, "summary", "", "Причины и последствия · " + groups.size);
     Array.from(groups.values()).sort(function (a, b) { return issuePriority(b) - issuePriority(a); }).slice(0, 12).forEach(function (row) {
       var card = document.createElement("div");
       card.className = "rn-run-journal-issue";
@@ -523,21 +539,19 @@
     main.appendChild(head);
     var meta = document.createElement("span");
     meta.className = "rn-run-journal-row-meta";
-    var sequence = firstSequence(row);
-    var last = lastSequence(row);
     var duration = value(row, "DurationMs", "durationMs", null);
+    var target = value(row, "Target", "target", "");
     meta.textContent = [
-      "#" + sequence + (last !== sequence ? "…#" + last : ""),
       timeLabel(row),
       duration === null ? "" : Number(duration) + " мс",
-      identityText(row)
+      identityText(row), target
     ].filter(Boolean).join(" · ");
     main.appendChild(meta);
-    var target = value(row, "Target", "target", "");
-    if (target) appendText(main, "span", "rn-run-journal-target", target);
     var reason = displayCause(row);
     if (reason) appendText(main, "span", "rn-run-journal-reason", reason);
     summary.appendChild(main);
+    var chevron = appendText(summary, "span", "rn-run-journal-chevron", "");
+    chevron.setAttribute("aria-hidden", "true");
     details.appendChild(summary);
 
     var body = document.createElement("div");
@@ -546,36 +560,34 @@
     if (note) appendText(body, "p", "rn-run-journal-note", note);
     var actions = document.createElement("div");
     actions.className = "rn-run-journal-actions";
-    appendNavigationActions(actions, row, options);
-    if (actions.childElementCount) body.appendChild(actions);
+    var navigation = actionMenu(actions, "Переходы события");
+    appendNavigationActions(navigation, row, options);
+    if (!navigation.childElementCount) actions.replaceChildren();
     var technical = document.createElement("details");
     technical.className = "rn-run-journal-technical";
     technical.open = !!(options.expanded && options.expanded[id + ":technical"]);
-    appendText(technical, "summary", "", "Технические данные и исходные события");
-    var payloadActions = document.createElement("div");
-    payloadActions.className = "rn-run-journal-actions";
-    var payloadView = appendPayloadAction(payloadActions, row, options);
-    if (payloadView) {
-      technical.appendChild(payloadActions);
-      technical.appendChild(payloadView.section);
-    }
+    appendText(technical, "summary", "", "Данные события");
+    var payloadView = appendPayloadAction(actions, row, Object.assign({}, options, {
+      onPayloadOpen: function () { technical.open = false; syncTechnical(); }
+    }));
+    if (actions.childElementCount) body.appendChild(actions);
+    if (payloadView) body.appendChild(payloadView.section);
     var effect = effectExplanation(row);
     if (effect) appendText(body, "p", "rn-run-journal-note", effect);
 
-    var dataSection = document.createElement("section");
-    dataSection.className = "rn-run-journal-json-section";
-    appendText(dataSection, "h4", "", "Содержимое этапа");
+    var choice = document.createElement("select"); choice.className = "rn-run-journal-data-kind";
+    choice.setAttribute("aria-label", "Данные события или связи");
+    [["data", "Данные"], ["evidence", "Связи"]].forEach(function (item) {
+      var option = appendText(choice, "option", "", item[1]); option.value = item[0];
+    });
+    choice.value = "data"; details.rnaDataKind = choice; technical.appendChild(choice);
     var dataHost = document.createElement("div");
     dataHost.className = "rn-run-journal-json rn-run-journal-data";
-    dataSection.appendChild(dataHost);
-    technical.appendChild(dataSection);
-
-    var evidenceSection = document.createElement("section");
-    evidenceSection.className = "rn-run-journal-json-section";
-    var evidenceHost = document.createElement("div");
-    evidenceHost.className = "rn-run-journal-json rn-run-journal-evidence";
-    evidenceSection.appendChild(evidenceHost);
-    technical.appendChild(evidenceSection);
+    technical.appendChild(dataHost);
+    choice.addEventListener("change", function () {
+      unmountJson(dataHost); details.setAttribute("data-mounted", "false"); syncTechnical();
+      if (choice.focus) choice.focus();
+    });
     body.appendChild(technical);
     details.appendChild(body);
 
@@ -584,14 +596,15 @@
       setDetailsMounted(details, row, mounted);
       if (!mounted) {
         details.setAttribute("data-mounted", "false");
-        if (payloadView) payloadView.cancel();
       }
+      if (!details.open && payloadView) payloadView.cancel();
     }
     details.addEventListener("toggle", function () {
       if (typeof options.onExpandedChange === "function") options.onExpandedChange(id, details.open);
       syncTechnical();
     });
     technical.addEventListener("toggle", function () {
+      if (technical.open && payloadView) payloadView.cancel();
       if (typeof options.onExpandedChange === "function") options.onExpandedChange(id + ":technical", technical.open);
       syncTechnical();
     });
@@ -630,28 +643,26 @@
     var metrics = document.createElement("div");
     metrics.className = "rn-run-journal-metrics";
     metric(metrics, "Итог", terminal ? statusLabel(rowStatus(terminal)) : "Не найден в выборке", terminal && isProblem(terminal) ? "problem" : "neutral");
-    metric(metrics, "Проблемы", problems, problems ? "problem" : "neutral");
-    metric(metrics, "Вызовы инструментов", tools, "neutral");
+    if (problems) metric(metrics, "Проблемы", problems, "problem");
+    if (tools) metric(metrics, "Действия", tools, "neutral");
     summary.appendChild(metrics);
 
     var toolbar = document.createElement("div");
     toolbar.className = "rn-run-journal-toolbar";
-    var filters = document.createElement("div");
+    var filters = document.createElement("select");
     filters.className = "rn-run-journal-filters";
-    filters.setAttribute("role", "toolbar");
-    filters.setAttribute("aria-label", "Фильтр журнала запуска");
+    filters.setAttribute("aria-label", "Фильтр истории");
     FILTERS.forEach(function (definition) {
       var count = rows.filter(function (row) { return matchesFilter(row, definition.id); }).length;
-      var button = actionButton(definition.label + " " + count, function () {
-        if (typeof options.onFilterChange === "function") options.onFilterChange(definition.id);
-      });
-      button.className = "rn-run-journal-filter" + (filter === definition.id ? " active" : "");
-      button.setAttribute("aria-pressed", filter === definition.id ? "true" : "false");
-      filters.appendChild(button);
+      var option = appendText(filters, "option", "", definition.label + " · " + count);
+      option.value = definition.id;
+    });
+    filters.value = filter;
+    filters.addEventListener("change", function () {
+      if (typeof options.onFilterChange === "function") options.onFilterChange(filters.value);
     });
     toolbar.appendChild(filters);
-    var expand = document.createElement("div");
-    expand.className = "rn-run-journal-expand-actions";
+    var expand = actionMenu(toolbar, "Действия со списком");
     var problemIds = rows.filter(isProblem).slice(0, MAX_BULK_EXPANDED_ROWS).map(rowId);
     var expandLabel = problems > MAX_BULK_EXPANDED_ROWS
       ? "Развернуть первые " + MAX_BULK_EXPANDED_ROWS + " проблем"
@@ -664,7 +675,6 @@
     expand.appendChild(actionButton("Свернуть всё", function () {
       if (typeof options.onExpandedSet === "function") options.onExpandedSet(rows.map(rowId), false);
     }));
-    toolbar.appendChild(expand);
     summary.appendChild(toolbar);
     root.appendChild(summary);
   }
@@ -700,7 +710,7 @@
       if (filter === "all" || filter === "problems") renderIssues(root, rows, options);
       if (normalized.truncated) {
         appendText(root, "div", "rn-run-journal-limit",
-          "Достигнут UI-лимит " + MAX_RENDERED_ROWS + " строк. Используйте run/search filter или bounded export.");
+          "Показаны первые " + MAX_RENDERED_ROWS + " событий. Уточните поиск или скачайте историю.");
       }
       var visible = rows.filter(function (row) { return matchesFilter(row, filter); });
       var list = document.createElement("div");

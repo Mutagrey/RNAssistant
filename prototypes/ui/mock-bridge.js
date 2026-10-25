@@ -972,6 +972,28 @@
         sections: contextParts.map(function (part) { return { id: part[0], title: part[1], tokens: part[2], count: 1, included: true,
           items: [{ id: part[0] + "-item", title: part[1], tokens: part[2], preview: part[3], reason: "Демонстрационный состав" }] }; }) };
     }
+    if (type === "getChatTrajectory" || type === "getChatEventPayload") {
+      if (payload.workspaceId != null) requireProjectChat({ workspaceId: payload.workspaceId, sessionId: payload.chatId });
+      else requireChat(payload);
+      var journalText = JSON.stringify({ message: "Сохранённый запрос демонстрационного чата", value: 42 });
+      if (type === "getChatEventPayload") {
+        if (payload.eventId !== "preview-journal-event") fail("Событие не найдено.");
+        var journalData = download(journalText, "text/plain; charset=utf-8");
+        journalData.payload.sha256 = await hash(bytes(journalText));
+        return { chatId: payload.chatId, workspaceId: payload.workspaceId, eventId: payload.eventId,
+          sha256: journalData.payload.sha256, byteLength: journalData.payload.byteLength, contentType: "application/json",
+          returnedCharacters: journalText.length, textTruncated: false, data: journalData };
+      }
+      var journalRow = { id: "preview-journal-row", kind: "model.request.prepared", title: "Запрос модели", status: "prepared",
+        runId: payload.runId || "current-run", stepId: payload.stepId || "two", createdUtc: "2026-10-25T10:00:00Z",
+        firstSequence: 1, lastSequence: 1, sourceEventIds: ["preview-journal-event"], sourceEventSeqs: [1],
+        dataJson: journalText, dataTruncated: false, resourceRefs: [] };
+      var journalEvent = { eventId: "preview-journal-event", sequence: 1, type: "llm.request", runId: journalRow.runId,
+        stepId: journalRow.stepId, createdUtc: journalRow.createdUtc, dataJson: journalText, payloadByteLength: bytes(journalText).length };
+      return { chatId: payload.chatId, workspaceId: payload.workspaceId, revision: revision, view: payload.view || "raw",
+        events: payload.view === "raw" ? [journalEvent] : [], rows: payload.view === "raw" ? [] : [journalRow],
+        totalEvents: 1, totalRows: 1, totalMatches: 1, hasMore: false, nextCursor: null };
+    }
     if (type === "getModelContext" || type === "getModelContextPayload" || type === "inspectModelContextPreview") {
       var contextWorkspaceId = payload.workspaceId, contextChatId = payload.chatId;
       if (contextWorkspaceId != null) {

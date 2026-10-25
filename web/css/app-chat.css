@@ -710,6 +710,7 @@
 .chat-inspector-composition-color.color-2 { background: color-mix(in srgb, #9a81bd 75%, var(--surface)); }
 .chat-inspector-composition-color.color-3 { background: color-mix(in srgb, #bc9856 75%, var(--surface)); }
 .chat-inspector-composition-color.color-4 { background: var(--ink-muted); }
+.chat-inspector-composition-color.is-available { background: var(--line); }
 .chat-inspector-disclosure .prompt-context-item { background: transparent; }
 .chat-inspector-disclosure .prompt-context-item > summary { min-height: 32px; }
 .chat-inspector-disclosure pre { max-height: 240px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11px; }

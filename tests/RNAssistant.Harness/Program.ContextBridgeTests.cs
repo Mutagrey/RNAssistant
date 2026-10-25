@@ -456,12 +456,13 @@ namespace RNAssistant.Harness
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"trajectory1\",\"type\":\"getChatTrajectory\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-query\",\"view\":\"failure-retries\",\"cursor\":\"view:failure-retries:42:25\",\"pageSize\":25,\"search\":\"tool failure\",\"eventTypes\":[\"session.commit\",\"llm.failure\"],\"visibility\":\"log-only\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-query\",\"workspaceId\":\"workspace-diagnostics\",\"view\":\"failure-retries\",\"cursor\":\"view:failure-retries:42:25\",\"pageSize\":25,\"search\":\"tool failure\",\"eventTypes\":[\"session.commit\",\"llm.failure\"],\"visibility\":\"log-only\"}}")
                 .GetAwaiter()
                 .GetResult();
 
             AssertTrue(JObject.Parse(responseJson)["ok"].Value<bool>(), "trajectory bridge response ok");
             AssertEqual("chat-query", controller.LastChatId, "trajectory chat id");
+            AssertEqual("workspace-diagnostics", controller.LastDiagnosticsWorkspaceId, "trajectory retains workspace scope");
             AssertEqual("failure-retries", controller.LastTrajectoryView, "trajectory view");
             AssertEqual("view:failure-retries:42:25", controller.LastTrajectoryCursor, "trajectory cursor");
             AssertEqual("tool failure", controller.LastTrajectorySearch, "trajectory search");
@@ -470,7 +471,7 @@ namespace RNAssistant.Harness
 
             responseJson = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"trajectory2\",\"type\":\"exportChatTrajectory\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-export\",\"view\":\"raw\",\"search\":\"failed\",\"eventTypes\":[\"llm.failure\"],\"visibility\":\"log-only\",\"redactionMode\":\"none\",\"includeCasPayloads\":true}}")
+                "\",\"payload\":{\"chatId\":\"chat-export\",\"workspaceId\":\"workspace-diagnostics\",\"view\":\"raw\",\"search\":\"failed\",\"eventTypes\":[\"llm.failure\"],\"visibility\":\"log-only\",\"redactionMode\":\"none\",\"includeCasPayloads\":true}}")
                 .GetAwaiter()
                 .GetResult();
             AssertTrue(JObject.Parse(responseJson)["ok"].Value<bool>(), "trajectory export bridge response ok");
@@ -478,15 +479,17 @@ namespace RNAssistant.Harness
             AssertTrue(download["base64"] == null, "the export bridge has no base64 body or compatibility field");
             AssertEqual(100L, (long)download["data"]["payload"]["byteLength"], "bounded download carries only exact payload metadata");
             AssertEqual("chat-export", controller.LastChatId, "trajectory export chat id");
+            AssertEqual("workspace-diagnostics", (string)download["workspaceId"], "export echoes workspace scope");
             AssertEqual("none", controller.LastTrajectoryExportRedaction, "trajectory export redaction");
             AssertTrue(controller.LastTrajectoryExportCas, "trajectory export CAS flag");
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes.Single(), "trajectory export types remain native array");
             responseJson = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"payload1\",\"type\":\"getChatEventPayload\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-payload\",\"eventId\":\"event-payload\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-payload\",\"workspaceId\":\"workspace-diagnostics\",\"eventId\":\"event-payload\"}}")
                 .GetAwaiter().GetResult();
             var preview = JObject.Parse(responseJson);
             AssertTrue((bool)preview["ok"], "payload metadata bridge succeeds");
+            AssertEqual("workspace-diagnostics", (string)preview["payload"]["workspaceId"], "payload retains workspace scope");
             AssertEqual("chat-payload", controller.LastChatId, "payload uses the addressed chat");
             AssertEqual("event-payload", (string)preview["payload"]["eventId"], "payload retains the exact event");
             AssertTrue(preview["payload"]["text"] == null, "no inline payload or old compatibility field");

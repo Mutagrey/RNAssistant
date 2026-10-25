@@ -511,6 +511,7 @@ namespace RNAssistant.Harness
                 Test("model context: large verified download", ModelContextLargeVerifiedDownload),
                 Test("model context: exact exchange and full payload", ModelContextExactExchange),
                 Test("model context: workspace exchange and scope", ModelContextWorkspaceExchange),
+                Test("model context: workspace diagnostic usage", WorkspaceDiagnosticUsage),
                 Test("model context: bound original source and pagination", ModelContextSourceAndPagination),
                 Test("model context: stable aliases and resource inspector", ModelContextStableAliases),
                 Test("model context: exact read message cost", ModelContextExactReadMessageCost),

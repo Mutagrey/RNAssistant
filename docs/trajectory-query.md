@@ -11,12 +11,27 @@ a second durable log.
 
 The current Diagnostics UI opens at **Ход работы**, a bounded in-memory stream for
 the current app session. **История чата** loads the saved `run-causal` view only when
-opened and shows the latest run first; **Показать весь чат** removes that run filter.
-Search, raw events and specialized projections are under **Поиск и технические
-данные**. The VBA editor owns the convenient code diff; the journal view is retained
+opened and shows the latest run first; **Показать весь чат** in its action menu
+removes that run filter. A single toolbar contains the view selector and search.
+The action menu opens additional event filters and export. The VBA editor owns the convenient code diff; the journal view is retained
 for mutation recovery evidence. Large event bodies are fetched only on demand.
 
 ## Query contract
+
+Office and workspace use the same query, payload reader and export. Workspace
+requests carry explicit `workspaceId` and `chatId`; each response confirms both.
+`ChatDiagnosticsScope` validates a connected workspace/session before event reads,
+including saved history while its source folder is unavailable. It also owns the
+shared scope check used by Model Context; its old private workspace loader is removed.
+Workspace payload/export leases use `trajectory-payload:<workspaceId>` and
+`trajectory-export:<workspaceId>`. Office owners remain unchanged.
+
+The full journal pins its source chat when opened from a run, step or action.
+Removing correlation filters keeps that chat. Workspace routes cannot select the
+Office VBA journal; missing or foreign response identity is rejected before render,
+payload reads or download. Late delivery after a source change closes the original
+lease without rebinding it. These are host-neutral/browser checks; native
+Windows/WebView2 controller delivery and lease liveness remain unqualified.
 
 Raw results and existing aggregate views are ordered newest first. `run-causal` is
 ordered chronologically. `pageSize` defaults to 100 and is capped at 200. Raw
@@ -37,10 +52,18 @@ Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and de
 
 ## Diagnostic presentation
 
-Technical events use a resizable list/detail split and left-aligned rows. One JSON
-viewer contains `data`, collapsed `evidence`, and the explicitly loaded `payload`
-with its MIME/completeness metadata. Separate source and payload viewers are removed;
-CAS loading remains lazy and bound to the selected event/chat.
+History uses flat compact rows, an inline outcome/count summary and one category
+selector. Causes are collapsed together; event navigation and bulk actions use the
+shared action-menu style. Changing a view retains the selected chat/run filter.
+Back restores the preceding same-source selection, search and row disclosures;
+its bounded stack is disposable UI state. History controls never dirty settings.
+
+Technical events retain a resizable list/detail split. One lossless JSON viewer
+switches between event data, links and an explicitly loaded body, without a
+synthetic `data/evidence/payload` root. Copy refers to the selected source. Body
+MIME metadata remains in links, and the viewer states completeness. A journal row
+also mounts only one data/links/body viewer at a time; CAS loading remains lazy
+and bound to the selected event/chat.
 
 The shared JSON tree keeps short string values beside their keys. Complete valid
 objects/arrays encoded inside strings expand as labelled `JSON в строке` nodes,
@@ -48,6 +71,10 @@ within cumulative character/node and depth/DOM limits. Malformed strings and sca
 strings remain strings. The lossless parser retains duplicate keys and numeric
 lexemes; raw/text modes and node/source copy preserve the original encoding.
 Nested decoded paths are marked `::<json>` and are display paths only.
+History enables the reader's compact presentation: one mode selector, one action
+menu, smaller indentation and no decorative closing-brace rows. Node copy controls
+appear on hover/focus (remain visible for touch); Escape closes their menu. The
+parser, limits, error/completeness states and original bytes are unchanged.
 
 ### Expanded chat steps
 

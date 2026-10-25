@@ -8,6 +8,17 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Inspector terminal action status — 2026-10-25
+
+Fixed host-neutral, 2026-10-25; original severity P2. Owner: Web chat Inspector
+presentation. `renderActivity` applied terminal run handling to the step summary
+but left the expanded action's original status. Chromium reproduced `Отменено`
+on the step and `Выполняю` inside it for cancelled, failed and completed runs.
+Both now use the same presentation state. The focused Inspector suite covers
+terminal running/waiting actions, unchanged live statuses and unknown-effect
+evidence; saved activity is not mutated. This was a presentation defect, not
+evidence of tool execution after cancellation. Windows/WebView2 remains unqualified.
+
 ## Workspace file resource schema branches — 2026-10-24
 
 Owner: Application `WorkspacePorts.ResourceVariant`. An existing focused Harness

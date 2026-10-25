@@ -20,7 +20,8 @@ namespace RNAssistant.Office.Services
             TrajectoryExportRequest request, CancellationToken token)
         {
             TrajectoryExportResult result = null;
-            var lease = _data.OpenDownload(session, Owner, TrajectoryExportService.MaximumBundleBytes, cancellation =>
+            var owner = ChatDiagnosticsScope.DownloadOwner(Owner, session.WorkspaceId);
+            var lease = _data.OpenDownload(session, owner, TrajectoryExportService.MaximumBundleBytes, cancellation =>
             {
                 cancellation.ThrowIfCancellationRequested();
                 var events = readCompleteEvents();
@@ -30,9 +31,11 @@ namespace RNAssistant.Office.Services
             try
             {
                 token.ThrowIfCancellationRequested();
-                return ChatTrajectoryExportResponse.From(session.Id, result, lease);
+                var response = ChatTrajectoryExportResponse.From(session.Id, result, lease);
+                response.WorkspaceId = session.WorkspaceId;
+                return response;
             }
-            catch { _data.Close(session.Id, Owner, lease.LeaseId); throw; }
+            catch { _data.Close(session.Id, owner, lease.LeaseId); throw; }
         }
     }
 }

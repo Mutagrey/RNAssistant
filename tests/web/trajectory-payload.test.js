@@ -22,7 +22,7 @@ function fixture(text = '\uFEFF{"dup":9007199254740993123,"dup":"<script>😀"}'
     send(type, payload) {
       calls.push(type);
       if (type === "resourceDataClose") { closes.push(payload); return Promise.resolve(); }
-      assert.deepEqual(JSON.parse(JSON.stringify(payload)), { chatId: "chat", eventId: "event" });
+      assert.deepEqual(JSON.parse(JSON.stringify(payload)), { chatId: "chat", eventId: "event", ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}) });
       return Object.assign(Promise.resolve(metadata), { requestId: "request-1" });
     },
     async fetch(url, config) {
@@ -44,6 +44,18 @@ function fixture(text = '\uFEFF{"dup":9007199254740993123,"dup":"<script>😀"}'
     assert.equal(f.closes[0].workspaceId, "trajectory-payload");
   }
   console.log("PASS trajectory payload: exact verified bytes, source/preview identities and close");
+  {
+    const f = fixture(); f.options.workspaceId = "workspace-one"; f.metadata.workspaceId = "workspace-one";
+    assert.equal((await f.read()).text, f.text);
+    assert.equal(f.closes.at(-1).workspaceId, "trajectory-payload:workspace-one");
+    for (const reply of [undefined, "workspace-two"]) {
+      const foreign = fixture(); foreign.options.workspaceId = "workspace-one"; foreign.metadata.workspaceId = reply;
+      await assert.rejects(foreign.read, /RESOURCE_DOWNLOAD_INVALID/);
+      assert.equal(foreign.calls.includes("fetch"), false, "foreign workspace metadata is rejected before reading bytes");
+      assert.equal(foreign.closes.at(-1).workspaceId, "trajectory-payload:workspace-one");
+    }
+  }
+  console.log("PASS trajectory payload: workspace identity and scoped lease cleanup");
   {
     const f = fixture(""), result = await f.read();
     assert.equal(result.text, "");

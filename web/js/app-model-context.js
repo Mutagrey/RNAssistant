@@ -852,9 +852,13 @@
   function composerText() { return typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput").value; }
   function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
   function previewAvailability(c) {
+    $("modelContextDialog").classList.toggle("is-workspace", !!c.workspaceId);
+    $("modelContextDialog").classList.toggle("is-preview", c.mode === "preview");
     $("modelContextPreviewOption").disabled = !!c.workspaceId || !!state.chatReadOnly;
     $("modelContextPreviewOption").hidden = !!c.workspaceId;
     $("modelContextMode").disabled = !!c.workspaceId;
+    $("modelContextMode").hidden = !!c.workspaceId;
+    $("modelContextAttempt").hidden = c.mode === "preview";
     var unavailable = !!state.chatReadOnly && c.mode === "preview";
     $("modelContextRefresh").disabled = unavailable;
     var request = c.detail && (c.detail.events || []).find(function (event) { return event.eventId === c.selected; });

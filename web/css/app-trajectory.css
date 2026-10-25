@@ -1,172 +1,42 @@
-.trajectory-panel {
-  min-height: 0;
-  padding: 11px;
-  overflow: hidden;
-  border-radius: 8px;
-}
-
-.trajectory-panel.active {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
-  gap: 7px;
-}
-
-.trajectory-primary-actions {
-  display: flex;
-  gap: 7px;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.trajectory-advanced-options {
-  border-top: 1px solid var(--section-line);
-  padding-top: 5px;
-}
-
-.trajectory-advanced-options > summary {
-  width: max-content;
-  max-width: 100%;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.trajectory-advanced-options > p {
-  margin: 7px 0;
-  color: var(--muted);
-  font-size: 10.5px;
-}
-
-.trajectory-status {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.trajectory-querybar {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr));
-  gap: 7px;
-  align-items: end;
-  margin: 1px 0 0;
-}
-
-.trajectory-field {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: var(--label-font-weight);
-}
-
-.trajectory-field > span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.trajectory-field input,
-.trajectory-field select {
-  width: 100%;
-  min-width: 0;
-  height: 30px;
-  padding-top: 0;
-  padding-bottom: 0;
-  font-size: 11px;
-}
-
-.trajectory-search-field {
-  grid-column: span 2;
-}
-
-.trajectory-refresh-button {
-  height: 30px;
-  white-space: nowrap;
-}
-
-.trajectory-export-bar {
-  display: grid;
-  grid-template-columns: minmax(180px, 260px) auto auto minmax(0, 1fr);
-  min-height: 30px;
-  gap: 9px;
-  align-items: center;
-  padding-top: 7px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.trajectory-export-options {
-  margin-top: 1px;
-  padding-top: 7px;
-  border-top: 1px solid var(--section-line);
-}
-
-.trajectory-export-options > summary {
-  width: max-content;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 10.5px;
-  font-weight: var(--label-font-weight);
-}
-
-.trajectory-export-cas {
-  display: inline-flex;
-  gap: 4px;
-  align-items: center;
-  white-space: nowrap;
-}
-
-.trajectory-export-cas input {
-  margin: 0;
-}
-
-#trajectoryExportNotice {
-  min-width: 0;
-  line-height: 1.35;
-}
-
-.trajectory-status-row {
-  display: flex;
-  min-height: 28px;
-  gap: 8px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.trajectory-correlation-bar {
-  display: flex;
-  min-height: 27px;
-  gap: 6px;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0;
-}
-
-.trajectory-correlation-actions {
-  display: flex;
-  min-width: 0;
-  gap: 5px;
-  overflow-x: auto;
-}
-
-.trajectory-correlation-actions button,
-.trajectory-correlation-chip {
-  min-height: 24px;
-  padding: 3px 6px;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 9.5px;
-  white-space: nowrap;
-}
-
+.shell #tab-settings .settings-page[data-settings-page="service"].active { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.settings-page[data-settings-page="service"] > .diagnostics-tab-panel.active { flex: 1; min-height: 0; }
+.settings-page[data-settings-page="service"] > .diagnostics-tabs { flex: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; padding: 0; gap: 12px; }
+.settings-page[data-settings-page="service"] .diagnostics-tab-button { padding: 0 2px; border-radius: 0; border-bottom: 2px solid transparent; box-shadow: none; background: transparent; }
+.settings-page[data-settings-page="service"] .diagnostics-tab-button.active { border-bottom-color: var(--accent); color: var(--ink); }
+.trajectory-panel { min-height: 0; min-width: 0; padding: 0; border: 0; background: transparent; }
+.trajectory-panel.active { display: flex; flex-direction: column; gap: 8px; }
+.trajectory-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.trajectory-heading { flex: 1; min-width: 0; }
+.trajectory-heading h3 { margin: 0; font-size: 13px; font-weight: 500; }
+.trajectory-heading p { margin: 3px 0 0; overflow: hidden; color: var(--ink-muted); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+.trajectory-panel .icon-button, .trajectory-panel .rna-action-menu-trigger { width: 28px; height: 28px; min-height: 28px; padding: 5px; border-radius: 5px; font-family: inherit; font-size: 16px; }
+.trajectory-panel .icon-button svg, .trajectory-panel .rna-action-menu svg { width: 13px; height: 13px; }
+.trajectory-panel .rna-action-menu-body { z-index: 12; min-width: 190px; font-family: var(--font-family, "Segoe UI", sans-serif); font-size: 12px; }
+.trajectory-panel .rna-action-menu-body > button { width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: 4px; background: transparent; font: inherit; text-align: left; white-space: normal; }
+.trajectory-toolbar { display: flex; gap: 8px; }
+.trajectory-field { display: grid; min-width: 0; gap: 4px; font-size: 11px; color: var(--ink-muted); }
+.trajectory-field input, .trajectory-field select { width: 100%; min-width: 0; height: 30px; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+#trajectoryViewField { flex: 0 1 190px; }
+.trajectory-search-field { flex: 1; }
+.trajectory-advanced-options, .trajectory-export-options { flex: none; padding: 5px 8px; border-radius: 5px; background: var(--surface-subtle); }
+.trajectory-advanced-options > summary, .trajectory-export-options > summary { color: var(--ink-muted); cursor: pointer; font-size: 11px; }
+.trajectory-querybar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
+.trajectory-export-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; padding-top: 8px; font-size: 11px; }
+.trajectory-export-cas { display: flex; align-items: center; gap: 4px; min-height: 30px; }
+#trajectoryExportNotice { flex-basis: 100%; color: var(--ink-muted); }
+.trajectory-status-row { display: flex; flex: none; min-height: 24px; gap: 8px; align-items: center; justify-content: space-between; }
+.trajectory-status { color: var(--ink-muted); font-size: 10px; overflow-wrap: anywhere; }
+.trajectory-status-row button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
 .trajectory-workspace {
   display: grid;
   grid-template-columns: minmax(160px, var(--split-left, 32%)) 6px minmax(0, 1fr);
-  height: 100%;
-  min-height: 220px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--panel);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
 }
 
 .trajectory-events {
@@ -180,11 +50,11 @@
   position: relative;
   display: grid;
   width: 100%;
-  min-height: 45px;
+  min-height: 38px;
   gap: 3px;
   justify-items: stretch;
   justify-content: stretch;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 0;
   border-bottom: 1px solid var(--section-line);
   border-radius: 0;
@@ -217,50 +87,12 @@
   font-size: 9.5px;
 }
 
-.trajectory-panel.is-derived .trajectory-event::before {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 12px;
-  width: 1px;
-  background: var(--line);
-  content: "";
-}
-
-.trajectory-panel.is-derived .trajectory-event::after {
-  position: absolute;
-  top: 18px;
-  left: 9px;
-  width: 7px;
-  height: 7px;
-  border: 1px solid var(--line-strong);
-  border-radius: 50%;
-  background: var(--panel);
-  content: "";
-}
-
-.trajectory-panel.is-derived .trajectory-event-line,
-.trajectory-panel.is-derived .trajectory-event-time {
-  padding-left: 15px;
-}
-
-.trajectory-panel.is-artifact-tree .trajectory-event {
-  padding-left: calc(10px + var(--trajectory-depth, 0) * 17px);
-}
-
-.trajectory-panel.is-artifact-tree .trajectory-event::before {
-  left: calc(12px + var(--trajectory-depth, 0) * 17px);
-}
-
-.trajectory-panel.is-artifact-tree .trajectory-event::after {
-  left: calc(9px + var(--trajectory-depth, 0) * 17px);
-}
-
+.trajectory-panel.is-artifact-tree .trajectory-event { padding-left: calc(8px + min(var(--trajectory-depth, 0), 4) * 10px); }
 .trajectory-event-type {
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 10.5px;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -277,7 +109,7 @@
   min-height: 0;
   gap: 6px;
   overflow: auto;
-  padding: 8px;
+  padding: 4px 0 4px 10px;
 }
 
 .trajectory-detail-head {
@@ -294,10 +126,14 @@
   gap: 5px;
 }
 
+#trajectoryDetailPart { max-width: 105px; min-width: 0; height: 28px; min-height: 28px; padding: 2px 22px 2px 6px; border: 0; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font: inherit; font-size: 11px; }
+.trajectory-detail-head strong { flex: 1; }
+.trajectory-detail-actions > button { min-height: 28px; padding: 3px 6px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; }
+
 .trajectory-detail-head strong {
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 11px;
+  font-family: inherit;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -356,50 +192,12 @@
   word-break: break-word;
 }
 
-@media (max-width: 700px) {
-  .trajectory-querybar {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .trajectory-search-field {
-    grid-column: span 2;
-  }
-
-  .trajectory-refresh-button {
-    width: 100%;
-    grid-column: 1 / -1;
-  }
-
-  .trajectory-workspace {
-    grid-template-columns: minmax(155px, var(--split-left, 32%)) 6px minmax(0, 1fr);
-  }
-
-  .trajectory-export-bar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 560px) {
-  .trajectory-panel.active {
-    overflow: auto;
-  }
-
-  .trajectory-querybar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .trajectory-search-field {
-    grid-column: auto;
-  }
-
-  .trajectory-workspace {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(180px, 38%) minmax(260px, 1fr);
-    min-height: 520px;
-  }
-
-  .trajectory-events {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-  }
+  #trajectoryViewField { flex-basis: 145px; }
+  .trajectory-toolbar { gap: 6px; }
+  .trajectory-field input, .trajectory-field select { font-size: 11px; }
+  .trajectory-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(70px, 28%) minmax(0, 1fr); }
+  .trajectory-workspace > .splitter { display: none; }
+  .trajectory-events { border-right: 0; border-bottom: 1px solid var(--line); }
+  .trajectory-detail { padding: 8px 0 0; }
 }

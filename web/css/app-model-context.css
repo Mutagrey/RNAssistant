@@ -13,10 +13,11 @@
 .model-context-dialog .icon-btn { flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; }
 .model-context-dialog .icon-btn > svg { width: 16px; height: 16px; }
 .model-context-controls { flex: 0 0 auto; width: 100%; max-width: 888px; max-height: min(30dvh, 240px); overflow-y: auto; margin-inline: auto; padding: 12px 16px 0; scrollbar-width: thin; }
-.model-context-source-row { display: flex; align-items: center; gap: 4px; }
-.model-context-source-row select { flex: 1; width: 0; }
-.model-context-selection { margin-top: 8px; }
-.model-context-selection > select { width: 100%; }
+.model-context-source-row { display: grid; grid-template-columns: minmax(0, 1fr) 30px 30px; align-items: center; gap: 6px 4px; }
+.model-context-source-row select { width: 100%; }
+.model-context-source-row select[hidden] { display: none; }
+#modelContextMode { grid-column: 1 / -1; }
+.model-context-dialog.is-preview #modelContextMode { grid-column: auto; }
 .model-context-history { margin-top: 2px; font-size: 12px; color: var(--ink-muted); }
 .model-context-history > summary, .model-context-meta > summary { display: flex; align-items: center; gap: 8px; padding-block: 8px; list-style: none; cursor: pointer; }
 .model-context-history > summary:hover, .model-context-meta > summary:hover { color: var(--ink); }
@@ -101,9 +102,14 @@
 .model-context-body .table-wrap :is(th, td) { padding: 7px 8px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); font-size: 12px; text-align: left; }
 .model-context-body .table-wrap th { color: var(--ink-muted); font-size: 11px; font-weight: 500; }
 @container request (min-width: 520px) {
-  .model-context-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
-  .model-context-selection { margin-top: 0; }
+  .model-context-dialog:not(.is-workspace):not(.is-preview) .model-context-source-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) 30px 30px; gap: 6px 8px; }
+  #modelContextMode { grid-column: auto; }
   .model-context-status { padding-block: 12px; }
+}
+@container request (max-width: 519px) {
+  .model-context-controls { padding: 8px 16px 0; }
+  .model-context-history > summary { padding-block: 6px; }
+  .model-context-status { padding-block: 6px; }
 }
 @container request (min-width: 420px) {
   .model-context-message.is-message > .model-context-message-body { margin-left: 10px; padding-left: 20px; }

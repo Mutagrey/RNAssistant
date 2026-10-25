@@ -28,6 +28,7 @@ class Element {
   get firstElementChild() { return this.childNodes[0] || null; }
   get childElementCount() { return this.childNodes.length; }
   appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; }
+  insertBefore(child, before) { if (child.parentNode) child.parentNode.removeChild(child); child.parentNode = this; const index = this.childNodes.indexOf(before); this.childNodes.splice(index < 0 ? this.childNodes.length : index, 0, child); return child; }
   removeChild(child) { this.childNodes.splice(this.childNodes.indexOf(child), 1); child.parentNode = null; return child; }
   remove() { if (this.parentNode) this.parentNode.removeChild(this); }
   replaceChildren(...children) { this.childNodes.forEach(child => { child.parentNode = null; }); this.childNodes = []; children.forEach(child => this.appendChild(child)); }
@@ -75,6 +76,7 @@ function preview(text, contentType, truncated) {
       payload: { sha256: sha, byteLength, contentType: "text/plain; charset=utf-8" } } };
 }
 const rawResponse = {
+  ChatId: "chat-1",
   View: "raw", TotalEvents: 1, TotalMatches: 1, HasMore: false,
   Events: [{
     Sequence: 32, EventId: "evt-32", CreatedUtc: "2026-08-29T10:00:00Z", Type: "agent.response.rejected",
@@ -146,12 +148,17 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(dataHost.textContent, /повтор 1\/2/);
   assert.match(dataHost.textContent, /9007199254740993123456789/);
   assert.match(dataHost.textContent, /<\/script><img onerror=1>/);
-  button(dataHost, "Текст").click();
+  dataHost.querySelector(".rn-json-mode-select").value = "pretty";
+  dataHost.querySelector(".rn-json-mode-select").dispatch("change");
+  get("trajectoryDetailPart").value = "evidence"; get("trajectoryDetailPart").dispatch("change");
+  dataHost.querySelector(".rn-json-mode-select").value = "pretty";
+  dataHost.querySelector(".rn-json-mode-select").dispatch("change");
   assert.match(dataHost.textContent, /evt-31/);
   assert.match(dataHost.textContent, /blob-1/);
+  get("trajectoryDetailPart").value = "data"; get("trajectoryDetailPart").dispatch("change");
   button(dataHost, "Копировать всё").click();
   await settle();
-  assert.ok(clipboard.at(-1).includes('"data":' + rawResponse.Events[0].DataJson));
+  assert.equal(clipboard.at(-1), rawResponse.Events[0].DataJson);
   assert.equal(dataHost.querySelectorAll(".rn-json-viewer").length, 1);
   console.log("PASS trajectory JSON viewer: one tree preserves exact data tokens and source evidence");
 
@@ -172,7 +179,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.match(payloadHost.textContent, /<main onclick=evil\(\)>safe<\/main>/);
   button(payloadHost, "Копировать всё").click();
   await settle();
-  assert.equal(JSON.parse(clipboard.at(-1)).payload, payloadText);
+  assert.equal(clipboard.at(-1), payloadText);
   assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-payload");
   console.log("PASS trajectory JSON viewer: non-JSON payload stays inert text with exact copy");
 
@@ -189,7 +196,7 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(/id="trajectoryEventData"[^>]*<\/pre>/.test(page), false);
   console.log("PASS trajectory JSON viewer: replaced diagnostics pretty/pre path is removed");
 
-  trajectoryResponse = { View: "raw", TotalEvents: 0, TotalMatches: 0, HasMore: false, Events: [] };
+  trajectoryResponse = { ChatId: "chat-1", View: "raw", TotalEvents: 0, TotalMatches: 0, HasMore: false, Events: [] };
   get("refreshTrajectoryButton").click();
   await settle();
   assert.equal(dataHost.childNodes.length, 0);
@@ -214,9 +221,11 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(lastQuery.runId, "run-1");
   assert.equal(panel.classList.contains("is-run-journal"), true);
   assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 3);
-  button(get("trajectoryEvents"), "Проблемы 1").click();
+  get("trajectoryEvents").querySelector(".rn-run-journal-filters").value = "problems";
+  get("trajectoryEvents").querySelector(".rn-run-journal-filters").dispatch("change");
   assert.equal(get("trajectoryEvents").querySelectorAll(".rn-run-journal-row").length, 1);
-  button(get("trajectoryEvents"), "Попытки и отмены 1").click();
+  get("trajectoryEvents").querySelector(".rn-run-journal-filters").value = "attempts";
+  get("trajectoryEvents").querySelector(".rn-run-journal-filters").dispatch("change");
   const rejected = get("trajectoryEvents").querySelectorAll(".rn-run-journal-row")[0];
   rejected.open = true; rejected.dispatch("toggle");
   assert.doesNotMatch(rejected.textContent, /duplicate id/);
@@ -248,6 +257,31 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(leaseCloses.at(-1).chatId, "chat-1");
   assert.equal(leaseCloses.at(-1).leaseId, "c".repeat(64));
   console.log("PASS trajectory export: late owner response is closed without rebind or download");
+  let workspaceId = "workspace-one";
+  context.RNAssistantWorkspaceChat = { owner: () => "project", snapshot: () => ({ project: { workspaceId },
+    sessionId: "chat-1", state: { title: "Workspace journal", runId: "run-1" } }) };
+  trajectoryResponse.WorkspaceId = workspaceId;
+  assert.equal(context.openRunJournal({ owner: "project", workspaceId, sessionId: "chat-1", runId: "run-1" }), true);
+  await settle();
+  assert.equal(trajectoryQueries.at(-1).workspaceId, workspaceId);
+  get("clearTrajectoryCorrelationButton").click(); await settle();
+  assert.equal(trajectoryQueries.at(-1).workspaceId, workspaceId, "full history keeps the same project");
+  assert.equal(trajectoryQueries.at(-1).chatId, "chat-1");
+  assert.equal(context.openRunJournal({ chatId: "chat-1" }), false, "Office route cannot open over the project");
+  const goodExport = { chatId: "chat-1", workspaceId, contentType: "application/zip", fileName: "workspace.zip", byteLength: 2,
+    bundleSha256: "b".repeat(64), data: { leaseId: "e".repeat(64), payload: { byteLength: 2, sha256: "b".repeat(64), contentType: "application/zip" } } };
+  exportResponse = goodExport; get("exportTrajectoryButton").click(); await settle();
+  assert.equal(downloads, 2);
+  assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-export:workspace-one");
+  exportResponse = { ...goodExport, workspaceId: "foreign-workspace" };
+  get("exportTrajectoryButton").click(); await settle();
+  assert.equal(downloads, 2, "foreign export is never downloaded");
+  exportResponse = new Promise(resolve => { resolveLate = resolve; });
+  get("exportTrajectoryButton").click(); await settle();
+  workspaceId = "workspace-two"; resolveLate(goodExport); await settle();
+  assert.equal(downloads, 2, "same session ID in another project cannot receive the late export");
+  assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-export:workspace-one");
+  console.log("PASS workspace journal: explicit scope, full history, foreign exports and late owner changes");
   console.log("OK 8/8");
 })().catch(error => {
   console.error(error);

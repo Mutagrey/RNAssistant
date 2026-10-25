@@ -93,6 +93,7 @@ namespace RNAssistant.Office
         public string LastArtifactViewerCursor { get; private set; }
         public string LastTrajectoryCursor { get; private set; }
         public string LastTrajectoryView { get; private set; }
+        public string LastDiagnosticsWorkspaceId { get; private set; }
         public string LastTrajectorySearch { get; private set; }
         public string LastTrajectoryVisibility { get; private set; }
         public IReadOnlyList<string> LastTrajectoryEventTypes { get; private set; }
@@ -131,6 +132,7 @@ namespace RNAssistant.Office
         }
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
+            LastDiagnosticsWorkspaceId = request?.WorkspaceId;
             LastChatId = request == null ? null : request.ChatId;
             LastTrajectoryView = request == null ? null : request.View;
             LastTrajectoryCursor = request == null ? null : request.Cursor;
@@ -139,10 +141,11 @@ namespace RNAssistant.Office
             LastTrajectoryEventTypes = request == null
                 ? (IReadOnlyList<string>)new string[0]
                 : request.EventTypes ?? new List<string>();
-            return new ChatTrajectoryResponse { ChatId = LastChatId, Revision = 1, Events = new SessionEventDto[0], Rows = new TrajectoryViewRowDto[0] };
+            return new ChatTrajectoryResponse { ChatId = LastChatId, WorkspaceId = LastDiagnosticsWorkspaceId, Revision = 1, Events = new SessionEventDto[0], Rows = new TrajectoryViewRowDto[0] };
         }
         public Task<ChatTrajectoryExportResponse> ExportChatTrajectoryAsync(ChatTrajectoryExportRequest request, CancellationToken token)
         {
+            LastDiagnosticsWorkspaceId = request?.WorkspaceId;
             LastChatId = request == null ? null : request.ChatId;
             LastTrajectoryView = request == null ? null : request.View;
             LastTrajectorySearch = request == null ? null : request.Search;
@@ -156,6 +159,7 @@ namespace RNAssistant.Office
             {
                 ChatId = LastChatId,
                 FileName = "trajectory.zip",
+                WorkspaceId = LastDiagnosticsWorkspaceId,
                 ContentType = "application/zip",
                 Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
                     Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64), MaxChunkBytes = 262144,
@@ -169,10 +173,11 @@ namespace RNAssistant.Office
         public Task<ModelContextPayloadResponse> GetModelContextPayloadAsync(ModelContextPayloadQuery query, CancellationToken token)
         { return Task.FromResult(new ModelContextPayloadResponse { ChatId = query.ChatId, EventId = query.EventId }); }
 
-        public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(string chatId, string eventId, CancellationToken cancellationToken)
+        public Task<ChatEventPayloadResponse> GetChatEventPayloadAsync(ChatEventPayloadRequest request, CancellationToken cancellationToken)
         {
-            LastChatId = chatId;
-            return Task.FromResult(new ChatEventPayloadResponse { ChatId = chatId, EventId = eventId,
+            LastDiagnosticsWorkspaceId = request.WorkspaceId;
+            LastChatId = request.ChatId;
+            return Task.FromResult(new ChatEventPayloadResponse { ChatId = request.ChatId, WorkspaceId = request.WorkspaceId, EventId = request.EventId,
                 Sha256 = new string('b', 64), ByteLength = 2, ReturnedCharacters = 2, ContentType = "application/json",
                 Data = new ResourceDownloadOpenResponse { LeaseId = new string('a', 64),
                     Url = "https://rnassistant.local-resource/v1/download/" + new string('a', 64), MaxChunkBytes = 262144,

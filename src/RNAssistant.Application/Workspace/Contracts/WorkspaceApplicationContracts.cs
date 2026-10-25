@@ -57,6 +57,7 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("modelConfiguration")] public ModelRunMetadata ModelConfiguration { get; set; }
         [JsonProperty("office")] public WorkspaceOfficeContext Office { get; set; }
         [JsonProperty("contextReceipt")] public ContextReceipt ContextReceipt { get; set; }
+        [JsonProperty("contextUsage")] public WorkspaceContextUsage ContextUsage { get; set; }
         [JsonProperty("acceptance")] public WorkspaceRunAcceptance Acceptance { get; set; }
         [JsonProperty("userInput")] public WorkspaceUserInput UserInput { get; set; }
         [JsonProperty("taskList")] public TaskListStateProjection TaskList { get; set; }
@@ -69,6 +70,17 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceModelProgress ModelProgress { get; set; }
         [JsonProperty("modelProgressUnavailable", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ModelProgressUnavailable { get; set; }
+    }
+
+    public sealed class WorkspaceContextUsage
+    {
+        public string MessageId { get; set; }
+        public string RunId { get; set; }
+        public string StepId { get; set; }
+        public int? PromptTokens { get; set; }
+        public int? CompletionTokens { get; set; }
+        public int? TotalTokens { get; set; }
+        public int? ContextWindowTokens { get; set; }
     }
 
     // Transient preview, scoped to one live attempt. Never durable history or authority.

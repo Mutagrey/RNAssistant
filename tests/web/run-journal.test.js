@@ -129,7 +129,7 @@ function findButton(root, prefix) {
   assert.match(root.textContent, /Ответ модели/);
   const metrics = root.querySelectorAll(".rn-run-journal-metric");
   assert.equal(metrics[1].textContent, "2Проблемы");
-  assert.equal(metrics[2].textContent, "2Вызовы инструментов");
+  assert.equal(metrics[2].textContent, "2Действия");
   console.log("PASS run journal: chronological typed rows and run view evidence render without inference");
 
   const toolSelection = rows.filter(item => item.ToolCallId === "call-1");
@@ -171,7 +171,8 @@ function findButton(root, prefix) {
   responseRow.dispatch("toggle");
   console.log("PASS run journal: explicit technical actions load persisted API request/response bodies while correlation IDs stay collapsed");
 
-  findButton(root, "Запросы и ответы").click();
+  root.querySelector(".rn-run-journal-filters").value = "api";
+  root.querySelector(".rn-run-journal-filters").dispatch("change");
   assert.equal(filter, "api");
   const apiFiltered = context.RNAssistantRunJournal.render(root, rows,
     Object.assign({}, options, { filter }));
@@ -183,7 +184,8 @@ function findButton(root, prefix) {
 
   context.RNAssistantRunJournal.render(root, rows, options);
 
-  findButton(root, "Проблемы").click();
+  root.querySelector(".rn-run-journal-filters").value = "problems";
+  root.querySelector(".rn-run-journal-filters").dispatch("change");
   assert.equal(filter, "problems");
   const filtered = context.RNAssistantRunJournal.render(root, rows, Object.assign({}, options, { filter }));
   assert.equal(filtered.displayed, 2);
@@ -195,8 +197,8 @@ function findButton(root, prefix) {
   rejected.open = true; rejected.dispatch("toggle");
   const rejectedTechnical = rejected.querySelector(".rn-run-journal-technical");
   rejectedTechnical.open = true; rejectedTechnical.dispatch("toggle");
-  assert.equal(mounts.at(-2).options.text, rows[3].DataJson);
-  assert.equal(mounts.at(-2).options.completeness, "preview");
+  assert.equal(mounts.at(-1).options.text, rows[3].DataJson);
+  assert.equal(mounts.at(-1).options.completeness, "preview");
   assert.match(rejected.textContent, /9007199254740993123456789/);
   assert.match(rejected.textContent, /попытка отклонена/i);
   rejected.open = false; rejected.dispatch("toggle");
@@ -287,17 +289,10 @@ function findButton(root, prefix) {
   const activity = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8");
   const agent = fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8");
   assert.ok(page.indexOf("app-run-journal.js") < page.indexOf("app-trajectory.js"));
-  ["app-agent.js"].forEach(asset => {
-    assert.ok(page.includes(asset + "?v=action-severity-20260930-1"), asset + " uses the diagnostics cache key");
+  ["app-agent.js", "app-run-journal.css", "app-run-journal.js", "app-trajectory-payload.js", "app-trajectory.js"].forEach(asset => {
+    assert.equal(page.split(asset + "?v=").length - 1, 1, asset + " is loaded once with a versioned URL");
   });
-  ["app-run-journal.css"].forEach(asset => {
-    assert.ok(page.includes(asset + "?v=chat-projection-20260907-1"),
-      asset + " uses the fresh Запросы и ответы visibility cache key");
-  });
-  ["app-run-journal.js", "app-trajectory-payload.js", "app-trajectory.js"].forEach(asset => {
-    assert.ok(page.includes(asset + "?v=" + (asset === "app-trajectory-payload.js" ? "trajectory-payload-20260906-1" : asset === "app-run-journal.js" ? "catalog-display-chat-20260908-1" : "chat-projection-20260907-1")), "payload cutover refreshes " + asset);
-  });
-  assert.match(page, /option value="run-causal">Журнал запуска/);
+  assert.match(page, /option value="run-causal">Ход запуска/);
   assert.match(trajectory, /pageSize:\s*view === "run-causal" \? 200 : 100/);
   assert.match(trajectory, /combined\.slice\(0, journalLimit\)/);
   assert.match(trajectory, /!hasMore \|\| !!loadedLimitReached/);

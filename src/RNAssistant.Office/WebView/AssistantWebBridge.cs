@@ -360,7 +360,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.GetChatEventPayload:
                         var chatEventPayload = Payload<ChatEventPayloadRequest>(payload);
-                        responsePayload = await _controller.GetChatEventPayloadAsync(chatEventPayload.ChatId, chatEventPayload.EventId, cancellationToken).ConfigureAwait(false);
+                        responsePayload = await _controller.GetChatEventPayloadAsync(chatEventPayload, cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.CreateChat:
                         var createChat = Payload<CreateChatPayload>(payload);

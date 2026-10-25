@@ -48,12 +48,14 @@ namespace RNAssistant.Office
         private bool ResourceOwnerIsActive(string chatId, string workspaceId)
         {
             if (Volatile.Read(ref _disposed) != 0 || string.IsNullOrWhiteSpace(chatId)) return false;
-            if (workspaceId != null && workspaceId.StartsWith(ModelContextInspectorService.Owner + ":", StringComparison.Ordinal))
+            var diagnosticOwner = new[] { ModelContextInspectorService.Owner, TrajectoryPayloadService.Owner, TrajectoryExportDownloadService.Owner }
+                .FirstOrDefault(owner => workspaceId != null && workspaceId.StartsWith(owner + ":", StringComparison.Ordinal));
+            if (diagnosticOwner != null)
             {
                 try
                 {
-                    return ModelContextInspectorService.ReadWorkspaceSession(_paths, _chatStore,
-                        workspaceId.Substring(ModelContextInspectorService.Owner.Length + 1), chatId) != null;
+                    return ChatDiagnosticsScope.ReadWorkspaceSession(_paths, _chatStore,
+                        workspaceId.Substring(diagnosticOwner.Length + 1), chatId) != null;
                 }
                 catch (Exception error) when (error is InvalidOperationException || error is ArgumentException ||
                     error is System.IO.IOException || error is UnauthorizedAccessException) { return false; }

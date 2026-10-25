@@ -102,12 +102,31 @@ namespace RNAssistant.Runtime
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
                 ContextCheckpointId = ContextCompactionRuntime.ActiveCheckpoint(session)?.Id,
                 ToolStepsUsed = session.LastRun?.KernelState?.Summary.ToolStepsUsed, Limits = session.LastRun?.KernelState?.Limits,
-                ContextReceipt = session.LastContextReceipt, Acceptance = session.LastRun?.WorkspaceAcceptance,
+                ContextReceipt = session.LastContextReceipt, ContextUsage = ReadContextUsage(session), Acceptance = session.LastRun?.WorkspaceAcceptance,
                 UserInput = GetPendingQuestions(session), TaskList = GetTaskList(session), Plan = GetPlan(workspace, session),
                 InterruptedToolId = session.LastRun?.InterruptedToolId, InterruptedPath = session.LastRun?.InterruptedFilePath,
                 InterruptedEffectPossible = session.LastRun?.InterruptedEffectPossible, MessageCount = session.Messages.Count,
                 Presentation = Presentation(workspace, session), ModelProgress = preview.Progress,
                 ModelProgressUnavailable = !preview.ReachedOwner
+            };
+        }
+
+        internal static WorkspaceContextUsage ReadContextUsage(ChatSession session)
+        {
+            var last = session.Messages.LastOrDefault(message => message.Role == "assistant" && message.ProtocolMessage);
+            if (last == null) return null;
+            var origin = last.AcceptedCallOrigin;
+            // Parallel calls share one completion; only call zero carries provider usage.
+            var response = origin == null ? last : session.Messages.FirstOrDefault(message =>
+                message.Role == "assistant" && message.ProtocolMessage && message.RunId == last.RunId &&
+                message.AcceptedCallOrigin?.ModelAttemptId == origin.ModelAttemptId &&
+                message.AcceptedCallOrigin.CallIndex == 0);
+            if (response == null) return null;
+            return new WorkspaceContextUsage {
+                MessageId = response.Id, RunId = response.RunId, StepId = response.AcceptedCallOrigin?.StepId,
+                PromptTokens = response.PromptTokens, CompletionTokens = response.CompletionTokens, TotalTokens = response.TotalTokens,
+                ContextWindowTokens = !string.IsNullOrWhiteSpace(response.RunId) && session.LastRun?.RunId == response.RunId
+                    ? session.LastRun?.ModelConfiguration?.ContextWindowTokens : null
             };
         }
 

@@ -24,7 +24,7 @@
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
   <link rel="stylesheet" href="css/app.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-chat.css?v=conversation-v8-inspector-20261023-1-action-icon-20261024-2-workspace-abilities-1">
+  <link rel="stylesheet" href="css/app-chat.css?v=conversation-v8-inspector-20261023-1-action-icon-20261024-2-workspace-abilities-1-workspace-diagnostics-20261025-1">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-composer.css?v=single-composer-20261023-1-project-shell-1">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
@@ -33,16 +33,16 @@
   <link rel="stylesheet" href="css/app-workspace.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-plugins.css?v=right-sections-sent-20261024-1-shared-dock-1-project-shell-1-pane-header-20261025-1">
   <link rel="stylesheet" href="css/app-preview-surface.css?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1">
-  <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-json-viewer.css?v=json-height-20260929-1-history-compact-20261025-1">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=agent-planning-20261002-2">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1">
-  <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1-history-compact-20261025-1">
+  <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1-history-compact-20261025-1">
   <link rel="stylesheet" href="css/app-tools.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-vba.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
-  <link rel="stylesheet" href="css/app-model-context.css?v=request-reader-20261024-1">
+  <link rel="stylesheet" href="css/app-model-context.css?v=request-reader-20261025-2">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=composer-menu-20261013-1">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-artifacts.css?v=artifact-versions-20261014-1">
@@ -336,11 +336,11 @@
               <div class="model-context-controls">
                 <div class="model-context-source-row">
                   <select id="modelContextMode" aria-label="Источник контекста"><option value="actual">Сохранённый запрос</option><option id="modelContextPreviewOption" value="preview">Следующий запрос</option></select>
+                  <select id="modelContextAttempt" aria-label="Сохранённый запрос"></select>
                   <button type="button" class="icon-btn" id="modelContextRefresh" aria-label="Обновить" title="Обновить"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                   <button type="button" class="icon-btn" id="modelContextDownload" aria-label="Скачать запрос" title="Скачать запрос"><svg data-rna-icon="download" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
                 </div>
                 <div id="modelContextActualControls" class="model-context-selection">
-                  <select id="modelContextAttempt" aria-label="Сохранённый запрос"></select>
                   <details id="modelContextHistory" class="model-context-history">
                     <summary>История и поиск</summary>
                     <div class="model-context-toolbar">
@@ -1035,53 +1035,57 @@
                 </div>
               </div>
 
-              <section class="model-compatibility-panel trajectory-panel diagnostics-tab-panel" data-diagnostics-panel="records" aria-labelledby="trajectoryTitle">
-                <div class="model-compatibility-head">
-                  <div>
-                    <h3 id="trajectoryTitle">История чата</h3>
-                    <p id="trajectoryDescription">Сохранённые шаги последнего запуска текущего чата. Раскройте строку для подробностей.</p>
-                  </div>
+              <section class="trajectory-panel diagnostics-tab-panel" data-diagnostics-panel="records" aria-labelledby="trajectoryTitle">
+                <div class="trajectory-head">
+                  <button class="icon-button hidden" id="trajectoryBackButton" type="button" aria-label="Назад к предыдущей выборке" title="Назад"><svg data-rna-icon="left" aria-hidden="true"></svg></button>
+                  <div class="trajectory-heading"><h3 id="trajectoryTitle">История чата</h3><p id="trajectoryDescription">Сохранённые события выбранного чата</p></div>
+                  <button class="icon-button" id="refreshTrajectoryButton" type="button" aria-label="Обновить историю" title="Обновить историю"><svg data-rna-icon="refresh" aria-hidden="true"></svg></button>
+                  <details class="popover rna-action-menu" id="trajectoryActionsMenu">
+                    <summary class="rna-action-menu-trigger" aria-label="Действия с историей" title="Действия с историей"><svg data-rna-icon="more" aria-hidden="true"></svg></summary>
+                    <div class="popover-menu rna-action-menu-body">
+                      <button class="hidden" id="clearTrajectoryCorrelationButton" type="button"><svg data-rna-icon="chat" aria-hidden="true"></svg><span>Показать весь чат</span></button>
+                      <button id="trajectoryFiltersButton" type="button"><svg data-rna-icon="search" aria-hidden="true"></svg><span>Фильтры событий</span></button>
+                      <button id="trajectoryExportOptionsButton" type="button"><svg data-rna-icon="download" aria-hidden="true"></svg><span>Экспорт диагностики</span></button>
+                    </div>
+                  </details>
                 </div>
-                <div class="trajectory-primary-actions">
-                  <button class="secondary trajectory-refresh-button" id="refreshTrajectoryButton" type="button">Обновить историю</button>
-                  <button class="secondary hidden" id="clearTrajectoryCorrelationButton" type="button">Показать весь чат</button>
+                <div class="trajectory-toolbar">
+                  <label class="trajectory-field" id="trajectoryViewField"><select id="trajectoryViewInput" aria-label="Представление истории"><option value="raw">Исходные события</option><option value="run-causal">Ход запуска</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Действия</option><option value="artifact-lineage">Артефакты</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations">Журнал VBA</option></select></label>
+                  <label class="trajectory-field trajectory-search-field"><input id="trajectorySearchInput" type="search" maxlength="512" placeholder="Поиск в истории" aria-label="Поиск в сохранённой истории"></label>
                 </div>
-                <details class="trajectory-advanced-options" id="trajectoryAdvancedOptions">
-                  <summary>Поиск и технические данные</summary>
-                  <p>Дифф кода — во вкладке VBA. Журнал изменений здесь нужен для сохранённых исходных записей и восстановления.</p>
+                <details class="trajectory-advanced-options hidden" id="trajectoryAdvancedOptions">
+                  <summary>Фильтры событий</summary>
                   <div class="trajectory-querybar">
-                    <label class="trajectory-field" id="trajectoryViewField"><span>Данные</span><select id="trajectoryViewInput"><option value="raw">Исходные события чата</option><option value="run-causal">Ход запуска</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Действия</option><option value="artifact-lineage">Артефакты</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations">Журнал VBA и восстановление</option></select></label>
-                    <label class="trajectory-field trajectory-search-field"><span>Поиск в сохранённой истории</span><input id="trajectorySearchInput" maxlength="512" placeholder="Слова из событий"></label>
                     <label class="trajectory-field" id="trajectoryTypeField"><span>Тип события</span><input id="trajectoryTypeInput" maxlength="256" placeholder="Типы через запятую"></label>
                     <label class="trajectory-field" id="trajectoryVisibilityField"><span>Состояние</span><select id="trajectoryVisibilityInput"><option value="">Все</option><option value="current">Текущее</option><option value="shadowed">Заменённое</option><option value="log-only">Только журнал</option></select></label>
-                    <label class="trajectory-field hidden" id="trajectoryVbaKindField"><span>VBA scope</span><select id="trajectoryVbaKindInput"><option value="">Модули и пакеты</option><option value="module">Модули</option><option value="package">Пакеты</option></select></label>
-                    <label class="trajectory-field hidden" id="trajectoryVbaStatusField"><span>Статус</span><select id="trajectoryVbaStatusInput"><option value="">Все</option><option value="open">Open</option><option value="committed">Committed</option><option value="not_applied">Not applied</option><option value="rolled_back">Rolled back</option><option value="failed">Failed</option><option value="unknown">Unknown</option></select></label>
+                    <label class="trajectory-field hidden" id="trajectoryVbaKindField"><span>Область VBA</span><select id="trajectoryVbaKindInput"><option value="">Модули и пакеты</option><option value="module">Модули</option><option value="package">Пакеты</option></select></label>
+                    <label class="trajectory-field hidden" id="trajectoryVbaStatusField"><span>Статус</span><select id="trajectoryVbaStatusInput"><option value="">Все</option><option value="open">Открыто</option><option value="committed">Применено</option><option value="not_applied">Не применено</option><option value="rolled_back">Отменено</option><option value="failed">Ошибка</option><option value="unknown">Неизвестно</option></select></label>
                   </div>
-                  <div class="trajectory-correlation-bar hidden" id="trajectoryCorrelationBar"><div class="trajectory-correlation-actions" id="trajectoryCorrelationActions"></div></div>
                 </details>
-                <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus">История загрузится при открытии вкладки.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Ранее</button></div>
                 <div class="trajectory-workspace split-layout hidden" id="trajectoryWorkspace" data-split-key="trajectory" data-default-ratio="0.32" data-min-left="160" data-max-ratio="0.6">
                   <div class="trajectory-events" id="trajectoryEvents" role="listbox" aria-label="События траектории"></div>
                   <div class="splitter" role="separator" aria-label="Ширина списка событий" aria-orientation="vertical"></div>
                   <div class="trajectory-detail">
                     <div class="trajectory-detail-head">
                       <strong id="trajectoryEventTitle">Событие не выбрано</strong>
-                      <div class="trajectory-detail-actions"><button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Показать payload</button><button class="secondary hidden" id="loadVbaMutationButton" type="button">Показать before / after</button></div>
+                      <select id="trajectoryDetailPart" aria-label="Содержимое или связи события"><option value="data">Данные</option><option value="evidence">Связи</option><option value="payload" disabled>Содержимое</option></select>
+                      <div class="trajectory-detail-actions"><details class="popover rna-action-menu hidden" id="trajectoryCorrelationBar"><summary class="rna-action-menu-trigger" aria-label="Связанные события" title="Связанные события"><svg data-rna-icon="more" aria-hidden="true"></svg></summary><div class="popover-menu rna-action-menu-body" id="trajectoryCorrelationActions"></div></details><button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Содержимое</button><button class="secondary hidden" id="loadVbaMutationButton" type="button">Изменения</button></div>
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
                     <div class="trajectory-json-host" id="trajectoryEventData"></div>
                     <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
                 </div>
-                <details class="trajectory-export-options">
+                <details class="trajectory-export-options hidden" id="trajectoryExportOptions">
                   <summary>Экспорт диагностики</summary>
                   <div class="trajectory-export-bar">
-                    <label class="trajectory-field"><span>Редактирование данных</span><select id="trajectoryExportRedactionInput"><option value="metadata">Только metadata</option><option value="secrets">Скрыть credential fields</option><option value="none">Без редактирования</option></select></label>
-                    <label class="trajectory-export-cas"><input id="trajectoryExportCasInput" type="checkbox" disabled> Включить CAS bodies</label>
+                    <label class="trajectory-field"><span>Содержимое архива</span><select id="trajectoryExportRedactionInput"><option value="metadata">Только метаданные</option><option value="secrets">Скрыть секреты</option><option value="none">Полные данные</option></select></label>
+                    <label class="trajectory-export-cas"><input id="trajectoryExportCasInput" type="checkbox" disabled> Включить сохранённые тела</label>
                     <button class="secondary" id="exportTrajectoryButton" type="button">Скачать ZIP</button>
-                    <span id="trajectoryExportNotice">Data и CAS bodies не попадут в архив.</span>
+                    <span id="trajectoryExportNotice">Тела событий и файлов не попадут в архив.</span>
                   </div>
                 </details>
+                <div class="trajectory-status-row"><div class="trajectory-status" id="trajectoryStatus" role="status">История загрузится при открытии вкладки.</div><button class="secondary hidden" id="loadMoreTrajectoryButton" type="button">Ещё</button></div>
               </section>
 
               <div class="logs-workspace diagnostics-logs diagnostics-tab-panel active" data-diagnostics-panel="runtime-log">
@@ -1138,24 +1142,24 @@
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=conversation-v8-20261023-1"></script>
   <script src="js/app-layout.js?v=plugin-right-preview-20261024-1-html-right-1-project-shell-1"></script>
-  <script src="js/app-chat-inspector.js?v=right-sections-sent-20261024-1-request-layout-2-shared-dock-1-workspace-abilities-1-project-shell-1-workspace-requests-20261025-1-pane-header-1"></script>
+  <script src="js/app-chat-inspector.js?v=right-sections-sent-20261024-1-request-layout-2-shared-dock-1-workspace-abilities-1-project-shell-1-workspace-requests-20261025-1-pane-header-1-terminal-status-1-workspace-diagnostics-1"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1"></script>
-  <script src="js/app-settings.js?v=auto-confirm-20261013-1"></script>
+  <script src="js/app-settings.js?v=auto-confirm-20261013-1-history-compact-20261025-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=composer-tooltips-20261015-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-viewer-ui.js?v=shared-viewers-20261019-1"></script>
-  <script src="js/app-json-viewer.js?v=chat-projection-20260907-1"></script>
+  <script src="js/app-json-viewer.js?v=chat-projection-20260907-1-history-compact-20261025-1"></script>
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=agent-planning-20261002-2-image-display-1"></script>
-  <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1"></script>
+  <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1-history-compact-20261025-1"></script>
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=attachment-input-20261012-1"></script>
-  <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1"></script>
-  <script src="js/app-trajectory.js?v=diagnostics-clarity-20260930-1"></script>
+  <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1-workspace-diagnostics-20261025-1"></script>
+  <script src="js/app-trajectory.js?v=diagnostics-clarity-20260930-1-workspace-diagnostics-20261025-1-history-compact-20261025-1"></script>
   <script src="js/app-prompts.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2-panel-model-20261002-1"></script>
@@ -1188,7 +1192,7 @@
   <script src="js/app-html-workspace.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-chat-browser.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
-  <script src="js/app-model-context.js?v=request-reader-20261024-1-shared-dock-1-workspace-requests-20261025-1"></script>
+  <script src="js/app-model-context.js?v=request-reader-20261024-1-shared-dock-1-workspace-requests-20261025-1-compact-header-1"></script>
   <script src="js/app-context-inspector.js?v=single-composer-20261023-1"></script>
   <script src="js/app-tool-result-preview.js?v=question-delivery-20261014-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>
