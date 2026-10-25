@@ -13,6 +13,8 @@ a late create response changed the selected chat, and a pending cancel disabled
 another chat's Stop or showed it an unrelated error. The Office host chat fixture
 was updated for the shared icon renderer; its checks pass. No full-suite or
 target-host qualification is claimed.
+Late chat and history deletion responses also no longer reopen the plugin after
+the user selects another project.
 
 ## Right preview header — 2026-10-25
 

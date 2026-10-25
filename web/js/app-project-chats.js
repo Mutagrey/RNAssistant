@@ -312,38 +312,48 @@
   }
   async function remove(entry, chat) {
     if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
-    var pluginCurrent = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId &&
-      window.RNAssistantWorkspaceChat.snapshot() && window.RNAssistantWorkspaceChat.snapshot().sessionId === chat.Id;
     try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
-      if (projectId() === entry.workspaceId && currentId() === chat.Id) active = null;
-      notice(""); render(); var selected = project();
-      if (pluginCurrent) await window.RNAssistantPlugins.select(entry.pluginId,
-        selected && selected.chats && selected.chats[0] && selected.chats[0].Id);
-      else if (!active && selected && selected.available && selected.chats.length) open(selected.workspaceId, selected.chats[0].Id); }
-    catch (error) { notice(error.detail || error.message, true); }
+      var removedSelected = projectId() === entry.workspaceId && currentId() === chat.Id;
+      if (removedSelected) { active = null; notice(""); }
+      render();
+      if (!removedSelected) return;
+      var selected = project();
+      if (window.RNAssistantWorkspaceChat.owner() === "plugin" && window.RNAssistantPlugins &&
+          window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId)
+        await window.RNAssistantPlugins.select(entry.pluginId,
+          selected && selected.chats && selected.chats[0] && selected.chats[0].Id);
+      else if (selected && selected.available && selected.chats.length)
+        open(selected.workspaceId, selected.chats[0].Id); }
+    catch (error) { if (projectId() === entry.workspaceId && currentId() === chat.Id)
+      notice(error.detail || error.message, true); }
   }
   async function removeHistory(entry) {
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
-    var pluginCurrent = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId;
     try { await window.RNAssistantChatDrafts.flushAll();
       catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
       (entry.chats || []).forEach(function (chat) {
         window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       });
       window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
-      if (projectId() === entry.workspaceId) {
+      var removedSelected = projectId() === entry.workspaceId;
+      var pluginSelected = removedSelected && window.RNAssistantWorkspaceChat.owner() === "plugin" &&
+        window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId;
+      if (removedSelected) {
         ++serial; active = null;
         selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
+        notice("");
       }
-      notice(""); render();
-      if (pluginCurrent) await window.RNAssistantPlugins.select(entry.pluginId);
-      else if (project() && project().available && project().chats && project().chats.length && !active)
+      render();
+      if (pluginSelected) await window.RNAssistantPlugins.select(entry.pluginId);
+      else if (removedSelected && project() && project().available && project().chats && project().chats.length && !active)
         open(projectId(), project().chats[0].Id); }
-    catch (error) { await refresh(); notice(error.detail || error.message, true); }
+    catch (error) { var selected = projectId() === entry.workspaceId;
+      await refresh(selected ? null : { workspaceId: projectId(), sessionId: currentId() });
+      if (selected) notice(error.detail || error.message, true); }
   }
   async function runChat(action, reportFailure) {
     if (busy || !active || !project() || !project().available) return false;

@@ -186,6 +186,59 @@ const root = path.resolve(__dirname, '../..');
     });
     assert.doesNotMatch(await page.locator('#workspaceChatNotice').textContent(), /Previous chat cancellation failed/,
       'a late cancel error must remain with its original session');
+    await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+    const sourceSession = await page.evaluate(() => RNAssistantWorkspaceChat.selectedSession('preview-plugin-workspace'));
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.deleteReply = {release:null, pluginSelections:0};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'deleteProjectChat') await new Promise(resolve => { deleteReply.release = resolve; });
+        return result;
+      };
+      const select = RNAssistantPlugins.select;
+      RNAssistantPlugins.select = function (...args) {
+        deleteReply.pluginSelections++;
+        return select.apply(this, args);
+      };
+    });
+    const sourceRow = page.locator('[data-tree-key="project-chat:preview-plugin-workspace:' + sourceSession + '"]');
+    page.once('dialog', dialog => dialog.accept());
+    await sourceRow.hover();
+    await sourceRow.getByRole('button', {name:/Удалить чат/}).click();
+    await page.waitForFunction(() => !!deleteReply.release);
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
+    await page.evaluate(async () => {
+      deleteReply.release();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    assert.equal(await page.evaluate(() => deleteReply.pluginSelections), 0,
+      'late deletion of a plugin chat must not reopen the plugin after another project was selected');
+    assert.equal(await page.evaluate(() => RNAssistantWorkspaceChat.owner()), 'project');
+    await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+    const expectedPluginSelections = await page.evaluate(() => deleteReply.pluginSelections);
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.historyReply = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'deleteProjectHistory') await new Promise(resolve => { historyReply.release = resolve; });
+        return result;
+      };
+    });
+    const sourceProject = page.locator('[data-tree-key="project:preview-plugin-workspace"]');
+    page.once('dialog', dialog => dialog.accept());
+    await sourceProject.locator(':scope > .navigation-tree-row').hover();
+    await sourceProject.locator('button[title^="Удалить историю"]').click();
+    await page.waitForFunction(() => !!historyReply.release);
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
+    await page.evaluate(async () => {
+      historyReply.release();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    assert.equal(await page.evaluate(() => deleteReply.pluginSelections), expectedPluginSelections,
+      'late history deletion must not reopen the plugin after another project was selected');
+    assert.equal(await page.evaluate(() => RNAssistantWorkspaceChat.owner()), 'project');
     console.log('PASS workspace snapshot ordering, running-chat reconnect and plugin selection during a pending reply');
   } finally {
     await browser.close();
