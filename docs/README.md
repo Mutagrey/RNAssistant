@@ -24,6 +24,9 @@ direct cutover объясняют порядок уже выполненной �
 Причина перехода к рабочему baseline зафиксирована в
 [ADR-0011](decisions/ADR-0011-working-baseline-and-trunk-development.md).
 
+[Таблица всех встроенных skills/tools и пересмотр описаний](audits/skills-tools-description-review.md)
+содержит сравнение семейств и следующие этапы объединения.
+
 Согласованный [план Tools](proposals/tools-architecture-plan.md) и
 [аудит встроенного каталога](audits/tools-architecture-current-state.md) описывают
 общий текстовый поиск workspace/Office и сохранение runtime/v8. Текущее поведение
