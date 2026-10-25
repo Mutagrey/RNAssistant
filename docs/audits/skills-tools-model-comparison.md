@@ -95,6 +95,10 @@ with four completions and exactly one write. No production context policy is cha
 
 ## Results after the shared harness fix
 
+**Root-cause correction:** the local failures below were later traced to a production
+admission/projection mismatch, not excessive skill size. See the snapshot-budget
+correction below. Raw pilot evidence remains unchanged.
+
 | Profile / variant | Acceptance | Model calls | Tool calls / writes | HTTP prompt / completion tokens | Request bytes | Seconds |
 |---|---|---:|---|---:|---:|---:|
 | Local 32K A | CONTEXT_ERROR | 2 (one compaction) | 1 / 0 | 7993 / 281 | 63325 | 43.77 |
@@ -110,8 +114,8 @@ establish a latency or quality effect. Local timing includes model warmup/cache 
 
 Local A needs approximately 29847 input tokens including schema and reserves; B needs
 29899, against a 27648 input limit. Both stop after selecting the skill and compaction,
-before source read/patch. This is an existing strict-schema request-budget limitation,
-not evidence that the local model cannot edit VBA or a newly introduced 32K regression.
+before source read/patch. This was initially classified as request-budget pressure. The later reproduction below
+identifies a tool-surface mismatch in admission; it is not a model capability limit.
 Cloud uses json_object, so its smaller schema overhead is not a controlled comparison
 of model intelligence against the json_schema local run. Do not compare their scores
 as if only the model changed.
@@ -128,8 +132,69 @@ Local working evidence: `/tmp/rna-skills-ab-5uXf01`; the archive is the retained
 The script records DLL paths for provenance; rebuilding on another machine requires
 both pinned sources, the same harness-only patch and newly recorded binary hashes.
 
-Next: address the observed strict-schema skill-budget pressure in its own scope,
-then add unprompted host-authoring and scoped-search tasks with independent graders.
+Next: verify the corrected admission path below, then add unprompted host-authoring
+and scoped-search tasks with independent graders.
 Do not merge all tools on this evidence: loading larger combined packages could
 increase the measured budget problem. File unification remains a separate owner/API
 migration under ADR-0013, not a remedy for this harness defect.
+
+
+## Snapshot-budget correction — 2026-10-26
+
+The user challenged the size diagnosis based on earlier approximately 10K base
+contexts. Investigation confirmed a bug in `ConversationModelSession`, not a need
+to shorten skill instructions. `CompileCurrent` merges direct tools and selected
+skills into the frozen snapshot arsenal. `CreateRequestFromSnapshot` uses that arsenal,
+but `EnsureToolPackFits` and `CanPublishToolPack` used the original direct/candidate
+pack. Exact schema projection correctly refused this mismatch, so admission counted
+unprojected inline tool contracts plus a separate response schema.
+
+`ToolsForSnapshot` now supplies the same tool set to dispatch and both admission
+checks. No schema, skill body, selected dependency, protocol, budget multiplier,
+context setting, output limit or reserve changed. No hidden fallback was added.
+
+New regression `skill packages: strict VBA selection fits actual request budget`
+fails before the fix (approximately 30068/27648, only 4 of 7 requests reached) and
+passes after it. Four adjacent existing checks pass: ordinary VBA schema inspection,
+complete-request oversized-selection refusal, exact callable-schema projection,
+and optional-schema admission. The original 32K scripted live-diagnostic scenario
+also now passes without compaction: 4 completions, 1 write, exact final source.
+
+Measured components from the unchanged scripted task/profile, UTF-8/4 estimator
+including message-role/envelope overhead:
+
+| Step | Message tokens | Response-schema/options | Repair reserve | Continuation reserve | Admission total | Input limit |
+|---|---:|---:|---:|---:|---:|---:|
+| Initial request | 8020 | 5532 | 1706 | 4608 | 19866 | 27648 |
+| VBA skill selected | 11768 | 7525 | 1706 | 4608 | 25607 | 27648 |
+| Module read | 11970 | 7525 | 1706 | 4608 | 25809 | 27648 |
+| Verified patch | 12216 | 7525 | 1706 | 4608 | 26055 | 27648 |
+
+The selected skill message accounts for 2578 estimated tokens at step 2. The main
+message accounts for 8777; remaining messages account for 413. Thus roughly 8K base
+message context and 11.8K after skill selection are compatible with the user's prior
+observation. Admission totals include schema costs and reserves; they are **not** the
+provider's actual prompt-token count. Initial local provider usage is 6877 tokens.
+The earlier approximately 29.9K rejection was calculated with a mismatched tool set.
+
+
+Real local strict-profile follow-up retains the same model digest, context 32768,
+4096 output limit, response mode and reasoning settings. The request after skill
+selection now reaches the provider: reported prompt usage is 10131 tokens (initial
+6877), with no compaction. The model first supplies a wrong patch column; the tool
+refuses without mutation, the model corrects the column and performs one verified
+write. It then supplies prose instead of tool_call_id values in finish evidence;
+these completions are rejected. Thus successful budget admission/source editing
+must be reported separately from full task acceptance. Runtime IDs are present in
+the model's TOOL_RESULT messages; this is not evidence that the budget fix hid them.
+
+Final follow-up result: 24 model calls, zero compactions, one rejected position-guard
+patch and one verified write. Exact final VBA bytes independently match the expected
+CRLF source. Full task acceptance is **false**: repeated prose evidence reaches the
+model-iteration limit. No unknown write or extra mutation occurred. This closes the
+reproduced admission defect, not general local-model finish reliability.
+
+[Follow-up evidence](evidence/vba-snapshot-budget-20261026.tar.gz) retains live and
+scripted requests/responses, context/budget receipts, acceptance, exact source/store,
+model digest, baseline revision, source patch, binary and file hashes. Archive SHA-256:
+`ac3ebc1e8dfbdb7f2a95c91fea0b94e357f78b0bd9f242ccc8fe5610c416435d`.

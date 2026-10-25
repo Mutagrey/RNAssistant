@@ -2498,7 +2498,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void SimpleAgentVbaSchemaInspectionDoesNotLoop(bool tightBudget)
+        private static void SimpleAgentVbaSchemaInspectionDoesNotLoop(bool tightBudget, bool strict = false)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
@@ -2576,6 +2576,11 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 };
                 var requestSettings = new AppSettings { AutoConfirmToolActions = true, ContextWindowOverrideTokens = 32768 };
+                if (strict)
+                {
+                    requestSettings.AgentResponseMode = AgentResponseModes.JsonSchema;
+                    requestSettings.MaxTokens = 4096;
+                }
                 // The default 32K request now fits. Retain a deliberate full-request admission refusal
                 // independently of how much prose the built-in prompts happen to contain.
                 var userRequest = "Исправь незакрытый If в UniLoader." +

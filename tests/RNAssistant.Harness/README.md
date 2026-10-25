@@ -474,8 +474,12 @@ set `RNA_BASE_URL`, `RNA_MODEL`, `RNA_RESPONSE_MODE` and `RNA_CONTEXT_TOKENS`, t
 Live diagnostics use the production conversation completion delegate directly: schema
 responses already carry their negotiated envelope. Only scripted diagnostics use
 `FixtureCompletion` to wrap domain JSON; applying it to live replies double-wraps v8.
-The full VBA skill can require compaction at 32K; the no-compaction scripted fixture
-was checked with 131072 tokens. This is not evidence of a local model supporting 128K.
+The earlier 32K VBA failure was a snapshot/direct-tool-pack admission mismatch,
+not proof of excessive skill size. With snapshot-based admission the unchanged
+no-compaction scripted fixture passes at 32768 tokens. The focused
+`skill packages: strict VBA selection fits actual request budget` regression covers
+selected tools through schema discovery, source patch and finish at that limit;
+the existing oversized-selection fixture retains refusal coverage.
 
 An optional `RNA_REQUIRE_TASK_LIST=true` explicitly requests task tracking; keep it
 separate from the unprompted-selection case. `RNA_API_KEY` is optional and never

@@ -150,8 +150,7 @@ namespace RNAssistant.Office.Services
             var snapshot = _lastSnapshot;
             var receipt = snapshot.Receipt;
             var messages = snapshot.Messages;
-            var exposed = new HashSet<string>(receipt.Arsenal.Tools.Select(item => item.Id), StringComparer.Ordinal);
-            var activeTools = _runnableCatalog.Where(item => exposed.Contains(item.Id)).OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
+            var activeTools = ToolsForSnapshot(snapshot);
             _session.LastContextReceipt = receipt;
             _responseEvidence = snapshot.DeliveredObservations.ToList();
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, callContext, _session, _runCache);
@@ -170,6 +169,14 @@ namespace RNAssistant.Office.Services
                 CallContext = callContext,
                 Options = options
             };
+        }
+
+        private IReadOnlyList<ToolCatalogEntry> ToolsForSnapshot(ModelContextSnapshot snapshot)
+        {
+            // Admission and dispatch must use the same frozen exposure, including selected skills.
+            var exposed = new HashSet<string>(snapshot.Receipt.Arsenal.Tools.Select(item => item.Id), StringComparer.Ordinal);
+            return _runnableCatalog.Where(item => exposed.Contains(item.Id))
+                .OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
         }
 
         internal void RebindAuthority(IReadOnlyList<ToolCatalogEntry> catalog, SkillCatalogSnapshot skills,
@@ -420,7 +427,7 @@ namespace RNAssistant.Office.Services
             try
             {
                 _lastSnapshot = CompileCurrent(true);
-                EnsureToolPackFits(_lastSnapshot.Messages, _toolPack, true);
+                EnsureToolPackFits(_lastSnapshot, true);
             }
             catch (PromptBudgetExceededException ex) when (
                 ex.CanCompact && _settings.AutoCompressContext && _contextCompactionService != null)
@@ -430,7 +437,7 @@ namespace RNAssistant.Office.Services
                     _currentAuthority, _runnableCatalog).ConfigureAwait(false);
                 if (checkpoint == null) throw;
                 _lastSnapshot = CompileCurrent(true);
-                EnsureToolPackFits(_lastSnapshot.Messages, _toolPack, false);
+                EnsureToolPackFits(_lastSnapshot, false);
             }
         }
 
@@ -695,7 +702,7 @@ namespace RNAssistant.Office.Services
                     stateMessage,
                     true,
                     false);
-                return EstimatedAdmittedRequestTokens(candidate.Messages, candidateTools) <=
+                return EstimatedAdmittedRequestTokens(candidate.Messages, ToolsForSnapshot(candidate)) <=
                     ModelContextBudget.InputBudgetTokens(_settings);
             }
             catch (PromptBudgetExceededException)
@@ -705,11 +712,10 @@ namespace RNAssistant.Office.Services
         }
 
         private void EnsureToolPackFits(
-            IReadOnlyList<ChatMessage> messages,
-            CallableToolPack toolPack,
+            ModelContextSnapshot snapshot,
             bool canCompact)
         {
-            var estimated = EstimatedAdmittedRequestTokens(messages, toolPack.Tools);
+            var estimated = EstimatedAdmittedRequestTokens(snapshot.Messages, ToolsForSnapshot(snapshot));
             var budget = ModelContextBudget.InputBudgetTokens(_settings);
             if (estimated <= budget) return;
             throw new PromptBudgetExceededException(

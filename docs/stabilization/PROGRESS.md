@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Snapshot arsenal fixes strict request-budget rejection — 2026-10-26
+
+Owner: Office ConversationModelSession. The prior VBA 32K diagnosis was incomplete:
+final/candidate admission used the direct pack instead of the compiled snapshot's
+selected tools. Strict projection then retained inline schemas, inflating admission.
+Budget checks and dispatch now share snapshot tool selection. Skill instructions,
+guards and reserves are unchanged. The new strict 32K regression fails before the
+fix and passes after; the genuine oversized-selection refusal still passes. The real
+local Gemma 32K run now edits exact source without compaction, but full acceptance
+fails at 24 iterations because finish repeatedly cites prose instead of tool IDs.
+
+[Component measurements and evidence](../audits/skills-tools-model-comparison.md#snapshot-budget-correction--2026-10-26).
+Earlier pilot observations below remain historical; they do not establish that the
+VBA package needs shortening or that local Gemma cannot perform the edit.
+
 ## Skill guidance real-model pilot — 2026-10-26
 
 Owner: Harness diagnostics / Core skills / Office catalogs. Recovered the prior

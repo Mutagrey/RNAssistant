@@ -10,14 +10,18 @@ exact-build gate.
 
 ## VBA skill strict-schema context budget — 2026-10-26
 
-Open context-size limitation; owner: Core model-context budget / Office skill catalogs.
-Pinned local Gemma 32K with json_schema selects common.vba_code_editing, then fails
-request admission even after compaction: approximately 29847 tokens before guidance
-changes and 29899 after, against a 27648 input limit. No source mutation occurs.
-Same-task cloud json_object pairs pass, but format/model differences prohibit attributing
-this to model intelligence. Do not silently raise context, drop guards or truncate skill
-instructions. Measure schema/skill contributions before choosing a smaller dependency
-surface. [Paired evidence](../audits/skills-tools-model-comparison.md).
+Fixed host-neutral: the previous 32K failure was an admission bug, not proof of an
+oversized VBA skill. Owner: Office ConversationModelSession. Final admission and
+candidate admission used the direct tool pack, while compilation/dispatch used the
+snapshot arsenal including selected-skill tools. Strict schema projection refused
+the mismatched surface, retaining inline schemas and counting separate schema costs.
+Admission now uses the same snapshot tool selection as request dispatch. Positive
+32K and genuinely oversized refusal fixtures pass; no skill/guard/reserve truncation.
+[Corrected measurements](../audits/skills-tools-model-comparison.md#snapshot-budget-correction--2026-10-26).
+The local real-model follow-up performs one verified source write without compaction,
+but full task acceptance fails at the iteration limit due to repeated non-ID finish
+evidence. That model/protocol adherence gap remains open; the guard is unchanged.
+Windows/Office and broad task/model qualification remain separate open evidence.
 
 ## Text exploration performance and qualification — 2026-10-25
 

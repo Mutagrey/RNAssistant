@@ -793,6 +793,7 @@ namespace RNAssistant.Harness
                 Test("skill packages: dependencies conflicts updates and revocation", SkillPackagesDependencyFailures),
                 Test("skill packages: exact request dispatch and next-step loading", SkillPackagesExactDispatch),
                 Test("skill packages: VBA schema inspection does not loop", () => SimpleAgentVbaSchemaInspectionDoesNotLoop(false)),
+                Test("skill packages: strict VBA selection fits actual request budget", () => SimpleAgentVbaSchemaInspectionDoesNotLoop(false, true)),
                 Test("skill packages: complete request admission preserves usable selection", () => SimpleAgentVbaSchemaInspectionDoesNotLoop(true)),
                 Test("skill packages: restart supporting files and inert arsenal", SkillPackagesRestartAndSupportingFiles),
                 Test("skills: revision and validation are deterministic", SkillRevisionAndValidationAreDeterministic),

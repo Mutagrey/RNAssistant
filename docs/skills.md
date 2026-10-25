@@ -51,6 +51,10 @@ Word includes insertion/formatting/review, PowerPoint includes slide/object crea
 and ordering, and Outlook includes draft creation, indexing and metadata updates.
 Selecting a skill exposes those schemas on the next request; policies, confirmation
 and exact dispatch bindings still govern execution.
+Office final/candidate request-budget checks use that compiled snapshot arsenal,
+the same set used to build the outgoing response schema. Checking the direct
+bootstrap pack instead would prevent exact schema projection and double-count
+inline contracts alongside schema options.
 
 Workspace plugin authoring declares `plugins.check` and `plugins.apply` as optional
 with explicit unavailable-validation/activation fallbacks. Their absence does not
