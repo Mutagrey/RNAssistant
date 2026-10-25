@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Inline chat visualization — 2026-10-25
+
+Owner: Web chat presentation / Core skill catalog. Completed Mermaid fences now
+render inline; HTML/JS runs on Play in an offline sandbox with local ECharts.
+Tables, source controls and enlargement share the existing transcript. Common
+chat_visualization is instruction-only and shared by Office/workspace. Focused
+browser, Markdown/stream, vendor and skill-catalog checks pass host-neutral.
+Native WebView2 frame identity/navigation enforcement (including plugin-entry
+exceptions) and Office delivery remain unqualified; arbitrary preview JS has no
+CPU-isolation guarantee. No new persistence or model wire format.
+
 ## Conversation v8 admission and diagnostics — 2026-10-25
 
 Owner: Core ModelProtocol/LLM, Office and workspace context admission, and

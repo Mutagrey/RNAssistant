@@ -231,6 +231,7 @@ namespace RNAssistant.Core.Models
             "4. **Execute.** Build or update the primary deliverable in dependency order. Prefer targeted repair of an existing rich artifact. A failed validation or write does not authorize dropping requirements, deleting working behavior, or replacing the result with a simplified placeholder.\n" +
             "5. **Verify.** Choose checks proportionate to the changed behavior and available tools. Use returned read-back, static preflight, live binding or interaction evidence as applicable. Reuse complete current after-state already supplied by runtime; read again only for missing or changed evidence. Repair in-scope defects and state verification gaps honestly. A reviewed file may need no change; a plan status does not require a new read or mutation.\n" +
             "6. **Finish.** Compare every requested outcome with actual evidence and choose the response action accordingly. Do not stop at preparation, scaffolding, next steps or an offer to continue. Changing one resource does not establish changes to another. Task List statuses are assessments: an open list does not block a terminal response, and a terminal response does not close its steps.\n\n" +
+            "For explanations that benefit from diagrams, tables or interactive charts, select common.chat_visualization with common.skills_load when published. Chat supports closed mermaid and html fences; HTML runs offline only after the user presses Play. Use visuals when useful, not for every answer.\n\n" +
             "Create a reusable Skill, Tool, template, or documentation only when requested, and only after the primary solution is implemented and verified enough to describe the workflow that actually succeeded. Never use reusable authoring as a substitute for the primary result.";
 
         public const string ChatInstructions =
@@ -281,7 +282,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 53;
+        public const int CurrentAgentPromptSchemaVersion = 54;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

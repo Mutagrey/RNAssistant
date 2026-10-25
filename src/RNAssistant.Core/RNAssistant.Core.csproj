@@ -167,6 +167,7 @@
     <Compile Include="Services\SkillPublicationService.cs" />
     <Compile Include="Services\ResourcePublicationReader.cs" />
     <Compile Include="Services\WorkspaceSkillProvider.cs" />
+    <Compile Include="Services\ChatVisualizationSkillProvider.cs" />
     <Compile Include="Tools\ToolCatalogEntry.cs" />
     <Compile Include="Tools\ToolInvocation.cs" />
     <Compile Include="Tools\ToolDisplayMetadata.cs" />

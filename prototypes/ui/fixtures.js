@@ -55,3 +55,9 @@ window.PrototypeFixtures.officeExamples = [
       { id: "notes", previewId: "preview-notes", title: "Обсуждение отчёта" }
     ] }
 ];
+
+// Preview-only message bodies; delivered through the existing mock bridge.
+window.PrototypeFixtures.visualChat = {
+  "user": "Покажи процесс подготовки отчёта, таблицу регионов и интерактивный график прямо в чате.",
+  "assistant": "Вот как может выглядеть ответ с визуализациями. **Данные демонстрационные.**\n\n### Как собирается отчёт\n```mermaid\nflowchart LR\n A[\"Данные\"] --> B[\"Проверка\"] --> C[\"Отчёт\"]\n```\n\n### Сравнение регионов\n| Регион | Выручка, млн ₽ | Изменение |\n|:---|---:|---:|\n| Москва | 12,4 | +18% |\n| Казань | 8,1 | +12% |\n| Пермь | 5,6 | +9% |\n\n### Интерактивный график\nНажмите ▶ в панели блока. Подсказки на столбцах работают без сети.\n```html\n<!doctype html><html lang=\"ru\"><head><style>body{font:14px system-ui;padding:8px}h2{margin:0 0 4px;font-size:18px}p{opacity:.65;margin:0 0 12px}#chart{height:220px}</style></head><body><h2>Выручка по регионам</h2><p>Демонстрационные данные · млн ₽</p><div id=\"chart\"></div><script>const chart=echarts.init(document.getElementById('chart'));chart.setOption({color:['#6d927f'],grid:{left:40,right:16,top:15,bottom:28},tooltip:{trigger:'axis'},xAxis:{type:'category',data:['Москва','Казань','Пермь']},yAxis:{type:'value',splitLine:{lineStyle:{color:'#ccd4ce',opacity:.3}}},series:[{type:'bar',data:[12.4,8.1,5.6],barWidth:38,itemStyle:{borderRadius:[5,5,0,0]}}]});addEventListener('resize',()=>chart.resize());</script></body></html>\n```\n\n### Пример кода\n```javascript\nconst total = rows.reduce((sum, row) => sum + row.revenue, 0);\n```"
+};

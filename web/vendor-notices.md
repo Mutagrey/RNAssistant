@@ -11,6 +11,7 @@ manifest or those URLs.
 | Package | Version | License | Local license text |
 |---|---:|---|---|
 | DOMPurify | 3.4.14 | MPL-2.0 OR Apache-2.0 | [`licenses/dompurify-3.4.14`](licenses/dompurify-3.4.14/) |
+| Mermaid | 12.2.0 | MIT; bundled dependency notices retained | [`licenses/mermaid-12.2.0/LICENSE`](licenses/mermaid-12.2.0/LICENSE) |
 | marked | 12.0.2 | MIT (plus bundled Markdown notice) | [`licenses/marked-12.0.2/LICENSE.md`](licenses/marked-12.0.2/LICENSE.md) |
 | highlight.js | 11.9.0 | BSD-3-Clause | [`licenses/highlight.js-11.9.0/LICENSE`](licenses/highlight.js-11.9.0/LICENSE) |
 | CodeMirror | 5.65.16 | MIT | [`licenses/codemirror-5.65.16/LICENSE`](licenses/codemirror-5.65.16/LICENSE) |

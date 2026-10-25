@@ -12,6 +12,7 @@ namespace RNAssistant.Core.Services
         public static IReadOnlyList<SkillDefinition> GetSkills()
         {
             return new[] {
+                ChatVisualizationSkillProvider.Create(),
                 Skill(FilesId, "Workspace files",
                     "Create or change real workspace files, inspect exact source and finish with current read evidence.",
 @"# Workspace files

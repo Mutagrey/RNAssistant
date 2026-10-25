@@ -161,26 +161,17 @@
   white-space: nowrap;
 }
 
-.block-tool-button {
-  display: inline-flex;
-  gap: 5px;
-  align-items: center;
-  border-color: var(--button-border);
-  padding: 4px 7px;
-  background: var(--button-bg);
-  color: var(--button-text);
-  font-size: 12px;
+.block-tools { gap: 2px; }
+.block-tool-button.icon-btn {
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
 }
-
-.block-tool-button:hover {
-  border-color: var(--button-border-hover);
-  background: var(--button-bg-hover);
-  color: var(--button-text);
-}
-
-.block-tool-button svg {
-  width: 13px;
-  height: 13px;
+.block-tool-button.icon-btn > svg { width: 15px; height: 15px; flex-basis: 15px; }
+.block-tool-button.icon-btn[aria-expanded="true"] { color: var(--ink); }
+@media (pointer: coarse) {
+  .block-tool-button.icon-btn { flex-basis: 40px; width: 40px; height: 40px; min-height: 40px; }
 }
 
 .markdown-json-block {
@@ -254,4 +245,37 @@
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--surface-subtle);
+}
+
+/* Inline visual answers share the transcript theme and never widen the pane. */
+.chat-visual {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  min-width: 0;
+}
+.chat-visual > .block-tools { padding: 8px; margin: 0; flex-wrap: wrap; border-bottom: 1px solid var(--line); }
+.chat-visual > pre { margin: 8px; }
+.chat-visual pre[hidden], .chat-visual button[hidden] { display: none; }
+.chat-visual-status { padding: 8px 12px; font-size: 12px; color: var(--ink-muted); }
+.chat-visual-status:empty { display: none; }
+.chat-visual-frame { display: block; width: 100%; height: 360px; border: 0; background: var(--surface); }
+.chat-visual-expanded {
+  position: fixed; inset: 16px; z-index: 1100; margin: 0;
+  display: flex; flex-direction: column; box-shadow: 0 12px 60px #0006;
+}
+.chat-visual-expanded .chat-visual-surface { flex: 1; min-height: 0; }
+.chat-visual-expanded .chat-visual-frame { height: 100% !important; }
+.chat-visual-expanded > pre { max-height: 35%; flex-shrink: 0; }
+.markdown .table-wrap { overflow-x: auto; padding: 0; }
+.markdown .table-wrap > .block-tools { padding: 6px 8px; margin: 0; }
+.markdown .table-wrap table { min-width: 100%; width: max-content; max-width: 100%; }
+.markdown .table-wrap th, .markdown .table-wrap td { padding: 9px 12px; line-height: 1.5; }
+.markdown .table-wrap th { text-align: start; font-weight: 600; }
+.markdown .table-wrap tbody tr:nth-child(even) { background: var(--surface-subtle); }
+@media (max-width: 480px) {
+  .chat-visual-frame { height: 300px; }
+  .chat-visual-expanded { inset: 6px; }
 }

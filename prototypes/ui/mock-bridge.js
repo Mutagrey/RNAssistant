@@ -26,6 +26,13 @@
       RunId: "preview-run-initial", RunViewState: runView("preview-run-initial", "2026-10-18T09:00:00Z"),
       ArtifactIds: ["report"], CreatedUtc: "2026-10-18T09:00:05Z" }
   ];
+  if (scenario === "visuals") {
+    messages = [
+      { Id: "preview-visual-user", Role: "user", Content: fixtures.visualChat.user, CreatedUtc: "2026-10-25T09:00:00Z" },
+      { Id: "preview-visual-answer", Role: "assistant", Content: fixtures.visualChat.assistant,
+        RunId: "preview-run-visual", RunViewState: runView("preview-run-visual", "2026-10-25T09:00:00Z"), CreatedUtc: "2026-10-25T09:00:05Z" }
+    ];
+  }
   var chats = activeChatId ? fixtures.officeExamples.flatMap(function (documentExample) {
     return documentExample.chats.map(function (chatExample, index) {
       return { Id: chatExample.previewId, Title: chatExample.title, Host: documentExample.host,
@@ -420,6 +427,13 @@
   }
 
   async function dispatch(type, payload, requestId) {
+    if (type === "resolveHtmlVendor") {
+      if (payload.id !== "echarts" || payload.version !== "5.6.0")
+        fail("В примере доступен только поставляемый ECharts 5.6.0.", "preview_vendor_unavailable");
+      var vendorResponse = await fetch("/preview/web/js/vendor/echarts.min.js");
+      if (!vendorResponse.ok) fail("Локальный ECharts недоступен.", "preview_vendor_unavailable");
+      return { js: await vendorResponse.text(), css: "" };
+    }
     if (type === "init") return { bridgeToken: token, bridgeContract: contract,
       init: Object.assign({ appVersion: "preview", host: "Excel", title: fixtures.document,
         settings: clone(settings), prompts: promptLibrary(), hasApiKey: true, hasHistorySecret: false }, chatState()) };

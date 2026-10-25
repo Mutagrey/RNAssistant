@@ -655,7 +655,7 @@ function appendChatMessageText(node, message) {
   var content = messageContent(message);
   body.innerHTML = markdown(content, { preserveLineBreaks: messageRole(message) === "user" });
   node.appendChild(body);
-  enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content });
+  enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: content });
 }
 
 function liveAgentActivities() {
@@ -775,7 +775,7 @@ function paintLiveModelOutput(section, output) {
         section.insertBefore(body, status);
       }
       body.innerHTML = markdown(content);
-      enhanceMarkdown(body, { enableJsonViewer: true, sourceText: content, streaming: true });
+      enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: content, streaming: true });
     } else if (body) section.removeChild(body);
   }
   var label = output.retrying ? "Повторная попытка…" : content || output.showStatus ? "Формируется…" : "";

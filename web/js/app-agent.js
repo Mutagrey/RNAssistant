@@ -109,7 +109,7 @@ function appendAgentFinalAnswer(parent, finalMessage) {
   var content = messageContent(finalMessage.message);
   answer.innerHTML = markdown(content);
   parent.appendChild(answer);
-  enhanceMarkdown(answer, { enableJsonViewer: true, sourceText: content });
+  enhanceMarkdown(answer, { enableVisuals: true, enableJsonViewer: true, sourceText: content });
 }
 
 function enhanceActivity(root) {
@@ -223,7 +223,7 @@ function appendAgentStepMessage(parent, text) {
   message.className = "agent-step-message markdown";
   message.innerHTML = markdown(text);
   parent.appendChild(message);
-  enhanceMarkdown(message, { enableJsonViewer: true, sourceText: text });
+  enhanceMarkdown(message, { enableVisuals: true, enableJsonViewer: true, sourceText: text });
 }
 
 // Presentation groups follow comments; model-step and call identities stay intact.

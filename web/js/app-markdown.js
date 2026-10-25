@@ -1,4 +1,11 @@
 (function () {
+  function blockButton(button, icon, label) {
+    button.className = "icon-btn block-tool-button";
+    button.title = label;
+    button.setAttribute("aria-label", label);
+    button.innerHTML = iconSvg(icon);
+  }
+
   function escapeHtml(text) {
     return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
@@ -63,7 +70,7 @@
     return preview;
   }
 
-  function completeJsonFences(sourceText) {
+  function completeCodeFences(sourceText) {
     var source = String(sourceText || "");
     var result = [];
     var offset = 0;
@@ -84,14 +91,14 @@
             character: opener[2].charAt(0),
             length: opener[2].length,
             indentation: opener[1].length,
-            json: info === "json",
+            language: info,
             bodyStart: next
           };
         }
       } else {
         var closer = line.match(/^ {0,3}(`+|~+)[ \t]*$/);
         if (closer && closer[1].charAt(0) === open.character && closer[1].length >= open.length) {
-          if (open.json) {
+          if (open.language === "json" || open.language === "mermaid" || open.language === "html") {
             var text = source.slice(open.bodyStart, lineStart);
             var renderedText = text.replace(/\r\n?/g, "\n");
             if (open.indentation) {
@@ -101,7 +108,7 @@
                 return bodyLine.slice(remove);
               }).join("\n");
             }
-            result.push({ text: text, renderedText: renderedText });
+            result.push({ language: open.language, text: text, renderedText: renderedText });
           }
           open = null;
         }
@@ -112,7 +119,9 @@
   }
 
   function clearMarkdownEnhancements(root) {
-    if (!root || !window.RNAssistantViewerRegistry) return;
+    if (!root) return;
+    if (window.RNAssistantChatVisuals) window.RNAssistantChatVisuals.clear(root);
+    if (!window.RNAssistantViewerRegistry) return;
     Array.prototype.slice.call(root.querySelectorAll(".markdown-json-viewer")).forEach(function (target) {
       window.RNAssistantViewerRegistry.unmount(target);
     });
@@ -157,9 +166,20 @@
 
   function enhanceMarkdown(root, options) {
     options = options || {};
-    var jsonFences = options.enableJsonViewer && !options.streaming
-      ? completeJsonFences(options.sourceText)
-      : [];
+    var fences = !options.streaming ? completeCodeFences(options.sourceText) : [];
+    var jsonFences = options.enableJsonViewer ? fences.filter(function (fence) { return fence.language === "json"; }) : [];
+    var visuals = options.enableVisuals && window.RNAssistantChatVisuals;
+    if (visuals) {
+      var candidates = fences.filter(function (fence) { return fence.language !== "json"; });
+      Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
+        var language = (code.className.match(/language-(mermaid|html)\b/) || [])[1];
+        var index = candidates.findIndex(function (fence) { return fence.language === language && fence.renderedText === code.textContent; });
+        if (index >= 0) {
+          var fence = candidates.splice(index, 1)[0];
+          visuals.mount(code.parentNode, language, fence.text);
+        }
+      });
+    }
     var jsonFenceIndex = 0;
     Array.prototype.slice.call(root.querySelectorAll("pre code")).forEach(function (code) {
       var language = normalizeCodeLanguage(detectCodeLanguage(code));
@@ -173,7 +193,7 @@
     });
 
     Array.prototype.slice.call(root.querySelectorAll("pre")).forEach(function (pre) {
-      if (pre.parentNode.classList.contains("code-wrap")) {
+      if (pre.parentNode.classList.contains("code-wrap") || pre.parentNode.classList.contains("chat-visual")) {
         return;
       }
       var code = pre.querySelector("code");
@@ -199,17 +219,19 @@
       var toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "block-tool-button";
-      toggle.innerHTML = iconSvg("eye") + "<span>Show</span>";
+      blockButton(toggle, "eye", "Показать код");
+      toggle.setAttribute("aria-expanded", "false");
       toggle.addEventListener("click", function () {
         var hidden = pre.style.display === "none";
         pre.style.display = hidden ? "" : "none";
         preview.style.display = hidden ? "none" : "";
-        toggle.innerHTML = iconSvg(hidden ? "eyeOff" : "eye") + "<span>" + (hidden ? "Hide" : "Show") + "</span>";
+        blockButton(toggle, hidden ? "eyeOff" : "eye", hidden ? "Скрыть" : "Показать");
+        toggle.setAttribute("aria-expanded", String(hidden));
       });
       var copy = document.createElement("button");
       copy.type = "button";
       copy.className = "block-tool-button";
-      copy.innerHTML = iconSvg("copy") + "<span>Copy</span>";
+      blockButton(copy, "copy", "Копировать");
       copy.addEventListener("click", function () {
         copyText(code ? code.textContent : pre.innerText);
       });
@@ -233,16 +255,18 @@
       var toggle = document.createElement("button");
       toggle.type = "button";
       toggle.className = "block-tool-button";
-      toggle.innerHTML = iconSvg("eyeOff") + "<span>Hide</span>";
+      blockButton(toggle, "eyeOff", "Скрыть таблицу");
+      toggle.setAttribute("aria-expanded", "true");
       toggle.addEventListener("click", function () {
         var hidden = table.style.display === "none";
         table.style.display = hidden ? "" : "none";
-        toggle.innerHTML = iconSvg(hidden ? "eyeOff" : "eye") + "<span>" + (hidden ? "Hide" : "Show") + "</span>";
+        blockButton(toggle, hidden ? "eyeOff" : "eye", hidden ? "Скрыть" : "Показать");
+        toggle.setAttribute("aria-expanded", String(hidden));
       });
       var copy = document.createElement("button");
       copy.type = "button";
       copy.className = "block-tool-button";
-      copy.innerHTML = iconSvg("copy") + "<span>Copy</span>";
+      blockButton(copy, "copy", "Копировать");
       copy.addEventListener("click", function () {
         copyText(table.innerText);
       });

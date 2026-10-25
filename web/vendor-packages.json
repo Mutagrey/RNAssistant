@@ -1152,5 +1152,49 @@
         "carrierField": null
       }
     ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "mermaid",
+      "version": "12.2.0",
+      "description": "mermaid",
+      "source": "https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/mermaid-12.2.0/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "mermaid.min.js",
+          "sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f"
+        },
+        {
+          "path": "licenses/mermaid-12.2.0/LICENSE",
+          "sha256": "ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "mermaid.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "mermaid.min.js",
+        "sourcePath": "js/vendor/mermaid.min.js",
+        "sourceSha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/mermaid-12.2.0/LICENSE",
+        "sourcePath": "licenses/mermaid-12.2.0/LICENSE",
+        "sourceSha256": "ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80",
+        "carrierField": null
+      }
+    ]
   }
 ]

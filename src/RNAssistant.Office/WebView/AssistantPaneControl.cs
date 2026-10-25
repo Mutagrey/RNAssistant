@@ -222,6 +222,7 @@ namespace RNAssistant.Office.WebView
             core.NavigationStarting += OnNavigationStarting;
             core.NavigationCompleted += OnNavigationCompleted;
             core.FrameNavigationStarting += OnFrameNavigationStarting;
+            core.FrameCreated += OnChatPreviewFrameCreated;
             core.NewWindowRequested += OnNewWindowRequested;
             core.PermissionRequested += OnPermissionRequested;
             core.AddWebResourceRequestedFilter("https://rnassistant.local-resource/*", CoreWebView2WebResourceContext.All);
@@ -362,6 +363,17 @@ namespace RNAssistant.Office.WebView
             {
                 OpenExternalUri(e.Uri);
             }
+        }
+
+        private static void OnChatPreviewFrameCreated(object sender, CoreWebView2FrameCreatedEventArgs e)
+        {
+            // Capture the identity before authored scripts can change window.name.
+            if (!(e.Frame.Name ?? string.Empty).StartsWith("rn-chat-preview-", StringComparison.Ordinal)) return;
+            e.Frame.NavigationStarting += (frameSender, navigation) =>
+            {
+                // A preview must not inherit the separate plugin-entry navigation exception.
+                if (!WebViewSecurityPolicy.CanNavigateFrame(navigation.Uri)) navigation.Cancel = true;
+            };
         }
 
         private void OnFrameNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
@@ -662,6 +674,7 @@ namespace RNAssistant.Office.WebView
                     core.NavigationStarting -= OnNavigationStarting;
                     core.NavigationCompleted -= OnNavigationCompleted;
                     core.FrameNavigationStarting -= OnFrameNavigationStarting;
+                    core.FrameCreated -= OnChatPreviewFrameCreated;
                     core.NewWindowRequested -= OnNewWindowRequested;
                     core.PermissionRequested -= OnPermissionRequested;
                     core.WebResourceRequested -= OnResourceDataRequested;

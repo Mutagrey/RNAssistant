@@ -1997,3 +1997,12 @@ per-size/theme/tab screenshots. This does not qualify Windows WebView2.
 Typed package-action normalization: `node tests/web/tool-package-actions.test.js`
 checks that install/remove accepts only result contract v1 with exact lowercase
 fields/effects and rejects the deleted PascalCase compatibility shape.
+
+
+Inline chat visuals: `node tests/web/chat-visuals.test.js` (Playwright, optional
+`BROWSER_EXECUTABLE`) covers real Mermaid, completed fences, offline HTML/ECharts,
+source copy, enlargement, stop/restart, stale loads, runtime errors and both themes
+at narrow width. Pair with Markdown raw-HTML/JSON tests, stream-render-cost and
+vendor gate. Filter `skill packages: built-ins` verifies the shared instruction-only
+visualization skill in Office/workspace. Native WebView2 navigation and frame-name
+binding require a separate Windows check; these browser tests do not qualify it.

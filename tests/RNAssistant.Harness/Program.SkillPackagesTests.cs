@@ -19,6 +19,10 @@ namespace RNAssistant.Harness
     {
         private static void BuiltInSkillPackagesLoadForEveryOfficeHost()
         {
+            var visual = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
+            AssertEqual("Common", visual.Host, "visual answers are host-neutral");
+            AssertEqual(0, visual.Package.RequiredTools.Count, "visual answers need no mutation capability");
+
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             WithTempPaths(paths =>
             {
@@ -34,6 +38,9 @@ namespace RNAssistant.Harness
                     ToolPackSnapshot.Capture(new ToolDescriptor(tool.Id, tool.Description,
                         tool.ArgumentSchemaJson, tool.Exposure, tool.ContractVersion), tool.Policy, tool.Binding)));
                 AssertTrue(skills.Skills.Any(skill => skill.Host == host), host + " publishes its host skill");
+                var hostVisual = skills.Skills.Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
+                AssertEqual(visual.BodyMarkdown, hostVisual.BodyMarkdown, "Office and workspace use one visualization definition");
+                AssertEqual(0, hostVisual.Package.RequiredTools.Count, "Office visualization is instruction-only");
                 if (host == "Outlook")
                     AssertTrue(!skills.Skills.Any(skill => skill.Id == "common.vba_code_editing" ||
                         skill.Id == "common.vba_userform_authoring" || skill.Id == "common.tool_authoring"),

@@ -170,6 +170,7 @@ namespace RNAssistant.Office.Services
                 skill.Package = new SkillPackageManifest { PackageId = skill.Id,
                     RequiredTools = ids.Select(id => new SkillToolDependency { Id = id }).ToList() };
             }
+            result.Add(RNAssistant.Core.Services.ChatVisualizationSkillProvider.Create());
             return result;
         }
 

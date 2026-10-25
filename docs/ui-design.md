@@ -1359,3 +1359,43 @@ revision HTML. Номер открывает комментарий для чт�
 проверенная правка исходника. Для плагина host связывает точный frame/instance,
 staging и submit проверяют release и workspace. Второй формат аннотаций не вводится;
 реальная Windows/WebView2 проверка остаётся открытой.
+
+
+## Визуальные ответы в ленте — 2026-10-25
+
+Owner: Web chat presentation (`app-chat-visuals.js`), общий Markdown enhancer.
+Office, project и plugin используют существующие message/agent renderers.
+Закрытые fenced-блоки `mermaid` в завершённых сообщениях превращаются в схемы
+при появлении в области просмотра; `html` запускается вручную кнопкой ▶.
+Стриминг и незакрытые fences остаются кодом. Исходник можно раскрыть и скопировать;
+увеличение сохраняет iframe, остановка его удаляет. Переключение чата освобождает
+preview; возвращение не запускает HTML автоматически. Асинхронные загрузки
+отброшенного сообщения не вставляют результат в новую ленту.
+
+Mermaid 12.2.0 поставляется локально: strict, без конфигурации из сообщения,
+30 000 символов / 300 edges. SVG проходит sanitization и показывается в inert
+sandbox iframe. HTML ограничен 200 000 символами, использует `allow-scripts`
+без same-origin; CSP запрещает сеть, внешние зависимости, вложенные frames,
+формы и workers. Локальный ECharts внедряется при обращении к `echarts`.
+Resource/fetch/Office bridge в preview не предоставляется; сообщения об ошибках
+принимаются только от текущего iframe. WebView2 фиксирует принадлежность frame
+к chat-preview до исполнения его скриптов и запрещает внешнюю навигацию,
+включая отдельное исключение навигации для plugin entry pages.
+
+Таблицы имеют полосатые строки, отступы, горизонтальную прокрутку и копирование.
+Поддерживаются обе темы и узкая лента. Mermaid перестраивается при смене темы;
+работающий HTML сохраняет состояние и тему запуска до следующего запуска.
+Это presentation существующего message, не новый artifact/store/wire contract.
+Навык `common.chat_visualization` описан в [Skills](skills.md#chat-visualization).
+
+Проверки: `tests/web/chat-visuals.test.js`, raw HTML/JSON, stream render cost,
+shared workspace chat layout и vendor gate. Реальная проверка навигации и
+изоляции в Windows/WebView2 остаётся открытой. Sandbox ограничивает authority,
+но не гарантирует CPU isolation: бесконечный JavaScript может затормозить renderer.
+
+
+Кнопки блоков Markdown/визуализаций используют общий `icon-btn` демо:
+SVG без видимого текста, 28 px (40 px touch), `title` и `aria-label`,
+`aria-expanded` для раскрытия. Рабочий пример доступен через preview-server:
+`/preview/web/?scenario=visuals`; сообщения приходят из mock bridge в настоящий
+ChatView, данные явно демонстрационные. HTML запускается вручную.

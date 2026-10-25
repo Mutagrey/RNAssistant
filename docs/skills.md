@@ -482,3 +482,20 @@ Schema 41 uses the same migration for sparse user updates, current Task List not
 and evidence-grounded compaction. Skill/schema loading alone requires no visible
 comment; independent known missing capability reads may be batched. The runtime
 retention contract is owned by [Conversation protocol](conversation-protocol.md#conversation-context).
+
+
+## Chat visualization
+
+`common.chat_visualization` is a Common built-in instruction-only package from
+Core `ChatVisualizationSkillProvider`; Office and workspace publish the same
+body with no required tools. Default prompt schema 54 recommends selecting it
+when diagrams, comparisons or interactive explanations improve the answer.
+Selection remains an ordinary `common.skills_load` operation, never an automatic
+intent classifier or new execution capability.
+
+The skill writes closed `mermaid` / `html` fences or Markdown tables directly in
+the response message. Mermaid renders after completion; HTML starts on Play in
+an offline sandbox. Charts can use the pinned local ECharts global without CDN.
+Instructions cover responsive dimensions, units, readable labels, example-data
+labelling and honest verification claims. Durable applications and connected
+Office artifacts continue through their existing authoring skills.

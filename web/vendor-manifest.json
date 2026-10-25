@@ -512,6 +512,48 @@
           "sha256": "8a1af140fdfbf5afd3df27f7e662f989c5b963a300020dfafce42033cae9e004"
         }
       ]
+    },
+    {
+      "id": "mermaid",
+      "npmPackage": "mermaid",
+      "version": "12.2.0",
+      "license": "MIT",
+      "npmTarball": "https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz",
+      "npmIntegrity": "sha512-w7nr/SFrLO7BaVTs3dQTvYSV6nYSBj0Yy9DjBhsIJtAcHqRzXSq4Pg32ujHZ/AdWsAMNEvvhbm5dt9E2tOiHzw==",
+      "sourceRevision": "npm-tarball-only",
+      "sourceRevisionNotes": "Exact upstream prebuilt classic bundle; embedded dependency license notices retained at its end.",
+      "packageDependencies": {
+        "d3": "^7.9.0",
+        "uuid": "^11.1.0 || ^12 || ^13 || ^14.0.0",
+        "dayjs": "^1.11.21",
+        "elkjs": "^0.9.3",
+        "katex": "^0.18.0",
+        "khroma": "^2.1.0",
+        "marked": "^16.3.0",
+        "stylis": "^4.3.6",
+        "roughjs": "^4.6.6",
+        "@types/d3": "^7.4.3",
+        "cytoscape": "^3.34.0",
+        "d3-sankey": "^0.12.3",
+        "dompurify": "^3.4.12",
+        "ts-dedent": "^2.2.0",
+        "chevrotain": "~13.2.0",
+        "es-toolkit": "^1.45.1",
+        "dagre-d3-es": "7.0.14",
+        "@iconify/utils": "^3.0.2",
+        "cytoscape-fcose": "^2.2.0",
+        "@upsetjs/venn.js": "^2.0.0",
+        "@mermaid-js/parser": "^2.0.1",
+        "cytoscape-cose-bilkent": "^4.1.0",
+        "@braintree/sanitize-url": "^7.1.2"
+      },
+      "browserRuntimeDependencies": [],
+      "licenseFiles": [
+        {
+          "path": "licenses/mermaid-12.2.0/LICENSE",
+          "sha256": "ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80"
+        }
+      ]
     }
   ],
   "files": [
@@ -860,6 +902,13 @@
       "sha256": "1cdc1270d987cb0f6ee66dd8efb01c50511aa14d17b6163bbbffb21df8cf1c06",
       "provenanceUrl": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
       "upstreamPath": "lib/sax.js"
+    },
+    {
+      "path": "js/vendor/mermaid.min.js",
+      "package": "mermaid",
+      "bytes": 5494801,
+      "sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
+      "provenanceUrl": "https://unpkg.com/mermaid@12.2.0/dist/mermaid.min.js"
     }
   ]
 }

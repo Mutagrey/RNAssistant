@@ -146,7 +146,7 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   const markdownSource = fs.readFileSync(path.join(__dirname, "../../web/js/app-markdown.js"), "utf8");
   const messagesSource = fs.readFileSync(path.join(__dirname, "../../web/js/app-messages.js"), "utf8");
   assert.match(markdownSource, /DOMPurify\.sanitize\(marked\.parse/);
-  assert.match(messagesSource, /sourceText:\s*state\.liveStreamContent,\s*streaming:\s*true/);
+  assert.match(messagesSource, /sourceText:\s*content,\s*streaming:\s*true/);
   assert.match(messagesSource, /clearMarkdownEnhancements\(box\)/);
   assert.match(messagesSource, /reconcileMessageUnits\(box,\s*buildMessageUnits\(\)\)/);
   assert.equal(/box\.innerHTML\s*=\s*["']["']/.test(messagesSource), false);
