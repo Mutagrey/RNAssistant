@@ -669,12 +669,12 @@
 .agent-model-results small { color: var(--muted); }
 .workspace-chat-activity { width: calc(100% - 36px); max-width: 100%; margin: 0 auto 10px; }
 .workspace-reflection-step {
-  display: grid; gap: 3px; align-self: flex-start; box-sizing: border-box; max-width: 100%;
-  padding: 8px 12px; border-left: 2px solid var(--line-strong); border-radius: 0 8px 8px 0;
-  background: var(--surface-subtle); color: var(--muted); font-size: 12px; line-height: 1.5;
-  overflow-wrap: anywhere;
+  color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
 }
-.workspace-reflection-step strong { color: var(--ink); font-weight: 500; }
+.workspace-reflection-step strong { font-size: 11px; font-weight: 500; }
+.workspace-reflection-step strong::after { content: " · "; }
+.workspace-reflection-step span { white-space: pre-wrap; }
+.workspace-reflection-step span + span { display: block; margin-top: 3px; }
 @media (max-width: 620px) { .chat-run-notice { width: calc(100% - 16px); } }
 
 .chat-toast { position: fixed; z-index: 100; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 12px 19px; border-radius: 8px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); font-size: 12px; overflow-wrap: anywhere; }
