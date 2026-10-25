@@ -48,7 +48,7 @@ const path = require("node:path");
       document.getElementById("inspectHtmlWorkspaceButton").parentElement.className,
       document.getElementById("chatForm").dataset.identity,
       document.getElementById("chatInput").value
-    ]), [1, "chatBrowserFrameMount", "preview-surface-actions", formIdentity, "Черновик рядом с HTML"],
+    ]), [1, "chatBrowserFrameMount", "preview-surface-panel-head", formIdentity, "Черновик рядом с HTML"],
     "right browser reuses the frame and central composer");
     const panelToggle = page.locator("#toggleChatInspectorButton");
     assert.equal(await page.locator("#chatBrowserToggle").count(), 0,
@@ -64,6 +64,9 @@ const path = require("node:path");
     assert.equal(await page.locator("#chatBrowser .preview-surface-title").textContent(), "Проверка HTML");
     assert.equal(await page.locator("#chatBrowser .preview-surface-path").textContent(), "index.html");
     assert.equal(await page.locator("#inspectHtmlWorkspaceButton").textContent(), "Аннотировать");
+    assert.equal(await page.locator("#inspectHtmlWorkspaceButton").evaluate(node =>
+      getComputedStyle(node.querySelector("span")).display !== "none"), true,
+    "HTML annotation action has a visible label");
     assert.equal(await page.locator("#attachHtmlWorkspaceSelectionButton").isVisible(), false,
       "the browser header has no duplicate attach action");
     if (process.env.RNA_HTML_BROWSER_SCREENSHOT) await page.screenshot({

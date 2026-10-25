@@ -109,7 +109,7 @@
     root.classList.add("preview-side-panel");
     var actions = bar.querySelector(".preview-surface-actions");
     el("chatBrowserFrameMount").appendChild(root);
-    actions.appendChild(el("inspectHtmlWorkspaceButton"));
+    bar.querySelector(".preview-surface-panel-head").appendChild(el("inspectHtmlWorkspaceButton"));
     el("attachHtmlWorkspaceSelectionButton").hidden = true;
     el("inspectHtmlWorkspaceButton").dataset.browserControl = "true";
     previewOwner().refreshInspectorControl();

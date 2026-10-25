@@ -90,6 +90,7 @@
     }
     return {
       actions: actions,
+      panelHead: panelHead,
       watch: watch,
       waiting: function (label, message) { detach(); show(label, message || "Загрузка…"); },
       fail: fail,

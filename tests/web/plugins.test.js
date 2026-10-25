@@ -213,6 +213,10 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.doesNotMatch(iconPrompt,/Таблица с восходящей линией/,'created icon is already in source');
     assert.equal(drawCalls,1,'creation reuses the drawn icon');
     await page.locator('#pluginPreviewMount .chat-browser-annotate').waitFor({state:'visible'});
+    assert.equal(await page.locator('#pluginPreviewMount .chat-browser-annotate').evaluate(node=>
+      node.parentElement.classList.contains('preview-surface-panel-head')&&
+      getComputedStyle(node.querySelector('span')).display!=='none'),true,
+      'plugin annotation action has a visible label in the panel header');
     await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount .chat-browser-annotate').disabled);
     await page.locator('#pluginPreviewMount .chat-browser-annotate').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('h1').hover();

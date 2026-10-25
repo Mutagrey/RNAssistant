@@ -5,6 +5,9 @@
 .preview-side-panel .preview-surface-bar{display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:0;padding:0;border-bottom:0}
 .preview-side-panel .preview-surface-panel-head{display:flex;align-items:center;gap:8px;flex:0 0 52px;min-width:0;padding:5px 10px;border-bottom:1px solid var(--line)}
 .preview-side-panel .preview-surface-panel-head>.panel-toggle{flex:none;margin-left:auto}
+.preview-side-panel .preview-surface-panel-head>.chat-browser-annotate{flex:none;min-height:32px;padding:5px 9px;font-size:12px;white-space:nowrap}
+.preview-side-panel .preview-surface-panel-head>.chat-browser-annotate svg{width:16px;height:16px;flex:none}
+.preview-side-panel .preview-surface-panel-head>[hidden]{display:none}
 .preview-side-panel .preview-surface-section{flex:1;min-width:0}
 .preview-side-panel .preview-surface-resource-row{flex:0 0 42px;min-height:42px;padding:4px 10px;border-bottom:1px solid var(--line);background:var(--surface-subtle)}
 .preview-side-panel .chat-inspector-switcher{width:max-content;max-width:100%;margin:0}

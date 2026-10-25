@@ -450,8 +450,8 @@
     previewSurface=window.RNAssistantPreviewSurface.attach(el('PreviewMount'),{
       reloadButton:el('Preview'),reloadLabel:'Проверить исходники и обновить предпросмотр'});
     pluginAnnotateButton=document.createElement('button');pluginAnnotateButton.type='button';
-    pluginAnnotateButton.className='icon-btn';pluginAnnotateButton.dataset.browserControl='true';
-    pluginAnnotateButton.disabled=true;previewSurface.actions.prepend(pluginAnnotateButton);
+    pluginAnnotateButton.className='button compact html-workspace-inspect-button';pluginAnnotateButton.dataset.browserControl='true';
+    pluginAnnotateButton.disabled=true;previewSurface.panelHead.appendChild(pluginAnnotateButton);
     pluginInspectStatus=document.createElement('span');pluginInspectStatus.className='html-workspace-inspect-status';
     pluginInspectStatus.setAttribute('role','status');el('Workbench').appendChild(pluginInspectStatus);
     pluginDraftBox=document.createElement('div');pluginDraftBox.className='attachment-drafts has-visual-annotations';
@@ -459,7 +459,7 @@
     el('Form').querySelector('#attachmentDrafts').after(pluginDraftBox);
     var toolbar=el('Toolbar');
     [el('Versions'),el('NavigationToggle')]
-      .forEach(function(control){previewSurface.actions.insertBefore(control,pluginAnnotateButton);});
+      .forEach(function(control){previewSurface.actions.insertBefore(control,el('Preview'));});
     toolbar.remove();
     syncPanelView();
     registerRailPopovers();

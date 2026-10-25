@@ -243,7 +243,6 @@
 .shell #tab-chat .plugin-workbench .plugin-preview { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .shell #tab-chat .plugin-workbench .preview-surface-title { display: block; }
 .shell #tab-chat .plugin-workbench .preview-surface-actions { gap: 3px; }
-.shell #tab-chat .plugin-workbench .preview-surface-actions [data-browser-control] span { display: none; }
 .shell #tab-chat .plugin-workbench .preview-surface-actions > .icon-btn { width: 29px; height: 29px; padding: 5px; }
 .shell #tab-chat .plugin-workbench .preview-surface-actions > .icon-btn svg { width: 17px; height: 17px; }
 .shell #tab-chat .plugin-workbench .plugin-sections-toggle { min-height: 29px; padding: 4px 6px; gap: 5px; font-size: 11px; }
