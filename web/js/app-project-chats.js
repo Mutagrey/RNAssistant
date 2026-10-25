@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  var scope = "office", catalog = null, active = null, busy = false, serial = 0, stopTitleWatch = null;
+  var scope = "office", catalog = null, catalogRevision = 0, active = null, busy = false, serial = 0, stopTitleWatch = null;
   var pendingChatRequests = new Set(), pendingCancels = new Set();
   var composer = null, uploadingFiles = false, uploadTarget = null;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
@@ -21,6 +21,17 @@
     return result;
   }
   function projects() { return catalog && catalog.projects || []; }
+  function replaceCatalog(value) { catalog = value; ++catalogRevision; }
+  async function refreshCatalog(isCurrent) {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var revision = catalogRevision, result = await send("getProjectChats", {});
+      if (isCurrent && !isCurrent()) return false;
+      if (revision !== catalogRevision) continue;
+      replaceCatalog(result);
+      return true;
+    }
+    throw new Error("Список проектов изменился во время обновления. Повторите обновление.");
+  }
   function project() { return projects().find(function (item) { return item.workspaceId === selectedWorkspaceId; }); }
   function projectId() { return selectedWorkspaceId; }
   function currentId() { return active && active.sessionId; }
@@ -245,12 +256,12 @@
       window.RNAssistantPlugins.onChatSnapshot(active);
   }
   async function refresh(target) {
-    var version = ++serial, result;
-    try { result = await send("getProjectChats", {}); }
+    var version = ++serial;
+    try { if (!await refreshCatalog(function () { return version === serial; })) return; }
     catch (error) { if (version === serial) notice(error.detail || error.message, true); return; }
     if (version !== serial) return;
     var previousProject = projectId(), previousChat = currentId();
-    catalog = result;
+    var result = catalog;
     if (target && target.workspaceId) selectedWorkspaceId = target.workspaceId;
     else if (result.selectedWorkspaceId) selectedWorkspaceId = result.selectedWorkspaceId;
     else if (!projects().some(function (item) { return item.workspaceId === selectedWorkspaceId; }))
@@ -302,7 +313,7 @@
         active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
         notice(statusText()); render();
       }
-      try { catalog = await send("getProjectChats", {}); render(); }
+      try { await refreshCatalog(); render(); }
       catch (error) { if (selected) notice("Чат создан, но список не обновлён: " + (error.detail || error.message), true); }
       return selected && version === serial && currentId() === result.sessionId ? result : null;
     } catch (error) { if (version === serial && projectId() === pid) notice(error.detail || error.message, true); }
@@ -318,7 +329,7 @@
       var returnedChat = returnedProject && (returnedProject.chats || []).find(function (item) { return item.Id === chat.Id; });
       var currentProject = projects().find(function (item) { return item.workspaceId === entry.workspaceId; });
       var currentChat = currentProject && (currentProject.chats || []).find(function (item) { return item.Id === chat.Id; });
-      if (returnedChat && currentChat) currentChat.Title = returnedChat.Title;
+      if (returnedChat && currentChat) { currentChat.Title = returnedChat.Title; ++catalogRevision; }
       if (returnedChat && projectId() === entry.workspaceId && currentId() === chat.Id && active.state) {
         active.state.Title = returnedChat.Title; active.state.title = returnedChat.Title;
       }
@@ -331,7 +342,10 @@
     try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
       var currentProject = projects().find(function (item) { return item.workspaceId === entry.workspaceId; });
-      if (currentProject) currentProject.chats = (currentProject.chats || []).filter(function (item) { return item.Id !== chat.Id; });
+      if (currentProject) {
+        currentProject.chats = (currentProject.chats || []).filter(function (item) { return item.Id !== chat.Id; });
+        ++catalogRevision;
+      }
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       fileNotices.delete(chatRequestKey(entry.workspaceId, chat.Id));
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
@@ -354,7 +368,10 @@
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
     try { await window.RNAssistantChatDrafts.flushAll();
       await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
-      if (catalog) catalog.projects = projects().filter(function (item) { return item.workspaceId !== entry.workspaceId; });
+      if (catalog) {
+        catalog.projects = projects().filter(function (item) { return item.workspaceId !== entry.workspaceId; });
+        ++catalogRevision;
+      }
       (entry.chats || []).forEach(function (chat) {
         window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       });
@@ -385,15 +402,14 @@
     pendingChatRequests.add(requestKey); render();
     try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) {
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
-      try { var latestCatalog = await send("getProjectChats", {});
-        if (projectId() === pid && currentId() === sid) { catalog = latestCatalog; render(); }
+      try { if (await refreshCatalog(function () { return projectId() === pid && currentId() === sid; })) render();
       } catch (_) { /* The chat result remains available. */ }
       if (stopTitleWatch) stopTitleWatch();
       stopTitleWatch = window.RNAssistantWorkspaceChat.watchTitle(result,
         function () { return send("getProjectChat", { workspaceId: pid, sessionId: sid }); },
         async function (latest) { if (projectId() !== pid || currentId() !== sid) return;
           active = window.RNAssistantWorkspaceChat.latestSnapshot(active, latest); render();
-          try { catalog = await send("getProjectChats", {}); if (projectId() === pid && currentId() === sid) render(); }
+          try { if (await refreshCatalog(function () { return projectId() === pid && currentId() === sid; })) render(); }
           catch (_) { /* The refreshed title is still shown in the open chat. */ }
         });
     } return true; }
@@ -475,7 +491,7 @@
       try {
         var result = await send(mode === "create" ? "createProjectWorkspace" : "connectProjectWorkspace", { rootPath: path });
         var connected = (result.projects || []).find(function (item) { return item.workspaceId === result.selectedWorkspaceId; });
-        if (!catalog || !connected) catalog = result;
+        if (!catalog || !connected) replaceCatalog(result);
         else {
           var existing = projects().find(function (item) { return item.workspaceId === connected.workspaceId; });
           if (existing) {
@@ -483,6 +499,7 @@
             Object.assign(existing, connected);
             if (chats) existing.chats = chats;
           } else catalog.projects.push(connected);
+          ++catalogRevision;
         }
         if (version === serial && !request.cancelled && !el("Connection").hidden) {
           selectedWorkspaceId = result.selectedWorkspaceId; active = null; notice("");

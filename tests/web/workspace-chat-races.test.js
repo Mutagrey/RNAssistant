@@ -430,7 +430,79 @@ const root = path.resolve(__dirname, '../..');
     assert.match(await concurrentlyRenamed.textContent(), /Название после подключения/,
       'a late connection catalog must not revert a chat renamed while connection was pending');
     assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-race', {exact:true}).count());
-    console.log('PASS workspace snapshot ordering, running-chat reconnect and plugin selection during a pending reply');
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.staleRunCatalog = {release:null, armed:true};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'getProjectChats' && staleRunCatalog.armed) {
+          staleRunCatalog.armed = false;
+          await new Promise(resolve => { staleRunCatalog.release = resolve; });
+        }
+        return result;
+      };
+    });
+    await page.locator('#chatInput').fill('Обновить список после ответа');
+    await page.locator('#chatInput').press('Enter');
+    await page.waitForFunction(() => !!staleRunCatalog.release);
+    await page.locator('#projectChatNew').click();
+    await page.waitForFunction(previousId => RNAssistantProjectChats.snapshot()?.sessionId?.startsWith('preview-project-') &&
+      RNAssistantProjectChats.snapshot().sessionId !== previousId, createdDuringHistoryDelete);
+    const createdDuringRunCatalog = await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId);
+    const rowCreatedDuringRunCatalog = page.locator('[data-tree-key="project-chat:preview-data-workspace:' + createdDuringRunCatalog + '"]');
+    assert.equal(await rowCreatedDuringRunCatalog.count(), 1);
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
+    await page.evaluate(async () => { staleRunCatalog.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(await rowCreatedDuringRunCatalog.count(), 1,
+      'a late run catalog must not hide a chat created before returning to the original session');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.staleTitleCatalog = {release:null, armed:true};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'getProjectChats' && staleTitleCatalog.armed) {
+          staleTitleCatalog.armed = false;
+          await new Promise(resolve => { staleTitleCatalog.release = resolve; });
+        }
+        return result;
+      };
+    });
+    await page.locator('#chatInput').fill('Обновить заголовок после ответа');
+    await page.locator('#chatInput').press('Enter');
+    await page.waitForFunction(() => !!staleTitleCatalog.release);
+    page.once('dialog', dialog => dialog.accept('Свежее название'));
+    await concurrentlyRenamed.hover();
+    await concurrentlyRenamed.getByRole('button', {name:/Переименовать чат/}).click();
+    await page.waitForFunction(() => document.querySelector('[data-tree-key="project-chat:preview-data-workspace:preview-project-clean"]')
+      ?.textContent.includes('Свежее название'));
+    await page.evaluate(async () => { staleTitleCatalog.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.match(await concurrentlyRenamed.textContent(), /Свежее название/,
+      'a late run catalog must not revert a title renamed while its read was pending');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.staleCreateCatalog = {release:null, armed:true};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'getProjectChats' && staleCreateCatalog.armed) {
+          staleCreateCatalog.armed = false;
+          await new Promise(resolve => { staleCreateCatalog.release = resolve; });
+        }
+        return result;
+      };
+    });
+    await page.locator('#projectChatNew').click();
+    await page.waitForFunction(() => !!staleCreateCatalog.release);
+    page.once('dialog', dialog => dialog.accept('Имя во время создания'));
+    await concurrentlyRenamed.hover();
+    await concurrentlyRenamed.getByRole('button', {name:/Переименовать чат/}).click();
+    await page.waitForFunction(() => document.querySelector('[data-tree-key="project-chat:preview-data-workspace:preview-project-clean"]')
+      ?.textContent.includes('Имя во время создания'));
+    await page.evaluate(async () => { staleCreateCatalog.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await page.waitForFunction(() => !RNAssistantProjectChats.isBusy());
+    assert.match(await concurrentlyRenamed.textContent(), /Имя во время создания/,
+      'a late create catalog must not revert a title renamed while its read was pending');
+    console.log('PASS workspace chat session and catalog races');
   } finally {
     await browser.close();
     server.kill();
