@@ -14,7 +14,7 @@ namespace RNAssistant.Core.Services
             return new[] {
                 ChatVisualizationSkillProvider.Create(),
                 Skill(FilesId, "Workspace files",
-                    "Create or change real workspace files, inspect exact source and finish with current read evidence.",
+                    "Inspect, create or edit workspace files using current source and verified after-state; honor explicit final-read requirements.",
 @"# Workspace files
 Use for tasks that create, inspect or edit real workspace files.
 
@@ -28,10 +28,10 @@ Keep all paths relative to the selected workspace. Respect the available tool ca
                 Skill(WebId, "Local web verify and repair",
                     "Build or repair a local multi-file HTML/CSS/JS app, run browser checks, fix failures and meet explicit final-read acceptance when present.",
 @"# Local web verify and repair
-Use for a local HTML/CSS/JS application when web.verify and file mutation tools are available. Load workspace.files with common.skills_load for file prerequisites and final source reads.
+Use for a local HTML/CSS/JS application when web.verify and file mutation tools are available. Load workspace.files with common.skills_load for source inspection and guarded file edits.
 
 1. Keep HTML, CSS and JS in real workspace files with local relative assets. When the task requires offline operation, use no CDN, external requests or dependencies.
-2. For an existing broken app, run web.verify before editing to obtain the failing checks. For a new app, create its files first, then run web.verify with its entryPath.
+2. For an existing broken app, run web.verify before editing when reproducing the failure will guide the fix; reuse relevant current failure evidence when available. A clear source defect can be corrected directly. For a new app, create its files first. Verify the resulting app with web.verify and its entryPath.
 3. Inspect the latest verification result: asset/runtime errors and failed functional checks identify behavior to repair. Read the relevant file, fix the cause, then verify again. Do not repeat an unchanged failing verification or weaken the accepted checks. A historical passing snapshot does not verify later edits.
 4. Once the current snapshot passes the accepted checks, reuse verified current after-state. If RUNTIME_CONTEXT.readAcceptance is supplied, read its required final files; a later repair requires fresh verification and fresh reads of changed files.
 5. Finish only when both behavioral checks and current source-read requirements are satisfied. Report an unavailable browser or an unmet requirement explicitly; do not claim a visual review or broader testing than web.verify actually performed."),
@@ -52,11 +52,20 @@ For a plugin annotation, inspect plugin.json and only its declared HTML/CSS/JS s
         {
             var tools = new List<string> { "common.resources_find", "common.resources_read", "common.resources_search", "files.create", "files.patch", "files.replace" };
             if (id == WebId) tools.Add("web.verify");
+            var optional = new List<SkillToolDependency>();
+            if (id == PluginId)
+            {
+                optional.Add(new SkillToolDependency { Id = "plugins.check",
+                    Fallback = "Inspect the plugin source and report that package validation and a checked preview are unavailable; do not claim a validated candidate." });
+                optional.Add(new SkillToolDependency { Id = "plugins.apply",
+                    Fallback = "Keep the source changes and report that activation is unavailable; do not claim publication." });
+            }
             return new SkillDefinition { Id = id, Host = "Workspace", Name = name, Description = description,
                 BodyMarkdown = body,
                 BuiltIn = true, Enabled = true, Version = "1.0.0",
                 Package = new SkillPackageManifest { PackageId = id,
-                    RequiredTools = tools.ConvertAll(tool => new SkillToolDependency { Id = tool }) } };
+                    RequiredTools = tools.ConvertAll(tool => new SkillToolDependency { Id = tool }),
+                    OptionalTools = optional } };
         }
     }
 }

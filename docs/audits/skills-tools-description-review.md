@@ -12,6 +12,20 @@ ID и требуют отдельного runtime inventory; их количес
 Skill — инструкция и зависимости; tool — исполняемая capability с schema/policy/binding.
 Совпадение тематики skill и tool не является дублированием исполняемого API.
 
+## Выполненный следующий этап — 2026-10-26
+
+Исходные таблицы ниже сохраняют выводы аудита до правки. Исправлены:
+scoped VBA search guidance; краткое описание CodeOnly; manifests Word/PowerPoint/Outlook
+с операциями, уже названными в их workflows; optional plugins.check/apply с явными
+fallback; workspace description о verified after-state; условный browser baseline.
+Проверки Harness: `skill packages: built-ins`, `skill packages: dependencies`,
+`settings: built-in skill references resolve to catalogs` — 3 passed. Built-ins fixture
+проверяет authoring tools в следующем request и optional plugin capabilities при наличии/отсутствии.
+Это host-neutral evidence; Windows/Office и модельный A/B не выполнялись.
+Runtime policies, v8 и публичные tool IDs не менялись. Общие resource dependencies
+и остальные редакционные предложения пока сохранены. Реальное модельное сравнение
+и файловый cutover остаются следующими этапами.
+
 ## Все встроенные skills
 
 | Skill ID | Контекст | Назначение | Решение / описание |

@@ -26,6 +26,22 @@ namespace RNAssistant.Harness
             AssertTrue(pluginAuthoring.BodyMarkdown.Contains(VisualAnnotationSourceWorkflow.Common),
                 "plugin source authoring includes the shared annotation-to-source procedure");
 
+            var pluginCatalog = new SkillCatalogSnapshot(new[] { pluginAuthoring });
+            var fileTools = pluginAuthoring.Package.RequiredTools.Select(item => PackageTool(item.Id)).ToArray();
+            var withoutPlugins = SkillTaskService.Select(PackageSession(), pluginAuthoring.Id,
+                pluginCatalog, PackageTools(fileTools), new AppSettings(), "plugin-without-capabilities");
+            AssertContains(withoutPlugins.Reason, "package validation", "missing check has explicit fallback");
+            AssertContains(withoutPlugins.Reason, "activation is unavailable", "missing apply has explicit fallback");
+            var withPlugins = fileTools.Concat(new[] { PackageTool("plugins.check"), PackageTool("plugins.apply") }).ToArray();
+            var pluginSession = PackageSession();
+            SkillTaskService.Select(pluginSession, pluginAuthoring.Id, pluginCatalog,
+                PackageTools(withPlugins), new AppSettings(), "plugin-with-capabilities");
+            var pluginSurface = SkillTaskService.Compile(pluginSession, pluginCatalog, PackageTools(withPlugins),
+                withPlugins, fileTools, "plugin-next-step", new AppSettings());
+            AssertTrue(pluginSurface.Tools.Any(tool => tool.Id == "plugins.check") &&
+                pluginSurface.Tools.Any(tool => tool.Id == "plugins.apply"),
+                "plugin skill admits available validation and activation on the next request");
+
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             WithTempPaths(paths =>
             {
@@ -63,6 +79,22 @@ namespace RNAssistant.Harness
                     AssertEqual(skill.Id, selected.Id, host + " can select its advertised skill " + skill.Id);
                     AssertTrue(selected.Tools.All(id => tools.Any(tool => tool.Id == id)),
                         host + " selection binds only its published tools: " + skill.Id);
+                    var advertisedOperations = skill.Id == "word.document_editing"
+                        ? new[] { "word.write_text", "word.format_text", "word.add_table", "word.add_comment" }
+                        : skill.Id == "powerpoint.deck_building"
+                        ? new[] { "powerpoint.add_slide", "powerpoint.set_text", "powerpoint.add_object", "powerpoint.move_slide" }
+                        : skill.Id == "outlook.email_assistant"
+                        ? new[] { "outlook.create_draft", "outlook.update_mail", "outlook.index_archive" }
+                        : new string[0];
+                    if (advertisedOperations.Length > 0)
+                    {
+                        var initial = CallableToolPack.Create(ChatModes.Agent, host, "host-skill", tools);
+                        var surface = SkillTaskService.Compile(session, skills, pack, tools, initial.Tools,
+                            "host-authoring-step", settings);
+                        foreach (var id in advertisedOperations)
+                            AssertTrue(surface.Tools.Any(tool => tool.Id == id),
+                                skill.Id + " exposes its advertised operation from bootstrap: " + id);
+                    }
                     if (skill.Id == "excel.analysis_reporting")
                     {
                         var initial = CallableToolPack.Create(ChatModes.Agent, host, "host-skill", tools);

@@ -44,6 +44,22 @@ authoring procedures: that host has no supported VBA mutation/package route.
 Host-neutral package checks select every advertised built-in against each host's
 actual published tool catalog, including default-off JavaScript.
 
+### Built-in routing and dependencies
+
+Office authoring packages declare the host operations named by their workflows:
+Word includes insertion/formatting/review, PowerPoint includes slide/object creation
+and ordering, and Outlook includes draft creation, indexing and metadata updates.
+Selecting a skill exposes those schemas on the next request; policies, confirmation
+and exact dispatch bindings still govern execution.
+
+Workspace plugin authoring declares `plugins.check` and `plugins.apply` as optional
+with explicit unavailable-validation/activation fallbacks. Their absence does not
+prevent source edits or certify a checked/published candidate. VBA instructions use
+scoped project search or a module target, then current reads before patching.
+Workspace file guidance reuses verified after-state except for explicit final-read
+acceptance. Browser verification before a fix is conditional on diagnostic value;
+verification of the changed app remains part of the web workflow.
+
 ### Manifest and task selection
 
 `SKILL.md` is the sole dependency source. A portable file with scalar `name` and
