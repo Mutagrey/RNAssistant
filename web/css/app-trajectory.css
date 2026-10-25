@@ -6,19 +6,16 @@
 .trajectory-panel { min-height: 0; min-width: 0; padding: 0; border: 0; background: transparent; }
 .trajectory-panel.active { display: flex; flex-direction: column; gap: 8px; }
 .trajectory-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.trajectory-heading { flex: 1; min-width: 0; }
-.trajectory-heading h3 { margin: 0; font-size: 13px; font-weight: 500; }
-.trajectory-heading p { margin: 3px 0 0; overflow: hidden; color: var(--ink-muted); font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
-.trajectory-panel .icon-button, .trajectory-panel .rna-action-menu-trigger { width: 28px; height: 28px; min-height: 28px; padding: 5px; border-radius: 5px; font-family: inherit; font-size: 16px; }
-.trajectory-panel .icon-button svg, .trajectory-panel .rna-action-menu svg { width: 13px; height: 13px; }
+.trajectory-scope { flex: 1; min-width: 0; color: var(--ink-muted); font-size: 11px; overflow-wrap: anywhere; }
+.trajectory-panel .icon-btn, .trajectory-panel .rna-action-menu-trigger { width: 30px; height: 30px; min-height: 30px; padding: 0; flex-basis: 30px; font-family: inherit; }
+.trajectory-panel .icon-btn svg, .trajectory-panel .rna-action-menu svg { width: 13px; height: 13px; }
 .trajectory-panel .rna-action-menu-body { z-index: 12; min-width: 190px; font-family: var(--font-family, "Segoe UI", sans-serif); font-size: 12px; }
 .trajectory-panel .rna-action-menu-body > button { width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: 4px; background: transparent; font: inherit; text-align: left; white-space: normal; }
-.trajectory-toolbar { display: flex; gap: 8px; }
 .trajectory-field { display: grid; min-width: 0; gap: 4px; font-size: 11px; color: var(--ink-muted); }
-.trajectory-field input, .trajectory-field select { width: 100%; min-width: 0; height: 30px; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
+.trajectory-field input, .trajectory-field select { width: 100%; min-width: 0; height: 30px; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
 #trajectoryViewField { flex: 0 1 190px; }
-.trajectory-search-field { flex: 1; }
-.trajectory-advanced-options, .trajectory-export-options { flex: none; padding: 5px 8px; border-radius: 5px; background: var(--surface-subtle); }
+#trajectoryViewInput { border: 0; background-color: transparent; }
+.trajectory-advanced-options, .trajectory-export-options { flex: none; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--surface-subtle); }
 .trajectory-advanced-options > summary, .trajectory-export-options > summary { color: var(--ink-muted); cursor: pointer; font-size: 11px; }
 .trajectory-querybar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
 .trajectory-export-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; padding-top: 8px; font-size: 11px; }
@@ -84,17 +81,15 @@
 .trajectory-event-payload {
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 9.5px;
+  font-size: var(--text-xs);
 }
 
 .trajectory-panel.is-artifact-tree .trajectory-event { padding-left: calc(8px + min(var(--trajectory-depth, 0), 4) * 10px); }
 .trajectory-event-type {
-  overflow: hidden;
   font-family: inherit;
-  font-size: 11px;
+  font-size: var(--text-sm);
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .trajectory-event-payload {
@@ -114,6 +109,7 @@
 
 .trajectory-detail-head {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 8px;
   align-items: center;
@@ -126,25 +122,22 @@
   gap: 5px;
 }
 
-#trajectoryDetailPart { max-width: 105px; min-width: 0; height: 28px; min-height: 28px; padding: 2px 22px 2px 6px; border: 0; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font: inherit; font-size: 11px; }
+#trajectoryDetailPart { max-width: 105px; min-width: 0; height: 28px; min-height: 28px; padding: 2px 22px 2px 6px; border: 0; border-radius: var(--radius-sm); background-color: var(--surface-subtle); color: var(--ink); font: inherit; font-size: 11px; }
 .trajectory-detail-head strong { flex: 1; }
 .trajectory-detail-actions > button { min-height: 28px; padding: 3px 6px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; }
 
 .trajectory-detail-head strong {
-  overflow: hidden;
   font-family: inherit;
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .trajectory-meta {
-  overflow: hidden;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink-muted);
+  font-family: var(--font);
+  line-height: 1.5;
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
 }
 
 .trajectory-json-host {
@@ -187,17 +180,23 @@
   margin-bottom: 6px;
   color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 9.5px;
+  font-size: var(--text-xs);
   line-height: 1.4;
   word-break: break-word;
 }
 
 @media (max-width: 560px) {
-  #trajectoryViewField { flex-basis: 145px; }
-  .trajectory-toolbar { gap: 6px; }
+  #trajectoryViewField { flex: 1 1 150px; }
+  .trajectory-head { flex-wrap: wrap; }
+  .trajectory-scope { flex: 0 0 100%; order: 2; padding-left: 6px; }
   .trajectory-field input, .trajectory-field select { font-size: 11px; }
   .trajectory-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(70px, 28%) minmax(0, 1fr); }
   .trajectory-workspace > .splitter { display: none; }
   .trajectory-events { border-right: 0; border-bottom: 1px solid var(--line); }
   .trajectory-detail { padding: 8px 0 0; }
 }
+
+.trajectory-overview { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 6px 0 9px; }
+.trajectory-overview > div { display: grid; gap: 2px; font-size: 10px; color: var(--ink-muted); }
+.trajectory-overview strong { font-size: 13px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.trajectory-overview > button { padding: 4px 7px; min-height: 28px; border: 0; font-size: 11px; color: var(--accent-strong); }

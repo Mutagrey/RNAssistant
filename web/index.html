@@ -37,8 +37,8 @@
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
   <link rel="stylesheet" href="css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-resource-viewer.css?v=agent-planning-20261002-2">
-  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1-history-compact-20261025-1">
-  <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1-history-compact-20261025-1">
+  <link rel="stylesheet" href="css/app-trajectory.css?v=diagnostics-clarity-20260930-1-history-content-20261025-1-shared-history-style-20261025-1">
+  <link rel="stylesheet" href="css/app-run-journal.css?v=json-height-20260929-1-history-content-20261025-1-shared-history-style-20261025-1">
   <link rel="stylesheet" href="css/app-tools.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-vba.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
@@ -53,10 +53,10 @@
   <link rel="stylesheet" href="css/app-theme.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=neutral-theme-20261019-1">
   <link rel="stylesheet" href="css/app-product-navigation.css?v=rail-popovers-20261019-2-project-shell-1-inspector-track-20261025-1">
-  <link rel="stylesheet" href="css/app-product-components.css?v=annotate-hover-20261024-1">
+  <link rel="stylesheet" href="css/app-product-components.css?v=annotate-hover-20261024-1-shared-history-style-20261025-1">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=questions-20261023-1-shared-dock-1-project-shell-1-pane-header-20261025-1-annotate-action-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=questions-20261023-1-shared-dock-1-project-shell-1-pane-header-20261025-1-annotate-action-1-visual-icons-20261025-1">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-chat-browser.css?v=annotate-hover-20261024-1-request-layout-2-pane-header-20261025-1">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1">
@@ -1037,9 +1037,11 @@
 
               <section class="trajectory-panel diagnostics-tab-panel" data-diagnostics-panel="records" aria-labelledby="trajectoryTitle">
                 <div class="trajectory-head">
-                  <button class="icon-button hidden" id="trajectoryBackButton" type="button" aria-label="Назад к предыдущей выборке" title="Назад"><svg data-rna-icon="left" aria-hidden="true"></svg></button>
-                  <div class="trajectory-heading"><h3 id="trajectoryTitle">История чата</h3><p id="trajectoryDescription">Сохранённые события выбранного чата</p></div>
-                  <button class="icon-button" id="refreshTrajectoryButton" type="button" aria-label="Обновить историю" title="Обновить историю"><svg data-rna-icon="refresh" aria-hidden="true"></svg></button>
+                  <button class="icon-btn hidden" id="trajectoryBackButton" type="button" aria-label="Назад к предыдущей выборке" title="Назад"><svg data-rna-icon="left" aria-hidden="true"></svg></button>
+                  <h3 id="trajectoryTitle" hidden>История чата</h3>
+                  <label class="trajectory-field" id="trajectoryViewField"><select id="trajectoryViewInput" aria-label="Представление истории"><option value="raw">Исходные события</option><option value="run-causal">Ход запуска</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Действия</option><option value="artifact-lineage">Артефакты</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations">Журнал VBA</option></select></label>
+                  <span class="trajectory-scope" id="trajectoryDescription">Весь чат</span>
+                  <button class="icon-btn" id="refreshTrajectoryButton" type="button" aria-label="Обновить историю" title="Обновить историю"><svg data-rna-icon="refresh" aria-hidden="true"></svg></button>
                   <details class="popover rna-action-menu" id="trajectoryActionsMenu">
                     <summary class="rna-action-menu-trigger" aria-label="Действия с историей" title="Действия с историей"><svg data-rna-icon="more" aria-hidden="true"></svg></summary>
                     <div class="popover-menu rna-action-menu-body">
@@ -1048,10 +1050,6 @@
                       <button id="trajectoryExportOptionsButton" type="button"><svg data-rna-icon="download" aria-hidden="true"></svg><span>Экспорт диагностики</span></button>
                     </div>
                   </details>
-                </div>
-                <div class="trajectory-toolbar">
-                  <label class="trajectory-field" id="trajectoryViewField"><select id="trajectoryViewInput" aria-label="Представление истории"><option value="raw">Исходные события</option><option value="run-causal">Ход запуска</option><option value="model-replay">Шаги модели</option><option value="tool-execution">Действия</option><option value="artifact-lineage">Артефакты</option><option value="confirmation-pauses">Подтверждения</option><option value="failure-retries">Ошибки и повторы</option><option value="turn-usage">Токены и стоимость</option><option value="vba-mutations">Журнал VBA</option></select></label>
-                  <label class="trajectory-field trajectory-search-field"><input id="trajectorySearchInput" type="search" maxlength="512" placeholder="Поиск в истории" aria-label="Поиск в сохранённой истории"></label>
                 </div>
                 <details class="trajectory-advanced-options hidden" id="trajectoryAdvancedOptions">
                   <summary>Фильтры событий</summary>
@@ -1072,6 +1070,7 @@
                       <div class="trajectory-detail-actions"><details class="popover rna-action-menu hidden" id="trajectoryCorrelationBar"><summary class="rna-action-menu-trigger" aria-label="Связанные события" title="Связанные события"><svg data-rna-icon="more" aria-hidden="true"></svg></summary><div class="popover-menu rna-action-menu-body" id="trajectoryCorrelationActions"></div></details><button class="secondary hidden" id="loadTrajectoryPayloadButton" type="button">Содержимое</button><button class="secondary hidden" id="loadVbaMutationButton" type="button">Изменения</button></div>
                     </div>
                     <div class="trajectory-meta" id="trajectoryEventMeta"></div>
+                    <div class="trajectory-overview hidden" id="trajectoryOverview"></div>
                     <div class="trajectory-json-host" id="trajectoryEventData"></div>
                     <div class="trajectory-vba-diff hidden" id="trajectoryVbaDiff"></div>
                   </div>
@@ -1155,11 +1154,11 @@
   <script src="js/app-text-viewer.js?v=artifact-text-20260831-1"></script>
   <script src="js/app-sequence-viewer.js?v=artifact-gallery-20260902-1"></script>
   <script src="js/app-resource-viewer.js?v=agent-planning-20261002-2-image-display-1"></script>
-  <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1-history-compact-20261025-1"></script>
+  <script src="js/app-run-journal.js?v=catalog-display-chat-20260908-1-history-content-20261025-1-shared-history-style-20261025-1"></script>
   <script src="js/app-resource-download.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-resource-upload.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1-workspace-diagnostics-20261025-1"></script>
-  <script src="js/app-trajectory.js?v=diagnostics-clarity-20260930-1-workspace-diagnostics-20261025-1-history-compact-20261025-1"></script>
+  <script src="js/app-trajectory.js?v=diagnostics-clarity-20260930-1-workspace-diagnostics-20261025-1-history-content-20261025-1"></script>
   <script src="js/app-prompts.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2-panel-model-20261002-1"></script>
@@ -1192,7 +1191,7 @@
   <script src="js/app-html-workspace.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-chat-browser.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
-  <script src="js/app-model-context.js?v=request-reader-20261024-1-shared-dock-1-workspace-requests-20261025-1-compact-header-1"></script>
+  <script src="js/app-model-context.js?v=request-reader-20261024-1-shared-dock-1-workspace-requests-20261025-1-compact-header-1-history-content-20261025-1"></script>
   <script src="js/app-context-inspector.js?v=single-composer-20261023-1"></script>
   <script src="js/app-tool-result-preview.js?v=question-delivery-20261014-1"></script>
   <script src="js/app-agent-data.js?v=step-results-20260908-1"></script>

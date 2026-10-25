@@ -221,3 +221,9 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .editor-body > .form-stack:has(.product-code-editor) { display: flex; flex-direction: column; flex: 1; min-height: 200px; }
 .editor-body > .form-stack:has(.product-code-editor) > :not(.product-code-editor) { flex-shrink: 0; }
 .editor-body:has(.product-code-editor) .section-head, .content:has(> .product-code-editor) .section-head { margin-bottom: 0; }
+
+/* Shared disclosure row: prototype work timeline and saved diagnostic history. */
+.rna-history-summary { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 2px; width: fit-content; max-width: 100%; list-style: none; cursor: pointer; border-radius: 5px; }
+.rna-history-summary::-webkit-details-marker { display: none; }
+.rna-history-summary:hover { background: var(--surface-hover); color: var(--ink); }
+.rna-history-summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

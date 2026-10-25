@@ -1337,8 +1337,10 @@ artifact names/metadata, single selection, inline JSON values, left-aligned even
 and split dragging. Use the bundled Playwright through `NODE_PATH`; optionally set
 `BROWSER_EXECUTABLE` and `LAYOUT_SCREENSHOT`. This is not Office/WebView2 qualification.
 `tests/web/chat-history-layout.test.js` uses the real preview shell with saved-event
-fixtures: compact wide/narrow light/dark layouts, one technical reader, exact
-navigation/back and retained scope, keyboard node copy, lazy bodies, empty/error
+fixtures: run/step/action hierarchy, exact result/argument subtrees, model composition
+and return, shared demo disclosure styling, every alternate view, wrapped wide/narrow
+light/dark layouts, one pane scroll, parent collapse/refresh and retained tree state,
+exact navigation/back and scope, keyboard node copy, lazy bodies, empty/error
 states and settings-dirty isolation. Use the same `NODE_PATH` / `BROWSER_EXECUTABLE`;
 optional `HISTORY_SCREENSHOTS` writes captures. Pair with `run-journal.test.js`,
 `trajectory-json-viewer.test.js` and `json-viewer.test.js` for reader/lifecycle checks.

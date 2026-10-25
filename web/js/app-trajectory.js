@@ -12,7 +12,7 @@
   var trajectoryRequestId = 0;
   var detailRequestId = 0;
   var journalFilter = "all";
-  var expandedJournalRows = {};
+  var expandedJournalRows = {}, journalParts = {};
   var journalStateChatId = "";
   var activeExport = null;
   var activePayload = null;
@@ -127,6 +127,7 @@
   }
 
   function resetLazyDetail() {
+    $("trajectoryOverview").replaceChildren(); $("trajectoryOverview").classList.add("hidden");
     detailRequestId += 1;
     if (activePayload) activePayload.abort();
     activePayload = null;
@@ -164,7 +165,7 @@
   function captureRoute() {
     return { scope: scopeKey(), selection: sourceSelectionKey(), view: $("trajectoryViewInput").value,
       filter: Object.assign({}, correlationFilter), journalFilter: journalFilter,
-      expanded: Object.assign({}, expandedJournalRows), search: $("trajectorySearchInput").value,
+      expanded: Object.assign({}, expandedJournalRows), parts: Object.assign({}, journalParts),
       type: $("trajectoryTypeInput").value, visibility: $("trajectoryVisibilityInput").value };
   }
 
@@ -174,8 +175,8 @@
     var route = routeHistory.pop();
     updateBackButton();
     if (!route || route.scope !== scopeKey() || route.selection !== sourceSelectionKey()) return;
-    correlationFilter = route.filter; journalFilter = route.journalFilter; expandedJournalRows = route.expanded;
-    $("trajectoryViewInput").value = route.view; $("trajectorySearchInput").value = route.search;
+    correlationFilter = route.filter; journalFilter = route.journalFilter; expandedJournalRows = route.expanded; journalParts = route.parts || {};
+    $("trajectoryViewInput").value = route.view;
     $("trajectoryTypeInput").value = route.type; $("trajectoryVisibilityInput").value = route.visibility;
     nextCursor = null; updateViewControls(); refreshTrajectory(false);
   }
@@ -292,10 +293,10 @@
     var sourceSeqs = value(item, "SourceEventSeqs", "sourceEventSeqs", []) || [];
     var sourceIds = value(item, "SourceEventIds", "sourceEventIds", []) || [];
     var resourceRefs = value(item, "ResourceRefs", "resourceRefs", []) || [];
-    $("trajectoryEventTitle").textContent = value(item, "Title", "title", value(item, "Kind", "kind", "row"));
+    $("trajectoryEventTitle").textContent = rowTitle(item);
     $("trajectoryEventMeta").textContent = [
       "#" + firstSequence + (lastSequence !== firstSequence ? "…" + lastSequence : ""),
-      value(item, "Status", "status", ""),
+      window.RNAssistantRunJournal.statusLabel(value(item, "Status", "status", "")),
       duration === null ? "" : duration + " мс",
       totalTokens === null ? "" : totalTokens + " токенов",
       costUsd === null ? "" : "$" + costUsd
@@ -314,6 +315,29 @@
       journalRunId: value(item, "JournalRunId", "journalRunId", null),
       resourceRefs: resourceRefs
     });
+    var overview = $("trajectoryOverview");
+    function number(label, amount) {
+      if (amount === null || amount === undefined) return;
+      var cell = document.createElement("div"), key = document.createElement("span"), val = document.createElement("strong");
+      key.textContent = label; val.textContent = typeof amount === "number" ? amount.toLocaleString("ru-RU") : String(amount);
+      cell.appendChild(key); cell.appendChild(val); overview.appendChild(cell);
+    }
+    number("Вход", promptTokens); number("Выход", completionTokens); number("Всего токенов", totalTokens);
+    if (costUsd !== null) number("Стоимость провайдера", "$" + costUsd);
+    if (activeView === "model-replay") {
+      number("Попытки", value(item, "AttemptCount", "attemptCount", null));
+      if (selectedSource().chatId === selectedChatId() && value(item, "RunId", "runId", "")) {
+        var contextButton = document.createElement("button"); contextButton.type = "button"; contextButton.className = "secondary";
+        contextButton.textContent = "Состав запроса и ответа";
+        var origin = scopeKey(), source = sourceSelectionKey();
+        contextButton.addEventListener("click", function () {
+          if (scopeKey() !== origin || sourceSelectionKey() !== source) return;
+          openModelContextFromHistory({ runId: value(item, "RunId", "runId", ""), stepId: value(item, "StepId", "stepId", "") });
+        });
+        overview.appendChild(contextButton);
+      }
+    }
+    overview.classList.toggle("hidden", !overview.childElementCount);
     renderCorrelationActions(item);
   }
 
@@ -411,9 +435,30 @@
       return value(item, "Operation", "operation", "mutation") + " · " +
         (value(item, "ModuleName", "moduleName", "") || value(item, "PackageId", "packageId", "") || mutationId(item));
     }
+    if (activeView === "model-replay") return "Запрос модели";
+    if (activeView === "turn-usage") return "Расход запуска";
+    if (activeView === "tool-execution") return value(item, "ToolId", "toolId", "Действие");
+    if (activeView === "confirmation-pauses") return "Подтверждение · " + value(item, "ToolId", "toolId", "действие");
     return activeView === "raw"
       ? value(item, "Type", "type", "event")
       : value(item, "Title", "title", value(item, "Kind", "kind", "row"));
+  }
+
+  function openModelContextFromHistory(target) {
+    var origin = scopeKey(), selection = sourceSelectionKey(), source = selectedSource();
+    if (source.chatId !== selectedChatId() || source.owner !== trajectoryOwner ||
+        (source.workspaceId || null) !== trajectoryWorkspaceId || !window.RNAssistantModelContext) return;
+    var scroll = $("trajectoryEvents").scrollTop, focused = document.activeElement;
+    switchTab("chat");
+    window.RNAssistantModelContext.open({ owner: source.owner, workspaceId: source.workspaceId,
+      chatId: source.chatId, sessionId: source.chatId, runId: target.runId, stepId: target.stepId,
+      requestEventId: target.requestEventId,
+      onClose: function () {
+        if (scopeKey() !== origin || sourceSelectionKey() !== selection) return;
+        switchTab("settings");
+        $("trajectoryEvents").scrollTop = scroll;
+        if (focused && focused.isConnected) focused.focus({ preventScroll: true });
+      } });
   }
 
   function renderRunJournal(response, previousScroll, loadedLimitReached) {
@@ -423,17 +468,12 @@
     var responseChatId = value(response, "ChatId", "chatId", selectedChatId() || "");
     var responseScope = scopeKey(), responseWorkspace = trajectoryWorkspaceId, sourceSelection = sourceSelectionKey();
     if (journalStateChatId && journalStateChatId !== responseScope) {
-      expandedJournalRows = {};
+      expandedJournalRows = {}; journalParts = {};
     }
     journalStateChatId = responseScope;
     selected = null;
-    var loadedIds = {};
-    events.forEach(function (item) { loadedIds[itemId(item)] = true; });
-    Object.keys(expandedJournalRows).forEach(function (id) {
-      if (!loadedIds[id] && !loadedIds[id.replace(/:technical$/, "")]) delete expandedJournalRows[id];
-    });
     root.setAttribute("role", "region");
-    root.setAttribute("aria-label", "Хронологический журнал запуска");
+    root.setAttribute("aria-label", "Дерево запусков и шагов");
     if (!adapter || typeof adapter.render !== "function") {
       root.replaceChildren();
       var unavailable = document.createElement("div");
@@ -450,20 +490,22 @@
     }
     result = adapter.render(root, events, {
       filter: journalFilter,
-      expanded: expandedJournalRows,
+      expanded: expandedJournalRows, parts: journalParts,
+      onPartChange: function (id, part) { journalParts[id] = part; },
+      onOpenModelContext: selectedSource().chatId === responseChatId ? openModelContextFromHistory : null,
       activeRunId: correlationFilter.runId || "",
+      activeStepId: correlationFilter.stepId || "",
+      activeToolCallId: correlationFilter.toolCallId || "",
       onFilterChange: function (filter) {
         journalFilter = filter;
         renderRunJournal(response, 0, loadedLimitReached);
       },
       onExpandedChange: function (id, open) {
-        if (open) expandedJournalRows[id] = true;
-        else delete expandedJournalRows[id];
+        expandedJournalRows[id] = !!open;
       },
       onExpandedSet: function (ids, open) {
         (ids || []).forEach(function (id) {
-          if (open) expandedJournalRows[id] = true;
-          else delete expandedJournalRows[id];
+          expandedJournalRows[id] = !!open;
         });
         rerender(true);
       },
@@ -477,6 +519,11 @@
         }, responseWorkspace);
       }
     });
+    if (result.validExpansionIds) {
+      var validIds = new Set(result.validExpansionIds);
+      Object.keys(expandedJournalRows).forEach(function (id) { if (!validIds.has(id)) delete expandedJournalRows[id]; });
+      Object.keys(journalParts).forEach(function (id) { if (!validIds.has(id)) delete journalParts[id]; });
+    }
     root.scrollTop = previousScroll;
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
@@ -484,7 +531,7 @@
     var matches = value(response, "TotalMatches", "totalMatches", total);
     var message = result.error
       ? "Журнал не отображён: " + result.error
-      : "Показано " + result.displayed + " из " + matches +
+      : "Событий в дереве: " + result.displayed + " из " + matches +
         (result.displayed !== result.loaded ? " · загружено " + result.loaded : "") +
         (result.truncated || loadedLimitReached ? " · достигнут лимит, уточните поиск" : "");
     $("trajectoryStatus").textContent = message;
@@ -572,6 +619,15 @@
       button.appendChild(first);
       button.appendChild(second);
       button.addEventListener("click", function () { selectEvent(item, button); });
+      button.addEventListener("keydown", function (event) {
+        var index = renderedEvents.indexOf(item), next = index;
+        if (event.key === "ArrowDown") next = Math.min(renderedEvents.length - 1, index + 1);
+        else if (event.key === "ArrowUp") next = Math.max(0, index - 1);
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = renderedEvents.length - 1;
+        else return;
+        event.preventDefault(); selectEvent(renderedEvents[next], root.children[next]); root.children[next].focus();
+      });
       root.appendChild(button);
     });
 
@@ -667,7 +723,7 @@
       return applyCorrelation({
         cursor: cursor || null,
         pageSize: 100,
-        search: $("trajectorySearchInput").value.trim(),
+        search: "",
         kind: $("trajectoryVbaKindInput").value || null,
         status: $("trajectoryVbaStatusInput").value || null
       });
@@ -678,7 +734,7 @@
       view: view,
       cursor: cursor || null,
       pageSize: view === "run-causal" ? 200 : 100,
-      search: $("trajectorySearchInput").value.trim(),
+      search: "",
       eventTypes: view === "raw" ? $("trajectoryTypeInput").value.split(",").map(function (item) { return item.trim(); }).filter(Boolean) : [],
       visibility: view === "raw" ? ($("trajectoryVisibilityInput").value || null) : null
     });
@@ -1079,7 +1135,7 @@
       if (latestRunId) correlationFilter.runId = latestRunId;
     }
     journalFilter = options.filter || "all";
-    expandedJournalRows = {};
+    expandedJournalRows = {}; journalParts = {};
     nextCursor = null;
     updateViewControls();
     refreshTrajectory(false);
@@ -1105,7 +1161,7 @@
     if (refresh) refresh.addEventListener("click", function () { refreshTrajectory(false, true); });
     if (more) more.addEventListener("click", function () { refreshTrajectory(true); });
     if (exportButton) exportButton.addEventListener("click", exportTrajectory);
-    ["trajectorySearchInput", "trajectoryTypeInput"].forEach(function (id) {
+    ["trajectoryTypeInput"].forEach(function (id) {
       $(id).addEventListener("input", function () {
         invalidateTrajectoryRequest();
         nextCursor = null;

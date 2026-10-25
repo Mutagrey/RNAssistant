@@ -82,8 +82,8 @@
     if (detail) card.appendChild(el("p", detail));
     $("modelContextBody").appendChild(card);
   }
-  function close() {
-    var c = current; current = null;
+  function close(restore) {
+    var c = current, returnToSource = c && live(c) && restore !== false; current = null;
     if (c) {
       clearTimeout(c.timer); c.abort.abort();
       c.requests.forEach(function (id) { cancelBridgeRequest(id).catch(function () {}); });
@@ -92,6 +92,7 @@
     $("modelContextDialog").classList.add("hidden");
     $("openModelContextFromTokens").setAttribute("aria-expanded", "false");
     window.RNAssistantChatInspector.hideRequest();
+    if (returnToSource && typeof c.onClose === "function") c.onClose();
   }
   async function call(c, type, payload) {
     var pending = send(type, Object.assign({ chatId: c.chatId }, c.workspaceId ? { workspaceId: c.workspaceId } : {}, payload || {}));
@@ -908,12 +909,12 @@
         options.workspaceId !== selected.workspaceId || options.sessionId !== selected.chatId) return;
     var scope = options && options.runId ? { runId: options.runId, stepId: options.stepId || "" } : null;
     var trigger = document.activeElement;
-    if (current) close();
+    if (current) close(false);
     if (typeof closePromptContextInspector === "function") closePromptContextInspector();
     current = { owner: selected.owner, chatId: selected.chatId, workspaceId: selected.workspaceId,
       abort: new AbortController(), requests: new Set(), version: 0,
-      mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: !scope, attempts: [],
-      scope: scope };
+      mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: !scope && !(options && options.requestEventId), attempts: [],
+      scope: scope, onClose: options && options.onClose };
     $("modelContextDialog").classList.remove("hidden");
     window.RNAssistantChatInspector.showRequest(trigger);
     $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
@@ -922,7 +923,16 @@
     $("modelContextHistory").open = false;
     previewAvailability(current);
     $("modelContextActualControls").classList.remove("hidden"); $("closeModelContextButton").focus();
-    if (scope) list(current, false);
+    $("closeModelContextButton").title = current.onClose ? "Вернуться к истории" : "Вернуться к боковой панели";
+    $("closeModelContextButton").setAttribute("aria-label", $("closeModelContextButton").title);
+    if (options && options.requestEventId) {
+      var opened = current;
+      select(opened, options.requestEventId, true).then(function () {
+        if (!live(opened) || !opened.detail) return;
+        opened.attempts = opened.detail.events.filter(function (event) { return event.type === "llm.request"; });
+        attemptPicker(opened).value = opened.selected;
+      });
+    } else if (scope) list(current, false);
     tick(current);
   }
   function bind() {

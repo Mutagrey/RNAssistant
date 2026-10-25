@@ -480,7 +480,6 @@ dialog::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
 .timeline-item:has(> p) + .timeline-item:has(> .timeline-group) { margin-top: 8px; }
 .assistant-message .timeline-item > p { margin: 0; }
 .timeline-group, .timeline-action, .timeline-notice { font-size: calc(var(--chat-text) - 1px); line-height: 1.5; }
-.timeline-group > summary, .timeline-action > summary, .timeline-notice > summary { display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 2px; list-style: none; cursor: pointer; border-radius: 5px; }
 .timeline-group > summary, .timeline-notice > summary { width: fit-content; max-width: 100%; }
 .timeline-group > summary { color: var(--ink-muted); }
 :is(.timeline-group, .timeline-action, .timeline-notice) > summary::-webkit-details-marker { display: none; }

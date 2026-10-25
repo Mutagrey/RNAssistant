@@ -13,15 +13,24 @@ saved-exchange Harness checks pass host-neutral. The pre-v8 CLI selector smoke
 remains a coverage gap in [RISK_REGISTER](RISK_REGISTER.md); real endpoint and
 Windows/Office/WebView2 qualification remain open.
 
-## Compact chat history — 2026-10-25
+## Chat history tree — 2026-10-25
 
-Owner: Web trajectory/run journal and shared JSON presentation. History now uses
-flat rows, a compact summary/category selector and shared-style menus for secondary
-actions. Exact navigation has a bounded same-source back stack; changing views
-keeps the selected chat/run. Data, links and loaded bodies share one reader, with
-quiet node actions and retained lossless/copy/completeness behavior. Diagnostic
-controls no longer mark settings dirty. Focused browser and JavaScript checks
-cover layout and transitions; native Windows/WebView2 remains unqualified.
+Owner: Web trajectory/run journal. Saved history now groups exact run → step →
+action → source events. The initial view shows the outcome and step overview;
+model exchange and bookkeeping stay collapsed. Problems/unknown effects remain
+visible on parent branches. Missing/conflicting correlations stay explicitly unbound,
+without sequence-based inference. Parent collapse releases readers/cancels body
+loads; back/refresh retain explicit collapsed state. Descriptions wrap and expanded
+readers use the pane scroll. Focused JS/browser checks cover grouping, scope,
+cancellation, navigation and both themes at wide/narrow widths. Existing exact
+workspace leases, lossless JSON and settings isolation remain; native
+Windows/WebView2 is still unqualified.
+The follow-up uses the same disclosure component as the approved demo (verified
+against computed styles), removes search/duplicate counters and coloured edge
+cards, and exposes Result/Arguments/Events directly. Exact model-request composition
+opens in the existing reader and returns to the history. Scoped lossless subtree
+reads, source guards and cancellation remain; all alternate-view screenshots are
+browser fixtures, not Office evidence.
 
 ## Workspace usage and saved journal — 2026-10-25
 

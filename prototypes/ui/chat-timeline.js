@@ -29,7 +29,7 @@
     var state = item.resolved ? "complete" : item.state;
     var caption = item.resolved ? "Повтор помог" : item.result || (state === "error" || state === "warning" ? labels[state] : "");
     return disclosure(key, "timeline-action is-" + state,
-      '<summary tabindex="0">' + symbol(state, item.icon || (item.target ? 'file' : 'search')) + '<span class="action-title' + (state === 'running' ? ' status-shimmer' : '') + '">' + E(item.title) + '</span><span class="action-result">' + E(caption) + '</span>' + I("right") + '</summary>' +
+      '<summary class="rna-history-summary" tabindex="0">' + symbol(state, item.icon || (item.target ? 'file' : 'search')) + '<span class="action-title' + (state === 'running' ? ' status-shimmer' : '') + '">' + E(item.title) + '</span><span class="action-result">' + E(caption) + '</span>' + I("right") + '</summary>' +
       '<div class="action-detail"><p>' + E(item.detail) + '</p>' + (item.target ? '<code>' + E(item.target) + '</code>' : '') + (item.resolved ? '<p class="resolved-note">Первая попытка не удалась. Повторное чтение выполнено успешно.</p>' : '') + '</div>', false);
   }
   function activity(item, key) {
@@ -42,14 +42,14 @@
     var body = work.map(function (block) { return block.steps.map(function (step, index) { return action(step, key + "/" + block.id + "/" + (step.id || index)); }).join(""); }).join("");
     var meta = countLabel(steps.length) + (issues.length ? " · " + issues.length + " замеч." : "") + (last.duration ? " · " + last.duration : "");
     return disclosure(key, "timeline-group is-" + state,
-      '<summary tabindex="0">' + symbol(state === "running" ? "complete" : state, "layers") + '<span class="work-label' + (running ? ' status-shimmer' : '') + '">' + E(title) + '</span><span class="work-count">' + E(meta) + '</span>' + I("right") + '</summary><div class="timeline-actions">' + body + '</div>', !!running);
+      '<summary class="rna-history-summary" tabindex="0">' + symbol(state === "running" ? "complete" : state, "layers") + '<span class="work-label' + (running ? ' status-shimmer' : '') + '">' + E(title) + '</span><span class="work-count">' + E(meta) + '</span>' + I("right") + '</summary><div class="timeline-actions">' + body + '</div>', !!running);
   }
   function renderItems(message, items) {
     return items.map(function (item, index) {
       var block = item.block, key = message.id + "/" + item.id, html;
       if (item.type === "activity") html = activity(item, key);
       else if (item.type === "text") html = '<p class="' + (block.phase === 'commentary' ? 'agent-comment' : 'agent-answer') + '">' + E(block.text) + '</p>';
-      else if (item.type === "notice") html = disclosure(key, "timeline-notice is-" + (block.tone || "warning"), '<summary tabindex="0">' + I("warning") + '<span>' + E(block.title) + '</span>' + I("right") + '</summary><p>' + E(block.text) + '</p>', false);
+      else if (item.type === "notice") html = disclosure(key, "timeline-notice is-" + (block.tone || "warning"), '<summary class="rna-history-summary" tabindex="0">' + I("warning") + '<span>' + E(block.title) + '</span>' + I("right") + '</summary><p>' + E(block.text) + '</p>', false);
       else if (item.type === "table") html = P.table(block.headers.map(E), block.rows.map(function (row) { return row.map(E); }));
       else if (item.type === "artifact") html = '<button class="artifact-link" data-go="materials/' + E(block.materialId) + '">' + I("file") + '<span class="row-copy"><strong>' + E(block.name) + '</strong><small>' + E(block.description) + '</small></span>' + I("right") + '</button>';
       else html = '';

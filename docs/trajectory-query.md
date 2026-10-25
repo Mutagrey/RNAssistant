@@ -12,7 +12,7 @@ a second durable log.
 The current Diagnostics UI opens at **Ход работы**, a bounded in-memory stream for
 the current app session. **История чата** loads the saved `run-causal` view only when
 opened and shows the latest run first; **Показать весь чат** in its action menu
-removes that run filter. A single toolbar contains the view selector and search.
+removes that run filter. A single toolbar contains the view selector, scope, refresh and action menu; the history search field is removed.
 The action menu opens additional event filters and export. The VBA editor owns the convenient code diff; the journal view is retained
 for mutation recovery evidence. Large event bodies are fetched only on demand.
 
@@ -46,17 +46,54 @@ Filters compose with AND:
 - `current`, `shadowed` or `log-only` visibility;
 - case-insensitive tokenized full-text search over event metadata and materialized event data.
 
-CAS payload bodies are intentionally excluded from full-text search and remain lazy. Their hash, content type and size metadata remain searchable/visible, and Diagnostics loads a bounded body preview only after explicit row expansion by exact event id.
+CAS payload bodies are intentionally excluded from full-text search and remain lazy. Their hash, content type and size metadata remain searchable/visible, and Diagnostics loads a bounded body preview only after an explicit body action for the exact event id.
 
 Every returned raw-event row retains `sourceEventSeqs`, `sourceEventIds`, and deduplicated revision evidence in `resourceRefs`.
 
 ## Diagnostic presentation
 
-History uses flat compact rows, an inline outcome/count summary and one category
-selector. Causes are collapsed together; event navigation and bulk actions use the
-shared action-menu style. Changing a view retains the selected chat/run filter.
-Back restores the preceding same-source selection, search and row disclosures;
-its bounded stack is disposable UI state. History controls never dirty settings.
+History is a disclosure tree: **run → step → action → source events**. The latest
+selected run starts open with its recorded outcome and a compact step overview;
+steps can be expanded together. Action boundaries/results share one call branch.
+Model exchange (with separate attempts when needed), step bookkeeping and run
+lifecycle live in quieter collapsed branches. Problems propagate to ancestor
+summaries; an unknown effect remains explicit even when another row says cancelled.
+A branch never derives a run/step terminal from successful tool rows. Long descriptions
+wrap without line clamps; expanded data uses the history pane's vertical scroll,
+not a second height-limited reader.
+
+Grouping uses recorded RunId/StepId/ToolCallId/ModelAttemptId, scoped to the exact
+run. A missing step can use a unique same-run call/attempt → step link. Conflicting,
+missing or foreign-run correlations remain in labelled unbound branches; sequence
+adjacency never fills a gap. Each row appears once; step numbers are positions in
+the loaded selection, not reconstructed runtime ordinals. Filtering retains the
+matching ancestor paths. Bulk problem expansion is limited to 50 source rows plus
+their ancestors. JSON/body reading remains explicit; collapsing any ancestor
+unmounts hidden readers, cancels body loads and suppresses late delivery.
+
+The category selector and shared action menus retain exact navigation. Changing a
+view retains the selected chat/run filter. Back restores the preceding same-source
+selection, action-content choice and tree disclosures, including explicitly collapsed defaults.
+The bounded stack and expansion keys are disposable UI state, pruned to the loaded
+tree. History controls never dirty settings.
+
+The disclosure row is shared with the approved prototype timeline: 13px text,
+28px minimum height, small project icons, neutral rows and the existing semantic
+warning/error tokens. No separate diagnostic palette or coloured edge cards remain.
+An expanded action initially shows its short result and one **Result / Arguments /
+Events** selector. Result/arguments are exact subtrees of the loaded projection,
+selected with the shared lossless parser; invalid, duplicate top-level or truncated
+wrappers show an explicit notice and retain the source-event route. Numeric lexemes
+and duplicate keys inside the subtree remain unchanged. This is structure browsing,
+not a new tool-result interpretation or a storage/read path.
+
+Model-exchange branches and the model-step view open the existing Model Context
+reader for the same owner/workspace/chat and run/step; a recorded HTTP request id
+opens that exact exchange, without substituting the latest request. Its return
+button restores the history pane, disclosures and scroll. The reader still owns
+message/response/JSON composition and its leases. Derived usage rows show typed
+input/output/total/provider cost; event lists support Up/Down and Home/End without
+extra navigation buttons. All eight alternate views remain available in the selector.
 
 Technical events retain a resizable list/detail split. One lossless JSON viewer
 switches between event data, links and an explicitly loaded body, without a
@@ -182,9 +219,9 @@ The Phase 9C UI defaults Diagnostics to the latest known run, requests at most 2
 chronological rows per page and passes already loaded DTOs to `RNAssistantRunJournal`.
 It keeps filters, expansion and scroll in UI memory only. Expanded rows show accepted
 arguments, executor result/data and typed effect evidence. Exact API request/response
-rows have a visible body badge and a dedicated filter; expanding one row automatically
-loads its bounded persisted CAS body preview through the existing Diagnostics callback,
-while a manual refresh remains available. The journal itself still reads no bridge, network, CAS or
+rows have a dedicated filter and explicit body action that loads a bounded persisted
+CAS preview through the existing Diagnostics callback. Opening a branch or a row
+does not fetch a body; manual refresh remains available. The journal itself still reads no bridge, network, CAS or
 storage. Projection correlation IDs are collapsed under a technical section, while the
 source-range action still returns to raw JSONL rows. Missing evidence and `ui.projected`
 retain their non-proof wording.

@@ -190,7 +190,7 @@
       "tool.result.recorded": "Результат действия сохранён",
       "domain.effect.prepared": "Изменение подготовлено",
       "domain.effect.dispatched": "Изменение отправлено",
-      "domain.effect.verified": "Фактический эффект проверен",
+      "domain.effect.verified": "Проверка результата действия",
       "run.summary.created": "Сводка запуска создана",
       "ui.projected": "Ответ подготовлен для интерфейса",
       "diagnostic.evidence.missing": "Не хватает сведений о выполнении",
@@ -203,6 +203,7 @@
   }
 
   function tone(row) {
+    if (hasUnknownEffect(row)) return "uncertain";
     if (isProblem(row)) return "problem";
     if (isWaiting(row)) return "waiting";
     if (rowKind(row) === "domain.effect.verified") return "verified";
@@ -234,7 +235,7 @@
       return "Эта попытка отклонена. Повторные попытки показаны отдельно.";
     }
     if (kind === "domain.effect.verified") {
-      return "Статус подтверждён сохранённой проверкой результата.";
+      return "Сохранены сведения о проверке результата.";
     }
     return "";
   }
@@ -244,6 +245,13 @@
     node.className = className || "";
     node.textContent = text || "";
     parent.appendChild(node);
+    return node;
+  }
+
+  function glyph(parent, name, className) {
+    var node = appendText(parent, "span", className, "");
+    node.setAttribute("aria-hidden", "true");
+    if (window.RNAssistantIcons) node.innerHTML = window.RNAssistantIcons.render(name);
     return node;
   }
 
@@ -406,7 +414,7 @@
   function actionButton(label, onClick) {
     var button = document.createElement("button");
     button.type = "button";
-    button.className = "secondary rn-run-journal-action";
+    button.className = "button compact ghost rn-run-journal-action";
     button.textContent = label;
     button.addEventListener("click", function (event) {
       event.preventDefault();
@@ -420,7 +428,8 @@
 
   function actionMenu(root, label) {
     var menu = document.createElement("details"); menu.className = "popover rna-action-menu";
-    var trigger = appendText(menu, "summary", "rna-action-menu-trigger", "⋯");
+    var trigger = appendText(menu, "summary", "rna-action-menu-trigger", "");
+    glyph(trigger, "more", "rn-run-journal-menu-icon");
     trigger.setAttribute("aria-label", label); trigger.title = label;
     var body = document.createElement("div"); body.className = "popover-menu rna-action-menu-body";
     menu.appendChild(body); root.appendChild(menu);
@@ -481,40 +490,330 @@
     return "";
   }
 
-  function renderIssues(root, rows, options) {
-    var groups = new Map();
-    rows.filter(isProblem).forEach(function (row) {
-      var call = value(row, "ToolCallId", "toolCallId", "");
-      var attempt = value(row, "ModelAttemptId", "modelAttemptId", "");
-      var key = JSON.stringify([value(row, "RunId", "runId", ""), call ? "call" : attempt ? "attempt" : "row", call || attempt || rowId(row)]);
-      var previous = groups.get(key);
-      if (!previous || issuePriority(row) > issuePriority(previous)) groups.set(key, row);
+  function correlation(row, name) {
+    return String(value(row, name, name.charAt(0).toLowerCase() + name.slice(1), "") || "");
+  }
+
+  function treeKey(parts) { return "group:" + JSON.stringify(parts); }
+
+  function group(type, key, rows, title) {
+    return { type: type, id: treeKey(key), rows: rows, title: title || "", children: [] };
+  }
+
+  function eventNode(row) { return { type: "event", id: rowId(row), rows: [row], row: row }; }
+
+  function isRunBoundary(row) {
+    return /^(run\.(started|ended|summary.created)|turn\.(started|ended)|user.message.appended|ui.projected)$/.test(rowKind(row));
+  }
+
+  function terminalRow(rows, kinds) {
+    return rows.slice().reverse().filter(function (row) { return kinds.indexOf(rowKind(row)) >= 0; })[0];
+  }
+
+  function actionTitle(rows) {
+    var tool = rows.map(function (row) { return correlation(row, "ToolId"); }).filter(Boolean)[0];
+    var labels = {
+      "common.resources_find": "Поиск источников", "common.resources_read": "Чтение источника",
+      "common.capabilities_search": "Поиск возможностей", "common.capabilities_read": "Описание возможности",
+      "excel.read_cells": "Чтение ячеек", "excel.write_cells": "Запись ячеек", "excel.create_sheet": "Создание листа"
+    };
+    return labels[tool] || tool || "Действие";
+  }
+
+  // Presentation only. A missing correlation can be resolved only through a unique,
+  // recorded call/attempt -> step link inside this exact run, never by adjacency.
+  function buildTree(rows) {
+    var runs = new Map();
+    rows.forEach(function (row) {
+      var id = correlation(row, "RunId");
+      if (!runs.has(id)) runs.set(id, group("run", ["run", id], []));
+      runs.get(id).rows.push(row);
     });
-    if (!groups.size) return;
-    var section = document.createElement("details");
-    section.className = "rn-run-journal-issues";
-    section.setAttribute("aria-label", "Причины и последствия");
-    appendText(section, "summary", "", "Причины и последствия · " + groups.size);
-    Array.from(groups.values()).sort(function (a, b) { return issuePriority(b) - issuePriority(a); }).slice(0, 12).forEach(function (row) {
-      var card = document.createElement("div");
-      card.className = "rn-run-journal-issue";
-      var toolId = value(row, "ToolId", "toolId", "");
-      appendText(card, "strong", "", titleLabel(row) + (toolId ? " · " + boundedText(toolId, 128) : ""));
-      var target = value(row, "Target", "target", "");
-      if (target) appendText(card, "div", "rn-run-journal-target", target);
-      appendText(card, "p", "", displayCause(row) || rowNote(row) || statusLabel(rowStatus(row)));
-      var effect = effectExplanation(row);
-      if (effect) appendText(card, "p", "rn-run-journal-note", effect);
-      var code = value(row, "ErrorCode", "errorCode", "");
-      if (code) appendText(card, "small", "rn-run-journal-code", "Код: " + code);
-      var call = value(row, "ToolCallId", "toolCallId", "");
-      if (call && typeof options.onNavigate === "function") {
-        card.appendChild(actionButton("Связанные действия", function () { options.onNavigate("toolCallId", call, "run-causal"); }));
+    runs.forEach(function (run, runId) {
+      run.runId = runId;
+      var links = new Map(), steps = new Map(), boundaries = [];
+      run.rows.forEach(function (row) {
+        var step = correlation(row, "StepId");
+        if (!step || isRunBoundary(row)) return;
+        ["ToolCallId", "ModelAttemptId"].forEach(function (field) {
+          var id = correlation(row, field);
+          if (!id) return;
+          var key = JSON.stringify([field, id]);
+          if (!links.has(key)) links.set(key, new Set());
+          links.get(key).add(step);
+        });
+      });
+      run.rows.forEach(function (row) {
+        if (isRunBoundary(row)) { boundaries.push(row); return; }
+        var step = correlation(row, "StepId");
+        if (!step && runId) {
+          var candidates = new Set();
+          ["ToolCallId", "ModelAttemptId"].forEach(function (field) {
+            var known = links.get(JSON.stringify([field, correlation(row, field)]));
+            if (known) known.forEach(function (id) { candidates.add(id); });
+          });
+          if (candidates.size === 1) step = Array.from(candidates)[0];
+        }
+        if (!steps.has(step)) {
+          var branch = group("step", ["step", runId, step], [], step ? "Шаг " + (Array.from(steps.keys()).filter(Boolean).length + 1) : "Без привязки к шагу");
+          branch.stepId = step;
+          steps.set(step, branch);
+        }
+        steps.get(step).rows.push(row);
+      });
+      steps.forEach(function (step) {
+        var actions = new Map(), models = new Map(), secondary = [];
+        step.rows.forEach(function (row) {
+          var call = correlation(row, "ToolCallId"), attempt = correlation(row, "ModelAttemptId");
+          if (isTool(row)) {
+            var key = call && runId ? call : rowId(row);
+            if (!actions.has(key)) {
+              var action = group("action", ["action", runId, step.stepId, key], []);
+              action.toolCallId = call;
+              actions.set(key, action);
+            }
+            actions.get(key).rows.push(row);
+          } else if (isModel(row) && !/^step\./.test(rowKind(row))) {
+            // Uncorrelated model events share a clearly labelled bucket, not an invented attempt.
+            var modelKey = runId ? attempt : rowId(row);
+            if (!models.has(modelKey)) models.set(modelKey, group("model", ["model", runId, step.stepId, modelKey], []));
+            models.get(modelKey).rows.push(row);
+          } else secondary.push(row);
+        });
+        actions.forEach(function (action) {
+          action.title = actionTitle(action.rows);
+          action.children = action.rows.map(eventNode);
+          step.children.push(action);
+        });
+        if (models.size) {
+          var modelRows = [];
+          models.forEach(function (model) { modelRows = modelRows.concat(model.rows); });
+          modelRows.sort(function (a, b) { return firstSequence(a) - firstSequence(b); });
+          var modelBranch = group("models", ["models", runId, step.stepId], modelRows, "Обмен с моделью");
+          models.forEach(function (model, id) {
+            model.title = id ? "Попытка " + (modelBranch.children.length + 1) : "Без привязки к попытке";
+            model.children = model.rows.map(eventNode);
+            modelBranch.children.push(model);
+          });
+          // A single attempt does not need another disclosure level.
+          if (models.size === 1) modelBranch.children = modelRows.map(eventNode);
+          step.children.push(modelBranch);
+        }
+        if (secondary.length) {
+          var service = group("service", ["service", runId, step.stepId], secondary, "Служебные события");
+          service.children = secondary.map(eventNode);
+          step.children.push(service);
+        }
+        run.children.push(step);
+      });
+      if (boundaries.length) {
+        var lifecycle = group("service", ["lifecycle", runId], boundaries, "События запуска");
+        lifecycle.children = boundaries.map(eventNode);
+        run.children.push(lifecycle);
       }
-      section.appendChild(card);
     });
-    if (groups.size > 12) appendText(section, "p", "rn-run-journal-note", "Ещё причин: " + (groups.size - 12) + ". Они доступны в списке ниже.");
-    root.appendChild(section);
+    return Array.from(runs.values());
+  }
+
+  function representative(node) {
+    var issue = node.rows.filter(isProblem).sort(function (a, b) { return issuePriority(b) - issuePriority(a); })[0];
+    if (node.type === "run") return terminalRow(node.rows, ["turn.ended", "run.ended"]);
+    if (node.type === "step") return terminalRow(node.rows, ["step.ended"]);
+    if (node.type === "action") return issue || terminalRow(node.rows,
+      ["tool.execution.completed", "tool.execution.finished", "tool.result.recorded", "domain.effect.verified"]) || node.rows[node.rows.length - 1];
+    return node.rows.slice().sort(function (a, b) { return issuePriority(b) - issuePriority(a); })[0];
+  }
+
+  function countLabel(count, forms) {
+    var lastTwo = count % 100, last = count % 10;
+    return count + " " + forms[lastTwo >= 11 && lastTwo <= 14 ? 2 : last === 1 ? 0 : last >= 2 && last <= 4 ? 1 : 2];
+  }
+
+  function groupStatus(node) {
+    var row = representative(node), problem = node.rows.some(isProblem);
+    if (node.type === "service") return node.rows.some(hasUnknownEffect) ? "Не подтверждено" : problem ? "Есть проблемы" : countLabel(node.rows.length, ["событие", "события", "событий"]);
+    if (node.type === "run" || node.type === "step") {
+      if (row) return statusLabel(rowStatus(row)) + (node.rows.some(hasUnknownEffect) && !hasUnknownEffect(row) ? " · эффект не подтверждён" : !isProblem(row) && problem ? " · были проблемы" : "");
+      return node.rows.some(hasUnknownEffect) ? "Эффект не подтверждён" : problem ? "Есть проблемы" : (node.type === "run" ? "Итог не найден в выборке" : "");
+    }
+    if (node.rows.some(hasUnknownEffect)) return "Не подтверждено";
+    if (problem) return "Есть проблемы";
+    if (node.type === "action") return row ? statusLabel(rowStatus(row)) : "";
+    return node.rows.some(function (item) { return rowStatus(item) === "rejected"; }) ? "Были отклонённые ответы" : countLabel(node.rows.length, ["событие", "события", "событий"]);
+  }
+
+  function visibleNode(node, filter) {
+    return node.rows.some(function (row) { return matchesFilter(row, filter); });
+  }
+
+  function visitTree(nodes, callback, path) {
+    nodes.forEach(function (node) {
+      callback(node, path || []);
+      if (node.children) visitTree(node.children, callback, (path || []).concat(node.id));
+    });
+  }
+
+  // Read a named field from the canonical projection with the shared lossless parser.
+  // A duplicate/truncated/invalid wrapper is never silently treated as a complete result.
+  function actionPart(rows, part) {
+    var reader = window.RNAssistantJsonViewer;
+    if (!reader) return { notice: "Просмотр структуры недоступен. Откройте события действия." };
+    var candidates = rows.filter(function (row) {
+      return part === "arguments" ? /^tool\./.test(rowKind(row)) :
+        ["tool.execution.completed", "tool.execution.finished", "tool.result.recorded"].indexOf(rowKind(row)) >= 0;
+    });
+    if (part !== "arguments") candidates.reverse();
+    for (var i = 0; i < candidates.length; i++) {
+      var row = candidates[i];
+      if (value(row, "DataTruncated", "dataTruncated", false)) return { notice: "Данные события усечены. Доступный фрагмент — в событиях действия." };
+      var parsed = reader.parse(value(row, "DataJson", "dataJson", ""));
+      if (!parsed.ok || parsed.root.type !== "object") return { notice: "Не удалось прочитать структуру. Исходные данные — в событиях действия." };
+      var names = part === "arguments" ? ["arguments"] : ["resultData", "toolResult"];
+      for (var j = 0; j < names.length; j++) {
+        var entries = parsed.root.entries.filter(function (entry) { return entry.key.value === names[j]; });
+        if (entries.length > 1) return { notice: "Поле повторяется. Откройте исходное событие, чтобы увидеть все значения." };
+        if (entries.length && entries[0].value.type !== "null") return {
+          text: reader.raw(parsed, entries[0].value), row: row
+        };
+      }
+    }
+    return { notice: part === "arguments" ? "Аргументов нет в загруженной выборке. Исходные записи — в событиях действия." :
+      "Структурированного результата нет в загруженной выборке. Краткий итог показан выше; исходные записи — в событиях действия." };
+  }
+
+  function actionContent(body, node, options, filter, isVisible) {
+    var controls = appendText(body, "div", "rn-run-journal-part-controls", "");
+    var select = appendText(controls, "select", "rn-run-journal-data-kind", "");
+    select.setAttribute("aria-label", "Содержимое действия");
+    [["result", "Результат"], ["arguments", "Аргументы"], ["events", "События · " + node.rows.length]].forEach(function (item) {
+      var option = appendText(select, "option", "", item[1]); option.value = item[0];
+    });
+    var part = options.parts && options.parts[node.id];
+    select.value = ["result", "arguments", "events"].indexOf(part) >= 0 ? part : filter === "all" ? "result" : "events";
+    var caption = appendText(controls, "span", "rn-run-journal-row-meta", "");
+    var host = appendText(body, "div", "rn-run-journal-json rn-run-journal-part", "");
+    var sources = appendText(body, "div", "rn-run-journal-source-events", "");
+    var mounted = "", cached = {};
+    function sync() {
+      var events = select.value === "events", visible = isVisible();
+      if (mounted === select.value && visible && !events) return;
+      if (controls.parentNode !== body) body.insertBefore(controls, host);
+      sources.classList.toggle("hidden", !events); host.classList.toggle("hidden", events);
+      if (!visible || events) {
+        if (mounted) unmountJson(host);
+        mounted = ""; caption.textContent = ""; return;
+      }
+      unmountJson(host);
+      var content = cached[select.value] || (cached[select.value] = actionPart(node.rows, select.value));
+      if (content.notice) {
+        appendText(host, "p", "rn-run-journal-note", content.notice); caption.textContent = "";
+      } else {
+        caption.textContent = "Событие #" + firstSequence(content.row);
+        mountJson(host, content.text, "full");
+        var toolbar = host.querySelector(".rn-json-toolbar");
+        if (toolbar) toolbar.insertBefore(controls, toolbar.firstElementChild);
+      }
+      mounted = select.value;
+    }
+    return { sources: sources, select: select, sync: sync, visible: function () { return isVisible() && select.value === "events"; } };
+  }
+
+  function renderGroup(node, options, filter, parentVisible, latestRun) {
+    var details = document.createElement("details");
+    var problem = node.rows.some(isProblem);
+    var uncertain = node.rows.some(hasUnknownEffect);
+    details.className = "rn-run-journal-branch branch-" + node.type + (uncertain ? " tone-uncertain" : problem ? " tone-problem" : "");
+    details.setAttribute("data-group-id", node.id);
+    if (node.runId) details.setAttribute("data-run-id", node.runId);
+    if (node.stepId) details.setAttribute("data-step-id", node.stepId);
+    if (node.toolCallId) details.setAttribute("data-call-id", node.toolCallId);
+    var targeted = !!((options.activeStepId && node.rows.some(function (row) { return correlation(row, "StepId") === options.activeStepId; })) ||
+      (options.activeToolCallId && node.rows.some(function (row) { return correlation(row, "ToolCallId") === options.activeToolCallId; })));
+    var defaultOpen = filter !== "all" || (node.type === "run" && (node.runId === options.activeRunId || node === latestRun)) ||
+      (targeted && (node.type === "run" || node.type === "step" || node.type === "action"));
+    details.open = options.expanded && Object.prototype.hasOwnProperty.call(options.expanded, node.id) ? !!options.expanded[node.id] : defaultOpen;
+    var summary = appendText(details, "summary", "rna-history-summary rn-run-journal-branch-summary", "");
+    glyph(summary, uncertain || problem ? "warning" : node.type === "run" ? "clock" : node.type === "step" ? "layers" : node.type === "action" ? "tool" : "code", "rn-run-journal-symbol");
+    var main = appendText(summary, "span", "rn-run-journal-row-main", "");
+    var head = appendText(main, "span", "rn-run-journal-row-head", "");
+    var title = node.title;
+    if (node.type === "step" && node.stepId) {
+      var actions = node.children.filter(function (child) { return child.type === "action"; });
+      var names = Array.from(new Set(actions.map(function (child) { return child.title; })));
+      if (names.length <= 2 && names.length) title += " · " + names.join(", ");
+      else if (!actions.length && node.children.some(function (child) { return child.type === "models"; })) title += " · Обмен с моделью";
+    }
+    if (node.type === "run") {
+      var date = new Date(value(node.rows[0], "CreatedUtc", "createdUtc", ""));
+      title = node.runId ? "Запуск" + (isNaN(date.getTime()) ? "" : " · " + date.toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })) : "Без привязки к запуску";
+    }
+    appendText(head, "span", "rn-run-journal-title", title);
+    var status = groupStatus(node);
+    if (status) appendText(head, "span", "rn-run-journal-status", status);
+    var row = representative(node);
+    if (node.type === "run" || node.type === "step") {
+      var steps = node.children.filter(function (child) { return child.type === "step" && child.stepId; }).length;
+      var tools = uniqueToolCallCount(node.rows);
+      if (node.type === "run") appendText(head, "span", "agent-work-count", [steps ? countLabel(steps, ["шаг", "шага", "шагов"]) : "", tools ? countLabel(tools, ["действие", "действия", "действий"]) : ""].filter(Boolean).join(" · "));
+    }
+    var target = "", cause = "";
+    if (node.type === "action") {
+      target = node.rows.map(function (item) { return correlation(item, "Target"); }).filter(Boolean)[0] || "";
+      cause = row && (displayCause(row) || effectExplanation(row) || rowNote(row)) || "";
+      if (cause && cause.length <= 120 && !uncertain) {
+        var caption = head.querySelector(".rn-run-journal-status");
+        if (caption) caption.textContent = cause;
+      }
+    }
+    glyph(summary, "right", "rn-run-journal-chevron");
+    var body = appendText(details, "div", "rn-run-journal-children" + (node.type === "action" ? " rn-run-journal-action-body" : ""), "");
+    if (node.type === "action") {
+      if (cause) appendText(body, "p", "rn-run-journal-result-summary", cause);
+      if (target) appendText(body, "code", "rn-run-journal-target", target);
+    }
+    if (node.type === "run" && row && displayCause(row)) {
+      var outcome = appendText(body, "div", "rn-run-journal-outcome", "");
+      appendText(outcome, "span", "rn-run-journal-outcome-label", "Итог запуска");
+      appendText(outcome, "p", "", displayCause(row));
+    }
+    var children = [];
+    function isVisible() { return options.isAlive() && parentVisible() && details.open; }
+    var content = node.type === "action" ? actionContent(body, node, options, filter, isVisible) : null;
+    if ((node.type === "models" || node.type === "model") && typeof options.onOpenModelContext === "function" &&
+        node.rows.some(function (item) { return correlation(item, "RunId"); })) {
+      var requests = node.rows.filter(function (item) { return rowKind(item) === "llm.request" && sourceIds(item).length === 1; });
+      var request = requests[requests.length - 1], contextRow = request || node.rows[0];
+      body.appendChild(actionButton(requests.length > 1 ? "Состав последнего запроса и ответа" : "Состав запроса и ответа", function () {
+        if (!options.isAlive()) return;
+        options.onOpenModelContext({ runId: correlation(contextRow, "RunId"), stepId: correlation(contextRow, "StepId"),
+          requestEventId: request ? sourceIds(request)[0] : "" });
+      }));
+    }
+    node.children.filter(function (child) { return visibleNode(child, filter); }).forEach(function (child) {
+      var visible = content ? content.visible : isVisible;
+      var element = child.type === "event" ? renderRow(child.row, Object.assign({}, options, { isVisible: visible })) :
+        renderGroup(child, options, filter, visible, latestRun);
+      (content ? content.sources : body).appendChild(element); children.push(element);
+    });
+    details.rnaSyncVisibility = function () {
+      if (content) content.sync();
+      children.forEach(function (child) { child.rnaSyncVisibility(); });
+    };
+    if (content) {
+      content.select.addEventListener("change", function () {
+        if (typeof options.onPartChange === "function") options.onPartChange(node.id, content.select.value);
+        details.rnaSyncVisibility();
+      });
+      content.sync();
+    }
+    var lastOpen = details.open;
+    details.addEventListener("toggle", function () {
+      if (!options.isAlive()) return;
+      if (details.open !== lastOpen && typeof options.onExpandedChange === "function") options.onExpandedChange(node.id, details.open);
+      lastOpen = details.open;
+      details.rnaSyncVisibility();
+    });
+    return details;
   }
 
   function renderRow(row, options) {
@@ -550,7 +849,7 @@
     var reason = displayCause(row);
     if (reason) appendText(main, "span", "rn-run-journal-reason", reason);
     summary.appendChild(main);
-    var chevron = appendText(summary, "span", "rn-run-journal-chevron", "");
+    var chevron = glyph(summary, "right", "rn-run-journal-chevron");
     chevron.setAttribute("aria-hidden", "true");
     details.appendChild(summary);
 
@@ -592,61 +891,48 @@
     details.appendChild(body);
 
     function syncTechnical() {
-      var mounted = details.open && technical.open;
+      var visible = options.isAlive() && (!options.isVisible || options.isVisible());
+      var mounted = visible && details.open && technical.open;
       setDetailsMounted(details, row, mounted);
       if (!mounted) {
         details.setAttribute("data-mounted", "false");
       }
-      if (!details.open && payloadView) payloadView.cancel();
+      if ((!visible || !details.open) && payloadView) payloadView.cancel();
     }
+    var lastOpen = details.open, lastTechnicalOpen = technical.open;
     details.addEventListener("toggle", function () {
-      if (typeof options.onExpandedChange === "function") options.onExpandedChange(id, details.open);
+      if (!options.isAlive()) return;
+      if (details.open !== lastOpen && typeof options.onExpandedChange === "function") options.onExpandedChange(id, details.open);
+      lastOpen = details.open;
       syncTechnical();
     });
     technical.addEventListener("toggle", function () {
+      if (!options.isAlive()) return;
       if (technical.open && payloadView) payloadView.cancel();
-      if (typeof options.onExpandedChange === "function") options.onExpandedChange(id + ":technical", technical.open);
+      if (technical.open !== lastTechnicalOpen && typeof options.onExpandedChange === "function") options.onExpandedChange(id + ":technical", technical.open);
+      lastTechnicalOpen = technical.open;
       syncTechnical();
     });
+    details.rnaSyncVisibility = syncTechnical;
     if (details.open && technical.open) syncTechnical();
     return details;
   }
 
-  function metric(root, label, number, toneName) {
-    var item = document.createElement("div");
-    item.className = "rn-run-journal-metric" + (toneName ? " tone-" + toneName : "");
-    appendText(item, "strong", "", String(number));
-    appendText(item, "span", "", label);
-    root.appendChild(item);
-  }
-
   function uniqueToolCallCount(rows) {
-    var ids = {};
+    var ids = new Set();
     var uncorrelatedCalls = 0;
     rows.forEach(function (row) {
       var id = value(row, "ToolCallId", "toolCallId", "");
-      if (id) ids[String(id).toLowerCase()] = true;
+      if (id) ids.add(JSON.stringify([correlation(row, "RunId"), String(id)]));
       else if (rowKind(row) === "tool.call.recorded") uncorrelatedCalls += 1;
     });
-    return Object.keys(ids).length + uncorrelatedCalls;
+    return ids.size + uncorrelatedCalls;
   }
 
-  function renderHeader(root, rows, filter, options) {
+  function renderHeader(root, rows, filter, options, tree) {
     var problems = rows.filter(isProblem).length;
-    var tools = uniqueToolCallCount(rows);
-    var terminal = rows.slice().reverse().filter(function (row) {
-      return rowKind(row) === "turn.ended" || rowKind(row) === "run.ended";
-    })[0];
-
     var summary = document.createElement("section");
     summary.className = "rn-run-journal-summary";
-    var metrics = document.createElement("div");
-    metrics.className = "rn-run-journal-metrics";
-    metric(metrics, "Итог", terminal ? statusLabel(rowStatus(terminal)) : "Не найден в выборке", terminal && isProblem(terminal) ? "problem" : "neutral");
-    if (problems) metric(metrics, "Проблемы", problems, "problem");
-    if (tools) metric(metrics, "Действия", tools, "neutral");
-    summary.appendChild(metrics);
-
     var toolbar = document.createElement("div");
     toolbar.className = "rn-run-journal-toolbar";
     var filters = document.createElement("select");
@@ -662,8 +948,19 @@
       if (typeof options.onFilterChange === "function") options.onFilterChange(filters.value);
     });
     toolbar.appendChild(filters);
-    var expand = actionMenu(toolbar, "Действия со списком");
-    var problemIds = rows.filter(isProblem).slice(0, MAX_BULK_EXPANDED_ROWS).map(rowId);
+    var expand = actionMenu(toolbar, "Действия с деревом");
+    var stepIds = [], allIds = [], problemPaths = new Set();
+    var limitedProblems = rows.filter(isProblem).slice(0, MAX_BULK_EXPANDED_ROWS).map(rowId);
+    visitTree(tree, function (node, path) {
+      allIds.push(node.id);
+      if (node.type === "event") allIds.push(node.id + ":technical");
+      if (node.type === "run" || node.type === "step") stepIds.push(node.id);
+      if (limitedProblems.indexOf(node.id) >= 0) path.concat(node.id).forEach(function (id) { problemPaths.add(id); });
+    });
+    expand.appendChild(actionButton("Развернуть шаги", function () {
+      if (typeof options.onExpandedSet === "function") options.onExpandedSet(stepIds, true);
+    }));
+    var problemIds = Array.from(problemPaths);
     var expandLabel = problems > MAX_BULK_EXPANDED_ROWS
       ? "Развернуть первые " + MAX_BULK_EXPANDED_ROWS + " проблем"
       : "Развернуть проблемы";
@@ -673,7 +970,7 @@
       }
     }));
     expand.appendChild(actionButton("Свернуть всё", function () {
-      if (typeof options.onExpandedSet === "function") options.onExpandedSet(rows.map(rowId), false);
+      if (typeof options.onExpandedSet === "function") options.onExpandedSet(allIds, false);
     }));
     summary.appendChild(toolbar);
     root.appendChild(summary);
@@ -691,6 +988,7 @@
   function unmount(root) {
     if (!root) return;
     (root.rnaPayloadCleanups || []).forEach(function (cancel) { cancel(); });
+    root.rnaJournalRender = null;
     root.rnaPayloadCleanups = [];
     Array.prototype.slice.call(root.querySelectorAll(".rn-run-journal-json")).forEach(unmountJson);
     Array.prototype.slice.call(root.querySelectorAll(".rn-run-journal-payload-host")).forEach(unmountJson);
@@ -701,26 +999,31 @@
     options = options || {};
     if (!root) throw new Error("Run journal root is required.");
     unmount(root);
-    options = Object.assign({}, options, { payloadCleanups: root.rnaPayloadCleanups });
+    var renderToken = {};
+    root.rnaJournalRender = renderToken;
+    options = Object.assign({}, options, { payloadCleanups: root.rnaPayloadCleanups,
+      isAlive: function () { return root.rnaJournalRender === renderToken; } });
     try {
       var normalized = normalizeRows(input === undefined ? [] : input);
       var rows = normalized.rows;
       var filter = FILTERS.some(function (item) { return item.id === options.filter; }) ? options.filter : "all";
-      renderHeader(root, rows, filter, options);
-      if (filter === "all" || filter === "problems") renderIssues(root, rows, options);
+      var tree = buildTree(rows);
+      renderHeader(root, rows, filter, options, tree);
       if (normalized.truncated) {
         appendText(root, "div", "rn-run-journal-limit",
           "Показаны первые " + MAX_RENDERED_ROWS + " событий. Уточните поиск или скачайте историю.");
       }
       var visible = rows.filter(function (row) { return matchesFilter(row, filter); });
       var list = document.createElement("div");
-      list.className = "rn-run-journal-list";
-      list.setAttribute("role", "list");
-      list.setAttribute("aria-label", "Хронологический журнал запуска");
-      visible.forEach(function (row) {
-        var item = renderRow(row, options);
-        item.setAttribute("role", "listitem");
-        list.appendChild(item);
+      list.className = "rn-run-journal-tree";
+      list.setAttribute("aria-label", "Дерево запусков и шагов");
+      var validExpansionIds = [];
+      visitTree(tree, function (node) {
+        validExpansionIds.push(node.id);
+        if (node.type === "event") validExpansionIds.push(node.id + ":technical");
+      });
+      tree.filter(function (node) { return visibleNode(node, filter); }).forEach(function (node) {
+        list.appendChild(renderGroup(node, options, filter, function () { return true; }, tree[tree.length - 1]));
       });
       if (!visible.length) appendText(list, "div", "rn-run-journal-empty", "Для выбранного фильтра строк нет.");
       root.appendChild(list);
@@ -729,7 +1032,8 @@
         loaded: rows.length,
         problems: rows.filter(isProblem).length,
         truncated: normalized.truncated,
-        totalInput: normalized.totalInput
+        totalInput: normalized.totalInput,
+        validExpansionIds: validExpansionIds
       };
     } catch (error) {
       return renderError(root, error);
@@ -740,6 +1044,7 @@
     render: render,
     unmount: unmount,
     isProblem: isProblem,
+    statusLabel: statusLabel,
     matchesFilter: matchesFilter,
     maxRenderedRows: MAX_RENDERED_ROWS,
     maxBulkExpandedRows: MAX_BULK_EXPANDED_ROWS
