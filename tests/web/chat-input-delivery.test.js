@@ -36,10 +36,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js",
       "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
       await page.addScriptTag({ content: read("js/" + file) });
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       window.renderAgentPlanDock = window.renderChatSessions = window.bindAttachmentActions = () => {};
       window.activeChatUsesCurrentDocument = () => true;
       window.send = (type, payload) => {
+        if (type === "getChatDrafts") return Promise.resolve({ drafts: [] });
+        if (type === "saveChatDraft") return Promise.resolve({ saved: true });
         if (type === "getChatInbox") return Promise.resolve(window.serverInbox);
         if (type !== "submitChatInput") throw new Error("Unexpected bridge request: " + type);
         window.submitted = payload;
@@ -47,6 +49,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       };
       window.loadChatState = async () => ({ activeChatId: "chat", messages: window.serverMessages,
         messageStartIndex: 0, messageTotalCount: window.serverMessages.length, inbox: window.serverInbox });
+      await hydrateChatDrafts();
       bindChatActions();
     });
 
