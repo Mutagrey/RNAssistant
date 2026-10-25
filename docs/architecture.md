@@ -34,7 +34,9 @@ architecture, not a claim that the UI and CLI have identical context preparation
 `ModelRequestPreparation` now shares response-schema construction, wire projection
 coordination, budget/reserves and final request assembly across Office/workspace.
 Domain projection functions and authority/prompt preparation remain host-owned;
-this does not merge COM and filesystem mutation owners.
+this does not merge COM and filesystem mutation owners. See the
+[remaining preparation differences audit](audits/office-workspace-preparation-audit.md)
+for callable-surface, history, authority and lifecycle boundaries.
 
 Workspace and plugin services share `src/RNAssistant.Application`, imported into
 Office Framework 4.8 and CLI Runtime. `Workspace/WorkspaceConversationService`
