@@ -23,9 +23,33 @@ namespace RNAssistant.Office.Services
             ResourceAuthorityService authority = null)
         { _events = events; _payloads = payloads; _data = data; _authority = authority; }
 
+        internal static ChatSession ReadWorkspaceSession(AppDataPaths paths, ChatStore chats, string workspaceId, string chatId)
+        {
+            if (string.IsNullOrWhiteSpace(workspaceId) || string.IsNullOrWhiteSpace(chatId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an exact workspace and chat are required.");
+            var workspaces = new WorkspaceStore(paths);
+            var workspace = workspaces.OpenConnectedHistory(workspaceId);
+            return workspaces.LoadSession(chats, workspace, chatId) ??
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: the chat is absent from this workspace.");
+        }
+
+        internal static string DownloadOwner(string workspaceId)
+        { return string.IsNullOrEmpty(workspaceId) ? Owner : Owner + ":" + workspaceId; }
+
+        private static void RequireScope(ChatSession session, string chatId, string workspaceId)
+        {
+            if (!string.IsNullOrEmpty(session.WorkspaceId) || workspaceId != null)
+            {
+                if (session.Host != "Workspace" || string.IsNullOrWhiteSpace(workspaceId) ||
+                    session.WorkspaceId != workspaceId || session.DocumentKey != workspaceId || session.Id != chatId)
+                    throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: the saved request requires its exact workspace and chat.");
+            }
+        }
+
         internal ModelContextResponse Query(ChatSession session, ModelContextQuery query, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            RequireScope(session, query.ChatId, query.WorkspaceId);
             if (!string.IsNullOrEmpty(query.VerifyResourceAlias) &&
                 (string.IsNullOrEmpty(query.RequestEventId) || !string.IsNullOrEmpty(query.Alias) || query.BeforeSequence.HasValue))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: payload verification requires an exact saved request and its resource alias.");
@@ -47,7 +71,7 @@ namespace RNAssistant.Office.Services
                     query.VerifyViewVariantOrdinal < 0 || query.VerifyViewVariantSnapshotCount <= 0 ||
                     query.VerifyViewVariantOrdinal >= query.VerifyViewVariantSnapshotCount))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact retained view variant and inventory snapshot are required.");
-            var response = new ModelContextResponse { ChatId = session.Id, Revision = session.Revision,
+            var response = new ModelContextResponse { ChatId = session.Id, WorkspaceId = session.WorkspaceId, Revision = session.Revision,
                 Events = new ModelContextEventDto[0] };
             if (!query.BeforeSequence.HasValue && string.IsNullOrEmpty(query.RequestEventId) &&
                 string.IsNullOrEmpty(query.Alias) &&
@@ -110,6 +134,7 @@ namespace RNAssistant.Office.Services
         internal ModelContextPayloadResponse Open(ChatSession session, ModelContextPayloadQuery query, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
+            RequireScope(session, query.ChatId, query.WorkspaceId);
             var item = _events.Read(session, SessionEventReadMode.RequireComplete)
                 .SingleOrDefault(e => e.SessionId == session.Id && e.EventId == query.EventId && IsModelEvent(e.Type));
             if (item == null) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact model event required.");
@@ -123,7 +148,8 @@ namespace RNAssistant.Office.Services
                 source = entries[index].OriginalPayload?.ToBlobReference();
             }
             if (source == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: saved body unavailable.");
-            var lease = _data.OpenDownload(session, Owner, Math.Max(1, source.ByteLength), cancellation =>
+            var owner = DownloadOwner(session.WorkspaceId);
+            var lease = _data.OpenDownload(session, owner, Math.Max(1, source.ByteLength), cancellation =>
             {
                 try
                 {
@@ -140,9 +166,9 @@ namespace RNAssistant.Office.Services
             try
             {
                 token.ThrowIfCancellationRequested();
-                return new ModelContextPayloadResponse { ChatId = session.Id, EventId = item.EventId, Data = lease };
+                return new ModelContextPayloadResponse { ChatId = session.Id, WorkspaceId = session.WorkspaceId, EventId = item.EventId, Data = lease };
             }
-            catch { _data.Close(session.Id, Owner, lease.LeaseId); throw; }
+            catch { _data.Close(session.Id, owner, lease.LeaseId); throw; }
         }
 
         private static bool IsModelEvent(string type)

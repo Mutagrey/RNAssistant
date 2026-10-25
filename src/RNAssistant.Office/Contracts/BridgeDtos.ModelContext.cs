@@ -8,6 +8,7 @@ namespace RNAssistant.Office.Contracts
 {
     public sealed class ModelContextQuery : ChatPayload
     {
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("beforeSequence")] public long? BeforeSequence { get; set; }
         [JsonProperty("knownRevision")] public long? KnownRevision { get; set; }
         [JsonProperty("requestEventId")] public string RequestEventId { get; set; }
@@ -22,6 +23,7 @@ namespace RNAssistant.Office.Contracts
     }
     public sealed class ModelContextPayloadQuery : ChatPayload
     {
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
         [JsonProperty("eventId")] public string EventId { get; set; }
         [JsonProperty("originalIndex")] public int? OriginalIndex { get; set; }
     }
@@ -119,6 +121,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class ModelContextResponse
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("revision")] public long Revision { get; set; }
         [JsonProperty("unchanged")] public bool Unchanged { get; set; }
         [JsonProperty("nextBeforeSequence")] public long? NextBeforeSequence { get; set; }
@@ -136,6 +139,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class ModelContextPayloadResponse
     {
         [JsonProperty("chatId")] public string ChatId { get; set; }
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("eventId")] public string EventId { get; set; }
         [JsonProperty("data")] public ResourceDownloadOpenResponse Data { get; set; }
     }

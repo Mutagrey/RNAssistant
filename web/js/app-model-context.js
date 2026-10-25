@@ -39,8 +39,22 @@
   }
   function field(list, key) { var found = list.find(function (m) { return m.key === key; }); return found && found.raw; }
   function decoded(raw) { try { return JSON.parse(raw); } catch (_) { return null; } }
-  function live(c) { return current === c && state.activeChatId === c.chatId && !c.abort.signal.aborted &&
-    $("tab-chat").classList.contains("active") && (typeof officeTranscriptActive !== "function" || officeTranscriptActive()); }
+  function snapshotField(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
+  function source() {
+    var workspace = window.RNAssistantWorkspaceChat, owner = workspace ? workspace.owner() : "office";
+    if (owner === "office") return { owner: owner, chatId: state.activeChatId };
+    var chat = workspace.snapshot();
+    return { owner: owner, workspaceId: snapshotField(snapshotField(chat, "project"), "workspaceId"), chatId: snapshotField(chat, "sessionId") };
+  }
+  function matches(c, response) {
+    return response && response.chatId === c.chatId && (response.workspaceId || null) === (c.workspaceId || null);
+  }
+  function payloadOwner(c) { return "model-context" + (c.workspaceId ? ":" + c.workspaceId : ""); }
+  function live(c) {
+    var selected = source();
+    return current === c && c.owner === selected.owner && matches(c, selected) && !c.abort.signal.aborted &&
+      $("tab-chat").classList.contains("active") && (c.owner !== "office" || typeof officeTranscriptActive !== "function" || officeTranscriptActive());
+  }
   function valid(c, version) { return live(c) && c.version === version; }
   function status(c, text) { if (live(c)) $("modelContextStatus").textContent = text; }
   function syncTabs(c) {
@@ -80,7 +94,7 @@
     window.RNAssistantChatInspector.hideRequest();
   }
   async function call(c, type, payload) {
-    var pending = send(type, Object.assign({ chatId: c.chatId }, payload || {}));
+    var pending = send(type, Object.assign({ chatId: c.chatId }, c.workspaceId ? { workspaceId: c.workspaceId } : {}, payload || {}));
     if (pending.requestId) c.requests.add(pending.requestId);
     try { return await pending; } finally { c.requests.delete(pending.requestId); }
   }
@@ -88,7 +102,7 @@
     var data = response && (response.data || response.rawData);
     try {
       if (!valid(c, version)) throw new Error("Просмотр закрыт или изменён.");
-      if (!data || !data.payload || response.chatId !== c.chatId) throw new Error("RESOURCE_DOWNLOAD_INVALID");
+      if (!data || !data.payload || !matches(c, response)) throw new Error("RESOURCE_DOWNLOAD_INVALID");
       var bytes = await window.RNAssistantResourceDownload.read(data, { fetch: window.fetch.bind(window),
         signal: c.abort.signal, isCurrent: function () { return valid(c, version); }, maxBytes: limit });
       if (!valid(c, version)) throw new Error("Просмотр изменён.");
@@ -105,7 +119,7 @@
     if (c.pending[key]) return c.pending[key];
     var operation = (async function () {
       var response = await call(c, "getModelContextPayload", { eventId: eventId, originalIndex: originalIndex });
-      var value = await download(c, response, "model-context", version);
+      var value = await download(c, response, payloadOwner(c), version);
       if (response.eventId !== eventId) throw new Error("RESOURCE_DOWNLOAD_INVALID");
       // Only the selected request is retained across tabs. Source/response/SSE bodies are disposable.
       if (valid(c, version) && eventId === c.selected && originalIndex === undefined) c.cache[key] = value;
@@ -437,7 +451,7 @@
       var response = await call(c, "getModelContext", query);
       if (!valid(c, version) || c.selected !== eventId) return;
       var updated = (response.resources || []).find(function (item) { return item.alias === row.alias; });
-      if (response.chatId !== c.chatId || !updated || !(response.events || []).some(function (item) { return item.eventId === eventId; }))
+      if (!matches(c, response) || !updated || !(response.events || []).some(function (item) { return item.eventId === eventId; }))
         throw new Error("Ответ проверки не соответствует выбранному ресурсу.");
       c.detail.resources = c.detail.resources.map(function (item) { return item.alias === row.alias ? updated : item; });
       if (c.mode === "actual" && c.tab === "resources") { c.focusResource = row.alias; await render(c); }
@@ -456,7 +470,7 @@
       if (prior) query.viewInventorySnapshotCount = prior.snapshotCount;
       var response = await call(c, "getModelContext", query), page = response.viewInventory;
       if (!valid(c, version) || c.selected !== eventId) return;
-      if (response.chatId !== c.chatId || !(response.events || []).some(function (item) { return item.eventId === eventId; }) ||
+      if (!matches(c, response) || !(response.events || []).some(function (item) { return item.eventId === eventId; }) ||
           !page || page.resourceAlias !== row.alias || !Array.isArray(page.items) ||
           !Number.isSafeInteger(page.snapshotCount) || page.snapshotCount < 0 ||
           (prior && page.snapshotCount !== prior.snapshotCount) ||
@@ -484,7 +498,7 @@
         verifyViewVariantSnapshotCount: inventory.snapshotCount });
       if (!valid(c, version) || c.selected !== eventId || c.inventory[row.alias] !== inventory) return;
       var checked = response.viewVariantVerification, variant = checked && checked.variant;
-      if (response.chatId !== c.chatId || !(response.events || []).some(function (event) { return event.eventId === eventId; }) ||
+      if (!matches(c, response) || !(response.events || []).some(function (event) { return event.eventId === eventId; }) ||
           !checked || checked.resourceAlias !== row.alias || checked.ordinal !== item.ordinal ||
           checked.snapshotCount !== inventory.snapshotCount || !variant || variant.view !== item.view ||
           JSON.stringify(variant.coverage) !== JSON.stringify(item.coverage) || variant.partsCount !== item.partsCount ||
@@ -650,7 +664,7 @@
       return;
     }
     if (!c.detail || !c.selected) {
-      notice(c, c.selectionError ? "Не удалось открыть запрос" : c.loading ? "Загрузка запроса…" : c.scope ? "Запрос шага не найден" : "Нет сохранённых запросов",
+      notice(c, c.selectionError ? "Не удалось открыть запрос" : c.loading ? "Загрузка запроса…" : c.scope ? "Запрос " + (c.scope.stepId ? "шага" : "запуска") + " не найден" : "Нет сохранённых запросов",
         c.selectionError || c.emptyMessage, c.selectionError ? "error" : "empty");
       return;
     }
@@ -700,7 +714,7 @@
         await window.showSaveFilePicker({ suggestedName: eventId + ".json" }) : null;
       var response = await call(c, "getModelContextPayload", { eventId: eventId });
       data = response && response.data;
-      if (!valid(c, version) || response.chatId !== c.chatId || response.eventId !== eventId || !data)
+      if (!valid(c, version) || !matches(c, response) || response.eventId !== eventId || !data)
         throw new Error("RESOURCE_DOWNLOAD_INVALID");
       if (handle) {
         var writable = await handle.createWritable();
@@ -715,7 +729,7 @@
     }
     catch (error) { if (valid(c, version)) status(c, error.message); }
     finally { if (data && data.leaseId) await send("resourceDataClose", { chatId: c.chatId,
-      workspaceId: "model-context", leaseId: data.leaseId }).catch(function () {}); }
+      workspaceId: payloadOwner(c), leaseId: data.leaseId }).catch(function () {}); }
   }
   async function select(c, eventId, forceRender) {
     var same = c.selected === eventId && c.detail;
@@ -731,8 +745,8 @@
       var detail = await call(c, "getModelContext", { requestEventId: eventId });
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (e) { return e.type === "llm.request" && e.eventId === eventId; });
-      if (detail.chatId !== c.chatId || !request || !request.trace || c.scope &&
-          (request.trace.RunId !== c.scope.runId || request.trace.StepId !== c.scope.stepId))
+      if (!matches(c, detail) || !request || !request.trace || c.scope &&
+          (request.trace.RunId !== c.scope.runId || c.scope.stepId && request.trace.StepId !== c.scope.stepId))
         throw new Error("Сохранённый запрос не соответствует выбранному чату и шагу.");
       var changed = !c.detail || JSON.stringify(c.detail.events.map(function (e) { return e.eventId; })) !== JSON.stringify(detail.events.map(function (e) { return e.eventId; }));
       var resourcesChanged = !c.detail || JSON.stringify(c.detail.resources) !== JSON.stringify(detail.resources);
@@ -741,7 +755,7 @@
       $("modelContextAttempt").title = request.trace.Purpose || "Сохранённый запрос";
       status(c, (request.trace.Model || "Модель не указана") + " · " + dateText(request.createdUtc) + "\n" +
         (response ? response.type === "llm.response" ? "Ответ сохранён" : "Ошибка запроса" : "Ответ пока не сохранён") +
-        (c.follow ? " · обновляется автоматически" : c.scope ? " · выбранный шаг" : " · выбранный запрос"));
+        (c.follow ? " · обновляется автоматически" : c.scope ? c.scope.stepId ? " · выбранный шаг" : " · выбранный запуск" : " · выбранный запрос"));
       c.loading = false; previewAvailability(c);
       if (!same || forceRender || changed && c.tab === "response" || resourcesChanged && c.tab === "resources") await render(c);
     } catch (error) {
@@ -766,10 +780,11 @@
     var operation = { version: c.version }; c.listRequest = operation;
     try {
       var response = await call(c, "getModelContext", older ? { beforeSequence: c.before } : { knownRevision: c.revision });
-      if (!valid(c, operation.version) || c.mode !== "actual" || response.unchanged) return;
-      if (response.chatId !== c.chatId) throw new Error("История запросов не соответствует выбранному чату.");
+      if (!valid(c, operation.version) || c.mode !== "actual") return;
+      if (!matches(c, response)) throw new Error("История запросов не соответствует выбранному чату.");
+      if (response.unchanged) return;
       if (c.scope) response.events = response.events.filter(function (event) {
-        return event.trace && event.trace.RunId === c.scope.runId && event.trace.StepId === c.scope.stepId;
+        return event.trace && event.trace.RunId === c.scope.runId && (!c.scope.stepId || event.trace.StepId === c.scope.stepId);
       });
       if (older) c.attempts = c.attempts.concat(response.events);
       else {
@@ -791,7 +806,7 @@
       else {
         c.version++; operation.version = c.version;
         c.selected = null; c.detail = null; c.loading = false; c.selectionError = ""; c.cache = {}; c.pending = {};
-        c.emptyMessage = c.scope ? "Точный запрос этого шага не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
+        c.emptyMessage = c.scope ? "Точный запрос этого " + (c.scope.stepId ? "шага" : "запуска") + " не найден в загруженной части истории." + (c.before ? " Нажмите «Ранее» для предыдущей страницы." : "") : c.workspaceId ? "В этой беседе ещё нет сохранённых запросов модели." : state.chatReadOnly ? "Сохранённых запросов нет. Для нового запроса создайте новый чат." :
           "Сохранённых запросов пока нет. Доступен предварительный контекст.";
         status(c, c.emptyMessage); previewAvailability(c);
         if (c.before) $("modelContextHistory").open = true;
@@ -819,7 +834,7 @@
       var detail = await call(c, "getModelContext", { alias: name });
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (event) { return event.type === "llm.request"; });
-      if (detail.chatId !== c.chatId || !request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
+      if (!matches(c, detail) || !request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
       c.scope = null;
       c.cache = {}; c.loading = false; c.selectionError = "";
       c.selected = request.eventId; c.detail = detail; c.inventory = {}; c.inventoryBusy = {};
@@ -837,13 +852,16 @@
   function composerText() { return typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput").value; }
   function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
   function previewAvailability(c) {
-    $("modelContextPreviewOption").disabled = !!state.chatReadOnly;
+    $("modelContextPreviewOption").disabled = !!c.workspaceId || !!state.chatReadOnly;
+    $("modelContextPreviewOption").hidden = !!c.workspaceId;
+    $("modelContextMode").disabled = !!c.workspaceId;
     var unavailable = !!state.chatReadOnly && c.mode === "preview";
     $("modelContextRefresh").disabled = unavailable;
     var request = c.detail && (c.detail.events || []).find(function (event) { return event.eventId === c.selected; });
     $("modelContextDownload").disabled = unavailable || (c.mode === "preview" ? !c.preview : c.loading || !request || !request.hasPayload);
   }
   async function preview(c) {
+    if (c.workspaceId) return;
     c.version++; var version = c.version; c.preview = null; c.previewError = ""; clearView(c);
     c.previewVersion = version;
     previewAvailability(c);
@@ -877,14 +895,19 @@
     c.timer = setTimeout(function () { tick(c); }, 2000);
   }
   function open(options) {
-    if (!state.activeChatId || state.bridgeUnavailable ||
-        (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")) return;
-    var scope = options && options.runId && options.stepId ? options : null;
-    if (scope && scope.chatId !== state.activeChatId) return;
+    var selected = source();
+    if (!selected.chatId || state.bridgeUnavailable) return;
+    if (selected.owner === "office") {
+      if (options && (options.owner && options.owner !== "office" || options.workspaceId ||
+          options.chatId && options.chatId !== selected.chatId)) return;
+    } else if (!selected.workspaceId || !options || options.owner !== selected.owner ||
+        options.workspaceId !== selected.workspaceId || options.sessionId !== selected.chatId) return;
+    var scope = options && options.runId ? { runId: options.runId, stepId: options.stepId || "" } : null;
     var trigger = document.activeElement;
     if (current) close();
     if (typeof closePromptContextInspector === "function") closePromptContextInspector();
-    current = { chatId: state.activeChatId, abort: new AbortController(), requests: new Set(), version: 0,
+    current = { owner: selected.owner, chatId: selected.chatId, workspaceId: selected.workspaceId,
+      abort: new AbortController(), requests: new Set(), version: 0,
       mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: !scope, attempts: [],
       scope: scope };
     $("modelContextDialog").classList.remove("hidden");
@@ -905,6 +928,7 @@
       window.RNAssistantChatInspector.setRequestLayout(this.value);
     });
     $("modelContextMode").addEventListener("change", function () {
+      if (!current || current.workspaceId) { this.value = "actual"; return; }
       var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {};
       c.loading = false; c.emptyMessage = ""; c.selectionError = ""; clearView(c);
       if (c.mode === "preview" && (c.tab === "response" || c.tab === "resources")) c.tab = "messages";

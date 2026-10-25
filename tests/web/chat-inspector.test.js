@@ -145,6 +145,18 @@ const { chromium } = require("playwright");
       document.getElementById("messages").appendChild(grouped);
     });
     const source = page.locator("#inspector-source .agent-activity-row .message-inspect-action");
+    const actionLayout = await source.evaluate(button => {
+      const row = button.closest(".agent-activity-row"), mark = row.querySelector(".agent-activity-mark svg");
+      const glyph = button.querySelector("svg"), text = row.querySelector(".agent-activity-name");
+      const box = node => node.getBoundingClientRect();
+      const center = node => box(node).top + box(node).height / 2;
+      return { height: box(row).height, mark: box(mark).width, glyph: box(glyph).width,
+        offset: Math.abs(center(mark) - center(glyph)), textOffset: Math.abs(center(text) - center(glyph)) };
+    });
+    assert.equal(actionLayout.mark, 13, "action icons keep their compact size");
+    assert.equal(actionLayout.glyph, 13, "the step link matches the compact action icon");
+    assert.ok(actionLayout.offset <= 1 && actionLayout.textOffset <= 2, "icons align with the action text");
+    assert.ok(actionLayout.height <= 30, "the step link does not enlarge a compact action row");
     await source.click();
     assert.equal(await page.locator(".chat-inspector-step").count(), 1, "the selected older run never uses the latest run's steps");
     assert.equal(await page.locator(".chat-inspector-step.is-selected details").evaluate(n => n.open), true);

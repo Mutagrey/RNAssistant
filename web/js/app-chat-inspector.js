@@ -69,17 +69,38 @@
   }
 
   function capability(parent, item, kind) {
+    var status = { selected: "Подключён", pending: "Подключается", unavailable: "Недоступен", available: "Доступен" }[item.Status] || item.Status || "";
     var details = disclosure(parent, kind + ":" + item.Id, item.Name || item.Id,
-      item.RequiresConfirmation ? "С разрешения" : "");
+      item.RequiresConfirmation ? "С разрешения" : kind === "skill" ? status : "");
+    if (item.Status === "unavailable") details.classList.add("is-unavailable");
     var summary = details.querySelector("summary");
     summary.insertBefore(icon(kind === "skill" ? "skill" : "tool"), summary.firstChild);
-    var description = String(item.Description || item.Reason || "");
-    if (description) summary.appendChild(node("span", "chat-inspector-description-preview", description));
+    var description = String(item.Description || ""), reason = String(item.Reason || "");
+    if (description || reason) summary.appendChild(node("span", "chat-inspector-description-preview", description || reason));
     var content = node("div", "chat-inspector-disclosure-body");
     if (description) paragraph(content, description);
+    if (reason && reason !== description) paragraph(content, reason);
     content.appendChild(node("code", "", item.Id || ""));
-    if (item.Status) paragraph(content, item.Status);
     details.appendChild(content);
+  }
+
+  function renderCapabilityList(body, details) {
+    heading(body, "Навыки · " + details.Selected.length);
+    if (!details.Selected.length) paragraph(body, "Подключённых навыков нет.");
+    details.Selected.forEach(function (skill) { capability(body, skill, "skill"); });
+    heading(body, "Инструменты · " + details.Tools.length);
+    if (!details.Tools.length) paragraph(body, "Инструментов нет.");
+    var groups = new Map();
+    details.Tools.forEach(function (tool) {
+      var group = window.RNAssistantLibraryGroups.category(tool.Id);
+      if (!groups.has(group.key)) groups.set(group.key, { title: group.title, tools: [] });
+      groups.get(group.key).tools.push(tool);
+    });
+    groups.forEach(function (group, id) {
+      var section = disclosure(body, "tools:" + id, group.title, String(group.tools.length));
+      section.classList.add("chat-inspector-tool-group");
+      group.tools.forEach(function (tool) { capability(section, tool, "tool"); });
+    });
   }
 
   function activeChat() {
@@ -183,6 +204,7 @@
   }
 
   function renderAbilities(body) {
+    if (owner !== "office") { renderWorkspaceAbilities(body); return; }
     if (!state.activeChatId || state.bridgeUnavailable) {
       paragraph(body, "Выберите доступный чат.");
       return;
@@ -200,25 +222,31 @@
       if (abilities.restriction) paragraph(body, abilities.restriction);
       paragraph(body, abilities.historical ? "Последний запуск · доступность проверяется перед выполнением" :
         abilities.pending ? "Навыки подключаются" : abilities.prepared ? "Состав следующего запроса" : "Состав текущего запуска");
-      heading(body, "Навыки · " + abilities.details.Selected.length);
-      if (!abilities.details.Selected.length) paragraph(body, "Подключённых навыков нет.");
-      abilities.details.Selected.forEach(function (skill) {
-        capability(body, skill, "skill");
-      });
-      heading(body, "Инструменты · " + abilities.details.Tools.length);
-      if (!abilities.details.Tools.length) paragraph(body, "Инструментов нет.");
-      var groups = new Map();
-      abilities.details.Tools.forEach(function (tool) {
-        var group = window.RNAssistantLibraryGroups.category(tool.Id);
-        if (!groups.has(group.key)) groups.set(group.key, { title: group.title, tools: [] });
-        groups.get(group.key).tools.push(tool);
-      });
-      groups.forEach(function (group, id) {
-        var details = disclosure(body, "tools:" + id, group.title, String(group.tools.length));
-        details.classList.add("chat-inspector-tool-group");
-        group.tools.forEach(function (tool) { capability(details, tool, "tool"); });
-      });
+      renderCapabilityList(body, abilities.details);
     }
+    action(body, "Открыть Библиотеку", "book", function () { switchTab("instructions"); });
+  }
+
+  function renderWorkspaceAbilities(body) {
+    var current = source(), receipt = field(current.snapshot, "contextReceipt"), details = receipt && receipt.Arsenal;
+    if (!current.sessionId) { paragraph(body, "Выберите чат, чтобы увидеть его возможности."); return; }
+    if (!details) {
+      info(body, "Состав ещё не сохранён", "Навыки и инструменты появятся после подготовки запроса модели.", "spark");
+      return;
+    }
+    function validItems(items) {
+      return Array.isArray(items) && items.every(function (item) { return item && typeof item.Id === "string" && item.Id.length > 0; });
+    }
+    if (typeof details.RunId !== "string" || !details.RunId || !validItems(details.Selected) || !validItems(details.Tools)) {
+      paragraph(body, "Сохранённый состав возможностей недоступен.");
+      return;
+    }
+    var runId = current.run.runId, previous = runId && details.RunId !== runId;
+    var active = ["running", "awaiting_user", "awaiting_confirmation"].indexOf(current.run.lifecycle) >= 0;
+    info(body, previous ? "Состав предыдущего запуска" : active ? "Текущий запуск" : "Сохранённый состав запроса",
+      previous ? "Для текущего запуска состав ещё не сохранён." : "Навыки и инструменты подготовленного запроса", "spark");
+    paragraph(body, "Доступность проверяется заново перед выполнением.");
+    renderCapabilityList(body, details);
     action(body, "Открыть Библиотеку", "book", function () { switchTab("instructions"); });
   }
 
@@ -424,8 +452,8 @@
           });
           details.appendChild(content);
         });
-        if (current.owner === "office" && stepId) action(details, "Запрос / ответ модели", "braces", function () {
-          if (source().key === current.key) window.RNAssistantModelContext.open({ chatId: sourceChatId, runId: sourceRunId, stepId: stepId });
+        if (stepId) action(details, "Запрос / ответ модели", "braces", function () {
+          if (source().key === current.key) window.RNAssistantModelContext.open(Object.assign(target(), { runId: sourceRunId, stepId: stepId }));
         });
         row.appendChild(copy); list.appendChild(row);
       });
@@ -443,12 +471,15 @@
         ? "Есть неподтверждённые результаты. Проверьте фактическое состояние." : "В ходе работы были неудачные попытки.");
       note.setAttribute("role", "status"); body.appendChild(note);
     }
-    if (current.owner === "office" && run.runId) {
+    if (run.runId) {
       heading(body, "Подробности запуска");
       var chatId = current.chatId, runId = run.runId;
       var selectedStep = activitySelection && activitySelection.stepId || "";
-      action(body, "История и диагностика", "clock", function () {
+      if (current.owner === "office") action(body, "История и диагностика", "clock", function () {
         if (source().key === current.key) window.openRunJournal({ chatId: chatId, runId: runId, stepId: selectedStep });
+      });
+      else action(body, "Запросы / ответы модели", "braces", function () {
+        if (source().key === current.key) window.RNAssistantModelContext.open(Object.assign(target(), { runId: runId }));
       });
     }
   }
@@ -459,7 +490,7 @@
     if (!panel || !body || !open) return;
     var current = source();
     if (requestView) {
-      if (requestView.chatId !== state.activeChatId) window.RNAssistantModelContext.close();
+      if (requestView.sourceKey !== current.key) window.RNAssistantModelContext.close();
       return;
     }
     if (presentationChat !== current.key) {
@@ -539,7 +570,7 @@
     if (!value && requestView) {
       window.RNAssistantModelContext.close();
       setOpen(false);
-      document.getElementById("toggleChatInspectorButton").focus({ preventScroll: true });
+      toggleNode().focus({ preventScroll: true });
       return;
     }
     if (open === !!value) return;
@@ -582,7 +613,7 @@
       else summary.prepend(nextIcon);
     }
     switcher.querySelectorAll("[data-chat-inspector-view]").forEach(function (button) {
-      if (["abilities", "usage"].indexOf(button.dataset.chatInspectorView) >= 0) button.hidden = owner !== "office";
+      if (button.dataset.chatInspectorView === "usage") button.hidden = owner !== "office";
       button.setAttribute("aria-checked", String(button.dataset.chatInspectorView === (browserOpen ? "preview" : view)));
     });
   }
@@ -664,7 +695,7 @@
 
   function showRequest(trigger) {
     var focused = trigger || document.activeElement, details = focused && focused.closest("[data-inspector-key]");
-    requestView = { open: open, chatId: state.activeChatId, focused: focused,
+    requestView = { open: open, sourceKey: source().key, focused: focused,
       key: details && details.dataset.inspectorKey, label: focused && focused.textContent };
     requestMode = "docked"; requestScroll = {}; requestContent = null;
     cancelUsage();
@@ -679,13 +710,14 @@
     setOpen(previous.open); sync();
     window.RNAssistantShellLayout.refresh();
     var target = previous.focused;
-    if ((!target || !target.isConnected || !target.getClientRects().length) && previous.chatId === state.activeChatId && previous.key) {
+    if (previous.sourceKey !== source().key) target = null;
+    if ((!target || !target.isConnected || !target.getClientRects().length) && previous.sourceKey === source().key && previous.key) {
       var details = Array.from(document.querySelectorAll("#chatInspectorBody [data-inspector-key]")).find(function (item) {
         return item.dataset.inspectorKey === previous.key;
       });
       target = details && Array.from(details.querySelectorAll("button, summary")).find(function (item) { return item.textContent === previous.label; });
     }
-    if (!target || !target.isConnected || !target.getClientRects().length) target = document.getElementById("toggleChatInspectorButton");
+    if (!target || !target.isConnected || !target.getClientRects().length) target = toggleNode();
     target.focus({ preventScroll: true });
   }
 

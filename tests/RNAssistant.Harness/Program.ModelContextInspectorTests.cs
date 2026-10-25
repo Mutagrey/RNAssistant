@@ -19,6 +19,63 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelContextWorkspaceExchange()
+        {
+            WithTempPaths(paths =>
+            {
+                var chats = new ChatStore(paths);
+                var workspaces = new WorkspaceStore(paths);
+                var workspace = workspaces.ConnectProject(System.IO.Path.Combine(paths.Root, "project"), true);
+                var other = workspaces.ConnectProject(System.IO.Path.Combine(paths.Root, "other-project"), true);
+                var session = workspaces.CreateSession(chats, workspace, "Diagnostics");
+                var foreign = workspaces.CreateSession(chats, other, "Other");
+                const string body = "{\"messages\":[{\"role\":\"user\",\"content\":\"Прочитай отчёт\"}]}";
+                var request = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new LlmTraceRecord { RequestId = "shared-id", RunId = "run", StepId = "step" }, body,
+                    "application/json", "run", "turn", "step");
+                var response = chats.AppendTrace(session, SessionEventTypes.LlmResponse,
+                    new LlmTraceRecord { RequestId = "shared-id" }, "{\"Content\":\"Ответ\"}",
+                    "application/json", "run", "turn", "step");
+                var foreignEvent = chats.AppendTrace(foreign, SessionEventTypes.LlmRequest,
+                    new LlmTraceRecord { RequestId = "shared-id" }, "{}", "application/json", "run", "turn", "step");
+                var loaded = ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id);
+                RuntimeThrows<InvalidOperationException>(() => ModelContextInspectorService.ReadWorkspaceSession(paths, chats, other.WorkspaceId, session.Id));
+                RuntimeThrows<InvalidOperationException>(() => ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, ""));
+                using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    var service = new ModelContextInspectorService(new ChatEventStoreAdapter(chats), new ChatBlobStore(paths), data);
+                    var query = new ModelContextQuery { ChatId = session.Id, WorkspaceId = workspace.WorkspaceId, RequestEventId = request.EventId };
+                    var detail = service.Query(loaded, query, CancellationToken.None);
+                    AssertEqual(workspace.WorkspaceId, detail.WorkspaceId, "response retains exact workspace");
+                    AssertEqual(2, detail.Events.Count, "workspace request and matching response only");
+                    AssertEqual(response.EventId, detail.Events.Last().EventId, "foreign shared request ID is isolated");
+                    var version = loaded.Revision;
+                    var unchanged = service.Query(loaded, new ModelContextQuery { ChatId = session.Id,
+                        WorkspaceId = workspace.WorkspaceId, KnownRevision = version }, CancellationToken.None);
+                    AssertTrue(unchanged.Unchanged && unchanged.WorkspaceId == workspace.WorkspaceId, "polling preserves scope");
+                    var download = service.Open(loaded, new ModelContextPayloadQuery { ChatId = session.Id,
+                        WorkspaceId = workspace.WorkspaceId, EventId = request.EventId }, CancellationToken.None);
+                    string mime;
+                    AssertEqual(body, Encoding.UTF8.GetString(data.ReadDownload(download.Data.LeaseId, 0,
+                        (int)download.Data.Payload.ByteLength, CancellationToken.None, out mime)), "exact saved workspace bytes");
+                    RuntimeThrows<InvalidOperationException>(() => data.Close(session.Id, ModelContextInspectorService.Owner, download.Data.LeaseId));
+                    data.Close(session.Id, ModelContextInspectorService.DownloadOwner(workspace.WorkspaceId), download.Data.LeaseId);
+                    RuntimeThrows<InvalidOperationException>(() => service.Query(loaded, new ModelContextQuery { ChatId = session.Id }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Query(loaded, new ModelContextQuery { ChatId = session.Id, WorkspaceId = other.WorkspaceId }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(loaded, new ModelContextPayloadQuery { ChatId = foreign.Id,
+                        WorkspaceId = workspace.WorkspaceId, EventId = request.EventId }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Open(loaded, new ModelContextPayloadQuery { ChatId = session.Id,
+                        WorkspaceId = workspace.WorkspaceId, EventId = foreignEvent.EventId }, CancellationToken.None));
+                    AssertEqual(version, chats.Load(session.Id).Revision, "diagnostic reads do not change history");
+                }
+                System.IO.Directory.Delete(workspace.RootPath, true);
+                AssertEqual(session.Id, ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id).Id,
+                    "saved exchange remains readable while the source folder is unavailable");
+                workspaces.HideProject(workspace.WorkspaceId);
+                RuntimeThrows<System.IO.InvalidDataException>(() => ModelContextInspectorService.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id));
+            });
+        }
+
         private static void ModelContextExactReadMessageCost()
         {
             WithTempPaths(paths =>

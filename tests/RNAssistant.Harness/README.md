@@ -222,9 +222,17 @@ history access during a run, draft restoration and late replies after switching 
 `RNA_CHAT_SCREENSHOTS` saves the visual review captures.
 `node tests/web/workspace-inspector.test.js` checks the shared Office/project/plugin
 Inspector DOM, exact workspace/session/run/step routing, stale owner rejection,
-draft and live preview frame preservation, and narrow/light/dark layouts.
-`INSPECTOR_SCREENSHOTS` saves these captures. Workspace request/usage/journal
-contracts and native Windows/WebView2 qualification remain open.
+draft and live preview frame preservation, and narrow/light/dark layouts. It also
+checks saved workspace capabilities, previous-run attribution, confirmation and
+unavailable-skill reasons, missing/incomplete receipts and session isolation.
+Saved request/response checks cover exact workspace routes, pending-read cancellation,
+Focus isolation, return focus, resizing without rereads and narrow plugin responses.
+`model context: workspace exchange and scope` checks the existing event/CAS reader,
+foreign workspace/event rejection, lease ownership, unchanged history and reads
+while the source folder is unavailable. `model-context.test.js` checks response
+identity and rejects absent workspace attribution. `INSPECTOR_SCREENSHOTS` saves
+browser captures. Workspace usage/journal and native Windows/WebView2 delivery,
+including controller lease liveness, remain open.
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin
 view and composer, one session draft and preferences across both screens, appended file reference, failed retry
 identity, double submit and late acknowledgement with identical later text.

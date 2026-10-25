@@ -147,11 +147,21 @@ selected skills, callable tools and explicit availability/restriction informatio
 editing remains in the Library. The former standalone Arsenal popover and its
 header button have been removed.
 
-`getAgentArsenal` returns typed `rnassistant.agentArsenal` v1 metadata from the run,
+In Office, `getAgentArsenal` returns typed `rnassistant.agentArsenal` v1 metadata from the run,
 `ContextReceipt.Arsenal` and published metadata. The inspector requests details
 only when its abilities view opens; the read never executes or selects anything.
 Late responses from another chat or revision are discarded. The right panel
 shares the prototype's width, view switcher and responsive presentation.
+
+Project and plugin chats use the same compact skill rows and tool groups directly
+from the selected session snapshot's `contextReceipt.Arsenal`. This is saved
+request metadata, not a live catalog or a promise that a tool can execute now.
+An earlier RunId is labelled as the previous run; missing or incomplete metadata
+is shown as unavailable, never as zero tools. Before the first compiled request
+there is no saved composition. Skills outside `Selected` are not included in the
+count. Unavailable skill reasons remain visible in the disclosure even when a
+description is present. This view makes no Office query and creates no second
+store; dispatch still revalidates exact bindings and policy.
 
 ### Independent workspace runtime
 

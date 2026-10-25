@@ -11,6 +11,23 @@ Selection after reopening plugin management now awaits one source check and
 restarts source watching before the frame can be annotated. Focused Chromium
 layout, plugin and HTML browser checks pass; Windows/WebView2 remains open.
 
+## Workspace saved request/response in the shared Inspector — 2026-10-25
+
+Owner: model-context diagnostics service and Web chat Inspector. Project and
+plugin steps now open their saved model exchange in the existing reader; a run
+action opens its request history. Typed queries and responses bind workspace and
+session; scoped download leases retain verified CAS bytes. Missing or foreign
+scope is rejected, without Office selection or a second diagnostic store.
+Saved history remains readable while the connected source folder is unavailable.
+Changing owner/session closes pending reads; resizing and return preserve the
+selected view and step focus. Workspace next-request preview remains unavailable.
+The generic navigation grid no longer overrides workspace chat columns; request
+content retains the Inspector width after the summary rows are hidden.
+
+Focused host-neutral scope/exchange and browser checks cover the new path and the
+existing Office reader. Workspace usage and event journal remain the next slice.
+Windows/Office/WebView2 controller delivery and lease liveness remain open evidence.
+
 ## Plugin development in the project shell — 2026-10-24
 
 Owner: Web plugin navigation and project chat shell. A plugin icon now opens its
@@ -23,6 +40,22 @@ Switching source chats preserves the iframe; switching projects hides it. Source
 registration precedes tree navigation, and deletion of the selected source chat
 reopens a valid chat or explicit empty state. Focused Chromium plugin, shell,
 draft, routing and Inspector checks pass. Windows/WebView2 delivery remains open.
+
+## Workspace capabilities in the shared Inspector — 2026-10-24
+
+Owner: Web chat Inspector presentation. Project and plugin chats now expose
+**Возможности агента** from the selected session's existing `contextReceipt.Arsenal`.
+Office and workspace reuse one compact renderer for skills and grouped tools.
+Confirmation requirements and skill availability stay visible; expanded skills
+keep their unavailability reason alongside their description.
+
+The view identifies a previous run and distinguishes absent/incomplete metadata
+from a saved empty composition. It does not query the Office chat, execute tools
+or add storage. Before the first compiled request no saved composition is claimed.
+Focused Inspector browser coverage checks counts, disclosures, previous-run
+attribution, missing/incomplete receipts, session isolation and narrow layouts.
+Workspace request/response, usage and journal remain the next contract-parity
+slice. Windows/Office/WebView2 qualification remains open.
 
 ## Shared context and activity Inspector — 2026-10-24
 
@@ -340,6 +373,7 @@ and run-state ordering passed, including browser focus/disclosure checks. No ful
 suite, paid model calls or Office validation. Open: actual target-provider support, Windows/WebView2/Office evidence,
 and cross-process live token delivery. The dated audit below
 describes its earlier baseline, not the status of every current implementation.
+
 
 ## Conversation v8 / shared-chat incident audit — 2026-10-23
 
@@ -3683,6 +3717,7 @@ commit candidate passes 838/862 Harness checks; all 24 failures also reproduce o
 checks next-run settings without changing accepted authority. Version-format
 validation passes.
 Real Windows/Office/WebView2 and real-model task quality remain unqualified.
+
 
 ## Artifact tree and document removal — 2026-10-13
 

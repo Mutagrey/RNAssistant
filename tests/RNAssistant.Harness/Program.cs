@@ -510,6 +510,7 @@ namespace RNAssistant.Harness
                 Test("trajectory export: bounded capture and delivery", TrajectoryDownloadBoundsAndLifecycle),
                 Test("model context: large verified download", ModelContextLargeVerifiedDownload),
                 Test("model context: exact exchange and full payload", ModelContextExactExchange),
+                Test("model context: workspace exchange and scope", ModelContextWorkspaceExchange),
                 Test("model context: bound original source and pagination", ModelContextSourceAndPagination),
                 Test("model context: stable aliases and resource inspector", ModelContextStableAliases),
                 Test("model context: exact read message cost", ModelContextExactReadMessageCost),

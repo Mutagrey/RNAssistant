@@ -695,6 +695,7 @@
 .chat-inspector-disclosure > summary > svg { width: 14px; height: 14px; color: var(--ink-muted); }
 .chat-inspector-disclosure-title { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 500; }
 .chat-inspector-disclosure-meta { color: var(--ink-muted); font-size: 10px; font-variant-numeric: tabular-nums; text-align: right; }
+.chat-inspector-disclosure.is-unavailable > summary .chat-inspector-disclosure-meta { color: var(--warning); }
 .chat-inspector-description-preview { grid-column: 2 / -1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; color: var(--ink-muted); font-size: 11px; line-height: 1.5; }
 .chat-inspector-disclosure[open] > summary .chat-inspector-description-preview { display: none; }
 .chat-inspector-disclosure-body { padding: 4px 0 12px; min-width: 0; overflow-wrap: anywhere; }
@@ -723,5 +724,5 @@
 .chat-inspector-step-call p { margin-top: 6px !important; white-space: pre-wrap; }
 .chat-inspector-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .chat-inspector-step.is-selected .chat-inspector-step-detail { border-radius: 5px; box-shadow: 0 0 0 5px var(--accent-soft); background: var(--accent-soft); }
-.agent-activity-row > .message-inspect-action { flex: 0 0 32px; width: 32px; height: 32px; margin-left: auto; color: var(--ink-muted); }
-.message-action.message-inspect-action.icon-btn > svg { flex-basis: 16px; width: 16px; height: 16px; }
+.agent-activity-row > .message-inspect-action { flex: 0 0 28px; width: 28px; height: 28px; min-height: 28px; margin: calc((1.5em - 28px) / 2) 0 calc((1.5em - 28px) / 2) auto; color: var(--ink-muted); }
+.message-action.message-inspect-action.icon-btn > svg { flex-basis: 13px; width: 13px; height: 13px; stroke-width: 1.75; }

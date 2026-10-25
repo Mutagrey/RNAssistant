@@ -161,6 +161,48 @@ function fixture(withAliases = false, pdf = false) {
   };
 }
 (async () => {
+  const workspace = fixture();
+  let selectedOwner = "project", selectedWorkspace = "workspace-one", replyWorkspace = "workspace-one";
+  workspace.c.RNAssistantWorkspaceChat = { owner: () => selectedOwner,
+    snapshot: () => ({ project: { workspaceId: selectedWorkspace }, sessionId: "chat" }) };
+  const workspaceSend = workspace.c.send;
+  workspace.c.send = async (type, query) => {
+    const result = await workspaceSend(type, query);
+    if (type.startsWith("getModelContext")) result.workspaceId = replyWorkspace;
+    return result;
+  };
+  const route = { owner: "project", workspaceId: "workspace-one", sessionId: "chat" };
+  workspace.c.RNAssistantModelContext.open(); await flush();
+  assert.equal(workspace.calls.length, 0, "a bare Office route cannot select a workspace session");
+  workspace.c.RNAssistantModelContext.open(route); await flush();
+  assert.equal(workspace.get("modelContextAttempt").value, "r1");
+  assert.ok(workspace.calls.filter(call => call.type.startsWith("getModelContext")).every(call => call.query.workspaceId === "workspace-one"));
+  assert.equal(workspace.closes[0].workspaceId, "model-context:workspace-one", "lease cleanup preserves its workspace owner");
+  workspace.get("modelContextMode").value = "preview";
+  await workspace.get("modelContextMode").fire("change");
+  assert.equal(workspace.get("modelContextMode").value, "actual");
+  assert.ok(!workspace.calls.some(call => call.type === "inspectModelContextPreview"));
+  workspace.c.RNAssistantModelContext.close();
+  let finishWorkspacePayload;
+  workspace.hold(new Promise(resolve => { finishWorkspacePayload = resolve; }));
+  workspace.c.RNAssistantModelContext.open(route); await flush();
+  const workspaceClosed = workspace.closes.length;
+  selectedOwner = "plugin"; workspace.c.RNAssistantModelContext.sync();
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), true, "owner change closes even the same workspace/session");
+  finishWorkspacePayload(); workspace.hold(null); await flush();
+  assert.equal(workspace.closes.length, workspaceClosed + 1, "a late workspace payload releases its lease after owner change");
+  assert.equal(workspace.closes.at(-1).workspaceId, "model-context:workspace-one");
+  selectedOwner = "project"; workspace.c.RNAssistantModelContext.open(route); await flush();
+  selectedWorkspace = "workspace-two"; workspace.c.RNAssistantModelContext.sync();
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), true, "workspace change invalidates the session route");
+  selectedWorkspace = "workspace-one"; replyWorkspace = "workspace-two";
+  workspace.c.RNAssistantModelContext.open(route); await flush();
+  assert.match(workspace.get("modelContextStatus").textContent, /не соответствует выбранному чату/);
+  workspace.c.RNAssistantModelContext.close();
+  replyWorkspace = null; workspace.c.RNAssistantModelContext.open(route); await flush();
+  assert.match(workspace.get("modelContextStatus").textContent, /не соответствует выбранному чату/);
+  workspace.c.RNAssistantModelContext.close();
+  console.log("PASS model context: exact workspace identity, owner changes, lease cleanup and missing/foreign scope refusal");
   const scoped = fixture();
   scoped.events[0].trace.RunId = "run-1"; scoped.events[0].trace.StepId = "step-1";
   scoped.events.push({ ...scoped.events[0], eventId: "other", sequence: 4,

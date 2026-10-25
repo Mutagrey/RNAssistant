@@ -973,7 +973,11 @@
           items: [{ id: part[0] + "-item", title: part[1], tokens: part[2], preview: part[3], reason: "Демонстрационный состав" }] }; }) };
     }
     if (type === "getModelContext" || type === "getModelContextPayload" || type === "inspectModelContextPreview") {
-      requireChat(payload);
+      var contextWorkspaceId = payload.workspaceId, contextChatId = payload.chatId;
+      if (contextWorkspaceId != null) {
+        requireProjectChat({ workspaceId: contextWorkspaceId, sessionId: contextChatId });
+        if (type === "inspectModelContextPreview") fail("Предпросмотр запроса проекта недоступен.");
+      } else requireChat(payload);
       var requestEvent = { eventId: "preview-request", alias: "Q1", sequence: 1, type: "llm.request",
         createdUtc: "2026-10-23T10:00:00Z", hasPayload: true,
         trace: { RunId: "preview-run", StepId: "preview-step", Model: "preview-model", Streaming: false,
@@ -982,7 +986,7 @@
         createdUtc: "2026-10-23T10:00:01Z", hasPayload: true, trace: {} };
       if (payload.requestEventId && payload.requestEventId !== requestEvent.eventId || payload.alias && payload.alias !== "Q1")
         fail("Запрос примера не найден.", "preview_request_missing");
-      if (type === "getModelContext") return { chatId: activeChatId, revision: revision,
+      if (type === "getModelContext") return { chatId: contextChatId, workspaceId: contextWorkspaceId, revision: revision,
         unchanged: !payload.requestEventId && payload.knownRevision === revision,
         events: payload.requestEventId || payload.alias ? [requestEvent, responseEvent] : [requestEvent],
         selectedAlias: payload.alias || null, resources: [], operations: [], evidence: [], nextBeforeSequence: null };
@@ -1000,7 +1004,7 @@
       var exampleData = download(exampleText, "application/json"); exampleData.payload.sha256 = await hash(exampleText);
       if (type === "inspectModelContextPreview") return { chatId: activeChatId, rawData: exampleData,
         generatedUtc: new Date().toISOString(), resourceContextReceipt: { Messages: [] } };
-      return { chatId: activeChatId, eventId: payload.eventId, data: exampleData };
+      return { chatId: contextChatId, workspaceId: contextWorkspaceId, eventId: payload.eventId, data: exampleData };
     }
     if (type === "getAgentArsenal") {
       requireChat(payload);
