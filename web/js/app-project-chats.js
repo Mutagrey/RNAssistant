@@ -311,15 +311,27 @@
   async function rename(entry, chat) {
     var title = window.prompt("Название чата", chat.Title);
     if (title === null || !title.trim() || title.trim() === chat.Title) return;
-    try { catalog = await send("renameProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id, title: title.trim() });
-      if (projectId() === entry.workspaceId && currentId() === chat.Id) { active.state.Title = title.trim(); active.state.title = title.trim(); }
-      notice(""); render(); }
-    catch (error) { notice(error.detail || error.message, true); }
+    var version = serial;
+    try { var result = await send("renameProjectChat", { workspaceId: entry.workspaceId,
+        sessionId: chat.Id, title: title.trim() });
+      var returnedProject = (result.projects || []).find(function (item) { return item.workspaceId === entry.workspaceId; });
+      var returnedChat = returnedProject && (returnedProject.chats || []).find(function (item) { return item.Id === chat.Id; });
+      var currentProject = projects().find(function (item) { return item.workspaceId === entry.workspaceId; });
+      var currentChat = currentProject && (currentProject.chats || []).find(function (item) { return item.Id === chat.Id; });
+      if (returnedChat && currentChat) currentChat.Title = returnedChat.Title;
+      if (returnedChat && projectId() === entry.workspaceId && currentId() === chat.Id && active.state) {
+        active.state.Title = returnedChat.Title; active.state.title = returnedChat.Title;
+      }
+      if (version === serial) notice("");
+      render(); }
+    catch (error) { if (version === serial) notice(error.detail || error.message, true); }
   }
   async function remove(entry, chat) {
     if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
     try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
-      catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
+      await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
+      var currentProject = projects().find(function (item) { return item.workspaceId === entry.workspaceId; });
+      if (currentProject) currentProject.chats = (currentProject.chats || []).filter(function (item) { return item.Id !== chat.Id; });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       fileNotices.delete(chatRequestKey(entry.workspaceId, chat.Id));
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
@@ -341,7 +353,8 @@
   async function removeHistory(entry) {
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
     try { await window.RNAssistantChatDrafts.flushAll();
-      catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
+      await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
+      if (catalog) catalog.projects = projects().filter(function (item) { return item.workspaceId !== entry.workspaceId; });
       (entry.chats || []).forEach(function (chat) {
         window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       });
@@ -461,7 +474,16 @@
       busy = true; render();
       try {
         var result = await send(mode === "create" ? "createProjectWorkspace" : "connectProjectWorkspace", { rootPath: path });
-        catalog = result;
+        var connected = (result.projects || []).find(function (item) { return item.workspaceId === result.selectedWorkspaceId; });
+        if (!catalog || !connected) catalog = result;
+        else {
+          var existing = projects().find(function (item) { return item.workspaceId === connected.workspaceId; });
+          if (existing) {
+            var chats = existing.chats;
+            Object.assign(existing, connected);
+            if (chats) existing.chats = chats;
+          } else catalog.projects.push(connected);
+        }
         if (version === serial && !request.cancelled && !el("Connection").hidden) {
           selectedWorkspaceId = result.selectedWorkspaceId; active = null; notice("");
         }

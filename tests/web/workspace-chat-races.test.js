@@ -314,6 +314,122 @@ const root = path.resolve(__dirname, '../..');
     assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-cancel', {exact:true}).count(),
       'the completed connection still appears in the tree');
     assert.equal(await page.locator('#projectChatConnectionCancel').textContent(), 'Отмена');
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.renameReply = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'renameProjectChat') await new Promise(resolve => { renameReply.release = resolve; });
+        return result;
+      };
+    });
+    const renamedRow = page.locator('[data-tree-key="project-chat:preview-data-workspace:preview-project-review"]');
+    page.once('dialog', dialog => dialog.accept('Новое имя беседы'));
+    await renamedRow.hover();
+    await renamedRow.getByRole('button', {name:/Переименовать чат/}).click();
+    await page.waitForFunction(() => !!renameReply.release);
+    await page.locator('#projectChatNew').click();
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot()?.sessionId?.startsWith('preview-project-') &&
+      RNAssistantProjectChats.snapshot().sessionId !== 'preview-project-review');
+    const createdDuringRename = await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId);
+    const createdRow = page.locator('[data-tree-key="project-chat:preview-data-workspace:' + createdDuringRename + '"]');
+    assert.equal(await createdRow.count(), 1);
+    await page.evaluate(async () => { renameReply.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(await createdRow.count(), 1,
+      'a late rename catalog must not hide a chat created while the rename was pending');
+    assert.match(await renamedRow.textContent(), /Новое имя беседы/,
+      'the renamed chat must still show its confirmed title');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.failedRename = {reject:null};
+      window.send = function (type, payload) {
+        if (type === 'renameProjectChat') return new Promise((resolve, reject) => {
+          failedRename.reject = reject;
+        });
+        return original(type, payload);
+      };
+    });
+    page.once('dialog', dialog => dialog.accept('Ещё одно имя'));
+    await renamedRow.hover();
+    await renamedRow.getByRole('button', {name:/Переименовать чат/}).click();
+    await page.waitForFunction(() => !!failedRename.reject);
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
+    await page.evaluate(async () => {
+      failedRename.reject(new Error('Previous chat rename failed'));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    assert.doesNotMatch(await page.locator('#workspaceChatNotice').textContent(), /Previous chat rename failed/,
+      'a late rename error must not appear in a newly selected chat');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.deleteCatalogReply = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'deleteProjectChat') await new Promise(resolve => { deleteCatalogReply.release = resolve; });
+        return result;
+      };
+    });
+    page.once('dialog', dialog => dialog.accept());
+    await renamedRow.hover();
+    await renamedRow.getByRole('button', {name:/Удалить чат/}).click();
+    await page.waitForFunction(() => !!deleteCatalogReply.release);
+    await page.locator('#projectChatNew').click();
+    await page.waitForFunction(previousId => RNAssistantProjectChats.snapshot()?.sessionId?.startsWith('preview-project-') &&
+      RNAssistantProjectChats.snapshot().sessionId !== previousId, createdDuringRename);
+    const createdDuringDelete = await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId);
+    const rowCreatedDuringDelete = page.locator('[data-tree-key="project-chat:preview-data-workspace:' + createdDuringDelete + '"]');
+    assert.equal(await rowCreatedDuringDelete.count(), 1);
+    await page.evaluate(async () => { deleteCatalogReply.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(await rowCreatedDuringDelete.count(), 1,
+      'a late delete catalog must not hide a chat created while deletion was pending');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.historyCatalogReply = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'deleteProjectHistory') await new Promise(resolve => { historyCatalogReply.release = resolve; });
+        return result;
+      };
+    });
+    const removedHistoryRow = page.locator('[data-tree-key^="project:"]').filter({hasText:'rna-connected-current'}).first();
+    page.once('dialog', dialog => dialog.accept());
+    await removedHistoryRow.locator(':scope > .navigation-tree-row').hover();
+    await removedHistoryRow.locator('button[title^="Удалить историю"]').click();
+    await page.waitForFunction(() => !!historyCatalogReply.release);
+    await page.locator('#projectChatNew').click();
+    await page.waitForFunction(previousId => RNAssistantProjectChats.snapshot()?.sessionId?.startsWith('preview-project-') &&
+      RNAssistantProjectChats.snapshot().sessionId !== previousId, createdDuringDelete);
+    const createdDuringHistoryDelete = await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId);
+    const rowCreatedDuringHistoryDelete = page.locator('[data-tree-key="project-chat:preview-data-workspace:' + createdDuringHistoryDelete + '"]');
+    assert.equal(await rowCreatedDuringHistoryDelete.count(), 1);
+    await page.evaluate(async () => { historyCatalogReply.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(await rowCreatedDuringHistoryDelete.count(), 1,
+      'a late history deletion catalog must not hide a chat created while deletion was pending');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.connectionCatalogReply = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'connectProjectWorkspace') await new Promise(resolve => { connectionCatalogReply.release = resolve; });
+        return result;
+      };
+    });
+    await page.locator('#projectChatWorkspaceMenu summary').click();
+    await page.locator('#projectChatConnect').click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/rna-connected-race');
+    await page.locator('#projectChatConnectionSubmit').click();
+    await page.waitForFunction(() => !!connectionCatalogReply.release);
+    const concurrentlyRenamed = page.locator('[data-tree-key="project-chat:preview-data-workspace:preview-project-clean"]');
+    page.once('dialog', dialog => dialog.accept('Название после подключения'));
+    await concurrentlyRenamed.hover();
+    await concurrentlyRenamed.getByRole('button', {name:/Переименовать чат/}).click();
+    await page.waitForFunction(() => document.querySelector('[data-tree-key="project-chat:preview-data-workspace:preview-project-clean"]')
+      ?.textContent.includes('Название после подключения'));
+    await page.evaluate(async () => { connectionCatalogReply.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.match(await concurrentlyRenamed.textContent(), /Название после подключения/,
+      'a late connection catalog must not revert a chat renamed while connection was pending');
+    assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-race', {exact:true}).count());
     console.log('PASS workspace snapshot ordering, running-chat reconnect and plugin selection during a pending reply');
   } finally {
     await browser.close();
