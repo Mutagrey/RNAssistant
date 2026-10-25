@@ -242,7 +242,8 @@ checking one request identity and one persisted user message.
 terminal response in both screens and switches plugin selection before an input
 reply arrives; completed chats must remain writable without stale busy state.
 It also opens a run started outside the panel and observes completion through
-read-only polling in both project and plugin views.
+read-only polling in both project and plugin views. Late create, cancel, delete
+and project-connection replies retain the newer chat selection.
 `node tests/web/workspace-chat-run-notice.test.js` presents a failed typed run
 through the real project and plugin panels, checks their common Office notice,
 and verifies shared message rendering of reflection, tool activity and finish

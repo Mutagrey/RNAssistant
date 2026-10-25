@@ -17,6 +17,8 @@ Late chat and history deletion responses also no longer reopen the plugin after
 the user selects another project.
 An in-flight project file upload now locks text send only in its source chat;
 the single file-upload slot stays explicit while another chat remains writable.
+Late project-connection responses retain a newer user selection while still
+refreshing the tree; a connection without intervening navigation opens its project.
 
 ## Right preview header — 2026-10-25
 

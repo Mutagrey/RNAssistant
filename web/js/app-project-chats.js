@@ -447,16 +447,23 @@
         el("ConnectionPath").focus();
       });
     });
-    el("ConnectionCancel").addEventListener("click", function () { el("Connection").hidden = true; });
+    el("ConnectionCancel").addEventListener("click", function () { ++serial; el("Connection").hidden = true; });
     el("Connection").addEventListener("submit", async function (event) {
       event.preventDefault(); if (busy) return;
       var path = el("ConnectionPath").value.trim(); if (!path) return;
+      var version = ++serial, mode = connectionMode;
       busy = true; render();
       try {
-        var result = await send(connectionMode === "create" ? "createProjectWorkspace" : "connectProjectWorkspace", { rootPath: path });
-        catalog = result; selectedWorkspaceId = result.selectedWorkspaceId; active = null;
-        el("Connection").hidden = true; el("ConnectionPath").value = ""; notice(""); render();
-      } catch (error) { notice(error.detail || error.message, true); }
+        var result = await send(mode === "create" ? "createProjectWorkspace" : "connectProjectWorkspace", { rootPath: path });
+        catalog = result;
+        if (version === serial && !el("Connection").hidden) {
+          selectedWorkspaceId = result.selectedWorkspaceId; active = null; notice("");
+        }
+        el("Connection").hidden = true;
+        if (el("ConnectionPath").value.trim() === path) el("ConnectionPath").value = "";
+        render();
+      } catch (error) { if (version === serial && !el("Connection").hidden)
+        notice(error.detail || error.message, true); }
       finally { busy = false; render(); }
     });
     var chatActions = {

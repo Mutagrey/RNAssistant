@@ -239,6 +239,38 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.evaluate(() => deleteReply.pluginSelections), expectedPluginSelections,
       'late history deletion must not reopen the plugin after another project was selected');
     assert.equal(await page.evaluate(() => RNAssistantWorkspaceChat.owner()), 'project');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.connectionReply = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'connectProjectWorkspace') await new Promise(resolve => { connectionReply.release = resolve; });
+        return result;
+      };
+    });
+    await page.locator('#projectChatWorkspaceMenu summary').click();
+    await page.locator('#projectChatConnect').click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/rna-connected-race');
+    await page.locator('#projectChatConnectionSubmit').click();
+    await page.waitForFunction(() => !!connectionReply.release);
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
+    await page.evaluate(async () => {
+      connectionReply.release();
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.workspaceId()), 'preview-data-workspace',
+      'late connection must not change a project selected while its response was pending');
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId), 'preview-project-clean');
+    assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-race', {exact:true}).count(),
+      'the newly connected project remains available in the tree');
+    await page.evaluate(() => { send = sendBeforeSelectionRace; });
+    await page.locator('#projectChatWorkspaceMenu summary').click();
+    await page.locator('#projectChatConnect').click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/rna-connected-current');
+    await page.locator('#projectChatConnectionSubmit').click();
+    await page.waitForFunction(() => document.querySelector('#projectChatContext').textContent.includes('rna-connected-current'));
+    assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-current', {exact:true}).count(),
+      'connecting without a later selection still opens the new project');
     console.log('PASS workspace snapshot ordering, running-chat reconnect and plugin selection during a pending reply');
   } finally {
     await browser.close();
