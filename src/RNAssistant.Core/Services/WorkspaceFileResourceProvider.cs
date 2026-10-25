@@ -60,6 +60,50 @@ namespace RNAssistant.Core.Services
             return result;
         }
 
+        public ResourceFindPage FindPaths(string directory, string query, bool recursive, string[] include,
+            string[] exclude, CancellationToken token)
+        {
+            var paths = _files.FindPaths(_workspace, directory, recursive, include, exclude, token);
+            var result = new ResourceFindPage { Scope = "workspace", Directory = directory ?? "", Query = query,
+                Complete = paths.Complete, UnavailableScopes = paths.Unavailable };
+            var matches = paths.Paths.Where(path => string.IsNullOrEmpty(query) ||
+                path.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0).ToList();
+            foreach (var target in matches.Take(200))
+                result.Items.Add(new ResourceFindCandidate { Target = target, Title = Path.GetFileName(target),
+                    Type = "file", Scope = "workspace", Mutable = !_workspace.ReadOnly,
+                    Representations = new List<string> { ResourceRepresentations.Metadata, ResourceRepresentations.Text },
+                    Usage = "Read this target for exact content; metadata discovery is not source evidence." });
+            result.Total = matches.Count;
+            result.Complete &= matches.Count <= 200;
+            if (!result.Complete) result.AvailabilityHint = "Discovery is incomplete; narrow directory, query or globs.";
+            return result;
+        }
+
+        public ResourceSearchSources SearchSources(ResourceTextSearchRequest request, CancellationToken token)
+        {
+            var result = new ResourceSearchSources();
+            IEnumerable<string> targets;
+            if (!string.IsNullOrEmpty(request.Target)) targets = new[] { request.Target };
+            else
+            {
+                if (request.Scope != "workspace") throw new ResourceRequestException("Unsupported workspace search scope.", "resource_search_unsupported", false);
+                var paths = _files.FindPaths(_workspace, request.Directory, request.Recursive,
+                    request.IncludeGlobs, request.ExcludeGlobs, token);
+                result.Complete = paths.Complete; result.Unavailable = paths.Unavailable; targets = paths.Paths;
+            }
+            foreach (var target in targets)
+            {
+                var capturedTarget = target;
+                result.Items.Add(new ResourceSearchSource { Target = target, Open = cancellation => {
+                    var snapshot = _files.CaptureFile(_workspace, capturedTarget, 64L * 1024 * 1024, cancellation);
+                    var stream = _files.OpenExactRead(_workspace, capturedTarget, snapshot.Reference, 64L * 1024 * 1024, cancellation);
+                    return new ResourceSearchText { Reference = snapshot.Reference,
+                        Reader = new StreamReader(stream, new UTF8Encoding(false, true), false, 81920) };
+                } });
+            }
+            return result;
+        }
+
         public ResourceReadObservation Read(string relativePath, int? startLine = null, int? lineCount = null,
             CancellationToken token = default(CancellationToken),
             int maximumCharacters = WorkspaceFileService.MaximumWindowTextCharacters)

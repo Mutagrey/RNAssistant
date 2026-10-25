@@ -50,6 +50,11 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("text search: workspace exact continuation", TextSearchWorkspaceAndContinuation),
+                Test("text search: regex and coverage", TextSearchRegexAndCoverage),
+                Test("text search: schemas and presentation", TextSearchSchemasAndPresentation),
+                Test("text search: Office parity", TextSearchOfficeParity),
+                Test("text search: mixed project experiment", TextSearchMixedProjectExperiment),
                 Test("plugins: immutable publications and independent grants", PluginsPublishAndSeparateAuthority),
                 Test("plugins: paged published history and guarded restore", PluginsPublishedHistoryAndRestore),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),

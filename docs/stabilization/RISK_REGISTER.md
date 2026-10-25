@@ -8,6 +8,18 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Text exploration performance and qualification — 2026-10-25
+
+Open qualification/performance gap; owners: Core search / Application workspace / Office Gateway.
+The common search matcher and workspace/VBA/HTML routing are checked host-neutral. A 505-source
+in-memory fixture needs 2005 opens across six continuation calls because prior sources are
+revalidated; this is not a disk or Office latency measurement. Workspace capture is bounded per
+source, while live Office source capture may materialize whole modules. Large real project/VBE
+latency, exact native session/reset behavior, Windows/WebView2 delivery and real-model A/B remain
+unqualified. Continue with narrower scopes when work bounds are reached; no automatic index,
+semantic-reference completeness, rehydrated continuation after restart or performance target
+is claimed. Plan/evaluation protocol: [Tools](../proposals/tools-architecture-plan.md).
+
 ## Inspector terminal action status — 2026-10-25
 
 Fixed host-neutral, 2026-10-25; original severity P2. Owner: Web chat Inspector

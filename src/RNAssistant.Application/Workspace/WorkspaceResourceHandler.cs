@@ -66,7 +66,8 @@ namespace RNAssistant.Runtime
                         return Return(ToolResult.Ok(ResourceFindProjection.Message(attachments),
                             ResourceFindProjection.Serialize(attachments), attachments.ResourceRefs));
                     }
-                    var page = type == "plan" ? _plans.Find(Value(context, "query")) : type == "file" ? _files.Find(Value(context, "directory"), Value(context, "query")) :
+                    var page = type == "plan" ? _plans.Find(Value(context, "query")) : type == "file" ? (context.Arguments.ContainsKey("recursive") || context.Arguments.ContainsKey("includeGlobs") || context.Arguments.ContainsKey("excludeGlobs")
+                        ? FindPaths(context, cancellationToken) : _files.Find(Value(context, "directory"), Value(context, "query"))) :
                         SkillCatalogService.Find(_skills(), Value(context, "query"));
                     if (type == "file")
                         foreach (var item in page.Items)
@@ -302,6 +303,12 @@ namespace RNAssistant.Runtime
                     message += " For workspace root, omit directory or use null; otherwise use a safe workspace-relative directory.";
                 return Return(ToolResult.Error(message, JsonConvert.SerializeObject(new ResourceFailure { Code = error.Code })));
             }
+        }
+
+        private ResourceFindPage FindPaths(ToolHandlerContext context, CancellationToken token)
+        {
+            var request = ResourceModelSearchSchema.Parse(context.Arguments);
+            return _files.FindPaths(request.Directory, request.Query, request.Recursive, request.IncludeGlobs, request.ExcludeGlobs, token);
         }
 
         private sealed class ResourceFailure

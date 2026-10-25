@@ -10,6 +10,57 @@ Read its normative documents in order: [URF](stabilization/resource-cutover/UNIV
 This file maps implementation owners, not a fourth normative architecture.
 Earlier R61 whole-read/accepted-tool-result binding explanations are superseded.
 
+## Shared text exploration — 2026-10-25
+
+`common.resources_search` keeps its public ID. Office accepts one semantic `target`
+or `scope=vba|html`; workspace accepts a relative file `target` or `scope=workspace`.
+A workspace with a bound Office document additionally accepts `scope=vba`, or
+`type=office` plus target. The same Core closed schema and matcher serve both routes.
+Required `query`, optional `mode=literal|regex`, `matchCase`, `limit` (1–50, default 20).
+Workspace scope additionally accepts `directory`, `recursive` (default false),
+`includeGlobs`/`excludeGlobs` (up to 16 workspace-relative patterns, case-sensitive,
+`*`, `?`, `**`, `**/`; no character classes, braces or negation).
+
+Streaming search is line-oriented; regex is .NET culture-invariant with 100 ms
+match timeout. Legacy single-target literal search preserves multiline and indexed
+artifact behavior, including part coordinates and long lines. No parser/LSP/index
+is required, including for unknown extensions. String matches are candidates,
+not verified references or a complete call graph. The model chooses queries/depth.
+
+Results distinguish `scanComplete`, `sourceComplete`, `matchesComplete`, bounded
+matches and `unavailableScopes`/`incompleteReasons`. `totalMatches` is cumulative
+for a continuation chain and is exact only when `totalMatchesExact=true`.
+New matches expose semantic target and 1-based UTF-16 `startLine/startColumn`;
+indexed literal artifacts retain their existing `partNumber` navigation.
+Exact ResourceRefs remain only in runtime results. Search does not grant complete
+source-read or patch authorization; read the selected source before editing.
+
+Continuation is `{afterTarget,afterLine,afterColumn}`; 0/0 means after the entire
+target. Repeat the identical options and exact returned coordinates. One ephemeral
+chain per handler retains ordered target membership and exact source pins, never
+another content store. Changes to membership or observed sources reject it;
+restart/catalog refresh may discard the handler and then continuation explicitly
+returns `resource_search_stale`. Start a fresh query, without silently replaying
+an old page. Previous coverage gaps cannot disappear on a later page. There is
+no atomic snapshot of the entire directory tree across independent calls.
+
+Per-call work bounds: 5000 traversal entries, 100 searched sources, 8 Mi UTF-16
+characters; regex lines above 65536 characters are skipped explicitly. A source
+page can continue; character/regex limits require narrowing the scope or reading
+ranges. Workspace capture/open has a 64 MiB per-source operation budget. These
+search-operation budgets do not reinstate a file/source size limit for reads or
+writes. Existing live Office capture may still materialize a whole module; this
+is not constant-memory COM qualification. Continuation revalidation can reread
+prior sources and is not an incremental index. CAS retention remains source-owned.
+
+`common.resources_find` keeps its default directory browsing. Its workspace file
+branch additionally accepts recursive/glob selectors for bounded nested file-only
+metadata discovery. Protected paths and links are excluded by the existing file
+owner; cancelled/inaccessible/truncated work never proves absence. The new path
+returns at most 200 matches and instructs narrowing when incomplete; directory
+browser paging remains independent. Model-facing pagination is provided for
+content search, not a new opaque discovery cursor.
+
 ## Source sizes and context budgets — 2026-10-22
 
 Text source size is not a model-context limit. Complete text is delivered when it
@@ -131,8 +182,8 @@ It scans at most 5000 entries; truncation reports `complete=false` with a narrow
 hint. Unavailable entries populate `unavailableScopes` and cannot prove an empty
 result. `scannedEntries` remains diagnostic metadata, outside the model projection. File descriptors expose metadata/stat without reading content or
 claiming an exact revision. The returned targets are sorted within the
-captured window, not across a truncated directory. Model discovery has no pagination
-or recursive search. The same file owner's application browser uses offsets and
+captured window, not across a truncated directory. Default directory discovery has no pagination; explicit recursive/glob discovery
+and scoped content-search continuation are described above. The same file owner's application browser uses offsets and
 50-row metadata pages within that sorted window; it reports scan truncation separately
 from remaining pages. Browsing stats entries without retaining bodies or publishing
 source authority. Protected metadata and credential-shaped names stay hidden.

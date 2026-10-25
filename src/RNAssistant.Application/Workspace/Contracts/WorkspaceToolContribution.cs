@@ -25,6 +25,7 @@ namespace RNAssistant.Runtime.Contracts
         public IReadOnlyList<WorkspaceToolContribution> Tools { get; set; }
         public IReadOnlyToolHandler ResourceFind { get; set; }
         public IReadOnlyToolHandler ResourceRead { get; set; }
+        public IReadOnlyToolHandler ResourceSearch { get; set; }
         public IToolMutationObserver MutationObserver { get; set; }
         // Pure model projection for the bound host's tool results; no live host reads.
         public ModelResultProjection ModelProjection { get; set; }

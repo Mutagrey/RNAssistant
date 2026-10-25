@@ -72,6 +72,7 @@ namespace RNAssistant.Office.Services
                             : new UnavailableOfficeMutation() }).ToArray();
                 result.ResourceFind = new UnavailableOfficeRead();
                 result.ResourceRead = new UnavailableOfficeRead();
+                result.ResourceSearch = new UnavailableOfficeRead();
                 result.MutationObserver = new UnavailableOfficeMutationObserver();
                 return result;
             }
@@ -79,14 +80,15 @@ namespace RNAssistant.Office.Services
             var session = OfficeSession(target, workspaceSession, runId);
             var resourceTools = ResourceToolCatalog.GetControllerTools()
                 .Where(item => item.Id == ResourceToolCatalog.FindToolId ||
-                    item.Id == ResourceToolCatalog.ReadToolId).ToArray();
+                    item.Id == ResourceToolCatalog.ReadToolId || item.Id == ResourceToolCatalog.SearchToolId).ToArray();
             var native = _executor.CreateNativeRuntime(session, tools.Concat(resourceTools),
                 settings ?? new AppSettings(), ChatModes.Agent, trace: false, manualRun: true);
             result.Tools = tools.Select(item => new WorkspaceToolContribution
                 { Entry = item, Handler = native.HandlerFor(item.Id) }).ToArray();
             result.ResourceFind = native.HandlerFor(ResourceToolCatalog.FindToolId) as IReadOnlyToolHandler;
             result.ResourceRead = native.HandlerFor(ResourceToolCatalog.ReadToolId) as IReadOnlyToolHandler;
-            if (result.Tools.Any(item => item.Handler == null) || result.ResourceFind == null || result.ResourceRead == null)
+            result.ResourceSearch = native.HandlerFor(ResourceToolCatalog.SearchToolId) as IReadOnlyToolHandler;
+            if (result.Tools.Any(item => item.Handler == null) || result.ResourceFind == null || result.ResourceRead == null || result.ResourceSearch == null)
                 throw new InvalidOperationException("The bound Office tool handlers are incomplete.");
             result.MutationObserver = new ResourceMutationAuthorityObserver(
                 _executor.ResourceAuthority, new ResourceMutationJournal(_paths), session, _executor.Payloads);

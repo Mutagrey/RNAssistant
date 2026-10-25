@@ -211,6 +211,11 @@
     <Compile Include="ModelProtocol\ConversationResponseHistoryReader.cs" />
     <Compile Include="Models\VbaModels.cs" />
     <Compile Include="Models\ResourceFindReadModels.cs" />
+    <Compile Include="Models\ResourceTextSearch.cs" />
+    <Compile Include="Services\ResourceModelSearchSchema.cs" />
+    <Compile Include="Services\ResourceTextSearch.cs" />
+    <Compile Include="Services\ResourcePathFilter.cs" />
+    <Compile Include="Storage\WorkspaceFileService.Search.cs" />
     <Compile Include="Models\ResourceTree.cs" />
     <Compile Include="Models\ResourceProcedureSelection.cs" />
     <Compile Include="Llm\LlmClient.cs" />

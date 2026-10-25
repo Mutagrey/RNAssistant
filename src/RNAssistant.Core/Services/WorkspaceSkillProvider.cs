@@ -18,7 +18,7 @@ namespace RNAssistant.Core.Services
 @"# Workspace files
 Use for tasks that create, inspect or edit real workspace files.
 
-1. Identify the required files and completion checks. Use common.resources_find for an unfamiliar directory; known relative paths can be read directly with common.resources_read (type=file).
+1. Identify the required files and completion checks. Use common.resources_find for an unfamiliar directory (recursive/glob selectors are available), and common.resources_search for literal or regex content across scope=workspace; choose the scope and depth yourself. Search snippets are not source-read authorization; known relative paths can be read directly with common.resources_read (type=file).
 2. Before editing, reuse current source already included from a read or verified after-state; read missing/stale source. Use files.create only for a new path. Success means it exists; do not create it again. After an already-existing error, read its current content.
 3. Use files.patch for one unique exact anchor inside an observed excerpt of a UTF-8 file. The model context bounds each supplied fragment; the file owner streams large source and result through an exact-revision write. files.replace requires complete current source and an intended whole-file change. A failed call is not a change; reconcile an unknown effect before continuing and never retry it automatically.
 4. Verify the changed behavior with the available task checks. A write read-back confirms bytes, not application behavior. A skill read supplies instructions, not file source or mutation permission.
@@ -50,7 +50,7 @@ For a plugin annotation, inspect plugin.json and only its declared HTML/CSS/JS s
 
         private static SkillDefinition Skill(string id, string name, string description, string body)
         {
-            var tools = new List<string> { "common.resources_find", "common.resources_read", "files.create", "files.patch", "files.replace" };
+            var tools = new List<string> { "common.resources_find", "common.resources_read", "common.resources_search", "files.create", "files.patch", "files.replace" };
             if (id == WebId) tools.Add("web.verify");
             return new SkillDefinition { Id = id, Host = "Workspace", Name = name, Description = description,
                 BodyMarkdown = body,

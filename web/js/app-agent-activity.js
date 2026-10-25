@@ -197,6 +197,7 @@ function activityPrimaryText(activity) {
 function activityTypedResultSummary(activity) {
   var kinds = {
     "common.resources_find": "resource-find",
+    "common.resources_search": "resource-search",
     "common.resources_read": "resource-read",
     "common.capabilities_search": "capability-search",
     "common.capabilities_read": "capability-read"

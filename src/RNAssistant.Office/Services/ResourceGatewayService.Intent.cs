@@ -15,6 +15,65 @@ namespace RNAssistant.Office.Services
         private const int MaximumIntentResults = 20;
         private const int IntentSnippetCharacters = 600;
 
+        internal ResourceWithinSearchPage SearchText(ChatSession session, ResourceTextSearchRequest request,
+            ResourceTextSearch search, System.Threading.CancellationToken token)
+        {
+            var sources = new ResourceSearchSources();
+            var targets = new List<string>();
+            if (!string.IsNullOrEmpty(request.Target))
+            {
+                // Preserve existing literal target search (including multiline queries, long lines and indexed parts).
+                // It is a provider optimization, not another model-facing tool or authority path.
+                if (request.Mode == "literal" && request.Continuation == null)
+                {
+                    var page = SearchWithin(session, request.Target, request.Query, request.Limit, request.MatchCase, token);
+                    if (page.TotalMatches <= request.Limit)
+                    {
+                        page.ExactReferences.Add(page.ExactReference);
+                        page.MatchesComplete = page.ScanComplete && page.SourceComplete;
+                        page.TotalMatchesExact = page.ScanComplete && page.SourceComplete;
+                        if (!page.ScanComplete) page.IncompleteReasons.Add("source_scan_incomplete");
+                        if (!page.SourceComplete) page.IncompleteReasons.Add("source_text_incomplete");
+                        foreach (var match in page.Matches) match.Target = request.Target;
+                        return page;
+                    }
+                }
+                targets.Add(request.Target);
+            }
+            else
+            {
+                if (request.Scope != "vba" && request.Scope != "html")
+                    throw new ResourceRequestException("Select scope vba or html.", "resource_search_unsupported", false);
+                var unavailable = new HashSet<string>(StringComparer.Ordinal);
+                var truncated = false;
+                var plans = IntentPlansForScope(request.Scope).ToList();
+                if (plans.Count == 0) unavailable.Add(request.Scope);
+                var states = EnumerateIntentResources(session, plans, unavailable, null, ref truncated);
+                AssignIntentTargets(states);
+                targets.AddRange(states.Where(state => ScopeMatches(request.Scope, state.Scope) &&
+                    (state.Descriptor.Representations.Contains(ResourceRepresentations.Source) ||
+                     state.Descriptor.Representations.Contains(ResourceRepresentations.Text))).Select(state => state.Target));
+                sources.Complete = !truncated && unavailable.Count == 0;
+                sources.Unavailable = unavailable.ToList();
+            }
+            foreach (var target in targets)
+            {
+                var currentTarget = target;
+                sources.Items.Add(new ResourceSearchSource { Target = target, Open = cancellation => {
+                    cancellation.ThrowIfCancellationRequested();
+                    var selected = ResolveIntentTarget(session, currentTarget);
+                    var representation = selected.Descriptor.Representations.Contains(ResourceRepresentations.Source)
+                        ? ResourceRepresentations.Source : ResourceRepresentations.Text;
+                    var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
+                    var read = ReadWhole(session, reference, representation, cancellation).Result;
+                    if (read.Text == null) throw new ResourceRequestException("Target has no text/source.", "resource_search_unsupported", false);
+                    return new ResourceSearchText { Reader = new System.IO.StringReader(read.Text),
+                        Reference = read.Resource.Reference, SourceComplete = read.SourceComplete != false && read.Complete };
+                } });
+            }
+            return search.Search(request, sources, token);
+        }
+
         internal ResourceWithinSearchPage SearchWithin(ChatSession session, string target, string query,
             int limit, bool matchCase, System.Threading.CancellationToken cancellationToken)
         {
@@ -58,6 +117,7 @@ namespace RNAssistant.Office.Services
             page.ExactReference = read.Resource.Reference.Copy();
             page.SourceComplete = read.SourceComplete != false;
             page.ScanComplete = page.SourceComplete;
+            var line = 1; var column = 1; var coordinateOffset = 0;
             for (var position = 0; position <= read.Text.Length - query.Length;)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -68,8 +128,15 @@ namespace RNAssistant.Office.Services
                 if (page.Matches.Count < limit)
                 {
                     var start = Math.Max(0, hit - 200);
-                    page.Matches.Add(new ResourceWithinSearchItem { Snippet = read.Text.Substring(start,
-                        Math.Min(600, read.Text.Length - start)) });
+                    while (coordinateOffset < hit)
+                    {
+                        var c = read.Text[coordinateOffset++];
+                        if (c == '\r' || c == '\n' && (coordinateOffset < 2 || read.Text[coordinateOffset - 2] != '\r'))
+                        { line++; column = 1; }
+                        else if (c != '\n') column++;
+                    }
+                    page.Matches.Add(new ResourceWithinSearchItem { Target = target, StartLine = line, StartColumn = column,
+                        Snippet = read.Text.Substring(start, Math.Min(600, read.Text.Length - start)) });
                 }
                 position = hit + 1;
             }
@@ -839,9 +906,9 @@ namespace RNAssistant.Office.Services
             ResourceDescriptor descriptor)
         {
             if (type == "VBA project")
-                return "Read structure for the complete component inventory. To search code across the project, use common.resources_find with scope=vba and query; use common.resources_search only on a VBA module target.";
+                return "Read structure for the complete component inventory. To search code across the project, use common.resources_find with scope=vba and query; use common.resources_search with scope=vba for literal/regex occurrences across modules.";
             if (type == "VBA module")
-                return "Read source directly; procedure selects a unique VBA procedure, optionally qualified by procedureKind for a property accessor. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use common.resources_search for literal occurrences. Live VBA modules do not support common.resources_outline or partNumber.";
+                return "Read source directly; procedure selects a unique VBA procedure, optionally qualified by procedureKind for a property accessor. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use common.resources_search for literal/regex occurrences. Live VBA modules do not support common.resources_outline or partNumber.";
             if (type == "HTML file")
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")

@@ -192,7 +192,7 @@ namespace RNAssistant.Core.Services
             var result = name == "common.resources_find"
                 ? SelectFields(data, "scope", "query", "items", "total", "complete", "availabilityHint", "unavailableScopes", "directory", "code", "retryable")
                 : name == "common.resources_search"
-                ? SelectFields(data, "target", "query", "matches", "totalMatches", "scanComplete", "sourceComplete", "code", "retryable")
+                ? SelectFields(data, "target", "scope", "query", "mode", "matches", "totalMatches", "totalMatchesExact", "scanComplete", "sourceComplete", "matchesComplete", "incompleteReasons", "unavailableScopes", "continuation", "code", "retryable")
                 : name == "common.resources_outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "startPage", "requestedPages", "nextPageIndex", "pageCount", "kind", "target", "type", "scope",
@@ -234,7 +234,9 @@ namespace RNAssistant.Core.Services
                 }));
             if (name == "common.resources_search" && result["matches"] is JArray)
                 result["matches"] = new JArray(((JArray)result["matches"]).Select(item => SelectFields(item,
-                    "snippet", "partNumber", "sectionTitle")));
+                    "target", "startLine", "startColumn", "snippet", "partNumber", "sectionTitle")));
+            if (name == "common.resources_search" && result["continuation"] != null)
+                result["continuation"] = SelectFields(result["continuation"], "afterTarget", "afterLine", "afterColumn");
             if (name == "common.resources_outline" && result["parts"] is JArray)
                 result["parts"] = new JArray(((JArray)result["parts"]).Select(item =>
                 {

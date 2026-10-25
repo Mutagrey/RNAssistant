@@ -114,11 +114,21 @@ the first feature family in the next segment: `common.resources_read` →
 and are shared with the demo; tool IDs, schemas and bindings do not change.
 
 Office publishes `common.resources_find/read/search/outline` as direct, read-only
-semantic resource tools. Search operates inside one discovered target; outline
-pages indexed document text parts. `resources_read.partNumber` is a bounded
+semantic resource tools. Search accepts one target or a scoped VBA/HTML collection with literal/regex matching;
+outline pages indexed document text parts. Workspace supplies the same search ID for
+relative files and recursive/glob scopes; a bound Office document adds VBA/Office targets. `resources_read.partNumber` is a bounded
 source/text selector, not a raw URI, cursor or mutation guard. The exact
 provider/index limits and incomplete-source semantics are owned by
 [Resource Fabric](resource-fabric.md#large-document-text-navigation--2026-10-14).
+
+Search is a direct read capability with exact binding revision `resources.search.v3`
+in Office. It is not marked independent-batch read because continuation state belongs
+to its handler. Workspace registers the exact same Core schema owner; descriptor,
+policy and binding changes participate in existing snapshot compatibility checks.
+The current finite Office bootstrap remains unchanged; discover/admit search normally.
+Search details use existing typed result blocks and activity summaries; Inspector still
+shows the saved request/result, not a second reconstructed log. Five VBA captions now
+use the active catalog constants and moduleName rather than retired tool IDs.
 
 ### Excel row and column deletion
 
@@ -149,13 +159,14 @@ is open, including empty tables, totals, formulas, protection and partial COM fa
 
 ### Workspace CLI file tools (development)
 
-The independent CLI advertises `common.resources_find/read` and the exact
+The independent CLI advertises `common.resources_find/read/search` and the exact
 `files.create/copy/move/patch/replace/delete/restore` catalog for writable workspaces.
 CLI `common.resources_find` accepts an optional `directory` and filename `query`.
-It returns at most 200 names from a single directory plus `truncated` and
-`scannedEntries`; a truncated result requires a narrower directory or query and
-does not prove a filename is absent. The scan stops after 5000 entries, and there
-is no cursor or recursive search yet.
+By default it returns at most 200 semantic targets from a single directory, with
+explicit completeness/unavailable-scope information. Scanned-entry counts remain
+diagnostic metadata. An incomplete result requires narrowing and does not prove
+absence. The scan stops after 5000 entries; there is no opaque model cursor. Optional recursive/includeGlobs/excludeGlobs discover nested files;
+common.resources_search supplies bounded content search and semantic continuation.
 `files.move` requires an accepted complete source read and explicit confirmation;
 it preserves identity, verifies the target bytes and source absence, then publishes
 a new revision. The target parent must exist and no existing file or reserved

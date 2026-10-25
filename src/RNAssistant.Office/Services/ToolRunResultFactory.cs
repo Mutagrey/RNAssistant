@@ -80,13 +80,17 @@ namespace RNAssistant.Office.Services
         private static RNAssistant.Core.Models.ToolResultSummary Summarize(string toolId, string dataJson)
         {
             if (string.IsNullOrWhiteSpace(dataJson)) return null;
-            if (toolId != ResourceToolCatalog.FindToolId && toolId != ResourceToolCatalog.ReadToolId &&
+            if (toolId != ResourceToolCatalog.FindToolId && toolId != ResourceToolCatalog.ReadToolId && toolId != ResourceToolCatalog.SearchToolId &&
                 toolId != CapabilityToolCatalog.SearchToolId && toolId != CapabilityToolCatalog.ReadToolId) return null;
             try
             {
                 var data = JObject.Parse(dataJson);
                 if (toolId == ResourceToolCatalog.FindToolId) return ResourceFindToolHandler.Summarize(data);
                 if (toolId == ResourceToolCatalog.ReadToolId) return ResourceReadToolHandler.Summarize(data);
+                if (toolId == ResourceToolCatalog.SearchToolId && data["matches"] is JArray matches)
+                    return new RNAssistant.Core.Models.ToolResultSummary { Kind = "resource-search", ReturnedItems = matches.Count,
+                        Complete = data.Value<bool?>("scanComplete") == true && data.Value<bool?>("sourceComplete") == true && data.Value<bool?>("matchesComplete") == true,
+                        Partial = (data["unavailableScopes"] as JArray)?.Count > 0 };
                 if (toolId == CapabilityToolCatalog.SearchToolId) return CapabilityCatalogService.SummarizeSearch(data);
                 return CapabilityCatalogService.SummarizeRead(data);
             }

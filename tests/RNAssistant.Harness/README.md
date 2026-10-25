@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+`text search:` checks closed workspace/Office schemas, language-independent literal/regex
+matching, Unicode/CRLF coordinates, recursive globs, hidden paths, cancellation,
+exact/stale/lost continuation, cumulative coverage and totals, pathological regex,
+long lines, native VBA ToolRuntime and typed presentation. The mixed-project fixture
+runs six exploration queries through 505 in-memory sources and prints calls, source
+opens, delivered bytes and elapsed time. This is a tool-only experiment, not model
+success/latency evidence or a semantic-reference benchmark. Existing original-text,
+workspace/VBA/HTML patch, v8 and saved-request checks retain their own coverage.
+
+
 `visual selection: workspace intake and common resource read` checks one accepted
 workspace attachment identity through input journal, chat CAS, model prompt and
 `common.resources_read`, plus native plugin-instance staging for active and checked

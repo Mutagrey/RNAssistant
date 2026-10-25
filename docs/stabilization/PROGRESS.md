@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Shared text exploration — 2026-10-25
+
+Owners: Core search contracts/matcher, Application workspace, Office Gateway and presentation.
+The existing common.resources_search now supports scoped literal/regex exploration for workspace,
+VBA and HTML, with closed schemas, exact source pins, semantic continuation and explicit coverage.
+Workspace discovery adds recursive/glob selectors. Search cannot authorize patches; v8 admission,
+mutation owners, events/CAS and the request Inspector remain unchanged. Existing indexed literal
+search keeps long-line/part navigation. Five VBA display entries now use current IDs and module
+arguments; typed search previews expose coordinates and incompleteness.
+Focused host-neutral search, indexed-source, patch/presentation and saved-request checks plus
+Chromium activity/result presentation pass. The mixed-language tool fixture records bounded
+output and revalidation amplification; it is not an autonomous-model comparison. Native
+Windows/Office/WebView2, large real-project latency and real-model A/B remain open in the
+[risk register](RISK_REGISTER.md). [Audit](../audits/tools-architecture-current-state.md) and
+[implementation/evaluation plan](../proposals/tools-architecture-plan.md) retain scope and limits.
+
+
 ## Visual annotation source-edit procedure — 2026-10-25
 
 Owner: Core shared authoring guidance, Office HTML and workspace plugin skills.

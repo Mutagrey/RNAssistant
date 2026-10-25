@@ -333,16 +333,27 @@ namespace RNAssistant.Core.Models
     public sealed class ResourceWithinSearchPage
     {
         [JsonIgnore] public ResourceRef ExactReference { get; set; }
+        [JsonIgnore] public List<ResourceRef> ExactReferences { get; set; } = new List<ResourceRef>();
+        [JsonProperty("scope", NullValueHandling = NullValueHandling.Ignore)] public string Scope { get; set; }
+        [JsonProperty("mode")] public string Mode { get; set; } = "literal";
+        [JsonProperty("matchesComplete")] public bool MatchesComplete { get; set; }
+        [JsonProperty("unavailableScopes")] public List<string> UnavailableScopes { get; set; } = new List<string>();
+        [JsonProperty("incompleteReasons")] public List<string> IncompleteReasons { get; set; } = new List<string>();
+        [JsonProperty("continuation", NullValueHandling = NullValueHandling.Ignore)] public ResourceSearchPosition Continuation { get; set; }
         [JsonProperty("target")] public string Target { get; set; }
         [JsonProperty("query")] public string Query { get; set; }
         [JsonProperty("matches")] public List<ResourceWithinSearchItem> Matches { get; set; } = new List<ResourceWithinSearchItem>();
         [JsonProperty("totalMatches")] public int TotalMatches { get; set; }
+        [JsonProperty("totalMatchesExact")] public bool TotalMatchesExact { get; set; }
         [JsonProperty("scanComplete")] public bool ScanComplete { get; set; }
         [JsonProperty("sourceComplete")] public bool SourceComplete { get; set; }
     }
 
     public sealed class ResourceWithinSearchItem
     {
+        [JsonProperty("target", NullValueHandling = NullValueHandling.Ignore)] public string Target { get; set; }
+        [JsonProperty("startLine", NullValueHandling = NullValueHandling.Ignore)] public int? StartLine { get; set; }
+        [JsonProperty("startColumn", NullValueHandling = NullValueHandling.Ignore)] public int? StartColumn { get; set; }
         [JsonProperty("snippet")] public string Snippet { get; set; }
         [JsonProperty("partNumber", NullValueHandling = NullValueHandling.Ignore)] public int? PartNumber { get; set; }
         [JsonProperty("sectionTitle", NullValueHandling = NullValueHandling.Ignore)] public string SectionTitle { get; set; }

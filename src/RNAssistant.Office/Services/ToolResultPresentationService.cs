@@ -103,6 +103,21 @@ namespace RNAssistant.Office.Services
                     if (reader.Read()) throw new JsonSerializationException("Trailing data.");
                 }
                 if (data == null) return;
+                if (data.Matches != null)
+                {
+                    var block = new ToolListBlockDto { Title = "Совпадения", Complete = data.ScanComplete == true &&
+                        data.SourceComplete == true && data.MatchesComplete == true && data.Matches.Count <= MaxRows };
+                    foreach (var match in data.Matches.Take(MaxRows))
+                    {
+                        if (match == null) { block.Complete = false; continue; }
+                        block.Items.Add(new ToolListItemDto { Title = Clip(match.Target ?? data.Target ?? "Ресурс", 240, block),
+                            Detail = Clip((match.StartLine.HasValue ? "Строка " + match.StartLine + ", столбец " + match.StartColumn + "\n" :
+                                match.PartNumber.HasValue ? "Часть " + match.PartNumber + "\n" : "") + match.Snippet, 2000, block) });
+                    }
+                    blocks.Add(block);
+                    if (!block.Complete) blocks.Add(new ToolTextBlockDto { Title = "Полнота поиска", Complete = false,
+                        Text = "Поиск или выдача неполны. " + string.Join(", ", data.IncompleteReasons ?? new List<string>()) });
+                }
                 var complete = data.Complete != false && !data.Partial && !data.Truncated && !data.Externalized && string.IsNullOrEmpty(data.NextCursor);
                 var table = data.Table ?? (data.Columns != null && data.Rows != null ? new ResourceTableBatch { Columns = data.Columns, Rows = data.Rows, TotalRows = data.TotalRows } : null);
                 if (table?.Columns != null && table.Rows != null)
@@ -172,6 +187,12 @@ namespace RNAssistant.Office.Services
             public List<ResourceTableColumn> Columns { get; set; }
             public List<IDictionary<string, object>> Rows { get; set; }
             public List<PreviewItem> Items { get; set; }
+            public string Target { get; set; }
+            public bool? ScanComplete { get; set; }
+            public bool? SourceComplete { get; set; }
+            public bool? MatchesComplete { get; set; }
+            public List<ResourceWithinSearchItem> Matches { get; set; }
+            public List<string> IncompleteReasons { get; set; }
         }
         private sealed class PreviewItem
         {

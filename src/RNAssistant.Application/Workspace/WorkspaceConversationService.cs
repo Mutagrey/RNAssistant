@@ -920,7 +920,7 @@ namespace RNAssistant.Runtime
                 var maximumFileReadCharacters = Math.Min(WorkspaceFileService.MaximumWindowTextCharacters,
                     ModelContextBudget.ApproximateTextCharacterCapacity(
                         ModelContextBudget.InputBudgetTokens(_settings), _settings));
-                Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Find workspace files (default type=file, one directory, up to 200) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files in one directory, up to 200. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
+                Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Find workspace files (default type=file, up to 200; optional recursive/includeGlobs/excludeGlobs select nested files) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files, up to 200; optional recursive/includeGlobs/excludeGlobs select nested files. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
                     " Use type=attachment to find accepted visual selections in this chat." +
                     (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
                     ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
@@ -936,6 +936,9 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, false, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceRead, _chatAttachments));
+                Register(registry, entries, "common.resources_search", ResourceModelSearchSchema.Description,
+                    ResourceModelSearchSchema.Create(true, office != null), false,
+                    new WorkspaceSearchHandler(_resources.Select("file"), office?.ResourceSearch), independentRead: false);
                 if (webHost != null && webHost.IsAvailable)
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
@@ -1191,6 +1194,7 @@ namespace RNAssistant.Runtime
                 if (find)
                 {
                     properties["query"]["description"] = skill ? "Optional skill search text." : "Optional file-name search text within this directory.";
+                    if (!skill) ResourceModelSearchSchema.AddPathFilters(properties);
                     if (!skill) properties["directory"]["description"] = "Workspace-relative directory. Omit or use null/empty for workspace root; never /, ., .. or an absolute path.";
                 }
                 else
