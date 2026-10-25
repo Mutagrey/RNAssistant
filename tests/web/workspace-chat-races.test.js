@@ -314,6 +314,58 @@ const root = path.resolve(__dirname, '../..');
     assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-cancel', {exact:true}).count(),
       'the completed connection still appears in the tree');
     assert.equal(await page.locator('#projectChatConnectionCancel').textContent(), 'Отмена');
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.connectionDuringChat = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'connectProjectWorkspace') await new Promise(resolve => { connectionDuringChat.release = resolve; });
+        return result;
+      };
+    });
+    await page.locator('#projectChatWorkspaceMenu summary').click();
+    await page.locator('#projectChatConnect').click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/rna-connected-race');
+    await page.locator('#projectChatConnectionSubmit').click();
+    await page.waitForFunction(() => !!connectionDuringChat.release);
+    await page.locator('#chatInput').fill('Сообщение во время подключения');
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'a pending connection must not block sending in the selected chat');
+    await page.locator('#chatInput').press('Enter');
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot()?.messages.some(message =>
+      message.Content === 'Сообщение во время подключения'));
+    await page.evaluate(async () => { connectionDuringChat.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot()?.sessionId), 'preview-project-clean',
+      'the connection must not replace a chat used while it was pending');
+    assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-race', {exact:true}).count());
+    await page.waitForFunction(() => !RNAssistantProjectChats.isBusy());
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.createDuringChat = {release:null, sessionId:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'createProjectChat') {
+          createDuringChat.sessionId = result.sessionId;
+          await new Promise(resolve => { createDuringChat.release = resolve; });
+        }
+        return result;
+      };
+    });
+    await page.locator('#projectChatNew').click();
+    await page.waitForFunction(() => !!createDuringChat.release);
+    await page.locator('#chatInput').fill('Сообщение во время создания чата');
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'a pending chat creation must not block sending in an existing chat');
+    await page.locator('#chatInput').press('Enter');
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot()?.messages.some(message =>
+      message.Content === 'Сообщение во время создания чата'));
+    await page.evaluate(async () => { createDuringChat.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
+    await page.waitForFunction(() => !RNAssistantProjectChats.isBusy());
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot()?.sessionId), 'preview-project-clean',
+      'the created chat must not replace a chat used while creation was pending');
+    const backgroundCreatedId = await page.evaluate(() => createDuringChat.sessionId);
+    assert.equal(await page.locator('[data-tree-key="project-chat:preview-data-workspace:' + backgroundCreatedId + '"]').count(), 1);
     await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
     await page.evaluate(() => {
       const original = window.sendBeforeSelectionRace;
@@ -493,6 +545,13 @@ const root = path.resolve(__dirname, '../..');
     });
     await page.locator('#projectChatNew').click();
     await page.waitForFunction(() => !!staleCreateCatalog.release);
+    const newlySelected = await page.evaluate(() => RNAssistantProjectChats.snapshot()?.sessionId);
+    await page.locator('#chatInput').fill('Первое сообщение нового чата');
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'the new chat must accept input while its catalog refresh is pending');
+    await page.locator('#chatInput').press('Enter');
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot()?.messages.some(message =>
+      message.Content === 'Первое сообщение нового чата'));
     page.once('dialog', dialog => dialog.accept('Имя во время создания'));
     await concurrentlyRenamed.hover();
     await concurrentlyRenamed.getByRole('button', {name:/Переименовать чат/}).click();
@@ -500,6 +559,7 @@ const root = path.resolve(__dirname, '../..');
       ?.textContent.includes('Имя во время создания'));
     await page.evaluate(async () => { staleCreateCatalog.release(); await new Promise(resolve => setTimeout(resolve, 0)); });
     await page.waitForFunction(() => !RNAssistantProjectChats.isBusy());
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot()?.sessionId), newlySelected);
     assert.match(await concurrentlyRenamed.textContent(), /Имя во время создания/,
       'a late create catalog must not revert a title renamed while its read was pending');
     console.log('PASS workspace chat session and catalog races');
