@@ -218,6 +218,7 @@
     <Compile Include="Llm\LlmMessageBuilder.cs" />
     <Compile Include="Llm\LlmRequestDiagnostics.cs" />
     <Compile Include="Llm\LlmRequestModels.cs" />
+    <Compile Include="Llm\LlmRequestComposition.cs" />
     <Compile Include="Llm\LlmResponseModels.cs" />
     <Compile Include="Llm\LlmResponseParser.cs" />
     <Compile Include="Llm\HistoricalContextProjector.cs" />

@@ -122,6 +122,8 @@ namespace RNAssistant.Core.Llm
                     Type = "request",
                     Streaming = settings.StreamResponses,
                     ContextMessages = wireMessages,
+                    RequestComposition = LlmRequestCompositionBuilder.Describe(apiBuild, messageList,
+                        requestOptions.TraceContextReceipt, requestOptions),
                     RequestId = requestDiagnostics.RequestId,
                     Purpose = requestOptions.TracePurpose,
                     Endpoint = traceEndpoint,

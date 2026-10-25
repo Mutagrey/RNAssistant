@@ -90,6 +90,13 @@
 .model-context-source .button { margin-block: 4px; }
 .model-context-omissions { margin: 0 0 8px; }
 .model-context-omissions > summary > small { color: var(--warning); }
+.model-context-composition { margin-bottom: 8px; }
+.model-context-composition-chart { margin: 0 0 4px; height: 12px; }
+.model-context-composition-chart > button { flex: 0 1 0; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; cursor: pointer; }
+.model-context-composition-chart > button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+.model-context-composition .is-unattributed { background: var(--line-strong); }
+.model-context-composition .chat-inspector-composition-dot { flex: 0 0 8px; }
+.model-context-composition-entry { display: block; max-width: calc(100% - 8px); text-align: left; font-size: var(--text-xs); white-space: normal; }
 .model-context-response { padding-top: 18px; }
 .model-context-response + .model-context-response { margin-top: 20px; border-top: 1px solid var(--line); }
 .model-context-response-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }

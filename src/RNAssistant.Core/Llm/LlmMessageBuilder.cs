@@ -75,8 +75,8 @@ namespace RNAssistant.Core.Llm
                         }))
                     });
                     build.MessageParts.Add(SkippedNativeAttachments(message));
-                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
-                    build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
+                    build.AddEstimate(ModelContextBudget.EstimateMessageTokens(message, null, null, false),
+                        ModelContextBudget.EstimateMessageTokens(message, settings, null, false));
                     continue;
                 }
 
@@ -94,8 +94,8 @@ namespace RNAssistant.Core.Llm
                     };
                     build.Messages.Add(toolMessage);
                     build.MessageParts.Add(SkippedNativeAttachments(message));
-                    build.EstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, settings, null, false);
-                    build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateMessageTokens(message, null, null, false);
+                    build.AddEstimate(ModelContextBudget.EstimateMessageTokens(message, null, null, false),
+                        ModelContextBudget.EstimateMessageTokens(message, settings, null, false));
                     continue;
                 }
 
@@ -201,16 +201,13 @@ namespace RNAssistant.Core.Llm
                     foreach (var part in manifest) part.PartIndex = null;
                     build.Messages.Add(new { role = message.Role, content = text });
                     build.MessageParts.Add(manifest);
-                    build.EstimatedPromptTokens += 4 +
-                        ModelContextBudget.EstimateTextTokens(message.Role, settings) +
-                        ModelContextBudget.EstimateTextTokens(text, settings);
-                    build.BaseEstimatedPromptTokens += 4 +
-                        ModelContextBudget.EstimateTextTokens(message.Role) +
-                        ModelContextBudget.EstimateTextTokens(text);
+                    build.AddEstimate(4 + ModelContextBudget.EstimateTextTokens(message.Role) + ModelContextBudget.EstimateTextTokens(text),
+                        4 + ModelContextBudget.EstimateTextTokens(message.Role, settings) + ModelContextBudget.EstimateTextTokens(text, settings));
                     continue;
                 }
 
                 var parts = new List<object> { new { type = "text", text = text } };
+                var audioTokens = 0;
                 foreach (var selectedImage in imageParts)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
@@ -255,17 +252,13 @@ namespace RNAssistant.Core.Llm
                         }
                     });
                     build.HasAudio = true;
-                    build.EstimatedPromptTokens += ModelContextBudget.EstimateAudioTokens(bytes.LongLength);
-                    build.BaseEstimatedPromptTokens += ModelContextBudget.EstimateAudioTokens(bytes.LongLength);
+                    audioTokens += ModelContextBudget.EstimateAudioTokens(bytes.LongLength);
                 }
                 build.Messages.Add(new { role = message.Role, content = parts });
                 build.MessageParts.Add(manifest);
-                build.EstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Role, settings) +
-                    ModelContextBudget.EstimateTextTokens(text, settings) +
-                    imageParts.Count * ModelContextBudget.EstimatedImageTokens;
-                build.BaseEstimatedPromptTokens += 4 + ModelContextBudget.EstimateTextTokens(message.Role) +
-                    ModelContextBudget.EstimateTextTokens(text) +
-                    imageParts.Count * ModelContextBudget.EstimatedImageTokens;
+                var mediaTokens = imageParts.Count * ModelContextBudget.EstimatedImageTokens + audioTokens;
+                build.AddEstimate(4 + ModelContextBudget.EstimateTextTokens(message.Role) + ModelContextBudget.EstimateTextTokens(text) + mediaTokens,
+                    4 + ModelContextBudget.EstimateTextTokens(message.Role, settings) + ModelContextBudget.EstimateTextTokens(text, settings) + mediaTokens);
             }
 
             return build;
@@ -508,5 +501,13 @@ namespace RNAssistant.Core.Llm
         public bool HasAudio { get; set; }
         public int EstimatedPromptTokens { get; set; }
         public int BaseEstimatedPromptTokens { get; set; }
+        public List<int> MessageBaseTokenEstimates { get; private set; } = new List<int>();
+
+        internal void AddEstimate(int baseline, int calibrated)
+        {
+            MessageBaseTokenEstimates.Add(baseline);
+            BaseEstimatedPromptTokens += baseline;
+            EstimatedPromptTokens += calibrated;
+        }
     }
 }

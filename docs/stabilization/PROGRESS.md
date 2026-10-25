@@ -50,6 +50,20 @@ saved-exchange Harness checks pass host-neutral. The pre-v8 CLI selector smoke
 remains a coverage gap in [RISK_REGISTER](RISK_REGISTER.md); real endpoint and
 Windows/Office/WebView2 qualification remain open.
 
+## Saved request composition estimate — 2026-10-25
+
+Owner: Core LLM transport diagnostics / Web Model Context Inspector. New request
+events retain each final message's existing baseline token estimate and format
+overhead. Disjoint groups use exact compiler source/ordinal links; unknown sources
+keep their cost, selected attachments label the whole containing message, and
+omitted media adds no share. The compact chart links to section/message details.
+Version, complete ordinals and sums are checked before rendering; old snapshots
+without estimates stay explicit. API usage and calibrated admission remain separate.
+Focused host-neutral/browser checks cover conservation, media, persistence before
+dispatch, metadata exclusion from wire, navigation and both themes at narrow width.
+Fine-grained skill/tool/mixed-message attribution, upper-meter integration,
+compaction/diff and Windows/WebView2 qualification remain open.
+
 ## Saved request source presentation — 2026-10-25
 
 Owner: Web Model Context Inspector. Ordered messages now expose saved resource

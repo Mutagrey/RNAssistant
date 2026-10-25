@@ -121,6 +121,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#modelContextResponseTab").isDisabled(), true);
     assert.equal(await page.locator("#modelContextResourcesTab").isDisabled(), true);
     assert.equal(await page.locator("#modelContextDownload").isDisabled(), false);
+    assert.equal(await body.locator(".model-context-composition").count(), 0, "preview cannot reuse saved request composition");
     await screenshot("request-preview");
     await page.locator("#modelContextMode").selectOption("actual");
     assert.equal(await page.locator("#modelContextAttempt").isVisible(), true, "saved-request selection returns with actual mode");
@@ -172,12 +173,33 @@ const { chromium } = require("playwright");
           { MessageIndex: 4, Presentation: "Full" },
           { Presentation: "Excluded", Role: "tool", ExclusionKind: "Budget", Reason: "Подробные строки не вошли в бюджет запроса." }
         ];
+        request.trace.RequestComposition = { Version: 1, Method: "base_text_media_v1", HasMedia: false, TotalEstimatedTokens: 213, Items: [
+          { MessageIndex: 0, Group: "InstructionsAndCatalog", EstimatedTokens: 40 },
+          { MessageIndex: 1, Group: "Conversation", EstimatedTokens: 45 },
+          { MessageIndex: 2, Group: "Conversation", EstimatedTokens: 25 },
+          { MessageIndex: 3, Group: "Resources", EstimatedTokens: 60 },
+          { MessageIndex: 4, Group: "Unattributed", EstimatedTokens: 35 },
+          { MessageIndex: null, Group: "ResponseFormat", EstimatedTokens: 8 }
+        ] };
+        request.trace.EstimatedPromptTokens = 260;
+        const response = reply.events.find(event => event.type === "llm.response");
+        if (response) response.trace.PromptTokens = 310;
         reply.resources = [{ alias: "R1@v1", resource, scope, currentness: "Unknown", payloadAvailability: "Unknown", observations: [] }];
         return reply;
       };
     });
     await source.click(); await size.selectOption("focus");
-    await messages.nth(3).locator(":scope > summary").click();
+    const composition = body.locator(".model-context-composition");
+    assert.match(await composition.innerText(), /213 ток\. · базовая оценка/);
+    assert.doesNotMatch(await composition.innerText(), /260|310/, "composition is not normalized to admission or API usage");
+    await screenshot("request-composition-overview");
+    const beforeComposition = await page.evaluate(() => layoutPayloadReads);
+    await composition.getByRole("button", { name: /^Контекст ресурсов ·/ }).click();
+    await composition.getByRole("button", { name: /^Сообщение 4 ·/ }).waitFor();
+    await screenshot("request-composition-groups");
+    await composition.getByRole("button", { name: /^Сообщение 4 ·/ }).click();
+    assert.equal(await messages.nth(3).evaluate(node => node.open), true);
+    assert.equal(await page.evaluate(() => layoutPayloadReads), beforeComposition, "composition routes to the already loaded message");
     const sources = body.locator('[data-context-source="message/3"]'), evidence = body.locator('[data-context-source="message/3/resource/0"]');
     await sources.locator(":scope > summary").click(); await evidence.locator(":scope > summary").click();
     assert.match(await evidence.innerText(), /Включение не установлено/);
@@ -206,6 +228,9 @@ const { chromium } = require("playwright");
       await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
       assert.equal(await body.evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
       await screenshot("request-sources-" + theme + "-narrow");
+      await body.evaluate(node => node.scrollTop = 0);
+      await screenshot("request-composition-" + theme + "-narrow");
+      await evidence.scrollIntoViewIfNeeded();
     }
     await page.locator("#closeModelContextButton").click();
     await source.click(); await size.selectOption("focus");

@@ -1,6 +1,7 @@
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Agent;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -19,6 +20,50 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelContextSavedRequestComposition()
+        {
+            var messages = new List<ChatMessage> {
+                new ChatMessage { Id = "rules", Role = "system", Content = "Rules and catalogue" },
+                new ChatMessage { Id = "user", Role = "user", Content = "Разбери Ω😀" },
+                new ChatMessage { Id = "resource", Role = "user", Content = "Observed source fragment" },
+                new ChatMessage { Id = "unmapped", Role = "developer", Content = "RUNTIME_CONTEXT: this text is not attribution" },
+                new ChatMessage { Id = "call", Role = "assistant", Content = "Reading", ToolCalls = new List<LlmToolCall> {
+                    new LlmToolCall { Id = "call-1", Name = "common.resources_read", ArgumentsJson = "{\"target\":\"file\"}" } } },
+                new ChatMessage { Id = "result", Role = "tool", ToolCallId = "call-1", Content = "Result" },
+                new ChatMessage { Id = "excluded", Role = "user", Content = new string('x', 1000), ExcludeFromModelContext = true }
+            };
+            var receipt = new ContextReceipt { Messages = messages.Take(6).Select((message, index) =>
+                new ContextMessagePresentation { SourceMessageId = message.Id, MessageIndex = index,
+                    Kind = new[] { "system-invariant", "dialogue", "current-source", "future-kind", "tool-interaction", "tool-interaction" }[index] }).ToList() };
+            var options = new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonSchema,
+                ResponseSchemaName = "reply", ResponseSchemaJson = "{\"type\":\"object\"}" };
+            var settings = new AppSettings { TokenEstimateMultiplier = 2.25 };
+            var build = new LlmMessageBuilder().Build(messages, settings, options);
+            var composition = LlmRequestCompositionBuilder.Describe(build, messages, receipt, options);
+            AssertEqual("base_text_media_v1", composition.Method, "method identifies a baseline, not calibrated API usage");
+            AssertEqual(6, build.MessageBaseTokenEstimates.Count, "only final visible messages get a cost");
+            AssertEqual((long)build.BaseEstimatedPromptTokens + ModelContextBudget.EstimateRequestOptionsTokens(options),
+                composition.TotalEstimatedTokens, "all baseline costs are accounted for exactly once");
+            AssertTrue(build.EstimatedPromptTokens != build.BaseEstimatedPromptTokens, "fixture distinguishes calibrated admission from baseline composition");
+            AssertEqual("0,1,2,3,4,5", string.Join(",", composition.Items.Where(item => item.MessageIndex.HasValue).Select(item => item.MessageIndex)),
+                "each final wire ordinal is retained, including tool calls and results");
+            AssertEqual(LlmRequestCompositionGroup.InstructionsAndCatalog, composition.Items[0].Group, "compiler instructions retain one unsplit group");
+            AssertEqual(LlmRequestCompositionGroup.Conversation, composition.Items[1].Group, "dialogue uses compiler attribution");
+            AssertEqual(LlmRequestCompositionGroup.Resources, composition.Items[2].Group, "resource messages use compiler attribution");
+            AssertEqual(LlmRequestCompositionGroup.Unattributed, composition.Items[3].Group, "unknown kinds never use role or text heuristics");
+            AssertEqual(LlmRequestCompositionGroup.ToolActivity, composition.Items[4].Group, "native tool call stays in operation group");
+            AssertEqual(LlmRequestCompositionGroup.ToolActivity, composition.Items[5].Group, "native result stays in operation group");
+            receipt.Messages.Add(receipt.Messages[0]);
+            receipt.Messages[1].MessageIndex = 4;
+            var uncertain = LlmRequestCompositionBuilder.Describe(build, messages, receipt, options);
+            AssertEqual(LlmRequestCompositionGroup.Unattributed, uncertain.Items[0].Group, "duplicate source metadata is not selected");
+            AssertEqual(LlmRequestCompositionGroup.Unattributed, uncertain.Items[1].Group, "misaligned metadata is not selected");
+            AssertEqual(composition.TotalEstimatedTokens, uncertain.TotalEstimatedTokens, "unknown attribution does not remove request cost");
+            build.MessageBaseTokenEstimates.RemoveAt(0);
+            AssertTrue(LlmRequestCompositionBuilder.Describe(build, messages, receipt, options) == null,
+                "misaligned cost capture produces no fabricated composition");
+        }
+
         private static void ModelContextWorkspaceExchange()
         {
             WithTempPaths(paths =>

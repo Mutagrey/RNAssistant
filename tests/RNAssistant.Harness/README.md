@@ -243,7 +243,12 @@ identity and rejects absent workspace attribution, duplicate message-source posi
 and invented omitted-item counts. `model-context-layout.test.js` checks compact
 source/coverage disclosures, recorded omissions, exact resource navigation and
 restored expansion without a payload reread in both themes at narrow width.
-`INSPECTOR_SCREENSHOTS` saves
+`model context: saved request composition`, `storage: model request trace precedes
+dispatch` and `storage: mixed attachment manifest matches saved request` check
+disjoint baseline costs, exact compiler attribution, selected media estimates and
+persisted metadata outside the provider payload. The same two Web tests reject
+inconsistent composition snapshots and check chart/message navigation without
+normalizing to admission or API usage. `INSPECTOR_SCREENSHOTS` saves
 browser captures. Next-request workspace estimates and native Windows/WebView2
 delivery, including controller lease liveness, remain open.
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin

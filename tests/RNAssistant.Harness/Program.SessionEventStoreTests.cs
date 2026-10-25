@@ -3664,6 +3664,8 @@ namespace RNAssistant.Harness
             AssertEqual("request", trace.Type, "request trace type");
             AssertEqual(ContextPresentationKind.Full, trace.ContextMessages.Single().Presentation, "compiler provenance reaches exact transport request");
             AssertEqual(0, trace.ContextMessages.Single().MessageIndex.Value, "wire message index retained");
+            AssertTrue(trace.RequestComposition != null && trace.RequestComposition.Items.Any(item => item.MessageIndex == 0),
+                "final request composition is captured before dispatch");
             AssertTrue(trace.PayloadUtf8Bytes != null && trace.PayloadUtf8Bytes.Length > 0,
                 "final request is materialized as reusable UTF-8 bytes");
             AssertTrue(!trace.PayloadTextMaterialized,
@@ -3673,6 +3675,8 @@ namespace RNAssistant.Harness
                 "trace bytes are exactly the JSON payload exposed to observers");
             AssertTrue(payload["ContextMessages"] == null && payload["contextMessages"] == null && payload["messages"][0]["SourceMessageId"] == null,
                 "diagnostic provenance is never model-facing");
+            AssertTrue(payload["RequestComposition"] == null && payload["requestComposition"] == null,
+                "composition metadata is never sent to the provider");
             AssertEqual("trace-model", (string)payload["model"], "materialized model recorded");
             AssertEqual("materialized prompt", (string)payload.SelectToken("messages[0].content"),
                 "materialized message recorded");
@@ -3908,6 +3912,14 @@ namespace RNAssistant.Harness
                 var entries = trace.ContextMessages.Where(item => item.MessageIndex.HasValue)
                     .OrderBy(item => item.MessageIndex).ToArray();
                 AssertEqual(3, wire.Count, "three visible messages share one serialized request");
+                AssertTrue(trace.RequestComposition != null && trace.RequestComposition.HasMedia,
+                    "mixed saved request retains media-aware composition");
+                AssertEqual(LlmRequestCompositionGroup.MessagesWithAttachments, trace.RequestComposition.Items[1].Group,
+                    "selected text and media are one whole-message cost, not counted again per part");
+                AssertEqual(LlmRequestCompositionGroup.Unattributed, trace.RequestComposition.Items[2].Group,
+                    "an omitted attachment adds no attachment share to its remaining message");
+                AssertEqual(trace.RequestComposition.TotalEstimatedTokens, trace.RequestComposition.Items.Sum(item => (long)item.EstimatedTokens),
+                    "recorded total equals all disjoint estimates");
                 AssertEqual("golden-instruction,golden-mixed,golden-later",
                     string.Join(",", entries.Select(item => item.SourceMessageId)),
                     "manifest order matches the final message order");
@@ -3918,6 +3930,11 @@ namespace RNAssistant.Harness
                 var selectedText = parts.Single(item => item.SourceAttachmentId == textAttachment.Id &&
                     item.Kind == "attachment_text");
                 var wireParts = (JArray)wire[1]["content"];
+                AssertEqual(4 + ModelContextBudget.EstimateTextTokens((string)wire[1]["role"]) +
+                    ModelContextBudget.EstimateTextTokens((string)wireParts[0]["text"]) +
+                    2 * ModelContextBudget.EstimatedImageTokens + ModelContextBudget.EstimateAudioTokens(audioBytes.Length),
+                    trace.RequestComposition.Items[1].EstimatedTokens,
+                    "media uses existing image/audio estimates, not base64 transport text length");
                 AssertEqual(0, selectedText.PartIndex.Value, "attachment text points to the actual text part");
                 var wireText = (string)wireParts[0]["text"];
                 var marker = "[Attachment: note.txt]" + Environment.NewLine;
@@ -3964,6 +3981,8 @@ namespace RNAssistant.Harness
                     "diagnostic manifest is not duplicated in provider payload");
                 AssertTrue(JToken.DeepEquals(JToken.FromObject(trace.ContextMessages), saved.Data["ContextMessages"]),
                     "saved request event keeps the complete typed manifest beside exact payload bytes");
+                AssertTrue(JToken.DeepEquals(JToken.FromObject(trace.RequestComposition), saved.Data["RequestComposition"]),
+                    "saved request event retains the exact typed composition beside its payload");
             });
         }
 

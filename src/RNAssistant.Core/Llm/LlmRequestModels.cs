@@ -104,6 +104,8 @@ namespace RNAssistant.Core.Llm
         public string ContextSnapshotId { get; set; }
         public string DocumentRuntimeId { get; set; }
         public List<ContextMessagePresentation> ContextMessages { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public LlmRequestComposition RequestComposition { get; set; }
         public bool? Streaming { get; set; }
         public string Type { get; set; }
         public string RequestId { get; set; }

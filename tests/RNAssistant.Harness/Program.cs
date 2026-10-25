@@ -517,6 +517,7 @@ namespace RNAssistant.Harness
                 Test("model context: bound original source and pagination", ModelContextSourceAndPagination),
                 Test("model context: stable aliases and resource inspector", ModelContextStableAliases),
                 Test("model context: exact read message cost", ModelContextExactReadMessageCost),
+                Test("model context: saved request composition", ModelContextSavedRequestComposition),
                 Test("model context: full preview", ModelContextFullPreview),
                 Test("model context: request schema duplication size", ModelRequestSchemaDuplicationSize),
                 Test("model context: request schema modes and fallback", ModelRequestSchemaDuplicationModesAndFallback),

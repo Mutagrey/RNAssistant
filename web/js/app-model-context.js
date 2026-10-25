@@ -345,7 +345,82 @@
     if (!(entry.EvidenceLinks || []).length && !(entry.Parts || []).length && !entry.Reason)
       source.appendChild(el("p", "Сохранена только отметка представления; подробности источников отсутствуют.", "model-context-note"));
   }
-  function messages(c, text, entries) {
+  function requestComposition(c, parent, composition, messageCount, reveal, saved) {
+    if (c.mode !== "actual") return;
+    var groups = [
+      { id: "InstructionsAndCatalog", title: "Инструкции и каталог", color: "color-0" },
+      { id: "Conversation", title: "Диалог", color: "color-1" },
+      { id: "ToolActivity", title: "Вызовы и результаты", color: "color-2" },
+      { id: "Resources", title: "Контекст ресурсов", color: "color-3" },
+      { id: "MessagesWithAttachments", title: "Сообщения с вложениями", color: "color-3" },
+      { id: "ResponseFormat", title: "Формат и обвязка", color: "color-4" },
+      { id: "Unattributed", title: "Не распределено", color: "is-unattributed" }
+    ];
+    var indices = new Set(), optionsCount = 0, sum = 0;
+    var validComposition = composition && composition.Version === 1 && composition.Method === "base_text_media_v1" &&
+      typeof composition.HasMedia === "boolean" && Number.isSafeInteger(composition.TotalEstimatedTokens) && composition.TotalEstimatedTokens >= 0 &&
+      Array.isArray(composition.Items) && composition.Items.length <= messageCount + 1 && composition.Items.every(function (item) {
+        if (!item || !groups.some(function (group) { return group.id === item.Group; }) || !Number.isSafeInteger(item.EstimatedTokens) || item.EstimatedTokens < 0) return false;
+        sum += item.EstimatedTokens;
+        if (item.Group === "ResponseFormat") return item.MessageIndex == null && ++optionsCount === 1;
+        if (!Number.isInteger(item.MessageIndex) || item.MessageIndex < 0 || item.MessageIndex >= messageCount || indices.has(item.MessageIndex)) return false;
+        indices.add(item.MessageIndex); return true;
+      }) && indices.size === messageCount && sum === composition.TotalEstimatedTokens;
+    var section = el("section", undefined, "model-context-composition"); parent.appendChild(section);
+    if (!validComposition) {
+      var missing = sourceDisclosure(section, "Состав по разделам", composition ? "Недоступен" : "Нет оценки", "composition", saved);
+      missing.appendChild(el("p", composition ? "Сводка не соответствует этому запросу или её формат не поддерживается. Сообщения доступны ниже." :
+        "Для этого запроса оценки разделов не сохранены. Точные сообщения и сведения об источниках доступны ниже.", "model-context-note"));
+      return;
+    }
+    var chart = el("div", undefined, "chat-inspector-composition-chart model-context-composition-chart");
+    chart.setAttribute("role", "group"); chart.setAttribute("aria-label", "Доли базовой оценки сохранённого запроса"); section.appendChild(chart);
+    var outer = sourceDisclosure(section, "Состав по разделам", "≈ " + sum.toLocaleString("ru-RU") + " ток. · базовая оценка", "composition", saved);
+    outer.appendChild(el("p", "Оценка без калибровки; это не расход API. Сообщения учитываются целиком, включая служебные поля." +
+      (composition.HasMedia ? " Медиа оценено приближённо." : ""), "model-context-note"));
+    var version = c.viewVersion;
+    groups.forEach(function (group) {
+      var items = composition.Items.filter(function (item) { return item.Group === group.id; });
+      if (!items.length) return;
+      var tokens = items.reduce(function (total, item) { return total + item.EstimatedTokens; }, 0);
+      var caption = "≈ " + tokens.toLocaleString("ru-RU") + " ток. · " + (sum ? tokens * 100 / sum : 0).toLocaleString("ru-RU", { maximumFractionDigits: 1 }) + "%";
+      var key = "composition/" + group.id, detail = sourceDisclosure(outer, group.title, caption, key, saved), count = 0;
+      var dot = el("i", undefined, "chat-inspector-composition-dot chat-inspector-composition-color " + group.color);
+      dot.setAttribute("aria-hidden", "true"); detail.children[0].insertBefore(dot, detail.children[0].children[0]);
+      detail.dataset.compositionCount = "0";
+      if (group.id === "InstructionsAndCatalog") detail.appendChild(el("p", "Инструкции, навыки и каталог в общем сообщении пока не разделены на доли.", "model-context-note"));
+      if (group.id === "Unattributed") detail.appendChild(el("p", "Размер учтён, но сохранённых данных недостаточно для однозначного раздела.", "model-context-note"));
+      var more = button("Показать ещё", page);
+      function page() {
+        if (!live(c) || c.viewVersion !== version || !detail.isConnected) return;
+        more.remove();
+        items.slice(count, count + 50).forEach(function (item) {
+          var control = button((item.MessageIndex == null ? "Параметры запроса" : "Сообщение " + (item.MessageIndex + 1)) +
+            " · ≈ " + item.EstimatedTokens.toLocaleString("ru-RU") + " ток.", function () {
+            if (live(c) && c.viewVersion === version && control.isConnected) reveal(item.MessageIndex);
+          });
+          control.className = "button compact ghost model-context-composition-entry"; detail.appendChild(control);
+        });
+        count += 50; detail.dataset.compositionCount = String(count);
+        if (count < items.length) detail.appendChild(more);
+      }
+      detail.addEventListener("toggle", function () {
+        if (!detail.open || count) return;
+        page();
+        while (count && saved && saved.compositionPages && count < saved.compositionPages[key] && count < items.length) page();
+      });
+      if (tokens > 0) {
+        var segment = button("", function () {
+          if (!live(c) || c.viewVersion !== version || !detail.isConnected) return;
+          outer.open = true; detail.open = true; detail.children[0].focus();
+        });
+        segment.className = "chat-inspector-composition-color " + group.color; segment.style.flexGrow = String(tokens);
+        segment.title = group.title + " · " + caption; segment.setAttribute("aria-label", segment.title); chart.appendChild(segment);
+      }
+    });
+    if (!sum) chart.remove();
+  }
+  function messages(c, text, entries, composition) {
     var root = $("modelContextBody"), fields;
     try { fields = members(text); } catch (error) { root.appendChild(el("p", error.message)); return mount(c, root, text, true); }
     var raw = field(fields, "messages");
@@ -361,10 +436,14 @@
     if (saved && saved.source !== source) saved = null;
     c.captureMessages = function () {
       if (!c.messageViews) c.messageViews = {};
+      var compositionPages = {};
+      root.querySelectorAll("details[data-composition-count]").forEach(function (row) {
+        compositionPages[row.dataset.contextSource] = Number(row.dataset.compositionCount);
+      });
       c.messageViews[mode] = { source: source, count: count, scroll: root.scrollTop,
         expanded: rows.filter(function (row) { return row.open; }).map(function (row) { return Number(row.dataset.messageIndex); }),
         sources: Array.from(root.querySelectorAll("details[data-context-source][open]")).map(function (row) { return row.dataset.contextSource; }),
-        omissionCount: omissionCount };
+        omissionCount: omissionCount, compositionPages: compositionPages };
     };
     var roles = { system: "Инструкции", developer: "Приложение",
       user: "Пользователь", assistant: "Модель", tool: "Инструмент", function: "Функция" };
@@ -443,6 +522,17 @@
     });
     collapse.title = "Свернуть все сообщения"; collapse.classList.add("model-context-collapse");
     overview.appendChild(collapse); listRoot.appendChild(overview);
+    requestComposition(c, listRoot, composition, list.length, function (index) {
+      var selected;
+      if (index == null) selected = settings;
+      else {
+        while (count <= index && count < list.length) page();
+        selected = rows.find(function (row) { return Number(row.dataset.messageIndex) === index; });
+      }
+      if (!selected) return;
+      selected.open = true; selected.children[0].focus();
+      selected.scrollIntoView({ block: "start" });
+    }, saved);
     var omitted = [];
     (entries || []).filter(Boolean).forEach(function (entry, entryIndex) {
       if (entry.Presentation === "Excluded") omitted.push({ entry: entry, index: entryIndex });
@@ -811,7 +901,7 @@
       if (!valid(c, version) || c.viewVersion !== viewVersion) return;
       root.replaceChildren();
       if (c.tab === "json") mount(c, root, value.text, true);
-      else messages(c, value.text, request.trace.ContextMessages);
+      else messages(c, value.text, request.trace.ContextMessages, request.trace.RequestComposition);
     } catch (error) {
       if (valid(c, version) && c.viewVersion === viewVersion)
         notice(c, "Не удалось прочитать запрос", error.message || String(error), "error");

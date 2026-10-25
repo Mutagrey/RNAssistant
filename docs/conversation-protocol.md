@@ -823,6 +823,26 @@ Strict-schema wire projection invalidates any earlier positive body claim while
 retaining the source link. The inspector displays the distinction. Known compiler
 exclusions carry typed decisions; unattributed transformations remain `Unknown`.
 
+Saved request composition (2026-10-25): `LlmTraceRecord.RequestComposition` v1
+captures the existing message builder's uncalibrated baseline estimates for each
+final wire message plus request-format overhead. The diagnostic method is
+`base_text_media_v1`: text uses the existing UTF-8 estimate; images/audio retain
+their existing media heuristics, never the length of base64 transport strings.
+Whole messages form disjoint groups from unique compiler source IDs and exact
+ordinals. Missing, duplicate, misaligned or unknown source kinds remain
+`Unattributed`; they still contribute their full estimate. Selected attachments
+label the whole containing message, including its text, without counting each
+attachment again. Omitted attachments add no share. Instructions/catalogue in a
+single message remain one group; there is no inferred skill/tool split.
+
+The component sum is a baseline estimate, separate from the calibrated admission
+estimate and API usage; it never scales to provider counts. This metadata is
+stored beside the exact request payload before dispatch and is not model-facing.
+It does not prove provider receipt, body delivery or source completeness. Requests
+without this snapshot explicitly lack a composition chart; UI validates the
+version, method, totals and complete one-to-one message ordinals before displaying
+shares. No new payload reader, storage projection or selection policy is added.
+
 For an unchanged text-serialized `common.resources_read` tool result with one uniquely
 mapped exact evidence/view/coverage link, the saved request trace estimates the
 entire final serialized tool message from its actual `role`, `tool_call_id` and

@@ -4,13 +4,14 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const crypto = require("node:crypto");
 class Node {
-  constructor(tag = "div") { this.tag = tag; this.children = []; this.listeners = {}; this.dataset = {}; this.value = ""; this.isConnected = true; this.classes = new Set(); this.classList = {
+  constructor(tag = "div") { this.tag = tag; this.children = []; this.listeners = {}; this.dataset = {}; this.style = {}; this.value = ""; this.isConnected = true; this.classes = new Set(); this.classList = {
     add: x => this.classes.add(x), remove: x => this.classes.delete(x), contains: x => this.classes.has(x),
     toggle: (x, force) => force ? this.classes.add(x) : this.classes.delete(x)
   }; }
   set textContent(value) { this.text = value; this.children = []; }
   get textContent() { return this.text || ""; }
   appendChild(node) { this.children.push(node); node.parent = this; return node; }
+  insertBefore(node, before) { const index = this.children.indexOf(before); this.children.splice(index < 0 ? this.children.length : index, 0, node); node.parent = this; return node; }
   get parentElement() { return this.parent; }
   replaceChildren() { this.children.forEach(n => n.isConnected = false); this.children = []; this.text = ""; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(n => n !== this); this.isConnected = false; }
@@ -373,6 +374,27 @@ function fixture(withAliases = false, pdf = false) {
     "source and omission disclosures use recorded metadata without new body reads");
   ambiguous.c.RNAssistantModelContext.close();
   console.log("PASS model context: missing/ambiguous provenance and attachment omissions stay explicit");
+
+  for (const variant of ["valid", "sum", "duplicate", "missing", "method"]) {
+    const cost = fixture();
+    const composition = { Version: 1, Method: "base_text_media_v1", HasMedia: false, TotalEstimatedTokens: 30,
+      Items: [{ MessageIndex: 0, Group: "InstructionsAndCatalog", EstimatedTokens: 10 },
+        { MessageIndex: 1, Group: "Unattributed", EstimatedTokens: 20 }] };
+    if (variant === "sum") composition.TotalEstimatedTokens = 99;
+    if (variant === "duplicate") composition.Items[1].MessageIndex = 0;
+    if (variant === "missing") { composition.Items.pop(); composition.TotalEstimatedTokens = 10; }
+    if (variant === "method") composition.Method = "unsupported";
+    cost.events[0].trace.RequestComposition = composition;
+    cost.events[0].trace.PromptTokens = 999;
+    cost.c.RNAssistantModelContext.open(); await flush();
+    const nodes = descendants(cost.get("modelContextBody"));
+    const bars = nodes.filter(node => node.className === "chat-inspector-composition-chart model-context-composition-chart");
+    assert.equal(bars.length, variant === "valid" ? 1 : 0, "only a complete, supported, balanced composition gets a chart: " + variant);
+    if (variant === "valid") assert.ok(nodes.some(node => /≈ 30 ток/.test(node.textContent)));
+    else assert.ok(nodes.some(node => /Сводка не соответствует/.test(node.textContent)));
+    cost.c.RNAssistantModelContext.close();
+  }
+  console.log("PASS model context: saved composition conservation, schema and message scope");
 
   const pdfRead = fixture(true, true);
   pdfRead.c.RNAssistantModelContext.open(); await flush();
