@@ -126,13 +126,11 @@ namespace RNAssistant.Office.Services
             _frozen = new ModelAuthoritySnapshot(resources, toolPack.Revision,
                 new SkillCatalogSnapshot(enabledSkills, publishedSkills?.Generation), ResourceStateProvider.CaptureSchemas(resources), session.Revision);
             var capabilityCatalog = toolPack.CapabilityContext(enabledSkills);
-            var options = ConversationModelSession.BuildRequestOptions(
-                mode,
-                AgentResponseModes.Normalize(settings.AgentResponseMode),
-                runnableTools,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)),
-                previewSession,
-                null);
+            var options = ModelProtocolWire.CreateRequestOptions(settings.AgentResponseMode, runnableTools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)));
+            options.ReasoningEnabled = previewSession.ReasoningEnabled;
+            options.TraceSession = previewSession;
+            options.TracePurpose = ChatModes.Normalize(mode);
             var repairReserveTokens = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
             var continuationReserveTokens = ModelContextBudget.ContinuationReserveTokens(settings);
             var inputLimit = ModelContextBudget.InputBudgetTokens(settings);

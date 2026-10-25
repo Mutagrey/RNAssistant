@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Shared model request preparation — 2026-10-26
+
+Owner: Core ModelProtocol; Office ConversationModelSession and Application workspace.
+`ModelRequestPreparation` now binds callable tools, schema options, host strict
+projection, message budget/reserves and final request assembly. Both consumers use
+it; replaced per-host budget formulas and Office request-options builder are removed.
+Snapshot/tool-ID mismatch refuses request creation; exact runtime binding guards remain.
+Host authority capture, prompts/domain projections, trace metadata, compaction persistence
+and file/COM owners remain separate. Inspector preview calls the canonical schema builder.
+Nine focused checks pass: shared preparation/budget/fallback, Office strict VBA 32K,
+oversized selection refusal, strict transport repair, workspace history and strict
+HTTP history, pinned Office workspace target, request-local fallback and Inspector.
+No live-model rerun or Windows/Office qualification was needed for this extraction;
+no prompt/schema/reserve change or quality improvement is claimed.
+
 ## Snapshot arsenal fixes strict request-budget rejection — 2026-10-26
 
 Owner: Office ConversationModelSession. The prior VBA 32K diagnosis was incomplete:

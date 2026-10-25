@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void WorkspaceAcceptedCallHistory()
+        private static void WorkspaceAcceptedCallHistory(bool strict = false)
         {
             WithTempPaths(paths =>
             {
@@ -58,6 +58,12 @@ namespace RNAssistant.Harness
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer the follow-up from persisted history.", "История читается.",
                                             results: new ConversationResultClaim[0]);
+                                if (strict)
+                                {
+                                    AssertEqual("json_schema", (string)JObject.Parse(requests[number - 1])["response_format"]?["type"],
+                                        "workspace sends its prepared strict schema on every request");
+                                    content = "{\"response\":" + content + "}";
+                                }
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] = content } }) }.ToString(Newtonsoft.Json.Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);
@@ -74,6 +80,7 @@ namespace RNAssistant.Harness
                         var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "history"));
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
                             Model = "test-model", StreamResponses = false, AutoCompressContext = false,
+                            AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject,
                             SmartChatTitles = false };
                         using (var service = new WorkspaceConversationService(paths))
                         {

@@ -501,6 +501,12 @@ final source, one selected VBA skill and one document write. The fixture also sa
 context estimates, budget components and exact live HTTP request bodies. It does
 not execute VBA. The general `--resource-workflow-live` case remains separate.
 
+Shared request preparation: `model request: snapshot surface budget and fallback`
+checks snapshot tool membership, dispatch/admission projection parity and preservation
+of full fallback messages. `workspace: strict prepared requests preserve call history`
+exercises strict requests through the real workspace HTTP path and a subsequent turn;
+`skill packages: strict VBA selection fits actual request budget` covers the Office path.
+
 Skill-package checks: after the normal host-neutral Harness build, filter by
 `skill packages:`, `tool pack:`, `skill editor:` and the two `agent:` prompt cases.
 For the six-tool Excel bootstrap, `tool pack:` checks standalone Excel write and

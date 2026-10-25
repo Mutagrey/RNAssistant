@@ -1273,8 +1273,15 @@ cancellation, prompt-budget rejection and protocol exhaustion are distinct. The
 separate bounded provider retry policy is defined below.
 
 `ModelProtocolWire` owns active response schema options, envelope writing and local
-JSON validation. `ConversationModelSession` adds reasoning/cache/trace fields to fresh
-options; AgentJsonProtocol retains native-role mapping and local history metadata.
+JSON validation. Core `ModelRequestPreparation` binds the callable tool surface,
+response options, host-provided strict catalog projection, message budget and
+admitted-token estimate, and constructs `ModelProtocolRequest` for Office and workspace.
+Request creation rejects a tool-ID set different from the compiled snapshot arsenal.
+The existing ToolRuntime still validates exact descriptor/policy/binding revisions.
+Full accepted messages remain intact for explicit json_object fallback and frozen
+repair; strict wire guidance and schema savings use the same projection as dispatch.
+Host owners add reasoning/cache/trace fields and prepare authority/domain prompts;
+AgentJsonProtocol retains native-role mapping and local history metadata.
 Compatibility probes reuse that same contract and transcript writer, but retain
 one raw attempt per check: no format repair, provider retry or fallback may turn a
 failed qualification probe into a pass. Fixed sentinel values remain independent

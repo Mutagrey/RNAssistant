@@ -30,7 +30,11 @@ The development CLI opens ordinary folders and workspace chats without a documen
 authority. It references Net8 Core and Runtime projects and uses the existing
 kernel, model protocol, tool runtime, frozen Core `ModelContextCompiler` and canonical stores. The Office UI still
 uses its document-owned composition until the M6–M9 cutovers; this is an in-flight
-architecture, not a claim that the UI and CLI have identical context preparation.
+architecture, not a claim that the UI and CLI have identical context preparation. Core
+`ModelRequestPreparation` now shares response-schema construction, wire projection
+coordination, budget/reserves and final request assembly across Office/workspace.
+Domain projection functions and authority/prompt preparation remain host-owned;
+this does not merge COM and filesystem mutation owners.
 
 Workspace and plugin services share `src/RNAssistant.Application`, imported into
 Office Framework 4.8 and CLI Runtime. `Workspace/WorkspaceConversationService`

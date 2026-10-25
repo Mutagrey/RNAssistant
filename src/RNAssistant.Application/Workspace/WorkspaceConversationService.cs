@@ -1255,13 +1255,13 @@ namespace RNAssistant.Runtime
             {
                 var authority = CaptureModelAuthority(cancellationToken);
                 _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _catalog, request.StepId, _settings);
-                var callContext = new ModelProtocolCallContext(_skillSurface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id));
-                var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, _skillSurface.Tools, callContext);
+                var preparation = PrepareRequest(_skillSurface);
+                var options = preparation.Options;
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
                 options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 ModelContextSnapshot snapshot;
-                try { snapshot = CompileCurrent(authority, options, request); }
+                try { snapshot = CompileCurrent(authority, preparation, request); }
                 catch (PromptBudgetExceededException ex)
                 {
                     if (!ex.CanCompact || !_settings.AutoCompressContext)
@@ -1281,7 +1281,7 @@ namespace RNAssistant.Runtime
                     _progress?.Invoke(new WorkspaceRunEvent("compacted", _session.LastRun.KernelState.Summary,
                         null, ConversationEventFeed.Cursor(_session)));
                     authority = CaptureModelAuthority(cancellationToken);
-                    try { snapshot = CompileCurrent(authority, options, request); }
+                    try { snapshot = CompileCurrent(authority, preparation, request); }
                     catch (PromptBudgetExceededException remaining)
                     { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
                 }
@@ -1296,18 +1296,9 @@ namespace RNAssistant.Runtime
                 _modelTrace.Configure(options);
                 _session.LastContextReceipt = receipt;
                 _chats.Commit(_session, new ConversationCommit());
-                // Freeze both catalog projections with this request; repair/fallback
-                // must not observe a later skill selection or catalog generation.
-                var fullCatalog = PromptToolCatalog(_skillSurface.Tools, true);
-                var schemaCatalog = PromptToolCatalog(_skillSurface.Tools, false);
-                var result = await _protocol.GetResponseAsync(new ModelProtocolRequest
-                {
-                    Settings = _settings, AcceptedMessages = messages, ContextSnapshot = snapshot,
-                    CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
-                    ProjectJsonSchemaMessages = source => ProjectSchemaCatalog(source, fullCatalog, schemaCatalog),
-                    CallableTools = _skillSurface.Tools, RunnableCatalog = _catalog,
-                    CallContext = callContext, Options = options
-                }, ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
+                var result = await _protocol.GetResponseAsync(preparation.CreateRequest(snapshot, _catalog,
+                    notice => _compiler.CompileRepair(snapshot, notice)),
+                    ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
                 _lastCompletion = result.Completion;
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
                 if (result.ProviderRefusal != null) return AgentModelResult.Refused(result.ProviderRefusal);
@@ -1349,11 +1340,10 @@ namespace RNAssistant.Runtime
                     return "No accepted model request is available for skill admission.";
                 var surface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _catalog,
                     _lastRequest.StepId, _settings, selections);
-                var options = ModelProtocolWire.CreateRequestOptions(_settings.AgentResponseMode, surface.Tools,
-                    new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id)));
+                var preparation = PrepareRequest(surface);
                 try
                 {
-                    CompileCurrent(_lastAuthority, options, _lastRequest, surface, previewResult);
+                    CompileCurrent(_lastAuthority, preparation, _lastRequest, surface, previewResult);
                     return null;
                 }
                 catch (PromptBudgetExceededException ex)
@@ -1363,13 +1353,18 @@ namespace RNAssistant.Runtime
                 }
             }
 
-            private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, LlmRequestOptions options, AgentModelRequest request,
+            private ModelRequestPreparation PrepareRequest(SkillRequestSurface surface)
+            {
+                return new ModelRequestPreparation(_settings, surface.Tools,
+                    new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id)),
+                    (messages, tools, schema) => ProjectSchemaCatalog(messages,
+                        PromptToolCatalog(tools, true), PromptToolCatalog(tools, false)));
+            }
+
+            private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, ModelRequestPreparation preparation, AgentModelRequest request,
                 SkillRequestSurface candidateSurface = null, ChatMessage previewResult = null)
             {
                 var surface = candidateSurface ?? _skillSurface;
-                var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
-                    ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
-                    ModelContextBudget.ContinuationReserveTokens(_settings);
                 var required = new List<ChatMessage>
                 { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt(surface) } };
                 var context = new WorkspaceModelContext { CompletionFeedback = ModelProtocolWire.RuntimeFeedback(request), ActiveTaskList = _taskLists.Project(authority.Resources), ActivePlan = _plans.Project(authority.Resources) };
@@ -1398,14 +1393,7 @@ namespace RNAssistant.Runtime
                         Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) };
                     required.Add(runtimeContext);
                 }
-                var budget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
-                if (string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal))
-                {
-                    var projected = ProjectSchemaCatalog(required,
-                        PromptToolCatalog(surface.Tools, true), PromptToolCatalog(surface.Tools, false));
-                    budget = ModelContextBudget.IncludeProjectedMessageSavings(budget, required,
-                        ModelProtocolWire.ProjectSchemaGuidance(projected), _settings);
-                }
+                var budget = preparation.MessageBudget(required);
                 var facts = AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session)).ToList();
                 if (previewResult != null) facts.Add(previewResult);
                 var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3,

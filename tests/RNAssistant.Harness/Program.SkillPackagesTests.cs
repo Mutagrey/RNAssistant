@@ -8,6 +8,7 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
@@ -17,6 +18,42 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelRequestPreparationBindsSnapshotAndBudget()
+        {
+            var read = PackageTool("fixture.read", ToolExposure.Direct);
+            var edit = PackageTool();
+            var tools = new[] { read, edit };
+            var skill = PackageSkill("fixture.edit", edit.Id);
+            var skills = new SkillCatalogSnapshot(new[] { skill });
+            var session = PackageSession();
+            var pack = PackageTools(tools);
+            SkillTaskService.Select(session, skill.Id, skills, pack, new AppSettings(), "load");
+            var snapshot = CompilePackage(session, skills, pack, tools);
+            var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
+                ContextWindowOverrideTokens = 32768, MaxTokens = 4096 };
+            var context = new ModelProtocolCallContext(tools.Select(tool => tool.Id));
+            Func<IReadOnlyList<ChatMessage>, IReadOnlyList<ToolCatalogEntry>, string, IReadOnlyList<ChatMessage>> projection =
+                (messages, exposed, schema) => messages.Select(message => new ChatMessage {
+                    Role = message.Role, Content = (message.Content ?? "").Replace("inline-schema", "") }).ToArray();
+            var preparation = new ModelRequestPreparation(settings, tools, context, projection);
+            var request = preparation.CreateRequest(snapshot, tools, notice => snapshot.Messages);
+            AssertTrue(ReferenceEquals(request.Options, preparation.Options), "dispatch uses admitted schema options");
+            AssertTrue(request.CallableTools.Any(tool => tool.Id == edit.Id), "selected skill is in the actual request");
+            var wire = ModelProtocolWire.ProjectSchemaGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages));
+            AssertEqual(ModelContextBudget.EstimateAdmittedRequestTokens(wire, request.Options, settings,
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings), ModelContextBudget.ContinuationReserveTokens(settings)),
+                preparation.EstimateAdmittedTokens(snapshot.Messages), "admission counts the exact dispatched projection");
+            var required = new[] { new ChatMessage { Role = "developer", Content = ModelProtocolWire.ActionGuidance + " inline-schema" } };
+            var strictBudget = preparation.MessageBudget(required);
+            AssertTrue(preparation.ProjectMessages(required)[0].Content != required[0].Content, "strict transport projects only wire messages");
+            AssertContains(required[0].Content, "inline-schema", "full fallback prompt is retained");
+            var stale = new ModelRequestPreparation(settings, new[] { read }, context, projection);
+            RuntimeThrows<InvalidOperationException>(() => stale.CreateRequest(snapshot, tools, notice => snapshot.Messages));
+            request.Options.ResponseFormat = LlmResponseFormats.JsonObject;
+            AssertTrue(ReferenceEquals(required, preparation.ProjectMessages(required)), "fallback uses the original complete messages");
+            AssertTrue(preparation.MessageBudget(required) > strictBudget, "json_object releases strict schema budget");
+        }
+
         private static void BuiltInSkillPackagesLoadForEveryOfficeHost()
         {
             var visual = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);

@@ -149,26 +149,15 @@ namespace RNAssistant.Office.Services
         {
             var snapshot = _lastSnapshot;
             var receipt = snapshot.Receipt;
-            var messages = snapshot.Messages;
             var activeTools = ToolsForSnapshot(snapshot);
             _session.LastContextReceipt = receipt;
             _responseEvidence = snapshot.DeliveredObservations.ToList();
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, activeTools, callContext, _session, _runCache);
+            var preparation = PrepareRequest(activeTools, callContext);
+            var options = preparation.Options;
             options.TraceStepId = stepId;
             options.TraceContextReceipt = receipt;
-            return new ModelProtocolRequest
-            {
-                Settings = _settings,
-                AcceptedMessages = messages,
-                ContextSnapshot = snapshot,
-                CompileRepair = notice => _compiler.CompileRepair(snapshot, notice),
-                ProjectJsonSchemaMessages = wireMessages => ConversationPromptComposer.ProjectJsonSchemaMessages(
-                    wireMessages, activeTools, options.ResponseSchemaJson),
-                CallableTools = activeTools,
-                RunnableCatalog = _runnableCatalog,
-                CallContext = callContext,
-                Options = options
-            };
+            return preparation.CreateRequest(snapshot, _runnableCatalog,
+                notice => _compiler.CompileRepair(snapshot, notice));
         }
 
         private IReadOnlyList<ToolCatalogEntry> ToolsForSnapshot(ModelContextSnapshot snapshot)
@@ -366,20 +355,17 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        internal static LlmRequestOptions BuildRequestOptions(
-            string mode,
-            string responseMode,
-            IReadOnlyList<ToolCatalogEntry> tools,
-            ModelProtocolCallContext callContext,
-            ChatSession session,
-            LlmRunCache runCache)
+        private ModelRequestPreparation PrepareRequest(IReadOnlyList<ToolCatalogEntry> tools,
+            ModelProtocolCallContext callContext = null)
         {
-            var options = ModelProtocolWire.CreateRequestOptions(responseMode, tools, callContext);
-            options.ReasoningEnabled = session == null ? (bool?)null : session.ReasoningEnabled;
-            options.RunCache = runCache;
-            options.TraceSession = session;
-            options.TracePurpose = ChatModes.Normalize(mode);
-            return options;
+            var preparation = new ModelRequestPreparation(_settings, tools,
+                callContext ?? new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)),
+                ConversationPromptComposer.ProjectJsonSchemaMessages);
+            preparation.Options.ReasoningEnabled = _session.ReasoningEnabled;
+            preparation.Options.RunCache = _runCache;
+            preparation.Options.TraceSession = _session;
+            preparation.Options.TracePurpose = ChatModes.Normalize(_mode);
+            return preparation;
         }
 
         private Task BuildMessagesAsync(
@@ -553,7 +539,7 @@ namespace RNAssistant.Office.Services
                     Content = "COMPLETION_FEEDBACK:\n" + _completionFeedback };
                 required.Add(feedback);
             }
-            var budget = RequestMessageBudget(tools, required);
+            var budget = PrepareRequest(tools).MessageBudget(required);
             var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
                 _settings, budget, enforceBudget, surface, trailingRequiredMessageId: feedback?.Id,
@@ -702,7 +688,7 @@ namespace RNAssistant.Office.Services
                     stateMessage,
                     true,
                     false);
-                return EstimatedAdmittedRequestTokens(candidate.Messages, ToolsForSnapshot(candidate)) <=
+                return PrepareRequest(ToolsForSnapshot(candidate)).EstimateAdmittedTokens(candidate.Messages) <=
                     ModelContextBudget.InputBudgetTokens(_settings);
             }
             catch (PromptBudgetExceededException)
@@ -715,7 +701,7 @@ namespace RNAssistant.Office.Services
             ModelContextSnapshot snapshot,
             bool canCompact)
         {
-            var estimated = EstimatedAdmittedRequestTokens(snapshot.Messages, ToolsForSnapshot(snapshot));
+            var estimated = PrepareRequest(ToolsForSnapshot(snapshot)).EstimateAdmittedTokens(snapshot.Messages);
             var budget = ModelContextBudget.InputBudgetTokens(_settings);
             if (estimated <= budget) return;
             throw new PromptBudgetExceededException(
@@ -725,41 +711,7 @@ namespace RNAssistant.Office.Services
                 canCompact);
         }
 
-        private int EstimatedAdmittedRequestTokens(
-            IReadOnlyList<ChatMessage> messages,
-            IReadOnlyList<ToolCatalogEntry> tools)
-        {
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)), _session, null);
-            return ModelContextBudget.EstimateAdmittedRequestTokens(
-                ProjectRequestMessages(messages, tools, options),
-                options,
-                _settings,
-                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings),
-                ModelContextBudget.ContinuationReserveTokens(_settings));
-        }
 
-        private int RequestMessageBudget(IReadOnlyList<ToolCatalogEntry> tools,
-            IReadOnlyList<ChatMessage> required)
-        {
-            var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)), _session, null);
-            var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
-                ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
-                ModelContextBudget.ContinuationReserveTokens(_settings);
-            var baseBudget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
-            return ModelContextBudget.IncludeProjectedMessageSavings(baseBudget, required,
-                ProjectRequestMessages(required, tools, options), _settings);
-        }
-
-        private static IReadOnlyList<ChatMessage> ProjectRequestMessages(
-            IReadOnlyList<ChatMessage> messages, IReadOnlyList<ToolCatalogEntry> tools, LlmRequestOptions options)
-        {
-            if (!string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal))
-                return messages;
-            return ModelProtocolWire.ProjectSchemaGuidance(
-                ConversationPromptComposer.ProjectJsonSchemaMessages(messages, tools, options.ResponseSchemaJson));
-        }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(
             string userText,

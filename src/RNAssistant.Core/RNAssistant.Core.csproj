@@ -203,6 +203,7 @@
     <Compile Include="ModelProtocol\ModelProtocolCallContext.cs" />
     <Compile Include="ModelProtocol\ToolResultWire.cs" />
     <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
+    <Compile Include="ModelProtocol\ModelRequestPreparation.cs" />
     <Compile Include="ModelProtocol\ModelProtocolRetryBudget.cs" />
     <Compile Include="ModelProtocol\ConversationResponse.cs" />
     <Compile Include="ModelProtocol\ConversationResponseJson.cs" />

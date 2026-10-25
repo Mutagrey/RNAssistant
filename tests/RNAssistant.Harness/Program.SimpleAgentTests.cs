@@ -2018,12 +2018,12 @@ namespace RNAssistant.Harness
                     ChatModes.Agent, userText, adapter, legacyCore, null, context,
                     settings, session, null, false, 60000,
                     CapabilityCatalogService.BuildPromptCatalog(runnable, null, legacyCore));
-                var currentOptions = ConversationModelSession.BuildRequestOptions(
-                    ChatModes.Agent, settings.AgentResponseMode, currentPack.Tools,
-                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnable)), session, null);
-                var legacyOptions = ConversationModelSession.BuildRequestOptions(
-                    ChatModes.Agent, settings.AgentResponseMode, legacyCore,
-                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnable)), session, null);
+                var currentOptions = ModelProtocolWire.CreateRequestOptions(
+                    settings.AgentResponseMode, currentPack.Tools,
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnable)));
+                var legacyOptions = ModelProtocolWire.CreateRequestOptions(
+                    settings.AgentResponseMode, legacyCore,
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnable)));
                 var repairReserve = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
                 var continuationReserve = ModelContextBudget.ContinuationReserveTokens(settings);
                 var currentTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
