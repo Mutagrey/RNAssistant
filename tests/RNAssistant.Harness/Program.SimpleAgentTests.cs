@@ -116,6 +116,16 @@ namespace RNAssistant.Harness
             var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "call_1", ToolId = "test.read" }, RNAssistant.Core.Tools.Contracts.ToolResult.Ok("ok"));
             result.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
             AssertTrue(!ConversationResponseHistoryReader.Read(result).Success, "tool results are not assistant responses");
+            var noCall = AgentTranscript.CreateAssistantMessage(V8Envelope(), null, null, AgentResponseStatuses.Completed);
+            noCall.ProtocolMessage = true;
+            noCall.ResponseModelAttemptId = "accepted_finish";
+            noCall.ToolResultRole = ToolResultRoles.Tool;
+            AssertTrue(!ConversationResponseHistoryReader.Read(noCall).Success,
+                "workspace no-call history rejects stray tool transport metadata");
+            noCall.ToolResultRole = null;
+            noCall.ResponseReason = "Conflicting reason.";
+            AssertTrue(!ConversationResponseHistoryReader.Read(noCall).Success,
+                "no-call history rejects a second reason outside the accepted envelope");
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             var first = jsonMessage();
             var second = jsonMessage();

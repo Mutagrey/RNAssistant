@@ -21,14 +21,24 @@ evidence of tool execution after cancellation. Windows/WebView2 remains unqualif
 
 ## Workspace file resource schema branches — 2026-10-24
 
-Owner: Application `WorkspacePorts.ResourceVariant`. An existing focused Harness
-check, `resources: VBA procedure workspace streaming`, fails at schema admission
-for `procedure`. The file-read branch returns `TextReadSelectorAlternatives`
-before the later `AddProcedureVariant`/`AddTreeVariant`/`AddPdfPageVariant` calls;
-the same unreachable order is present in the pre-change `HEAD`. This is a file
-selector admission defect, separate from the visual-selection attachment path.
-Next scoped fix: build complete file alternatives and run the existing VBA,
-JSON-tree and workspace PDF schema checks before claiming those selectors work.
+Fixed host-neutral 2026-10-25; owner: Application `WorkspacePorts.ResourceVariant`.
+The old file-read branch returned before procedure/tree/PDF alternatives. The
+file schema now has disjoint whole, line, character, procedure, tree and PDF page
+alternatives. Focused VBA, JSON-tree and workspace PDF Harness checks pass; the
+VBA fixture also admits procedure, tree and PDF windows through the v8 strict
+response schema. Windows/Office/WebView2 remains unqualified.
+
+## CLI resource-selector smoke is pre-v8 — 2026-10-25
+
+Open coverage gap; owner: CLI test harness. `tests/cli/resource_selectors_smoke.py`
+still imports `action=tool`/`action=done` fixtures and inspects a pre-v8 strict
+schema path. It cannot qualify current CLI selector admission or diagnostics.
+Port its scripted responses and assertions to the v8 wrapper and finish evidence
+before using its result as end-to-end evidence; the focused host-neutral Harness
+schema checks above remain available meanwhile. A source search also finds
+`action=tool`/`action=done` fixtures in other CLI smoke scripts, including
+`read_recovery_smoke.py` and `tool_result_projection_smoke.py`; audit their current
+qualification claims separately before relying on them.
 
 ## Conversation v8 / shared-chat incident audit — 2026-10-23
 

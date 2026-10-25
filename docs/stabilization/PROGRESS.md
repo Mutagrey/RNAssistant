@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Conversation v8 admission and diagnostics — 2026-10-25
+
+Owner: Core ModelProtocol/LLM, Office and workspace context admission, and
+Application workspace resource schema. Strict requests now budget their projected
+wire prompt through compilation and dispatch; an oversized full prompt cannot
+reach `json_object` fallback. Invalid provider schema errors remain typed HTTP
+failures rather than format-unsupported fallback. Workspace file procedure,
+tree and PDF selectors enter disjoint runtime and v8 strict schema alternatives;
+no-call history rejects stray transport metadata. Focused protocol, resource and
+saved-exchange Harness checks pass host-neutral. The pre-v8 CLI selector smoke
+remains a coverage gap in [RISK_REGISTER](RISK_REGISTER.md); real endpoint and
+Windows/Office/WebView2 qualification remain open.
+
 ## Compact chat history — 2026-10-25
 
 Owner: Web trajectory/run journal and shared JSON presentation. History now uses

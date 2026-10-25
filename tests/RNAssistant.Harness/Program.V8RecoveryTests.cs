@@ -167,12 +167,14 @@ namespace RNAssistant.Harness
                 using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
                 {
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                    var wireRequests = new List<JObject>();
                     var server = Task.Run(async () => {
                         for (var index = 0; index < 2; index++)
                         {
                             var context = await listener.GetContextAsync();
                             string raw; using (var reader = new StreamReader(context.Request.InputStream)) raw = await reader.ReadToEndAsync();
                             var request = JObject.Parse(raw);
+                            wireRequests.Add(request);
                             var prompt = (string)request["messages"][0]["content"];
                             AssertEqual(strict, (string)request.SelectToken("response_format.type") == "json_schema", "selected wire transport");
                             if (strict) {
@@ -195,7 +197,7 @@ namespace RNAssistant.Harness
                         var session = service.CreateSession(workspace, "Stream"); var previewSeen = false;
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "fixture",
                             StreamResponses = true, SmartChatTitles = false, AutoCompressContext = false,
-                            ContextWindowOverrideTokens = 131072, MaxConsecutiveReflections = 1,
+                            ContextWindowOverrideTokens = strict ? 19000 : 131072, MaxConsecutiveReflections = 1,
                             AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject };
                         var result = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                             SessionId = session.Id, Message = "Answer directly.", ReasoningEnabled = true }, settings, () => "fixture-key",
@@ -206,7 +208,8 @@ namespace RNAssistant.Harness
                                 AssertEqual(state.RunId, state.ModelProgress.RunId, "preview cannot cross runs");
                                 previewSeen = true;
                             }, cancellationToken: timeout.Token).GetAwaiter().GetResult();
-                        AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "streamed workspace run completes");
+                        AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                            "streamed workspace run completes: " + result.Summary.Reason + " " + result.Summary.AssistantMessage);
                         AssertTrue(previewSeen, "workspace progress sink is connected");
                         AssertTrue(service.ReadState(workspace, session.Id).ModelProgress == null, "terminal state retires transient preview");
                         var stored = service.GetSession(workspace, session.Id).Messages.Where(message => message.ResponseProtocolVersion == 8).ToArray();
@@ -216,6 +219,21 @@ namespace RNAssistant.Harness
                         AssertEqual(RunViewLifecycles.Completed, stored.Last().RunViewState?.Lifecycle,
                             "workspace persists the terminal run outcome on its visible accepted response");
                         server.GetAwaiter().GetResult();
+                        if (strict)
+                        {
+                            var format = wireRequests.Last()["response_format"];
+                            var budgetOptions = new LlmRequestOptions {
+                                ResponseFormat = (string)format["type"],
+                                ResponseSchemaName = (string)format.SelectToken("json_schema.name"),
+                                ResponseSchemaJson = format.SelectToken("json_schema.schema").ToString(Formatting.None)
+                            };
+                            var unprojectedBudget = Math.Max(1, ModelContextBudget.InputBudgetTokens(settings) -
+                                ModelContextBudget.EstimateRequestOptionsTokens(budgetOptions, settings) -
+                                ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings) -
+                                ModelContextBudget.ContinuationReserveTokens(settings));
+                            AssertTrue(service.GetSession(workspace, session.Id).LastContextReceipt.EstimatedTokens > unprojectedBudget,
+                                "the full frozen prompt exceeds the strict message budget, while its projected wire completed");
+                        }
                     } finally { listener.Stop(); }
                 }
             });

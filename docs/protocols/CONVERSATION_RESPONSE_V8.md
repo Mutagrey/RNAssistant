@@ -42,6 +42,11 @@ Strict prompts retain action/evidence/permission semantics without repeating the
 format examples or tool argument schemas. Argument descriptions stay in the supplied
 schema; schema types alone do not explain their meaning. Both full and projected
 prompts belong to the same frozen request, including repair and fallback.
+Strict admission counts the projected wire prompt and schema at compilation and
+dispatch. A fallback separately checks the retained full prompt before sending
+`json_object`; an invalid strict schema is reported as a provider error rather
+than treated as lack of format support. No-call accepted history rejects stray
+tool transport metadata and a second reason outside its v8 envelope.
 
 ## Admission, persistence and presentation
 

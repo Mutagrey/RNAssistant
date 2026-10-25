@@ -94,6 +94,19 @@ namespace RNAssistant.Core.Llm
                 Math.Max(0, continuationReserveTokens));
         }
 
+        // The compiler retains the full frozen prompt for a possible json_object
+        // fallback. Strict transport may send a smaller projection of required
+        // guidance, so reserve only the bytes that its actual request will carry.
+        public static int IncludeProjectedMessageSavings(int messageBudget,
+            IEnumerable<ChatMessage> fullRequired,
+            IEnumerable<ChatMessage> projectedRequired,
+            AppSettings settings)
+        {
+            var saved = Math.Max(0, EstimateMessagesTokens(fullRequired, settings) -
+                EstimateMessagesTokens(projectedRequired, settings));
+            return (int)Math.Min(int.MaxValue, (long)Math.Max(1, messageBudget) + saved);
+        }
+
         public static int EffectiveOutputTokens(AppSettings settings, IEnumerable<ChatMessage> messages, string model = null)
         {
             return EffectiveOutputTokens(settings, EstimateMessagesTokens(messages, settings, model), model);

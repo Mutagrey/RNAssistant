@@ -1097,28 +1097,19 @@ namespace RNAssistant.Runtime
                 return schema;
             }
 
-            private static void AddProcedureVariant(JObject schema)
+            private static void AddProcedureVariant(JObject alternatives, JObject file)
             {
-                var text = schema.DeepClone();
-                AddProcedureSelectors((JObject)schema["properties"]);
-                var procedure = (JObject)schema.DeepClone();
+                var procedure = (JObject)file.DeepClone();
                 var properties = (JObject)procedure["properties"];
-                foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount", "partNumber", "limit", "offset", "fields" })
-                    properties.Remove(name);
+                AddProcedureSelectors(properties);
                 ((JArray)procedure["required"]).Add("procedure");
-                schema["anyOf"] = new JArray(text, procedure);
+                ((JArray)alternatives["anyOf"]).Add(procedure);
             }
 
-            private static void AddTreeVariant(JObject schema)
+            private static void AddTreeVariant(JObject alternatives, JObject file)
             {
-                var variants = schema["anyOf"] as JArray;
-                if (variants == null) { variants = new JArray(schema.DeepClone()); schema["anyOf"] = variants; }
-                var tree = (JObject)schema.DeepClone();
-                tree.Remove("anyOf");
+                var tree = (JObject)file.DeepClone();
                 var properties = (JObject)tree["properties"];
-                foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount", "partNumber",
-                    "procedure", "procedureKind", "fields", "path", "section", "referencePath", "version" })
-                    properties.Remove(name);
                 properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("tree") };
                 properties["pointer"] = new JObject { ["type"] = "string",
                     ["description"] = "RFC 6901-style JSON/YAML pointer; empty string selects the root." };
@@ -1127,23 +1118,14 @@ namespace RNAssistant.Runtime
                 properties["limit"] = new JObject { ["type"] = "integer", ["minimum"] = 1 };
                 ((JArray)tree["required"]).Add("representation");
                 ((JArray)tree["required"]).Add("pointer");
-                var outer = (JObject)schema["properties"];
-                foreach (var name in new[] { "representation", "pointer", "depth", "offset", "limit" })
-                    if (outer[name] == null) outer[name] = properties[name].DeepClone();
-                variants.Add(tree);
+                ((JArray)alternatives["anyOf"]).Add(tree);
             }
 
-            private static void AddPdfPageVariant(JObject schema)
+            private static void AddPdfPageVariant(JObject alternatives, JObject file)
             {
-                var variants = schema["anyOf"] as JArray;
-                if (variants == null) { variants = new JArray(schema.DeepClone()); schema["anyOf"] = variants; }
-                var page = (JObject)schema.DeepClone();
-                page.Remove("anyOf");
+                var variants = (JArray)alternatives["anyOf"];
+                var page = (JObject)file.DeepClone();
                 var properties = (JObject)page["properties"];
-                foreach (var name in new[] { "startLine", "lineCount", "startChar", "charCount",
-                    "partNumber", "procedure", "procedureKind", "pointer", "depth", "offset", "limit",
-                    "fields", "path", "section", "referencePath", "version" })
-                    properties.Remove(name);
                 properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("text") };
                 properties["pageIndex"] = new JObject { ["type"] = "integer", ["minimum"] = 0,
                     ["description"] = "Zero-based page of an exact PDF original; extracted text may omit visual content." };
@@ -1151,12 +1133,12 @@ namespace RNAssistant.Runtime
                 ((JArray)page["required"]).Add("pageIndex");
                 var window = (JObject)page.DeepClone();
                 var windowProperties = (JObject)window["properties"];
-                var common = (JObject)schema["properties"];
-                windowProperties["startChar"] = common["startChar"].DeepClone();
-                windowProperties["charCount"] = common["charCount"].DeepClone();
+                // TextReadSelectorAlternatives starts with whole, lines, chars.
+                var characterProperties = (JObject)((JObject)variants[2])["properties"];
+                windowProperties["startChar"] = characterProperties["startChar"].DeepClone();
+                windowProperties["charCount"] = characterProperties["charCount"].DeepClone();
                 ((JArray)window["required"]).Add("startChar");
                 ((JArray)window["required"]).Add("charCount");
-                common["pageIndex"] = properties["pageIndex"].DeepClone();
                 var range = (JObject)page.DeepClone();
                 var rangeProperties = (JObject)range["properties"];
                 rangeProperties.Remove("pageIndex");
@@ -1167,8 +1149,6 @@ namespace RNAssistant.Runtime
                 ((JArray)range["required"]).Single(item => (string)item == "pageIndex").Remove();
                 ((JArray)range["required"]).Add("startPage");
                 ((JArray)range["required"]).Add("pageCount");
-                common["startPage"] = rangeProperties["startPage"].DeepClone();
-                common["pageCount"] = rangeProperties["pageCount"].DeepClone();
                 variants.Add(page);
                 variants.Add(window);
                 variants.Add(range);
@@ -1217,9 +1197,15 @@ namespace RNAssistant.Runtime
                 {
                     properties["target"]["description"] = skill ? "Enabled skill ID from discovery or the catalog." : "Workspace-relative file path, for example notes.txt or src/app.js.";
                     if (skill) properties["referencePath"]["description"] = "One listed reference path of this skill. Omit or use null to read its core instructions.";
-                    return TextReadSelectorAlternatives(schema, maximumFileReadCharacters);
+                    var alternatives = TextReadSelectorAlternatives(schema, maximumFileReadCharacters);
+                    if (!skill)
+                    {
+                        AddProcedureVariant(alternatives, schema);
+                        AddTreeVariant(alternatives, schema);
+                        AddPdfPageVariant(alternatives, schema);
+                    }
+                    return alternatives;
                 }
-                if (!find && !skill) { AddProcedureVariant(schema); AddTreeVariant(schema); AddPdfPageVariant(schema); }
                 return schema;
             }
 
@@ -1409,6 +1395,13 @@ namespace RNAssistant.Runtime
                     required.Add(runtimeContext);
                 }
                 var budget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
+                if (string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal))
+                {
+                    var projected = ProjectSchemaCatalog(required,
+                        PromptToolCatalog(surface.Tools, true), PromptToolCatalog(surface.Tools, false));
+                    budget = ModelContextBudget.IncludeProjectedMessageSavings(budget, required,
+                        ModelProtocolWire.ProjectSchemaGuidance(projected), _settings);
+                }
                 var facts = AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session)).ToList();
                 if (previewResult != null) facts.Add(previewResult);
                 var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3,

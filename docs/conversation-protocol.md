@@ -1035,17 +1035,18 @@ With SSE enabled, transport chunks still contain that raw JSON envelope. The liv
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; ModelProtocol removes those optional nulls before schema validation; the executor later applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
-When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
+When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects support for `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. An invalid supplied schema remains a typed provider HTTP error and does not trigger fallback. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
 
 For `json_schema`, the wire-only projection of the generated `RUNTIME_CONTEXT.tools`
 omits `function.parameters` after checking that every callable name and its exact
 structured argument contract matches `response_format.json_schema`. Descriptions,
-safety metadata, capability membership, document policy and the v7 envelope stay
+safety metadata, capability membership, document policy and the v8 envelope stay
 in the request. The accepted prompt retains full parameters: a schema-rejection
 retry and direct `json_object` mode send those same contracts without recompiling
 or changing the accepted messages. If the generated context or schema cannot be
-matched, projection is skipped. Admission still budgets the full prompt plus the
-strict schema, so this reduction does not claim extra callable capacity.
+matched, projection is skipped. Compilation and dispatch budget the actual strict
+wire prompt plus its schema and required reserves; the frozen full prompt is
+checked again before any `json_object` fallback dispatch.
 
 Historical host-neutral fixture measured from the retained exact `llm.request` UTF-8 bytes:
 the former Excel Agent core (20 callable schemas) plus one admitted

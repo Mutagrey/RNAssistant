@@ -199,13 +199,21 @@ namespace RNAssistant.Core.Llm
                 return false;
             }
             var value = body ?? string.Empty;
+            // A malformed supplied schema is a request error, not evidence that the
+            // endpoint lacks structured-output support. Keep its HTTP diagnostic.
+            if (value.IndexOf("invalid schema", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("schema is invalid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("schema validation", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("unsupported schema keyword", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("unsupported keyword", StringComparison.OrdinalIgnoreCase) >= 0)
+                return false;
             var mentionsFormat = value.IndexOf("response_format", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 value.IndexOf("json_schema", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 value.IndexOf("structured output", StringComparison.OrdinalIgnoreCase) >= 0;
             var rejected = value.IndexOf("unsupported", StringComparison.OrdinalIgnoreCase) >= 0 ||
                 value.IndexOf("not support", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("unknown", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                value.IndexOf("invalid", StringComparison.OrdinalIgnoreCase) >= 0;
+                value.IndexOf("unknown response_format", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("unknown parameter: response_format", StringComparison.OrdinalIgnoreCase) >= 0;
             return mentionsFormat && rejected;
         }
 

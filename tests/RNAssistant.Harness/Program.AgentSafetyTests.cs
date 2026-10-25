@@ -964,6 +964,39 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static async Task ModelProtocolInvalidSchemaDoesNotTriggerFallback()
+        {
+            var request = NewProtocolRequest(strict: true);
+            var invalidSchema = "{\"error\":{\"message\":\"Invalid schema for response_format: unsupported schema keyword\"}}";
+            AssertEqual(LlmFailureKind.Http, LlmHttpTransport.FailureKind(
+                System.Net.HttpStatusCode.BadRequest, invalidSchema, request.Options),
+                "an invalid supplied schema remains a provider request error");
+            AssertEqual(LlmFailureKind.Http, LlmHttpTransport.FailureKind(
+                System.Net.HttpStatusCode.UnprocessableEntity,
+                "{\"error\":{\"message\":\"Unknown property in json_schema\"}}", request.Options),
+                "an unknown schema property does not imply unsupported transport");
+            AssertEqual(LlmFailureKind.Http, LlmHttpTransport.FailureKind(
+                System.Net.HttpStatusCode.BadRequest,
+                "{\"error\":{\"message\":\"Unsupported keyword in response_format json_schema\"}}", request.Options),
+                "unsupported schema syntax remains a provider request error");
+            AssertEqual(LlmFailureKind.ResponseFormatUnsupported, LlmHttpTransport.FailureKind(
+                System.Net.HttpStatusCode.BadRequest,
+                "{\"error\":{\"message\":\"response_format json_schema is not supported by this model\"}}", request.Options),
+                "explicit format rejection still permits configured fallback");
+            var calls = 0;
+            var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                calls++;
+                throw new LlmRequestException(LlmHttpTransport.FailureKind(
+                    System.Net.HttpStatusCode.BadRequest, invalidSchema, options),
+                    invalidSchema, statusCode: 400);
+            });
+            var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
+            AssertEqual(1, calls, "invalid schema never dispatches an unwrapped fallback request");
+            AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "schema error remains a provider failure");
+            AssertEqual(LlmFailureKind.Http, result.Failure.ProviderKind, "the original HTTP cause remains typed for diagnostics");
+        }
+
         private static async Task ModelProtocolFallbackDuringRepair()
         {
             var request = NewProtocolRequest(2, true);
@@ -1160,6 +1193,63 @@ namespace RNAssistant.Harness
             AssertEqual(ModelProtocolFailureKind.PromptBudgetExceeded, result.Failure.Kind, "budget rejection belongs to protocol boundary");
             AssertEqual(0, calls, "prompt budget is checked before raw dispatch");
             AssertTrue(result.Response == null && result.Completion == null, "budget failure cannot become an accepted answer");
+        }
+
+        private static async Task ModelProtocolBudgetsProjectedWirePrompt()
+        {
+            Func<ModelProtocolRequest> createRequest = () =>
+            {
+                var request = NewProtocolRequest(1, true);
+                request.Settings.ContextWindowOverrideTokens = 8192;
+                request.Settings.MaxTokens = 512;
+                request.AcceptedMessages = new[] {
+                    new ChatMessage { Role = "system", Content = new string('x', 40000) },
+                    new ChatMessage { Role = "user", Content = "Answer directly." }
+                };
+                request.ProjectJsonSchemaMessages = source => new[] {
+                    new ChatMessage { Role = source[0].Role, Content = "Projected strict guidance." },
+                    source[1]
+                };
+                var wire = ModelProtocolWire.ProjectSchemaGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages));
+                var reserve = ModelContextBudget.ContinuationReserveTokens(request.Settings);
+                var budget = ModelContextBudget.InputBudgetTokens(request.Settings);
+                AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(request.AcceptedMessages,
+                    request.Options, request.Settings, 0, reserve) > budget,
+                    "the full fallback prompt exceeds the input budget");
+                AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(wire,
+                    request.Options, request.Settings, 0, reserve) <= budget,
+                    "the actual strict wire prompt fits the input budget");
+                return request;
+            };
+            var strict = createRequest();
+            strict.Settings.FallbackToJsonObject = false;
+            var calls = 0;
+            var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                calls++;
+                AssertEqual("Projected strict guidance.", messages.First().Content,
+                    "transport receives the projected prompt that passed budget admission");
+                var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                    "Answer directly.", "Done.", results: new ConversationResultClaim[0]);
+                return Task.FromResult(new LlmCompletionResult {
+                    Content = SchemaTransport(JObject.Parse(finish)).ToString(Formatting.None) });
+            });
+            var accepted = await protocol.GetResponseAsync(strict, null, CancellationToken.None);
+            AssertTrue(accepted.Failure == null && accepted.Response.Action == ConversationResponse.FinishAction,
+                "a fitting strict request is admitted");
+            AssertEqual(1, calls, "the fitting strict request dispatches exactly once");
+
+            var fallback = createRequest();
+            calls = 0;
+            protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
+            {
+                calls++;
+                throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "json_schema unsupported");
+            });
+            var blocked = await protocol.GetResponseAsync(fallback, null, CancellationToken.None);
+            AssertEqual(ModelProtocolFailureKind.PromptBudgetExceeded, blocked.Failure.Kind,
+                "an oversized full prompt is refused before json_object fallback dispatch");
+            AssertEqual(1, calls, "only the fitting strict request reached transport");
         }
 
         private static void RunSummaryUsesTypedOutcomesAndMetadata()

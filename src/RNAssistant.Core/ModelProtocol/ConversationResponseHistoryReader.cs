@@ -82,6 +82,7 @@ namespace RNAssistant.Core.ModelProtocol
             if (nativeCalls != null && nativeCalls.Count > 0 ||
                 !string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
                 message.AcceptedCallOrigin != null || message.ToolResultProtocolVersion != 0 ||
+                !string.IsNullOrWhiteSpace(message.ToolResultRole) || !string.IsNullOrWhiteSpace(message.ResponseReason) ||
                 string.IsNullOrWhiteSpace(message.ResponseModelAttemptId))
                 return ConversationHistoryReadResult.Fail("No-call v8 response has tool metadata or lacks its model attempt origin.");
             return ConversationHistoryReadResult.Ok(new AgentResponse(

@@ -979,11 +979,13 @@ then submit an explicit test-user choice with `answer`. Keep the two CLI traces,
 actual HTTP/CAS, selected profile/digest and source/binaries. Success proves this
 interaction route, not autonomous clarification quality or full M4/M5 acceptance.
 
-`python3 -B tests/cli/resource_selectors_smoke.py` checks closed file/skill argument
-alternatives in the actual prompt and structured-output wire, wrong-kind selectors
-rejected before dispatch, nullable file defaults, invalid root paths with repair
-guidance, relative directory discovery and exact file/skill reads. It uses scripted
-HTTP through the production CLI and preserves separate file-read acceptance.
+`tests/cli/resource_selectors_smoke.py` still uses pre-v8 responses and schema
+paths; it is not current end-to-end evidence. Its repair is tracked in the
+[risk register](../../docs/stabilization/RISK_REGISTER.md).
+Use the focused `resources: VBA procedure workspace streaming`,
+`resources: JSON tree workspace exact streaming` and
+`resource context: workspace PDF page text` Harness checks for current selector
+admission until that scripted CLI smoke is ported.
 
 ## Find a test
 

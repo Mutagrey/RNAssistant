@@ -546,7 +546,7 @@ namespace RNAssistant.Office.Services
                     Content = "COMPLETION_FEEDBACK:\n" + _completionFeedback };
                 required.Add(feedback);
             }
-            var budget = RequestMessageBudget(tools);
+            var budget = RequestMessageBudget(tools, required);
             var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
             return _compiler.Compile(frozen, required, facts, _context?.Notes, _runnableCatalog,
                 _settings, budget, enforceBudget, surface, trailingRequiredMessageId: feedback?.Id,
@@ -726,21 +726,33 @@ namespace RNAssistant.Office.Services
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)), _session, null);
             return ModelContextBudget.EstimateAdmittedRequestTokens(
-                messages,
+                ProjectRequestMessages(messages, tools, options),
                 options,
                 _settings,
                 ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings),
                 ModelContextBudget.ContinuationReserveTokens(_settings));
         }
 
-        private int RequestMessageBudget(IReadOnlyList<ToolCatalogEntry> tools)
+        private int RequestMessageBudget(IReadOnlyList<ToolCatalogEntry> tools,
+            IReadOnlyList<ChatMessage> required)
         {
             var options = BuildRequestOptions(_mode, _settings.AgentResponseMode, tools,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)), _session, null);
             var fixedTokens = ModelContextBudget.EstimateRequestOptionsTokens(options, _settings) +
                 ModelProtocolClient.EstimateFormatRepairOverheadTokens(_settings) +
                 ModelContextBudget.ContinuationReserveTokens(_settings);
-            return Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
+            var baseBudget = Math.Max(1, ModelContextBudget.InputBudgetTokens(_settings) - fixedTokens);
+            return ModelContextBudget.IncludeProjectedMessageSavings(baseBudget, required,
+                ProjectRequestMessages(required, tools, options), _settings);
+        }
+
+        private static IReadOnlyList<ChatMessage> ProjectRequestMessages(
+            IReadOnlyList<ChatMessage> messages, IReadOnlyList<ToolCatalogEntry> tools, LlmRequestOptions options)
+        {
+            if (!string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal))
+                return messages;
+            return ModelProtocolWire.ProjectSchemaGuidance(
+                ConversationPromptComposer.ProjectJsonSchemaMessages(messages, tools, options.ResponseSchemaJson));
         }
 
         private async Task<ChatMessage> BuildArtifactMediaMessageAsync(

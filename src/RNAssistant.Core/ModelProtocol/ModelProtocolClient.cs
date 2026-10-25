@@ -73,7 +73,7 @@ namespace RNAssistant.Core.ModelProtocol
                             ? EstimateFormatRepairOverheadTokens(settings)
                             : 0;
                         if (!TryValidatePromptBudget(
-                            attemptMessages,
+                            wireMessages,
                             settings,
                             options,
                             repairReserve,

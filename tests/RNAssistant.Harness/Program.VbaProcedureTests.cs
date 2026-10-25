@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
@@ -176,6 +177,27 @@ namespace RNAssistant.Harness
                 AssertTrue(ToolSchemaSupport.ValidateArguments(fileArgs, schema, false, out error), "workspace schema admits procedure reads");
                 fileArgs["startLine"] = 1;
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(fileArgs, schema, false, out error), "workspace schema rejects mixed procedure/line selectors");
+                var strictTool = new ToolCatalogEntry { Id = "common.resources_read",
+                    ArgumentSchemaJson = schema.ToString(Formatting.None) };
+                var strict = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { strictTool },
+                    new ModelProtocolCallContext(new string[0])));
+                var strictCall = new JObject { ["action"] = "execute", ["reason"] = "Read the exact file view.",
+                    ["tool_calls"] = new JArray(new JObject { ["name"] = strictTool.Id,
+                        ["arguments"] = new JObject { ["target"] = "wide.bas", ["type"] = JValue.CreateNull(),
+                            ["procedure"] = "Wide", ["procedureKind"] = JValue.CreateNull() } }), ["message"] = "" };
+                AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(strictCall), strict, false, out error),
+                    "v8 strict wire admits the file procedure alternative: " + error);
+                ((JObject)strictCall.SelectToken("tool_calls[0].arguments")).Replace(new JObject {
+                    ["target"] = "large.json", ["type"] = JValue.CreateNull(), ["representation"] = "tree",
+                    ["pointer"] = "", ["depth"] = JValue.CreateNull(), ["offset"] = JValue.CreateNull(),
+                    ["limit"] = JValue.CreateNull() });
+                AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(strictCall), strict, false, out error),
+                    "v8 strict wire admits the file tree alternative: " + error);
+                ((JObject)strictCall.SelectToken("tool_calls[0].arguments")).Replace(new JObject {
+                    ["target"] = "pages.pdf", ["type"] = JValue.CreateNull(), ["representation"] = "text",
+                    ["pageIndex"] = 0, ["startChar"] = 0, ["charCount"] = 10 });
+                AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(strictCall), strict, false, out error),
+                    "v8 strict wire admits the PDF page window alternative: " + error);
                 var officeArgs = new JObject { ["type"] = "office", ["target"] = "VBA module: Wide", ["representation"] = "source", ["procedure"] = "Wide" };
                 AssertTrue(ToolSchemaSupport.ValidateArguments(officeArgs, schema, false, out error), "workspace Office binding exposes the same procedure selector");
                 officeArgs["partNumber"] = 1;
