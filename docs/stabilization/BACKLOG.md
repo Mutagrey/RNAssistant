@@ -74,8 +74,6 @@ Owner: HTML preview tests / plugin preview lifecycle. Fixture
 (reading 'create')` без stack. Повтор со stack-capture завершил 12 циклов без
 page errors. Причина не установлена; при следующей preview-правке сохранить
 полный stack и условия воспроизведения, не объявлять проблему исправленной.
-Ранее зарегистрированное расхождение history control во время source-chat run
-также повторено; отдельная запись ниже остаётся владельцем этого вопроса.
 
 ## Resource Context — остаток исходного предложения — 2026-10-23
 

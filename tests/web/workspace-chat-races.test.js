@@ -26,6 +26,30 @@ const root = path.resolve(__dirname, '../..');
       else {
         await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
       }
+      const historyGuard = await page.evaluate(() => {
+        const snapshot = RNAssistantProjectChats.snapshot();
+        const workspaceId = RNAssistantProjectChats.workspaceId();
+        const originalStatus = snapshot.state.status;
+        const historyButton = id => document.querySelector(
+          '#projectChatTree [data-tree-key="project:' + id + '"] > .navigation-tree-row button[title^="Удалить историю"]');
+        const unrelated = Array.from(document.querySelectorAll('#projectChatTree [data-tree-key^="project:"]'))
+          .find(row => row.dataset.treeKey !== 'project:' + workspaceId);
+        const results = {};
+        for (const status of ['running', 'awaitingconfirmation', 'completed']) {
+          snapshot.state.status = status;
+          RNAssistantProjectChats.refreshTree();
+          results[status] = [historyButton(workspaceId).disabled,
+            document.querySelector('#projectChatTree [data-tree-key="project-chat:' + workspaceId + ':' +
+              snapshot.sessionId + '"] > .navigation-tree-row button[title^="Удалить чат"]').disabled,
+            historyButton(unrelated.dataset.treeKey.slice(8)).disabled];
+        }
+        snapshot.state.status = originalStatus;
+        RNAssistantProjectChats.refreshTree();
+        return results;
+      });
+      assert.deepEqual(historyGuard, { running: [true, true, false],
+        awaitingconfirmation: [true, true, false], completed: [false, false, false] },
+      owner + ': selected snapshot guards its project history without locking unrelated projects');
       await page.evaluate(() => {
         const original = send;
         window.snapshotRace = {release:null, delivered:false};

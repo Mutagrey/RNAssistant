@@ -126,6 +126,15 @@
     if (field(state, "status", "Status") === "interrupted") return "Выполнение прервано. Проверьте ход работы перед новым запросом.";
     return "";
   }
+  function chatRunStatus(entry, chat) {
+    return entry.workspaceId === projectId() && chat.Id === currentId() && runState()
+      ? field(runState(), "status", "Status") : chat.RunStatus;
+  }
+  function runBlocksDeletion(status) { return status === "running" || status === "awaitingconfirmation"; }
+  function historyBlocked(entry) {
+    return (entry.chats || []).some(function (chat) { return runBlocksDeletion(chatRunStatus(entry, chat)); }) ||
+      entry.workspaceId === projectId() && !!currentId() && runBlocksDeletion(field(runState(), "status", "Status"));
+  }
   function renderTree() {
     var root = el("Tree"), selected = currentId(), needle = query.trim().toLocaleLowerCase("ru");
     var pluginSource = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId();
@@ -134,8 +143,7 @@
       var items = (entry.chats || []).filter(function (chat) {
         return !needle || ownMatch || chat.Title.toLocaleLowerCase("ru").includes(needle);
       }).map(function (chat) {
-        var runStatus = entry.workspaceId === projectId() && chat.Id === selected && runState()
-          ? field(runState(), "status", "Status") : chat.RunStatus;
+        var runStatus = chatRunStatus(entry, chat);
         return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat",
           title: entry.workspaceId === projectId() && chat.Id === selected && runState()
             ? field(runState(), "title", "Title") || chat.Title : chat.Title,
@@ -146,7 +154,7 @@
             { title: "Переименовать чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
               disabled: !entry.available, onClick: function () { rename(entry, chat); } },
             { title: "Удалить чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
-              disabled: !entry.available || runStatus === "running" || runStatus === "awaitingconfirmation",
+              disabled: !entry.available || runBlocksDeletion(runStatus),
               onClick: function () { remove(entry, chat); } }
           ]), workspaceId: entry.workspaceId, sessionId: chat.Id };
       });
@@ -166,9 +174,7 @@
           { title: "Открыть «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("external"),
             onClick: function () { selectProject(entry.workspaceId); } },
           { title: "Удалить историю «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
-            disabled: (entry.chats || []).some(function (chat) {
-              return chat.RunStatus === "running" || chat.RunStatus === "awaitingconfirmation";
-            }), onClick: function () { removeHistory(entry); } }
+            disabled: historyBlocked(entry), onClick: function () { removeHistory(entry); } }
         ] };
     }).filter(Boolean);
     window.RNAssistantNavigationTree.render(root, nodes, {
