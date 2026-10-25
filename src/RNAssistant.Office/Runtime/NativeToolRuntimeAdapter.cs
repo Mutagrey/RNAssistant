@@ -269,7 +269,7 @@ namespace RNAssistant.Office.Runtime
                     if (capabilityTools == null)
                         throw new InvalidOperationException(
                             "Capability handler dependencies are unavailable.");
-                    binding = CapabilityToolHandler.BindingFor(registration.Descriptor.Id);
+                    binding = CapabilityToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new CapabilityToolHandler(
                         registration.Descriptor.Id, capabilityTools,
                         discoveryCatalog, skillCatalog, session, manualRun);

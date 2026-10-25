@@ -147,6 +147,11 @@
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\SkillTaskService.cs" />
     <Compile Include="Services\CallableToolProfile.cs" />
+    <Compile Include="Services\CallableToolSet.cs" />
+    <Compile Include="Services\ToolPackAdmissionJournal.cs" />
+    <Compile Include="Tools\CapabilityCatalogService.cs" />
+    <Compile Include="Tools\CapabilityToolCatalog.cs" />
+    <Compile Include="Tools\CapabilityToolContracts.cs" />
     <Compile Include="Tools\SkillLoadToolHandler.cs" />
     <Compile Include="Services\ConversationRunPolicy.cs" />
     <Compile Include="Services\ConversationInputJournal.cs" />

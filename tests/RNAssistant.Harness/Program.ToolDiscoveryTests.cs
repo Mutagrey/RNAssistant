@@ -1137,7 +1137,7 @@ namespace RNAssistant.Harness
                     tool.Id == CapabilityToolCatalog.ReadToolId);
                 var beforeBinding = ToolPackSnapshotFactory.ExecutionFingerprint(
                     catalog, capabilityRead.Id);
-                AssertEqual(CapabilityToolHandler.BindingFor(
+                AssertEqual(CapabilityToolCatalog.BindingFor(
                         CapabilityToolCatalog.ReadToolId).HandlerId,
                     snapshot.Find(CapabilityToolCatalog.ReadToolId)
                         .Binding.HandlerId,

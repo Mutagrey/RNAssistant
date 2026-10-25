@@ -64,8 +64,8 @@ registry, admission journal, permission layer or intent classifier is introduced
 | --- | --- | --- |
 | Office Agent/Excel | skills_load, resources_find/read, capabilities_search/read, excel.inspect | Existing exact direct admission or selected skill |
 | Office Agent/Word, PowerPoint, Outlook; Office Plan | The five common bootstrap IDs above, subject to mode catalog | Same routes, with existing mode policy |
-| Workspace/CLI | Published non-Skill catalog after mode filtering | Selected skills |
-| Writable workspace Agent | Common skills_load, resources_find/read/search, questions_ask, task_list_set, plan_doc_save/restore/delete; files.create/copy/move/patch/replace/delete/restore | Available contributions plus selected skills |
+| Workspace/CLI | Published non-Skill catalog after mode filtering, including capabilities_search/read in Agent/Plan | Exact direct admission or selected skills |
+| Writable workspace Agent | Common skills_load, resources_find/read/search, capabilities_search/read, questions_ask, task_list_set, plan_doc_save/restore/delete; files.create/copy/move/patch/replace/delete/restore | Available contributions plus selected skills |
 | Read-only workspace | Same profile over the catalog without files.* mutations | Read-only filesystem association does not redefine Plan/task or bound-Office policy |
 | Workspace with Office target | Workspace profile also includes published non-Skill Office contributions | Exact pinned target and existing guards remain |
 | Plugin source workspace | Workspace profile also includes available non-Skill plugin contributions | Specialized tools such as web.verify still require a selected skill |
@@ -76,13 +76,42 @@ Skill-only tool via a direct admission. It does not republish disabled/missing t
 or replace catalog-owner availability checks. Existing Office profile IDs and
 snapshot revision rules are unchanged, so this extraction requires no data migration.
 
-The next behavioral cutover is shared discovery/admission for workspace, **before**
-reducing its initial surface. The intended direction is a small common exploration
-core, an explicit environment profile, and model-selected additional tools/skills.
-Adding resources_search/questions_ask to the Office core or narrowing workspace is
-not part of this extraction. Compare task completion, discovery calls, request size
-and selection errors on the same corpus before adopting those changes. No silent
-tool eviction, partial skill loading or keyword-based intent routing is planned.
+### Shared discovery and admission — 2026-10-26
+
+Core `CapabilityCatalogService`/`CapabilityToolCatalog` now own descriptor construction,
+metadata search and exact schema reads for both consumers. `CallableToolSet` owns
+staging, candidate membership and replay checks; `ToolPackAdmissionJournal` persists
+accepted/rejected extensions in the existing chat event stream. Office retains its
+profile factory and ResourceGateway skill source reader. No second registry/journal,
+alias path or migration adapter remains.
+
+Workspace Agent/Plan now registers `common.capabilities_search/read`. Its default
+`workspace-direct` profile remains broad, including existing plugin and bound-Office
+contributions. A composition-owned `CallableToolProfile` can specify a smaller
+surface; this is not a model argument, user permission or automatic intent classifier.
+Chat and unavailable/read-only filesystem tools retain their mode/catalog filters.
+
+A completed schema result stages membership only after terminal persistence. At the
+next request, the existing skill compiler and ModelRequestPreparation test the full
+candidate (instructions, history, schema, repair/continuation reserves). The journal
+append precedes publication. Successful reads of already callable tools create no
+extension; Skill-only tools still require a selected compatible package. A refused
+candidate does not partially publish or gain authority from retained schema history.
+Reopening validates exact descriptor/policy/binding pins; drift resets optional
+membership explicitly. Prior-turn optional schemas can yield to the current budget
+with an explicit notice; no effect is replayed. Current-run effects remain kernel-owned.
+
+Schema receipts and runtime metadata removal now share Core helpers: exact callable
+schemas are not duplicated in model history, and `loaded`/revision fields do not
+claim selection authority. Workspace capability reads of skill IDs return routing
+metadata to `common.resources_read` (`type=skill`, semantic target) and
+`common.skills_load`; they do not read source, select the skill or execute code.
+Office retains its existing exact skill/reference source reads through ResourceGateway.
+
+Next: compare smaller explicit profiles on the same task/model corpus before
+changing defaults. Adding resources_search/questions_ask to the Office core or
+narrowing workspace is not part of this cutover. Measure task completion, discovery
+calls, request size and selection errors; no partial skills or keyword-based routing.
 
 The Office `common.resources_read` selector schema has one Core owner. The direct
 Office descriptor uses it unchanged; the workspace/CLI Office binding adds only

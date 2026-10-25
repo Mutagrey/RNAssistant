@@ -5,29 +5,25 @@ using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Tools
 {
-    internal sealed partial class CapabilityCatalogService
+    internal sealed class OfficeCapabilitySources
     {
-        private readonly SkillCatalogService _skillCatalog;
         private readonly ResourceGatewayService _resources;
-        internal SkillCatalogSnapshot CaptureSkills() { return _skillCatalog.Capture(); }
-        internal SkillCatalogSnapshot SelectPublishedSkills(SkillCatalogSnapshot published)
-        { return _skillCatalog.SelectPublished(published); }
-
-        internal CapabilityCatalogService(IOfficeApplicationAdapter adapter,
+        internal CapabilityCatalogService Catalog { get; }
+        internal OfficeCapabilitySources(IOfficeApplicationAdapter adapter,
             Func<SkillCatalogSnapshot> publishedSkills, ResourceGatewayService resources)
         {
             _resources = resources ?? throw new ArgumentNullException(nameof(resources));
-            _skillCatalog = new SkillCatalogService((adapter ?? throw new ArgumentNullException(nameof(adapter))).HostName, publishedSkills);
+            Catalog = new CapabilityCatalogService(new SkillCatalogService(
+                (adapter ?? throw new ArgumentNullException(nameof(adapter))).HostName, publishedSkills), ReadSkill);
         }
-
-        private IReadOnlyList<SkillDefinition> CapabilitySkills(bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
-        {
-            if (runtimeSkills != null) return runtimeSkills.Where(item => item != null && item.Enabled).ToList();
-            return manualRun ? (IReadOnlyList<SkillDefinition>)_skillCatalog.GetVisibleSkills() : new SkillDefinition[0];
-        }
+        private static bool HasArgument(IDictionary<string, object> arguments, string name)
+        { return arguments != null && arguments.ContainsKey(name); }
+        private static ToolRecoveryContract DefectRecovery()
+        { return new ToolRecoveryContract(ToolFailureKind.ToolDefect, ToolRetryPolicy.None); }
 
         private CapabilityToolOutcome ReadSkill(IDictionary<string, object> arguments, SkillDefinition skill, ChatSession session)
         {

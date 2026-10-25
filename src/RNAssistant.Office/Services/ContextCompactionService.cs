@@ -18,12 +18,12 @@ namespace RNAssistant.Office.Services
         // algorithm is shared with the independent workspace runtime.
         private readonly ContextCompactionRuntime _runtime;
         private readonly ResourceAuthorityService _authority;
-        private readonly Func<ChatSession, IReadOnlyList<ToolCatalogEntry>, SkillCatalogSnapshot, CallableToolPack> _captureTools;
+        private readonly Func<ChatSession, IReadOnlyList<ToolCatalogEntry>, SkillCatalogSnapshot, CallableToolSet> _captureTools;
         private readonly Func<SkillCatalogSnapshot> _captureSkills;
 
         public ContextCompactionService(LlmCompletionDelegate completeAsync,
             ResourceAuthorityService authority = null, ChatBlobStore payloads = null,
-            Func<ChatSession, IReadOnlyList<ToolCatalogEntry>, SkillCatalogSnapshot, CallableToolPack> captureTools = null,
+            Func<ChatSession, IReadOnlyList<ToolCatalogEntry>, SkillCatalogSnapshot, CallableToolSet> captureTools = null,
             Func<SkillCatalogSnapshot> captureSkills = null)
         {
             _authority = authority; _captureTools = captureTools; _captureSkills = captureSkills;

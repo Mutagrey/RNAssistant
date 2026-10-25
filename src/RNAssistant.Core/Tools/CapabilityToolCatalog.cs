@@ -3,20 +3,20 @@ using System.Collections.Generic;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal static class CapabilityToolCatalog
+    public static class CapabilityToolCatalog
     {
-        internal const string SearchToolId = "common.capabilities_search";
-        internal const string ReadToolId = "common.capabilities_read";
+        public const string SearchToolId = "common.capabilities_search";
+        public const string ReadToolId = "common.capabilities_read";
 
-        internal static bool Owns(string toolId)
+        public static bool Owns(string toolId)
         {
             return string.Equals(toolId, SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ReadToolId, StringComparison.Ordinal);
         }
 
-        internal static IEnumerable<ToolCatalogEntry> GetTools()
+        public static IEnumerable<ToolCatalogEntry> GetTools()
         {
             yield return Projection(
                 SearchToolId,
@@ -30,15 +30,23 @@ namespace RNAssistant.Office.Tools
                 "capabilities_read");
         }
 
+        public static ToolBinding BindingFor(string id)
+        {
+            if (id == SearchToolId) return new ToolBinding("capabilities.search.intent.v1");
+            if (id == ReadToolId) return new ToolBinding("capabilities.read.intent.v1");
+            return null;
+        }
+
         private static ToolCatalogEntry Projection(
             string id, string description, string schema, string name)
         {
-            return ControllerToolCatalogEntry.CreateTypedProjection(
-                new ToolDescriptor(id, description, schema),
-                new ToolPolicy(ToolEffect.Read, ToolVerification.None,
-                    false, true, new[] { "agent", "plan" }),
-                CapabilityToolHandler.BindingFor(id),
-                name: name, scope: "session");
+            return new ToolCatalogEntry {
+                Id = id, Host = "Common", Name = name, Description = description,
+                ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true,
+                Scope = "session", AgentCanRun = true,
+                Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, true, new[] { "agent", "plan" }),
+                Binding = BindingFor(id)
+            };
         }
     }
 }

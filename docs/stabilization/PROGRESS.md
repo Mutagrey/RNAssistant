@@ -1,5 +1,30 @@
 # Stabilization progress
 
+## Shared discovery/admission reaches workspace — 2026-10-26
+
+Owners: Core capability catalog / CallableToolSet / ToolPackAdmissionJournal;
+Application workspace composition; Office source/profile adapters. Pure discovery,
+descriptors, policies, exact membership and same-stream admission replay moved from
+Office into Core. Both consumers use them; old implementations were removed. Office
+retains its profile factory and ResourceGateway source acquisition. Workspace now
+offers capabilities_search/read in Agent/Plan while retaining its broad default
+surface. Skill source reads route to existing resources_read. Exact schema receipt
+compaction and runtime metadata removal are shared; no second registry or journal.
+
+21 focused Harness checks pass: end-to-end workspace discovery → next-request
+admission → execution → reopen → binding drift, skill-only refusal, 11 pack/budget
+checks, existing Office discovery/skill references/collisions, strict VBA admission,
+Library descriptions, workspace strict/object history, pinned Office target and Plan
+policy. Office profile IDs and existing registration contracts remain unchanged.
+No real-model quality or Windows/Office qualification is claimed.
+
+The normal CLI build exposes a pre-existing Core.Net8 DPAPI draft-store dependency
+failure. A temporary build-only exclusion of that unused CLI type verifies separate
+Core → Runtime → CLI assemblies, but does not close the
+[normal-build gap](RISK_REGISTER.md#cli-core-net8-draft-store-build-blocker--2026-10-26).
+Next: repair that independent build inclusion, then compare smaller explicit profiles
+on a shared task/model corpus before changing defaults. Product version unchanged.
+
 ## Direct admission budget fixtures corrected — 2026-10-26
 
 Owner: Harness / Office model-context verification. The two prior failures were

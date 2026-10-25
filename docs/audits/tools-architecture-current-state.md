@@ -47,8 +47,8 @@ Manual chat/HTML commands, file-owner journal operations and skill IDs are not p
 
 | Public ID | Schema/catalog source | Decision |
 |---|---|---|
-| `common.capabilities_read` | [CapabilityToolCatalog.cs](../../src/RNAssistant.Office/Tools/CapabilityToolCatalog.cs) | keep |
-| `common.capabilities_search` | [CapabilityToolCatalog.cs](../../src/RNAssistant.Office/Tools/CapabilityToolCatalog.cs) | keep |
+| `common.capabilities_read` | [CapabilityToolCatalog.cs](../../src/RNAssistant.Core/Tools/CapabilityToolCatalog.cs) | keep |
+| `common.capabilities_search` | [CapabilityToolCatalog.cs](../../src/RNAssistant.Core/Tools/CapabilityToolCatalog.cs) | keep |
 | `common.file_copy` | [AuthoredFileToolCatalog.cs](../../src/RNAssistant.Office/Tools/AuthoredFileToolCatalog.cs) | keep until existing workspace-first cutover |
 | `common.file_create` | [AuthoredFileToolCatalog.cs](../../src/RNAssistant.Office/Tools/AuthoredFileToolCatalog.cs) | keep until existing workspace-first cutover |
 | `common.file_patch` | [AuthoredFileToolCatalog.cs](../../src/RNAssistant.Office/Tools/AuthoredFileToolCatalog.cs) | keep until existing workspace-first cutover |

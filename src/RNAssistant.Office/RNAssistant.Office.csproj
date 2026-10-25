@@ -297,7 +297,6 @@
     <Compile Include="Services\AgentJsonProtocol.cs" />
     <Compile Include="Services\ConversationPromptComposer.cs" />
     <Compile Include="Services\CallableToolPack.cs" />
-    <Compile Include="Services\ToolPackAdmissionJournal.cs" />
     <Compile Include="Services\ToolPackSnapshotFactory.cs" />
     <Compile Include="Services\ApplicationVersionService.cs" />
     <Compile Include="Services\ContextCompactionService.cs" />
@@ -344,10 +343,7 @@
     <Compile Include="Tools\SkillAuthoringService.Library.cs" />
     <Compile Include="Tools\SkillAuthoringService.Mutations.cs" />
     <Compile Include="Tools\SkillAuthoringToolHandler.cs" />
-    <Compile Include="Tools\CapabilityCatalogService.cs" />
-    <Compile Include="Tools\CapabilityCatalogService.SkillReads.cs" />
-    <Compile Include="Tools\CapabilityToolCatalog.cs" />
-    <Compile Include="Tools\CapabilityToolContracts.cs" />
+    <Compile Include="Tools\OfficeCapabilitySources.cs" />
     <Compile Include="Tools\CapabilityToolHandler.cs" />
     <Compile Include="Tools\ToolAuthoringCatalog.cs" />
     <Compile Include="Tools\ToolAuthoringCatalog.Schemas.cs" />

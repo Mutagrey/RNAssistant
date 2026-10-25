@@ -8,6 +8,23 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## CLI Core.Net8 draft-store build blocker — 2026-10-26
+
+Open build gap; owner: Core project composition / local draft persistence.
+`dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore` fails with
+CS0103 at ProtectedChatDraftStore.cs:23: Core.Net8 includes this Windows DPAPI-default
+type but explicitly excludes ProtectedSecretStore. The draft type was introduced
+by `ae52ab50`; neither file nor its Net8 inclusion changed in the discovery cutover.
+No Application/Runtime/CLI consumer of ProtectedChatDraftStore was found. Harness
+includes its injected-codec path and cannot establish this separate assembly boundary.
+
+For discovery boundary verification only, a temporary BeforeTargets=CoreCompile
+target excluded Storage/ProtectedChatDraftStore.cs from RNAssistant.Core.Net8;
+the separate Core/Runtime/CLI build then passed with zero warnings/errors. This is
+diagnostic evidence, not a production fix or a successful normal CLI build. Resolve
+the unused Windows-only inclusion separately; do not add plaintext secret/draft
+fallbacks or change Office DPAPI behavior. No repository override was retained.
+
 ## Direct admission overflow fixtures — 2026-10-26
 
 Closed host-neutral; owner: Office model-context / Harness. Both former failures

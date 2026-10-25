@@ -113,8 +113,8 @@ context store или recovery engine здесь был бы дублирован
 skills, admission persistence и policy не заменялись. Текущий контракт и таблица
 профилей — в [Tool Library](../tool-library.md#shared-direct-tool-profile-selection--2026-10-26).
 Наблюдение выше о `_catalog` как direct input относится к baseline аудита.
-Следующий шаг — общий discovery/admission для workspace; уменьшать его каталог
-до появления этого пути нельзя. Поведенческие изменения требуют отдельной проверки
+Общий discovery/admission затем перенесён в Core и подключён к workspace; текущий
+широкий профиль сохранён. Сужение defaults остаётся отдельным этапом сравнения. Поведенческие изменения требуют отдельной проверки
 на одинаковом task/model corpus, а не автоматического переноса Office bootstrap.
 
 Сначала зафиксировать различия, затем извлечь только одинаковые правила.

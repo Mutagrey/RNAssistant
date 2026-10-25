@@ -123,9 +123,9 @@ namespace RNAssistant.Office.Services
             else
             {
                 if (name == CapabilityToolCatalog.ReadToolId && status == ToolResultStatus.Ok &&
-                    CompactCallableSchema(data, callableTools))
+                    CapabilityCatalogService.CompactCallableSchema(data, callableTools))
                     message = "Tool schema is in the current request: " + (string)data["id"] + ".";
-                RemoveCapabilityRuntimeState(data);
+                CapabilityCatalogService.RemoveRuntimeState(data);
             }
 
             // Result prose is operational metadata, not resource content. Apply the
@@ -336,27 +336,6 @@ namespace RNAssistant.Office.Services
                 string.Equals(name, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal);
         }
 
-        private static bool CompactCallableSchema(JToken token, IEnumerable<ToolCatalogEntry> callableTools)
-        {
-            var data = token as JObject;
-            if (data == null || (string)data["kind"] != "tool-schema" ||
-                data["loaded"]?.Type != JTokenType.Boolean || !(bool)data["loaded"] ||
-                data["complete"]?.Type != JTokenType.Boolean || !(bool)data["complete"] ||
-                data["truncated"]?.Type != JTokenType.Boolean || (bool)data["truncated"])
-                return false;
-            var tool = callableTools?.FirstOrDefault(item => item != null &&
-                string.Equals(item.Id, (string)data["id"], StringComparison.Ordinal));
-            if (tool == null || !string.Equals((string)data["revision"],
-                    CapabilityCatalogService.Revision(tool), StringComparison.Ordinal) ||
-                !JToken.DeepEquals(data["descriptor"], CapabilityCatalogService.Descriptor(tool)))
-                return false;
-            // Only the detached model view changes. Admission/replay still consume
-            // the complete durable descriptor, and this request supplies its exact copy.
-            data.Remove("descriptor");
-            data["schemaInRequest"] = true;
-            return true;
-        }
-
         private static bool IsPlanningResult(string name)
         {
             return string.Equals(name, UserQuestionToolCatalog.AskToolId,
@@ -380,27 +359,6 @@ namespace RNAssistant.Office.Services
         private static bool IsVbaResult(string name)
         {
             return VbaToolCatalog.Owns(name);
-        }
-
-        private static void RemoveCapabilityRuntimeState(JToken token)
-        {
-            var root = token as JObject;
-            if (root == null) return;
-            RemoveProperties(root,
-                "catalogRevision", "revision", "skillRevision", "snapshotRevision",
-                "previousSnapshotRevision", "admission", "progressCharacters", "loaded");
-            var items = root["items"] as JArray;
-            if (items != null)
-            {
-                foreach (var item in items.OfType<JObject>())
-                    RemoveProperties(item, "revision", "catalogRevision");
-            }
-            var references = root["references"] as JArray;
-            if (references != null)
-            {
-                foreach (var item in references.OfType<JObject>())
-                    RemoveProperties(item, "revision", "skillRevision");
-            }
         }
 
         private static void RemovePlanningRuntimeState(string name, JToken token)

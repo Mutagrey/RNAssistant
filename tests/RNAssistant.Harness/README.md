@@ -1,5 +1,14 @@
 # RNAssistant Harness
 
+`workspace: discovery admission restart and binding drift` uses a strict mock HTTP
+provider and an explicit small composition profile. A tool absent from the first
+request is found/read, admitted only in the next schema, executed once, restored
+after reopening, then invalidated on binding drift. A Skill-only schema read never
+admits it. The fixture checks one canonical admission event and model receipts
+without duplicated schemas, loaded flags or runtime revisions. Default workspace
+profiles stay broad. Existing `tool pack:`, Office discovery/skill-reference tests,
+workspace strict/object history and pinned-Office tests cover the shared owners.
+
 `tool pack: explicit profiles` compares explicit and all-direct profiles through
 the production skill compiler: initial/selected registration fingerprints,
 shared dependency deduplication, mutation policy/binding pins, selection removal

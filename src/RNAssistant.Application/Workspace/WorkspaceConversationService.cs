@@ -41,6 +41,7 @@ namespace RNAssistant.Runtime
         private readonly IWorkspaceWebVerifierFactory _webHost;
         private readonly Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> _extraTools;
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
+        private readonly CallableToolProfile _toolProfile;
         private readonly Func<WorkspaceDescriptor, bool> _isPluginSourceWorkspace;
         private readonly Func<IDisposable> _titleApplyLease;
         private readonly CancellationTokenSource _titleLifetime = new CancellationTokenSource();
@@ -81,11 +82,13 @@ namespace RNAssistant.Runtime
             Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null,
             IWorkspaceOfficeCapabilities officeCapabilities = null,
             Func<IDisposable> titleApplyLease = null,
-            Func<WorkspaceDescriptor, bool> isPluginSourceWorkspace = null)
+            Func<WorkspaceDescriptor, bool> isPluginSourceWorkspace = null,
+            CallableToolProfile toolProfile = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
             _isPluginSourceWorkspace = isPluginSourceWorkspace;
+            _toolProfile = toolProfile ?? CallableToolProfile.AllDirect("workspace-direct");
             _titleApplyLease = titleApplyLease;
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
@@ -193,7 +196,7 @@ namespace RNAssistant.Runtime
         {
             return new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, null, new AppSettings(), null, null,
                 runPolicy: ConversationRunPolicy.For(ChatModes.Require(mode), mutationPolicy), webHost: _webHost,
-                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace))
+                extraTools: _extraTools?.Invoke(workspace), pluginSource: IsPluginSource(workspace), toolProfile: _toolProfile)
                 .ToolIds;
         }
 
@@ -311,7 +314,7 @@ namespace RNAssistant.Runtime
                         session, settings, apiKeyProvider, progress, session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance(),
                         webHost: _webHost, extraTools: _extraTools?.Invoke(workspace),
                         office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
-                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value));
+                        pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                     await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingRun.Summary.PendingConfirmation.PendingId,
                         AgentRunContinuation.Restore(pendingRun, 0, RestoreAcceptedHistory(session, currentRunOnly: true)),
@@ -356,7 +359,7 @@ namespace RNAssistant.Runtime
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId),
-                    pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value));
+                    pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                 var userMessage = new ChatMessage { Id = Guid.NewGuid().ToString("N"), Role = "user",
                     Content = message ?? string.Empty, RunId = runId, Attachments = drafts };
                 if (drafts.Count > 0) attachmentStore.CommitToCas(userMessage);
@@ -473,7 +476,7 @@ namespace RNAssistant.Runtime
                     settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
-                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value));
+                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                 using (var control = OpenRunControl(session, cancellationToken))
                 {
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
@@ -839,6 +842,30 @@ namespace RNAssistant.Runtime
             }
         }
 
+        private sealed class WorkspaceCapabilityHandler : IReadOnlyToolHandler
+        {
+            private readonly string _id;
+            private readonly CapabilityCatalogService _service;
+            private readonly Func<IReadOnlyList<ToolCatalogEntry>> _catalog;
+            private readonly Func<IReadOnlyList<SkillDefinition>> _skills;
+            private readonly ChatSession _session;
+            internal WorkspaceCapabilityHandler(string id, CapabilityCatalogService service,
+                Func<IReadOnlyList<ToolCatalogEntry>> catalog, Func<IReadOnlyList<SkillDefinition>> skills, ChatSession session)
+            { _id = id; _service = service; _catalog = catalog; _skills = skills; _session = session; }
+            public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
+            {
+                token.ThrowIfCancellationRequested();
+                var outcome = _service.Execute(_id, context.Arguments, _catalog(), _skills(), _session, false);
+                var data = string.IsNullOrWhiteSpace(outcome.DataJson) ? new JObject() : JObject.Parse(outcome.DataJson);
+                if (outcome.Status != CapabilityOutcomeStatus.Ok)
+                { data["code"] = outcome.ErrorCode; data["retryable"] = outcome.Retryable; }
+                var result = outcome.Status == CapabilityOutcomeStatus.Ok
+                    ? ToolResult.Ok(outcome.Message, data.ToString(Formatting.None))
+                    : ToolResult.Error(outcome.Message, data.ToString(Formatting.None));
+                return Task.FromResult(new ToolHandlerResult(result, ToolEffectEvidence.None, recovery: outcome.Recovery));
+            }
+        }
+
         private sealed class WorkspacePorts : IModelProtocol, IRunStore
         {
             private readonly ChatStore _chats;
@@ -856,7 +883,11 @@ namespace RNAssistant.Runtime
             private readonly WorkspaceOfficeCapabilitySet _office;
             private readonly bool _pluginSource;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
-            private readonly IReadOnlyList<ToolCatalogEntry> _directTools;
+            private readonly CallableToolProfile _directProfile;
+            private CallableToolSet _callable;
+            private ToolPackAdmissionJournal _admissions;
+            private ChatMessage _packState;
+            private bool _carryoverOnly;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly WorkspaceChatAttachmentResourceProvider _chatAttachments;
             private readonly ModelContextCompiler _compiler;
@@ -884,12 +915,13 @@ namespace RNAssistant.Runtime
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
                 bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null,
                 IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null,
-                bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null)
+                bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null, CallableToolProfile toolProfile = null)
             {
                 _chats = chats; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
                 _settings = settings.Clone(); _progress = progress; _modelProgress = modelProgress; _acceptance = acceptance; _office = office;
                 _pluginSource = pluginSource;
+                _directProfile = toolProfile ?? CallableToolProfile.AllDirect("workspace-direct");
                 _mode = runPolicy ?? ConversationRunPolicy.ForAcceptedRun(session);
                 if (office != null && office.ModelProjection == null)
                     throw new InvalidOperationException("The bound Office result projection is unavailable.");
@@ -975,8 +1007,16 @@ namespace RNAssistant.Runtime
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
                 if (office?.Tools != null) foreach (var contribution in office.Tools)
                     Register(registry, entries, contribution.Entry, contribution.Handler);
+                var discovery = new CapabilityCatalogService(_skillCatalog, (arguments, skill, chat) =>
+                    CapabilityToolOutcome.Ok("Use common.resources_read to inspect this skill source; common.skills_load selects it.",
+                        new JObject { ["kind"] = "skill-guidance", ["id"] = skill.Id,
+                            ["readSource"] = new JObject { ["tool"] = "common.resources_read",
+                                ["type"] = "skill", ["target"] = skill.Id },
+                            ["loadSkill"] = skill.Id }.ToString(Formatting.None)));
+                foreach (var entry in CapabilityToolCatalog.GetTools())
+                    Register(registry, entries, entry, new WorkspaceCapabilityHandler(entry.Id, discovery,
+                        () => _catalog, () => _skills.Skills, session));
                 _catalog = entries;
-                _directTools = CallableToolProfile.AllDirect("workspace-direct").Select(_catalog);
                 _toolPack = new ToolPackSnapshot("workspace", _mode.Mode, "Workspace", entries.Select(item =>
                     ToolPackSnapshot.Capture(new ToolDescriptor(item.Id, item.Description, item.ArgumentSchemaJson,
                         item.Exposure, item.ContractVersion), item.Policy, item.Binding)));
@@ -1256,14 +1296,33 @@ namespace RNAssistant.Runtime
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
                 var authority = CaptureModelAuthority(cancellationToken);
-                _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _directTools, request.StepId, _settings);
+                EnsureCallableSet();
+                var admission = _callable.PreparePending((tools, state) => CanAdmitTools(authority, request, tools, state));
+                if (admission != null)
+                {
+                    _admissions.Append(admission, request.StepId);
+                    _callable.Publish(admission);
+                    _packState = admission.StateMessage;
+                    if (admission.Admitted) _carryoverOnly = false;
+                    authority = CaptureModelAuthority(cancellationToken);
+                }
+                _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _callable.Tools, request.StepId, _settings);
                 var preparation = PrepareRequest(_skillSurface);
-                var options = preparation.Options;
-                options.ReasoningEnabled = _session.ReasoningEnabled;
-                options.TraceStepId = request.StepId;
-                options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 ModelContextSnapshot snapshot;
-                try { snapshot = CompileCurrent(authority, preparation, request); }
+                try
+                {
+                    try { snapshot = CompileCurrent(authority, preparation, request); }
+                    catch (PromptBudgetExceededException) when (_carryoverOnly)
+                    {
+                        _callable = NewCallableSet(null);
+                        _carryoverOnly = false;
+                        _packState = new ChatMessage { Role = "user", ProtocolMessage = true,
+                            Content = "TOOL_PACK_RESTORE_STATE:\n{\"restored\":false,\"code\":\"tool_pack_carryover_budget\",\"instruction\":\"Prior schemas exceed this request budget. Discover and read needed schemas again.\"}" };
+                        _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _callable.Tools, request.StepId, _settings);
+                        preparation = PrepareRequest(_skillSurface);
+                        snapshot = CompileCurrent(authority, preparation, request);
+                    }
+                }
                 catch (PromptBudgetExceededException ex)
                 {
                     if (!ex.CanCompact || !_settings.AutoCompressContext)
@@ -1287,6 +1346,10 @@ namespace RNAssistant.Runtime
                     catch (PromptBudgetExceededException remaining)
                     { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
                 }
+                var options = preparation.Options;
+                options.ReasoningEnabled = _session.ReasoningEnabled;
+                options.TraceStepId = request.StepId;
+                options.TraceModelAttemptId = "attempt_" + Guid.NewGuid().ToString("N");
                 var messages = snapshot.Messages;
                 _lastRequest = request;
                 _lastAuthority = snapshot.Authority;
@@ -1328,6 +1391,36 @@ namespace RNAssistant.Runtime
                     result.SourceModelAttemptId);
             }
 
+            private CallableToolSet NewCallableSet(IReadOnlyList<ToolPackExtensionEventData> restored)
+            {
+                return CallableToolSet.Create(_mode.Mode, "Workspace", _session.LastRun.RunId, _catalog,
+                    _directProfile, tools => new ToolPackSnapshot("workspace", _mode.Mode, "Workspace",
+                        tools.Select(tool => _toolPack.Find(tool.Id))).Revision, restored);
+            }
+
+            private void EnsureCallableSet()
+            {
+                if (_callable != null) return;
+                _admissions = new ToolPackAdmissionJournal(new ChatEventStoreAdapter(_chats), _session);
+                bool current;
+                var restored = _admissions.ReadAccepted(out current);
+                _callable = NewCallableSet(restored);
+                _carryoverOnly = restored.Count > 0 && !current && _callable.OptionalSchemaCount > 0;
+            }
+
+            private bool CanAdmitTools(ModelAuthoritySnapshot authority, AgentModelRequest request,
+                IReadOnlyList<ToolCatalogEntry> tools, ChatMessage state)
+            {
+                var surface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, tools, request.StepId, _settings);
+                var preparation = PrepareRequest(surface);
+                try
+                {
+                    var snapshot = CompileCurrent(authority, preparation, request, surface, packState: state);
+                    return preparation.EstimateAdmittedTokens(snapshot.Messages) <= ModelContextBudget.InputBudgetTokens(_settings);
+                }
+                catch (PromptBudgetExceededException) { return false; }
+            }
+
             private ModelAuthoritySnapshot CaptureModelAuthority(CancellationToken cancellationToken)
             {
                 var frozen = CaptureContextAuthority(cancellationToken);
@@ -1340,7 +1433,7 @@ namespace RNAssistant.Runtime
             {
                 if (_lastRequest == null || _lastAuthority == null)
                     return "No accepted model request is available for skill admission.";
-                var surface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _directTools,
+                var surface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _callable.Tools,
                     _lastRequest.StepId, _settings, selections);
                 var preparation = PrepareRequest(surface);
                 try
@@ -1364,7 +1457,7 @@ namespace RNAssistant.Runtime
             }
 
             private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, ModelRequestPreparation preparation, AgentModelRequest request,
-                SkillRequestSurface candidateSurface = null, ChatMessage previewResult = null)
+                SkillRequestSurface candidateSurface = null, ChatMessage previewResult = null, ChatMessage packState = null)
             {
                 var surface = candidateSurface ?? _skillSurface;
                 var required = new List<ChatMessage>
@@ -1395,6 +1488,8 @@ namespace RNAssistant.Runtime
                         Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) };
                     required.Add(runtimeContext);
                 }
+                var state = packState ?? _packState ?? _callable?.RestorationStateMessage;
+                if (state != null) required.Add(state);
                 var budget = preparation.MessageBudget(required);
                 var facts = AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session)).ToList();
                 if (previewResult != null) facts.Add(previewResult);
@@ -1591,8 +1686,10 @@ namespace RNAssistant.Runtime
                     "Load a missing applicable skill with common.skills_load; reuse current SELECTED_SKILL. Complete instructions and tools arrive next request. " +
                     "Selection survives turns, cancellation, restart and compaction; remove irrelevant skills with action=remove. Resource reads never activate skills. " +
                     "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
-                    PromptToolCatalog((surface ?? _skillSurface)?.Tools ?? _directTools, true) +
-                    ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
+                    PromptToolCatalog((surface ?? _skillSurface)?.Tools ?? _directProfile.Select(_catalog), true) +
+                    (_mode.AllowsSkills ? ". Use common.capabilities_search to discover additional tools or skills; common.capabilities_read reads an exact tool schema. " +
+                    "A direct schema becomes callable only after next-request admission; skill-only tools require common.skills_load. " : ". ") +
+                    "Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
             }
 
             private ModelProtocolProgress ModelProgress(AgentModelRequest request, LlmRequestOptions options)
@@ -1754,6 +1851,9 @@ namespace RNAssistant.Runtime
                     ReferenceEquals(message.RunViewState, runView));
                 _chats.CommitRun(_session, new ConversationRunCommit(fact, _session.Messages.Skip(firstMessage),
                     activity, updated: projected == null ? null : new[] { projected }));
+                if (fact.Kind == AgentRunEventKind.ToolCompleted &&
+                    fact.Execution.Outcome != ToolExecutionOutcome.AwaitingConfirmation && _callable != null)
+                    foreach (var message in _session.Messages.Skip(firstMessage)) _callable.StageReadResult(message);
                 _cursor++;
                 if (fact.Kind == AgentRunEventKind.ResponseAccepted || fact.Summary.Lifecycle != RunLifecycle.Running)
                     _modelProgress?.Invoke(null);

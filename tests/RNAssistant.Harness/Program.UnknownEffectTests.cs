@@ -6,6 +6,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Harness

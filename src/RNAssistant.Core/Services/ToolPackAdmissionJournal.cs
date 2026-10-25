@@ -5,13 +5,13 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Persistence;
-using RNAssistant.Office.Tools;
+using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Core.Services
 {
     // The append-only chat event stream is the only replay authority for optional
     // callable membership. Raw tool-result messages are deliberately not read here.
-    internal sealed class ToolPackAdmissionJournal
+    public sealed class ToolPackAdmissionJournal
     {
         private readonly IEventStore _events;
         private readonly ChatSession _session;

@@ -7,13 +7,89 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
-using RNAssistant.Office.Services;
+using RNAssistant.Core.Services;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal sealed partial class CapabilityCatalogService
+    public sealed class CapabilityCatalogService
     {
-        internal const int MaximumDescriptorCharacters = 24000;
+        public static JObject BuildTool(ToolCatalogEntry tool)
+        {
+            if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) return null;
+            JObject schema;
+            string schemaError;
+            if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError)) return null;
+            return new JObject
+            {
+                ["type"] = "function",
+                ["function"] = new JObject
+                {
+                    ["name"] = tool.Id,
+                    ["description"] = BuildDescription(tool),
+                    ["parameters"] = ToolSchemaSupport.ForPrompt(schema)
+                },
+                ["safety"] = new JObject
+                {
+                    ["mutates_document"] = tool.MutatesDocument,
+                    ["mutates_local_state"] = tool.MutatesLocalState,
+                    ["requires_confirmation"] = tool.RequiresConfirmation,
+                    ["risk_level"] = tool.RiskLevel
+                }
+            };
+        }
+
+        public static string BuildDescription(ToolCatalogEntry tool)
+        {
+            var parts = new List<string>();
+            if (!string.IsNullOrWhiteSpace(tool.Description)) parts.Add(tool.Description.Trim());
+            if (!string.IsNullOrWhiteSpace(tool.UseWhen)) parts.Add("Use when: " + tool.UseWhen.Trim());
+            if (!string.IsNullOrWhiteSpace(tool.DoNotUseWhen)) parts.Add("Do not use when: " + tool.DoNotUseWhen.Trim());
+            if (!string.IsNullOrWhiteSpace(tool.Limitations)) parts.Add("Limitations: " + tool.Limitations.Trim());
+            return string.Join(" ", parts.ToArray());
+        }
+
+        public static bool CompactCallableSchema(JToken token, IEnumerable<ToolCatalogEntry> callableTools)
+        {
+            var data = token as JObject;
+            if (data == null || (string)data["kind"] != "tool-schema" ||
+                data["loaded"]?.Type != JTokenType.Boolean || !(bool)data["loaded"] ||
+                data["complete"]?.Type != JTokenType.Boolean || !(bool)data["complete"] ||
+                data["truncated"]?.Type != JTokenType.Boolean || (bool)data["truncated"])
+                return false;
+            var tool = callableTools?.FirstOrDefault(item => item != null &&
+                string.Equals(item.Id, (string)data["id"], StringComparison.Ordinal));
+            if (tool == null || !string.Equals((string)data["revision"],
+                    CapabilityCatalogService.Revision(tool), StringComparison.Ordinal) ||
+                !JToken.DeepEquals(data["descriptor"], CapabilityCatalogService.Descriptor(tool)))
+                return false;
+            // Only the detached model view changes. Admission/replay still consume
+            // the complete durable descriptor, and this request supplies its exact copy.
+            data.Remove("descriptor");
+            data["schemaInRequest"] = true;
+            return true;
+        }
+
+        public static void RemoveRuntimeState(JToken token)
+        {
+            var root = token as JObject;
+            if (root == null) return;
+            foreach (var name in new[] { "catalogRevision", "revision", "skillRevision", "snapshotRevision",
+                "previousSnapshotRevision", "admission", "progressCharacters", "loaded" }) root.Remove(name);
+            var items = root["items"] as JArray;
+            if (items != null)
+            {
+                foreach (var item in items.OfType<JObject>())
+                    { item.Remove("revision"); item.Remove("catalogRevision"); }
+            }
+            var references = root["references"] as JArray;
+            if (references != null)
+            {
+                foreach (var item in references.OfType<JObject>())
+                    { item.Remove("revision"); item.Remove("skillRevision"); }
+            }
+        }
+
+        public const int MaximumDescriptorCharacters = 24000;
 
         private const int MaximumSearchPageSize = 20;
         private const int MaximumQueryCharacters = 200;
@@ -21,7 +97,27 @@ namespace RNAssistant.Office.Tools
         private const int MaximumPromptSummaryCharacters = 96;
         private const int MaximumSummaryCharacters = 160;
 
-        internal CapabilityToolOutcome Execute(
+        private readonly SkillCatalogService _skillCatalog;
+        private readonly Func<IDictionary<string, object>, SkillDefinition, ChatSession, CapabilityToolOutcome> _readSkill;
+
+        public CapabilityCatalogService(SkillCatalogService skillCatalog,
+            Func<IDictionary<string, object>, SkillDefinition, ChatSession, CapabilityToolOutcome> readSkill)
+        {
+            _skillCatalog = skillCatalog ?? throw new ArgumentNullException(nameof(skillCatalog));
+            _readSkill = readSkill ?? throw new ArgumentNullException(nameof(readSkill));
+        }
+
+        public SkillCatalogSnapshot CaptureSkills() { return _skillCatalog.Capture(); }
+        public SkillCatalogSnapshot SelectPublishedSkills(SkillCatalogSnapshot published)
+        { return _skillCatalog.SelectPublished(published); }
+
+        private IReadOnlyList<SkillDefinition> CapabilitySkills(bool manualRun, IReadOnlyList<SkillDefinition> runtimeSkills)
+        {
+            if (runtimeSkills != null) return runtimeSkills.Where(item => item != null && item.Enabled).ToList();
+            return manualRun ? (IReadOnlyList<SkillDefinition>)_skillCatalog.GetVisibleSkills() : new SkillDefinition[0];
+        }
+
+        public CapabilityToolOutcome Execute(
             string toolId,
             IDictionary<string, object> arguments,
             IReadOnlyList<ToolCatalogEntry> runnableCatalog,
@@ -52,25 +148,25 @@ namespace RNAssistant.Office.Tools
                 "unknown_tool", false, DefectRecovery());
         }
 
-        internal static JObject Descriptor(ToolCatalogEntry tool)
+        public static JObject Descriptor(ToolCatalogEntry tool)
         {
-            return ConversationPromptComposer.BuildTool(tool);
+            return BuildTool(tool);
         }
 
-        internal static string Revision(ToolCatalogEntry tool)
+        public static string Revision(ToolCatalogEntry tool)
         {
             var descriptor = Descriptor(tool);
             return descriptor == null ? string.Empty : Sha256(descriptor.ToString(Formatting.None));
         }
 
-        internal static string ToolCatalogRevision(IEnumerable<ToolCatalogEntry> tools)
+        public static string ToolCatalogRevision(IEnumerable<ToolCatalogEntry> tools)
         {
             return Sha256(string.Join("\n", NormalizeTools(tools)
                 .Select(tool => tool.Id + ":" + Revision(tool))
                 .ToArray()));
         }
 
-        internal static string CatalogRevision(
+        public static string CatalogRevision(
             IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
@@ -82,7 +178,7 @@ namespace RNAssistant.Office.Tools
             return Sha256(string.Join("\n", entries));
         }
 
-        internal static JObject BuildPromptCatalog(
+        public static JObject BuildPromptCatalog(
             IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills,
             IEnumerable<ToolCatalogEntry> activeTools)
@@ -121,7 +217,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        internal static void BindReadSchema(
+        public static void BindReadSchema(
             IList<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
@@ -168,7 +264,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        internal static void ThrowOnCollision(
+        public static void ThrowOnCollision(
             IEnumerable<ToolCatalogEntry> tools,
             IEnumerable<SkillDefinition> skills)
         {
@@ -186,7 +282,7 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<SkillDefinition> skills,
             ChatSession session)
         {
-            var id = ToolArgumentReader.String(
+            var id = ArgumentString(
                 arguments, "id", string.Empty).Trim();
             var tool = tools.FirstOrDefault(candidate =>
                 string.Equals(candidate.Id, id, StringComparison.Ordinal));
@@ -220,7 +316,7 @@ namespace RNAssistant.Office.Tools
                 }
                 return ReadTool(tool, skills);
             }
-            return ReadSkill(arguments, skill, session);
+            return _readSkill(arguments, skill, session);
         }
 
         private static CapabilityToolOutcome ReadTool(ToolCatalogEntry tool, IReadOnlyList<SkillDefinition> skills)
@@ -289,7 +385,7 @@ namespace RNAssistant.Office.Tools
             IReadOnlyList<ToolCatalogEntry> tools,
             IReadOnlyList<SkillDefinition> skills)
         {
-            var query = ToolArgumentReader.String(
+            var query = ArgumentString(
                 arguments, "query", string.Empty).Trim();
             if (query.Length == 0)
             {
@@ -305,7 +401,7 @@ namespace RNAssistant.Office.Tools
                     "capability_query_too_large",
                     true);
             }
-            var kind = ToolArgumentReader.String(
+            var kind = ArgumentString(
                 arguments, "kind", string.Empty).Trim().ToLowerInvariant();
             var matches = Records(tools, skills)
                 .Where(record => string.IsNullOrWhiteSpace(kind) || string.Equals(record.Kind, kind, StringComparison.Ordinal))
@@ -334,7 +430,7 @@ namespace RNAssistant.Office.Tools
             }.ToString(Formatting.None));
         }
 
-        internal static ToolResultSummary SummarizeSearch(JObject data)
+        public static ToolResultSummary SummarizeSearch(JObject data)
         {
             var items = data?["items"] as JArray;
             if (items == null || data["kind"]?.Type != JTokenType.String ||
@@ -348,7 +444,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        internal static ToolResultSummary SummarizeRead(JObject data)
+        public static ToolResultSummary SummarizeRead(JObject data)
         {
             if (data?["kind"]?.Type != JTokenType.String ||
                 data["complete"]?.Type != JTokenType.Boolean) return null;
@@ -582,7 +678,7 @@ namespace RNAssistant.Office.Tools
             }
         }
 
-        internal static string SearchSchema()
+        public static string SearchSchema()
         {
             return "{\"type\":\"object\",\"properties\":{" +
                 "\"query\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200,\"description\":\"Literal query over capability ids and compact metadata.\"}," +
@@ -590,7 +686,7 @@ namespace RNAssistant.Office.Tools
                 "\"required\":[\"query\"],\"additionalProperties\":false}";
         }
 
-        internal static string ReadSchema(
+        public static string ReadSchema(
             IEnumerable<string> allowedIds,
             IEnumerable<string> skillIds)
         {
@@ -655,6 +751,32 @@ namespace RNAssistant.Office.Tools
                 ["additionalProperties"] = false,
                 ["anyOf"] = variants
             }.ToString(Formatting.None);
+        }
+
+        private static string ArgumentString(IDictionary<string, object> args, string name, string fallback = "")
+        {
+            object value;
+            if (args == null || !args.TryGetValue(name, out value) || value == null)
+            {
+                return fallback;
+            }
+
+            var token = value as JToken;
+            if (token == null)
+            {
+                return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (token.Type == JTokenType.Null || token.Type == JTokenType.Undefined)
+            {
+                return fallback;
+            }
+            if (token.Type == JTokenType.Object || token.Type == JTokenType.Array)
+            {
+                return token.ToString(Formatting.None);
+            }
+
+            var scalar = token as JValue;
+            return Convert.ToString(scalar == null ? token.ToString(Formatting.None) : scalar.Value, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static bool HasArgument(

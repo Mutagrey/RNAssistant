@@ -51,7 +51,7 @@ namespace RNAssistant.Runtime
                     session, settings, apiKeyProvider, progress, acceptance, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings, session.LastRun.RunId),
-                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value));
+                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                 _chats.CloseOpenSteps(session, request.RunId, "interrupted", "Explicit continuation after the previous invocation stopped.");
                 // The kernel's first mandatory append claims this cursor. No new
                 // input, run ID, budget or accepted tool call is manufactured.

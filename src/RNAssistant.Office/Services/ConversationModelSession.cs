@@ -43,7 +43,7 @@ namespace RNAssistant.Office.Services
         private string _currentUserId;
         private ChatMessage _packState;
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
-        private CallableToolPack _toolPack;
+        private CallableToolSet _toolPack;
         private string _requestStepId;
         private string _completionFeedback;
         private LlmRunCache _runCache;

@@ -116,7 +116,7 @@ namespace RNAssistant.Office.Tools
             _markdownDocuments = new MarkdownDocumentService(_resourceGateway, new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads));
             _authoredFiles = new AuthoredFileService(_resourceGateway,
                 new DocumentArtifactStore(_resourceAuthority.Store, _resourceAuthority.Revisions, Payloads), Payloads);
-            _capabilityCatalogService = new CapabilityCatalogService(adapter, _catalogPublication.CaptureSkills, _resourceGateway);
+            _capabilityCatalogService = new OfficeCapabilitySources(adapter, _catalogPublication.CaptureSkills, _resourceGateway).Catalog;
             var excelBackends = _adapter as IExcelBackendProvider;
             _excelReadAdapter = excelBackends == null || excelBackends.ExcelReadBackend == null
                 ? null : new ExcelReadToolAdapter(excelBackends.ExcelReadBackend);

@@ -243,7 +243,7 @@ namespace RNAssistant.Office.Services
             var result = new JArray();
             foreach (var tool in tools ?? new ToolCatalogEntry[0])
             {
-                var descriptor = BuildTool(tool);
+                var descriptor = CapabilityCatalogService.BuildTool(tool);
                 if (descriptor != null) result.Add(descriptor);
             }
             return result;
@@ -315,41 +315,6 @@ namespace RNAssistant.Office.Services
             var result = messages.ToArray();
             result[0] = copy;
             return result;
-        }
-
-        internal static JObject BuildTool(ToolCatalogEntry tool)
-        {
-            if (tool == null || string.IsNullOrWhiteSpace(tool.Id)) return null;
-            JObject schema;
-            string schemaError;
-            if (!ToolSchemaSupport.TryParse(tool, out schema, out schemaError)) return null;
-            return new JObject
-            {
-                ["type"] = "function",
-                ["function"] = new JObject
-                {
-                    ["name"] = tool.Id,
-                    ["description"] = BuildDescription(tool),
-                    ["parameters"] = ToolSchemaSupport.ForPrompt(schema)
-                },
-                ["safety"] = new JObject
-                {
-                    ["mutates_document"] = tool.MutatesDocument,
-                    ["mutates_local_state"] = tool.MutatesLocalState,
-                    ["requires_confirmation"] = tool.RequiresConfirmation,
-                    ["risk_level"] = tool.RiskLevel
-                }
-            };
-        }
-
-        internal static string BuildDescription(ToolCatalogEntry tool)
-        {
-            var parts = new List<string>();
-            if (!string.IsNullOrWhiteSpace(tool.Description)) parts.Add(tool.Description.Trim());
-            if (!string.IsNullOrWhiteSpace(tool.UseWhen)) parts.Add("Use when: " + tool.UseWhen.Trim());
-            if (!string.IsNullOrWhiteSpace(tool.DoNotUseWhen)) parts.Add("Do not use when: " + tool.DoNotUseWhen.Trim());
-            if (!string.IsNullOrWhiteSpace(tool.Limitations)) parts.Add("Limitations: " + tool.Limitations.Trim());
-            return string.Join(" ", parts.ToArray());
         }
 
         private static string NormalizeInstructionRole(string role)

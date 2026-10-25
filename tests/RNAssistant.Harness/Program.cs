@@ -130,6 +130,7 @@ namespace RNAssistant.Harness
                 Test("workspace: saved Office results use host projection", WorkspaceOfficeHistoryUsesHostProjection),
                 Test("workspace: first message names the chat and smart title updates it", WorkspaceChatAutoTitle),
                 Test("workspace: accepted call history survives a new turn", () => WorkspaceAcceptedCallHistory()),
+                Test("workspace: discovery admission restart and binding drift", WorkspaceDiscoveryAdmitsAndRestoresExactTools),
                 Test("workspace: strict prepared requests preserve call history", () => WorkspaceAcceptedCallHistory(true)),
                 Test("workspace: copy identity conflict and read-only association", WorkspaceRejectsCopyConflict),
                 Test("tabular project: create reopen read-only and relocate", TabularProjectsCreateReopenAndRelocate),

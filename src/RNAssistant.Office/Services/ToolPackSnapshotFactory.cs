@@ -61,7 +61,7 @@ namespace RNAssistant.Office.Services
             return ToolPackSnapshot.Capture(
                 new ToolDescriptor(
                     definition.Id,
-                    ConversationPromptComposer.BuildDescription(definition),
+                    CapabilityCatalogService.BuildDescription(definition),
                     definition.ArgumentSchemaJson, definition.Exposure, definition.ContractVersion),
                 policy,
                 new ToolBinding(

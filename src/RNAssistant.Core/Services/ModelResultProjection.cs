@@ -64,6 +64,8 @@ namespace RNAssistant.Core.Services
             var data = wire.Data;
             var materialized = new ToolResultMaterialization(
                 wire.Result, resultResource: wire.ResultResource, data: data);
+            if (_projectData == null && wire.Name == CapabilityToolCatalog.ReadToolId && wire.Result.Status == ToolResultStatus.Ok)
+                CapabilityCatalogService.CompactCallableSchema(materialized.Data, callableTools);
             // Common families have one projection in both hosts. Domain projection
             // runs only for other tools; recovery is rendered once from typed facts.
             var model = IsResourceEvidence(wire.Name) || IsWorkspaceMutation(wire.Name) || _projectData == null
@@ -274,6 +276,7 @@ namespace RNAssistant.Core.Services
         public static JToken ProjectGenericData(string name, ToolResultMaterialization source)
         {
             var data = source.Data.DeepClone();
+            if (CapabilityToolCatalog.Owns(name)) CapabilityCatalogService.RemoveRuntimeState(data);
             RemoveQuestionRuntimeState(name, data);
             RemoveTaskListRuntimeState(name, data);
             RemovePlanRuntimeState(name, data);

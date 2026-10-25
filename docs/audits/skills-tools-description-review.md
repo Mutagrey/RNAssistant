@@ -93,8 +93,8 @@ Common skills в Office фильтруются host; Workspace получает 
 
 | Tool ID | Семейство | Источник контракта |
 |---|---|---|
-| `common.capabilities_read` | C | [CapabilityToolCatalog.cs](../../src/RNAssistant.Office/Tools/CapabilityToolCatalog.cs) |
-| `common.capabilities_search` | C | [CapabilityToolCatalog.cs](../../src/RNAssistant.Office/Tools/CapabilityToolCatalog.cs) |
+| `common.capabilities_read` | C | [CapabilityToolCatalog.cs](../../src/RNAssistant.Core/Tools/CapabilityToolCatalog.cs) |
+| `common.capabilities_search` | C | [CapabilityToolCatalog.cs](../../src/RNAssistant.Core/Tools/CapabilityToolCatalog.cs) |
 | `common.file_copy` | A | [AuthoredFileToolCatalog.cs](../../src/RNAssistant.Office/Tools/AuthoredFileToolCatalog.cs) |
 | `common.file_create` | A | [AuthoredFileToolCatalog.cs](../../src/RNAssistant.Office/Tools/AuthoredFileToolCatalog.cs) |
 | `common.file_patch` | A | [AuthoredFileToolCatalog.cs](../../src/RNAssistant.Office/Tools/AuthoredFileToolCatalog.cs) |

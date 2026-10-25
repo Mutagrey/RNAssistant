@@ -40,17 +40,6 @@ namespace RNAssistant.Office.Tools
             _manualRun = manualRun;
         }
 
-        internal static ToolBinding BindingFor(string toolId)
-        {
-            if (string.Equals(toolId, CapabilityToolCatalog.SearchToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("capabilities.search.intent.v1");
-            if (string.Equals(toolId, CapabilityToolCatalog.ReadToolId,
-                StringComparison.Ordinal))
-                return new ToolBinding("capabilities.read.intent.v1");
-            return null;
-        }
-
         public Task<ToolHandlerResult> ExecuteAsync(
             ToolHandlerContext context,
             CancellationToken cancellationToken)

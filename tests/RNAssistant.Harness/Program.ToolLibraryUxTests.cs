@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                         {
                             var revision = ToolAuthoringService
                                 .LibraryRevision(tool);
-                            var promptDescription = ConversationPromptComposer
+                            var promptDescription = CapabilityCatalogService
                                 .BuildDescription(tool);
                             var readme = tool.Readme;
                             var markdown =
@@ -67,7 +67,7 @@ namespace RNAssistant.Harness
                                 ToolAuthoringService.LibraryRevision(tool),
                                 tool.Id + " library revision unchanged");
                             AssertEqual(promptDescription,
-                                ConversationPromptComposer.BuildDescription(tool),
+                                CapabilityCatalogService.BuildDescription(tool),
                                 tool.Id + " model description unchanged");
                             var projection = ToolLibraryResponse.From(
                                 new[] { tool });

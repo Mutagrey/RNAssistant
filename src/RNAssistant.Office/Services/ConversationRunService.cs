@@ -187,7 +187,7 @@ namespace RNAssistant.Office.Services
                 if (!string.IsNullOrWhiteSpace(tool.CapabilityStatus) &&
                     !string.Equals(tool.CapabilityStatus, "available", StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(tool.CapabilityStatus, "partial", StringComparison.OrdinalIgnoreCase)) continue;
-                var descriptor = ConversationPromptComposer.BuildTool(tool);
+                var descriptor = CapabilityCatalogService.BuildTool(tool);
                 if (descriptor == null || descriptor.ToString(Formatting.None).Length >
                     CapabilityCatalogService.MaximumDescriptorCharacters) continue;
                 tool.MutatesDocument = profile.MutatesDocument;

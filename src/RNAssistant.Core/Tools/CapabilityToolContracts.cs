@@ -1,25 +1,25 @@
 using System;
 using RNAssistant.Core.Tools;
 
-namespace RNAssistant.Office.Tools
+namespace RNAssistant.Core.Tools
 {
-    internal enum CapabilityOutcomeStatus
+    public enum CapabilityOutcomeStatus
     {
         Ok,
         Error
     }
 
-    internal sealed class CapabilityToolOutcome
+    public sealed class CapabilityToolOutcome
     {
-        internal CapabilityOutcomeStatus Status { get; private set; }
-        internal string Message { get; private set; }
-        internal string DataJson { get; private set; }
-        internal string ErrorCode { get; private set; }
-        internal bool Retryable { get; private set; }
-        internal ToolRecoveryContract Recovery { get; private set; }
-        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> Evidence { get; private set; }
+        public CapabilityOutcomeStatus Status { get; private set; }
+        public string Message { get; private set; }
+        public string DataJson { get; private set; }
+        public string ErrorCode { get; private set; }
+        public bool Retryable { get; private set; }
+        public ToolRecoveryContract Recovery { get; private set; }
+        public System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> Evidence { get; private set; }
 
-        internal static CapabilityToolOutcome Ok(
+        public static CapabilityToolOutcome Ok(
             string message, string dataJson, System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> evidence = null)
         {
             return new CapabilityToolOutcome
@@ -31,7 +31,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        internal static CapabilityToolOutcome Error(
+        public static CapabilityToolOutcome Error(
             string message, string dataJson, string errorCode, bool retryable,
             ToolRecoveryContract recovery = null)
         {
