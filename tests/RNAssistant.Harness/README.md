@@ -8,6 +8,15 @@ host/mode cores, exact admission, restart and budget refusal; workspace strict
 request/history and pinned-target cases cover the other consumer. These are
 host-neutral checks, not real Office or model-quality qualification.
 
+`tool pack: fitting extension` and `tool pack: fitting prior schemas` retain the
+original ASCII fixtures as positive strict-projection regressions. The overflow
+and carryover-refusal cases use valid non-ASCII descriptors and assert that schema
+options plus reserves alone exceed the input budget. They print projected messages,
+options, repair/continuation reserves and total. Oversized retained read evidence
+must stop request construction; a larger context and restart cannot turn a rejected
+admission into authority. Carryover starts with complete evidence under a larger
+prior result budget. Run `tool pack:` for all 11 focused checks.
+
 `text search:` checks closed workspace/Office schemas, language-independent literal/regex
 matching, Unicode/CRLF coordinates, recursive globs, hidden paths, cancellation,
 exact/stale/lost continuation, cumulative coverage and totals, pathological regex,

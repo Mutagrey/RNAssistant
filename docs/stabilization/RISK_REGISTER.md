@@ -10,19 +10,32 @@ exact-build gate.
 
 ## Direct admission overflow fixtures — 2026-10-26
 
-Open validation gap; owner: Office model-context / Harness. The `tool pack: overflow
-rejects extension atomically` and `tool pack: prior schemas yield to request budget`
-checks fail because their optional schemas are admitted. Reproduced both with the
-new shared profile selector and with the original `CallableToolPack` and
-`WorkspaceConversationService` sources from `524b3f2f` compiled into a separate
-temporary Harness output. The same IDs/assertions fail; the profile extraction is
-not the cause. The preceding snapshot-budget correction removed double counting,
-but obsolete fixture thresholds versus an actual budget defect have not yet been
-distinguished. Do not report the entire tool-pack suite as passing. Before the next
-discovery/admission cutover, measure the actual projected request plus all reserves,
-then exercise a demonstrably over-budget candidate and restored pack. Preserve
-atomic rejection, durable refusal, and explicit carryover behavior; do not weaken
-assertions or restore double counting to make the tests pass.
+Closed host-neutral; owner: Office model-context / Harness. Both former failures
+also reproduced with baseline `524b3f2f` consumers. Measurements now confirm obsolete
+fixture expectations after strict schema deduplication, not a new admission defect.
+The original 600-value extension and 350-value carryover remain as positive cases.
+Negative cases use valid 800-value non-ASCII schemas within the 24,000-character
+descriptor limit; options plus reserves alone already exceed the input budget.
+
+| Fixture | Projected messages | Options | Repair | Continuation | Admitted total / input limit |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Original extension, both tools admitted | 3267 | 8706 | 1707 | 1539 | 15219 / 18464 |
+| Original carryover retained | 2941 | 3340 | 1707 | 1024 | 9012 / 10464 |
+| Oversized carryover dropped, explicit notice retained | 2972 | 1098 | 1707 | 1024 | 6801 / 10464 |
+
+These are local estimator values for the actual strict wire projection, not provider
+usage. Oversized extension options/reserves alone use 24053 versus 18464; oversized
+carryover uses 13684 versus 10464. Admission rejects the entire extension durably.
+Its complete schema-read evidence also exceeds the small context, so request
+construction refuses instead of truncating evidence. Explicitly enlarging the test
+context permits inspection of the refusal (33903 / 127938) without admitting the
+rejected tools; reopening likewise does not resurrect them. Carryover is seeded with
+complete read evidence under a larger prior result budget, then tested at 12K.
+
+All 11 `tool pack:` checks pass, including the two new positive cases. Tests use the
+same strict projection sequence as ModelProtocolClient, including repair and
+continuation reserves. Production budgeting, policies and schema limits are unchanged.
+This closes these fixture gaps, not provider-token calibration or Office qualification.
 
 ## VBA skill strict-schema context budget — 2026-10-26
 

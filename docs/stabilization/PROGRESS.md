@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Direct admission budget fixtures corrected — 2026-10-26
+
+Owner: Harness / Office model-context verification. The two prior failures were
+obsolete overflow expectations after schema deduplication. Original cases now prove
+that fitting schemas remain admitted (15219 / 18464) and carried (9012 / 10464).
+Valid oversized cases prove atomic durable refusal, request refusal when retained
+evidence itself cannot fit, non-resurrection after restart, and explicit carryover
+removal without rebind resurrection. All 11 `tool pack:` checks pass. No production
+code, budget formula, reserves, descriptor limits or version changed.
+[Measurements and closed gap](RISK_REGISTER.md#direct-admission-overflow-fixtures--2026-10-26).
+Next: shared workspace discovery/admission before reducing its initial tool surface.
+Provider/Windows qualification remains separate; no live-model run was needed.
+
 ## Shared callable profile selection — 2026-10-26
 
 Owner: Core CallableToolProfile; Office CallableToolPack and Application workspace.
@@ -14,8 +27,8 @@ fingerprint parity, deduplication, removal, host cores, exact/durable admission,
 dependency revocation, strict VBA budget, strict workspace history and target pinning.
 Two overflow/carryover fixtures also fail with the baseline `524b3f2f` consumers;
 the [validation gap](RISK_REGISTER.md#direct-admission-overflow-fixtures--2026-10-26)
-must be resolved before changing discovery/admission behavior. Next: establish true
-budget-boundary fixtures, then workspace discovery/admission before catalog reduction.
+was subsequently resolved by the measured budget-boundary cases above. Workspace
+discovery/admission remains the next step before catalog reduction.
 No live-model or Windows/Office qualification was performed.
 
 ## Shared model request preparation — 2026-10-26

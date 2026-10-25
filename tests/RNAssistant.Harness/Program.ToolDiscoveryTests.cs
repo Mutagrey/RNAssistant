@@ -1305,12 +1305,14 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ConversationModelSessionRejectsToolPackOverflowAtomically()
+        private static void ConversationModelSessionRejectsToolPackOverflowAtomically(bool oversized = true)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var enumValues = new JArray(Enumerable.Range(0, 600)
-                    .Select(value => "value_" + value + "_" + new string('x', 12)));
+                // Non-ASCII values exceed the token budget while the descriptor
+                // stays within the catalog's 24,000-character publication limit.
+                var enumValues = new JArray(Enumerable.Range(0, oversized ? 800 : 600)
+                    .Select(value => "value_" + value + "_" + new string(oversized ? '\u754c' : 'x', 12)));
                 var optionalTools = Enumerable.Range(1, 2).Select(index => new ToolCatalogEntry
                 {
                     Id = "fixture.large_" + index,
@@ -1342,12 +1344,15 @@ namespace RNAssistant.Harness
                     executor.GetControllerTools().Where(tool => tool.Id == CapabilityToolCatalog.ReadToolId)
                         .Concat(optionalTools));
                 CapabilityCatalogService.BindReadSchema(catalog, null);
+                AssertTrue(optionalTools.All(candidate => catalog.Any(tool => tool.Id == candidate.Id)),
+                    "all budget fixture schemas remain valid discoverable tools");
                 var settings = new AppSettings
                 {
                     AgentResponseMode = AgentResponseModes.JsonSchema,
                     ContextWindowOverrideTokens = 20000,
                     MaxTokens = 512
                 };
+                AssertToolPackBudgetFixture(catalog, settings, oversized);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "overflow-run", TurnId = "overflow-turn" };
                 var store = new ChatStore(FixturePaths.Value);
@@ -1390,8 +1395,27 @@ namespace RNAssistant.Harness
 
                     store.Save(session);
                     modelSession.EndResponse("after-overflow");
+                    if (oversized)
+                    {
+                        // A rejected pack does not erase the complete read evidence.
+                        // If that evidence also exceeds the small context, refuse
+                        // request construction instead of silently truncating it.
+                        RuntimeThrows<PromptBudgetExceededException>(() => modelSession.CreateRequest("blocked-overflow",
+                            new ModelProtocolCallContext(new string[0])));
+                        settings.ContextWindowOverrideTokens = 131072;
+                    }
                     var request = modelSession.CreateRequest("after-overflow",
                         new ModelProtocolCallContext(new string[0]));
+                    AssertToolPackWireFits(request, oversized ? "rejected extension" : "accepted extension");
+                    if (!oversized)
+                    {
+                        AssertTrue(optionalTools.All(candidate => request.CallableTools.Any(tool => tool.Id == candidate.Id)),
+                            "original fixture fits after strict schema deduplication; both schemas are admitted");
+                        AssertEqual(1, store.ReadEvents(session.Host, session.DocumentKey, session.Id)
+                            .Count(item => item.Type == SessionEventTypes.ToolPackExtensionAccepted),
+                            "fitting batch has one durable admission");
+                        return;
+                    }
                     AssertTrue(optionalTools.All(candidate => request.RunnableCatalog.Any(tool => tool.Id == candidate.Id)),
                         "overflow keeps the dynamic registry available for discovery");
                     AssertTrue(optionalTools.All(candidate => !request.CallableTools.Any(tool => tool.Id == candidate.Id)),
@@ -1405,14 +1429,6 @@ namespace RNAssistant.Harness
                         "rejection does not repeat an unbounded list of exact ids");
                     AssertContains(state.Content, "\"requestedSchemaCount\":2",
                         "compact rejection retains the requested batch size");
-                    var estimated = ModelContextBudget.EstimateAdmittedRequestTokens(
-                        request.AcceptedMessages,
-                        request.Options,
-                        settings,
-                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
-                        ModelContextBudget.ContinuationReserveTokens(settings));
-                    AssertTrue(estimated <= ModelContextBudget.InputBudgetTokens(settings),
-                        "rejected state and retained pack still fit with all request reserves");
                 }
 
                 var rejectedEvents = store.ReadEvents(session.Host, session.DocumentKey, session.Id)
@@ -1796,12 +1812,12 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ToolPackCarryoverFallsBackWithinBudget()
+        private static void ToolPackCarryoverFallsBackWithinBudget(bool oversized = true)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                var values = new JArray(Enumerable.Range(0, 350)
-                    .Select(value => "value_" + value + "_" + new string('x', 12)));
+                var values = new JArray(Enumerable.Range(0, oversized ? 800 : 350)
+                    .Select(value => "value_" + value + "_" + new string(oversized ? '\u754c' : 'x', 12)));
                 var optional = new ToolCatalogEntry {
                     Id = "fixture.carried_large", Host = "Excel", Name = "Large carried schema",
                     Description = "Budget fallback fixture.", BuiltIn = true, Enabled = true, AgentCanRun = true,
@@ -1821,7 +1837,9 @@ namespace RNAssistant.Harness
                 CapabilityCatalogService.BindReadSchema(catalog, null);
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "large-run", TurnId = "large-turn" };
-                var read = ReadSchemaEvidence(executor, catalog, optional.Id, "large-read");
+                // The prior turn delivered this complete schema under a larger
+                // result budget; the new turn below deliberately has less room.
+                var read = ReadSchemaEvidence(executor, catalog, optional.Id, "large-read", 32768);
                 read.RunId = session.LastRun.RunId;
                 read.ExcludeFromModelContext = true;
                 session.Messages.Add(read);
@@ -1836,6 +1854,7 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = "small-run", TurnId = "small-turn" };
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
                     ContextWindowOverrideTokens = 12000, MaxTokens = 512, AutoCompressContext = false };
+                AssertToolPackBudgetFixture(catalog, settings, oversized);
                 using (var next = ConversationModelSession.CreateAsync(adapter, null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
                     EventStore(store), ChatModes.Agent, "Use the small context.", session,
@@ -1844,6 +1863,15 @@ namespace RNAssistant.Harness
                 {
                     var request = next.PrepareRequestAsync("small-step",
                         new ModelProtocolCallContext(new string[0]), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertToolPackWireFits(request, oversized ? "dropped carryover" : "retained carryover");
+                    if (!oversized)
+                    {
+                        AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id),
+                            "original carried schema fits and must not be discarded");
+                        AssertTrue(!FlattenSimple(request.AcceptedMessages).Contains("tool_pack_carryover_budget"),
+                            "fitting carryover has no false budget refusal");
+                        return;
+                    }
                     AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id),
                         "oversized prior optional schema yields to the current request budget");
                     AssertContains(FlattenSimple(request.AcceptedMessages), "tool_pack_carryover_budget",
@@ -1854,6 +1882,40 @@ namespace RNAssistant.Harness
                         "catalog rebind does not silently restore a dropped prior schema");
                 }
             });
+        }
+
+        private static void AssertToolPackBudgetFixture(IReadOnlyList<ToolCatalogEntry> catalog,
+            AppSettings settings, bool oversized)
+        {
+            var options = ModelProtocolWire.CreateRequestOptions(settings.AgentResponseMode, catalog,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(catalog)));
+            // Prove overflow without relying on duplicated inline contracts or the
+            // size of mutable production prompts: options/reserves alone cannot fit.
+            var minimum = ModelContextBudget.EstimateAdmittedRequestTokens(new ChatMessage[0], options, settings,
+                ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings),
+                ModelContextBudget.ContinuationReserveTokens(settings));
+            var budget = ModelContextBudget.InputBudgetTokens(settings);
+            Console.WriteLine("BUDGET candidate options+reserves=" + minimum + " input=" + budget);
+            AssertEqual(oversized, minimum > budget, "fixture has a proven schema/reserve budget boundary");
+        }
+
+        private static void AssertToolPackWireFits(ModelProtocolRequest request, string scenario)
+        {
+            // Match ModelProtocolClient's actual strict wire projection, not the
+            // full accepted prompt retained for a possible json_object fallback.
+            var messages = request.Options.ResponseFormat == LlmResponseFormats.JsonSchema
+                ? ModelProtocolWire.ProjectSchemaGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages))
+                : request.AcceptedMessages;
+            var settings = request.Settings;
+            var messageTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);
+            var optionTokens = ModelContextBudget.EstimateRequestOptionsTokens(request.Options, settings);
+            var repair = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
+            var continuation = ModelContextBudget.ContinuationReserveTokens(settings);
+            var total = ModelContextBudget.EstimateAdmittedRequestTokens(messages, request.Options, settings, repair, continuation);
+            var budget = ModelContextBudget.InputBudgetTokens(settings);
+            Console.WriteLine("BUDGET " + scenario + " messages=" + messageTokens + " options=" + optionTokens +
+                " repair=" + repair + " continuation=" + continuation + " total=" + total + " input=" + budget);
+            AssertTrue(total <= budget, "actual projected request and all reserves fit: " + scenario);
         }
 
         private static ToolPolicy OptionalFixturePolicy()
@@ -1875,7 +1937,8 @@ namespace RNAssistant.Harness
             OfficeToolExecutor executor,
             IReadOnlyList<ToolCatalogEntry> catalog,
             string toolId,
-            string callId)
+            string callId,
+            int maxDataTokens = AgentJsonProtocol.DefaultMaxToolResultDataTokens)
         {
             var command = Command(CapabilityToolCatalog.ReadToolId, "id", toolId);
             command.ToolCallId = callId;
@@ -1884,7 +1947,7 @@ namespace RNAssistant.Harness
             return AgentJsonProtocol.CreateToolResultMessage(command,
                 new ToolResultMaterialization(TerminalToolResult.Ok(
                     result.Message, result.DataJson,
-                    result.ModelResourceRefs)), ToolResultRoles.User);
+                    result.ModelResourceRefs)), maxDataTokens, ToolResultRoles.User);
         }
     }
 }
