@@ -12,15 +12,6 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Chat input delivery fixture after protected drafts — 2026-10-24
-
-Owner: Web test fixtures. `tests/web/chat-input-delivery.test.js` starts the
-isolated composer without hydrating the protected draft store, then waits for an
-Office submit that now correctly requires `flushOffice`. It times out waiting
-for a bridge acknowledgement; the same guard and submit path are present at
-HEAD before the HTML selection change. Initialize the draft fixture explicitly
-so this test again covers queue/steer and late acknowledgement behavior.
-
 ## CLI smoke v7 fixtures after v8 cutover — 2026-10-23
 
 Owner: Workspace/CLI test fixtures. Static post-merge review found v7 response
@@ -60,15 +51,9 @@ cannot replace it`; обновить assertion отдельной правкой
 остальные четыре случая `plan mode:` прошли; это расхождение текста, не закрытый
 Windows/Office gate.
 
-## Shell audit: preview fixtures и одиночная JS-ошибка — 2026-10-23
+## Shell audit: одиночная JS-ошибка — 2026-10-23
 
-Owner: HTML preview tests / plugin preview lifecycle. Fixture
-`tests/web/html-preview-reuse.test.js` исправлен в inspect-only срезе и снова
-проверяет reuse/invalidations. `tests/web/html-workspace-layout.test.js` проходит
-границы toolbar/menu, затем ждёт скрытый `.html-workspace-create-menu > summary`
-в автономной panel fixture; то же происходит на базовом HEAD до инспектора.
-Согласовать fixture с текущим состоянием каталога отдельно. Адресная Chrome
-проверка нового Inspector проверяет размеры toolbar на 1100/760/420 px.
+Owner: HTML preview / plugin preview lifecycle.
 
 Один полный rapid-navigation probe дал `Cannot read properties of undefined
 (reading 'create')` без stack. Повтор со stack-capture завершил 12 циклов без
@@ -230,19 +215,6 @@ Owner: `tests/web/skills-contract.test.js`. Выборочный запуск п
 в `app-chat-session.js`. Этой строки нет и на неизменённом `HEAD`; текущая загрузка
 проходит через `applyChatState`/`applyLibraryCatalogState`. Сверить assertion с
 действующим путём и сохранить negative controls в отдельной правке теста.
-
-## UI fixtures настроек модели — 2026-10-20
-
-Owner: web tests / model settings UI. `plugins.test.js` проходит на текущем
-срезе; ранее зафиксированный сбой подписи настроек больше не воспроизводится.
-`chat-composer-layout.test.js` проходит начальные проверки composer, затем fixture
-настроек не предоставляет `formModel`, используемый `renderContextWindowSummary`.
-`prompt-review.test.js` также останавливается до проверок редактора: fixture не
-предоставляет `renderModelCapabilityList` для `app-settings.js`.
-Согласовать fixtures с текущим UI настроек отдельной правкой. Адресные
-`splitter-preferences.test.js` и `product-shell-parity.test.js` проходили;
-прежний сбой `workspace-chat-layout.test.js` закрыт срезом 1b. Это не результат
-полного web suite.
 
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 

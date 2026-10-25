@@ -75,11 +75,16 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const reload = await page.locator("#reloadHtmlWorkspaceSourceButton").boundingBox();
       assert.ok(reload.x >= 0 && reload.x + reload.width <= width, "actions menu remains inside the panel");
       await page.locator("#htmlWorkspaceMoreActions > summary").click();
-      await page.locator(".html-workspace-create-menu > summary").click();
-      const create = await page.locator("#addHtmlDataButton").boundingBox();
-      const sidebar = await page.locator("#htmlWorkspaceSidebar").boundingBox();
-      assert.ok(create.y + create.height <= sidebar.y + sidebar.height + 1, "creation options are not clipped by an empty sidebar");
-      await page.locator(".html-workspace-create-menu > summary").click();
+      if (width > 560) {
+        await page.locator(".html-workspace-create-menu > summary").click();
+        const create = await page.locator("#addHtmlDataButton").boundingBox();
+        const sidebar = await page.locator("#htmlWorkspaceSidebar").boundingBox();
+        assert.ok(create.y + create.height <= sidebar.y + sidebar.height + 1, "creation options are not clipped by an empty sidebar");
+        await page.locator(".html-workspace-create-menu > summary").click();
+      } else {
+        assert.equal(await page.locator("#htmlWorkspaceSidebar").isVisible(), false,
+          "the narrow editor hides its inline sidebar");
+      }
     }
     await page.setViewportSize({ width: 1100, height: 760 });
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT });
