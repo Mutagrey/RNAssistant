@@ -55,7 +55,7 @@
     { workspaceId: "preview-plan-workspace", name: "План продаж", rootPath: "C:\\Projects\\SalesPlan", available: true,
       chats: [{ Id: "preview-plan-chat", Title: "План запуска", RunStatus: "completed" }] }
   ] : [];
-  var hiddenWorkspaceProjects = [];
+  var hiddenWorkspaceProjects = [], workspaceSequence = 0;
   var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
   if (dataProject) projectMessages["preview-plan-chat"] = [];
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
@@ -613,7 +613,7 @@
         hiddenWorkspaceProjects = hiddenWorkspaceProjects.filter(function (item) { return item !== connected; });
         workspaceProjects.push(connected);
       } else if (!connected) {
-        connected = { workspaceId: "preview-workspace-" + (workspaceProjects.length + 1),
+        connected = { workspaceId: "preview-workspace-" + (++workspaceSequence),
           name: rootPath.split(/[\\/]/).filter(Boolean).pop(), rootPath: rootPath,
           available: true, chats: [] };
         workspaceProjects.push(connected);

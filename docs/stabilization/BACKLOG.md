@@ -12,14 +12,6 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Preview mock: повторный workspace ID после удаления истории — 2026-10-25
-
-Owner: `prototypes/ui/mock-bridge.js`. После `deleteProjectHistory` новый
-`connectProjectWorkspace` вычисляет ID по текущей длине списка и может повторить
-ID другого видимого проекта. `RNAssistantNavigationTree.render` тогда сообщает
-duplicate key и оставляет дерево пустым. Нужен монотонный счётчик ID в mock и
-адресная browser-проверка; product runtime этим наблюдением не квалифицирован.
-
 ## Chat input delivery fixture after protected drafts — 2026-10-24
 
 Owner: Web test fixtures. `tests/web/chat-input-delivery.test.js` starts the
