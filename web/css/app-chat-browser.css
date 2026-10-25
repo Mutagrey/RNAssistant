@@ -17,13 +17,8 @@
 .chat-browser-menu:not([open])>.popover-menu{display:none}
 .chat-browser-menu>.popover-menu>button{padding:7px 9px;border:0;border-radius:5px;background:transparent;color:var(--ink);font-size:12px;text-align:left}
 .chat-browser-menu>.popover-menu>button:hover{background:var(--surface-hover)}
-.chat-browser .preview-surface-bar{min-height:52px;gap:5px}
 .chat-browser .preview-surface-location{display:flex;flex-direction:column;justify-content:center;gap:0;overflow:visible;font-size:12px}
-.chat-browser .chat-inspector-switcher{flex:none;width:100%;margin:0}
-.chat-browser .chat-inspector-switcher>summary{min-height:19px;padding:0;font-size:11px}
-.chat-browser .chat-inspector-switcher .popover-menu{min-width:210px;right:auto;top:25px}
-.chat-browser .preview-surface-title{font-size:11px;font-weight:400;color:var(--ink-muted)}
-.chat-browser .preview-surface-path{display:none}
+.chat-browser .preview-surface-title{font-size:12px;font-weight:600}
 .chat-browser .chat-browser-annotate{display:inline-flex;align-items:center;gap:5px;font-weight:600}
 .chat-browser .chat-browser-annotate svg{width:14px;height:14px;flex:none}
 .chat-browser #attachHtmlWorkspaceSelectionButton:disabled{display:none}

@@ -38,14 +38,13 @@
 .shell.navigation-compact .product-mobile-menu-button { display: grid; }
 .shell:is(.navigation-wide, .navigation-compact).navigation-open .product-mobile-menu-button { left: calc(52px + var(--nav-width) + 1px + var(--panel-toggle-inset)); }
 .shell:has(#tab-plugins.active .plugin-manager:not([hidden])) .product-mobile-menu-button { left: calc(52px + var(--panel-toggle-inset)); }
-.shell:has(#tab-plugins.active .plugin-workbench:not([hidden]):not(.plugin-data-templates)) .product-mobile-menu-button { display: none; }
 .shell.navigation-transition .product-mobile-menu-button:hover { background: transparent; color: var(--ink-muted); }
 @media (min-width: 621px) {
-  .shell.navigation-open > .content > .panel.active .split-layout[data-default-left]:not(#chatLayout) { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) !important; }
-  .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left]:not(#chatLayout) { grid-template-columns: 0px 0px minmax(0, 1fr) !important; }
+  .shell.navigation-open > .content > .panel.active .split-layout[data-default-left]:not(.chat-workspace) { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) !important; }
+  .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left]:not(.chat-workspace) { grid-template-columns: 0px 0px minmax(0, 1fr) !important; }
   .shell.navigation-closed > .content > .panel.active .global-nav { visibility: hidden; opacity: 0; pointer-events: none; overflow: hidden; }
   .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left] > .splitter:not(.chat-inspector-splitter) { visibility: hidden; opacity: 0; pointer-events: none; width: 0; min-width: 0; }
-  .shell.navigation-closed > .content > .panel.active :is(.chat-main:not(.plugin-chat), .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content) { grid-column: 3 !important; }
+  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 3 !important; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .shell.navigation-transition > .content > .panel.active .split-layout[data-default-left] { transition: grid-template-columns var(--motion-duration) var(--motion-ease); }
@@ -54,9 +53,7 @@
   .shell.navigation-transition.navigation-open > .content > .panel.active .global-nav { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s; }
   .shell .rail-button { transition: background-color var(--motion-fast), color var(--motion-fast); }
 }
-.shell.navigation-wide :is(.chatbar:not(.plugin-chat-head), .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
-.shell.navigation-wide .plugin-data-templates .plugin-toolbar,
-.shell.navigation-compact .plugin-data-templates .plugin-toolbar { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+.shell.navigation-wide :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
 .shell .global-nav { min-width: 0; background: var(--surface-subtle); border-right: 1px solid var(--line); }
 .shell .split-layout > .global-nav { border-right: 0; }
 .shell .product-nav-heading { display: flex; align-items: center; min-height: 52px; padding: 0 18px; margin: 0; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 600; }
@@ -152,7 +149,7 @@
   .shell.navigation-compact.navigation-open #tab-chat .chat-workspace,
   .shell.navigation-compact.navigation-open #tab-chat .chat-workspace.with-inspector { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
   .shell.navigation-compact.navigation-open > .content > .panel.active .split-layout[data-default-left] > .splitter { display: block; }
-  .shell.navigation-compact :is(.chatbar:not(.plugin-chat-head), .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
+  .shell.navigation-compact :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
   .shell #tab-workspace .dt-navigation { padding: 0; border-bottom: 0; }
   .shell #tab-workspace .dt-nav-content { padding: 0 8px 6px; }
   .shell #tab-workspace .dt-nav-heading { display: flex; }
@@ -162,7 +159,7 @@
   .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left] { grid-template-columns: minmax(0, 1fr) !important; }
   .shell.navigation-closed > .content > .panel.active .global-nav,
   .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left] > .splitter { display: none !important; }
-  .shell.navigation-closed > .content > .panel.active :is(.chat-main:not(.plugin-chat), .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content) { grid-column: 1 !important; }
+  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 1 !important; }
   .shell { --panel-toggle-inset: 8px; position: relative; min-width: 0; }
   .shell > .section-rail { display: none; }
   .shell > .content { width: 100%; }
@@ -170,14 +167,13 @@
   .shell .global-nav, .shell .split-layout[data-default-left] > .splitter { display: none !important; }
   .shell .chat-workspace, .shell .instruction-layout, .shell .vba-layout, .shell .html-workspace-layout,
   .shell .settings-shell { display: grid; grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
-  .shell .chat-main:not(.plugin-chat), .shell .instruction-editor, .shell .vba-editor, .shell .html-workspace-editor,
+  .shell .chat-main, .shell .instruction-editor, .shell .vba-editor, .shell .html-workspace-editor,
   .shell .settings-pages { grid-column: 1 !important; grid-row: 1 !important; min-width: 0; }
   .shell #tab-workspace .dt-navigation { display: none; }
   .shell #tab-workspace .product-dt-main { padding-inline: var(--page-inset); }
   .product-mobile-menu-button { left: var(--panel-toggle-inset); display: grid; }
   .shell:has(#tab-plugins.active .plugin-manager:not([hidden])) .product-mobile-menu-button { left: var(--panel-toggle-inset); }
-  .shell.navigation-single :is(.chatbar:not(.plugin-chat-head), .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
-  .shell.navigation-single .plugin-data-templates .plugin-toolbar { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)); }
+  .shell.navigation-single :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--panel-toggle-inset) + var(--control) + var(--panel-toggle-gap)) !important; }
   .shell #tab-settings .settings-pages { padding: 16px 12px 20px; }
   .shell #tab-settings .settings-heading { order: -1; display: flex; flex-direction: column; justify-content: center; gap: 2px; min-height: 52px; margin: -16px -12px 14px; padding: 4px 12px; border-bottom: 1px solid var(--line); }
   .shell #tab-settings .settings-heading h2 { order: 2; color: var(--ink); font-size: 15px; }
@@ -194,9 +190,8 @@
   .shell.navigation-open .panel.active .global-nav { position: absolute; top: 0; right: 0; bottom: 0; left: 52px; z-index: 38; display: flex !important; width: calc(100% - 52px); height: 100%; max-height: 100%; overflow: auto; }
   .shell.navigation-open .panel.active .tool-list-panel.global-nav,
   .shell.navigation-open .panel.active .settings-nav.global-nav { display: grid !important; }
-  .shell.navigation-open .panel.active .chat-main:not(.plugin-chat), .shell.navigation-open .panel.active .instruction-editor,
+  .shell.navigation-open .panel.active .chat-main, .shell.navigation-open .panel.active .instruction-editor,
   .shell.navigation-open .panel.active .vba-editor, .shell.navigation-open .panel.active .html-workspace-editor,
-  .shell.navigation-open .panel.active .settings-pages, .shell.navigation-open #tab-workspace .product-dt-main,
-  .shell.navigation-open #tab-plugins .plugin-data-templates .plugin-content { display: none !important; }
+  .shell.navigation-open .panel.active .settings-pages, .shell.navigation-open #tab-workspace .product-dt-main { display: none !important; }
   .shell.navigation-open #tab-workspace .dt-navigation.global-nav { display: flex !important; }
 }

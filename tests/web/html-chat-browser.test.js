@@ -55,6 +55,8 @@ const path = require("node:path");
       "the chat header has one right-panel button");
     assert.equal(await panelToggle.getAttribute("aria-controls"), "chatBrowser");
     assert.equal(await panelToggle.getAttribute("aria-label"), "Свернуть боковую панель");
+    assert.equal(await panelToggle.evaluate(node => node.parentElement.classList.contains("chatbar-actions")), true,
+      "the desktop panel button stays in the central chat header");
     assert.equal(await page.locator("#chatBrowserHide").count(), 0,
       "the browser has no separate arrow for hiding it");
     assert.equal(await page.locator("#chatBrowser").evaluate(node => getComputedStyle(node).borderLeftWidth), "0px",
@@ -119,6 +121,8 @@ const path = require("node:path");
       "shared splitter resizes the browser");
     await page.setViewportSize({ width: 680, height: 800 });
     await page.waitForFunction(() => document.getElementById("chatLayout").classList.contains("browser-overlay"));
+    assert.equal(await panelToggle.evaluate(node => node.parentElement.classList.contains("preview-surface-panel-head")), true,
+      "the same button remains reachable over the narrow HTML preview");
     assert.equal(await page.locator("#chatBrowser").evaluate(node => getComputedStyle(node).borderLeftWidth), "1px",
       "the overlay keeps a border when its splitter is absent");
     assert.ok((await page.locator("#chatBrowser").boundingBox()).width >= 500,

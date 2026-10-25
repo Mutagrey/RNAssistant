@@ -159,179 +159,82 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('#workspaceChatNotice').getByText('Проверка ошибки отправки').waitFor();
     assert.equal(await page.locator('#chatInput').inputValue(),'Черновик рабочего проекта','failed delivery preserves the draft');
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    const pluginToggle=page.locator('#pluginSurfaceToggle');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','plugin opens with the right preview');
+    const pluginToggle=page.locator('#workspaceInspectorToggle');
+    await page.waitForFunction(() => RNAssistantWorkspaceChat.owner()==='plugin' &&
+      document.querySelector('#workspaceChatView').parentElement.id==='projectChatLayout');
+    assert.equal(await page.locator('#tab-chat').getAttribute('class').then(value=>value.includes('active')),true,
+      'plugin opens its source project in the common chat screen');
+    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),true,
+      'the project and chat tree remains open');
+    assert.equal(await page.locator('#pluginRail [data-plugin-id="data-templates"]').getAttribute('aria-current'),'page',
+      'the plugin icon identifies the selected project shell');
     assert.equal(await pluginToggle.getAttribute('aria-controls'),'pluginPreviewMount');
-    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),false,'plugin opens with its tree collapsed');
-    // Office was closed; the plugin preview is open, so active foreground/background differ.
-    assert.deepEqual((await toggleMetrics('#pluginSurfaceToggle')).filter((_,index)=>index!==4&&index!==5),
-      officeToggle.filter((_,index)=>index!==4&&index!==5),'plugin reuses the same right-panel button geometry and icon');
-    await checkToggleFocus('#pluginSurfaceToggle');
-    await pluginToggle.click();
-    await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-closed.png')});
-    await pluginToggle.press('Enter');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Enter opens the right preview once');
-    await page.waitForFunction(() => RNAssistantWorkspaceChat.owner()==='plugin' && document.querySelector('#workspaceChatView').parentElement.id==='pluginChat');
-    assert.equal(await page.locator('#pluginChat').isVisible(),true,'the shared chat stays visible');
-    await page.locator('#messages .message.user').first().waitFor();
+    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true');
+    assert.equal(await pluginToggle.evaluate(node=>node.parentElement.classList.contains('workspace-chat-head')),true,
+      'on a wide screen the panel button stays at the right edge of the central chat header');
+    const sourceWorkspace='preview-plugin-workspace';
+    await page.locator('[data-tree-key="project:'+sourceWorkspace+'"]').waitFor();
+    assert.equal(await page.locator('#projectChatTree').isVisible(),true);
     assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
       document.querySelector('#messages').dataset.testIdentity]), ['workspaceChatTranscriptMount',transcriptIdentity],
-      'plugin mounts the same physical transcript');
-    await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor({state:'visible'});
-    assert.equal(await page.locator('#pluginPreview').evaluate(node=>node.parentElement.classList.contains('preview-surface-actions')),true,
-      'the existing refresh action belongs to the right preview');
-    assert.match(await page.locator('#pluginPreviewMount .preview-surface-location').textContent(),/Данные и шаблоны/,
-      'the right preview identifies its resource');
-    await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    await page.evaluate(() => switchTab('chat'));
-    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),true,
-      'leaving the plugin restores the prior tree preference');
-    await page.evaluate(() => switchTab('plugins'));
-    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),false,
-      'returning to the plugin collapses its tree again');
-    assert.ok((await page.locator('#pluginChat').boundingBox()).x < (await page.locator('#pluginPreviewMount').boundingBox()).x,
-      'the shared chat is centered before the right preview');
-    assert.deepEqual(await dimensions('#chatForm','#messages'), office, 'plugin uses the same message/composer metrics');
-    const pluginTitleInset = () => page.locator('#pluginChatTitle').evaluate(node => node.getBoundingClientRect().left-node.parentElement.getBoundingClientRect().left);
-    assert.equal(await pluginTitleInset(),12,'nested chat header has no navigation-toggle reservation on desktop');
-    await page.locator('.plugin-toolbar').screenshot({animations:'disabled',path:path.join(captures,'plugin-panel-open.png')});
+      'plugin uses the same physical transcript as Office and project chats');
+    assert.deepEqual(await dimensions('#chatForm','#messages'),office,'plugin uses shared message and composer metrics');
+    await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor();
+    const frame=page.locator('#pluginPreviewMount iframe');
+    await frame.evaluate(node=>{node.dataset.routeProbe='same-instance';});
+    await page.locator('#pluginNavigationToggle').click();
+    assert.equal(await page.locator('#pluginNavigationPane').isVisible(),true,'plugin sections open inside the preview');
+    await page.locator('#pluginNavigationToggle').click();
     await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin.png')});
-    const splitter=page.locator('#pluginSurfaceSplitter'), splitBox=await splitter.boundingBox();
-    const seam=await splitter.evaluate(node=>{
-      const handle=node.getBoundingClientRect(),toolbar=document.querySelector('.plugin-toolbar').getBoundingClientRect();
-      const body=document.querySelector('#pluginBody').getBoundingClientRect();
-      const preview=document.querySelector('#pluginPreviewMount .preview-surface-bar').getBoundingClientRect();
-      return {top:handle.top,headerTop:toolbar.top,previewTop:preview.top,
-        previewHeight:preview.height,bottom:handle.bottom,bodyBottom:body.bottom};
-    });
-    assert.ok(Math.abs(seam.top-seam.headerTop)<1 && Math.abs(seam.top-seam.previewTop)<1 &&
-      Math.abs(seam.bottom-seam.bodyBottom)<1 && Math.abs(seam.previewHeight-52)<1,
-      'plugin chat and preview have aligned top headers and one full-height divider');
-    await page.mouse.move(splitBox.x-4,seam.headerTop+26);
-    assert.equal(await splitter.evaluate(node=>node.matches(':hover')),true,
-      'the header continuation keeps the same transparent resize target');
-    const navWidth=(await page.locator('#pluginNavigationPane').boundingBox()).width;
-    assert.equal(await splitter.getAttribute('class'),'splitter','plugin uses the common splitter element');
-    assert.equal(splitBox.width,1,'development divider is one visible pixel');
-    assert.deepEqual(await splitter.evaluate(node=>{
-      const line=getComputedStyle(node),hit=getComputedStyle(node,'::before');
-      return [line.boxShadow,hit.backgroundColor,hit.left,hit.right];
-    }),['none','rgba(0, 0, 0, 0)','-5px','-5px'],'wide hit target adds no background or glow');
-    await page.mouse.move(splitBox.x-4,splitBox.y+120);
-    assert.equal(await splitter.evaluate(node=>node.matches(':hover')),true,'transparent area catches the pointer over the preview');
-    await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin-splitter-hover.png')});
-    const splitBefore=Number(await splitter.getAttribute('aria-valuenow'));
-    await page.mouse.down();
-    await page.mouse.move(splitBox.x-70,splitBox.y+120,{steps:4});
-    await page.mouse.up();
-    assert.ok(Number(await splitter.getAttribute('aria-valuenow'))<splitBefore,'transparent hit target still resizes the panes');
-    assert.equal((await page.locator('#pluginNavigationPane').boundingBox()).width,navWidth,'local split does not change the shared navigation width');
-    await splitter.press('Enter');
-    await page.locator('#productMobileMenuButton').click();
-    await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    assert.equal(await splitter.isVisible(),true,'collapsing navigation keeps the local splitter visible');
-    assert.equal((await splitter.boundingBox()).width,1);
+    const split=page.locator('#pluginSurfaceSplitter'), before=Number(await split.getAttribute('aria-valuenow'));
+    await split.press('ArrowLeft');
+    assert.ok(Number(await split.getAttribute('aria-valuenow'))>before,'the right preview width can be changed');
+    await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(false));
+    assert.equal(await split.isVisible(),true,'preview divider remains usable with the project tree collapsed');
+    await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(true));
     await pluginToggle.click();
-    await page.evaluate(() => refreshSplitPanes());
-    assert.equal(await splitter.isVisible(),false,'common layout refresh respects a closed preview');
-    assert.equal(await page.locator('#pluginChat').isVisible(),true,'closing the preview keeps the chat');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'false');
-    await pluginToggle.press('Space');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true','Space opens the right preview once');
-    await page.locator('#productMobileMenuButton').click();
-    await page.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    const history=page.locator('#messages .is-activity-message');
-    assert.match(await history.textContent(),/common.resources_read/,'saved tool activity uses the common renderer');
-    await page.locator('#chatInput').fill('Черновик плагина');
-    await page.locator('#chatInput').press('Escape');
-    assert.equal(await page.locator('#pluginChat').isVisible(),true,'Escape does not close the central chat');
-    await page.locator('#pluginPreviewMount iframe').evaluate(frame => { frame.dataset.toggleProbe = 'same-instance'; });
+    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,'the common panel button closes the preview');
+    assert.equal(await page.locator('#workspaceChatView').isVisible(),true,'closing preview keeps the chat');
+    const selectedSource=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
+    await page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+selectedSource+'"] .navigation-tree-label').click();
+    await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
+    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,
+      'selecting a source chat does not reopen a closed preview');
     await pluginToggle.click();
-    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик плагина','closing the preview keeps the chat draft');
-    await pluginToggle.press('Enter');
-    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик плагина','reopening the preview keeps the chat draft');
-    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('data-toggle-probe'),'same-instance',
-      'reopening the right preview keeps its live iframe');
-    await page.locator('#chatInput').press('Shift+Enter');
-    assert.match(await page.locator('#chatInput').inputValue(),/\n$/,'Shift+Enter inserts a line break');
-    await page.locator('#chatInput').press('Enter');
-    await page.locator('#workspaceChatNotice').getByText('Проверка ошибки отправки').waitFor();
-    assert.equal((await page.locator('#chatInput').inputValue()).trim(),'Черновик плагина','plugin failure preserves input');
-    assert.equal(await history.count(),1,'failure keeps the saved tool activity visible');
-    const firstRequest=await page.evaluate(() => chatTest.requests.at(-1).payload.input.requestId);
-    await page.locator('#chatInput').press('Enter');
-    await page.waitForFunction(id => chatTest.requests.filter(item => item.payload.input.requestId===id).length===2,firstRequest);
-    await page.locator('#sendButton').waitFor({state:'visible'});
-    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
-    await page.locator('#workspacePlanButton').click();
-    await page.locator('#workspaceReasoningToggle').click();
-    await page.locator('#chatInput').press('Enter');
-    await page.waitForFunction(() => chatTest.requests.at(-1).payload.input.Mode==='plan');
-    assert.equal(await page.evaluate(() => chatTest.requests.at(-1).payload.input.ReasoningEnabled),true,'workspace preferences reach the runtime');
-    assert.notEqual(await page.evaluate(() => chatTest.requests.at(-1).payload.input.requestId),firstRequest,'changed preferences get a new request identity');
-    await page.setViewportSize({width:390,height:844});
-    await page.locator('#chatInput').scrollIntoViewIfNeeded();
-    assert.ok((await page.locator('#pluginChat').boundingBox()).y < (await page.locator('#pluginPreviewMount').boundingBox()).y,'narrow plugin keeps chat before preview');
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth<=innerWidth),true,'plugin chat fits a narrow viewport');
-    assert.equal(await pluginTitleInset(),12,'narrow chat title keeps its normal inset');
-    await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin-narrow.png')});
-    await page.setViewportSize({width:750,height:900});
-    await page.waitForFunction(() => document.querySelector('.shell').classList.contains('navigation-compact'));
-    assert.equal(await pluginTitleInset(),12,'compact chat title keeps its normal inset');
-    await page.setViewportSize({width:1360,height:900});
-    await page.evaluate(() => {chatTest.fail=false;chatTest.transcript=false;});
-    await page.locator('#chatInput').fill('Первое обсуждение плагина');
-    await page.locator('#chatInput').press('Enter');
-    await page.locator('#messages').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.',{exact:true}).waitFor();
-    const sourceWorkspace='preview-plugin-workspace';
+    assert.equal(await frame.getAttribute('data-route-probe'),'same-instance','reopening keeps the live plugin frame');
     const firstSession=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
-    await page.locator('#chatInput').fill('Неотправленный черновик первой беседы');
-    await page.locator('#pluginChatNew').click();
-    await page.locator('#messages .chat-empty').waitFor();
+    await page.locator('#chatInput').fill('Черновик первой беседы');
+    await page.locator('#projectChatNew').click();
+    await page.locator('#projectChatTitle').getByText('Новый чат').waitFor();
     const secondSession=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
-    assert.notEqual(secondSession,firstSession,'plus creates a separate workspace session');
-    assert.equal(await page.locator('#chatInput').inputValue(),'','new chat starts with an empty draft');
-    assert.equal(await page.locator('#pluginChatTitle').textContent(),'Новый чат');
-    assert.equal(await pluginTitleInset(),12,'new chat title keeps its normal inset');
-    assert.equal(await page.locator('#workspaceReasoningToggle').isEnabled(),true,'new chat releases composer controls');
-    await page.screenshot({animations:'disabled',path:path.join(captures,'plugin-new-chat.png')});
-    await page.evaluate(() => {chatTest.hold=true;});
-    await page.locator('#chatInput').fill('Второе обсуждение плагина');
-    await page.locator('#chatInput').press('Enter');
-    await page.waitForFunction(() => typeof chatTest.release==='function');
-    const submitted=await page.evaluate(() => chatTest.requests.at(-1).payload);
-    assert.equal(submitted.sessionId,secondSession,'send targets the newly created session');
-    assert.equal(submitted.input.sessionId,secondSession,'runtime input pins the same session');
-    await page.locator('#pluginChatHistory').click();
-    await page.locator('#pluginChatHistoryList > button').first().waitFor();
-    assert.equal(await page.locator('#pluginChatHistoryList > button').count(),2,'history remains available during a run');
-    await page.locator('#pluginPreviewMount iframe').evaluate(frame => { frame.dataset.routeProbe = 'same-instance'; });
-    await page.evaluate(([workspace,session])=>RNAssistantProjectChats.open(workspace,session),[sourceWorkspace,secondSession]);
-    await page.locator('#messages').getByText('Второе обсуждение плагина',{exact:true}).waitFor();
-    const sourceTree=page.locator('[data-tree-key="project:'+sourceWorkspace+'"]');
-    await page.waitForFunction(workspace=>document.querySelectorAll('[data-tree-key^="project-chat:'+workspace+':"]').length===2,sourceWorkspace);
-    assert.equal(await sourceTree.locator('[data-tree-key^="project-chat:"]').count(),2,'main tree lists both source chats');
-    if(!await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()))await page.locator('#productMobileMenuButton').click();
-    await page.screenshot({animations:'disabled',path:path.join(captures,'plugin-chat-history.png')});
-    const firstRow=page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+firstSession+'"]');
-    await firstRow.locator('> .navigation-tree-row > .navigation-tree-label').click();
-    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
-    assert.equal(await page.locator('#messages').getByText('Второе обсуждение плагина',{exact:true}).count(),0,'older chat has its own history');
-    await page.evaluate(() => {chatTest.hold=false;chatTest.release();});
-    assert.equal(await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace),firstSession,'late reply cannot replace the selected history session');
-    await firstRow.hover();
-    await firstRow.getByRole('button',{name:'Открыть чат в плагине',exact:true}).click();
-    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
-    assert.equal(await page.locator('#chatInput').inputValue(),'Неотправленный черновик первой беседы','returning to a source chat restores its own draft');
-    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('data-route-probe'),'same-instance',
-      'opening another source chat keeps the live plugin frame');
-    await page.locator('#pluginChatHistory').click();
-    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
+    assert.notEqual(secondSession,firstSession,'the common project button creates a separate source chat');
+    assert.equal(await page.locator('#chatInput').inputValue(),'');
+    await page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+firstSession+'"] .navigation-tree-label').click();
+    await page.waitForFunction(session=>RNAssistantWorkspaceChat.selectedSession('preview-plugin-workspace')===session,firstSession);
+    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик первой беседы');
+    assert.equal(await frame.getAttribute('data-route-probe'),'same-instance','switching source chats keeps the preview');
+    const deletedRow=page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+firstSession+'"]');
+    page.once('dialog',dialog=>dialog.accept());
+    await deletedRow.hover();
+    await deletedRow.getByRole('button',{name:/Удалить чат/}).click();
+    await page.waitForFunction(session=>RNAssistantWorkspaceChat.selectedSession('preview-plugin-workspace')===session,secondSession);
+    assert.equal(await frame.getAttribute('data-route-probe'),'same-instance',
+      'deleting the selected chat opens another source chat without replacing the preview');
+    await page.locator('#projectChatTree [data-tree-key="project:preview-plan-workspace"] > .navigation-tree-row > .navigation-tree-label').click();
+    await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='project');
+    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,'another project hides the plugin preview');
+    assert.equal(await page.locator('.section-rail [data-section="chat"]').getAttribute('aria-current'),'page',
+      'the ordinary project restores the workspace rail selection');
     await page.locator('[data-plugin-id="data-templates"]').click();
-    await page.locator('#messages').getByText('Первое обсуждение плагина',{exact:true}).waitFor();
-    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('data-route-probe'),'same-instance',
-      'reselecting the current plugin does not reopen its frame');
-    // Reopening the same session must also restore the transcript after its DOM was cleared.
+    await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
+    assert.equal(await page.locator('#projectChatTree').isVisible(),true);
+    await page.setViewportSize({width:390,height:844});
+    await page.waitForFunction(()=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width===innerWidth);
+    assert.equal(await pluginToggle.evaluate(node=>node.parentElement.classList.contains('preview-surface-panel-head')),true,
+      'the same button remains reachable when the preview covers the narrow chat');
+    await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin-narrow.png')});
+    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'plugin preview fits the narrow viewport');
+    await page.setViewportSize({width:1360,height:900});
     await page.mouse.move(680,500);
     await page.locator('[data-plugin-id="data-templates"]').hover();
     await page.getByRole('button',{name:'Редактировать',exact:true}).waitFor();

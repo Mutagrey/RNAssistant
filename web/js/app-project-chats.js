@@ -11,7 +11,8 @@
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
   }
-  function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project"; }
+  function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project" ||
+    window.RNAssistantWorkspaceChat.owner() === "plugin"; }
   function node(tag, className, text) {
     var result = document.createElement(tag);
     result.className = className || "";
@@ -107,6 +108,7 @@
   }
   function renderTree() {
     var root = el("Tree"), selected = currentId(), needle = query.trim().toLocaleLowerCase("ru");
+    var pluginSource = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId();
     var nodes = projects().map(function (entry) {
       var ownMatch = entry.name.toLocaleLowerCase("ru").includes(needle);
       var items = (entry.chats || []).filter(function (chat) {
@@ -114,7 +116,9 @@
       }).map(function (chat) {
         var runStatus = entry.workspaceId === projectId() && chat.Id === selected && runState()
           ? field(runState(), "status", "Status") : chat.RunStatus;
-        return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat", title: chat.Title,
+        return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat",
+          title: entry.workspaceId === projectId() && chat.Id === selected && runState()
+            ? field(runState(), "title", "Title") || chat.Title : chat.Title,
           selected: entry.workspaceId === projectId() && chat.Id === selected,
           status: runStatus === "running" ? "running" : runStatus === "awaitingconfirmation" ? "waiting" : "",
           actions: (entry.pluginId ? [{ title: "Открыть чат в плагине", iconHtml: window.RNAssistantNavigationTree.icon("code"),
@@ -135,7 +139,10 @@
         workspaceId: entry.workspaceId, children: items,
         actions: [
           { title: "Новый чат в «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("plus"),
-            disabled: !entry.available, onClick: function () { selectProject(entry.workspaceId, false); create(); } },
+            disabled: !entry.available, onClick: function () {
+              if (pluginSource === entry.workspaceId) create();
+              else { selectProject(entry.workspaceId, false); create(); }
+            } },
           { title: "Открыть «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("external"),
             onClick: function () { selectProject(entry.workspaceId); } },
           { title: "Удалить историю «" + entry.name + "»", iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true,
@@ -146,26 +153,42 @@
     }).filter(Boolean);
     window.RNAssistantNavigationTree.render(root, nodes, {
       label: "Проекты и чаты", emptyText: projects().length ? "Ничего не найдено." : "Подключите папку проекта, чтобы видеть её чаты.",
-      onSelect: function (item) { if (item.sessionId) open(item.workspaceId, item.sessionId); else selectProject(item.workspaceId); },
+      onSelect: function (item) {
+        if (pluginSource === item.workspaceId) {
+          window.RNAssistantPlugins.select(window.RNAssistantPlugins.selectedId(), item.sessionId);
+        } else window.RNAssistantProjectChats.open(item.workspaceId, item.sessionId);
+      },
       onToggle: function (item, isExpanded) { expanded[item.workspaceId] = isExpanded; }
     });
   }
-  function render() {
-    runObserver.select(ownsView() && project() && project().available ? active : null, busy);
-    el("New").disabled = busy || !project() || !project().available;
+  function updateControls() {
+    var pluginBusy = !!(window.RNAssistantPlugins && window.RNAssistantPlugins.isChatBusy());
+    el("New").disabled = busy || !project() || !project().available || pluginBusy;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
     el("ConnectionSubmit").disabled = busy;
+    if (!ownsView()) return;
+    if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || busy || pluginBusy || uploadingFiles ||
+      !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
+    var target = active && active.sessionId ? { workspaceId: projectId(), sessionId: currentId() } : null;
+    var draft = target && window.RNAssistantChatDrafts.readWorkspace(target);
+    var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
+    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || pluginBusy || uploadingFiles ||
+      !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
+      !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || field(runState(), "status", "Status") === "running";
+  }
+  function render() {
+    runObserver.select(ownsView() && project() && project().available ? active : null, busy);
+    updateControls();
     renderTree();
     if (!ownsView()) return;
     if (composer) {
       composer.select({ workspaceId: projectId(), sessionId: currentId() }, active && active.state);
-      composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
     }
 
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
     el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
-    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!(active && active.pendingId) || field(runState(), "status", "Status") === "running";
+    updateControls();
     var visibleFile = fileNotice && fileNotice.target.workspaceId === projectId() && fileNotice.target.sessionId === currentId();
     el("FileStatus").textContent = visibleFile ? fileNotice.message : "";
     el("FileStatus").classList.toggle("is-error", !!(visibleFile && fileNotice.error));
@@ -192,10 +215,13 @@
           suggestions.push(suggest);
         });
       }
+      var pluginChat = window.RNAssistantWorkspaceChat.owner() === "plugin";
       messages.appendChild(renderChatEmptyState({
-        title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" : "Выберите чат проекта",
+        title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" :
+          pluginChat ? "Чатов пока нет" : "Выберите чат проекта",
         text: !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
-          "Верните папку на прежний путь или подключите её заново." : "Обсудите файлы проекта, подготовку данных или составьте план.",
+          "Верните папку на прежний путь или подключите её заново." : pluginChat && !active ?
+          "Нажмите «+», чтобы создать чат исходников." : "Обсудите файлы проекта, подготовку данных или составьте план.",
         buttons: suggestions
       }));
     } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
@@ -203,6 +229,8 @@
     if (!busy && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
     else if (!busy && !noticeError && statusText()) notice(statusText());
     else notice(noticeText, noticeError);
+    if (window.RNAssistantWorkspaceChat.owner() === "plugin" && window.RNAssistantPlugins)
+      window.RNAssistantPlugins.onChatSnapshot(active);
   }
   async function refresh(target) {
     var version = ++serial, result;
@@ -259,7 +287,10 @@
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
       if (projectId() === pid) {
         active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId);
-        catalog = await send("getProjectChats", {}); notice(statusText()); render();
+        notice(statusText()); render();
+        try { catalog = await send("getProjectChats", {}); render(); }
+        catch (error) { notice("Чат создан, но список не обновлён: " + (error.detail || error.message), true); }
+        return result;
       }
     } catch (error) { notice(error.detail || error.message, true); }
     finally { busy = false; render(); }
@@ -274,6 +305,8 @@
   }
   async function remove(entry, chat) {
     if (!window.confirm("Удалить чат «" + chat.Title + "»? История этого чата будет удалена; файлы проекта останутся.")) return;
+    var pluginCurrent = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId &&
+      window.RNAssistantWorkspaceChat.snapshot() && window.RNAssistantWorkspaceChat.snapshot().sessionId === chat.Id;
     try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
@@ -281,11 +314,14 @@
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       if (projectId() === entry.workspaceId && currentId() === chat.Id) active = null;
       notice(""); render(); var selected = project();
-      if (!active && selected && selected.available && selected.chats.length) open(selected.workspaceId, selected.chats[0].Id); }
+      if (pluginCurrent) await window.RNAssistantPlugins.select(entry.pluginId,
+        selected && selected.chats && selected.chats[0] && selected.chats[0].Id);
+      else if (!active && selected && selected.available && selected.chats.length) open(selected.workspaceId, selected.chats[0].Id); }
     catch (error) { notice(error.detail || error.message, true); }
   }
   async function removeHistory(entry) {
     if (!window.confirm("Удалить историю проекта «" + entry.name + "» и убрать его из дерева? Папка и файлы останутся.")) return;
+    var pluginCurrent = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId() === entry.workspaceId;
     try { await window.RNAssistantChatDrafts.flushAll();
       catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
       (entry.chats || []).forEach(function (chat) {
@@ -297,7 +333,8 @@
         selectedWorkspaceId = (projects().find(function (item) { return item.available; }) || projects()[0] || {}).workspaceId || null;
       }
       notice(""); render();
-      if (project() && project().available && project().chats && project().chats.length && !active)
+      if (pluginCurrent) await window.RNAssistantPlugins.select(entry.pluginId);
+      else if (project() && project().available && project().chats && project().chats.length && !active)
         open(projectId(), project().chats[0].Id); }
     catch (error) { await refresh(); notice(error.detail || error.message, true); }
   }
@@ -336,6 +373,7 @@
     var loaded;
     if (next === "projects") loaded = refresh(target);
     if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.refresh();
+    if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
     return loaded;
   }
   function bind() {
@@ -346,19 +384,19 @@
     });
     var dropZone = el("Layout").querySelector(".project-chat-main");
     dropZone.addEventListener("dragover", function (event) {
-      if (!ownsView()) return;
+      if (window.RNAssistantWorkspaceChat.owner() !== "project") return;
       if (event.dataTransfer && Array.from(event.dataTransfer.types || []).includes("Files")) {
         event.preventDefault(); event.dataTransfer.dropEffect = active && !uploadingFiles ? "copy" : "none";
       }
     });
     dropZone.addEventListener("drop", function (event) {
-      if (!ownsView()) return;
+      if (window.RNAssistantWorkspaceChat.owner() !== "project") return;
       var files = Array.from(event.dataTransfer && event.dataTransfer.files || []);
       if (files.length) { event.preventDefault(); addProjectFiles(files,
         { workspaceId: projectId(), sessionId: currentId() }); }
     });
     el("Input").addEventListener("paste", function (event) {
-      if (!ownsView()) return;
+      if (window.RNAssistantWorkspaceChat.owner() !== "project") return;
       var files = Array.from(event.clipboardData && event.clipboardData.files || []);
       if (files.length) { event.preventDefault(); addProjectFiles(files,
         { workspaceId: projectId(), sessionId: currentId() }); }
@@ -368,7 +406,9 @@
     });
     document.querySelector("[data-project-scope-icon]").innerHTML = window.RNAssistantNavigationTree.icon("folder");
     el("Refresh").addEventListener("click", refresh);
-    el("New").addEventListener("click", create);
+    el("New").addEventListener("click", function () {
+      create();
+    });
     el("Search").addEventListener("input", function () { query = this.value; renderTree(); });
     [["Connect", "connect"], ["Create", "create"]].forEach(function (entry) {
       el(entry[0]).addEventListener("click", function () {
@@ -391,7 +431,7 @@
       } catch (error) { notice(error.detail || error.message, true); }
       finally { busy = false; render(); }
     });
-    window.RNAssistantWorkspaceChat.registerActions("project", {
+    var chatActions = {
       snapshot: function () { return active; },
       suspend: function () { runObserver.select(null, false); },
       loadPrevious: async function () {
@@ -406,10 +446,10 @@
         } catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
       },
       input: function () {
-        el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || busy || uploadingFiles || !project() || !project().available || !active || !el("Input").value.trim() || !!active.pendingId || field(runState(), "status", "Status") === "running";
+        updateControls();
       },
       submit: function () {
-        var text = el("Input").value.trim(); if (!text || el("Send").disabled || !active || uploadingFiles) return;
+        var text = el("Input").value.trim(); if (el("Send").disabled || !active || uploadingFiles) return;
         var pid = projectId(), sid = currentId();
         var target = { workspaceId: pid, sessionId: sid }, draftVersion = composer.draftVersion();
         var request = composer.prepareInput(target, text);
@@ -440,13 +480,19 @@
         if (pendingId) runChat(function (pid, sid) { return send("resolveProjectChat", { workspaceId: pid, sessionId: sid, pendingId: pendingId, approve: approve }); });
       },
       progress: runObserver.acceptProgress
-    });
+    };
+    window.RNAssistantWorkspaceChat.registerActions("project", chatActions);
+    window.RNAssistantWorkspaceChat.registerActions("plugin", chatActions);
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);
   window.RNAssistantProjectChats = { show: function () {
     if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); }
     else if (window.RNAssistantWorkspaceChat.mount("office")) resumeOfficeTranscript();
-  }, scope: function () { return scope; }, setScope: setScope,
+    if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
+  }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
+    refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,
+    snapshot: function () { return active; },
+    isBusy: function () { return busy; },
     open: function (workspaceId, sessionId) { switchTab("chat"); return setScope("projects", { workspaceId: workspaceId, sessionId: sessionId }); } };
 }());

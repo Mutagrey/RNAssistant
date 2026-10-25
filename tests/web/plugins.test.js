@@ -77,6 +77,9 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
         case 'getChatDrafts':return {drafts:[]};
         case 'saveChatDraft':return {saved:true};
         case 'getPlugins':return {defaultSourceParent:'C:\\Users\\Demo\\AppData\\Roaming\\RNAssistant\\plugin-workspaces',items:item.hidden?[]:[{...item}]};
+        case 'getProjectChats':return {selectedWorkspaceId:'source-1',projects:[{workspaceId:'source-1',name:item.name,
+          rootPath:item.sourceRoot,available:true,pluginId:'example',chats:sourceChatCreated?
+            [{Id:'source-chat-1',Title:'Исходники',RunStatus:'idle'}]:[]}]};
         case 'getRemovedPlugins':return {items:item.hidden?[{...item}]:[]};
         case 'getPluginIcons':return {items:savedIcons.slice()};
         case 'savePluginIcon':{const saved={id:'icon-test',name:payload.name,svg:'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 4h16v16H4Z"/></svg>'};savedIcons=[saved];return saved;}
@@ -127,7 +130,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#messages').getByText('Чатов пока нет').waitFor();
     assert.equal(sourceChatCreateCalls,0,'opening development does not create a source chat');
     assert.equal(await page.locator('#sendButton').isDisabled(),true,'empty source chat locks the composer');
-    assert.equal(await page.locator('#pluginChatNew').isEnabled(),true,'explicit creation remains available');
+    assert.equal(await page.locator('#projectChatNew').isEnabled(),true,'source chat creation uses the project tree');
     await page.locator('#pluginAdd').hover();
     await page.locator('.rail-hover-card').getByText('Удалённых с панели плагинов нет.').waitFor();
     assert.equal(await page.locator('.rail-hover-title').textContent(),'Добавить плагины');
@@ -204,7 +207,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     const splitter=page.locator('#pluginSurfaceSplitter');
     const splitBefore=Number(await splitter.getAttribute('aria-valuenow'));
     await splitter.press('ArrowLeft');
-    assert.ok(Number(await splitter.getAttribute('aria-valuenow'))<splitBefore,'development split resizes from the keyboard');
+    assert.ok(Number(await splitter.getAttribute('aria-valuenow'))>splitBefore,'development split resizes from the keyboard');
     assert.match(iconPrompt,/workspace\.plugin_authoring/);
     assert.match(iconPrompt,/Сводка продаж/);
     assert.doesNotMatch(iconPrompt,/Таблица с восходящей линией/,'created icon is already in source');
@@ -234,14 +237,14 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
       await page.waitForFunction(value=>document.querySelector('#pluginPreviewMount iframe')?.getAttribute('src')!==value,previous);};
     await refreshPreview();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
-    await page.locator('#pluginApply').click();await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginReopen').click();
+    await page.locator('#pluginApply').click();await page.locator('#pluginVersions summary').click();await page.locator('#pluginReopen').click();
     assert.equal(await page.locator('#pluginRail [data-plugin-id="example"] .plugin-icon-image').count(),1,'published SVG icon appears in the rail');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
     version=2;await refreshPreview();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v2'}).waitFor();
     await page.locator('#pluginApply').click();
     assert.equal(await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').textContent(),'hello preview-v2','apply preserves the pinned visible instance');
-    await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginReopen').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v2'}).waitFor();
+    await page.locator('#pluginVersions summary').click();await page.locator('#pluginReopen').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v2'}).waitFor();
     await page.locator('#pluginVersions summary').click();
     await page.screenshot({path:path.join(captures,'plugin-versions.png')});
     await page.locator('#pluginVersionItems button').nth(1).click();
@@ -249,7 +252,9 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.locator('#pluginApply').isVisible(),false,'historical preview hides source Apply');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
+    const historicalFrame=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
     await page.locator('#pluginRestoreVersion').click();
+    await page.waitForFunction(previous=>document.querySelector('#pluginPreviewMount iframe')?.getAttribute('src')!==previous,historicalFrame);
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
     assert.equal(version,2,'restore leaves editable source version untouched');
@@ -265,7 +270,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(captures,'plugins-narrow.png')});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no page overflow at 390px');
     assert.ok(await page.locator('#messages').innerText(),'development chat rendered');
-    await page.locator('.plugin-toolbar-actions summary').click();await page.locator('#pluginDisable').click();await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount iframe'));
+    await page.locator('#pluginVersions summary').click();await page.locator('#pluginDisable').click();await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount iframe'));
     await page.setViewportSize({width:1280,height:800});
     await page.locator('#pluginRail [data-plugin-id="example"]').hover();
     assert.equal(await page.locator('.rail-hover-title').textContent(),'Example','plugin uses the same rail popover');

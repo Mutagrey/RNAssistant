@@ -327,71 +327,51 @@ async function serve() {
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').hover();
     await normal.locator('.rail-hover-card').getByRole('button', { name: 'Удалить с панели' }).waitFor();
     await normal.locator('#pluginRail [data-plugin-id="data-templates"]').click();
-    assert.equal(await normal.evaluate(() => RNAssistantShellLayout.isNavigationOpen()), false,
-      'plugin selection collapses its tree by default');
-    await normal.locator('#productMobileMenuButton').click();
-    await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').waitFor();
-    await normal.locator('#pluginNavigationTree [data-tree-key="sources"] > .navigation-tree-row').click();
+    assert.equal(await normal.locator('#tab-chat').evaluate(node=>node.classList.contains('active')),true,
+      'plugin opens its source project in the common chat screen');
+    assert.equal(await normal.evaluate(() => RNAssistantShellLayout.isNavigationOpen()), true,
+      'the project and chat tree remains open');
+    await normal.locator('#projectChatTree [data-tree-key="project:preview-plugin-workspace"]').waitFor();
     await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
     await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewSources").waitFor({ state: "visible" });
+    await normal.locator('#pluginNavigationToggle').click();
+    await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').waitFor();
     await normal.locator('[data-nav-search-toggle="pluginNavigationSearch"]').click();
     await normal.locator("#pluginNavigationSearch").fill("production-form");
     assert.equal(await normal.locator('#pluginNavigationTree [data-tree-key="template:production-form"]').count(), 1);
     assert.equal(await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').count(), 0);
     await normal.locator("#pluginNavigationSearch").press("Escape");
     assert.equal(await normal.locator('#pluginNavigationTree [data-tree-key="sources"]').count(), 1);
-    assert.equal(await normal.locator("#pluginNavigationToggle, #pluginNavigationClose").count(), 0,
-      "Data Templates uses the shared panel button");
-    assert.equal(await normal.locator("#productMobileMenuButton").getAttribute("aria-controls"), "pluginNavigationPane");
-    await normal.waitForFunction(() => !document.querySelector('.shell').classList.contains('navigation-transition'));
-    assert.deepEqual(await normal.evaluate(() => {
-      const rect = selector => document.querySelector(selector).getBoundingClientRect();
-      const nav = rect("#pluginNavigationPane .product-nav-heading"), header = rect("#pluginWorkbench .plugin-toolbar"),
-        toggle = rect("#productMobileMenuButton"), title = rect("#pluginWorkbench .plugin-title");
-      return [Math.round(nav.height), Math.round(header.height),
-        Math.round(toggle.left - header.left), Math.round(title.left - toggle.right)];
-    }), [52, 52, 10, 6], "plugin headers and the shared button follow the demo spacing");
     await normal.locator('#pluginNavigationTree [data-tree-key="template:production-form"] > .navigation-tree-row').click();
     await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTemplateEditor").waitFor({ state: "visible" });
-    await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.querySelector("#dtViewTemplates .dt-section-heading h3")?.textContent === "production-form");
-    assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates .dt-section-heading h3").textContent(), "production-form");
+    assert.equal(await normal.locator('#pluginNavigationPane').isVisible(), false,
+      'choosing a plugin section returns to the preview');
+    await normal.locator('#pluginNavigationToggle').click();
     await normal.locator('#pluginNavigationTree [data-tree-key="templates"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtTemplateEditor").waitFor({ state: "hidden" });
     await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.querySelector("#dtViewTemplates .dt-section-heading h3")?.textContent === "Шаблоны преобразования");
-    assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates .dt-section-heading h3").textContent(), "Шаблоны преобразования");
     await normal.setViewportSize({ width: 750, height: 720 });
     await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-compact"));
-    await normal.locator("#pluginNavigationPane").waitFor({ state: "hidden" });
-    assert.equal(await normal.locator("#pluginNavigationPane").isVisible(), false);
-    await normal.locator("#productMobileMenuButton").click();
-    await normal.waitForFunction(() => Math.abs(document.querySelector("#pluginNavigationPane").getBoundingClientRect().width - 290) < 0.5);
-    assert.equal(await normal.evaluate(() => {
-      const main = document.querySelector(".plugin-data-templates .plugin-content").getBoundingClientRect();
-      const button = document.querySelector("#productMobileMenuButton").getBoundingClientRect();
-      return Math.round(button.left - main.left);
-    }), 10, "the project tree and shared button expand together");
+    assert.equal(await normal.locator('#pluginWorkbench').isVisible(), true,
+      'plugin preview remains reachable in compact layout');
+    await normal.locator('#pluginNavigationToggle').click();
+    assert.equal(await normal.locator('#pluginNavigationPane').isVisible(), true);
+    await normal.locator('#pluginNavigationToggle').click();
     await normal.setViewportSize({ width: 390, height: 720 });
-    await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-single"));
-    await normal.locator("#productMobileMenuButton").click();
-    await normal.locator("#pluginNavigationPane").waitFor({ state: "visible" });
-    assert.equal(await normal.locator("#pluginNavigationPane [data-plugin-nav-icon]").count(), 0,
-      "the tree heading does not duplicate the panel icon");
-    await normal.locator("#productMobileMenuButton").click();
+    await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-single") &&
+      document.querySelector('#pluginWorkbench').getBoundingClientRect().width === innerWidth);
+    assert.equal(await normal.locator('#workspaceInspectorToggle').isVisible(), true,
+      'the same panel button stays accessible over the narrow preview');
+    assert.equal(await normal.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
     await normal.setViewportSize({ width: 1280, height: 720 });
     await normal.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-wide"));
     await normal.waitForFunction(() => document.querySelector("#pluginPreviewMount iframe")?.contentDocument?.documentElement?.dataset.previewReady === "true");
-    assert.equal(await normal.locator('#pluginSurfaceToggle').getAttribute('aria-expanded'), 'true',
-      'plugin opens with its right preview visible');
-    await normal.waitForFunction(() => document.querySelector('#pluginPreviewMount iframe')?.title.includes('предпросмотр'));
-    assert.equal(await normal.locator('#pluginProject').count(), 0,
-      'Data Templates has no duplicate Project button in the toolbar');
-    assert.equal(await normal.locator('#pluginNavigationProject').count(), 1,
-      'the project action remains in the tree heading');
+    assert.equal(await normal.locator('#workspaceInspectorToggle').getAttribute('aria-expanded'), 'true');
     assert.equal(await normal.locator('#pluginApply').isVisible(), false,
       'an unchanged published package has no Apply action');
+    await normal.locator('#pluginNavigationToggle').click();
     await normal.locator('#pluginNavigationTree [data-tree-key="templates"] > .navigation-tree-row > .navigation-tree-label').click();
     await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").waitFor({ state: "visible" });
-    assert.equal(await normal.frameLocator("#pluginPreviewMount iframe").locator("#dtViewTemplates").isVisible(), true);
     await normal.locator('.section-rail [data-section="artifacts"]').click();
     await normal.locator("#artifactCatalogAll").click();
     await normal.locator("#artifactCatalogOverviewRows").getByRole("button", { name: "Методика расчёта.pdf" }).click();
@@ -399,8 +379,7 @@ async function serve() {
     await normal.locator("#artifactCatalogPreviewBody .rn-pdf-thumbnail-rail").waitFor();
     assert.equal(await normal.locator("#artifactCatalogStatus").textContent(), "");
     await normal.locator('.section-rail [data-section="chat"]').click();
-    await normal.locator("#chatScopeSwitcher summary").click();
-    await normal.locator('#chatScopeSwitcher [data-workspace-scope="projects"]').click();
+    await normal.locator('#projectChatLayout').waitFor({state:'visible'});
     assert.deepEqual(await normal.locator('#projectChatTree [data-tree-key^="project:"]').evaluateAll(nodes =>
       nodes.map(node => node.dataset.treeKey).sort()),
     ['project:preview-data-workspace', 'project:preview-plan-workspace', 'project:preview-plugin-workspace'],
@@ -517,25 +496,23 @@ async function serve() {
     assert.equal(drawnIcons.items.length, 1, 'preview saves a simulated drawing immediately');
     await normal.locator('#pluginCreateSubmit').click();
     await normal.locator('#messages .message.assistant').getByText('Изменение исходников смоделировано в preview. Файлы плагина не менялись.', { exact: true }).waitFor();
-    assert.match(await normal.locator('#pluginSource').textContent(), /plugin-workspaces[\\/]Сводка продаж-/, 'preview uses the default source folder');
+    assert.match(await normal.evaluate(async () => (await send('getPlugins', {})).items.find(item =>
+      item.pluginId === 'preview-plugin-1').sourceRoot), /plugin-workspaces[\\/]Сводка продаж-/,
+      'preview uses the default source folder');
     await normal.locator('#pluginPreview').click();
     await normal.frameLocator('#pluginPreviewMount iframe').getByRole('heading', { name: 'Сводка продаж' }).waitFor();
     assert.equal(await normal.locator('#pluginApply').isVisible(), true);
     const originalPluginSession = await normal.evaluate(() =>
       RNAssistantWorkspaceChat.selectedSession('source-preview-plugin-1'));
-    await normal.locator('#pluginChatNew').click();
+    await normal.locator('#projectChatNew').click();
     await normal.waitForFunction(previous =>
       RNAssistantWorkspaceChat.selectedSession('source-preview-plugin-1') !== previous, originalPluginSession);
-    await normal.locator('#pluginChatHistory').click();
-    await normal.locator('#pluginChatHistoryList button').nth(1).waitFor();
-    assert.equal(await normal.locator('#pluginChatHistoryList').isVisible(), true,
-      'plugin chat history opens in place');
-    await normal.locator('#pluginChatHistoryList button').nth(1).click();
+    await normal.locator('#projectChatTree [data-tree-key="project-chat:source-preview-plugin-1:'+originalPluginSession+'"] .navigation-tree-label').click();
     await normal.waitForFunction(previous =>
       RNAssistantWorkspaceChat.selectedSession('source-preview-plugin-1') === previous, originalPluginSession);
     await normal.locator('#pluginApply').click();
     assert.equal(await normal.locator('#pluginApply').isVisible(), false);
-    assert.equal(await normal.locator('#pluginStatus').textContent(), '');
+    assert.equal(await normal.locator('#pluginWorkbenchStatus').textContent(), '');
     assert.equal(await normal.locator('#pluginRail [data-plugin-id="preview-plugin-1"] .plugin-icon-image').count(), 1,
       'the simulated publication displays its vector icon');
     await normal.evaluate(id => send('deletePluginIcon', { id }), drawnIcons.items[0].id);

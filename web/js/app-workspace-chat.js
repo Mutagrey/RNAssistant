@@ -94,23 +94,13 @@
     document.getElementById("sendButton").setAttribute("aria-label", "Отправить");
     input.readOnly = false;
     if (changed && sharedComposer) sharedComposer.select(null);
-    var plugin = owner === "plugin";
     view.dataset.owner = owner;
-    view.classList.toggle("chat-main", !plugin);
-    view.classList.toggle("plugin-workspace-chat-view", plugin);
-    view.querySelector(".workspace-chat-head").classList.toggle("plugin-chat-head", plugin);
-    ["projectChatTitleBlock", "projectChatContextNote"].forEach(function (id) {
-      document.getElementById(id).hidden = plugin;
-    });
-    ["pluginChatTitle", "pluginDevelopmentActions", "pluginChatSource"].forEach(function (id) {
-      document.getElementById(id).hidden = !plugin;
-    });
-    if (plugin) document.getElementById("projectChatFileStatus").hidden = true;
-    input.placeholder = plugin ? "Опишите изменение плагина" : "Спросите о проекте…";
-    input.setAttribute("aria-label", plugin ? "Сообщение в чат исходников" : "Сообщение в чат проекта");
-    list.setAttribute("aria-label", plugin ? "Сообщения чата исходников" : "Сообщения чата проекта");
+    view.classList.add("chat-main");
+    view.classList.remove("plugin-workspace-chat-view");
+    input.placeholder = owner === "plugin" ? "Опишите изменение плагина" : "Спросите о проекте…";
+    input.setAttribute("aria-label", "Сообщение в чат проекта");
+    list.setAttribute("aria-label", "Сообщения чата проекта");
     if (sharedComposer) sharedComposer.refresh();
-    document.getElementById("workspaceInspectorToggle").hidden = plugin;
     window.RNAssistantChatInspector.mount(owner);
     return changed;
   }
@@ -288,7 +278,7 @@
     function save() {
       if (current) loaded = draftStore.saveWorkspace(current, { text: input.value, mode: mode, reasoning: reasoning });
     }
-    var note = toolbar.querySelector(".plugin-chat-context-note, .project-chat-context-note");
+    var note = toolbar.querySelector(".project-chat-context-note");
     function showOfficeContext(snapshot) {
       if (!note) return;
       var office = field(snapshot, "office"), status = String(field(snapshot, "status") || "").toLowerCase();

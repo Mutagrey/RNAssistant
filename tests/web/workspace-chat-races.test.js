@@ -45,7 +45,7 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#chatInput').press('Enter');
       await page.waitForFunction(() => !!snapshotRace.release);
       await page.waitForFunction(() => !document.querySelector('#chatInput').value &&
-        !document.querySelector(RNAssistantWorkspaceChat.owner() === 'plugin' ? '#pluginChatNew' : '#projectChatNew').disabled);
+        !document.querySelector('#projectChatNew').disabled);
       await page.evaluate(async () => {
         snapshotRace.release();
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -106,7 +106,7 @@ const root = path.resolve(__dirname, '../..');
       await new Promise(resolve => setTimeout(resolve, 0));
     });
     await page.locator('#chatInput').fill('Новый запрос после возврата');
-    assert.equal(await page.locator('#pluginChatNew').isEnabled(), true,
+    assert.equal(await page.locator('#projectChatNew').isEnabled(), true,
       'reopening the plugin must not retain the previous view busy flag');
     assert.equal(await page.locator('#sendButton').isEnabled(), true);
     console.log('PASS workspace snapshot ordering, running-chat reconnect and plugin selection during a pending reply');

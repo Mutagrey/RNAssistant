@@ -94,7 +94,7 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#chatInput').fill('Новый ввод');
     await page.locator('#chatInput').fill('Тот же текст');
     await page.evaluate(() => draftTest.release());
-    await page.waitForFunction(() => !document.querySelector('#pluginChatNew').disabled);
+    await page.waitForFunction(() => !document.querySelector('#projectChatNew').disabled);
     assert.equal(await page.locator('#chatInput').inputValue(), 'Тот же текст',
       'late acknowledgement does not erase a later draft with identical text');
     await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
@@ -118,7 +118,7 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#chatInput').fill(message);
       await page.locator('#chatInput').press('Enter');
       await page.waitForFunction(() => retryTest.requests.length === 1 &&
-        !document.querySelector(RNAssistantWorkspaceChat.owner() === 'plugin' ? '#pluginChatNew' : '#projectChatNew').disabled);
+        !document.querySelector('#projectChatNew').disabled);
       if (destination === 'plugin') await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
       else await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
       assert.equal(await page.locator('#chatInput').inputValue(), message, 'unacknowledged draft survives navigation');

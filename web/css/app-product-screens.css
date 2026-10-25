@@ -223,3 +223,71 @@
 }
 
 .shell #workspaceInspectorToggle { margin-left: auto; }
+/* Plugin development uses the project chat tree and one right preview dock. */
+.shell.navigation-open > .content > #tab-chat.active #projectChatLayout.plugin-surface-open:not(.with-inspector) {
+  grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--plugin-surface-width, 520px) !important;
+}
+.shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-open:not(.with-inspector) {
+  grid-template-columns: 0px 0px minmax(0, 1fr) 1px var(--plugin-surface-width, 520px) !important;
+}
+.shell #tab-chat #projectChatLayout > .plugin-surface-splitter { grid-column: 4; grid-row: 1; width: 1px; }
+.shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-open > .plugin-surface-splitter {
+  visibility: visible; opacity: 1; pointer-events: auto; width: 1px; min-width: 1px;
+}
+.shell #tab-chat #projectChatLayout > .plugin-workbench {
+  position: relative; grid-column: 5; grid-row: 1; display: flex; flex-direction: column;
+  min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--line); background: var(--surface);
+}
+.shell #tab-chat #projectChatLayout > .plugin-workbench[hidden],
+.shell #tab-chat #projectChatLayout > .plugin-surface-splitter[hidden] { display: none; }
+.shell #tab-chat .plugin-workbench .plugin-preview { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.shell #tab-chat .plugin-workbench .preview-surface-title { display: block; }
+.shell #tab-chat .plugin-workbench .preview-surface-actions { gap: 3px; }
+.shell #tab-chat .plugin-workbench .preview-surface-actions [data-browser-control] span { display: none; }
+.shell #tab-chat .plugin-workbench .preview-surface-actions > .icon-btn { width: 29px; height: 29px; padding: 5px; }
+.shell #tab-chat .plugin-workbench .preview-surface-actions > .icon-btn svg { width: 17px; height: 17px; }
+.shell #tab-chat .plugin-workbench .plugin-sections-toggle { min-height: 29px; padding: 4px 6px; gap: 5px; font-size: 11px; }
+.shell #tab-chat .plugin-workbench .plugin-sections-toggle svg { flex: none; width: 15px; height: 15px; }
+.shell #tab-chat .plugin-workbench .plugin-sections-toggle[aria-expanded="true"] { background: var(--surface-selected); }
+.shell #tab-chat .plugin-workbench .plugin-decision-strip { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--accent-soft); color: var(--ink); font-size: 11px; }
+.shell #tab-chat .plugin-workbench .plugin-decision-strip[hidden] { display: none; }
+.shell #tab-chat .plugin-workbench .plugin-decision-strip > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shell #tab-chat .plugin-workbench .plugin-decision-strip > .button { flex: none; min-height: 28px; padding: 5px 9px; }
+.shell #tab-chat .plugin-workbench .plugin-navigation:not([hidden]) {
+  position: absolute; z-index: 30; inset: 94px auto 0 0; display: flex; flex-direction: column;
+  width: min(270px, 88%); min-height: 0; border-right: 1px solid var(--line);
+  background: var(--surface-subtle); box-shadow: var(--shadow);
+}
+.shell #tab-chat .plugin-workbench:has(.plugin-decision-strip:not([hidden])) .plugin-navigation:not([hidden]) { top: 134px; }
+.shell #tab-chat .plugin-workbench .plugin-navigation[hidden] { display: none; }
+.shell #tab-chat .plugin-workbench .plugin-status:not(:empty) {
+  position: absolute; z-index: 35; top: 98px; right: 10px; max-width: calc(100% - 20px);
+  padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 7px;
+  background: var(--surface); box-shadow: var(--shadow);
+}
+.shell #tab-chat .plugin-workbench .plugin-status:empty { display: none; }
+.shell #tab-chat .plugin-workbench > .html-workspace-inspect-status:not(:empty) { position: absolute; z-index: 35; right: 12px; bottom: 12px; max-width: min(320px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); pointer-events: none; }
+@media (max-width: 1100px) {
+  .shell.navigation-open > .content > #tab-chat.active #projectChatLayout.plugin-surface-open:not(.with-inspector),
+  .shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-open:not(.with-inspector) {
+    position: relative; grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px !important;
+  }
+  .shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-open:not(.with-inspector) {
+    grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important;
+  }
+  .shell #tab-chat #projectChatLayout > .plugin-workbench {
+    position: absolute; grid-column: auto; grid-row: auto; inset: 0 0 0 auto;
+    width: min(620px, 65vw); z-index: 12; box-shadow: -12px 0 30px #142a151a;
+  }
+  .shell #tab-chat #projectChatLayout > .plugin-surface-splitter { display: none; }
+}
+@media (max-width: 700px) {
+  .shell #tab-chat #projectChatLayout > .plugin-workbench { width: 100%; }
+}
+@media (max-width: 450px) {
+  .shell #tab-chat .plugin-workbench .plugin-sections-toggle span,
+  .shell #tab-chat .plugin-workbench .plugin-version-menu > summary span { display: none; }
+  .shell #tab-chat .plugin-workbench .plugin-sections-toggle { width: 29px; justify-content: center; }
+  .shell #tab-chat .plugin-workbench .plugin-version-menu > summary { width: 29px; justify-content: center; }
+  .shell #tab-chat .plugin-workbench .plugin-version-menu > summary svg:last-child { display: none; }
+}

@@ -70,9 +70,6 @@ function switchTab(name) {
   Array.prototype.slice.call(document.querySelectorAll(".panel")).forEach(function (panel) {
     panel.classList.toggle("active", panel.id === "tab-" + name);
   });
-  if (changed && active && active.id === "tab-plugins" && name !== "plugins" && window.RNAssistantShellLayout) {
-    window.RNAssistantShellLayout.restoreAfterPlugin();
-  }
   var selectedPanel = document.getElementById("tab-" + name);
   if (changed && selectedPanel && document.querySelector(".shell.layout-ready") &&
       !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {

@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## Right preview header — 2026-10-25
+
+Owner: Web shared preview surface, plugin and HTML chat browser presentation.
+The right pane now separates its section switcher from the resource toolbar.
+The panel toggle stays on the central chat header on wide screens; the same
+button remains reachable inside a narrow overlay. Plugin version actions share
+one labeled menu, while Apply/Restore appear only with an actionable candidate.
+Selection after reopening plugin management now awaits one source check and
+restarts source watching before the frame can be annotated. Focused Chromium
+layout, plugin and HTML browser checks pass; Windows/WebView2 remains open.
+
+## Plugin development in the project shell — 2026-10-24
+
+Owner: Web plugin navigation and project chat shell. A plugin icon now opens its
+source workspace in the ordinary Projects tree. The shared ChatView stays in the
+center; the exact plugin iframe, annotations, version actions and Inspector use
+one right dock. Project chat selection and creation use the same tree; the
+duplicate plugin history controls, chat handlers and standalone development layout
+are removed. Project and plugin sessions use the same project chat controller.
+Switching source chats preserves the iframe; switching projects hides it. Source
+registration precedes tree navigation, and deletion of the selected source chat
+reopens a valid chat or explicit empty state. Focused Chromium plugin, shell,
+draft, routing and Inspector checks pass. Windows/WebView2 delivery remains open.
+
 ## Shared context and activity Inspector — 2026-10-24
 
 Owner: Web chat Inspector presentation. One dock and section switcher now follow
@@ -316,7 +340,6 @@ and run-state ordering passed, including browser focus/disclosure checks. No ful
 suite, paid model calls or Office validation. Open: actual target-provider support, Windows/WebView2/Office evidence,
 and cross-process live token delivery. The dated audit below
 describes its earlier baseline, not the status of every current implementation.
-
 
 ## Conversation v8 / shared-chat incident audit — 2026-10-23
 
@@ -3660,7 +3683,6 @@ commit candidate passes 838/862 Harness checks; all 24 failures also reproduce o
 checks next-run settings without changing accepted authority. Version-format
 validation passes.
 Real Windows/Office/WebView2 and real-model task quality remain unqualified.
-
 
 ## Artifact tree and document removal — 2026-10-13
 

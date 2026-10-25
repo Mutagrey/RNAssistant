@@ -35,7 +35,6 @@
 }
 
 #chatForm[data-owner="plugin"] #projectChatContextNote,
-#chatForm[data-owner="project"] #pluginChatSource,
 #chatForm[data-owner="plugin"] #projectChatFileStatus {
   display: none !important;
 }

@@ -97,7 +97,7 @@ const { chromium } = require("playwright");
     await page.evaluate(() => { window.previewFrame = document.querySelector("#pluginPreviewMount iframe"); window.previewDocument = previewFrame.contentDocument; });
     await page.locator("#chatInput").fill("Черновик плагина");
     await view("activity");
-    assert.equal(await page.evaluate(() => document.querySelector("#pluginBody > #chatInspector") === inspectorNode), true);
+    assert.equal(await page.evaluate(() => document.querySelector("#projectChatLayout > #chatInspector") === inspectorNode), true);
     assert.equal(await page.locator(".chat-inspector-step").count(), 2);
     assert.equal(await page.locator("#pluginPreviewMount").isHidden(), true);
     await page.locator('#messages [aria-label="Открыть шаг"]').nth(2).click();

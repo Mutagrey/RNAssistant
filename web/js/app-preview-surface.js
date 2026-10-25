@@ -5,6 +5,13 @@
     var bar = document.createElement("div");
     bar.className = "preview-surface-bar";
     bar.hidden = true;
+    var panelHead = document.createElement("div");
+    panelHead.className = "preview-surface-panel-head";
+    var section = document.createElement("div");
+    section.className = "preview-surface-section";
+    panelHead.appendChild(section);
+    var resourceRow = document.createElement("div");
+    resourceRow.className = "preview-surface-resource-row";
     var location = document.createElement("span");
     location.className = "preview-surface-location";
     var title = document.createElement("strong");
@@ -36,7 +43,8 @@
       });
     }
     actions.appendChild(reload);
-    bar.append(location, status, actions);
+    resourceRow.append(location, status, actions);
+    bar.append(panelHead, resourceRow);
     root.insertBefore(bar, root.firstChild);
 
     var pending = null;
@@ -48,6 +56,7 @@
     }
     function setStatus(message, error) {
       status.textContent = message || "";
+      status.title = message || "";
       status.dataset.error = error ? "true" : "false";
       status.setAttribute("role", error ? "alert" : "status");
     }

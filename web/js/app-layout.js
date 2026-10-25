@@ -2,7 +2,6 @@
   var productNavigationKey = "rnassistant.ui.navigation.width";
   var productNavigationOpenKey = "rnassistant.ui.navigation.open";
   var productNavigationPreference = true;
-  var pluginNavigationCollapsed = false;
   var compactNavigationOpen = false;
   var productLayoutMode = null;
   var navigationTransitionTimer = null;
@@ -18,7 +17,7 @@
   }
 
   function navigationIsOpen() {
-    return productLayoutMode === "wide" ? productNavigationPreference && !pluginNavigationCollapsed : compactNavigationOpen;
+    return productLayoutMode === "wide" ? productNavigationPreference : compactNavigationOpen;
   }
 
   function syncProductNavigation() {
@@ -63,7 +62,6 @@
 
   function setProductNavigationOpen(open) {
     if (navigationMode() === "wide") {
-      pluginNavigationCollapsed = false;
       productNavigationPreference = !!open;
       try { window.localStorage.setItem(productNavigationOpenKey, open ? "1" : "0"); }
       catch (error) { /* Storage may be disabled. */ }
@@ -76,8 +74,6 @@
     isNavigationOpen: function () { return navigationIsOpen(); },
     mode: navigationMode,
     setNavigationOpen: setProductNavigationOpen,
-    collapseForPlugin: function () { pluginNavigationCollapsed = true; syncProductNavigation(); },
-    restoreAfterPlugin: function () { pluginNavigationCollapsed = false; syncProductNavigation(); },
     refresh: syncProductNavigation
   };
 

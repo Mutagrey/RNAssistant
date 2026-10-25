@@ -102,8 +102,8 @@
     return current.owner === "office" ? { chatId: current.chatId } :
       { owner: current.owner, workspaceId: current.workspaceId, sessionId: current.sessionId };
   }
-  function layoutNode() { return document.getElementById(owner === "office" ? "chatLayout" : owner === "project" ? "projectChatLayout" : "pluginBody"); }
-  function toggleNode() { return document.getElementById(owner === "office" ? "toggleChatInspectorButton" : owner === "project" ? "workspaceInspectorToggle" : "pluginSurfaceToggle"); }
+  function layoutNode() { return document.getElementById(owner === "office" ? "chatLayout" : "projectChatLayout"); }
+  function toggleNode() { return document.getElementById(owner === "office" ? "toggleChatInspectorButton" : "workspaceInspectorToggle"); }
   function previewSurface() { return owner === "office" ? window.RNAssistantChatBrowser : owner === "plugin" && window.RNAssistantPlugins && window.RNAssistantPlugins.preview; }
   function mount(nextOwner) {
     if (nextOwner === owner) return;
@@ -525,7 +525,7 @@
     panel.hidden = false;
     panel.inert = !open;
     panel.setAttribute("aria-hidden", String(!open));
-    divider.hidden = owner === "plugin" || window.innerWidth <= 1100 || requestMode === "focus";
+    divider.hidden = window.innerWidth <= 1100 || requestMode === "focus";
     divider.inert = !open;
     if (panelToggle) panelToggle.sync();
     if (workspaceToggle) workspaceToggle.sync();
@@ -568,11 +568,9 @@
     var preview = switcher.querySelector('[data-chat-inspector-view="preview"]');
     var browserOpen = !open && browser && browser.isOpen();
     var host = browserOpen
-      ? document.querySelector((owner === "plugin" ? "#pluginPreviewMount" : "#chatBrowser") + " .preview-surface-location")
+      ? document.querySelector((owner === "plugin" ? "#pluginPreviewMount" : "#chatBrowser") + " .preview-surface-section")
       : document.querySelector("#chatInspector .chat-inspector-head");
-    if (browserOpen && host && host.querySelector(".preview-surface-title"))
-      host.insertBefore(switcher, host.querySelector(".preview-surface-title"));
-    else if (host && switcher.parentElement !== host) host.appendChild(switcher);
+    if (host && switcher.parentElement !== host) host.appendChild(switcher);
     preview.hidden = !browser || !browser.hasSource();
     switcher.classList.toggle("is-browser-view", !!browserOpen);
     if (browserOpen) {

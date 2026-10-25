@@ -32,6 +32,10 @@
     if (!bound) return;
     var layout = el("chatLayout"), overlay = availableWidth() < 681;
     layout.classList.toggle("browser-overlay", overlay);
+    var toggle = el("toggleChatInspectorButton");
+    var toggleTarget = open && overlay ? el("htmlWorkspacePreview").querySelector(".preview-surface-panel-head") :
+      document.querySelector("#chatDropZone > .chatbar .chatbar-actions");
+    if (toggleTarget && toggle.parentElement !== toggleTarget) toggleTarget.appendChild(toggle);
     layout.style.setProperty("--browser-width", Math.round(paneWidth()) + "px");
     el("chatBrowserSplitter").hidden = !open || overlay;
     window.RNAssistantSplitter.update(el("chatBrowserSplitter"), paneWidth(), bounds());
@@ -76,6 +80,7 @@
   }
   function restoreHome() {
     var root = el("htmlWorkspacePreview"), editor = el("htmlWorkspaceEditor");
+    root.classList.remove("preview-side-panel");
     if (root.parentElement === el("chatBrowserFrameMount")) editor.insertBefore(root, el("htmlWorkspaceEdit"));
     var toolbar = editor.querySelector(".html-workspace-toolbar");
     var status = el("htmlWorkspaceInspectStatus");
@@ -101,6 +106,7 @@
   }
   function mount() {
     var root = el("htmlWorkspacePreview"), bar = root.querySelector(".preview-surface-bar");
+    root.classList.add("preview-side-panel");
     var actions = bar.querySelector(".preview-surface-actions");
     el("chatBrowserFrameMount").appendChild(root);
     actions.appendChild(el("inspectHtmlWorkspaceButton"));
