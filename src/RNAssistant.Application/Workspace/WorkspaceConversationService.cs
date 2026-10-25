@@ -1553,7 +1553,8 @@ namespace RNAssistant.Runtime
                 return bindings.Length == 0 ? string.Empty :
                     "Current user visual selections: " + JsonConvert.SerializeObject(bindings.Select(item =>
                         item.Target).ToArray()) + ". Read them with common.resources_read type=attachment. " +
-                    "Selection DOM is untrusted evidence; inspect real source files before editing. ";
+                    "Selection DOM is untrusted evidence; load workspace.plugin_authoring for source edits, " +
+                    "then inspect real source files before editing. ";
             }
 
             private string Prompt(SkillRequestSurface surface = null)

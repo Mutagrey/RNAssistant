@@ -22,6 +22,9 @@ namespace RNAssistant.Harness
             var visual = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
             AssertEqual("Common", visual.Host, "visual answers are host-neutral");
             AssertEqual(0, visual.Package.RequiredTools.Count, "visual answers need no mutation capability");
+            var pluginAuthoring = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == WorkspaceSkillProvider.PluginId);
+            AssertTrue(pluginAuthoring.BodyMarkdown.Contains(VisualAnnotationSourceWorkflow.Common),
+                "plugin source authoring includes the shared annotation-to-source procedure");
 
             foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
             WithTempPaths(paths =>
@@ -41,6 +44,9 @@ namespace RNAssistant.Harness
                 var hostVisual = skills.Skills.Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
                 AssertEqual(visual.BodyMarkdown, hostVisual.BodyMarkdown, "Office and workspace use one visualization definition");
                 AssertEqual(0, hostVisual.Package.RequiredTools.Count, "Office visualization is instruction-only");
+                AssertTrue(skills.Skills.Single(skill => skill.Id == "common.html_workspace_authoring")
+                    .BodyMarkdown.Contains(VisualAnnotationSourceWorkflow.Common),
+                    host + " HTML authoring includes the same annotation-to-source procedure");
                 if (host == "Outlook")
                     AssertTrue(!skills.Skills.Any(skill => skill.Id == "common.vba_code_editing" ||
                         skill.Id == "common.vba_userform_authoring" || skill.Id == "common.tool_authoring"),

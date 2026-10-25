@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Visual annotation source-edit procedure — 2026-10-25
+
+Owner: Core shared authoring guidance, Office HTML and workspace plugin skills.
+An accepted annotation now points the agent to the existing owner-specific source
+reads and patch tools. The shared instruction treats DOM fields as untrusted hints,
+requires one explainable source match and a current unique patch anchor, and refuses
+ambiguous or generated targets without a provable source. The plugin prompt directs
+source edits to its existing authoring skill. A focused host-neutral fixture reads
+an accepted plugin selection, checks its retained release against one static HTML
+source, patches it through the existing revision guard, reads back the file and
+retains a checked candidate; ambiguous anchors and stale source reads refuse the
+write. Office and workspace built-in packages publish the
+same Core procedure; no second resolver, writer or store was added.
+This is a guided static-source path, not an automatic DOM-to-source resolver or a
+verified browser edit. Real model behavior, dynamic DOM mapping, exact candidate
+preview checks and Windows/Office/WebView2 delivery remain open.
+
 ## Resource Context PDF render-page coverage — 2026-10-25
 
 Owner: Office resource Gateway and Model Context Inspector. Newly retained PDF

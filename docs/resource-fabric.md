@@ -544,8 +544,12 @@ input event and user message carry the same attachment metadata; the body stays
 in the existing immutable attachment CAS. `WorkspaceChatAttachmentResourceProvider`
 derives the semantic target from the accepted user message, verifies its artifact
 link and exact body, and serves it through workspace `common.resources_find/read`.
-Ambiguous targets, missing bodies and foreign selectors fail explicitly. This is
-backend intake/read only: plugin-frame capture and composer staging are still open.
+Ambiguous targets, missing bodies and foreign selectors fail explicitly. Plugin-frame
+capture and composer staging now use this same accepted body; Windows WebView2
+injection remains unqualified. Core supplies one source-edit instruction shared by
+the Office HTML and workspace plugin authoring skills. It does not establish a
+DOM-to-file mapping or grant mutation authority; exact source matching, guarded
+patching and visible preview verification remain separate steps.
 
 The provider still verifies document ownership, committed publication, original
 metadata and explicit removal; content reads retain exact hash/length checks.

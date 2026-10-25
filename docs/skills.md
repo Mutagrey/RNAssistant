@@ -377,9 +377,14 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 
 Workspace built-ins include `workspace.plugin_authoring`: it guides the source
 chat to create a path-only SVG icon from a text brief, update `plugin.json`,
-check the package and preview behavior before publication. It uses existing
-file tools; an image-generation model is not required. Plugin check/apply remain
-runtime tools with their own authority and confirmation.
+check the package and preview behavior before publication. For an accepted visual
+annotation it also directs the agent to read the exact selection, match one real
+HTML/CSS/JS source target and patch only a current unique anchor. The Office
+`common.html_workspace_authoring` skill uses the same Core instructions with its
+own HTML workspace patch tool. Neither skill turns preview DOM into source or
+write authority. They use existing file tools; an image-generation model is not
+required. Plugin check/apply remain runtime tools with their own authority and
+confirmation.
 
 ## Target Skill Library UX
 

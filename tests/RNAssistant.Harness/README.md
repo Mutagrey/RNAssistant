@@ -5,6 +5,10 @@ workspace attachment identity through input journal, chat CAS, model prompt and
 `common.resources_read`, plus native plugin-instance staging for active and checked
 candidate releases, browser-safe draft projection, duplicate submission and
 ambiguous-target refusal.
+The same fixture now checks a static annotated plugin button against its retained
+release and current source, applies one revision-guarded `files.patch`, reads the
+changed source and retains a checked candidate. Ambiguous anchors and stale reads
+refuse the write. It does not assert browser behavior.
 
 `v8 recovery:` checks configurable/frozen reflection depth, separate format retries,
 strict response transport, bounded output truncation, accepted reasoning after

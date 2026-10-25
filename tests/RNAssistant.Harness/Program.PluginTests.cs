@@ -185,9 +185,9 @@ namespace RNAssistant.Harness
                     var sessionId = service.CreateProjectChat(new ProjectChatRequest {
                         WorkspaceId = plugin.SourceWorkspaceId }).SessionId;
                     var selection = new HtmlVisualSelection {
-                        Tag = "button", StableUiId = "save", Selector = "html > body > button:nth-of-type(1)",
-                        Attributes = new System.Collections.Generic.Dictionary<string, string> { { "data-ui-id", "save" } },
-                        Ancestry = new System.Collections.Generic.List<HtmlVisualAncestor>(), TextExcerpt = "Save",
+                        Tag = "button", StableUiId = "", Selector = "html > body > main:nth-of-type(1) > button:nth-of-type(1)",
+                        Attributes = new System.Collections.Generic.Dictionary<string, string> { { "id", "run" } },
+                        Ancestry = new System.Collections.Generic.List<HtmlVisualAncestor>(), TextExcerpt = "Проверить команду",
                         Rect = new HtmlVisualRect { X = 10, Y = 20, Width = 80, Height = 30 },
                         Viewport = new HtmlVisualViewport { Width = 800, Height = 600, Dpr = 1 }
                     };
@@ -288,6 +288,7 @@ namespace RNAssistant.Harness
                                 "sent annotation remains pinned to the retained release");
                             var committed = user.Attachments.Single();
                             AssertTrue(modelRequest.Contains("Current user visual selections") &&
+                                modelRequest.Contains("workspace.plugin_authoring") &&
                                 modelRequest.Contains("\\\"attachment\\\"") &&
                                 !modelRequest.Contains("rnassistant.html-visual-selection") &&
                                 !modelRequest.Contains(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri) &&
@@ -336,6 +337,33 @@ namespace RNAssistant.Harness
                             AssertTrue(read.Result.DataJson.Contains("rnassistant.html-visual-selection") &&
                                 read.ResourceEvidence.Single().Immutable,
                                 "model read carries exact immutable evidence");
+                            var accepted = HtmlVisualSelectionPolicy.ReadAnnotation(new AttachmentStore(paths).ReadBytes(committed));
+                            var sourceWorkspace = new WorkspaceStore(paths).Open(plugin.SourceRoot, false, true);
+                            var files = new WorkspaceFileService(paths);
+                            var source = files.ReadText(sourceWorkspace, "index.html");
+                            var anchor = "<button id=\"run\">Проверить команду</button>";
+                            var published = new PluginStore(paths).ReadRelease(
+                                new PluginReleaseIdentity(plugin.PluginId, plugin.ReleaseId));
+                            var retainedHtml = Encoding.UTF8.GetString(new PluginStore(paths).ReadFile(published, "index.html"));
+                            AssertTrue(accepted.Selection.Attributes["id"] == "run" &&
+                                retainedHtml == source.Text && source.Text.Contains(anchor),
+                                "accepted DOM evidence is checked against one real source anchor and the retained release");
+                            AssertEqual("patch_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
+                                files.PatchExact(sourceWorkspace, "index.html", source.Reference,
+                                    "id=\"", "id=\"other-")).Code,
+                                "an ambiguous source anchor refuses the annotated edit");
+                            AssertEqual(source.Reference.Revision, files.ReadText(sourceWorkspace, "index.html").Reference.Revision,
+                                "ambiguous refusal leaves plugin source unchanged");
+                            var changed = files.PatchExact(sourceWorkspace, "index.html", source.Reference, anchor,
+                                "<button id=\"run\">Выполнить команду</button>");
+                            AssertTrue(changed.Text.Contains("Выполнить команду") &&
+                                files.ReadText(sourceWorkspace, "index.html").Text.Contains("Выполнить команду") &&
+                                service.Check(plugin.PluginId).HasChanges,
+                                "existing guarded patch verifies real plugin source and produces a checked candidate");
+                            AssertEqual("target_conflict", RuntimeThrows<WorkspaceFileException>(() =>
+                                files.PatchExact(sourceWorkspace, "index.html", source.Reference, anchor,
+                                    "<button id=\"run\">Устаревшая правка</button>")).Code,
+                                "a stale source read cannot overwrite the verified annotation edit");
                             var bounded = new WorkspaceResourceHandler(null, null, () => null,
                                 new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), false, null, 64,
                                 chatAttachments: provider).ExecuteAsync(new ToolHandlerContext(execution,
