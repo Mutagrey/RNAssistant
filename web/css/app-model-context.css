@@ -75,6 +75,21 @@
 .model-context-meta p { white-space: pre-wrap; }
 .model-context-message-body .model-context-meta { margin-bottom: -8px; }
 .model-context-meta .model-context-message { color: var(--ink); }
+.model-context-source { min-width: 0; margin: 4px 0; color: var(--ink-muted); font-size: 13px; line-height: 1.5; }
+.model-context-source > summary { width: auto; }
+.model-context-source > summary > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.model-context-source > summary > small { flex: 0 1 auto; font-size: var(--text-xs); overflow-wrap: anywhere; }
+.model-context-source-arrow { display: flex; flex: 0 0 12px; }
+.model-context-source-arrow svg { width: 12px; height: 12px; }
+.model-context-source[open] > summary > .model-context-source-arrow { transform: rotate(90deg); }
+.model-context-source > :not(summary) { margin-left: 8px; }
+.model-context-source > .model-context-source { padding-left: 10px; border-left: 1px solid var(--line); }
+.model-context-source-facts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 3px 12px; max-width: 560px; margin-block: 8px; font-size: var(--text-xs); }
+.model-context-source-facts dt, .model-context-source-facts dd { margin: 0; overflow-wrap: anywhere; }
+.model-context-source-facts dd { color: var(--ink); }
+.model-context-source .button { margin-block: 4px; }
+.model-context-omissions { margin: 0 0 8px; }
+.model-context-omissions > summary > small { color: var(--warning); }
 .model-context-response { padding-top: 18px; }
 .model-context-response + .model-context-response { margin-top: 20px; border-top: 1px solid var(--line); }
 .model-context-response-head { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }

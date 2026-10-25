@@ -152,6 +152,62 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#chatLayout > .chat-main").evaluate(node => node.inert), false);
     await page.evaluate(() => document.getElementById("tab-chat").classList.add("active"));
     assert.equal((await panel.boundingBox()).width, dockWidth, "a hidden chat does not let the closed HTML browser override the Inspector columns");
+    await page.evaluate(() => {
+      const original = send;
+      send = async (type, args) => {
+        const reply = await original(type, args);
+        if (type !== "getModelContext") return reply;
+        const request = reply.events.find(event => event.type === "llm.request");
+        if (!request) return reply;
+        const resource = { uri: "rna://document/table/sales", revision: "sales-r1" }, scope = { kind: "conversation", id: "preview-chat" };
+        request.trace.ContextMessages = [
+          { MessageIndex: 0, Presentation: "Full" },
+          { MessageIndex: 1, Presentation: "Unknown", Parts: [{ Kind: "image_url", SourceAttachmentId: "scan-2",
+            Presentation: "Excluded", Reason: "Изображение не выбрано: достигнут лимит запроса." }] },
+          { MessageIndex: 2, Presentation: "Full" },
+          { MessageIndex: 3, Presentation: "Fragment", EvidenceLinks: [{ EvidenceId: "sales-observation", ScopeId: scope, Resource: resource,
+            View: "text", BodyIncludedInMessage: null, ObservedCoverage: { kind: "line-range", start: 1, end: 5 },
+            ReadMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 20 }, selectionComplete: true,
+              representationComplete: false, sourceComplete: null } }] },
+          { MessageIndex: 4, Presentation: "Full" },
+          { Presentation: "Excluded", Role: "tool", ExclusionKind: "Budget", Reason: "Подробные строки не вошли в бюджет запроса." }
+        ];
+        reply.resources = [{ alias: "R1@v1", resource, scope, currentness: "Unknown", payloadAvailability: "Unknown", observations: [] }];
+        return reply;
+      };
+    });
+    await source.click(); await size.selectOption("focus");
+    await messages.nth(3).locator(":scope > summary").click();
+    const sources = body.locator('[data-context-source="message/3"]'), evidence = body.locator('[data-context-source="message/3/resource/0"]');
+    await sources.locator(":scope > summary").click(); await evidence.locator(":scope > summary").click();
+    assert.match(await evidence.innerText(), /Включение не установлено/);
+    const facts = await evidence.locator(":scope > dl").innerText();
+    assert.match(facts, /Строки · начало 1 · конец 5/); assert.match(facts, /Строки · начало 1 · конец 20/);
+    assert.doesNotMatch(facts, /"kind"/, "readable coverage keeps recorded bounds without a raw JSON paragraph");
+    assert.match(facts, /Выбранный фрагмент\s+Да/); assert.match(facts, /Представление целиком\s+Нет/);
+    assert.match(facts, /Источник целиком\s+Не установлено/);
+    const sourceReads = await page.evaluate(() => layoutPayloadReads);
+    await screenshot("request-source-coverage");
+    await evidence.getByRole("button", { name: "Открыть R1@v1", exact: true }).click();
+    await body.locator(".model-context-resource[open]").waitFor();
+    await page.locator("#modelContextMessagesTab").click(); await evidence.waitFor();
+    assert.equal(await evidence.evaluate(node => node.open), true, "source expansion survives resource navigation");
+    assert.equal(await page.evaluate(() => layoutPayloadReads), sourceReads, "source navigation reuses the same immutable request");
+    const omissions = body.locator('[data-context-source="omissions"]');
+    await omissions.locator(":scope > summary").click();
+    await omissions.locator(":scope > details > summary").first().click();
+    await omissions.locator(":scope > details > summary").last().click();
+    assert.match(await omissions.innerText(), /В составе сообщения 2/);
+    assert.match(await omissions.innerText(), /Подробные строки не вошли в бюджет/);
+    await omissions.scrollIntoViewIfNeeded(); await screenshot("request-omissions");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await evidence.scrollIntoViewIfNeeded();
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(value => document.documentElement.setAttribute("data-theme", value), theme);
+      assert.equal(await body.evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
+      await screenshot("request-sources-" + theme + "-narrow");
+    }
+    await page.locator("#closeModelContextButton").click();
     await source.click(); await size.selectOption("focus");
     await page.evaluate(() => { state.activeChatId = "other-chat"; RNAssistantModelContext.sync(); });
     assert.equal(await page.locator("#modelContextDialog").isVisible(), false);

@@ -250,18 +250,100 @@
     return facts.length ? "Заявлено провайдером при чтении: " + facts.join("; ") +
       "; текущая доступность не проверена; возможность чтения моделью не подтверждена" : "";
   }
-  function partNote(part) {
-    var details = [part.Kind || "Часть", note(part)];
-    if (part.SourceAttachmentId) details.push("вложение " + part.SourceAttachmentId);
-    if (part.PartIndex != null) details.push("часть JSON " + (part.PartIndex + 1));
-    if (part.PageNumber != null) details.push("страница " + part.PageNumber);
-    if (part.OmittedCount != null) details.push("не выбрано: " + part.OmittedCount);
-    if (part.SelectedCharacters != null) details.push("символов: " + part.SelectedCharacters);
-    if (part.ByteLength != null) details.push("байт: " + part.ByteLength);
-    if (part.ContentType) details.push(part.ContentType);
-    if (part.ContentSha256) details.push("SHA-256: " + part.ContentSha256);
-    if (part.Reason) details.push(part.Reason);
-    return details.join(" · ");
+  function sourceDisclosure(parent, title, caption, key, saved) {
+    var detail = el("details", undefined, "model-context-source"), summary = el("summary", undefined, "rna-history-summary");
+    detail.dataset.contextSource = key;
+    summary.appendChild(el("span", title));
+    if (caption) summary.appendChild(el("small", caption));
+    var arrow = el("span", undefined, "model-context-source-arrow");
+    arrow.innerHTML = window.RNAssistantIcons.render("right"); summary.appendChild(arrow);
+    detail.appendChild(summary); parent.appendChild(detail);
+    if (saved && (saved.sources || []).indexOf(key) >= 0) detail.open = true;
+    return detail;
+  }
+  function sourceFact(parent, label, value) {
+    if (value === undefined || value === null || value === "") return;
+    parent.appendChild(el("dt", label)); parent.appendChild(el("dd", String(value)));
+  }
+  function sourceCoverage(coverage) {
+    if (!coverage) return "Не сохранено";
+    var kinds = { whole: "Ресурс целиком", "line-range": "Строки", "character-range": "Символы", "cell-range": "Ячейки",
+      "page-range": "Страницы", "time-range": "Время", "record-range": "Записи", "json-path": "JSON Pointer", "yaml-path": "YAML pointer", "field-set": "Поля" };
+    if (!kinds[coverage.kind]) return JSON.stringify(coverage);
+    var parts = [kinds[coverage.kind]];
+    if (coverage.address) parts.push(coverage.address);
+    if (coverage.path != null) parts.push(JSON.stringify(coverage.path));
+    // Keep recorded bounds; no provider-specific inclusive/exclusive conversion.
+    if (coverage.start != null) parts.push("начало " + coverage.start);
+    if (coverage.end != null) parts.push("конец " + coverage.end);
+    if (coverage.fields && coverage.fields.length) parts.push(coverage.fields.join(", "));
+    return parts.join(" · ");
+  }
+  function sourceLinks(c, parent, entry, key, saved) {
+    (entry.EvidenceLinks || []).filter(Boolean).forEach(function (link, index) {
+      var selected = resourceFor(c, link), resource = link.Resource || {}, metadata = link.ReadMetadata;
+      var row = sourceDisclosure(parent, selected ? "Ресурс " + selected.alias : resource.uri || link.EvidenceId || "Источник",
+        link.BodyIncludedInMessage === true ? "Тело включено" : link.BodyIncludedInMessage === false ? "Тело не включено" : "Включение не установлено",
+        key + "/resource/" + index, saved);
+      var facts = el("dl", undefined, "model-context-source-facts"); row.appendChild(facts);
+      sourceFact(facts, "Представление", link.View);
+      sourceFact(facts, "Покрытие наблюдения", sourceCoverage(link.ObservedCoverage));
+      if (metadata) {
+        sourceFact(facts, "Запрошено", metadata.requestedCoverage ? sourceCoverage(metadata.requestedCoverage) :
+          metadata.requestedSection != null ? "Раздел: " + metadata.requestedSection :
+          metadata.requestedProcedure != null ? "Процедура: " + metadata.requestedProcedure :
+          metadata.requestedPartNumber != null ? "Часть: " + metadata.requestedPartNumber : "Не сохранено");
+        [["Выбранный фрагмент", metadata.selectionComplete], ["Представление целиком", metadata.representationComplete],
+          ["Источник целиком", metadata.sourceComplete]].forEach(function (fact) {
+          sourceFact(facts, fact[0], fact[1] === true ? "Да" : fact[1] === false ? "Нет" : "Не установлено");
+        });
+      } else row.appendChild(el("p", "Запрошенный диапазон и раздельная полнота не сохранены.", "model-context-note"));
+      if (selected) row.appendChild(button("Открыть " + selected.alias, function () {
+        if (!live(c) || !row.isConnected) return;
+        c.focusResource = selected.alias; c.tab = "resources"; render(c);
+      }));
+      var technical = sourceDisclosure(row, "Сведения о чтении", "", key + "/resource/" + index + "/details", saved);
+      technical.appendChild(el("p", evidenceNote(c, link), "model-context-note"));
+    });
+  }
+  function partTitle(part) {
+    var names = { attachment_text: "Текст вложения", attachment_analysis: "Анализ вложения", image_url: "Изображение",
+      input_audio: "Аудио", image: "Изображение", pdf: "PDF", text: "Текст", data: "Данные результата", attachments: "Вложения" };
+    return (names[part.Kind] || part.Kind || "Часть сообщения") + (part.PageNumber != null ? " · страница " + part.PageNumber :
+      part.PartIndex != null ? " · часть " + (part.PartIndex + 1) : "");
+  }
+  function partSource(parent, part, key, saved) {
+    var row = sourceDisclosure(parent, partTitle(part), note(part), key, saved);
+    if (part.Reason) row.appendChild(el("p", part.Reason, "model-context-note"));
+    var facts = el("dl", undefined, "model-context-source-facts"); row.appendChild(facts);
+    sourceFact(facts, "Вложение", part.SourceAttachmentId);
+    if (part.PageNumber != null && part.PartIndex != null) sourceFact(facts, "Часть JSON", part.PartIndex + 1);
+    sourceFact(facts, "Не выбрано", part.OmittedCount);
+    sourceFact(facts, "Символов", part.SelectedCharacters);
+    sourceFact(facts, "Байт", part.ByteLength);
+    sourceFact(facts, "Тип", part.ContentType);
+    if (part.ContentSha256) {
+      var technical = sourceDisclosure(row, "Отпечаток содержимого", "", key + "/digest", saved);
+      technical.appendChild(el("p", part.ContentSha256, "model-context-note"));
+    }
+    return row;
+  }
+  function messageSources(c, parent, entry, key, saved, ambiguous) {
+    var counts = [];
+    var links = entry && (entry.EvidenceLinks || []).filter(Boolean), parts = entry && (entry.Parts || []).filter(Boolean);
+    if (links && links.length) counts.push("наблюдения: " + links.length);
+    if (parts && parts.length) counts.push("части: " + parts.length);
+    var source = sourceDisclosure(parent, "Источники и полнота", ambiguous ? "Неоднозначная привязка" : counts.join(" · ") || note(entry), key, saved);
+    if (!entry) {
+      source.appendChild(el("p", ambiguous ? "Несколько записей состава ссылаются на это сообщение. Источник не выбран; точное содержимое доступно ниже и в JSON запроса." :
+        "Сведения об источниках сообщения не сохранены. Точное содержимое доступно ниже и в JSON запроса.", "model-context-note"));
+      return;
+    }
+    if (entry.Reason) source.appendChild(el("p", entry.Reason, "model-context-note"));
+    sourceLinks(c, source, entry, key, saved);
+    (entry.Parts || []).filter(Boolean).forEach(function (part, index) { partSource(source, part, key + "/part/" + index, saved); });
+    if (!(entry.EvidenceLinks || []).length && !(entry.Parts || []).length && !entry.Reason)
+      source.appendChild(el("p", "Сохранена только отметка представления; подробности источников отсутствуют.", "model-context-note"));
   }
   function messages(c, text, entries) {
     var root = $("modelContextBody"), fields;
@@ -269,14 +351,20 @@
     var raw = field(fields, "messages");
     if (!raw) { root.appendChild(el("p", "В payload нет массива messages. Откройте JSON запроса.")); return; }
     var listRoot = el("section", undefined, "model-context-messages"); root.appendChild(listRoot);
-    var list = members(raw), count = 0;
+    var list = members(raw), count = 0, byIndex = new Map();
+    (entries || []).filter(Boolean).forEach(function (entry) {
+      if (!Number.isInteger(entry.MessageIndex) || entry.MessageIndex < 0 || entry.MessageIndex >= list.length) return;
+      var at = byIndex.get(entry.MessageIndex) || []; at.push(entry); byIndex.set(entry.MessageIndex, at);
+    });
     var mode = c.mode, source = mode === "preview" ? c.previewVersion : c.selected, rows = [];
     var saved = c.messageViews && c.messageViews[mode];
     if (saved && saved.source !== source) saved = null;
     c.captureMessages = function () {
       if (!c.messageViews) c.messageViews = {};
       c.messageViews[mode] = { source: source, count: count, scroll: root.scrollTop,
-        expanded: rows.filter(function (row) { return row.open; }).map(function (row) { return Number(row.dataset.messageIndex); }) };
+        expanded: rows.filter(function (row) { return row.open; }).map(function (row) { return Number(row.dataset.messageIndex); }),
+        sources: Array.from(root.querySelectorAll("details[data-context-source][open]")).map(function (row) { return row.dataset.contextSource; }),
+        omissionCount: omissionCount };
     };
     var roles = { system: "Инструкции", developer: "Приложение",
       user: "Пользователь", assistant: "Модель", tool: "Инструмент", function: "Функция" };
@@ -285,7 +373,7 @@
       more.remove();
       list.slice(count, count + 50).forEach(function (message, offset) {
         var index = count + offset, parts = members(message.raw), role = decoded(field(parts, "role")) || "message";
-        var entry = (entries || []).find(function (item) { return item.MessageIndex === index; });
+        var candidates = byIndex.get(index) || [], entry = candidates.length === 1 && candidates[0].Presentation !== "Excluded" ? candidates[0] : null;
         var content = field(parts, "content"), contentValue = decoded(content);
         var detail = el("details", undefined, "model-context-message is-message"), summary = el("summary");
         detail.dataset.messageIndex = String(index); detail.dataset.role = role;
@@ -314,6 +402,7 @@
         var loaded = false;
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded || !live(c) || !detail.isConnected) return; loaded = true;
+          messageSources(c, body, entry, "message/" + index, saved, candidates.length > 1);
           if (role === "assistant" && typeof contentValue === "string" && modelDecision(contentValue)) {
             modelMessage(c, body, contentValue);
           } else if (typeof contentValue === "string") {
@@ -324,21 +413,11 @@
           metadata.appendChild(el("p", "Роль: " + role + " · " +
             (entry && entry.Presentation && entry.Presentation !== "Unknown" ? note(entry) : "полнота исходных источников не сохранена")));
           metadata.appendChild(el("p", "Размер сообщения в JSON: " + message.raw.length.toLocaleString("ru-RU") + " символов."));
-          if (entry && entry.Reason) metadata.appendChild(el("p", entry.Reason, "model-context-note"));
           if (entry && entry.ToolCallId) metadata.appendChild(el("p", "Операция: " +
             (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
           if (Number.isSafeInteger(entry && entry.EstimatedWireMessageTokens) && entry.EstimatedWireMessageTokens >= 0)
             metadata.appendChild(el("p", "Оценка всего сериализованного read-сообщения: ≈ " +
               entry.EstimatedWireMessageTokens + " токенов (не измеренное usage)."));
-          (entry && entry.EvidenceLinks || []).forEach(function (link) {
-            if (!link) return;
-            metadata.appendChild(el("p", evidenceNote(c, link)));
-            var selected = resourceFor(c, link);
-            if (selected) metadata.appendChild(button("Ресурс " + selected.alias, function () {
-              c.focusResource = selected.alias; c.tab = "resources"; render(c);
-            }));
-          });
-          (entry && entry.Parts || []).forEach(function (part) { metadata.appendChild(el("p", partNote(part))); });
           metadata.appendChild(button("Копировать сообщение JSON", function () { copyTextResult(message.raw); }));
           parts.filter(function (part) { return part.key !== "role" && part.key !== "content"; }).forEach(function (part) {
             lazy(c, metadata, part.key, function () { return part.raw; }, true);
@@ -363,25 +442,58 @@
       listRoot.querySelectorAll("details[open]").forEach(function (detail) { detail.open = false; });
     });
     collapse.title = "Свернуть все сообщения"; collapse.classList.add("model-context-collapse");
-    overview.appendChild(collapse); listRoot.appendChild(overview); page();
-    while (saved && count < saved.count && count < list.length) page();
+    overview.appendChild(collapse); listRoot.appendChild(overview);
+    var omitted = [];
+    (entries || []).filter(Boolean).forEach(function (entry, entryIndex) {
+      if (entry.Presentation === "Excluded") omitted.push({ entry: entry, index: entryIndex });
+      else (entry.Parts || []).filter(Boolean).forEach(function (part, partIndex) {
+        if (part.Presentation === "Excluded") omitted.push({ entry: entry, index: entryIndex, part: part, partIndex: partIndex });
+      });
+    });
+    if (omitted.length) {
+      var omissions = sourceDisclosure(listRoot, "Сохранённые пропуски", "записей: " + omitted.length, "omissions", saved), omissionCount = 0;
+      omissions.classList.add("model-context-omissions");
+      var moreOmissions = button("Показать ещё пропуски", addOmissions);
+      function addOmissions() {
+        moreOmissions.remove();
+        omitted.slice(omissionCount, omissionCount + 50).forEach(function (item) {
+          var entry = item.entry, key = "omission/" + item.index + (item.part ? "/" + item.partIndex : "");
+          if (item.part) {
+            var partRow = partSource(omissions, item.part, key, saved);
+            var linked = byIndex.get(entry.MessageIndex);
+            partRow.appendChild(el("p", linked && linked.length === 1 && linked[0] === entry ?
+              "В составе сообщения " + (entry.MessageIndex + 1) : "Привязка к сообщению не установлена.", "model-context-note"));
+            return;
+          }
+          var reasons = { Explicit: "Исключено при сборке", SupersededEvidence: "Есть новая версия", UnknownEvidence: "Источник не определён",
+            UnavailableEvidence: "Источник недоступен", DuplicateBody: "Повтор тела", Budget: "Бюджет запроса", SelectionLimit: "Лимит выбора",
+            OperationBudget: "Бюджет операций", OperationSelectionLimit: "Лимит операций", OperationReceipt: "Сводка операции" };
+          var row = sourceDisclosure(omissions, roles[entry.Role] || entry.Role || "Источник", reasons[entry.ExclusionKind] || "Не включено", key, saved);
+          row.appendChild(el("p", entry.Reason || "Причина исключения не сохранена.", "model-context-note"));
+          sourceLinks(c, row, entry, key, saved);
+          if (entry.OriginalPayload && c.mode === "actual") {
+            var version = c.version;
+            lazy(c, row, "Локальный оригинал источника", function () { return payload(c, c.selected, item.index, version); }, false);
+          }
+        });
+        omissionCount += 50; if (omissionCount < omitted.length) omissions.appendChild(moreOmissions);
+      }
+      omissions.addEventListener("toggle", function () {
+        if (!omissions.open || omissionCount !== 0 || !live(c) || !omissions.isConnected) return;
+        addOmissions();
+        while (saved && omissionCount < saved.omissionCount && omissionCount < omitted.length) addOmissions();
+      });
+    }
+    var unattributed = list.filter(function (_, index) {
+      var at = byIndex.get(index); return !at || at.length !== 1 || at[0].Presentation === "Excluded";
+    }).length;
+    if (unattributed) listRoot.appendChild(el("p", "Нет однозначных сведений об источниках: " + unattributed + " из " + list.length + " сообщений.", "model-context-note"));
+    page(); while (saved && count < saved.count && count < list.length) page();
     var parameters = fields.filter(function (part) { return part.key !== "messages"; });
     if (parameters.length) {
       var settings = el("details", undefined, "model-context-meta");
       settings.appendChild(el("summary", "Параметры запроса · " + parameters.length)); root.appendChild(settings);
       parameters.forEach(function (part) { lazy(c, settings, "Параметр запроса: " + part.key, function () { return part.raw; }, true); });
-    }
-    var excluded = (entries || []).filter(function (entry) { return entry.Presentation === "Excluded"; });
-    if (excluded.length) {
-      var local = el("details", undefined, "model-context-message"); local.appendChild(el("summary", "Не включено отдельными сообщениями · " + excluded.length)); root.appendChild(local);
-      excluded.forEach(function (entry) {
-        var row = el("div", undefined, "model-context-message-body"); local.appendChild(row);
-        row.appendChild(el("p", (entry.Role || "Источник") + " · " + (entry.Reason || "Не включено")));
-        if (entry.OriginalPayload && c.mode === "actual") {
-          var version = c.version;
-          lazy(c, row, "Локальный оригинал", function () { return payload(c, c.selected, entries.indexOf(entry), version); }, false);
-        }
-      });
     }
     if (saved) {
       var viewVersion = c.viewVersion;

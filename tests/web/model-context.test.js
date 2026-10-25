@@ -150,6 +150,7 @@ function fixture(withAliases = false, pdf = false) {
         "X-RNAssistant-Chunk-SHA256": crypto.createHash("sha256").update(chunk).digest("hex") } }); }
   });
   c.window = c;
+  c.RNAssistantIcons = { render: name => '<svg data-icon="' + name + '"></svg>' };
   get("tab-chat").classList.add("active");
   c.RNAssistantChatInspector = { showRequest() {}, hideRequest() {}, setRequestLayout() {}, restoreRequestLayout() {} };
   c.RNAssistantViewerRegistry = { mount(kind, node, options) { mounts.push({ kind, node, options }); }, unmount() {} };
@@ -299,20 +300,22 @@ function fixture(withAliases = false, pdf = false) {
   assert.equal(parts[3].raw, '[{"x":true}]');
   assert.equal(api.members('["a,b",{"nested":[1,2]}]').length, 2);
   api.open(); await flush();
-  const userMessage = f.get("modelContextBody").children[0].children.filter(node => node.tag === "details")[1];
+  const userMessage = descendants(f.get("modelContextBody")).find(node => node.dataset.messageIndex === "1");
   userMessage.open = true; await userMessage.fire("toggle");
   const userMetadata = userMessage.children[1].children.find(node => node.className === "model-context-meta");
   assert.ok(userMetadata.children.some(node => /Операция: call-1/.test(node.textContent)),
     "typed operation link appears in request details");
-  assert.ok(userMetadata.children.some(node => /evidence-1/.test(node.textContent) &&
+  const userSources = userMessage.children[1].children.find(node => node.dataset.contextSource === "message/1");
+  assert.ok(descendants(userSources).some(node => /evidence-1/.test(node.textContent) &&
     /доставка тела в сообщении не установлена/.test(node.textContent)),
     "observed evidence does not claim unproved body delivery");
-  assert.ok(userMetadata.children.some(node => /раздельная полнота не сохранены/.test(node.textContent)),
+  assert.ok(descendants(userSources).some(node => /раздельная полнота не сохранены/.test(node.textContent)),
     "old traces do not infer requested selectors or completeness");
-  const excluded = f.get("modelContextBody").children.find(node => node.tag === "details" &&
-    node.children.some(child => /Не включено отдельными сообщениями/.test(child.textContent)));
-  assert.ok(excluded && excluded.children.some(node => node.children.some(child =>
-    /не вошло в бюджет/.test(child.textContent))), "inspector shows the compiler's recorded omission reason");
+  const excluded = descendants(f.get("modelContextBody")).find(node => node.dataset.contextSource === "omissions");
+  assert.equal(excluded.children.length, 1, "omission records render only on expansion");
+  excluded.open = true; await excluded.fire("toggle");
+  assert.ok(descendants(excluded).some(node => /не вошло в бюджет/.test(node.textContent)),
+    "inspector shows the compiler's recorded omission reason");
   assert.equal(f.closes.length, 1, "exact download lease closes after reading");
   assert.equal(f.get("modelContextAttempt").value, "r1");
   await f.get("modelContextJsonTab").fire("click"); await flush();
@@ -344,6 +347,30 @@ function fixture(withAliases = false, pdf = false) {
   assert.equal(late.closes.length, 1, "late payload acquisition closes its lease even after dialog closed");
   assert.equal(late.mounts.length, 0, "late payload never renders into a closed or other chat");
   console.log("PASS model context: exact JSON, full download, following, preview staleness and cancellation");
+
+  const ambiguous = fixture();
+  ambiguous.events[0].trace.ContextMessages = [null,
+    { MessageIndex: 0, Presentation: "Full", Reason: "first-source" },
+    { MessageIndex: 0, Presentation: "Fragment", Reason: "second-source" },
+    { MessageIndex: 99, Presentation: "Full", Reason: "out-of-range-source" },
+    { MessageIndex: 1, Presentation: "Unknown", Parts: [{ Kind: "image_url", SourceAttachmentId: "scan",
+      Presentation: "Excluded", Reason: "Лимит изображений", OmittedCount: null }] }];
+  ambiguous.c.RNAssistantModelContext.open(); await flush();
+  const firstMessage = descendants(ambiguous.get("modelContextBody")).find(node => node.dataset.messageIndex === "0");
+  firstMessage.open = true; await firstMessage.fire("toggle");
+  const ambiguousText = descendants(firstMessage).map(node => node.textContent).join(" ");
+  assert.match(ambiguousText, /Неоднозначная привязка/);
+  assert.doesNotMatch(ambiguousText, /first-source|second-source|out-of-range-source|Полностью/,
+    "duplicate or out-of-range provenance never picks a source or a completeness claim");
+  const omittedParts = descendants(ambiguous.get("modelContextBody")).find(node => node.dataset.contextSource === "omissions");
+  omittedParts.open = true; await omittedParts.fire("toggle");
+  const omissionText = descendants(omittedParts).map(node => node.textContent).join(" ");
+  assert.match(omissionText, /Лимит изображений/); assert.match(omissionText, /В составе сообщения 2/);
+  assert.doesNotMatch(omissionText, /Не выбрано/, "an unknown omitted-item count is not invented");
+  assert.equal(ambiguous.calls.filter(call => call.type === "getModelContextPayload").length, 1,
+    "source and omission disclosures use recorded metadata without new body reads");
+  ambiguous.c.RNAssistantModelContext.close();
+  console.log("PASS model context: missing/ambiguous provenance and attachment omissions stay explicit");
 
   const pdfRead = fixture(true, true);
   pdfRead.c.RNAssistantModelContext.open(); await flush();

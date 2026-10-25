@@ -235,7 +235,11 @@ missing usage and same-run window attribution. Workspace Inspector browser cover
 includes usage, exact journal routes, raw payload, full-chat scope and foreign replies;
 `trajectory-json-viewer.test.js` and `trajectory-payload.test.js` cover workspace
 exports/lease cleanup and rejection before byte reads. `model-context.test.js` checks response
-identity and rejects absent workspace attribution. `INSPECTOR_SCREENSHOTS` saves
+identity and rejects absent workspace attribution, duplicate message-source positions
+and invented omitted-item counts. `model-context-layout.test.js` checks compact
+source/coverage disclosures, recorded omissions, exact resource navigation and
+restored expansion without a payload reread in both themes at narrow width.
+`INSPECTOR_SCREENSHOTS` saves
 browser captures. Next-request workspace estimates and native Windows/WebView2
 delivery, including controller lease liveness, remain open.
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin

@@ -24,6 +24,18 @@ saved-exchange Harness checks pass host-neutral. The pre-v8 CLI selector smoke
 remains a coverage gap in [RISK_REGISTER](RISK_REGISTER.md); real endpoint and
 Windows/Office/WebView2 qualification remain open.
 
+## Saved request source presentation — 2026-10-25
+
+Owner: Web Model Context Inspector. Ordered messages now expose saved resource
+observations, independent completeness fields and attachment parts before technical
+JSON. Recorded message/part omissions are grouped at the top and loaded into the
+DOM in bounded pages; local originals remain explicit reads. Duplicate message
+positions do not choose an arbitrary source. Source/resource navigation preserves
+disclosures without another payload read. Focused JS/Chromium checks cover unknown
+attribution, omissions, scope and narrow layouts in both themes. This reuses existing
+trace metadata; transformed-source attribution, token shares, request diff/compaction
+and native WebView2 qualification remain open.
+
 ## Chat history tree — 2026-10-25
 
 Owner: Web trajectory/run journal. Saved history now groups exact run → step →
