@@ -303,7 +303,7 @@
       if (fileAction) { update(); return; }
       fileAction = document.getElementById("attachFileButton").cloneNode(true); fileAction.removeAttribute("id");
       fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
-      fileAction.onclick = function () { if (locked || !current) return;
+      fileAction.onclick = function () { if (fileAction.disabled || !current) return;
         fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
         picker.open = false; fileInput.click(); };
       fileInput.onchange = function () {
@@ -332,7 +332,8 @@
       if (activeOwner === "office") return;
       clear.hidden = !input.value; resizeComposerInput(input);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
-      if (fileAction) { fileAction.hidden = activeOwner !== "project"; fileAction.disabled = locked || !current || activeOwner !== "project"; }
+      if (fileAction) { fileAction.hidden = activeOwner !== "project"; fileAction.disabled = locked || !current ||
+        activeOwner !== "project" || !!(fileOptions && fileOptions.canAttachFiles && !fileOptions.canAttachFiles()); }
       think.setAttribute("aria-pressed", String(reasoning)); think.title = reasoning ? "Reasoning включён" : "Reasoning выключен";
       think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning"); think.disabled = locked;
       label.textContent = field(state.settings, "model") || "Модель";

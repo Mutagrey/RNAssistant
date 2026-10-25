@@ -65,6 +65,41 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatInput').inputValue(), projectDraft,
       'file reference and text share the source chat draft');
 
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
+    await page.evaluate(() => {
+      const original = send;
+      window.uploadRace = {original, release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'beginProjectChatFileUpload' && payload.sessionId === 'preview-project-review')
+          await new Promise(resolve => { uploadRace.release = resolve; });
+        return result;
+      };
+    });
+    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
+    const [otherChooser] = await Promise.all([
+      page.waitForEvent('filechooser', {timeout:5000}),
+      page.locator('#workspaceComposerPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
+    ]);
+    await otherChooser.setFiles({name:'older.txt', mimeType:'text/plain', buffer:Buffer.from('older')});
+    await page.waitForFunction(() => !!uploadRace.release);
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
+    await page.locator('#chatInput').fill('Текст в другой сессии');
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'an upload in a previous session must not block text in the selected chat');
+    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
+    assert.equal(await page.locator('#workspaceComposerPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).isDisabled(), true,
+      'the file picker remains unavailable while the single upload slot is occupied');
+    await page.evaluate(() => uploadRace.release());
+    await page.waitForFunction(() => ((RNAssistantChatDrafts.readWorkspace({workspaceId:'preview-data-workspace',
+      sessionId:'preview-project-review'}) || {}).text || '').includes('Файл проекта: chat-files/'));
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Текст в другой сессии',
+      'completed upload updates only its original draft');
+    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
+    assert.match(await page.locator('#projectChatFileStatus').textContent(), /Файл добавлен в проект:.*older\.txt/,
+      'the source chat retains the completed upload status after switching back');
+    await page.evaluate(() => { send = uploadRace.original; return RNAssistantPlugins.select('data-templates'); });
+
     await page.evaluate(() => {
       const original = send;
       window.draftTest = {original, requests:[], release:null, failOnce:true};

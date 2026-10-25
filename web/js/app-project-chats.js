@@ -2,13 +2,13 @@
   "use strict";
   var scope = "office", catalog = null, active = null, busy = false, serial = 0, stopTitleWatch = null;
   var pendingChatRequests = new Set(), pendingCancels = new Set();
-  var composer = null, uploadingFiles = false;
+  var composer = null, uploadingFiles = false, uploadTarget = null;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
     function (target) { return send("getProjectChat", target); },
     function (snapshot) { active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot); notice(statusText()); render(); },
     function (error) { notice(error.detail || error.message, true); });
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
-  var noticeText = "", noticeError = false, fileNotice = null;
+  var noticeText = "", noticeError = false, fileNotices = new Map();
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
   }
@@ -27,6 +27,8 @@
   function chatRequestKey(workspaceId, sessionId) { return JSON.stringify([workspaceId, sessionId]); }
   function chatBusy() { return !!active && pendingChatRequests.has(chatRequestKey(projectId(), currentId())); }
   function cancelBusy() { return !!active && pendingCancels.has(chatRequestKey(projectId(), currentId())); }
+  function selectedUploadBusy() { return !!active && uploadingFiles && !!uploadTarget &&
+    uploadTarget.workspaceId === projectId() && uploadTarget.sessionId === currentId(); }
   function field(value, lower, upper) { return value && (value[lower] !== undefined ? value[lower] : value[upper]); }
   function runState() { return active && active.state; }
   function notice(text, error) {
@@ -36,8 +38,9 @@
     el("Notice").dataset.error = noticeError ? "true" : "false";
   }
   function fileStatus(target, message, error) {
+    fileNotices.set(chatRequestKey(target.workspaceId, target.sessionId),
+      { target: target, message: message || "", error: !!error });
     if (projectId() !== target.workspaceId || currentId() !== target.sessionId) return;
-    fileNotice = { target: target, message: message || "", error: !!error };
     if (!ownsView()) return;
     var box = el("FileStatus");
     box.textContent = message || ""; box.hidden = !message;
@@ -85,18 +88,19 @@
     }
   }
   async function addProjectFiles(files, target) {
-    if (uploadingFiles || !target || !files.length) return;
+    if (!target || !files.length) return;
+    if (uploadingFiles) { fileStatus(target, "Дождитесь завершения текущей загрузки файла.", true); return; }
     if (files.length > 10) {
       fileStatus(target, "За один раз можно добавить не более 10 файлов.", true);
       return;
     }
-    uploadingFiles = true; render();
+    uploadingFiles = true; uploadTarget = { workspaceId: target.workspaceId, sessionId: target.sessionId }; render();
     try {
       for (var index = 0; index < files.length; index++) {
         fileStatus(target, "Подготовка файла " + (index + 1) + " из " + files.length + ": " + files[index].name + "…");
         if (!await uploadProjectFile(target, files[index])) break;
       }
-    } finally { uploadingFiles = false; render(); }
+    } finally { uploadingFiles = false; uploadTarget = null; render(); }
   }
   function statusText() {
     var state = active && active.state;
@@ -167,18 +171,18 @@
   }
   function updateControls() {
     var pluginBusy = !!(window.RNAssistantPlugins && window.RNAssistantPlugins.isChatBusy());
-    var selectedBusy = busy || chatBusy();
+    var selectedBusy = busy || chatBusy() || selectedUploadBusy();
     el("New").disabled = busy || !project() || !project().available || pluginBusy;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
     el("ConnectionSubmit").disabled = busy;
     if (!ownsView()) return;
-    if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy || uploadingFiles ||
+    if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
       !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
     var target = active && active.sessionId ? { workspaceId: projectId(), sessionId: currentId() } : null;
     var draft = target && window.RNAssistantChatDrafts.readWorkspace(target);
     var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
-    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy || uploadingFiles ||
+    el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
       !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
       !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || field(runState(), "status", "Status") === "running";
   }
@@ -194,10 +198,10 @@
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
     el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
     updateControls();
-    var visibleFile = fileNotice && fileNotice.target.workspaceId === projectId() && fileNotice.target.sessionId === currentId();
-    el("FileStatus").textContent = visibleFile ? fileNotice.message : "";
-    el("FileStatus").classList.toggle("is-error", !!(visibleFile && fileNotice.error));
-    el("FileStatus").hidden = !visibleFile || !fileNotice.message;
+    var fileNotice = active && fileNotices.get(chatRequestKey(projectId(), currentId()));
+    el("FileStatus").textContent = fileNotice ? fileNotice.message : "";
+    el("FileStatus").classList.toggle("is-error", !!(fileNotice && fileNotice.error));
+    el("FileStatus").hidden = !fileNotice || !fileNotice.message;
     window.RNAssistantWorkspaceChat.renderWorkspaceControls(active, function (answers, requestId) {
       return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
         input: { sessionId: sid, requestId: requestId, answers: answers } }); }, true);
@@ -315,6 +319,7 @@
     try { await window.RNAssistantChatDrafts.flushWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
       catalog = await send("deleteProjectChat", { workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
+      fileNotices.delete(chatRequestKey(entry.workspaceId, chat.Id));
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       var removedSelected = projectId() === entry.workspaceId && currentId() === chat.Id;
@@ -337,6 +342,9 @@
       catalog = await send("deleteProjectHistory", { workspaceId: entry.workspaceId });
       (entry.chats || []).forEach(function (chat) {
         window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
+      });
+      fileNotices.forEach(function (fileNotice, key) {
+        if (fileNotice.target.workspaceId === entry.workspaceId) fileNotices.delete(key);
       });
       window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       var removedSelected = projectId() === entry.workspaceId;
@@ -399,6 +407,7 @@
     window.RNAssistantWorkspaceChat.mount("office");
     composer = window.RNAssistantWorkspaceChat.bindComposer(el("Form"), {
       fileTarget: function () { return { workspaceId: projectId(), sessionId: currentId() }; },
+      canAttachFiles: function () { return !uploadingFiles; },
       onFiles: addProjectFiles
     });
     var dropZone = el("Layout").querySelector(".project-chat-main");
@@ -468,7 +477,7 @@
         updateControls();
       },
       submit: function () {
-        var text = el("Input").value.trim(); if (el("Send").disabled || !active || uploadingFiles) return;
+        var text = el("Input").value.trim(); if (el("Send").disabled || !active || selectedUploadBusy()) return;
         var pid = projectId(), sid = currentId();
         var target = { workspaceId: pid, sessionId: sid }, draftVersion = composer.draftVersion();
         var request = composer.prepareInput(target, text);

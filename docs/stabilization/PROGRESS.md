@@ -15,6 +15,8 @@ was updated for the shared icon renderer; its checks pass. No full-suite or
 target-host qualification is claimed.
 Late chat and history deletion responses also no longer reopen the plugin after
 the user selects another project.
+An in-flight project file upload now locks text send only in its source chat;
+the single file-upload slot stays explicit while another chat remains writable.
 
 ## Right preview header — 2026-10-25
 
