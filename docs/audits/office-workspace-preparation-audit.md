@@ -107,6 +107,16 @@ context store или recovery engine здесь был бы дублирован
 
 ## Следующий cutover: явные профили callable surface
 
+Обновление 2026-10-26: первый extraction выполнен через Core
+`CallableToolProfile`: Office сохраняет explicit core/admissions, workspace явно
+использует `workspace-direct` для опубликованных non-Skill tools. Общий resolver
+skills, admission persistence и policy не заменялись. Текущий контракт и таблица
+профилей — в [Tool Library](../tool-library.md#shared-direct-tool-profile-selection--2026-10-26).
+Наблюдение выше о `_catalog` как direct input относится к baseline аудита.
+Следующий шаг — общий discovery/admission для workspace; уменьшать его каталог
+до появления этого пути нельзя. Поведенческие изменения требуют отдельной проверки
+на одинаковом task/model corpus, а не автоматического переноса Office bootstrap.
+
 Сначала зафиксировать различия, затем извлечь только одинаковые правила.
 Не добавлять generic Office abstraction, второй registry или второй журнал.
 

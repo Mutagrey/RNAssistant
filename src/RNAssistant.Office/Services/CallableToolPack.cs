@@ -33,6 +33,7 @@ namespace RNAssistant.Office.Services
         private readonly string _runId;
         private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
         private readonly IDictionary<string, ToolCatalogEntry> _catalogById;
+        private readonly CallableToolProfile _profile;
         private readonly HashSet<string> _coreIds;
         private readonly List<string> _optionalIds = new List<string>();
         private readonly HashSet<string> _optionalSet = new HashSet<string>(StringComparer.Ordinal);
@@ -56,8 +57,8 @@ namespace RNAssistant.Office.Services
                 .OrderBy(tool => tool.Id, StringComparer.Ordinal)
                 .ToArray();
             _catalogById = _catalog.ToDictionary(tool => tool.Id, StringComparer.Ordinal);
-            _coreIds = SelectCoreIds(_mode, _host, _catalogById.Keys);
-            _coreIds.RemoveWhere(id => _catalogById[id].Exposure == ToolExposure.Skill);
+            _profile = CreateProfile();
+            _coreIds = new HashSet<string>(_profile.Select(_catalog).Select(tool => tool.Id), StringComparer.Ordinal);
         }
 
         public static CallableToolPack Create(
@@ -217,7 +218,7 @@ namespace RNAssistant.Office.Services
                 {
                     Mode = _mode,
                     Host = _host,
-                    Profile = ProfileId(),
+                    Profile = _profile.Id,
                     CatalogRevision = CapabilityCatalogService.ToolCatalogRevision(_catalog),
                     PreviousSnapshotRevision = previousRevision,
                     SnapshotRevision = revision,
@@ -300,7 +301,7 @@ namespace RNAssistant.Office.Services
                 admission.Admitted &&
                 string.Equals(admission.Mode, _mode, StringComparison.Ordinal) &&
                 string.Equals(admission.Host ?? string.Empty, _host, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(admission.Profile, ProfileId(), StringComparison.Ordinal) &&
+                string.Equals(admission.Profile, _profile.Id, StringComparison.Ordinal) &&
                 !string.IsNullOrWhiteSpace(admission.PreviousSnapshotRevision) &&
                 !string.IsNullOrWhiteSpace(admission.SnapshotRevision) &&
                 admission.RequestedSchemas != null;
@@ -308,9 +309,7 @@ namespace RNAssistant.Office.Services
 
         private IReadOnlyList<ToolCatalogEntry> ToolsFor(IEnumerable<string> optionalIds)
         {
-            var active = new HashSet<string>(_coreIds, StringComparer.Ordinal);
-            foreach (var id in optionalIds ?? new string[0]) active.Add(id);
-            return _catalog.Where(tool => active.Contains(tool.Id)).ToArray();
+            return _profile.Select(_catalog, optionalIds);
         }
 
         private ChatMessage BuildStateMessage(
@@ -383,21 +382,16 @@ namespace RNAssistant.Office.Services
             return "bootstrap-core";
         }
 
-        private static HashSet<string> SelectCoreIds(
-            string mode,
-            string host,
-            IEnumerable<string> catalogIds)
+        private CallableToolProfile CreateProfile()
         {
-            var catalog = new HashSet<string>(catalogIds ?? new string[0], StringComparer.Ordinal);
             var selected = new HashSet<string>(BootstrapToolIds, StringComparer.Ordinal);
-            if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
-                string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase)) selected.UnionWith(ExcelCoreToolIds);
-            if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
-                (string.Equals(host, "Excel", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(host, "Word", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(host, "PowerPoint", StringComparison.OrdinalIgnoreCase))) selected.UnionWith(VbaCoreToolIds);
-            selected.IntersectWith(catalog);
-            return selected;
+            if (string.Equals(_mode, ChatModes.Agent, StringComparison.Ordinal) &&
+                string.Equals(_host, "Excel", StringComparison.OrdinalIgnoreCase)) selected.UnionWith(ExcelCoreToolIds);
+            if (string.Equals(_mode, ChatModes.Agent, StringComparison.Ordinal) &&
+                (string.Equals(_host, "Excel", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(_host, "Word", StringComparison.OrdinalIgnoreCase) ||
+                 string.Equals(_host, "PowerPoint", StringComparison.OrdinalIgnoreCase))) selected.UnionWith(VbaCoreToolIds);
+            return CallableToolProfile.Explicit(ProfileId(), selected);
         }
 
         private bool TryReadEvidence(ChatMessage message, out string id)

@@ -50,6 +50,40 @@ admission through `common.capabilities_read`; independent schema reads may share
 one batch. A selected skill can supply its declared tools in the next request.
 Neither route changes confirmation, execution policy or effect verification.
 
+### Shared direct-tool profile selection — 2026-10-26
+
+Core `CallableToolProfile` now selects the direct inputs for both hosts. Office
+`CallableToolPack` owns its explicit initial IDs and durable admissions; workspace
+composition explicitly selects `workspace-direct` (all published non-Skill entries).
+Core `SkillTaskService` still combines these inputs with validated selected-skill
+dependencies, deduplicates IDs and records exact registration revisions in Arsenal.
+`ModelRequestPreparation` still checks the complete request budget. No second
+registry, admission journal, permission layer or intent classifier is introduced.
+
+| Context | Initial direct surface | Extension |
+| --- | --- | --- |
+| Office Agent/Excel | skills_load, resources_find/read, capabilities_search/read, excel.inspect | Existing exact direct admission or selected skill |
+| Office Agent/Word, PowerPoint, Outlook; Office Plan | The five common bootstrap IDs above, subject to mode catalog | Same routes, with existing mode policy |
+| Workspace/CLI | Published non-Skill catalog after mode filtering | Selected skills |
+| Writable workspace Agent | Common skills_load, resources_find/read/search, questions_ask, task_list_set, plan_doc_save/restore/delete; files.create/copy/move/patch/replace/delete/restore | Available contributions plus selected skills |
+| Read-only workspace | Same profile over the catalog without files.* mutations | Read-only filesystem association does not redefine Plan/task or bound-Office policy |
+| Workspace with Office target | Workspace profile also includes published non-Skill Office contributions | Exact pinned target and existing guards remain |
+| Plugin source workspace | Workspace profile also includes available non-Skill plugin contributions | Specialized tools such as web.verify still require a selected skill |
+
+Common names in the table use the `common.` namespace. Profile selection preserves
+the supplied catalog order, descriptors, policies and bindings; it never selects a
+Skill-only tool via a direct admission. It does not republish disabled/missing tools
+or replace catalog-owner availability checks. Existing Office profile IDs and
+snapshot revision rules are unchanged, so this extraction requires no data migration.
+
+The next behavioral cutover is shared discovery/admission for workspace, **before**
+reducing its initial surface. The intended direction is a small common exploration
+core, an explicit environment profile, and model-selected additional tools/skills.
+Adding resources_search/questions_ask to the Office core or narrowing workspace is
+not part of this extraction. Compare task completion, discovery calls, request size
+and selection errors on the same corpus before adopting those changes. No silent
+tool eviction, partial skill loading or keyword-based intent routing is planned.
+
 The Office `common.resources_read` selector schema has one Core owner. The direct
 Office descriptor uses it unchanged; the workspace/CLI Office binding adds only
 its required `type=office` discriminator to each closed alternative. A section,

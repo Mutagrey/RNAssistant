@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Shared callable profile selection — 2026-10-26
+
+Owner: Core CallableToolProfile; Office CallableToolPack and Application workspace.
+Both consumers now select direct inputs through one profile implementation. Office
+retains its explicit core, profile IDs and durable admissions; workspace explicitly
+uses all published non-Skill entries. Skill resolution, policy/binding checks and
+full request budgeting keep their existing owners. No catalog narrowing, new
+registry, data migration or version bump. [Profile contract](../tool-library.md#shared-direct-tool-profile-selection--2026-10-26).
+
+Host-neutral verification: 11 of 13 focused checks pass, including profile/skill
+fingerprint parity, deduplication, removal, host cores, exact/durable admission,
+dependency revocation, strict VBA budget, strict workspace history and target pinning.
+Two overflow/carryover fixtures also fail with the baseline `524b3f2f` consumers;
+the [validation gap](RISK_REGISTER.md#direct-admission-overflow-fixtures--2026-10-26)
+must be resolved before changing discovery/admission behavior. Next: establish true
+budget-boundary fixtures, then workspace discovery/admission before catalog reduction.
+No live-model or Windows/Office qualification was performed.
+
 ## Shared model request preparation — 2026-10-26
 
 Owner: Core ModelProtocol; Office ConversationModelSession and Application workspace.

@@ -146,6 +146,7 @@
     <Compile Include="Models\ResourceRequestException.cs" />
     <Compile Include="Services\SkillCatalogService.cs" />
     <Compile Include="Services\SkillTaskService.cs" />
+    <Compile Include="Services\CallableToolProfile.cs" />
     <Compile Include="Tools\SkillLoadToolHandler.cs" />
     <Compile Include="Services\ConversationRunPolicy.cs" />
     <Compile Include="Services\ConversationInputJournal.cs" />

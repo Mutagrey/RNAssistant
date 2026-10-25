@@ -1,5 +1,13 @@
 # RNAssistant Harness
 
+`tool pack: explicit profiles` compares explicit and all-direct profiles through
+the production skill compiler: initial/selected registration fingerprints,
+shared dependency deduplication, mutation policy/binding pins, selection removal
+and prior-request stability. Existing `tool pack:` cases cover actual Office
+host/mode cores, exact admission, restart and budget refusal; workspace strict
+request/history and pinned-target cases cover the other consumer. These are
+host-neutral checks, not real Office or model-quality qualification.
+
 `text search:` checks closed workspace/Office schemas, language-independent literal/regex
 matching, Unicode/CRLF coordinates, recursive globs, hidden paths, cancellation,
 exact/stale/lost continuation, cumulative coverage and totals, pathological regex,

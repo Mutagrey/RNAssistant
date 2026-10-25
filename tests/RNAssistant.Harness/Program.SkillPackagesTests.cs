@@ -18,6 +18,57 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void CallableProfilesPreserveSkillSurface()
+        {
+            var read = PackageTool("fixture.read", ToolExposure.Direct);
+            var write = PackageTool("fixture.write", ToolExposure.Direct, "fixture.write.v2");
+            write.Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false,
+                new[] { "agent" });
+            var special = PackageTool();
+            var catalog = new[] { write, special, read };
+            var pack = PackageTools(catalog);
+            var one = PackageSkill("fixture.one", write.Id, special.Id);
+            var two = PackageSkill("fixture.two", special.Id);
+            var skills = new SkillCatalogSnapshot(new[] { one, two });
+            var requestedIds = new List<string> { read.Id, special.Id, "unavailable" };
+            var narrow = CallableToolProfile.Explicit("fixture-minimal", requestedIds);
+            requestedIds.Add(write.Id);
+            AssertEqual(read.Id, narrow.Select(catalog).Single().Id,
+                "profile captures its IDs and cannot expose skill-only or missing tools");
+            AssertEqual(2, narrow.Select(catalog, new[] { write.Id, write.Id, special.Id }).Count,
+                "explicit admission cannot duplicate schemas or bypass skill selection");
+
+            foreach (var profile in new[] { narrow, CallableToolProfile.AllDirect("workspace-direct") })
+            {
+                var session = PackageSession();
+                var direct = profile.Select(catalog);
+                // Independent baseline: the previous Office core / workspace all-catalog inputs.
+                var previousDirect = profile == narrow ? new[] { read } : catalog;
+                Func<IReadOnlyList<ToolCatalogEntry>, SkillRequestSurface> compile = input =>
+                    SkillTaskService.Compile(session, skills, pack, catalog, input, "step", new AppSettings());
+                var initial = compile(direct);
+                AssertEqual(compile(previousDirect).Arsenal.ToolFingerprint, initial.Arsenal.ToolFingerprint,
+                    profile.Id + " preserves initial exact registrations");
+                SkillTaskService.Select(session, one.Id, skills, pack, new AppSettings(), "load-one");
+                SkillTaskService.Select(session, two.Id, skills, pack, new AppSettings(), "load-two");
+                var selected = compile(direct);
+                AssertEqual(compile(previousDirect).Arsenal.ToolFingerprint, selected.Arsenal.ToolFingerprint,
+                    profile.Id + " preserves loaded descriptor/policy/binding revisions");
+                AssertEqual(3, selected.Tools.Count, "shared dependencies and direct tools appear once");
+                AssertEqual(2, selected.Arsenal.Tools.Single(tool => tool.Id == special.Id).Skills.Count,
+                    "both skill owners survive deduplication");
+                AssertTrue(ReferenceEquals(write, selected.Tools.Single(tool => tool.Id == write.Id)),
+                    "selection does not rewrite the policy or binding");
+                AssertEqual(pack.Find(write.Id).Revision,
+                    selected.Arsenal.Tools.Single(tool => tool.Id == write.Id).Revision,
+                    "receipt pins the original mutation registration");
+                session.LastRun.SelectedSkills.Clear();
+                AssertEqual(initial.Arsenal.ToolFingerprint, compile(direct).Arsenal.ToolFingerprint,
+                    "removing selections returns to the profile without losing direct tools");
+                AssertEqual(3, selected.Tools.Count, "prior request remains unchanged after removal");
+            }
+        }
+
         private static void ModelRequestPreparationBindsSnapshotAndBudget()
         {
             var read = PackageTool("fixture.read", ToolExposure.Direct);

@@ -343,6 +343,7 @@ namespace RNAssistant.Harness
                 Test("tool pack: optional schema requires exact admission", OptionalAgentToolRequiresExactAdmission),
                 Test("tool pack: core and atomic monotonic admission", CallableToolPackDefinesCoreAndAdmitsAtomically),
                 Test("tool pack: R61 mode and host profiles are minimal", CallableToolPackUsesR61ModeHostProfiles),
+                Test("tool pack: explicit profiles preserve skill surface and pins", CallableProfilesPreserveSkillSurface),
                 Test("tool pack: overflow rejects extension atomically", ConversationModelSessionRejectsToolPackOverflowAtomically),
                 Test("tool pack: durable admission replays across chat turns", ToolPackAdmissionReplaysAcrossChatTurns),
                 Test("tool pack: prior schemas yield to request budget", ToolPackCarryoverFallsBackWithinBudget),

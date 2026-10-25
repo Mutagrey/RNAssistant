@@ -8,6 +8,22 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Direct admission overflow fixtures — 2026-10-26
+
+Open validation gap; owner: Office model-context / Harness. The `tool pack: overflow
+rejects extension atomically` and `tool pack: prior schemas yield to request budget`
+checks fail because their optional schemas are admitted. Reproduced both with the
+new shared profile selector and with the original `CallableToolPack` and
+`WorkspaceConversationService` sources from `524b3f2f` compiled into a separate
+temporary Harness output. The same IDs/assertions fail; the profile extraction is
+not the cause. The preceding snapshot-budget correction removed double counting,
+but obsolete fixture thresholds versus an actual budget defect have not yet been
+distinguished. Do not report the entire tool-pack suite as passing. Before the next
+discovery/admission cutover, measure the actual projected request plus all reserves,
+then exercise a demonstrably over-budget candidate and restored pack. Preserve
+atomic rejection, durable refusal, and explicit carryover behavior; do not weaken
+assertions or restore double counting to make the tests pass.
+
 ## VBA skill strict-schema context budget — 2026-10-26
 
 Fixed host-neutral: the previous 32K failure was an admission bug, not proof of an

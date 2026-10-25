@@ -856,6 +856,7 @@ namespace RNAssistant.Runtime
             private readonly WorkspaceOfficeCapabilitySet _office;
             private readonly bool _pluginSource;
             private readonly IReadOnlyList<ToolCatalogEntry> _catalog;
+            private readonly IReadOnlyList<ToolCatalogEntry> _directTools;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly WorkspaceChatAttachmentResourceProvider _chatAttachments;
             private readonly ModelContextCompiler _compiler;
@@ -975,6 +976,7 @@ namespace RNAssistant.Runtime
                 if (office?.Tools != null) foreach (var contribution in office.Tools)
                     Register(registry, entries, contribution.Entry, contribution.Handler);
                 _catalog = entries;
+                _directTools = CallableToolProfile.AllDirect("workspace-direct").Select(_catalog);
                 _toolPack = new ToolPackSnapshot("workspace", _mode.Mode, "Workspace", entries.Select(item =>
                     ToolPackSnapshot.Capture(new ToolDescriptor(item.Id, item.Description, item.ArgumentSchemaJson,
                         item.Exposure, item.ContractVersion), item.Policy, item.Binding)));
@@ -1254,7 +1256,7 @@ namespace RNAssistant.Runtime
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
                 var authority = CaptureModelAuthority(cancellationToken);
-                _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _catalog, request.StepId, _settings);
+                _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _directTools, request.StepId, _settings);
                 var preparation = PrepareRequest(_skillSurface);
                 var options = preparation.Options;
                 options.ReasoningEnabled = _session.ReasoningEnabled;
@@ -1338,7 +1340,7 @@ namespace RNAssistant.Runtime
             {
                 if (_lastRequest == null || _lastAuthority == null)
                     return "No accepted model request is available for skill admission.";
-                var surface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _catalog,
+                var surface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _directTools,
                     _lastRequest.StepId, _settings, selections);
                 var preparation = PrepareRequest(surface);
                 try
@@ -1589,7 +1591,7 @@ namespace RNAssistant.Runtime
                     "Load a missing applicable skill with common.skills_load; reuse current SELECTED_SKILL. Complete instructions and tools arrive next request. " +
                     "Selection survives turns, cancellation, restart and compaction; remove irrelevant skills with action=remove. Resource reads never activate skills. " +
                     "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
-                    PromptToolCatalog((surface ?? _skillSurface)?.Tools ?? _catalog.Where(tool => tool.Exposure != ToolExposure.Skill).ToArray(), true) +
+                    PromptToolCatalog((surface ?? _skillSurface)?.Tools ?? _directTools, true) +
                     ". Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
             }
 
