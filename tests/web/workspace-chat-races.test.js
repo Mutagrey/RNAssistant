@@ -271,6 +271,49 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(() => document.querySelector('#projectChatContext').textContent.includes('rna-connected-current'));
     assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-current', {exact:true}).count(),
       'connecting without a later selection still opens the new project');
+    await page.locator('#projectChatWorkspaceMenu summary').click();
+    await page.locator('#projectChatConnect').click();
+    await page.evaluate(() => {
+      const original = send;
+      window.openAfterCancel = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'getProjectChat' && payload.sessionId === 'preview-project-review')
+          await new Promise(resolve => { openAfterCancel.release = resolve; });
+        return result;
+      };
+      window.pendingOpenAfterCancel = RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review');
+    });
+    await page.waitForFunction(() => !!openAfterCancel.release);
+    await page.locator('#projectChatConnectionCancel').click();
+    await page.evaluate(() => openAfterCancel.release());
+    await page.evaluate(() => pendingOpenAfterCancel);
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot()?.sessionId), 'preview-project-review',
+      'closing an idle connection form must not discard a pending chat read');
+    await page.evaluate(() => {
+      const original = window.sendBeforeSelectionRace;
+      window.cancelledConnection = {release:null};
+      window.send = async function (type, payload) {
+        const result = await original(type, payload);
+        if (type === 'connectProjectWorkspace') await new Promise(resolve => { cancelledConnection.release = resolve; });
+        return result;
+      };
+    });
+    await page.locator('#projectChatWorkspaceMenu summary').click();
+    await page.locator('#projectChatConnect').click();
+    await page.locator('#projectChatConnectionPath').fill('/tmp/rna-connected-cancel');
+    await page.locator('#projectChatConnectionSubmit').click();
+    await page.waitForFunction(() => !!cancelledConnection.release);
+    assert.equal(await page.locator('#projectChatConnectionCancel').textContent(), 'Скрыть',
+      'an accepted connection cannot be presented as cancellable');
+    await page.locator('#projectChatConnectionCancel').click();
+    await page.evaluate(() => cancelledConnection.release());
+    await page.waitForFunction(() => !RNAssistantProjectChats.isBusy());
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.workspaceId()), 'preview-data-workspace',
+      'closing a pending connection form must not change the selected project');
+    assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-cancel', {exact:true}).count(),
+      'the completed connection still appears in the tree');
+    assert.equal(await page.locator('#projectChatConnectionCancel').textContent(), 'Отмена');
     console.log('PASS workspace snapshot ordering, running-chat reconnect and plugin selection during a pending reply');
   } finally {
     await browser.close();

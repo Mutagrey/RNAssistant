@@ -7,7 +7,7 @@
     function (target) { return send("getProjectChat", target); },
     function (snapshot) { active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot); notice(statusText()); render(); },
     function (error) { notice(error.detail || error.message, true); });
-  var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect";
+  var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect", connectionRequest = null;
   var noticeText = "", noticeError = false, fileNotices = new Map();
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
@@ -172,6 +172,8 @@
   function updateControls() {
     var pluginBusy = !!(window.RNAssistantPlugins && window.RNAssistantPlugins.isChatBusy());
     var selectedBusy = busy || chatBusy() || selectedUploadBusy();
+    el("ConnectionCancel").textContent = connectionRequest ? "Скрыть" : "Отмена";
+    el("ConnectionCancel").title = connectionRequest ? "Операция продолжится; проект появится в дереве." : "";
     el("New").disabled = busy || !project() || !project().available || pluginBusy;
     el("Connect").disabled = busy;
     el("Create").disabled = busy;
@@ -447,24 +449,29 @@
         el("ConnectionPath").focus();
       });
     });
-    el("ConnectionCancel").addEventListener("click", function () { ++serial; el("Connection").hidden = true; });
+    el("ConnectionCancel").addEventListener("click", function () {
+      if (connectionRequest) connectionRequest.cancelled = true;
+      el("Connection").hidden = true;
+    });
     el("Connection").addEventListener("submit", async function (event) {
       event.preventDefault(); if (busy) return;
       var path = el("ConnectionPath").value.trim(); if (!path) return;
-      var version = ++serial, mode = connectionMode;
+      var version = ++serial, mode = connectionMode, request = { cancelled: false };
+      connectionRequest = request;
       busy = true; render();
       try {
         var result = await send(mode === "create" ? "createProjectWorkspace" : "connectProjectWorkspace", { rootPath: path });
         catalog = result;
-        if (version === serial && !el("Connection").hidden) {
+        if (version === serial && !request.cancelled && !el("Connection").hidden) {
           selectedWorkspaceId = result.selectedWorkspaceId; active = null; notice("");
         }
         el("Connection").hidden = true;
         if (el("ConnectionPath").value.trim() === path) el("ConnectionPath").value = "";
         render();
-      } catch (error) { if (version === serial && !el("Connection").hidden)
+      } catch (error) { if (version === serial && !request.cancelled && !el("Connection").hidden)
         notice(error.detail || error.message, true); }
-      finally { busy = false; render(); }
+      finally { if (connectionRequest === request) connectionRequest = null;
+        busy = false; render(); }
     });
     var chatActions = {
       snapshot: function () { return active; },
