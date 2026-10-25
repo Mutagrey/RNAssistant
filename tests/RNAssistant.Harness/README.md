@@ -471,6 +471,12 @@ session does not authorize stale delete/rename or alter exact patch matching.
 The opt-in real-model fixture runs through the production conversation/runtime:
 set `RNA_BASE_URL`, `RNA_MODEL`, `RNA_RESPONSE_MODE` and `RNA_CONTEXT_TOKENS`, then run
 `dotnet tests/RNAssistant.Harness/bin/Debug/net8.0/RNAssistant.Harness.dll --resource-workflow-live /tmp/new-evidence-directory`.
+Live diagnostics use the production conversation completion delegate directly: schema
+responses already carry their negotiated envelope. Only scripted diagnostics use
+`FixtureCompletion` to wrap domain JSON; applying it to live replies double-wraps v8.
+The full VBA skill can require compaction at 32K; the no-compaction scripted fixture
+was checked with 131072 tokens. This is not evidence of a local model supporting 128K.
+
 An optional `RNA_REQUIRE_TASK_LIST=true` explicitly requests task tracking; keep it
 separate from the unprompted-selection case. `RNA_API_KEY` is optional and never
 saved. `RNA_INSTRUCTION_ROLE` and `RNA_REASONING_MODE` select explicit endpoint

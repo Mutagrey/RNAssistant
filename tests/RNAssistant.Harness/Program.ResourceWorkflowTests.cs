@@ -180,7 +180,13 @@ namespace RNAssistant.Harness
                 {
                     using (var deadline = new CancellationTokenSource(TimeSpan.FromMinutes(8)))
                     {
-                        var service = CreateConversationRunService(adapter, executor, complete, new ContextCompactionService(complete));
+                        // Scripted replies are domain JSON; live replies already use the negotiated wire envelope.
+                        // Do not send live responses through FixtureCompletion, which wraps scripted schema replies.
+                        var store = new ChatStore(FixturePaths.Value);
+                        var service = scripted
+                            ? CreateConversationRunService(adapter, executor, complete, new ContextCompactionService(complete))
+                            : new ConversationRunService(adapter, executor, ConversationStore(store), EventStore(store),
+                                complete, new ContextCompactionService(complete));
                         var result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, task, session, NewContext(adapter), settings,
                             tools, (kind, text, activity) => { if (activity != null) Console.WriteLine(activity.ToolId + ": " + activity.ResultMessage); },
                             cancellationToken: deadline.Token).GetAwaiter().GetResult();

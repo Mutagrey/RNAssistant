@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Skill guidance real-model pilot — 2026-10-26
+
+Owner: Harness diagnostics / Core skills / Office catalogs. Recovered the prior
+local Gemma 32K and Gemma cloud profiles. Fixed a live-harness-only double envelope:
+scripted FixtureCompletion must not wrap already formatted provider responses.
+The same fix was applied to both comparison variants. Cloud A/B each passed the
+explicit-load VBA task with four model calls and one verified write. Local json_schema
+A/B both hit the existing selected-skill request-budget limit after compaction.
+This is not spontaneous-selection coverage or proof of improved model quality.
+[Report and retained evidence](../audits/skills-tools-model-comparison.md); context
+pressure remains open in the risk register. No production protocol change or Office
+qualification is claimed.
+
 ## Alpha preparation — 2026-10-26
 
 User-requested product version: `16.1.0-alpha.1`; assembly binding stays `16.0.4.0`.

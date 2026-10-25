@@ -8,6 +8,17 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## VBA skill strict-schema context budget — 2026-10-26
+
+Open context-size limitation; owner: Core model-context budget / Office skill catalogs.
+Pinned local Gemma 32K with json_schema selects common.vba_code_editing, then fails
+request admission even after compaction: approximately 29847 tokens before guidance
+changes and 29899 after, against a 27648 input limit. No source mutation occurs.
+Same-task cloud json_object pairs pass, but format/model differences prohibit attributing
+this to model intelligence. Do not silently raise context, drop guards or truncate skill
+instructions. Measure schema/skill contributions before choosing a smaller dependency
+surface. [Paired evidence](../audits/skills-tools-model-comparison.md).
+
 ## Text exploration performance and qualification — 2026-10-25
 
 Open qualification/performance gap; owners: Core search / Application workspace / Office Gateway.
