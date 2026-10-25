@@ -658,7 +658,7 @@
       var partsAvailability = { Unchecked: "части не проверены", Verified: "хеши и длины всех частей проверены",
         Unavailable: "одна или более частей отсутствует, повреждена или недоступна" };
       var viewNote = el("p", "Сохранённое view " + view.view +
-        (view.coverage ? " · покрытие " + JSON.stringify(view.coverage) : "") +
+        (view.coverage ? " · покрытие " + JSON.stringify(view.coverage) : " · покрытие неизвестно") +
         retainedTextCost(view) +
         " · " + (viewAvailability[view.payloadAvailability] || viewAvailability.Unknown) +
         (view.partsCount ? " · частей: " + view.partsCount + " · " +
@@ -708,7 +708,7 @@
           var parts = { Unchecked: "части не проверены", Verified: "все части проверены",
             Unavailable: "одна или более частей недоступна" };
           var itemNote = el("p", "#" + (item.ordinal + 1) + " · " + item.view +
-            (item.coverage ? " · покрытие " + JSON.stringify(item.coverage) : "") +
+            (item.coverage ? " · покрытие " + JSON.stringify(item.coverage) : " · покрытие неизвестно") +
             retainedTextCost(item) +
             " · " + (item.payloadRegistered ? "payload зарегистрирован" : "payload не зарегистрирован") +
             " · частей: " + item.partsCount +

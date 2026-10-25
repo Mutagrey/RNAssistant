@@ -544,10 +544,35 @@ namespace RNAssistant.Harness
                     var metadata = PayloadRef.FromBlob(payloads.StoreText(Newtonsoft.Json.JsonConvert.SerializeObject(retained), "application/json"));
                     store.RegisterView(scope, new ResourceRevisionView(exact, "binary:" + view + ":0", retained.Payload.Sha256,
                         metadata, ResourceCoverage.Whole(), new[] { retained.Payload }));
+                    AssertTrue(ModelContextInspectorService.RetainedCoverage(
+                        store.GetView(scope, exact, "binary:" + view + ":0")) == null,
+                        "legacy page metadata cannot appear as whole-source coverage in Inspector");
                     AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
                         new ResourceReadRequest { Reference = exact, Representation = view, ViewPath = "0" })).ErrorCode,
                         "retained metadata cannot bypass the negotiated MIME or per-view bound");
                 }
+                var jpeg = PayloadRef.FromBlob(payloads.StoreBytes(new byte[] { 0xff, 0xd8, 0xff, 0xd9 }, "image/jpeg"));
+                var wrongPage = new ResourceBinaryView { Payload = jpeg, Width = 1, Height = 1,
+                    PageIndex = 0, PageCount = 2 };
+                var wrongPageMetadata = PayloadRef.FromBlob(payloads.StoreText(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(wrongPage), "application/json"));
+                store.RegisterView(scope, new ResourceRevisionView(exact, "binary:render-page:1", jpeg.Sha256,
+                    wrongPageMetadata, ResourceCoverage.Whole(), new[] { jpeg }));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = exact, Representation = ResourceRepresentations.RenderPage,
+                        ViewPath = "1" })).ErrorCode,
+                    "retained PDF page metadata must match the requested page without recapture");
+                var matchingPage = new ResourceBinaryView { Payload = jpeg, Width = 1, Height = 1,
+                    PageIndex = 1, PageCount = 2 };
+                var matchingMetadata = PayloadRef.FromBlob(payloads.StoreText(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(matchingPage), "application/json"));
+                store.RegisterView(scope, new ResourceRevisionView(exact, "binary:page-thumbnail:1", jpeg.Sha256,
+                    matchingMetadata, ResourceCoverage.Whole(), new[] { jpeg }));
+                var legacyPage = gateway.Read(session, new ResourceReadRequest { Reference = exact,
+                    Representation = ResourceRepresentations.PageThumbnail, ViewPath = "1" }).Result;
+                AssertTrue(legacyPage.Coverage.Kind == ResourceCoverageKinds.PageRange &&
+                    legacyPage.Coverage.Start == 1 && legacyPage.Coverage.End == 2,
+                    "matching legacy page metadata stays readable with exact read coverage");
                 AssertEqual(0, reads, "discovery and rejected retained views do not render or hydrate source bytes");
             });
         }

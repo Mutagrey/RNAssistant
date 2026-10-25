@@ -73,6 +73,8 @@ function fixture(withAliases = false, pdf = false) {
         if (pdf) resources.splice(0, resources.length, {
           alias: "R1@v1", resource: { uri: "rna://attachment/pdf", revision: "pdf-r1" },
           scope: { kind: "conversation", id: "chat" }, currentness: "Current",
+          retainedViews: [{ view: "binary:render-page:1", coverage: null,
+            payloadAvailability: "Unchecked", partsCount: 1, partsAvailability: "Unchecked" }],
           observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "text",
             coverage: { kind: "page-range", start: 1, end: 3 }, observationComplete: false,
             readMetadata: { requestedCoverage: { kind: "page-range", start: 1, end: 3 },
@@ -378,6 +380,8 @@ function fixture(withAliases = false, pdf = false) {
   const pdfDetails = pdfRead.get("modelContextBody").children.find(node => node.tag === "details");
   assert.match(pdfDetails.children[1].children.map(node => node.textContent).join(" "),
     /Профиль извлечения: pdf-page-range-text:content-order-v1 · Страниц в оригинале: 12/);
+  assert.match(pdfDetails.children[1].children.map(node => node.textContent).join(" "),
+    /Сохранённое view binary:render-page:1 · покрытие неизвестно/);
   pdfRead.c.RNAssistantModelContext.close();
 
   const linked = fixture(true);

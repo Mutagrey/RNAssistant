@@ -260,7 +260,7 @@ namespace RNAssistant.Office.Services
             return new ModelContextViewInventoryDto { ResourceAlias = resource.Alias,
                 SnapshotCount = page.SnapshotCount, NextOffset = page.NextOffset,
                 Items = page.Items.Select((view, index) => new ModelContextViewInventoryItemDto {
-                    Ordinal = offset + index, View = view.View, Coverage = view.Coverage,
+                    Ordinal = offset + index, View = view.View, Coverage = RetainedCoverage(view),
                     PayloadRegistered = view.Payload != null, PartsCount = view.Parts.Count,
                     EstimatedTextBodyTokens = EstimateTextBodyTokens(view) }).ToArray() };
         }
@@ -282,13 +282,24 @@ namespace RNAssistant.Office.Services
 
         private static ModelContextRetainedViewDto DescribeRetainedView(ResourceRevisionView view)
         {
-            return new ModelContextRetainedViewDto { View = view.View, Coverage = view.Coverage,
+            return new ModelContextRetainedViewDto { View = view.View, Coverage = RetainedCoverage(view),
                 PayloadAvailability = view.Payload == null ? ModelContextPayloadAvailability.NotRetained :
                     ModelContextPayloadAvailability.Unchecked,
                 PartsCount = view.Parts.Count,
                 PartsAvailability = view.Parts.Count == 0 ? (ModelContextPayloadAvailability?)null :
                     ModelContextPayloadAvailability.Unchecked,
                 EstimatedTextBodyTokens = EstimateTextBodyTokens(view), Retained = view };
+        }
+
+        // Older internal PDF page metadata was registered as whole-source coverage.
+        // Its page key alone does not prove the stored page body; keep it unknown.
+        internal static ResourceCoverage RetainedCoverage(ResourceRevisionView view)
+        {
+            if (view?.Coverage?.Kind == ResourceCoverageKinds.Whole &&
+                (view.View.StartsWith("binary:render-page:", StringComparison.Ordinal) ||
+                 view.View.StartsWith("binary:page-thumbnail:", StringComparison.Ordinal)))
+                return null;
+            return view?.Coverage;
         }
 
         // Same uncalibrated UTF-8 bytes/4 baseline as ModelContextBudget, for the

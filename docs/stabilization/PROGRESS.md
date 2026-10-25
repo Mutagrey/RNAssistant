@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Resource Context PDF render-page coverage — 2026-10-25
+
+Owner: Office resource Gateway and Model Context Inspector. Newly retained PDF
+render/thumbnail metadata now records the selected page range. Reuse refuses a
+stored page index or count that contradicts the request, without recapture.
+Inspector shows unknown coverage for older internal page metadata that claimed
+`whole`. Focused binary and Web checks pass host-neutral; actual PDF rendering on
+this machine is unavailable, and Windows/Office/WebView2 qualification remains open.
+
 ## Inline chat visualization — 2026-10-25
 
 Owner: Web chat presentation / Core skill catalog. Completed Mermaid fences now

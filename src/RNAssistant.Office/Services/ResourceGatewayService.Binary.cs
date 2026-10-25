@@ -26,6 +26,8 @@ namespace RNAssistant.Office.Services
             if (paged && (!int.TryParse(request.ViewPath, NumberStyles.None, CultureInfo.InvariantCulture, out page) || page < 0) ||
                 !paged && !string.IsNullOrEmpty(request.ViewPath))
                 throw new ResourceRequestException("An exact zero-based page selector is required for page views only.", "RESOURCE_VIEW_INVALID", false);
+            var coverage = paged ? new ResourceCoverage(ResourceCoverageKinds.PageRange,
+                start: page, end: (long)page + 1) : ResourceCoverage.Whole();
             var descriptor = Resolve(session, request.Reference.Uri).Resource;
             var exact = descriptor.Reference;
             if (!exact.IsExact || request.Reference.IsExact && exact.Revision != request.Reference.Revision)
@@ -84,14 +86,20 @@ namespace RNAssistant.Office.Services
                     var image = _mediaViews.ReadImage(session, exact.Uri);
                     bytes = image.Bytes; mimeType = image.MimeType;
                 }
+                if (paged && (binary.PageIndex != page || !binary.PageCount.HasValue || binary.PageCount.Value <= page))
+                    throw new ResourceRequestException("The PDF renderer returned a different page.",
+                        "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
                 binary.Payload = PayloadRef.FromBlob(_authority.Payloads.StoreBytes(bytes, mimeType));
                 var metadata = PayloadRef.FromBlob(_authority.Payloads.StoreText(
                     Newtonsoft.Json.JsonConvert.SerializeObject(binary), "application/json"));
                 if (revisions.GetRevision(scope, exact) == null)
                     revisions.RegisterRevision(scope, new ResourceRevisionMetadata(exact, descriptor.ContentSha256));
                 revisions.RegisterView(scope, new ResourceRevisionView(exact, view, binary.Payload.Sha256,
-                    metadata, ResourceCoverage.Whole(), new[] { binary.Payload }));
+                    metadata, coverage, new[] { binary.Payload }));
             }
+            if (paged && (binary.PageIndex != page || !binary.PageCount.HasValue || binary.PageCount.Value <= page))
+                throw new ResourceRequestException("The retained PDF page metadata does not match the selected page.",
+                    "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var expectedMime = raw ? "application/octet-stream" : request.Representation == ResourceRepresentations.Image
                 ? ArtifactViewerService.NormalizeMimeType(descriptor.MimeType) : "image/jpeg";
             if (binary?.Payload == null || binary.Payload.ByteLength < 0 || !raw && binary.Payload.ByteLength == 0 ||
@@ -99,7 +107,6 @@ namespace RNAssistant.Office.Services
                 raw && (binary.Payload.ByteLength != descriptor.ByteLength ||
                     !string.Equals(binary.Payload.Sha256, descriptor.ContentSha256, StringComparison.OrdinalIgnoreCase)))
                 throw new ResourceRequestException("The exact binary payload is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
-            var coverage = paged ? new ResourceCoverage(ResourceCoverageKinds.PageRange, start: page, end: page + 1) : ResourceCoverage.Whole();
             var result = new ResourceReadSelection { Result = new ResourceReadResult {
                 Resource = descriptor, Representation = request.Representation, Binary = binary,
                 ContentSha256 = binary.Payload.Sha256, Payload = binary.Payload, Coverage = coverage, Complete = true

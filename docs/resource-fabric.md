@@ -1905,6 +1905,13 @@ Binary views advertise sequential byte offsets/streaming and separate 256 KiB
 `maxBatchBytes`/`maxItemsPerBatch` limits. Gateway rejects unsupported views and row/field
 selectors before source hydration. Captured and retained views obey the same
 per-view byte limit and MIME contract; retained data cannot bypass negotiation.
+Newly retained PDF page and page-thumbnail metadata views carry their exact
+zero-based `page-range`, not whole-PDF coverage. A retained page record must name
+the requested page and a source page count beyond it; mismatches fail without
+recapture. Older internal page metadata recorded as `whole` remains readable when
+its page identity checks pass, but Inspector reports that stored coverage as
+unknown rather than claiming the entire PDF. Real renderer delivery still needs
+target-host qualification.
 The same owner also exposes `raw` for exact attachment-backed image/file/attachment
 artifacts, including empty originals. It reads and verifies original byte length
 and SHA-256, never extracted text or rendered output. The retained `binary:raw`
