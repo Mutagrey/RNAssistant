@@ -3,7 +3,7 @@
   <PropertyGroup>
     <!-- Single source of truth for the RNAssistant product version. -->
     <RNAssistantVersionPrefix>16.1.0</RNAssistantVersionPrefix>
-    <RNAssistantVersionSuffix>dev</RNAssistantVersionSuffix>
+    <RNAssistantVersionSuffix>alpha.1</RNAssistantVersionSuffix>
     <!-- Preserve baseline assembly binding until Windows/VSTO qualification. -->
     <RNAssistantAssemblyVersion>16.0.4.0</RNAssistantAssemblyVersion>
     <RNAssistantBuildNumber Condition="'$(RNAssistantBuildNumber)' == ''">0</RNAssistantBuildNumber>

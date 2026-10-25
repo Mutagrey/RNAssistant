@@ -7,6 +7,17 @@ Historical baseline: `v16.0.4`. This file does not reconstruct historical releas
 
 ## [Unreleased]
 
+Alpha `16.1.0-alpha.1` is prepared in source; it is not yet a published or qualified release.
+
+### Tools exploration alpha — 2026-10-26
+
+- Shared bounded literal/regex resource search across workspace and Office VBA/HTML,
+  with semantic continuation and explicit incomplete-result reporting.
+- Recursive workspace discovery with include/exclude globs.
+- Correct active VBA tool display IDs and show search coordinates in result previews.
+- Product version advances from `16.1.0-dev` to `16.1.0-alpha.1`; assembly binding
+  remains `16.0.4.0`. Windows/Office qualification and signed release evidence are open.
+
 ### Added
 
 - Qualification Center runs versioned in-app host checks with durable typed evidence;

@@ -1,5 +1,12 @@
 # Stabilization progress
 
+## Alpha preparation — 2026-10-26
+
+User-requested product version: `16.1.0-alpha.1`; assembly binding stays `16.0.4.0`.
+Source preparation only: no release tag, distribution or qualification claim.
+Windows/Office scenarios and signed exact-build evidence remain open under the
+[release process](../operations/RELEASE_PROCESS.md).
+
 ## Shared text exploration — 2026-10-25
 
 Owners: Core search contracts/matcher, Application workspace, Office Gateway and presentation.

@@ -9,9 +9,9 @@ is migration history; this document owns the current policy.
 
 - Commit is not release. No version bump, Git tag or automatic push per ordinary commit.
 - Historical baseline is `v16.0.4` (`225a05bb44dd7701892b5f8c98ea2e3b342274a7`); do not create another baseline tag.
-- The current working baseline keeps `16.1.0-dev` and exact commit identity; it is
-  accepted for ordinary maintenance, not a tagged distribution or formal quality
-  claim. Development continues on `main` by default, without per-task branches.
+- The explicitly requested alpha preparation uses `16.1.0-alpha.1` and exact commit identity; it is
+  a prepared candidate version, not a tagged distribution or formal quality
+  claim. Windows/Office qualification and signed exact-build evidence remain open. Development continues on `main` by default, without per-task branches.
 - Product version changes only at an explicit release milestone. Open Windows/Office
   evidence does not block ordinary changes; it remains visible and must be resolved
   for any release whose declared qualification requires it.
@@ -26,10 +26,10 @@ is migration history; this document owns the current policy.
 
 | Field | Source / example | Rule |
 |---|---|---|
-| Product | `RNAssistantVersionPrefix=16.1.0`, `RNAssistantVersionSuffix=dev` | `Version=16.1.0-dev`; only tracked source of product version |
+| Product | `RNAssistantVersionPrefix=16.1.0`, `RNAssistantVersionSuffix=alpha.1` | `Version=16.1.0-alpha.1`; only tracked source of product version |
 | Assembly compatibility | `RNAssistantAssemblyVersion=16.0.4.0` | Preserve baseline binding, independent of product changes |
 | File / VSTO Application | `16.1.0.<RNAssistantBuildNumber>` | Default build number 0; CI/release passes it without a commit |
-| Informational | `16.1.0-dev+g<12-char-sha>` | Add `.dirty` when tracked/index/untracked changes exist; archives without SHA use `+source-archive`, unknown tree state adds `.unknown` |
+| Informational | `16.1.0-alpha.1+g<12-char-sha>` | Add `.dirty` when tracked/index/untracked changes exist; archives without SHA use `+source-archive`, unknown tree state adds `.unknown` |
 | Assembly metadata | ProductVersion, CommitSha, BuildUtc, Branch, Channel, WorkingTreeState, Configuration, RuntimePlatform, BuildEvidenceSignerSha256 | Full SHA; UTC timestamp; exact candidate configuration/platform; signer is `unavailable` outside an evidence-bearing candidate |
 | Protocol | Defined by each existing contract | Never inferred from product/assembly version |
 
@@ -60,10 +60,10 @@ tree, inspect tags, contact remotes or modify source files.
 Git is required for checkout builds. Ordinary source archive builds without `.git`
 are allowed in both Debug and Release configurations. Git/GitHub archives substitute
 the exact source commit into the tracked archive-provenance file, so their
-InformationalVersion is `16.1.0-dev+g<12-char-sha>.unknown`; branch and
+InformationalVersion is `16.1.0-alpha.1+g<12-char-sha>.unknown`; branch and
 post-extraction working-tree state remain unknown and the build is not release
 evidence. A plain copied archive without the substituted commit remains
-`16.1.0-dev+source-archive.unknown`. Git failures in an actual checkout still fail.
+`16.1.0-alpha.1+source-archive.unknown`. Git failures in an actual checkout still fail.
 For exact archive provenance, supply `RNAssistantCommitSha` (full SHA),
 `RNAssistantBranch` and `RNAssistantWorkingTreeState=clean|dirty` through MSBuild
 properties or the ignored root `Directory.Build.local.props` (preserve any signing
