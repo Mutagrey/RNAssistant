@@ -31,7 +31,44 @@ namespace RNAssistant.Harness
         private static string RecoveryReflection()
         { return ModelProtocolWire.WriteAcceptedDecision("reflection", "Choose a safe approach.", "", "Read before changing."); }
         private static string RecoveryFinish()
-        { return ModelProtocolWire.WriteAcceptedDecision("finish", "Answer the question.", "Ready.", results: new ConversationResultClaim[0]); }
+        { return ModelProtocolWire.WriteAcceptedDecision("finish", "Answer the question.", "Ready.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed); }
+
+        private static void V8RecoveryFinishOutcome()
+        {
+            foreach (var strict in new[] { false, true })
+            foreach (var outcome in new[] { ConversationOutcome.Completed, ConversationOutcome.Partial, ConversationOutcome.UnableToComplete })
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var session = NewSession(adapter); var requests = new List<string>();
+                var claim = new ConversationResultClaim("Requested answer assessed.", new string[0],
+                    outcome == ConversationOutcome.Completed ? ConversationAssessment.Satisfied :
+                    outcome == ConversationOutcome.Partial ? ConversationAssessment.PartiallySatisfied : ConversationAssessment.NotSatisfied);
+                var accepted = JObject.Parse(ModelProtocolWire.WriteAcceptedDecision("finish", "Explain the final answer and limits.",
+                    "Final answer with its limitations.", results: new[] { claim }, outcome: outcome));
+                var service = CreateConversationRunService(adapter, executor, (config, messages, options, stream, token) => {
+                    requests.Add(string.Join("\n", messages.Select(message => message.Content)));
+                    var response = (JObject)accepted.DeepClone();
+                    if (requests.Count == 1) response["message"] = " \t\n";
+                    if (requests.Count == 2) response["outcome"] = outcome == ConversationOutcome.Completed ? "unable_to_complete" : "completed";
+                    return Task.FromResult(new LlmCompletionResult { Content = response.ToString(Formatting.None) });
+                });
+                var result = service.ExecuteAsync(ChatModes.Agent, "Answer using the available facts.", session, NewContext(adapter),
+                    new AppSettings { SmartChatTitles = false, AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject },
+                    OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToArray(), null).GetAwaiter().GetResult();
+                AssertEqual(3, requests.Count, "empty and contradictory finishes each receive format correction");
+                AssertContains(requests[1], "empty_finish_message", "empty finish has an explicit diagnostic");
+                AssertContains(requests[2], "contradictory_outcome", "contradictory claim has an explicit diagnostic");
+                AssertEqual(1, session.LastRun.IterationsUsed, "format repair stays in the same kernel iteration");
+                AssertEqual("model_finish", result.RunViewState.Reason, "valid corrected finish is accepted");
+                AssertEqual(ConversationFinishContract.Name(outcome), result.RunViewState.ModelOutcome, "model assessment survives kernel acceptance");
+                AssertEqual(RunViewHealth.Clean, result.RunViewState.ExecutionHealth, "task assessment does not invent a runtime error");
+                AssertEqual(RunGoalVerification.NotAssessed, result.RunViewState.GoalVerification, "model outcome does not prove task success");
+                var reopened = new ChatStore(FixturePaths.Value).Load(session.Id);
+                var saved = reopened.Messages.Where(message => message.ProtocolMessage && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion).ToArray();
+                AssertEqual(1, saved.Length, "rejected finishes never enter accepted history");
+                AssertEqual(outcome, ConversationResponseHistoryReader.Read(saved[0]).Response.Outcome.Value, "canonical replay preserves the model outcome");
+                AssertEqual(result.RunViewState.ModelOutcome, RunViewStateProjector.Create(reopened).ModelOutcome, "projection reconstructs outcome after reopen");
+            });
+        }
 
         private static void V8RecoveryReflectionDepth()
         {
@@ -47,7 +84,7 @@ namespace RNAssistant.Harness
                 for (var index = 0; index < depth; index++) script.Enqueue(RecoveryReflection());
                 script.Enqueue("{\"action\":\"reflection\",\"decision\":\"invalid\",\"message\":\"\"}");
                 script.Enqueue(RecoveryReflection()); // One over-limit proposal receives semantic feedback.
-                script.Enqueue("{\"action\":\"finish\",\"results\":[],\"message\":\"invalid\"}");
+                script.Enqueue("{\"action\":\"finish\",\"outcome\":\"completed\",\"results\":[],\"message\":\"invalid\"}");
                 script.Enqueue(RecoveryFinish());
                 var requests = new List<string>(); var activities = new List<ChatActivity>();
                 var session = NewSession(adapter);
@@ -73,6 +110,21 @@ namespace RNAssistant.Harness
                 AssertTrue(visible.All(message => message.ReasoningContent == "Saved reasoning." && message.ReasoningTokens == 7),
                     "accepted reflection reasoning survives reopen");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("invalid")), "rejected formats remain out of accepted history");
+            });
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var session = NewSession(adapter); var requests = new List<string>();
+                var service = CreateConversationRunService(adapter, executor, (config, messages, options, stream, token) => {
+                    requests.Add(string.Join("\n", messages.Select(message => message.Content)));
+                    return Task.FromResult(new LlmCompletionResult { Content = RecoveryReflection() });
+                });
+                var result = service.ExecuteAsync(ChatModes.Agent, "Answer directly.", session, NewContext(adapter),
+                    new AppSettings { MaxConsecutiveReflections = 0, MaxAgentIterations = 5, SmartChatTitles = false },
+                    OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToArray(), null).GetAwaiter().GetResult();
+                AssertEqual("reflection_limit", result.RunViewState.Reason, "a second over-limit reflection stops the run explicitly");
+                AssertEqual(2, requests.Count, "one semantic correction, no silent loop");
+                AssertContains(requests[1], "reflection_limit_feedback", "model receives correction before terminal limit");
+                AssertContains(requests[1], "Choose execute or finish now", "correction states available actions");
+                AssertEqual(0, session.LastRun.KernelState.ConsecutiveReflections, "over-limit proposals were never accepted");
             });
         }
 
@@ -197,7 +249,7 @@ namespace RNAssistant.Harness
                         var session = service.CreateSession(workspace, "Stream"); var previewSeen = false;
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "fixture",
                             StreamResponses = true, SmartChatTitles = false, AutoCompressContext = false,
-                            ContextWindowOverrideTokens = strict ? 19000 : 131072, MaxConsecutiveReflections = 1,
+                            ContextWindowOverrideTokens = strict ? 22000 : 131072, MaxConsecutiveReflections = 1,
                             AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject };
                         var result = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                             SessionId = session.Id, Message = "Answer directly.", ReasoningEnabled = true }, settings, () => "fixture-key",

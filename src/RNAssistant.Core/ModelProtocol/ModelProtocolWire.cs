@@ -19,6 +19,15 @@ namespace RNAssistant.Core.ModelProtocol
             "Report concrete obstacles and unfinished outcomes honestly; unverified does not waive required inspection. " +
             "Do not ask the user to verify state that available read tools can inspect.";
 
+        public const string FinishGuidance =
+            "finish is a final assertion and answer, never a question, request for approval, offer to continue or promise of future work. " +
+            "Required outcome is the model's task assessment: completed (all results satisfied), partial (some achieved and some incomplete work: partially_satisfied or a mix), " +
+            "or unable_to_complete (no satisfied/partially_satisfied task results). Assess requested outcomes, not incidental successful discovery steps. " +
+            "reason briefly explains why finishing is justified now; message must be nonblank and give the actual answer/result, a concise explanation and any unfinished work or verification limits. " +
+            "For a simple direct answer, one clear sentence is enough. Use the user's language. " +
+            "Outcome and result assessments are model claims; runtime checks evidence independently. " +
+            "If indispensable user input is needed, choose execute with the available question tool. Continue feasible authorized work before finishing.";
+
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last. " +
             "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
@@ -26,14 +35,14 @@ namespace RNAssistant.Core.ModelProtocol
             "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. " +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (short execution references such as E1 from terminal results of this run), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             "Without accepted calls results may be empty. After accepted calls include results and at least one real terminal reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
-            "execute forbids decision/results; reflection forbids tool_calls/results; finish forbids tool_calls/decision. No extra root fields. " +
-            "Assessments are model claims, not runtime success. Ask indispensable questions through the available question tool; explain unresolved outcomes truthfully. Keep the envelope even when the task cannot be fulfilled.";
+            "execute forbids decision/results/outcome; reflection forbids tool_calls/results/outcome; finish forbids tool_calls/decision. No extra root fields. " +
+            FinishGuidance + " Keep the envelope even when the task cannot be fulfilled.";
 
         public const string JsonObjectGuidance = ActionGuidance + "\n" +
             "Shape examples only (TOOL_NAME and FIELD are placeholders, not callable names or arguments):\n" +
             "{\"action\":\"execute\",\"reason\":\"Inspect the source.\",\"tool_calls\":[{\"name\":\"TOOL_NAME\",\"arguments\":{\"FIELD\":\"value\"}}],\"message\":\"I will inspect the source first.\"}\n" +
             "{\"action\":\"reflection\",\"reason\":\"Choose the approach.\",\"decision\":\"Read the exact procedure before patching.\",\"message\":\"\"}\n" +
-            "{\"action\":\"finish\",\"reason\":\"The direct question is answered.\",\"results\":[],\"message\":\"Answer to the user.\"}\n" +
+            "{\"action\":\"finish\",\"reason\":\"The direct question is answered.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Answer to the user.\"}\n" +
             "After tool calls, include result claims citing real terminal IDs instead of empty results.";
 
         public const string SchemaGuidance =
@@ -43,17 +52,17 @@ namespace RNAssistant.Core.ModelProtocol
             "Choose finish only to deliver the answer or honest outcomes now. After tool calls cite their short execution references (E1, E2) from terminal results of this run. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +
             "Runtime assigns call IDs; E1 labels an operation/outcome, R1@v2 an observed resource version, never a tool argument or finish evidence. Ask indispensable questions through the question tool. Follow the current REFLECTION_BUDGET. " +
-            "Do not repeat accepted calls or invent evidence.";
+            "Do not repeat accepted calls or invent evidence. " + FinishGuidance;
 
         public const string StringEscapingGuidance =
             "Use exactly one JSON escaping layer in every string, including nested tool arguments: encode a real line break as \\n and one literal source backslash as \\\\. " +
             "Runtime decodes the envelope once and preserves argument text; never strip or pre-unescape a backslash.";
 
         public const string MessageGuidance =
-            "message is useful user-facing text; an empty string is allowed. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +
+            "message is useful user-facing text; only execute/reflection may use an empty string. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +
             "On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. " +
-            "Use message=\"\" for routine continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. " +
-            "For finish, deliver the answer or outcomes and verification limits. Give concise decision reasons, not private reasoning or invented findings.";
+            "Use message=\"\" for routine execute/reflection continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. " +
+            "For finish, give a nonblank final answer/result, concise explanation of the conclusion and any limitations; no questions to the user or offers to continue. Give decision reasons, not private reasoning or invented findings.";
 
         public static ConversationResponseParseResult Parse(string content, IEnumerable<ToolCatalogEntry> callableTools,
             IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context, bool schemaTransport = false)
@@ -77,12 +86,12 @@ namespace RNAssistant.Core.ModelProtocol
         }
 
         public static string WriteAcceptedDecision(string action, string reason, string message,
-            string decision = null, IEnumerable<ConversationResultClaim> results = null)
+            string decision = null, IEnumerable<ConversationResultClaim> results = null, ConversationOutcome? outcome = null)
         {
             if (action == ConversationResponse.ExecuteAction)
                 throw new ArgumentException("An accepted no-call decision is required.", nameof(action));
             return new ConversationResponse(action, reason, message,
-                decision: decision, results: results).ToJson();
+                decision: decision, results: results, outcome: outcome).ToJson();
         }
 
         internal static string FormatRepairContent(ConversationResponseError kind, string error, int attempt, int maxAttempts)

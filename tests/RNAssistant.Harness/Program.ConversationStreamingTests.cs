@@ -40,7 +40,7 @@ namespace RNAssistant.Harness
                 (phase, message, activity) => delayed.Add(Tuple.Create(phase, message, activity)));
             projector.Start(true);
             projector.OnUpdate(new LlmStreamUpdate
-                { ContentDelta = "{\"action\":\"finish\",\"reason\":\"Answer.\",\"results\":[],\"message\":\" " });
+                { ContentDelta = "{\"action\":\"finish\",\"reason\":\"Answer.\",\"outcome\":\"completed\",\"results\":[],\"message\":\" " });
             AssertEqual(0, delayed.Count, "an attempt without visible output does not clear the prior draft");
             projector.OnUpdate(new LlmStreamUpdate { ContentDelta = "Visible\"}" });
             projector.Complete();
@@ -53,7 +53,7 @@ namespace RNAssistant.Harness
                 var responseChunks = new[]
                 {
                     "<think>" + thinking,
-                    "</think>{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"results\":[],\"mes",
+                    "</think>{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"outcome\":\"completed\",\"results\":[],\"mes",
                     "sage\":\"Привет\\nмир \\uD83D",
                     "\\uDE00\"}"
                 };
@@ -109,7 +109,7 @@ namespace RNAssistant.Harness
                 {
                     BuildDeltaSse("reasoning_content", "Размышление "),
                     BuildDeltaSse("reasoning", "продолжается."),
-                    BuildDeltaSse("content", "{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"results\":[],\"message\":\"Ответ"),
+                    BuildDeltaSse("content", "{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Ответ"),
                     BuildDeltaSse("content", ".\"}"),
                     "data: [DONE]\n\n"
                 });
@@ -148,9 +148,9 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    "{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"results\":[],\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\"}",
+                    "{\"action\":\"finish\",\"reason\":\"Answer the request.\",\"outcome\":\"completed\",\"results\":[],\"status\":\"in_progress\",\"message\":\"Жил-был потоковый черновик.\"}",
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Answer after format repair.", "Исправлено.", results: new ConversationResultClaim[0])
+                        "Answer after format repair.", "Исправлено.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                 });
                 var thoughts = new Queue<string>(new[] { "Первая мысль.", "Исправленная мысль." });
                 var calls = 0;

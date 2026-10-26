@@ -79,14 +79,14 @@ namespace RNAssistant.Harness
                         else if (step == 2)
                             answer = Execute("excel.add_sheet", new JObject { ["name"] = "Report" });
                         else if (step == 3)
-                            answer = new JObject { ["action"] = "finish", ["reason"] = "Premature claim.",
+                            answer = new JObject { ["action"] = "finish", ["reason"] = "Premature claim.", ["outcome"] = "completed",
                                 ["results"] = new JArray(),
                                 ["message"] = "Лист Report создан. Теперь заполню данные и построю график." };
                         else
                         {
                             sheetCallId = SheetResultId(request);
                             if (sheetCallId == null) throw new InvalidOperationException("Sheet terminal ID missing from model context.");
-                            answer = new JObject { ["action"] = "finish", ["reason"] = "Only the sheet exists.",
+                            answer = new JObject { ["action"] = "finish", ["reason"] = "Only the sheet exists.", ["outcome"] = "partial",
                                 ["results"] = new JArray(new JObject {
                                     ["summary"] = "Лист создан; данные и график не готовы.",
                                     ["evidence"] = new JArray(sheetCallId),

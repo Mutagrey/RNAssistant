@@ -718,6 +718,7 @@ namespace RNAssistant.Cli
                     action = summary.Reason == "model_finish" ? "finish" :
                         needsInput ? "awaiting_user" : "other",
                     health = summary.ExecutionHealth.ToString(), summary.AssistantMessage, summary.ToolCounts,
+                    modelOutcome = result.RunViewState?.ModelOutcome,
                     summary.IterationsUsed, summary.ToolStepsUsed,
                     pendingId = pending?.PendingId, pendingTool = pending?.Call.Name,
                     pendingPath = pending == null ? null : PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
@@ -737,6 +738,7 @@ namespace RNAssistant.Cli
             if (pending != null || needsInput) return 3;
             if (cancelled) return 130;
             if (!acceptancePassed) return 5;
+            if (summary.Reason == "model_finish" && result.RunViewState?.ModelOutcome != "completed") return 5;
             return summary.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.Failed ? 5 : 0;
         }
 

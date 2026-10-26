@@ -2,23 +2,24 @@
 
 Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
 Response protocol is 8, reference contract revision is 2, new chat stream format
-is 8, and built-in prompt schema is 56. Formats 6 and 7 remain read-only history;
+is 8, and built-in prompt schema is 57. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
-Earlier experimental format-8 histories without the required bindings are refused;
+Earlier format-8 histories without the required bindings or explicit finish outcome are refused;
 no automatic rewrite/deletion or execution upgrade. See [ADR-0018](../decisions/ADR-0018-typed-model-references.md).
 
 ## Model envelope
 
 In `json_object` mode the model returns one raw JSON object with fields in this order: `action`,
 `reason`, action-specific fields, `message` last. `reason` is a short decision
-basis, not private reasoning. `message` is user-facing text and may be empty.
+basis, not private reasoning. `message` is user-facing text; only `execute` and
+`reflection` may leave it empty. `finish.message` must contain a nonblank answer.
 No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
 
 | Action | Required action-specific field | Meaning |
 | --- | --- | --- |
 | `execute` | Nonempty `tool_calls` | Propose one or more validated calls. Each call has exactly `name` and root object `arguments`; runtime assigns IDs. Only independent local reads may batch. |
 | `reflection` | Nonblank `decision` | Record a useful interpretation and request another bounded model step. No tool dispatch, result or new authority. |
-| `finish` | `results` array | End the run with the answer or honest outcome. No further work is scheduled by a promise in `message`. |
+| `finish` | `outcome`, `results` array, nonblank `message` | Assert the final answer and assessed task outcome. No questions, approval requests, offers to continue or promises of future work. |
 
 `results[]` entries contain exactly `summary`, `evidence` (exact short execution
 references such as `E1` from delivered terminal results) and `assessment`: `satisfied`,
@@ -26,6 +27,39 @@ references such as `E1` from delivered terminal results) and `assessment`: `sati
 without accepted calls may use `results=[]`. After accepted calls, finish
 needs at least one result and one terminal evidence reference in aggregate;
 discovery calls need not all be cited.
+
+### Finish is an assertion
+
+The universal finish form is `action + reason + outcome + results + message`.
+`reason` briefly explains why the model ends the run now. `message` delivers the
+actual answer/result, a concise explanation and any unfinished work or verification
+limits, in the user's language. A simple direct answer may be one sentence; no
+fixed Markdown headings are required. Necessary questions use `execute` with
+`common.questions_ask`. Continue feasible authorized work before finishing.
+The question/answer distinction is a semantic model instruction; punctuation is
+not an admission rule (quoted questions and source code can contain `?`).
+
+`outcome` is required only on finish and is the **model's claim**, independent of
+runtime lifecycle, effect health and task verification. Results assess requested
+task outcomes, not a list of incidental successful discovery operations.
+
+| `outcome` | Local consistency rule for `results` |
+| --- | --- |
+| `completed` | Every reported result is `satisfied`. With no accepted calls, `results=[]` is allowed for a direct answer. |
+| `partial` | Some work is achieved and some remains: at least one `partially_satisfied`, or a mixture of `satisfied` and `unverified`/`not_satisfied`. |
+| `unable_to_complete` | No result is `satisfied` or `partially_satisfied`; explain the obstacle. With no accepted calls, an empty results array is allowed. |
+
+```json
+{"action":"finish","reason":"The requested data and chart were produced and checked.","outcome":"completed","results":[{"summary":"Data and chart created.","evidence":["E7","E12"],"assessment":"satisfied"}],"message":"The data and chart are ready. The saved values and chart series were checked."}
+```
+
+The parser rejects missing/unknown outcome (`invalid_outcome`), blank final
+answers (`empty_finish_message`) and contradictory assessments
+(`contradictory_outcome`) in both response modes. They receive bounded format
+repair on the same request; rejected drafts never become accepted history.
+The strict schema requires outcome and a nonblank finish message; cross-field
+assessment consistency is checked locally, including on typed kernel proposals.
+No legacy outcome is inferred from text or results.
 
 `ModelProtocolWire` owns the canonical action/message/escaping guidance,
 writer and format repair. Default Agent, Chat, Plan, Office editable-prompt
@@ -129,7 +163,7 @@ workspace acceptance and no-replay rules still apply.
 
 `finish accepted`, `RunLifecycle.Completed` and task success are distinct.
 `RunViewState.GoalVerification` remains `not_assessed`; model
-`results/assessment` are shown as claims with exact evidence IDs, never as
+`outcome` and `results/assessment` are shown as claims with exact evidence IDs, never as
 runtime proof. The separate visible reflection activity is excluded from model
 context; its accepted protocol record retains the decision and attempt origin
 as model history. The visible step retains accepted provider reasoning; an execute
@@ -141,9 +175,19 @@ retains the exact accepted wire and tool-result correlation.
 Model-context replay sanitizes runtime identifiers from accepted `reason` and
 `message` without changing literal text in `tool_calls.arguments`.
 
+`RunViewState.ModelOutcome` is reconstructed from the accepted finish envelope;
+it cannot alter runtime health, write counts or `GoalVerification`. CLI emits
+`modelOutcome` separately and returns exit 5 for `partial`/`unable_to_complete`,
+even when the run ended `Completed/Clean` without requested acceptance checks.
+Explicit workspace acceptance still rejects `completed` when its checks fail;
+an honest incomplete finish can end the run without passing those checks.
+These rules do not establish that every aspect of a free-form user task was
+fulfilled: an `ok` read cited as `satisfied` is still not proof of a requested write.
+
 Workspace project/plugin chat also presents accepted finish claims and exact
 evidence IDs as model assessments. It shows reflection decisions as saved steps;
-an empty `message` does not create an answer bubble. A direct finish may include
+an empty execute/reflection `message` does not create an answer bubble. A blank
+finish is rejected before acceptance. A direct finish may include
 evidence-free claims when this run accepted no calls; any cited foreign ID is
 still rejected. Target WebView2 and full integration qualification remain open.
 
@@ -152,7 +196,7 @@ metadata. User/developer history cannot contain native call metadata; native
 history has exactly one paired call. Workspace replay checks adjacent batch
 siblings against the same run, step and model attempt with consecutive indexes;
 an index reset cannot start a second batch before the preceding results.
-Format-6/7/8 chats are read-only after this cutover; no legacy inference,
+Format-6/7 chats and incompatible format-8 histories cannot continue; no legacy inference,
 dual-write or automatic migration is allowed. Windows x64 + Office x64 +
 WebView2 and real-model qualification remain open.
 

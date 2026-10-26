@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                 System.Func<string, string> loadSchema = id => execute(CapabilityToolCatalog.ReadToolId,
                     new JObject { ["id"] = id }, "Загружаю схему инструмента.");
                 var premature = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                    "The clear has not been inspected yet.", "", results: new ConversationResultClaim[0]);
+                    "The clear has not been inspected yet.", "", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                 var responses = new Queue<string>(new[] {
                     read,
                     loadSchema("excel.clear_range"),
@@ -71,7 +71,7 @@ namespace RNAssistant.Harness
                                 new[] { clearResult.ExecutionReference.Alias, inspected.ExecutionReference.Alias }, ConversationAssessment.Unverified),
                             new ConversationResultClaim("Report sheet was created.",
                                 new[] { sheet.ExecutionReference.Alias }, ConversationAssessment.Satisfied)
-                        });
+                        }, outcome: ConversationOutcome.Partial);
                     return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
                 var result = service.ExecuteAsync(ChatModes.Agent, "Очисти Data!A2:B2 и создай Report.",

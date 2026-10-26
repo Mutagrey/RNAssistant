@@ -595,7 +595,8 @@ authority; restart and explicit continuation retain that snapshot.
 `SessionEvent.CurrentSchemaVersion` remains 4: v8 changes the response and chat
 stream format, not the event envelope. No historical bytes or CAS payloads are
 rewritten. Full-history preflight requires format-8 accepted responses with
-complete call origins, required typed references and terminal results for accepted calls before model
+complete call origins, required typed references, explicit finish outcome with a
+nonblank answer, and terminal results for accepted calls before model
 preparation. A pending confirmation without valid v8 history and `KernelState`
 cannot continue and must be cancelled or resubmitted in a new chat. Unsupported
 event schemas and old snapshot files are refused rather than guessed or migrated.
@@ -603,6 +604,11 @@ Reset is explicit;
 protocol failures never automatically delete user chats, CAS, settings or keys.
 See [the current conversation contract](protocols/CONVERSATION_RESPONSE_V8.md)
 and the historical [unified-agent cutover](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13).
+
+Finish `outcome` remains inside the accepted v8 response body. `RunViewState.ModelOutcome`
+is its replayable model-assessment projection, not a second task verdict or source
+of runtime health/effect counts. Earlier outcome-less finishes are refused by
+preflight; no outcome is guessed, no source body is rewritten or removed.
 
 ## Conversation input queue
 

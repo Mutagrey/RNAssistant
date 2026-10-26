@@ -84,7 +84,7 @@ namespace RNAssistant.Harness
                         if (!release.Wait(10000)) throw new TimeoutException("Receipt test did not release the model.");
                         var bytes = Encoding.UTF8.GetBytes(new JObject { ["choices"] = new JArray(new JObject {
                             ["message"] = new JObject { ["content"] = ModelProtocolWire.WriteAcceptedDecision(
-                                ConversationResponse.FinishAction, "No tools needed.", "Reply.", results: new ConversationResultClaim[0]) } })
+                                ConversationResponse.FinishAction, "No tools needed.", "Reply.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) } })
                         }.ToString(Formatting.None));
                         context.Response.ContentLength64 = bytes.Length;
                         await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
@@ -163,7 +163,7 @@ namespace RNAssistant.Harness
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] =
                                         ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                                            "The reply needs no tools.", "Готово.", results: new ConversationResultClaim[0]) } })
+                                            "The reply needs no tools.", "Готово.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) } })
                                 }.ToString(Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);
                                 context.Response.ContentType = "application/json";
@@ -326,7 +326,7 @@ namespace RNAssistant.Harness
                             var response = new JObject { ["choices"] = new JArray(new JObject {
                                 ["message"] = new JObject { ["content"] =
                                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                                        "The reply needs no tools.", "Готово.", results: new ConversationResultClaim[0]) } })
+                                        "The reply needs no tools.", "Готово.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) } })
                             }.ToString(Formatting.None);
                             var bytes = Encoding.UTF8.GetBytes(response);
                             context.Response.ContentType = "application/json";
@@ -658,7 +658,7 @@ namespace RNAssistant.Harness
                     Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "The chart is not present.", "The chart remains unfinished.", results:
                         new[] { new ConversationResultClaim("Chart absent", new[] { "call-1" },
-                            ConversationAssessment.PartiallySatisfied) }) };
+                            ConversationAssessment.PartiallySatisfied) }, outcome: ConversationOutcome.Partial) };
                 var finished = PluginApplicationService.PresentWorkspaceMessage(finish);
                 AssertEqual("partially_satisfied", finished.Results.Single().Assessment,
                     "workspace chat retains incomplete model assessment");
@@ -847,7 +847,7 @@ namespace RNAssistant.Harness
                             ["message"] = new JObject { ["content"] =
                                 ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                     "The edit is complete.", "Ответ на исправленный запрос.",
-                                    results: new ConversationResultClaim[0]) } }) }.ToString(Formatting.None);
+                                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) } }) }.ToString(Formatting.None);
                         var bytes = Encoding.UTF8.GetBytes(response);
                         context.Response.ContentType = "application/json";
                         context.Response.ContentLength64 = bytes.Length;

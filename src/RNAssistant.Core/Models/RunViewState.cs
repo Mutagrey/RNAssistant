@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Models
 {
@@ -91,6 +92,7 @@ namespace RNAssistant.Core.Models
         public string Lifecycle { get; private set; }
         public string ExecutionHealth { get; private set; }
         public string GoalVerification { get; private set; }
+        public string ModelOutcome { get; private set; }
         public IReadOnlyList<ModelResultViewState> ModelResults { get; private set; }
         public int SuccessfulReads { get; private set; }
         public int VerifiedWrites { get; private set; }
@@ -109,7 +111,7 @@ namespace RNAssistant.Core.Models
             int unverifiedWrites, int failedCalls, int unknownEffects,
             PendingConfirmationViewState pendingConfirmation, string reason, string currentAction,
             DateTime startedUtc, string goalVerification = RunGoalVerification.NotAssessed,
-            IEnumerable<ModelResultViewState> modelResults = null)
+            IEnumerable<ModelResultViewState> modelResults = null, string modelOutcome = null)
         {
             // Json.NET passes null for this field in durable run views written before
             // goal verification was added; optional parameter defaults do not apply.
@@ -135,6 +137,20 @@ namespace RNAssistant.Core.Models
             if (claims.Any(claim => claim == null) ||
                 claims.Length > 0 && lifecycle != RunViewLifecycles.Completed)
                 throw new ArgumentException("Model finish results require a completed run.");
+            if (modelOutcome != null)
+            {
+                ConversationOutcome outcome;
+                if (lifecycle != RunViewLifecycles.Completed || reason != "model_finish" ||
+                    !ConversationFinishContract.TryRead(modelOutcome, out outcome))
+                    throw new ArgumentException("A model outcome requires an accepted finish.", nameof(modelOutcome));
+                var assessments = claims.Select(claim => {
+                    ConversationAssessment assessment;
+                    ConversationResultClaim.TryReadAssessment(claim.Assessment, out assessment);
+                    return assessment;
+                });
+                if (ConversationFinishContract.Contradiction(outcome, assessments) != null)
+                    throw new ArgumentException("Model outcome contradicts result assessments.", nameof(modelOutcome));
+            }
 
             RunId = runId;
             TurnId = turnId;
@@ -142,6 +158,7 @@ namespace RNAssistant.Core.Models
             Lifecycle = lifecycle;
             ExecutionHealth = executionHealth;
             GoalVerification = goalVerification;
+            ModelOutcome = modelOutcome;
             ModelResults = Array.AsReadOnly(claims);
             SuccessfulReads = successfulReads;
             VerifiedWrites = verifiedWrites;

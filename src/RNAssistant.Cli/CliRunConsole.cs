@@ -55,6 +55,8 @@ namespace RNAssistant.Cli
                 Console.WriteLine("Assistant: " + Text(summary.AssistantMessage, 2000));
             Console.WriteLine("Steps: " + summary.IterationsUsed + "; tools: " + summary.ToolStepsUsed);
             var presentation = result.Presentation;
+            if (result.RunViewState?.ModelOutcome != null)
+                Console.WriteLine("Model assessment: " + result.RunViewState.ModelOutcome + " (not independent task verification).");
             Console.WriteLine("File effects recorded for this task:");
             if (presentation == null) Console.WriteLine("  Unavailable.");
             else

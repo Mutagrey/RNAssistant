@@ -116,7 +116,7 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken)
         {
             var sentinel = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
+                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
             var messages = ToolResultProbeMessages(toolResultRole, ProbeTransport(sentinel, responseMode));
             return RunAsync(
                 settings,

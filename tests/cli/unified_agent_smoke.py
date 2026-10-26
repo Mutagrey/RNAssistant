@@ -125,7 +125,7 @@ def check(root):
 
         responses.extend([call("common.resources_read", target="untrusted.txt"),
                           call("files.create", relativePath="blocked.txt", text="bad"), DONE])
-        run("--mutation-policy", "deny", "--auto-confirm", "on")
+        run("--mutation-policy", "deny", "--auto-confirm", "on", code=5)
         assert not (workspace / "blocked.txt").exists()
         print("PASS unified CLI: injected write under Deny never dispatches")
 

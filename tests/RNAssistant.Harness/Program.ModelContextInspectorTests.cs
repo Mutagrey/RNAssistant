@@ -359,7 +359,7 @@ namespace RNAssistant.Harness
                     throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema rejected during repair");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
                     { Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Answer directly.", "Done.", results: new ConversationResultClaim[0]) });
+                        "Answer directly.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
             });
             var result = protocol.GetResponseAsync(request, null, CancellationToken.None).GetAwaiter().GetResult();
             AssertTrue(result.Failure == null, "strict repair falls back and accepts a valid object response");
@@ -401,7 +401,7 @@ namespace RNAssistant.Harness
                     "direct object request retains Full provenance");
                 return System.Threading.Tasks.Task.FromResult(new LlmCompletionResult
                     { Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Answer directly.", "Done.", results: new ConversationResultClaim[0]) });
+                        "Answer directly.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
             });
             AssertTrue(objectProtocol.GetResponseAsync(objectRequest, null, CancellationToken.None)
                 .GetAwaiter().GetResult().Failure == null, "json_object mode accepts the shared v8 response");

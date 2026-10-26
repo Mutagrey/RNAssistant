@@ -39,7 +39,7 @@ namespace RNAssistant.Harness
                                 new[] { session.Messages.Last(message => message.RunId == session.LastRun.RunId &&
                                     message.ToolName == TaskListToolCatalog.SetToolId &&
                                     message.AcceptedCallOrigin != null).ToolCallId },
-                                ConversationAssessment.Satisfied) });
+                                ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = content });
                 })
                     .ExecuteAsync(ChatModes.Agent, "Record the completed review.", session, NewContext(adapter), new AppSettings(),

@@ -90,7 +90,7 @@ namespace RNAssistant.Office.Services
             return AgentModelResult.Accepted(new AgentResponseDraft(response.Action, response.Reason, response.Message,
                 response.Action == ConversationResponse.ExecuteAction
                     ? response.ToolCalls.Select(call => new ToolCallDraft(call.Name, call.Arguments.ToString(Formatting.None)))
-                    : null, response.Decision, response.Results),
+                    : null, response.Decision, response.Results, response.Outcome),
                 _lastModel.SourceModelAttemptId);
         }
 

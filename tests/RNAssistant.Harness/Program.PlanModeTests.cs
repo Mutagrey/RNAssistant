@@ -383,7 +383,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!answer.Contains(question.Id) && !answer.Contains("PLAN_ANSWERS"), "runtime IDs and raw JSON stay out of chat");
                 responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                     "The user selected Core after the question.", "Учту выбранную область Core.",
-                    results: new ConversationResultClaim[0]));
+                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed));
                 var resumed = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Plan, answer, reloaded, NewContext(adapter),
                     new AppSettings { ToolResultRole = resultRole, ContextWindowOverrideTokens = 65536 }, tools, null).GetAwaiter().GetResult();

@@ -465,7 +465,8 @@ function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
   var modelResults = runViewState && runViewState.modelResults || [];
-  var modelConcern = modelResults.some(function (item) { return item.assessment !== "satisfied"; });
+  var modelConcern = runViewState &&
+    ["partial", "unable_to_complete"].indexOf(runViewState.modelOutcome) >= 0;
   // Goal verification stays in the typed state; an ordinary answer is not an alert.
   if (health === "clean" && !modelConcern && runViewState &&
       ["failed", "cancelled"].indexOf(runViewState.lifecycle) < 0) return;
@@ -501,7 +502,7 @@ function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
     text.textContent = "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ".";
   }
   copy.appendChild(text);
-  if (modelConcern) {
+  if (modelConcern && modelResults.length) {
     var details = document.createElement("details");
     details.className = "agent-model-results";
     var heading = document.createElement("summary");

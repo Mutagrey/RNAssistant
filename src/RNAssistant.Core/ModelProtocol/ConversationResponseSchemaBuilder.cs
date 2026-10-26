@@ -69,13 +69,20 @@ namespace RNAssistant.Core.ModelProtocol
 
         private static JObject Branch(string action, string field, JObject schema)
         {
-            return ClosedObject(new JObject
+            var properties = new JObject
             {
                 ["action"] = new JObject { ["type"] = "string", ["const"] = action },
-                ["reason"] = new JObject(NonblankString()) { ["description"] = "Brief decision basis, not private reasoning." },
-                [field] = schema,
-                ["message"] = new JObject { ["type"] = "string", ["description"] = ModelProtocolWire.MessageGuidance }
-            });
+                ["reason"] = new JObject(NonblankString()) { ["description"] = "Brief reason for choosing this action; for finish, why the run ends now. Not private reasoning." }
+            };
+            if (action == ConversationResponse.FinishAction)
+                properties["outcome"] = new JObject { ["type"] = "string",
+                    ["enum"] = new JArray("completed", "partial", "unable_to_complete"),
+                    ["description"] = ModelProtocolWire.FinishGuidance };
+            properties[field] = schema;
+            var message = action == ConversationResponse.FinishAction ? NonblankString() : new JObject { ["type"] = "string" };
+            message["description"] = ModelProtocolWire.MessageGuidance;
+            properties["message"] = message;
+            return ClosedObject(properties);
         }
 
         private static JObject ClosedObject(JObject properties)

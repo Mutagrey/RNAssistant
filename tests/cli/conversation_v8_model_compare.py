@@ -347,6 +347,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
                "runtime_readback_count": terminal.get("completeFileReads"),
                "runtime_verified_writes": terminal.get("verifiedFileChanges"),
                "lifecycle": terminal.get("lifecycle"), "reason": terminal.get("reason"),
+               "model_outcome": terminal.get("modelOutcome"),
                "acceptance": terminal.get("acceptance"), "iterations": terminal.get("IterationsUsed"),
                "tool_steps": terminal.get("ToolStepsUsed"), "tool_counts": terminal.get("ToolCounts"),
                "reflection_count": sum(item == "reflection" for item in (entry.get("action") for entry in responses if isinstance(entry, dict))),

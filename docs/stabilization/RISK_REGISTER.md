@@ -68,6 +68,20 @@ evidence состояния до исправления.
 | I26-09 / P1, условный сценарий | **Таймаут submit не совпадает с жизнью run.** Bridge idle timeout `SubmitProjectChat` — 300 s; model request default — 1800 s. Receipt, compaction и tool events отбрасываются progress bridge. Долгий nonstream/model/tool wait может дать uncertain bridge timeout при ещё занятом lease. Polling другого request ID не продлевает submit. | Typed bridge delivery/run control. Durable admission должен завершать submit; дальнейшее ожидание — наблюдение run. Существующая RequestId-идемпотентность сохраняется. Пятиминутная задержка в этом аудите не проигрывалась. |
 | I26-10 / P1 | **Ввод во время run имеет разные возможности.** Office adapter реализует `IRunInputChannel`; WorkspacePorts — только `IModelProtocol/IRunStore`, coordinator вызывается без input channel. Поэтому очередь/уточнение в активном workspace не подключены к существующему kernel port, а Send блокируется. | Application active-run/input delivery + общий composer. Подключить существующий input journal/channel через владельца запуска; нельзя просто разблокировать Send и создать второго concurrent writer. |
 
+Повтор 2026-10-27 на свежей CLI-сборке подтвердил I26-03 в обоих v8 response
+modes: после одного `common.resources_read` scripted `finish` с `satisfied` даёт
+`Completed/Clean`, exit 0 и `WriteOk=0`, хотя `script.js` отсутствует. Исправление
+I26-04 проверено тем же прогоном: объявленные схемы read/search теперь валидны.
+Question tool штатно завершает текущий run как `awaiting_user`; необходимость
+вопроса проверяется инструкцией модели, не runtime admission. Причину конкретного
+пользовательского запуска без фото экранной диагностики определить нельзя.
+В следующем изменении v8 пустой `finish.message` отклоняется, обязательный
+`outcome` модели проверяется на согласованность с `results`, а CLI больше не
+возвращает exit 0 для `partial`/`unable_to_complete`. Это не закрывает I26-03:
+`completed` + `satisfied` после успешного read не доказывает запрошенный write без
+отдельных критериев задачи. Запрет вопросов внутри finish закреплён в общей
+инструкции обоих response modes; анализ пунктуации не считается надёжной проверкой.
+
 Точные code anchors для повторной проверки:
 
 - `src/RNAssistant.Application/Workspace/WorkspaceConversationService.cs`:

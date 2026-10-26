@@ -284,7 +284,7 @@ namespace RNAssistant.Core.Agent
             }
             return new AgentResponse(response.Action, response.Reason, response.Message,
                 response.Action == ConversationResponse.ExecuteAction ? calls : null,
-                response.Decision, response.Results, sourceModelAttemptId);
+                response.Decision, response.Results, sourceModelAttemptId, response.Outcome);
         }
 
         private ToolPolicySnapshot[] ValidateResponse(AgentResponse response)

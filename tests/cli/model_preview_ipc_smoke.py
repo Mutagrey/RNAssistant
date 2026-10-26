@@ -33,7 +33,7 @@ def run_case(root):
                     self.wfile.write(body)
                     return
                 assert request["stream"] is True
-                response = {"action": "finish", "reason": "Completed.", "results": [],
+                response = {"action": "finish", "outcome": "completed", "reason": "Completed.", "results": [],
                             "message": first_marker + second_marker}
                 content = conversation_content(request, response)
                 split = content.index(second_marker)

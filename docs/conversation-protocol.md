@@ -10,6 +10,14 @@ RNAssistant uses one `Core/Agent/AgentKernel`, invoked by Office's
 `ConversationRunService` and CLI's `WorkspaceConversationService`. A request may
 finish with zero calls; neither a router LLM nor a mandatory planner is involved.
 
+`finish` is a final assertion with nonblank answer text, a brief reason for ending
+and an explicit model `outcome` (`completed`, `partial`, `unable_to_complete`).
+The parser checks its consistency with `results`; runtime separately checks cited
+terminal evidence, effects and explicit task acceptance. Accepted finish ends the
+run, but does not establish whole-task success. Questions go through
+`common.questions_ask`. The exact shape, correction and reflection-limit behavior
+are owned by the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md).
+
 - Agent is the default behavior, without a mode selector in the UI.
 - The single **Plan** toggle in the composer `+` menu stays active until disabled.
   It permits discovery, skills, questions, Plan save and Task List updates, but

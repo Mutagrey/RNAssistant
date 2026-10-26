@@ -233,7 +233,7 @@ namespace RNAssistant.Harness
                     }
                     else content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "Answer the follow-up about remaining work.", "Нужны исходные данные; результаты ещё не готовы.",
-                        results: new ConversationResultClaim[0]);
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = content });
                 });
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();

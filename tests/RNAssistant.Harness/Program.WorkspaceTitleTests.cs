@@ -59,7 +59,7 @@ namespace RNAssistant.Harness
                                             failedRead ? new[] { "common.resources_find" } : new[] { "common.resources_find", "common.resources_find" })
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer the follow-up from persisted history.", "История читается.",
-                                            results: new ConversationResultClaim[0]);
+                                            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                                 if (rejectFinish && number == 2)
                                 {
                                     var invalid = JObject.Parse(content);
@@ -314,7 +314,7 @@ namespace RNAssistant.Harness
                                     ? requestNumber == 4 ? "Навязанное название" : "Продажи за октябрь"
                                     : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                         "A direct answer needs no tools.", "Подготовлю отчёт.",
-                                        results: new ConversationResultClaim[0]);
+                                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] = content } }) }.ToString(Newtonsoft.Json.Formatting.None);
                                 var bytes = Encoding.UTF8.GetBytes(response);

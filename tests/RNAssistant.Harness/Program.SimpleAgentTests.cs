@@ -126,6 +126,12 @@ namespace RNAssistant.Harness
             noCall.ResponseReason = "Conflicting reason.";
             AssertTrue(!ConversationResponseHistoryReader.Read(noCall).Success,
                 "no-call history rejects a second reason outside the accepted envelope");
+            noCall.ResponseReason = null;
+            var oldFinish = JObject.Parse(noCall.Content);
+            oldFinish.Remove("outcome");
+            noCall.Content = oldFinish.ToString(Formatting.None);
+            AssertTrue(!ConversationResponseHistoryReader.Read(noCall).Success,
+                "old outcome-less finish is refused without inferred success or migration");
             var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
             var first = jsonMessage();
             var second = jsonMessage();
@@ -173,14 +179,16 @@ namespace RNAssistant.Harness
 
         private static string V8Envelope(params JObject[] calls)
         {
-            return new JObject
+            var root = new JObject
             {
                 ["action"] = calls == null || calls.Length == 0 ? "finish" : "execute",
                 ["reason"] = "Handle the request.",
                 [calls == null || calls.Length == 0 ? "results" : "tool_calls"] =
                     new JArray(calls ?? new JObject[0]),
                 ["message"] = "Читаю."
-            }.ToString(Formatting.None);
+            };
+            if (calls == null || calls.Length == 0) root["outcome"] = "completed";
+            return root.ToString(Formatting.None);
         }
 
         private static string V8FinishWithIllegalCalls(params JObject[] calls)
@@ -203,9 +211,9 @@ namespace RNAssistant.Harness
 
         private static void ConversationV8RoundTripsWithoutStatus()
         {
-            foreach (var message in new[] { "Готово.", "", "  ", "Не удалось выполнить.\nНужен доступ.", "He said \"done\" \\ / \t" })
+            foreach (var message in new[] { "Готово.", "Не удалось выполнить.\nНужен доступ.", "He said \"done\" \\ / \t" })
             {
-                var json = new JObject { ["action"] = "finish", ["reason"] = "Answer the user.",
+                var json = new JObject { ["action"] = "finish", ["reason"] = "Answer the user.", ["outcome"] = "completed",
                     ["results"] = new JArray(), ["message"] = message }.ToString(Formatting.None);
                 var parsed = ParseV8(json);
                 AssertTrue(parsed.Success, "v8 accepts a string message without interpreting its wording");
@@ -241,7 +249,8 @@ namespace RNAssistant.Harness
                 var envelope = ModelProtocolWire.WriteAcceptedDecision(action,
                     "Record the next decision.", "Observed result; next decision is explicit.",
                     decision: action == ConversationResponse.ReflectionAction ? "Consider the observation." : null,
-                    results: action == ConversationResponse.FinishAction ? new ConversationResultClaim[0] : null);
+                    results: action == ConversationResponse.FinishAction ? new ConversationResultClaim[0] : null,
+                    outcome: action == ConversationResponse.FinishAction ? (ConversationOutcome?)ConversationOutcome.Completed : null);
                 var parsed = ParseV8(envelope);
                 AssertTrue(parsed.Success && parsed.Response.Action == action && parsed.Response.ToolCalls.Count == 0,
                     "v8 preserves no-call action: " + action);
@@ -266,7 +275,7 @@ namespace RNAssistant.Harness
                     requests++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                         ConversationResponse.FinishAction, "Answer the request directly.", "Ответ пользователю.",
-                        results: new ConversationResultClaim[0]) });
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 }).ExecuteAsync(mode, "Запрос пользователя.", session, NewContext(adapter), new AppSettings(),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
@@ -297,7 +306,7 @@ namespace RNAssistant.Harness
                                     new JObject { ["label"] = "Markdown", ["description"] = "Использовать Markdown." },
                                     new JObject { ["label"] = "HTML", ["description"] = "Использовать HTML." }) }) } }),
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "The user chose Markdown.", "Использую Markdown.", results: new ConversationResultClaim[0]) });
+                        "The user chose Markdown.", "Использую Markdown.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 var requests = new List<JObject>();
                 var session = NewSession(adapter);
                 var settings = new AppSettings { AgentResponseMode = responseMode, ToolResultRole = ToolResultRoles.Tool };
@@ -398,7 +407,7 @@ namespace RNAssistant.Harness
                     .Replace("\"NUMBER\"", number);
                 AssertTrue(!ParseV8(json, V8ReadTool()).Success, "non-JSON/non-finite number rejected: " + number);
             }
-            var escaped = ParseV8("{\"action\":\"finish\",\"reason\":\"Answer the user.\",\"results\":[],\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\"}");
+            var escaped = ParseV8("{\"action\":\"finish\",\"reason\":\"Answer the user.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"\\u0410\\/\\b\\f\\n\\r\\t\"}");
             AssertTrue(escaped.Success, "standard Unicode and control escapes are accepted");
             var exactSource = "line 1\nconst escaped = \"\\n\";\nconst regex = /\\d+\\\\path/;";
             var exactWire = V8Envelope(V8Call(arguments: new JObject { ["query"] = exactSource }));
@@ -1125,7 +1134,7 @@ namespace RNAssistant.Harness
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the observed sheet write.", honest ? "Лист Report не создан." : "Лист Report создан.",
                             results: new[] { new ConversationResultClaim(honest ? "Sheet Report was not created." : "Sheet Report was created.",
-                                new[] { callId }, honest ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) });
+                                new[] { callId }, honest ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Partial);
                         if (invalidShape)
                         {
                             var invalid = JObject.Parse(response);
@@ -1211,7 +1220,7 @@ namespace RNAssistant.Harness
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the divergent effect honestly.", "Модуль Module1 обновлён.",
                             results: new[] { new ConversationResultClaim("Module source is divergent.",
-                                evidence, ConversationAssessment.Unverified) });
+                                evidence, ConversationAssessment.Unverified) }, outcome: ConversationOutcome.UnableToComplete);
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
@@ -1320,7 +1329,7 @@ namespace RNAssistant.Harness
                             "Report the observed write outcome.", "The write outcome is recorded.",
                             results: new[] { new ConversationResultClaim("Module write assessment", evidence,
                                 outcome == "ok" ? ConversationAssessment.Satisfied :
-                                outcome == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied) });
+                                outcome == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied) }, outcome: ConversationOutcome.Partial);
                     }
                     rawByAttempt.Add(options.TraceModelAttemptId, content);
                     options.TraceSink(new LlmTraceRecord
@@ -1452,7 +1461,7 @@ namespace RNAssistant.Harness
                     {
                         Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Answer without a tool call.", "Лист Report создан.",
-                            results: new ConversationResultClaim[0])
+                            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                     });
                 };
                 var session = NewSession(adapter);
@@ -1571,7 +1580,7 @@ namespace RNAssistant.Harness
                     new LlmCompletionResult { Content = invalid, ReasoningContent = "INVALID_REASONING_SENTINEL" },
                     new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                         ConversationResponse.FinishAction, "Explain the refusal.",
-                        "Не могу выполнить этот запрос.", results: new ConversationResultClaim[0]) }
+                        "Не могу выполнить этот запрос.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) }
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1606,7 +1615,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string invalidPair = "{\"status\":\"in_progress\",\"action\":\"finish\",\"reason\":\"Inspect sheets.\",\"results\":[],\"message\":\"Проверяю листы...\"}";
+                const string invalidPair = "{\"status\":\"in_progress\",\"action\":\"finish\",\"reason\":\"Inspect sheets.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Проверяю листы...\"}";
                 var responses = new Queue<string>(new[]
                 {
                     invalidPair,
@@ -1658,7 +1667,7 @@ namespace RNAssistant.Harness
                             {
                                 Content = ModelProtocolWire.WriteAcceptedDecision(
                                     ConversationResponse.FinishAction, "Answer directly.", terminalCase,
-                                    results: new ConversationResultClaim[0])
+                                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                             }));
                     var terminalResult = terminalService.ExecuteAsync(
                         ChatModes.Agent,
@@ -1730,7 +1739,7 @@ namespace RNAssistant.Harness
                             Arguments = new JObject { ["query"] = "CSS" } }));
                 else
                     responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Answer with the requested CSS.", answer, results: new ConversationResultClaim[0]));
+                        "Answer with the requested CSS.", answer, results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed));
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -1830,7 +1839,7 @@ namespace RNAssistant.Harness
                         {
                             Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                 "Answer the question after valid format repair.", "Ответ принят.",
-                                results: new ConversationResultClaim[0]),
+                                results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed),
                             ReasoningContent = "ACCEPTED_REASONING"
                         });
                 };
@@ -2087,7 +2096,7 @@ namespace RNAssistant.Harness
                         }),
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "A semantic target is required.", "Нужна семантическая цель.",
-                        results: new ConversationResultClaim[0])
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                 });
                 var modelCalls = 0;
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
@@ -2288,7 +2297,7 @@ namespace RNAssistant.Harness
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report macro dispatch without claiming an effect.", "Макрос выполнен.",
                             results: new[] { new ConversationResultClaim("Macro dispatched; effect unverified.",
-                                evidence, ConversationAssessment.Unverified) });
+                                evidence, ConversationAssessment.Unverified) }, outcome: ConversationOutcome.UnableToComplete);
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
@@ -2481,7 +2490,7 @@ namespace RNAssistant.Harness
                             "The refreshed write completed.", "Изменение подтверждено.",
                             results: new[] { new ConversationResultClaim(
                                 "The VBA change was applied after a current read.",
-                                new[] { applied.ExecutionReference.Alias }, ConversationAssessment.Satisfied) });
+                                new[] { applied.ExecutionReference.Alias }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
@@ -2570,7 +2579,7 @@ namespace RNAssistant.Harness
                                 "The skill load was refused by the context budget.",
                                 "Навык не подключён: контекст не вмещает полный запрос.",
                                 results: new[] { new ConversationResultClaim("The requested skill could not be loaded.",
-                                    new[] { refused.ExecutionReference.Alias }, ConversationAssessment.NotSatisfied) });
+                                    new[] { refused.ExecutionReference.Alias }, ConversationAssessment.NotSatisfied) }, outcome: ConversationOutcome.UnableToComplete);
                         }
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
@@ -2605,7 +2614,7 @@ namespace RNAssistant.Harness
                         resumedCalls++;
                         return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                             ConversationResponse.FinishAction, "Answer the new request directly.", "Можно продолжать.",
-                            results: new ConversationResultClaim[0]) });
+                            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                     }).ExecuteAsync(ChatModes.Agent, "Продолжим без этого навыка.", session, NewContext(adapter),
                         new AppSettings { ContextWindowOverrideTokens = 32768 },
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
@@ -2804,7 +2813,7 @@ namespace RNAssistant.Harness
                 responses.Enqueue(null);
                 responses.Enqueue(ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                     "Answer the new request directly.", "Обычный новый ответ.",
-                    results: new ConversationResultClaim[0]));
+                    results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed));
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "initial", TurnId = "turn", Status = "running",
                     ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion };
@@ -2828,7 +2837,7 @@ namespace RNAssistant.Harness
                                     initialHealth == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied),
                                 new ConversationResultClaim("The requested skill was saved.",
                                     new[] { skill.ExecutionReference.Alias }, ConversationAssessment.Satisfied)
-                            });
+                            }, outcome: ConversationOutcome.Partial);
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
@@ -3011,7 +3020,7 @@ namespace RNAssistant.Harness
                             externalDrift ? "Изменение отклонено как устаревшее." : "Изменение сохранено.",
                             results: new[] { new ConversationResultClaim(
                                 externalDrift ? "The patch was rejected after source drift." : "The patch was applied.",
-                                new[] { callId }, externalDrift ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) });
+                                new[] { callId }, externalDrift ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Partial);
                     }
                     return Task.FromResult(new LlmCompletionResult
                         { Content = response });
@@ -3148,7 +3157,7 @@ namespace RNAssistant.Harness
                             "Report the confirmed policy drift.",
                             "Определение инструмента изменилось; действие не выполнено.",
                             results: new[] { new ConversationResultClaim("The clear was not dispatched.",
-                                new[] { callId }, ConversationAssessment.NotSatisfied) });
+                                new[] { callId }, ConversationAssessment.NotSatisfied) }, outcome: ConversationOutcome.UnableToComplete);
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
@@ -3204,7 +3213,7 @@ namespace RNAssistant.Harness
                             })) });
                     if (calls == 3) return Task.FromResult(new LlmCompletionResult { Content =
                         ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Summarize the existing paired read.", "Done", results: new ConversationResultClaim[0]) });
+                            "Summarize the existing paired read.", "Done", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                     var accepted = messages.Where(message => message.Role == "assistant" &&
                         message.ToolName == ResourceToolCatalog.FindToolId && message.AcceptedCallOrigin != null).ToList();
                     AssertEqual(2, accepted.Count, "both identical read positions remain in history");
@@ -3452,7 +3461,7 @@ namespace RNAssistant.Harness
                                 "The write outcome remains uncertain after inspection.",
                                 "Состояние листа проверено; создание не подтверждено.",
                                 results: new[] { new ConversationResultClaim("Sheet creation remains unverified.",
-                                    new[] { uncertain.ExecutionReference.Alias, inspected.ExecutionReference.Alias }, ConversationAssessment.Unverified) });
+                                    new[] { uncertain.ExecutionReference.Alias, inspected.ExecutionReference.Alias }, ConversationAssessment.Unverified) }, outcome: ConversationOutcome.UnableToComplete);
                         }
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
@@ -3485,7 +3494,7 @@ namespace RNAssistant.Harness
                     calls++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                         ConversationResponse.FinishAction, "Answer the new request.", "Unexpected",
-                        results: new ConversationResultClaim[0]) });
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 });
                 var count = session.Messages.Count;
                 RuntimeThrows<InvalidOperationException>(() => service.ExecuteAsync(ChatModes.Chat, "Continue", session,

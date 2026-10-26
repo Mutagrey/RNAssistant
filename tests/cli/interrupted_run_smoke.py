@@ -40,7 +40,7 @@ def main():
             if len(requests) == 2:
                 entered.set()
                 release.wait(10)
-            content = {"action": "finish", "reason": "No source change is authorized by this request.",
+            content = {"action": "finish", "outcome": "completed", "reason": "No source change is authorized by this request.",
                        "results": [], "message": "Waiting for an explicit new task."}
             if len(requests) == 1:
                 content = {"action": "execute", "reason": "Inspect both source files.",

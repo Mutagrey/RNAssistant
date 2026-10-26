@@ -66,7 +66,7 @@ def main():
                 "--message", "Read large.txt and replace it only after seeing its complete source.",
                 "--context-tokens", "24576", "--min-reads", "1", "--max-iterations", "4", "--max-tool-steps", "3",
                 "--jsonl"], cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
-            assert run.returncode == 0, (run.stdout, run.stderr)
+            assert run.returncode == 5, (run.stdout, run.stderr)
             assert len(requests) == 4, (len(requests), run.stdout, run.stderr)
             initial_context = "\n".join(message.get("content") or "" for message in requests[1]["messages"])
             assert "source_observation_required" in initial_context and "RefreshRequired" in initial_context

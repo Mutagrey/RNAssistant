@@ -1365,7 +1365,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Answer the request.", "Answer.", results: new ConversationResultClaim[0])
+                            "Answer the request.", "Answer.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                     });
                 };
                 var final = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(

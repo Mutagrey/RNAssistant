@@ -62,13 +62,14 @@ namespace RNAssistant.Core.ModelProtocol
                 default: return Fail(ConversationResponseError.InvalidAction, "action must be execute, reflection or finish.");
             }
             var unsupported = root.Properties().FirstOrDefault(property =>
-                property.Name != "action" && property.Name != "reason" && property.Name != "message" && property.Name != specialized);
+                property.Name != "action" && property.Name != "reason" && property.Name != "message" && property.Name != specialized &&
+                !(action == ConversationResponse.FinishAction && property.Name == "outcome"));
             if (unsupported != null)
                 return Fail(ConversationResponseError.WrongActionFields, "action=" + action + " forbids root field " + unsupported.Name + ".");
             if (!Nonblank(root["reason"]))
                 return Fail(ConversationResponseError.MissingReason, "A nonblank string reason is required.");
             if (root["message"] == null || root["message"].Type != JTokenType.String)
-                return Fail(ConversationResponseError.MissingMessage, "A string message is required; an empty string is allowed.");
+                return Fail(ConversationResponseError.MissingMessage, "A string message is required; finish requires a nonblank answer.");
             var reason = (string)root["reason"];
             var message = (string)root["message"];
             if (action == ConversationResponse.ExecuteAction) return ReadExecute(root, reason, message);
@@ -103,6 +104,12 @@ namespace RNAssistant.Core.ModelProtocol
 
         private static ConversationResponseParseResult ReadFinish(JObject root, string reason, string message)
         {
+            if (string.IsNullOrWhiteSpace(message))
+                return Fail(ConversationResponseError.EmptyFinishMessage, "finish requires a nonblank message with the answer, concise explanation and any remaining limitations; questions go through the question tool.");
+            ConversationOutcome outcome;
+            if (root["outcome"] == null || root["outcome"].Type != JTokenType.String ||
+                !ConversationFinishContract.TryRead((string)root["outcome"], out outcome))
+                return Fail(ConversationResponseError.InvalidOutcome, "finish requires outcome: completed, partial or unable_to_complete. This is a model claim, not runtime proof.");
             var results = root["results"] as JArray;
             if (results == null)
                 return Fail(ConversationResponseError.MissingFinishResults, "finish requires a results array, even for a direct answer without tools.");
@@ -123,8 +130,10 @@ namespace RNAssistant.Core.ModelProtocol
                     return Fail(ConversationResponseError.InvalidAssessment, "assessment must be satisfied, partially_satisfied, unverified or not_satisfied.");
                 claims.Add(new ConversationResultClaim((string)claim["summary"], evidence.Values<string>(), assessment));
             }
+            var contradiction = ConversationFinishContract.Contradiction(outcome, claims.Select(claim => claim.Assessment));
+            if (contradiction != null) return Fail(ConversationResponseError.ContradictoryOutcome, contradiction);
             // Referential/run/terminal checks belong to kernel admission, before acceptance.
-            return ConversationResponseParseResult.Ok(new ConversationResponse(ConversationResponse.FinishAction, reason, message, results: claims));
+            return ConversationResponseParseResult.Ok(new ConversationResponse(ConversationResponse.FinishAction, reason, message, results: claims, outcome: outcome));
         }
 
         private static bool Nonblank(JToken token)

@@ -2752,7 +2752,7 @@ namespace RNAssistant.Harness
                 session.Messages.Add(source);
                 var priorAnswer = AgentTranscript.CreateAssistantMessage(
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Acknowledge the prior image.", "Stored.", results: new ConversationResultClaim[0]),
+                        "Acknowledge the prior image.", "Stored.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed),
                     null, responseStatus: AgentResponseStatuses.Completed);
                 priorAnswer.ProtocolMessage = true;
                 priorAnswer.ResponseModelAttemptId = "prior_image_answer";
@@ -3000,7 +3000,7 @@ namespace RNAssistant.Harness
                 session.Messages.Add(source);
                 var priorAnswer = AgentTranscript.CreateAssistantMessage(
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Acknowledge the prior scan.", "Stored.", results: new ConversationResultClaim[0]),
+                        "Acknowledge the prior scan.", "Stored.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed),
                     null, responseStatus: AgentResponseStatuses.Completed);
                 priorAnswer.ProtocolMessage = true;
                 priorAnswer.ResponseModelAttemptId = "prior_scan_answer";

@@ -87,7 +87,7 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationHistoryReadResult.Fail("No-call v8 response has tool metadata or lacks its model attempt origin.");
             return ConversationHistoryReadResult.Ok(new AgentResponse(
                 response.Action, response.Reason, response.Message, decision: response.Decision,
-                results: response.Results, sourceModelAttemptId: message.ResponseModelAttemptId));
+                results: response.Results, sourceModelAttemptId: message.ResponseModelAttemptId, outcome: response.Outcome));
         }
     }
 }

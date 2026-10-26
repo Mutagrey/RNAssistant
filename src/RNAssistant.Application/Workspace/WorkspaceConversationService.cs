@@ -623,7 +623,7 @@ namespace RNAssistant.Runtime
                     }
                     StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptedContract, GetPendingQuestions(session),
-                        receipt, ConversationEventFeed.Cursor(session), Presentation(workspace, session));
+                        receipt, ConversationEventFeed.Cursor(session), Presentation(workspace, session), RunViewStateProjector.Create(session));
                 }
             }
         }
@@ -691,7 +691,8 @@ namespace RNAssistant.Runtime
                     }
                     StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
-                        cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
+                        cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session),
+                        runViewState: RunViewStateProjector.Create(session));
                 }
             }
         }
@@ -1593,9 +1594,7 @@ namespace RNAssistant.Runtime
                     var unmet = UnmetAcceptance(_acceptance);
                     // A terminal honest failure remains possible. It cannot
                     // satisfy the acceptance contract or turn CLI exit into 0.
-                    var admitsIncomplete = result.Response.Results != null &&
-                        result.Response.Results.Any(claim =>
-                            claim.Assessment != ConversationAssessment.Satisfied);
+                    var admitsIncomplete = result.Response.Outcome != ConversationOutcome.Completed;
                     if (unmet != null && !admitsIncomplete)
                         return AgentModelResult.RejectCompletion(unmet);
                 }
@@ -1604,7 +1603,7 @@ namespace RNAssistant.Runtime
                     result.Response.Action == ConversationResponse.ExecuteAction
                         ? result.Response.ToolCalls.Select(call => new ToolCallDraft(call.Name,
                             call.Arguments.ToString(Formatting.None))) : null,
-                    result.Response.Decision, result.Response.Results),
+                    result.Response.Decision, result.Response.Results, result.Response.Outcome),
                     result.SourceModelAttemptId);
             }
 
@@ -1994,7 +1993,7 @@ namespace RNAssistant.Runtime
                             ResponseModelAttemptId = fact.SourceModelAttemptId,
                             ResponseStatus = fact.Response.Final ? AgentResponseStatuses.Completed : AgentResponseStatuses.InProgress,
                             Content = ModelProtocolWire.WriteAcceptedDecision(fact.Response.Action,
-                                fact.Response.Reason, fact.Response.Message, fact.Response.Decision, fact.Response.Results),
+                                fact.Response.Reason, fact.Response.Message, fact.Response.Decision, fact.Response.Results, fact.Response.Outcome),
                             RunId = fact.Summary.RunId
                         });
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
@@ -2436,11 +2435,12 @@ namespace RNAssistant.Runtime
         public string Cursor { get; private set; }
         public bool Duplicate { get; private set; }
         public WorkspaceRunPresentation Presentation { get; private set; }
+        public RunViewState RunViewState { get; private set; }
         public WorkspaceRunResult(string sessionId, RunSummary summary, WorkspaceRunAcceptance acceptance,
             WorkspaceUserInput userInput = null, WorkspaceInputReceipt receipt = null, string cursor = null,
-            WorkspaceRunPresentation presentation = null)
+            WorkspaceRunPresentation presentation = null, RunViewState runViewState = null)
         { SessionId = sessionId; Summary = summary; Acceptance = acceptance; UserInput = userInput; Receipt = receipt;
-            Cursor = cursor; Presentation = presentation; }
+            Cursor = cursor; Presentation = presentation; RunViewState = runViewState; }
         public static WorkspaceRunResult AlreadyAccepted(WorkspaceInputReceipt receipt)
         { return new WorkspaceRunResult(receipt.SessionId, null, null, receipt: receipt) { Duplicate = true }; }
     }

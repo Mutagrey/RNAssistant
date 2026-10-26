@@ -62,7 +62,9 @@ evidence и ADR — только когда нужны причина, точн�
   `app.js` — boot/shared rendering.
 - Все modes идут через `ConversationRunService` → `AgentKernel`; только kernel
   считает lifecycle/outcomes. Model wire — conversation-response v8
-  `action + reason + (tool_calls | decision | results) + message`; IDs, guards, URI/revision/cursor и authority принадлежат
+  `action + reason + (tool_calls | decision | outcome + results) + message`; для
+  `finish` обязателен непустой ответ, `outcome` — оценка модели, не runtime proof.
+  IDs, guards, URI/revision/cursor и authority принадлежат
   runtime, а не модели/UI.
 - Model-facing reads используют только `common.resources_*` и semantic target;
   revision-pinned `rna://`/durable `ResourceRef` остаются runtime-only evidence. Chat events — append-only source of truth;

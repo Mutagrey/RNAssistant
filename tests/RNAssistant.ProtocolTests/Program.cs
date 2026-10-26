@@ -26,6 +26,7 @@ internal static class Program
             }
             Check(args.Length == 0 || args.Length == 2 && args[0] == "--export", "usage: [--export directory | --validate response.json]");
             Forms();
+            FinishOutcomes();
             Calls();
             JsonSyntax();
             WriterAndStream();
@@ -51,7 +52,7 @@ internal static class Program
         {
             var valid = Envelope(action);
             Case(action, valid);
-            Case(action + " empty message", Change(valid, "message", ""));
+            Case(action + " empty message", Change(valid, "message", ""), action == "finish" ? "empty_finish_message" : null);
             foreach (var name in new[] { "action", "reason", "message" })
             {
                 var code = name == "action" ? "invalid_action" : "missing_" + name;
@@ -59,7 +60,7 @@ internal static class Program
                 Case(action + " null " + name, Change(valid, name, JValue.CreateNull()), code);
                 Case(action + " wrong type " + name, Change(valid, name, new JObject()), code);
             }
-            foreach (var field in new[] { "tool_calls", "decision", "results", "id", "final", "status", "criterion_ref" })
+            foreach (var field in new[] { "tool_calls", "decision", "results", "outcome", "id", "final", "status", "criterion_ref" })
                 if (valid[field] == null) Case(action + " extra " + field, Change(valid, field, JValue.CreateNull()), "wrong_action_fields");
             foreach (var blank in new[] { "", " \t\n", "\u0085\u00a0\u1680\u2000\u2028\u202f\u205f\u3000" })
                 Case(action + " blank reason " + blank.Length, Change(valid, "reason", blank), "missing_reason");
@@ -100,6 +101,41 @@ internal static class Program
         Case("duplicate evidence", Finish(Change(Claim("satisfied"), "evidence", new JArray("call-1", "call-1"))), "duplicate_evidence");
         foreach (var bad in new JToken[] { new JValue("ok"), new JValue("Satisfied"), new JValue(0) })
             Case("bad assessment " + bad, Finish(Change(Claim("satisfied"), "assessment", bad)), "invalid_assessment");
+    }
+
+    private static void FinishOutcomes()
+    {
+        foreach (var value in new JToken[] { JValue.CreateNull(), new JValue("unknown"), new JValue("Completed"), new JValue(1) })
+            Case("bad outcome " + value, Change(Envelope("finish"), "outcome", value), "invalid_outcome");
+        Case("missing outcome", Remove(Envelope("finish"), "outcome"), "invalid_outcome");
+        foreach (var blank in new[] { "", " \r\n\t", "\u0085\u00a0\u1680\u2000\u2028\u202f\u205f\u3000" })
+            Case("blank finish " + blank.Length, Change(Envelope("finish"), "message", blank), "empty_finish_message");
+        Case("direct unable", Change(Envelope("finish"), "outcome", "unable_to_complete"));
+        Case("partial empty", Change(Envelope("finish"), "outcome", "partial"), "contradictory_outcome", schemaValid: true);
+        foreach (var assessment in new[] { "satisfied", "partially_satisfied", "unverified", "not_satisfied" })
+        foreach (var outcome in new[] { "completed", "partial", "unable_to_complete" })
+        {
+            var valid = outcome == "completed" ? assessment == "satisfied" : outcome == "partial"
+                ? assessment == "partially_satisfied" : assessment == "unverified" || assessment == "not_satisfied";
+            Case("outcome " + outcome + " with " + assessment, Change(Finish(Claim(assessment)), "outcome", outcome),
+                valid ? null : "contradictory_outcome", schemaValid: true);
+        }
+        Case("mixed partial", Change(Finish(Claim("satisfied"), Claim("not_satisfied")), "outcome", "partial"));
+        Case("mixed completed", Change(Finish(Claim("satisfied"), Claim("not_satisfied")), "outcome", "completed"),
+            "contradictory_outcome", schemaValid: true);
+        foreach (var schemaTransport in new[] { false, true })
+        {
+            var wire = Change(Envelope("finish"), "message", "").ToString(Formatting.None);
+            if (schemaTransport) wire = "{\"response\":" + wire + "}";
+            Check(ModelProtocolWire.Parse(wire, Tools, Tools, Context, schemaTransport).ErrorCode == "empty_finish_message",
+                "both transports reject silent finish");
+        }
+        Throws(() => ModelProtocolWire.WriteAcceptedDecision("finish", "Reason", "", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed),
+            "writer rejects silent finish");
+        Throws(() => ModelProtocolWire.WriteAcceptedDecision("finish", "Reason", "Answer.", results: new ConversationResultClaim[0]),
+            "writer cannot infer missing outcome");
+        Check(ModelProtocolWire.SchemaGuidance.Contains(ModelProtocolWire.FinishGuidance) &&
+            ModelProtocolWire.JsonObjectGuidance.Contains(ModelProtocolWire.FinishGuidance), "both modes receive assertion/question policy");
     }
 
     private static void Calls()
@@ -242,8 +278,8 @@ internal static class Program
         var root = new JObject { ["action"] = action, ["reason"] = "Reason" };
         if (action == "execute") root["tool_calls"] = new JArray(Call("probe.read"));
         else if (action == "reflection") root["decision"] = "Read the current state before changing it.";
-        else root["results"] = new JArray();
-        root["message"] = "";
+        else { root["outcome"] = "completed"; root["results"] = new JArray(); }
+        root["message"] = action == "finish" ? "Answer." : "";
         return root;
     }
     private static JObject Call(string name)
@@ -251,7 +287,13 @@ internal static class Program
     private static JObject Claim(string assessment)
     { return new JObject { ["summary"] = "Sheet inspected", ["evidence"] = new JArray("call-1"), ["assessment"] = assessment }; }
     private static JObject Finish(params JToken[] claims)
-    { return Change(Envelope("finish"), "results", new JArray(claims)); }
+    {
+        var root = Change(Envelope("finish"), "results", new JArray(claims));
+        var assessments = claims.OfType<JObject>().Select(claim => (string)claim["assessment"]).ToArray();
+        root["outcome"] = assessments.All(value => value == "satisfied") ? "completed" :
+            assessments.Any(value => value == "satisfied" || value == "partially_satisfied") ? "partial" : "unable_to_complete";
+        return root;
+    }
     private static void Check(bool condition, string name)
     { _assertions++; if (!condition) throw new InvalidOperationException(name); }
     private static void Throws(Action action, string name)

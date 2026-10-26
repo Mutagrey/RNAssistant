@@ -24,7 +24,7 @@ def main(directory):
         valid = not errors
         assert valid == (case["schema_valid"] or case["name"] == "duplicate evidence"), (case["name"], [error.message for error in errors])
         if valid != case["parser_valid"]:
-            assert case["name"] in ("omitted optional logical form", "duplicate evidence"), case["name"]
+            assert case["name"] in ("omitted optional logical form", "duplicate evidence") or case["error_code"] == "contradictory_outcome", case["name"]
             projections += 1
         checked += 1
     no_tools = json.loads((root / "schema-no-tools.json").read_text())
@@ -33,7 +33,7 @@ def main(directory):
     for action in ("execute", "reflection", "finish"):
         case = next(case for case in json.loads((root / "cases.json").read_text()) if case["name"] == action)
         assert empty_validator.is_valid({"response": json.loads(case["raw"])}) == (action != "execute")
-    print(f"PASS independent JSON Schema: {checked} cases; {projections} explicit optional-field transport projection; no-tools union.")
+    print(f"PASS independent JSON Schema: {checked} cases; {projections} explicit transport/local semantic differences; no-tools union.")
 
 
 if __name__ == "__main__":

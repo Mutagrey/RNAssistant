@@ -28,12 +28,13 @@ namespace RNAssistant.Core.Agent
         public string Reason { get; private set; }
         public string Message { get; private set; }
         public string Decision { get; private set; }
+        public ConversationOutcome? Outcome { get; private set; }
         public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
         public IReadOnlyList<ToolCallDraft> ToolCalls { get; private set; }
 
         public AgentResponseDraft(string action, string reason, string message,
             IEnumerable<ToolCallDraft> calls = null, string decision = null,
-            IEnumerable<ConversationResultClaim> results = null)
+            IEnumerable<ConversationResultClaim> results = null, ConversationOutcome? outcome = null)
         {
             var snapshot = (calls ?? new ToolCallDraft[0]).ToArray();
             if (!ConversationResponse.IsValidAction(action, snapshot.Length) ||
@@ -46,7 +47,9 @@ namespace RNAssistant.Core.Agent
             if (message == null) throw new ArgumentNullException(nameof(message));
             var claims = results == null ? null : results.ToArray();
             if (claims != null && claims.Any(claim => claim == null)) throw new ArgumentException("Null result claim.", nameof(results));
+            ConversationFinishContract.Validate(action, message, outcome, claims);
             Action = action; Reason = reason; Message = message; Decision = decision;
+            Outcome = outcome;
             Results = claims == null ? null : Array.AsReadOnly(claims);
             ToolCalls = Array.AsReadOnly(snapshot);
         }
@@ -76,6 +79,7 @@ namespace RNAssistant.Core.Agent
         public string Reason { get; private set; }
         public string Message { get; private set; }
         public string Decision { get; private set; }
+        public ConversationOutcome? Outcome { get; private set; }
         public string SourceModelAttemptId { get; private set; }
         public bool Final { get { return Action == ConversationResponse.FinishAction; } }
         public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
@@ -83,7 +87,8 @@ namespace RNAssistant.Core.Agent
 
         public AgentResponse(string action, string reason, string message,
             IEnumerable<ToolCall> calls = null, string decision = null,
-            IEnumerable<ConversationResultClaim> results = null, string sourceModelAttemptId = null)
+            IEnumerable<ConversationResultClaim> results = null, string sourceModelAttemptId = null,
+            ConversationOutcome? outcome = null)
         {
             var snapshot = (calls ?? new ToolCall[0]).ToArray();
             if (!ConversationResponse.IsValidAction(action, snapshot.Length) ||
@@ -96,7 +101,9 @@ namespace RNAssistant.Core.Agent
             if (message == null) throw new ArgumentNullException(nameof(message));
             var claims = results == null ? null : results.ToArray();
             if (claims != null && claims.Any(claim => claim == null)) throw new ArgumentException("Null result claim.", nameof(results));
+            ConversationFinishContract.Validate(action, message, outcome, claims);
             Action = action; Reason = reason; Message = message; Decision = decision;
+            Outcome = outcome;
             SourceModelAttemptId = sourceModelAttemptId;
             Results = claims == null ? null : Array.AsReadOnly(claims);
             ToolCalls = Array.AsReadOnly(snapshot);
@@ -112,6 +119,7 @@ namespace RNAssistant.Core.Agent
         public string Action { get; private set; }
         public string Reason { get; private set; }
         public string Decision { get; private set; }
+        public ConversationOutcome? Outcome { get; private set; }
         public string SourceModelAttemptId { get; private set; }
         public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
         public IReadOnlyList<ToolCall> ToolCalls { get; private set; }
@@ -145,7 +153,7 @@ namespace RNAssistant.Core.Agent
             if (response == null) throw new ArgumentNullException(nameof(response));
             return new AgentMessage(AgentMessageKind.Assistant, response.Message, response.ToolCalls,
                 action: response.Action) { Reason = response.Reason, Decision = response.Decision,
-                    Results = response.Results, SourceModelAttemptId = response.SourceModelAttemptId };
+                    Results = response.Results, Outcome = response.Outcome, SourceModelAttemptId = response.SourceModelAttemptId };
         }
 
         // Already validated, materialized history from an earlier user turn.

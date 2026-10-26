@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Усилен finish в Conversation v8 — 2026-10-27
+
+Owner: Core ModelProtocol / AgentKernel, Application Workspace и shared RunViewState.
+Для finish обязательны непустой ответ и `outcome` модели: `completed`, `partial`,
+`unable_to_complete`. Противоречие с `results` возвращается на format repair;
+schema, writer, typed kernel proposals и replay соблюдают один контракт.
+Outcome сохраняется отдельно от lifecycle, effect health и task verification;
+CLI возвращает exit 5 для честного неполного результата даже без acceptance criteria.
+Общая инструкция определяет finish как утверждение с ответом, кратким обоснованием
+и ограничениями; вопросы идут через `common.questions_ask`. Prompt schema — 57;
+старые finish без outcome не угадываются и не переписываются.
+
+Reflection при нулевом остатке явно требует execute/finish; первое превышение
+получает коррекцию, повторное — `reflection_limit`. Это проверено вместе с format
+repair и сохранением принятого outcome после reopen. Проверки host-neutral:
+179 codec cases, независимая JSON Schema, targeted Harness, оба response modes
+CLI (коррекции без повторной записи; partial/unable → exit 5), shared Web state.
+Windows/Office/WebView2 и поведение реальной модели не квалифицированы.
+I26-03 остаётся открыт для общего доказательства цели: `completed` + `satisfied`
+со ссылкой на успешный read не доказывает запрошенный write. S1b I26-09/10 также
+остаётся отдельным открытым срезом; изменение finish его не закрывает.
+
 ## Исправлено восстановление workspace run без владельца — 2026-10-27
 
 Owner: Application Workspace run control / ProjectChat activation. I26-02 исправлен:

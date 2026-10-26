@@ -10,6 +10,7 @@
     failed: true
   };
   var healthValues = { clean: true, errors: true, unknown: true };
+  var modelOutcomes = { completed: true, partial: true, unable_to_complete: true };
   var assessments = { satisfied: true, partially_satisfied: true,
     unverified: true, not_satisfied: true };
 
@@ -67,6 +68,7 @@
       executionHealth: executionHealth,
       goalVerification: text(source, "GoalVerification") || "not_assessed",
       modelResults: modelResults(source),
+      modelOutcome: text(source, "ModelOutcome"),
       successfulReads: count(source, "SuccessfulReads"),
       verifiedWrites: count(source, "VerifiedWrites"),
       noChangeWrites: count(source, "NoChangeWrites"),
@@ -82,6 +84,8 @@
         healthValues[executionHealth] !== true ||
         result.goalVerification !== "not_assessed" ||
         result.modelResults === null ||
+        (source.ModelOutcome != null && (typeof source.ModelOutcome !== "string" || modelOutcomes[result.modelOutcome] !== true ||
+          normalizedLifecycle !== "completed" || result.reason !== "model_finish")) ||
         (result.modelResults.length > 0 && normalizedLifecycle !== "completed") ||
         result.successfulReads === null || result.verifiedWrites === null || result.noChangeWrites === null ||
         result.unverifiedWrites === null || result.failedCalls === null || result.unknownEffects === null ||
@@ -186,6 +190,7 @@
       tool_step_limit: "Достигнут лимит действий.",
       step_limit_reached: "Достигнут лимит шагов выполнения.",
       reflection_limit: "Модель не смогла перейти от промежуточных решений к ответу. Запуск остановлен.",
+      repeated_tool_no_progress: "Модель повторила отклонённые действия без продвижения. Запуск остановлен.",
       no_tool_progress: "Модель повторила описание прогресса без действия или завершения. Запуск остановлен.",
       outputtruncated: "Ответ модели обрезан по лимиту выходных токенов. Увеличьте лимит ответа или уменьшите объём изменения.",
       repeated_unknown_tool_call: "Результат предыдущего действия неизвестен — проверьте документ перед повтором."
@@ -212,13 +217,12 @@
       ? "Работа остановлена · результат действия неизвестен"
       : viewState.reason === "provider_refused" ? "Отказ провайдера" : "Ошибка выполнения";
     if (viewState.lifecycle === "completed") {
-      var results = viewState.modelResults || [];
-      if (results.some(function (item) { return item.assessment === "not_satisfied"; }))
+      if (viewState.modelOutcome === "unable_to_complete")
         return "Ответ завершён · задача не выполнена по оценке модели";
-      if (results.some(function (item) { return item.assessment === "unverified"; }))
-        return "Ответ завершён · итог не подтверждён по оценке модели";
-      if (results.some(function (item) { return item.assessment === "partially_satisfied"; }))
+      if (viewState.modelOutcome === "partial")
         return "Ответ завершён · задача выполнена частично по оценке модели";
+      if (viewState.modelOutcome === "completed")
+        return "Ответ завершён · задача выполнена по оценке модели";
       return "Ответ завершён";
     }
     return "Выполняется";

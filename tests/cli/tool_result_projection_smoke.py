@@ -82,7 +82,7 @@ def main():
                 "--message", "Find and read app.js, then verify index.html", "--max-iterations", "5",
                 "--auto-confirm", "on", "--max-tool-steps", "4", "--jsonl"], cwd=REPO, env=env,
                 text=True, capture_output=True, timeout=90, check=False)
-            assert run.returncode == 0, (run.stdout, run.stderr)
+            assert run.returncode == 5, (run.stdout, run.stderr)
             assert len(requests) == 6, len(requests)
             find_results = [message["content"] for message in requests[2]["messages"]
                             if message.get("role") == "user" and message.get("content")]

@@ -42,6 +42,7 @@ namespace RNAssistant.Core.Services
                 summary.PendingConfirmation.PendingId,
                 summary.PendingConfirmation.Call.Id,
                 summary.PendingConfirmation.Call.Name);
+            var finish = FinishResponse(messages, summary);
 
             return new RunViewState(
                 summary.RunId,
@@ -59,7 +60,9 @@ namespace RNAssistant.Core.Services
                 summary.Reason,
                 string.IsNullOrWhiteSpace(run.CurrentAction) ? summary.AssistantMessage : run.CurrentAction,
                 run.StartedUtc,
-                modelResults: FinishResults(messages, summary));
+                modelResults: finish?.Results.Select(claim => new ModelResultViewState(
+                    claim.Summary, claim.AssessmentName, claim.Evidence)),
+                modelOutcome: finish?.Outcome.HasValue == true ? ConversationFinishContract.Name(finish.Outcome.Value) : null);
         }
 
         public static RunViewState StampCurrentRun(ChatSession session, bool includeProtocolResponses = false)
@@ -104,21 +107,19 @@ namespace RNAssistant.Core.Services
             return RunViewLifecycles.Running;
         }
 
-        private static IReadOnlyList<ModelResultViewState> FinishResults(
+        private static AgentResponse FinishResponse(
             IEnumerable<ChatMessage> messages, RunSummary summary)
         {
             if (summary.Lifecycle != RunLifecycle.Completed || summary.Reason != "model_finish")
-                return new ModelResultViewState[0];
+                return null;
             var message = (messages ?? Enumerable.Empty<ChatMessage>()).LastOrDefault(item =>
                 item != null && item.Role == "assistant" && item.ProtocolMessage &&
                 string.Equals(item.RunId, summary.RunId, StringComparison.Ordinal));
             if (message == null || message.ResponseProtocolVersion != ConversationResponse.ProtocolVersion)
-                return new ModelResultViewState[0];
+                return null;
             var accepted = ConversationResponseHistoryReader.Read(message);
             return !accepted.Success || accepted.Response.Action != ConversationResponse.FinishAction
-                ? (IReadOnlyList<ModelResultViewState>)new ModelResultViewState[0]
-                : accepted.Response.Results.Select(claim => new ModelResultViewState(
-                    claim.Summary, claim.AssessmentName, claim.Evidence)).ToArray();
+                ? null : accepted.Response;
         }
 
         private static IReadOnlyList<ToolEffectEvidence> CollectEffects(

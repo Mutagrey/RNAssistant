@@ -33,7 +33,7 @@ def finish_response(request):
         elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
             evidence.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
     evidence = list(dict.fromkeys(evidence))
-    return {"action": "finish", "reason": "Report completed tool outcomes.",
+    return {"action": "finish", "outcome": "completed", "reason": "Report completed tool outcomes.",
             "results": [{"summary": "Finished.", "evidence": evidence,
                          "assessment": "satisfied"}] if evidence else [],
             "message": "Finished."}

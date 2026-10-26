@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
         {
             return calls.Length == 0
                 ? new AgentResponseDraft(ConversationResponse.FinishAction, KernelFixtureFinishReason,
-                    "Done; all changes applied.", results: new ConversationResultClaim[0])
+                    "Done; all changes applied.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                 : new AgentResponseDraft(ConversationResponse.ExecuteAction, "Execute the requested call.",
                     "", calls: calls);
         }
@@ -98,7 +98,7 @@ namespace RNAssistant.Harness
             foreach (var message in new[] { "completed", "blocked", "refused" })
             {
                 var f = new KernelFixture(new AgentResponseDraft(ConversationResponse.FinishAction,
-                    "No tool effect is claimed.", message, results: new ConversationResultClaim[0]));
+                    "No tool effect is claimed.", message, results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed));
                 var result = await f.RunAsync();
                 AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle, "wording is not runtime lifecycle");
                 AssertEqual(ExecutionHealth.Clean, result.Summary.ExecutionHealth, "no effects is not an error");
@@ -1125,7 +1125,8 @@ namespace RNAssistant.Harness
                 var claim = new ConversationResultClaim("Observed runtime outcome.",
                     new[] { terminal.Execution.Context.Call.Id }, assessment);
                 return AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
-                    draft.Reason, draft.Message, results: new[] { claim }), result.SourceModelAttemptId);
+                    draft.Reason, draft.Message, results: new[] { claim }, outcome: assessment == ConversationAssessment.Satisfied
+                        ? ConversationOutcome.Completed : ConversationOutcome.UnableToComplete), result.SourceModelAttemptId);
             }
         }
 

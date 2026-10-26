@@ -67,7 +67,7 @@ namespace RNAssistant.Harness
                                         CapabilityToolCatalog.ReadToolId, "fixture.extra");
                                 else
                                     content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                                        "Answer from accepted history.", "History inspected.", results: new ConversationResultClaim[0]);
+                                        "Answer from accepted history.", "History inspected.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                                 var response = new JObject { ["choices"] = new JArray(new JObject {
                                     ["message"] = new JObject { ["content"] = "{\"response\":" + content + "}" } }) };
                                 var bytes = Encoding.UTF8.GetBytes(response.ToString(Newtonsoft.Json.Formatting.None));

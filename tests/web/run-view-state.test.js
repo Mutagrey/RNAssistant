@@ -38,13 +38,19 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.normalize(Object.assign(state("bad-value"), { Lifecycle: "toString" })), null);
   assert.equal(runView.normalize(state("bad-pending-case", "awaiting_confirmation", "clean",
     { pendingId: "pending", toolCallId: "call", toolName: "excel.write_range" })), null);
-  const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish",
+  const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish", ModelOutcome: "partial",
     ModelResults: [{ Summary: "Chart remains unfinished", Assessment: "partially_satisfied",
       Evidence: ["call-1"] }] }));
   assert.equal(partial.modelResults[0].evidence[0], "call-1");
   assert.ok(Object.isFrozen(partial.modelResults) && Object.isFrozen(partial.modelResults[0]));
   assert.match(runView.outcomeLabel(partial), /частично по оценке модели/);
   assert.equal(partial.goalVerification, "not_assessed");
+  assert.equal(partial.modelOutcome, "partial");
+  assert.equal(runView.normalize(Object.assign(state("bad-outcome"), { Reason: "model_finish", ModelOutcome: "unknown" })), null);
+  assert.equal(runView.normalize(Object.assign(state("bad-outcome-type"), { Reason: "model_finish", ModelOutcome: ["completed"] })), null);
+  assert.equal(runView.normalize(Object.assign(state("early-outcome", "running"), { Reason: "model_finish", ModelOutcome: "completed" })), null);
+  const unable = runView.normalize(Object.assign(state("unable"), { Reason: "model_finish", ModelOutcome: "unable_to_complete" }));
+  assert.match(runView.outcomeLabel(unable), /не выполнена по оценке модели/);
   assert.equal(runView.normalize(Object.assign(state("forged"), { ModelResults: [{
     Summary: "No evidence", Assessment: "satisfied", Evidence: ["call-1", "call-1"] }] })), null);
   assert.equal(runView.normalize(Object.assign(state("running-claim", "running"), {
@@ -58,6 +64,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.runNotice(failed).text, runView.failureReasonLabel("provider"),
     "all chat surfaces use the same terminal failure text");
   assert.match(runView.failureReasonLabel("reflection_limit"), /промежуточных решений/);
+  assert.match(runView.failureReasonLabel("repeated_tool_no_progress"), /отклонённые действия/);
   assert.equal(runView.runNotice(runView.normalize(state("completed"))), null);
   assert.equal(runView.sessionRevision({ sessionRevision: 0 }), 0);
   assert.equal(runView.sessionRevision({ SessionRevision: 4 }), null);
@@ -195,7 +202,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   ui.document = { createElement: () => new Node() };
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent.js"), "utf8"), ui,
     { filename: "app-agent.js" });
-  const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish",
+  const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish", ModelOutcome: "partial",
     ModelResults: [{ Summary: "Chart unfinished", Assessment: "partially_satisfied",
       Evidence: ["call-1"] }] }));
   const parent = new Node();
@@ -204,6 +211,11 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.match(flatten(parent), /Chart unfinished/);
   assert.match(flatten(parent), /call-1/);
   assert.match(flatten(parent), /достижение цели отдельно не проверено/);
+  const unable = new Node();
+  ui.appendAgentRunViewState(unable, runView.normalize(Object.assign(state("unable"), {
+    Reason: "model_finish", ModelOutcome: "unable_to_complete" })), "unable");
+  assert.match(flatten(unable), /не выполнена по оценке модели/,
+    "an incomplete direct answer remains visible even without result claims");
   const ordinary = new Node();
   ui.appendAgentRunViewState(ordinary, runView.normalize(state("ordinary")), "run-ordinary");
   assert.equal(ordinary.children.length, 0, "ordinary completed answers have no service card");

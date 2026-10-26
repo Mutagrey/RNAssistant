@@ -110,7 +110,7 @@ namespace RNAssistant.Harness
                 if (attempts == 2) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported");
                 return Task.FromResult(new LlmCompletionResult { Content = attempts == 1 ? "invalid" :
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Report read.", "Done.",
-                        results: new[] { new ConversationResultClaim("Read.", new[] { "E9" }, ConversationAssessment.Satisfied) }) });
+                        results: new[] { new ConversationResultClaim("Read.", new[] { "E9" }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed) });
             });
             var outcome = await protocol.GetResponseAsync(request, null, CancellationToken.None);
             AssertTrue(outcome.Failure == null, "reference projection allows bounded repair/fallback");

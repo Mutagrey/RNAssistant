@@ -93,7 +93,9 @@ release and current source, applies one revision-guarded `files.patch`, reads th
 changed source and retains a checked candidate. Ambiguous anchors and stale reads
 refuse the write. It does not assert browser behavior.
 
-`v8 recovery:` checks configurable/frozen reflection depth, separate format retries,
+`v8 recovery:` checks configurable/frozen reflection depth (including correction and
+repeated over-limit refusal), required finish outcome/nonblank answer, contradiction
+repair and outcome replay, separate format retries,
 strict response transport, bounded output truncation, accepted reasoning after
 persisted reopen, and workspace live/saved presentation. Run
 `node tests/web/stream-render-cost.test.js`, `node tests/web/workspace-chat-v8.test.js`
@@ -101,6 +103,8 @@ and `node tests/web/workspace-chat-progress.test.js` for the corresponding UI pa
 the last checks project/plugin progress bridge routing and uses Playwright with
 optional `BROWSER_EXECUTABLE`. Scripted CLI coverage is
 `tests/cli/conversation_v8_finish_smoke.py` and `tests/cli/response_mode_smoke.py`.
+The finish smoke checks both modes: empty-answer/outcome corrections without write
+replay, and exit 5 for partial/unable model assessments despite Completed/Clean.
 The latter requires `jsonschema` from `tests/RNAssistant.ProtocolTests/requirements.txt`.
 It validates the actual HTTP `json_object` catalog with an independent JSON Schema
 validator: valid read/find/search selectors, incomplete and mixed-selector refusal,

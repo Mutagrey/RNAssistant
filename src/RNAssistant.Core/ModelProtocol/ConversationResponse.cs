@@ -20,13 +20,15 @@ namespace RNAssistant.Core.ModelProtocol
         public string Reason { get; private set; }
         public string Message { get; private set; }
         public string Decision { get; private set; }
+        public ConversationOutcome? Outcome { get; private set; }
+        public string OutcomeName { get { return Outcome.HasValue ? ConversationFinishContract.Name(Outcome.Value) : null; } }
         public bool Final { get { return Action == FinishAction; } }
         public IReadOnlyList<ConversationToolCall> ToolCalls { get { return Array.AsReadOnly(_calls.Select(CloneCall).ToArray()); } }
         public IReadOnlyList<ConversationResultClaim> Results { get; private set; }
 
         internal ConversationResponse(string action, string reason, string message,
             IEnumerable<ConversationToolCall> calls = null, string decision = null,
-            IEnumerable<ConversationResultClaim> results = null)
+            IEnumerable<ConversationResultClaim> results = null, ConversationOutcome? outcome = null)
         {
             var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
             if (!IsValidAction(action, snapshot.Length)) throw new ArgumentException("Action and tool calls disagree.", nameof(action));
@@ -41,10 +43,12 @@ namespace RNAssistant.Core.ModelProtocol
             var claims = results == null ? null : results.ToArray();
             if (claims != null && claims.Any(claim => claim == null))
                 throw new ArgumentException("Results cannot contain null claims.", nameof(results));
+            ConversationFinishContract.Validate(action, message, outcome, claims);
             Action = action;
             Reason = reason;
             Message = message;
             Decision = decision;
+            Outcome = outcome;
             _calls = snapshot.Select(CloneCall).ToArray();
             Results = claims == null ? null : Array.AsReadOnly(claims);
         }
@@ -68,12 +72,15 @@ namespace RNAssistant.Core.ModelProtocol
             else if (Action == ReflectionAction)
                 root["decision"] = Decision;
             else
+            {
+                root["outcome"] = OutcomeName;
                 root["results"] = new JArray(Results.Select(claim => new JObject
                 {
                     ["summary"] = claim.Summary,
                     ["evidence"] = new JArray(claim.Evidence),
                     ["assessment"] = claim.AssessmentName
                 }));
+            }
             root["message"] = Message;
             return root.ToString(Formatting.None);
         }
@@ -86,6 +93,68 @@ namespace RNAssistant.Core.ModelProtocol
 
     // A claim remains model interpretation; it does not upgrade runtime evidence.
     public enum ConversationAssessment { Satisfied, PartiallySatisfied, Unverified, NotSatisfied }
+
+    // Overall task assessment by the model, never a runtime lifecycle/effect verdict.
+    public enum ConversationOutcome { Completed, Partial, UnableToComplete }
+
+    public static class ConversationFinishContract
+    {
+        public static string Name(ConversationOutcome outcome)
+        {
+            switch (outcome)
+            {
+                case ConversationOutcome.Completed: return "completed";
+                case ConversationOutcome.Partial: return "partial";
+                case ConversationOutcome.UnableToComplete: return "unable_to_complete";
+                default: throw new ArgumentOutOfRangeException(nameof(outcome));
+            }
+        }
+
+        public static bool TryRead(string value, out ConversationOutcome outcome)
+        {
+            switch (value)
+            {
+                case "completed": outcome = ConversationOutcome.Completed; return true;
+                case "partial": outcome = ConversationOutcome.Partial; return true;
+                case "unable_to_complete": outcome = ConversationOutcome.UnableToComplete; return true;
+                default: outcome = default(ConversationOutcome); return false;
+            }
+        }
+
+        public static string Contradiction(ConversationOutcome outcome, IEnumerable<ConversationAssessment> assessments)
+        {
+            var values = assessments.ToArray();
+            switch (outcome)
+            {
+                case ConversationOutcome.Completed:
+                    return values.Any(value => value != ConversationAssessment.Satisfied)
+                        ? "completed requires every result to be satisfied; report unfinished or unverified work honestly." : null;
+                case ConversationOutcome.Partial:
+                    return !values.Any(value => value == ConversationAssessment.Satisfied || value == ConversationAssessment.PartiallySatisfied) ||
+                        !values.Any(value => value != ConversationAssessment.Satisfied)
+                        ? "partial requires some achieved work and some incomplete work: partially_satisfied or a mix of satisfied and unsatisfied results." : null;
+                case ConversationOutcome.UnableToComplete:
+                    return values.Any(value => value == ConversationAssessment.Satisfied || value == ConversationAssessment.PartiallySatisfied)
+                        ? "unable_to_complete cannot claim satisfied or partially_satisfied results; use partial for achieved task outcomes." : null;
+                default: throw new ArgumentOutOfRangeException(nameof(outcome));
+            }
+        }
+
+        internal static void Validate(string action, string message, ConversationOutcome? outcome,
+            IReadOnlyList<ConversationResultClaim> results)
+        {
+            if (action != ConversationResponse.FinishAction)
+            {
+                if (outcome.HasValue) throw new ArgumentException("Only finish may contain outcome.", nameof(outcome));
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("finish requires a nonblank answer.", nameof(message));
+            if (!outcome.HasValue) throw new ArgumentException("finish requires an explicit model outcome.", nameof(outcome));
+            if (results == null) throw new ArgumentNullException(nameof(results));
+            var error = Contradiction(outcome.Value, results.Select(claim => claim.Assessment));
+            if (error != null) throw new ArgumentException(error, nameof(results));
+        }
+    }
 
     public sealed class ConversationResultClaim
     {
@@ -151,7 +220,8 @@ namespace RNAssistant.Core.ModelProtocol
         None, InvalidJson, InvalidAction, WrongActionFields, MissingReason, MissingMessage,
         EmptyExecuteCalls, TooManyCalls, InvalidToolCall, MissingDecision, MissingFinishResults,
         InvalidFinishResults, InvalidAssessment, DuplicateEvidence, InvalidContext,
-        UnknownTool, SchemaNotLoaded, InvalidToolSchema, InvalidArguments, InvalidBatch
+        UnknownTool, SchemaNotLoaded, InvalidToolSchema, InvalidArguments, InvalidBatch,
+        EmptyFinishMessage, InvalidOutcome, ContradictoryOutcome
     }
 
     public sealed class ConversationResponseParseResult
@@ -185,6 +255,9 @@ namespace RNAssistant.Core.ModelProtocol
                 case ConversationResponseError.WrongActionFields: return "wrong_action_fields";
                 case ConversationResponseError.MissingReason: return "missing_reason";
                 case ConversationResponseError.MissingMessage: return "missing_message";
+                case ConversationResponseError.EmptyFinishMessage: return "empty_finish_message";
+                case ConversationResponseError.InvalidOutcome: return "invalid_outcome";
+                case ConversationResponseError.ContradictoryOutcome: return "contradictory_outcome";
                 case ConversationResponseError.EmptyExecuteCalls: return "empty_execute_calls";
                 case ConversationResponseError.TooManyCalls: return "too_many_calls";
                 case ConversationResponseError.InvalidToolCall: return "invalid_tool_call";

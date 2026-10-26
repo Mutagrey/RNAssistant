@@ -56,7 +56,7 @@ namespace RNAssistant.Office.Services
                             throw new InvalidOperationException("Accepted v8 decision lacks its model attempt origin.");
                         var decision = AgentTranscript.CreateAssistantMessage(
                             ModelProtocolWire.WriteAcceptedDecision(fact.Response.Action, fact.Response.Reason,
-                                fact.Response.Message, fact.Response.Decision, fact.Response.Results),
+                                fact.Response.Message, fact.Response.Decision, fact.Response.Results, fact.Response.Outcome),
                             _lastModel == null ? null : _lastModel.Completion,
                             responseStatus: fact.Response.Final ? AgentResponseStatuses.Completed : AgentResponseStatuses.InProgress);
                         decision.ProtocolMessage = true;

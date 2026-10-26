@@ -833,7 +833,7 @@ namespace RNAssistant.Harness
                     var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "The corrected read returned the current module source.", "Прочитано.",
                         results: new[] { new ConversationResultClaim("Module source read.",
-                            new[] { read.ExecutionReference.Alias }, ConversationAssessment.Satisfied) });
+                            new[] { read.ExecutionReference.Alias }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
                 session = NewSession(adapter);

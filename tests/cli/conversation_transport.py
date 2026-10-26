@@ -42,6 +42,7 @@ def finish(request, message="Finished.", assessment="satisfied", direct=False):
     if assessment == "satisfied" and last_outcome in ("error", "unknown"):
         assessment = "not_satisfied"
     return {"action": "finish", "reason": "Report the observed outcome.",
+            "outcome": {"satisfied": "completed", "partially_satisfied": "partial", "unverified": "unable_to_complete", "not_satisfied": "unable_to_complete"}[assessment],
             "results": [{"summary": message, "evidence": [evidence[-1]] if evidence else [], "assessment": assessment}] if evidence or assessment != "satisfied" else [],
             "message": message}
 

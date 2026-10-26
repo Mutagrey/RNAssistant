@@ -220,7 +220,7 @@ namespace RNAssistant.Harness
                         {
                             Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                 "Answer the edited prompt once.", "Обновленный ответ.",
-                                results: new ConversationResultClaim[0]),
+                                results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed),
                             PromptTokens = 10,
                             CompletionTokens = 2,
                             TotalTokens = 12

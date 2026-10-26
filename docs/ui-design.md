@@ -279,8 +279,11 @@ Ctrl/Cmd+Enter выполняет «Далее»/«Готово», обычны�
 [Codex App Server: user input](https://learn.chatgpt.com/docs/app-server#toolrequestuserinput)
 с отдельным запросом и подтверждением ответа; точный desktop layout не копируется.
 
-В текущем Conversation v8 частичный, неподтверждённый и невыполненный итог
-`finish.results` выводится как оценка модели с точными ссылками на результаты;
+В текущем Conversation v8 `finish.outcome` выводится через `RunViewState.ModelOutcome`
+как оценка модели. `partial` и `unable_to_complete` получают заметный итог даже при
+пустом `results` прямого ответа; `finish.results` содержит пояснения и точные ссылки.
+UI не выводит общий outcome из отдельных assessments. `finish.message` непустой;
+вопросы пользователю идут через отдельный tool.
 `GoalVerification` остаётся `not_assessed`. Сохранённый `reflection` показан
 как шаг истории без повторного комментария и без превращения в tool result.
 Актуальная ошибка/unknown остаётся плашкой у ввода, подтверждение — отдельной

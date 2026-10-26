@@ -44,7 +44,7 @@ def scripted_response(request, scenario, index):
                 result = json.loads(content.removeprefix('TOOL_RESULT:\n'))
                 if result.get('status') == 'ok':
                     evidence.append(result['tool_call_id'])
-        result = dict(action='finish', reason='Report verified fixture outcomes.', message='Готово.',
+        result = dict(action='finish', reason='Report verified fixture outcomes.', outcome='completed', message='Готово.',
                       results=[dict(summary='Requested file change verified.', evidence=evidence, assessment='satisfied')])
     if request.get('response_format', {}).get('type') == 'json_schema':
         result = {'response': result}

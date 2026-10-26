@@ -80,7 +80,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Answer the request.", "Done", results: new ConversationResultClaim[0])
+                            "Answer the request.", "Done", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                     });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, null,
@@ -112,7 +112,7 @@ namespace RNAssistant.Harness
                     rawCalls++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                         ConversationResponse.FinishAction, "No tool call is needed.", "Done",
-                        results: new ConversationResultClaim[0]) });
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
@@ -211,7 +211,7 @@ namespace RNAssistant.Harness
                 var quoted = AgentTranscript.CreateAssistantMessage(
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "Answer with quoted text.", "{\"quoted\":\"text\"}",
-                        results: new ConversationResultClaim[0]), null, responseStatus: "completed");
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed), null, responseStatus: "completed");
                 quoted.ProtocolMessage = true;
                 quoted.ResponseModelAttemptId = "prior_quoted_finish";
                 current.Messages.Add(quoted);
@@ -242,7 +242,7 @@ namespace RNAssistant.Harness
                     rawCalls++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                         ConversationResponse.FinishAction, "No tool call is needed.", "Done",
-                        results: new ConversationResultClaim[0]) });
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 };
                 var service = CreateConversationRunService(adapter, executor, completion, new ContextCompactionService(completion),
                     () => { boundaryCalls++; return new ModelProtocolClient(completion); });
@@ -318,7 +318,7 @@ namespace RNAssistant.Harness
                     rawCalls++;
                     return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(
                         ConversationResponse.FinishAction, "No tool call is needed.", "Done",
-                        results: new ConversationResultClaim[0]) });
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 });
                 var result = await protocol.GetResponseAsync(request, new ModelProtocolProgress
                 {
@@ -535,7 +535,7 @@ namespace RNAssistant.Harness
                         ? ScriptedVerifiedFinish(session, "Report the completed reads.", "Done", "Sheets inspected.",
                             "common.capabilities_read", "excel.inspect", "excel.inspect")
                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Answer the new request.", "Fresh answer", results: new ConversationResultClaim[0]);
+                            "Answer the new request.", "Fresh answer", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = content });
                 };
                 var requests = new List<ModelProtocolRequest>();
@@ -694,7 +694,7 @@ namespace RNAssistant.Harness
                 modelId["id"] = "MODEL_ID";
                 var values = new[]
                 {
-                    "{\"action\":\"finish\",\"reason\":\"Answer directly.\",\"results\":[],\"message\":\"Old response\",\"status\":\"completed\"}",
+                    "{\"action\":\"finish\",\"reason\":\"Answer directly.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Old response\",\"status\":\"completed\"}",
                     V8Envelope(modelId),
                     V8Envelope(V8Call(), V8Call(write.Id)),
                     V8Envelope(V8Call(), V8Call(external.Id)),
@@ -793,7 +793,7 @@ namespace RNAssistant.Harness
                 {
                     Content = calls <= invalid.Length ? invalid[calls - 1] :
                         ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Answer directly.", "  Accepted.  ", results: new ConversationResultClaim[0]),
+                            "Answer directly.", "  Accepted.  ", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed),
                     ReasoningContent = calls <= invalid.Length ? "REJECTED_REASONING" : "accepted reasoning",
                     PromptTokens = calls * 10,
                     CompletionTokens = calls,
@@ -930,7 +930,7 @@ namespace RNAssistant.Harness
                 if (formats.Count == 1) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "unsupported schema");
                 if (options.ResponseFormat == LlmResponseFormats.JsonObject)
                     AssertTrue(options.ResponseSchemaName == null && options.ResponseSchemaJson == null, "fallback clears strict schema fields");
-                var content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Answer directly.", "Done.", results: new ConversationResultClaim[0]);
+                var content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Answer directly.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                 return Task.FromResult(new LlmCompletionResult { Content = options.ResponseFormat == LlmResponseFormats.JsonSchema
                     ? SchemaTransport(JObject.Parse(content)).ToString(Formatting.None) : content });
             };
@@ -1011,7 +1011,7 @@ namespace RNAssistant.Harness
                 {
                     Content = formats.Count == 1 ? "invalid model response" :
                         ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Answer after fallback.", "Accepted after fallback.", results: new ConversationResultClaim[0])
+                            "Answer after fallback.", "Accepted after fallback.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                 });
             });
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
@@ -1039,7 +1039,7 @@ namespace RNAssistant.Harness
                     throw new LlmRequestException(prompts.Count == 1 ? LlmFailureKind.Timeout : LlmFailureKind.Network, "temporary failure");
                 return Task.FromResult(new LlmCompletionResult { Content = prompts.Count == 2 ? "invalid response" :
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Answer after recovery.", "Recovered.", results: new ConversationResultClaim[0]) });
+                        "Answer after recovery.", "Recovered.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
             }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
             AssertTrue(result.Failure == null, "two transient failures do not consume either protocol response slot");
@@ -1064,7 +1064,7 @@ namespace RNAssistant.Harness
                     throw new LlmRequestException(LlmFailureKind.TransientServer, "gateway unavailable", statusCode: 502);
                 return Task.FromResult(new LlmCompletionResult { Content = calls < 5 ? "invalid response" :
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                        "Answer on the new step.", "Next step.", results: new ConversationResultClaim[0]) });
+                        "Answer on the new step.", "Next step.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
             }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
             var failed = await protocol.GetResponseAsync(NewProtocolRequest(3), null, CancellationToken.None);
             AssertEqual(ModelProtocolFailureKind.Provider, failed.Failure.Kind, "third transient failure ends the step");
@@ -1230,7 +1230,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Projected strict guidance.", messages.First().Content,
                     "transport receives the projected prompt that passed budget admission");
                 var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                    "Answer directly.", "Done.", results: new ConversationResultClaim[0]);
+                    "Answer directly.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                 return Task.FromResult(new LlmCompletionResult {
                     Content = SchemaTransport(JObject.Parse(finish)).ToString(Formatting.None) });
             });
@@ -1852,7 +1852,7 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult
                     {
                         Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                            "Answer the request.", "Done.", results: new ConversationResultClaim[0])
+                            "Answer the request.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)
                     });
                 };
                 var settings = new AppSettings
@@ -2560,7 +2560,7 @@ namespace RNAssistant.Harness
             var toolJson = ModelProtocolWire.WriteAcceptedCall("Probe one compatible tool call.", "TOOL_OK",
                 new ConversationToolCall { Name = "compat.echo", Arguments = new JObject { ["value"] = "A" } });
             var finalJson = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
+                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
             foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {
@@ -2626,7 +2626,7 @@ namespace RNAssistant.Harness
             var toolJson = ModelProtocolWire.WriteAcceptedCall("Probe one compatible tool call.", "TOOL_OK",
                 new ConversationToolCall { Name = "compat.echo", Arguments = new JObject { ["value"] = "A" } });
             var finalJson = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0]);
+                "Probe the terminal answer after a result.", "RESULT_OK", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
             var cases = new List<string[]>
             {
                 new[] { "Any non-empty response", toolJson.Replace("\"A\"", "\"WRONG\""), finalJson.Replace("RESULT_OK", "Any final message") }
@@ -2773,7 +2773,7 @@ namespace RNAssistant.Harness
         private static void ModelProviderErrorsRejectCompletion()
         {
             var answer = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                "No tool call is needed.", "Done.", results: new ConversationResultClaim[0]);
+                "No tool call is needed.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
             var delta = new JObject { ["choices"] = new JArray(new JObject {
                 ["delta"] = new JObject { ["content"] = answer } }) }.ToString(Formatting.None);
             const string error = "{\"error\":{\"message\":\"Unexpected value: 3d_scene_authoring\",\"type\":\"invalid_request\"}}";

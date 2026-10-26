@@ -172,7 +172,7 @@ internal static class Program
 
         var directStore = new KernelStore();
         var finish = new AgentResponseDraft(ConversationResponse.FinishAction, "Direct answer.", "answer",
-            results: new ConversationResultClaim[0]);
+            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
         var direct = new AgentKernel(new QueueModel(new[] { AgentModelResult.Accepted(finish, "attempt_direct") }),
             tools, directStore).RunAsync(new AgentRunRequest("run3", "run3", "question",
                 new AgentRunLimits(3, 2)), CancellationToken.None).GetAwaiter().GetResult();
@@ -184,9 +184,9 @@ internal static class Program
         var execute = new AgentResponseDraft(ConversationResponse.ExecuteAction, "Read source.", "",
             calls: new[] { new ToolCallDraft("test.read", "{}") });
         var emptyFinish = new AgentResponseDraft(ConversationResponse.FinishAction, "Premature.", "promise",
-            results: new ConversationResultClaim[0]);
+            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
         var validFinish = new AgentResponseDraft(ConversationResponse.FinishAction, "Have result.", "done",
-            results: new[] { new ConversationResultClaim("Read", new[] { "call_1" }, ConversationAssessment.Satisfied) });
+            results: new[] { new ConversationResultClaim("Read", new[] { "call_1" }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
         var callModel = new QueueModel(new[] { AgentModelResult.Accepted(execute, "attempt_execute"),
             AgentModelResult.Accepted(emptyFinish, "attempt_empty"), AgentModelResult.Accepted(validFinish, "attempt_finish") });
         var run = new AgentKernel(callModel, callTools, callStore, newCallId: () => "call_1").RunAsync(
@@ -220,7 +220,7 @@ internal static class Program
             AgentModelResult.Accepted(execute, "attempt_after_restart"),
             AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
                 "Read complete.", "answer", results: new[] { new ConversationResultClaim("Read",
-                    new[] { "call_2" }, ConversationAssessment.Satisfied) }), "attempt_done") }),
+                    new[] { "call_2" }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed), "attempt_done") }),
             afterRestartTools, restartStore, newCallId: () => "call_2").ContinueAsync(restored,
             CancellationToken.None).GetAwaiter().GetResult();
         Expect(afterRestart.Summary.Lifecycle == RunLifecycle.Completed && afterRestartTools.Executions == 1 &&
@@ -239,7 +239,7 @@ internal static class Program
             AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.ExecuteAction,
                 "Read stale source.", "", calls: new[] { new ToolCallDraft(Tool, "{}") }), "attempt_stale"),
             AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
-                "Answer revised request.", "done", results: new ConversationResultClaim[0]), "attempt_revised") });
+                "Answer revised request.", "done", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed), "attempt_revised") });
         lateModel.BeforeSend = (request, token) => {
             if (request.StepId == "run_steer_late:1") lateInput.Add("Do not read the source.");
         };
@@ -262,7 +262,7 @@ internal static class Program
             AgentModelResult.Accepted(new AgentResponseDraft(ConversationResponse.FinishAction,
                 "Report first result.", "done", results: new[] {
                     new ConversationResultClaim("First read is available.",
-                        new[] { "call_steer_1" }, ConversationAssessment.Satisfied) }), "attempt_after_steer") });
+                        new[] { "call_steer_1" }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed), "attempt_after_steer") });
         var nextCall = 0;
         var batch = new AgentKernel(batchModel, batchTools, batchStore,
             newCallId: () => "call_steer_" + ++nextCall, input: batchInput)

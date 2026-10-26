@@ -197,7 +197,7 @@ namespace RNAssistant.Harness
                                     ["message"] = new JObject { ["content"] =
                                         ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer from the retained Office result.", "Done.",
-                                            results: new ConversationResultClaim[0]) } }) };
+                                            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) } }) };
                                 var bytes = Encoding.UTF8.GetBytes(reply.ToString(Formatting.None));
                                 context.Response.ContentType = "application/json";
                                 context.Response.ContentLength64 = bytes.Length;
