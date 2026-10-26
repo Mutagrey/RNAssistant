@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
@@ -123,7 +125,8 @@ namespace RNAssistant.Core.Llm
                     Streaming = settings.StreamResponses,
                     ContextMessages = wireMessages,
                     RequestComposition = LlmRequestCompositionBuilder.Describe(apiBuild, messageList,
-                        requestOptions.TraceContextReceipt, requestOptions),
+                        requestOptions.TraceContextReceipt, requestOptions,
+                        requestOptions.TraceMessageContentChanged),
                     RequestId = requestDiagnostics.RequestId,
                     Purpose = requestOptions.TracePurpose,
                     Endpoint = traceEndpoint,
@@ -666,6 +669,7 @@ namespace RNAssistant.Core.Llm
                 entry.MessageIndex = entries.Count;
                 entry.EstimatedWireMessageTokens = null;
                 if (entry.Parts == null) entry.Parts = new List<ContextMessagePresentation>();
+                var wire = alignedWire ? serializedMessages[entries.Count] as JObject : null;
                 if (changedContent != null && entries.Count < changedContent.Length && changedContent[entries.Count])
                 {
                     entry.Presentation = ContextPresentationKind.Unknown;
@@ -674,11 +678,36 @@ namespace RNAssistant.Core.Llm
                     foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
                         link.BodyIncludedInMessage = null;
                 }
+                if (source != null && wire != null && !WireContainsSourceText(wire, message))
+                {
+                    entry.Presentation = ContextPresentationKind.Unknown;
+                    entry.Reason = "Сохранённый текст запроса не подтверждает доставку исходного сообщения.";
+                    entry.Parts.Clear();
+                    foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
+                        link.BodyIncludedInMessage = null;
+                }
                 if ((message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null)
                 {
                     entry.Parts.Add(new ContextMessagePresentation { Kind = "message", Presentation = entry.Presentation, Reason = entry.Reason });
                     if (alignedParts)
-                        entry.Parts.AddRange(wireParts[entries.Count]);
+                        foreach (var part in wireParts[entries.Count])
+                        {
+                            if (part == null) continue;
+                            var captured = JsonConvert.DeserializeObject<ContextMessagePresentation>(
+                                JsonConvert.SerializeObject(part));
+                            if (captured.Presentation != ContextPresentationKind.Excluded &&
+                                !WireContainsAttachmentPart(wire, message, captured))
+                            {
+                                captured.Presentation = ContextPresentationKind.Unknown;
+                                captured.Reason = "Сохранённый запрос не подтверждает эту часть вложения.";
+                                captured.PartIndex = null;
+                                captured.PageNumber = null;
+                                captured.SelectedCharacters = null;
+                                captured.ContentSha256 = null;
+                                captured.ByteLength = null;
+                            }
+                            entry.Parts.Add(captured);
+                        }
                     else
                         entry.Parts.Add(new ContextMessagePresentation { Kind = "attachments", Presentation = ContextPresentationKind.Unknown,
                             Reason = "Текст и медиа выбраны transport; точные переданные части доступны в JSON запроса." });
@@ -702,7 +731,6 @@ namespace RNAssistant.Core.Llm
                     (message.Attachments?.Count ?? 0) == 0 && message.AttachmentAnalysis == null &&
                     (changedContent.Length == 0 || !changedContent[entries.Count]))
                 {
-                    var wire = serializedMessages[entries.Count] as JObject;
                     if (wire != null && wire["content"]?.Type == JTokenType.String &&
                         string.Equals((string)wire["role"], "tool", StringComparison.Ordinal) &&
                         string.Equals((string)wire["tool_call_id"], message.ToolCallId, StringComparison.Ordinal) &&
@@ -722,6 +750,139 @@ namespace RNAssistant.Core.Llm
             }
             return entries;
         }
+
+        private static bool WireContainsSourceText(JObject wire, ChatMessage message)
+        {
+            string text;
+            if (wire == null || message == null ||
+                !string.Equals((string)wire["role"], message.Role, StringComparison.Ordinal) ||
+                !TryWireText(wire, out text)) return false;
+            if (string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals((string)wire["tool_call_id"], message.ToolCallId, StringComparison.Ordinal))
+                return false;
+            var calls = (message.ToolCalls ?? new List<LlmToolCall>()).Where(call => call != null).ToArray();
+            var wireCalls = wire["tool_calls"] as JArray;
+            if (calls.Length != (wireCalls?.Count ?? 0)) return false;
+            for (var index = 0; index < calls.Length; index++)
+                if (!string.Equals((string)wireCalls[index]["id"], calls[index].Id, StringComparison.Ordinal) ||
+                    !string.Equals((string)wireCalls[index]["type"],
+                        string.IsNullOrWhiteSpace(calls[index].Type) ? "function" : calls[index].Type,
+                        StringComparison.Ordinal) ||
+                    !string.Equals((string)wireCalls[index]["function"]?["name"], calls[index].Name,
+                        StringComparison.Ordinal) ||
+                    !string.Equals((string)wireCalls[index]["function"]?["arguments"],
+                        string.IsNullOrWhiteSpace(calls[index].ArgumentsJson) ? "{}" : calls[index].ArgumentsJson,
+                        StringComparison.Ordinal)) return false;
+            var source = message.Content ?? string.Empty;
+            return (message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null
+                ? source.Length > 0 && text.StartsWith(source, StringComparison.Ordinal)
+                : string.Equals(text, source, StringComparison.Ordinal);
+        }
+
+        private static bool TryWireText(JObject wire, out string text)
+        {
+            text = null;
+            var content = wire?["content"];
+            if (content?.Type == JTokenType.String)
+                text = (string)content;
+            else if (content is JArray parts && parts.Count > 0 &&
+                string.Equals((string)parts[0]?["type"], "text", StringComparison.Ordinal) &&
+                parts[0]?["text"]?.Type == JTokenType.String)
+                text = (string)parts[0]["text"];
+            return text != null;
+        }
+
+        private static bool WireContainsAttachmentPart(JObject wire, ChatMessage message,
+            ContextMessagePresentation part)
+        {
+            if (wire == null || message == null || part == null ||
+                !string.Equals((string)wire["role"], message.Role, StringComparison.Ordinal) ||
+                string.IsNullOrEmpty(part.SourceAttachmentId)) return false;
+            var matches = (message.Attachments ?? new List<ChatAttachment>())
+                .Where(item => item != null && item.Id == part.SourceAttachmentId).Take(2).ToArray();
+            if (matches.Length != 1) return false;
+            if (part.Kind == "attachment_analysis")
+            {
+                string text;
+                var analysis = message.AttachmentAnalysis;
+                return analysis?.AttachmentIds?.Contains(part.SourceAttachmentId) == true &&
+                    !string.IsNullOrEmpty(analysis.Content) && TryWireText(wire, out text) &&
+                    text.IndexOf(analysis.Content, StringComparison.Ordinal) >= 0 &&
+                    text.IndexOf(analysis.Content, text.IndexOf(analysis.Content, StringComparison.Ordinal) + 1,
+                        StringComparison.Ordinal) < 0;
+            }
+            if (part.Kind == "attachment_text")
+            {
+                string text;
+                if (!TryWireText(wire, out text) || !part.SelectedCharacters.HasValue ||
+                    !part.ByteLength.HasValue || string.IsNullOrEmpty(part.ContentSha256)) return false;
+                var array = wire["content"] as JArray;
+                if (array == null ? part.PartIndex.HasValue : part.PartIndex != 0) return false;
+                var marker = "[Attachment: " + matches[0].FileName + "]" + Environment.NewLine;
+                var start = text.IndexOf(marker, StringComparison.Ordinal);
+                if (start < 0 || text.IndexOf(marker, start + marker.Length, StringComparison.Ordinal) >= 0)
+                    return false;
+                start += marker.Length;
+                if (part.SelectedCharacters.Value < 0 || part.SelectedCharacters.Value > text.Length - start)
+                    return false;
+                var selected = text.Substring(start, part.SelectedCharacters.Value);
+                var suffix = part.Presentation == ContextPresentationKind.Fragment
+                    ? Environment.NewLine + "[Content truncated]" + Environment.NewLine + "[End attachment]"
+                    : Environment.NewLine + "[End attachment]";
+                if (text.IndexOf(suffix, start + selected.Length, StringComparison.Ordinal) != start + selected.Length)
+                    return false;
+                var bytes = Encoding.UTF8.GetBytes(selected);
+                using (var sha = SHA256.Create())
+                    return bytes.Length == part.ByteLength.Value &&
+                        string.Equals(HashHex(sha.ComputeHash(bytes)), part.ContentSha256, StringComparison.Ordinal);
+            }
+            var media = wire["content"] as JArray;
+            if (media == null || !part.PartIndex.HasValue || part.PartIndex < 1 ||
+                part.PartIndex >= media.Count) return false;
+            var selectedPart = media[part.PartIndex.Value] as JObject;
+            if (part.Kind == "image_url")
+            {
+                if (!string.Equals((string)selectedPart?["type"], "image_url", StringComparison.Ordinal))
+                    return false;
+                var url = (string)selectedPart?["image_url"]?["url"];
+                var prefix = "data:" + part.ContentType + ";base64,";
+                return url != null && url.StartsWith(prefix, StringComparison.Ordinal) &&
+                    MatchesBase64(url, prefix.Length, part);
+            }
+            return part.Kind == "input_audio" &&
+                string.Equals((string)selectedPart?["type"], "input_audio", StringComparison.Ordinal) &&
+                MatchesBase64((string)selectedPart?["input_audio"]?["data"], 0, part);
+        }
+
+        private static bool MatchesBase64(string encoded, int start, ContextMessagePresentation part)
+        {
+            if (encoded == null || start < 0 || start > encoded.Length || !part.ByteLength.HasValue ||
+                string.IsNullOrEmpty(part.ContentSha256)) return false;
+            var count = encoded.Length - start;
+            if (count == 0 || count % 4 != 0) return false;
+            var padding = encoded[encoded.Length - 1] == '=' ? 1 : 0;
+            if (padding == 1 && encoded[encoded.Length - 2] == '=') padding++;
+            if ((long)count / 4 * 3 - padding != part.ByteLength.Value) return false;
+            var chars = new char[4096];
+            using (var sha = SHA256.Create())
+            {
+                for (var offset = 0; offset < count;)
+                {
+                    var length = Math.Min(chars.Length, count - offset);
+                    encoded.CopyTo(start + offset, chars, 0, length);
+                    byte[] bytes;
+                    try { bytes = Convert.FromBase64CharArray(chars, 0, length); }
+                    catch (FormatException) { return false; }
+                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
+                    offset += length;
+                }
+                sha.TransformFinalBlock(new byte[0], 0, 0);
+                return string.Equals(HashHex(sha.Hash), part.ContentSha256, StringComparison.Ordinal);
+            }
+        }
+
+        private static string HashHex(byte[] bytes)
+        { return BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant(); }
 
         private static void Trace(LlmRequestOptions requestOptions, LlmTraceRecord record)
         {

@@ -3983,6 +3983,58 @@ namespace RNAssistant.Harness
                     "saved request event keeps the complete typed manifest beside exact payload bytes");
                 AssertTrue(JToken.DeepEquals(JToken.FromObject(trace.RequestComposition), saved.Data["RequestComposition"]),
                     "saved request event retains the exact typed composition beside its payload");
+                var transportParts = entries.Select(entry => entry.Parts
+                    .Where(part => part.Kind != "message").ToList()).ToList();
+                options.TraceContextReceipt.Messages[1].EvidenceLinks.Add(new ContextEvidenceLink
+                    { BodyIncludedInMessage = true });
+                var verified = LlmClient.DescribeWireMessages(messages, options.TraceContextReceipt,
+                    new bool[0], transportParts, wire, settings);
+                AssertEqual(ContextPresentationKind.Full, verified[1].Parts.Single(part => part.Kind == "message").Presentation,
+                    "saved mixed text preserves its exact source prefix");
+                AssertTrue(verified[1].Parts.Where(part => part.SourceAttachmentId != null &&
+                    part.Presentation != ContextPresentationKind.Excluded).All(part =>
+                        part.Presentation == ContextPresentationKind.Full),
+                    "selected text and media are verified against serialized request parts");
+                var changedText = (JArray)wire.DeepClone();
+                ((JObject)((JArray)changedText[1]["content"])[0])["text"] = "different";
+                var unproved = LlmClient.DescribeWireMessages(messages, options.TraceContextReceipt,
+                    new bool[0], transportParts, changedText, settings);
+                AssertEqual(ContextPresentationKind.Unknown, unproved[1].Parts.Single(part => part.Kind == "message").Presentation,
+                    "changed serialized text cannot inherit source-body delivery");
+                AssertTrue(unproved[1].EvidenceLinks.Single().BodyIncludedInMessage == null &&
+                    unproved[1].Parts.Single(part => part.Kind == "attachment_text").Presentation == ContextPresentationKind.Unknown,
+                    "changed mixed text clears its source and attachment proofs");
+                AssertEqual(ContextPresentationKind.Full, unproved[1].Parts.Single(part =>
+                    part.SourceAttachmentId == audio.Id).Presentation,
+                    "unchanged audio remains proven independently of changed text");
+                var changedImage = (JArray)wire.DeepClone();
+                ((JObject)((JArray)changedImage[1]["content"])[1]["image_url"])["url"] =
+                    "data:image/png;base64," + Convert.ToBase64String(new byte[] { 9, 9, 9, 9 });
+                var mediaMismatch = LlmClient.DescribeWireMessages(messages, options.TraceContextReceipt,
+                    new bool[0], transportParts, changedImage, settings);
+                AssertEqual(ContextPresentationKind.Unknown, mediaMismatch[1].Parts.Single(part =>
+                    part.SourceAttachmentId == image.Id).Presentation,
+                    "changed image bytes lose their delivery proof");
+                AssertEqual(ContextPresentationKind.Full, mediaMismatch[1].Parts.Single(part =>
+                    part.SourceAttachmentId == pdf.Id && part.PartIndex.HasValue).Presentation,
+                    "a different exact media part keeps its own proof");
+                var changedRole = (JArray)wire.DeepClone();
+                ((JObject)changedRole[1])["role"] = "assistant";
+                var wrongWireRole = LlmClient.DescribeWireMessages(messages, options.TraceContextReceipt,
+                    new bool[0], transportParts, changedRole, settings);
+                AssertTrue(wrongWireRole[1].Parts.All(part => part.Presentation != ContextPresentationKind.Full),
+                    "a changed serialized role invalidates source and attachment delivery claims");
+                var transformed = LlmClient.DescribeWireMessages(messages, options.TraceContextReceipt,
+                    new[] { false, true, false }, transportParts, wire, settings);
+                AssertTrue(transformed[1].Presentation == ContextPresentationKind.Unknown &&
+                    transformed[1].Parts.Single(part => part.SourceAttachmentId == audio.Id).Presentation == ContextPresentationKind.Full,
+                    "a transformed source does not erase independently verified attachment delivery");
+                options.TraceContextReceipt.Messages[1].Role = "assistant";
+                var mismatchedRole = LlmClient.DescribeWireMessages(messages, options.TraceContextReceipt,
+                    new bool[0], transportParts, wire, settings);
+                AssertEqual(ContextPresentationKind.Unknown, mismatchedRole[1].Parts.Single(part =>
+                    part.Kind == "message").Presentation,
+                    "a receipt for another role cannot claim the serialized message");
             });
         }
 

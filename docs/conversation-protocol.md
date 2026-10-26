@@ -815,7 +815,13 @@ and attachments replaced by auxiliary analysis, carry explicit reasons. A PDF
 omission count is recorded only when the renderer confirms the total page count;
 a PDF skipped before rendering has an unknown count. The message-level label
 remains `Unknown` when transport augments or selects attachments; individual
-parts retain their proved labels. Trace metadata never enters provider JSON,
+parts retain their proved labels. Before saving the trace, source role/text and
+tool-call correlation are checked against the serialized message. Selected text
+is checked at its unique attachment boundary with UTF-8 length/digest; image and
+audio parts are checked by final position, type, decoded byte length and digest.
+A mismatch clears only that source or part's delivery proof, while separately
+verified parts remain visible. Changed compiler content stays `Unknown` even when
+its unchanged attachments are independently verified. Trace metadata never enters provider JSON,
 which remains the authority for exact sent content. Older request events without
 the manifest retain unknown attachment attribution. A host-neutral mixed-request
 fixture compares the saved UTF-8 request bytes and the persisted manifest across
@@ -839,7 +845,10 @@ final wire message plus request-format overhead. The diagnostic method is
 `base_text_media_v1`: text uses the existing UTF-8 estimate; images/audio retain
 their existing media heuristics, never the length of base64 transport strings.
 Whole messages form disjoint groups from unique compiler source IDs and exact
-ordinals. Missing, duplicate, misaligned or unknown source kinds remain
+ordinals and matching source roles. A recorded post-compiler content projection
+leaves the whole message's source group `Unattributed`; selected attachments can
+still identify the whole message as containing attachments. Missing, duplicate,
+misaligned or unknown source kinds remain
 `Unattributed`; they still contribute their full estimate. Selected attachments
 label the whole containing message, including its text, without counting each
 attachment again. Omitted attachments add no share. Instructions/catalogue in a

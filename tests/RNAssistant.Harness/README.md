@@ -309,7 +309,9 @@ restored expansion without a payload reread in both themes at narrow width.
 `model context: saved request composition`, `storage: model request trace precedes
 dispatch` and `storage: mixed attachment manifest matches saved request` check
 disjoint baseline costs, exact compiler attribution, selected media estimates and
-persisted metadata outside the provider payload. The same two Web tests reject
+persisted metadata outside the provider payload. The mixed fixture also changes
+serialized text, role and image bytes independently: unproved parts become Unknown
+without erasing unchanged media. The same two Web tests reject
 inconsistent composition snapshots and check chart/message navigation without
 normalizing to admission or API usage. `INSPECTOR_SCREENSHOTS` saves
 browser captures. Next-request workspace estimates and native Windows/WebView2

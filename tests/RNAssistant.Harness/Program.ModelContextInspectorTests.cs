@@ -56,6 +56,12 @@ namespace RNAssistant.Harness
             AssertEqual(LlmRequestCompositionGroup.ToolActivity, composition.Items[5].Group, "native result stays in operation group");
             var attributed = LlmClient.DescribeWireMessages(messages, receipt);
             AssertEqual(ContextPresentationKind.Full, attributed[0].Presentation, "unique source retains its presentation");
+            var changed = LlmRequestCompositionBuilder.Describe(build, messages, receipt, options,
+                new[] { true, false, false, false, false, false });
+            AssertEqual(LlmRequestCompositionGroup.Unattributed, changed.Items[0].Group,
+                "a transformed final message cannot inherit its source cost category");
+            AssertEqual(composition.TotalEstimatedTokens, changed.TotalEstimatedTokens,
+                "unknown transformed attribution retains the whole request estimate");
             foreach (var kind in new[] { "working-set", "resource-change", "observation-notice", "repeated-read", "context-unavailable" })
             {
                 receipt.Messages[2].Kind = kind;

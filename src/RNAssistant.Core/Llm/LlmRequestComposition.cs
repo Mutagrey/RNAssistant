@@ -33,7 +33,8 @@ namespace RNAssistant.Core.Llm
     internal static class LlmRequestCompositionBuilder
     {
         internal static LlmRequestComposition Describe(LlmApiMessageBuildResult build,
-            IList<ChatMessage> messages, ContextReceipt receipt, LlmRequestOptions options)
+            IList<ChatMessage> messages, ContextReceipt receipt, LlmRequestOptions options,
+            bool[] changedContent = null)
         {
             var visible = messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)).ToList();
             if (build.Messages.Count != visible.Count || build.MessageBaseTokenEstimates.Count != visible.Count ||
@@ -43,7 +44,9 @@ namespace RNAssistant.Core.Llm
             for (var index = 0; index < visible.Count; index++)
             {
                 var source = sources[index];
-                var group = Classify(source?.Kind);
+                var projected = changedContent != null && changedContent.Length > 0 &&
+                    (changedContent.Length != visible.Count || changedContent[index]);
+                var group = projected ? LlmRequestCompositionGroup.Unattributed : Classify(source?.Kind);
                 if (build.MessageParts[index].Any(part => part != null && !string.IsNullOrEmpty(part.SourceAttachmentId) &&
                     part.Presentation != ContextPresentationKind.Excluded)) group = LlmRequestCompositionGroup.MessagesWithAttachments;
                 result.Items.Add(new LlmRequestCompositionItem { MessageIndex = index, Group = group,
@@ -94,6 +97,8 @@ namespace RNAssistant.Core.Llm
                 ContextMessagePresentation[] candidates;
                 if (!string.IsNullOrEmpty(id) && sourceCounts[id] == 1 && sources.TryGetValue(id, out candidates) &&
                     candidates.Length == 1 && candidates[0].MessageIndex == index && positions[index] == 1 &&
+                    (string.IsNullOrEmpty(candidates[0].Role) ||
+                     string.Equals(candidates[0].Role, visible[index].Role, StringComparison.Ordinal)) &&
                     candidates[0].Presentation != ContextPresentationKind.Excluded)
                     result[index] = candidates[0];
             }

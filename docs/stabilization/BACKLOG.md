@@ -104,7 +104,11 @@ page errors. Причина не установлена; при следующе
    без file picker остаётся whole-Blob fallback; его memory profile и реальное
    Windows/WebView2 поведение требуют target-host evidence.
 2. **Полнота manifest и metadata.** Owner: Core model-context/LLM diagnostics и
-   resource providers. Дополнять доказуемую атрибуцию преобразованных сообщений,
+   resource providers. Сохранённый смешанный запрос теперь проверяет исходный
+   текст/роль и выбранные attachment text/media части по итоговому wire; неверные
+   части остаются `Unknown`, корректные независимые части сохраняются. Проекция
+   текста после compiler не наследует группу стоимости исходника. Дополнять
+   доказуемую атрибуцию остальных преобразованных сообщений,
    coverage будущих специализированных selectors и cost/capabilities конкретных
    views. Model find уже скрывает application-only binary views и сообщает известные
    MIME/byteLength; для прямого сохранённого UTF-8 текста и JSON `tree` есть только

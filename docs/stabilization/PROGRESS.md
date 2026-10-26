@@ -25,6 +25,19 @@ the [archived comparison](../audits/tool-profile-comparison.md#typed-short-refer
 is not qualification of revision 2. Broad defaults remain. Windows/Office/WebView2
 and updated live-model quality evidence stay open.
 
+## Saved mixed-request attribution verified against wire — 2026-10-26
+
+Owner: Core LLM request trace and composition. Before publishing a saved request
+manifest, source text/role/call correlation and selected attachment text/media
+parts are checked against the serialized request. Changed portions lose only
+their delivery proof; unchanged parts remain attributable. Projected whole
+messages keep their estimated cost in `Unattributed` unless actual selected
+attachments identify the mixed-message group. The mixed saved-request and
+model-context composition fixtures pass host-neutral. This does not allocate one
+message's cost among multiple resources or prove provider receipt. The remaining
+Wave 1–2 coverage and Windows/Office/WebView2 gates stay open; later Wiki work
+should use the canonical conversation contract and this status.
+
 ## Office next-request preview uses active skill and wire preparation — 2026-10-26
 
 Owner: Office PromptContextInspectorService / ModelContextPreview. The preview now
