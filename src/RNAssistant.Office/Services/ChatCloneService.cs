@@ -40,6 +40,8 @@ namespace RNAssistant.Office.Services
             {
                 FormatVersion = session.FormatVersion,
                 Revision = session.Revision,
+                ExecutionReferenceSequence = session.ExecutionReferenceSequence,
+                ResourceReferenceIndex = session.ResourceReferenceIndex.ToList(),
                 Id = session.Id,
                 ParentSessionId = session.ParentSessionId,
                 ParentSessionRevision = session.ParentSessionRevision,
@@ -369,6 +371,8 @@ namespace RNAssistant.Office.Services
                 ResponseStatus = message.ResponseStatus,
                 RunViewState = message.RunViewState,
                 ToolCallId = message.ToolCallId,
+                ExecutionReference = message.ExecutionReference,
+                ResourceModelReferences = message.ResourceModelReferences.ToList(),
                 ResultStepId = message.ResultStepId,
                 ExecutionProgress = message.ExecutionProgress,
                 AcceptedCallOrigin = message.AcceptedCallOrigin,

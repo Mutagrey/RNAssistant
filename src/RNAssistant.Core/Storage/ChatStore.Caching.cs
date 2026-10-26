@@ -342,6 +342,7 @@ namespace RNAssistant.Core.Storage
             return sessionEvent != null &&
                 (string.Equals(sessionEvent.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
                  string.Equals(sessionEvent.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal) ||
+                 string.Equals(sessionEvent.Type, SessionEventTypes.LlmRequest, StringComparison.Ordinal) ||
                  string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal));
         }
 

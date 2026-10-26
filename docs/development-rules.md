@@ -79,7 +79,10 @@ ModelProtocol.
 - Исключения ограничены exact public tool/skill id, когда это реальная выбираемая
   semantic identity, и runtime-generated `tool_call_id` транспортного Tool Result.
   `tool_call_id` нужен только для сопоставления принятого вызова с результатом,
-  никогда не является argument и не создаётся моделью.
+  никогда не является argument и не создаётся моделью. В model projection он имеет
+  короткое типизированное имя `E1`; finish цитирует это имя по ADR-0018. `R1@v2`
+  допускается только как метка наблюдения в owned context header: это не runtime
+  revision, не target инструмента и не authority. Канонические значения остаются закрытыми.
 - Resource — данные, Tool — действие. Resource read не выдаёт execution authority.
 - Safety-critical решение не принимается по словам в model message, exception text
   или UI label.

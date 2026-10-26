@@ -33,6 +33,7 @@ namespace RNAssistant.Core.ModelProtocol
         // ModelProtocol validates sequential batch membership; runtime alone owns accepted call IDs.
         public ModelProtocolCallContext CallContext { get; set; }
         public LlmRequestOptions Options { get; set; }
+        public Func<IReadOnlyList<ChatMessage>, IReadOnlyList<ChatMessage>> ProjectReferences { get; set; }
     }
 
     // Presentation controls carry no repair instruction or attempt count. StreamUpdate
@@ -76,6 +77,7 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ModelProtocolResult
     {
         public ConversationResponse Response { get; private set; }
+        public IReadOnlyList<string> DeliveredExecutionReferences { get; private set; } = new string[0];
         // Provider-native refusal is not a model-authored conversation envelope.
         public string ProviderRefusal { get; private set; }
         // Only an accepted completion may cross the protocol boundary.
@@ -90,14 +92,15 @@ namespace RNAssistant.Core.ModelProtocol
         private ModelProtocolResult() { }
 
         internal static ModelProtocolResult Accepted(ConversationResponse response, LlmCompletionResult completion,
-            object contextUsage, string sourceModelAttemptId)
+            object contextUsage, string sourceModelAttemptId, IReadOnlyList<string> deliveredReferences = null)
         {
             if (string.IsNullOrWhiteSpace(sourceModelAttemptId))
                 throw new ArgumentException("Accepted response requires its source model attempt ID.", nameof(sourceModelAttemptId));
             return new ModelProtocolResult
             {
                 Response = response, Completion = completion, ContextUsage = contextUsage,
-                SourceModelAttemptId = sourceModelAttemptId
+                SourceModelAttemptId = sourceModelAttemptId,
+                DeliveredExecutionReferences = Array.AsReadOnly((deliveredReferences ?? new string[0]).ToArray())
             };
         }
 

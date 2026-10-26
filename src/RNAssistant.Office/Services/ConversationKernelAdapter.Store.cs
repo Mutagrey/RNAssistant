@@ -31,7 +31,8 @@ namespace RNAssistant.Office.Services
             if (events.Count == 0 || events[events.Count - 1].Sequence != _session.Revision)
                 throw new InvalidOperationException("Canonical finish evidence is not current.");
             return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(events,
-                _session.Id, runId, turnId, acceptedCallIds, results, _executor.Payloads));
+                _session.Id, runId, turnId, acceptedCallIds, results, _executor.Payloads,
+                _lastModel?.DeliveredExecutionReferences ?? new string[0]));
         }
 
         public async Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)

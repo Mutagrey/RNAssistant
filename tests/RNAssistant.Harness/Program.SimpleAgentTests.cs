@@ -1206,7 +1206,7 @@ namespace RNAssistant.Harness
                             item.AcceptedCallOrigin != null &&
                             (item.ToolName == VbaToolCatalog.WriteModule ||
                              item.ToolName == ResourceToolCatalog.ReadToolId))
-                            .Select(item => item.ToolCallId).ToArray();
+                            .Select(item => item.ExecutionReference.Alias).ToArray();
                         AssertEqual(3, evidence.Length, "finish cites the write and before/after reads");
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the divergent effect honestly.", "Модуль Module1 обновлён.",
@@ -1313,7 +1313,7 @@ namespace RNAssistant.Harness
                             item.AcceptedCallOrigin != null &&
                             (item.ToolName == VbaToolCatalog.WriteModule ||
                              outcome == "unknown" && item.ToolName == ResourceToolCatalog.ReadToolId))
-                            .Select(item => item.ToolCallId).ToArray();
+                            .Select(item => item.ExecutionReference.Alias).ToArray();
                         AssertEqual(outcome == "unknown" ? 2 : 1, evidence.Length,
                             "finish cites the accepted write and any required inspection");
                         content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
@@ -2283,7 +2283,7 @@ namespace RNAssistant.Harness
                     {
                         var evidence = session.Messages.Where(message => message.AcceptedCallOrigin != null &&
                             (message.ToolName == VbaToolCatalog.RunMacro || message.ToolName == "excel.inspect"))
-                            .Select(message => message.ToolCallId).ToArray();
+                            .Select(message => message.ExecutionReference.Alias).ToArray();
                         AssertEqual(2, evidence.Length, "macro dispatch and subsequent inspection are cited");
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report macro dispatch without claiming an effect.", "Макрос выполнен.",
@@ -2481,7 +2481,7 @@ namespace RNAssistant.Harness
                             "The refreshed write completed.", "Изменение подтверждено.",
                             results: new[] { new ConversationResultClaim(
                                 "The VBA change was applied after a current read.",
-                                new[] { applied.ToolCallId }, ConversationAssessment.Satisfied) });
+                                new[] { applied.ExecutionReference.Alias }, ConversationAssessment.Satisfied) });
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
@@ -2570,7 +2570,7 @@ namespace RNAssistant.Harness
                                 "The skill load was refused by the context budget.",
                                 "Навык не подключён: контекст не вмещает полный запрос.",
                                 results: new[] { new ConversationResultClaim("The requested skill could not be loaded.",
-                                    new[] { refused.ToolCallId }, ConversationAssessment.NotSatisfied) });
+                                    new[] { refused.ExecutionReference.Alias }, ConversationAssessment.NotSatisfied) });
                         }
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
@@ -2817,17 +2817,17 @@ namespace RNAssistant.Harness
                             item.ExecutionProgress?.Outcome == (initialHealth == "unknown" ? ToolExecutionOutcome.Unknown : ToolExecutionOutcome.Error));
                         var skill = session.Messages.Last(item => item.ToolName == "common.skills_upsert" &&
                             item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
-                        var sheetEvidence = new List<string> { sheet.ToolCallId };
+                        var sheetEvidence = new List<string> { sheet.ExecutionReference.Alias };
                         if (initialHealth == "unknown")
                             sheetEvidence.Add(session.Messages.Last(item => item.ToolName == ResourceToolCatalog.ReadToolId &&
-                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok).ToolCallId);
+                                item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok).ExecutionReference.Alias);
                         scriptedResponse = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report both observed outcomes.", "Проверка листа недоступна; skill сохранён.",
                             results: new[] {
                                 new ConversationResultClaim("Sheet creation was not verified.", sheetEvidence,
                                     initialHealth == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied),
                                 new ConversationResultClaim("The requested skill was saved.",
-                                    new[] { skill.ToolCallId }, ConversationAssessment.Satisfied)
+                                    new[] { skill.ExecutionReference.Alias }, ConversationAssessment.Satisfied)
                             });
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
@@ -3452,7 +3452,7 @@ namespace RNAssistant.Harness
                                 "The write outcome remains uncertain after inspection.",
                                 "Состояние листа проверено; создание не подтверждено.",
                                 results: new[] { new ConversationResultClaim("Sheet creation remains unverified.",
-                                    new[] { uncertain.ToolCallId, inspected.ToolCallId }, ConversationAssessment.Unverified) });
+                                    new[] { uncertain.ExecutionReference.Alias, inspected.ExecutionReference.Alias }, ConversationAssessment.Unverified) });
                         }
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });

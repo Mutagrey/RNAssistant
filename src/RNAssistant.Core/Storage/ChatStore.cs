@@ -302,8 +302,10 @@ namespace RNAssistant.Core.Storage
                         throw new ChatConcurrencyException("The chat must be persisted before trace events can be appended.");
                     }
                     var pending = new List<PendingSessionEvent>();
+                    ResourceReferenceAllocator traceReferences = null;
                     if (string.Equals(type, SessionEventTypes.LlmRequest, StringComparison.Ordinal))
                     {
+                        traceReferences = AllocateTraceResourceReferences(session, dataToken);
                         pending.Add(PendingEvent(SessionEventTypes.StepStarted,
                             BuildStepLifecycleData(dataToken, "running", false, null), null,
                             runId, turnId, correlatedStepId));
@@ -331,6 +333,7 @@ namespace RNAssistant.Core.Storage
                         session.StorageTailByteOffset,
                         pending,
                         null);
+                    if (traceReferences != null) session.ResourceReferenceIndex = traceReferences.Index;
                     AdvanceHeaderCache(path, session.Id, session.Revision, session.StorageHeadHash,
                         session.StorageByteLength, appended);
                     AdvanceProjectionCache(path, session.Id, session.Revision, session.StorageHeadHash,
@@ -855,6 +858,8 @@ namespace RNAssistant.Core.Storage
                 throw new ChatConcurrencyException("Chat storage changed while this session was open. Reload the chat before saving again.");
             }
 
+            AllocateExecutionReferences(session, stored, commit);
+            AllocateResourceReferences(session, stored, commit);
             var previousRevision = session.Revision;
             var previousUpdatedUtc = session.UpdatedUtc;
             var durableRevision = previousRevision;
@@ -887,6 +892,8 @@ namespace RNAssistant.Core.Storage
                         writes.AddRange(commit.RemovedMessageIds.Select(id => Operation(SessionOperationTypes.MessageRemove,
                             new JObject { ["Id"] = id })));
                         projectedAfter["Messages"] = projectedBefore["Messages"]?.DeepClone() ?? new JArray();
+                        projectedAfter["ResourceReferenceIndex"] = projectedBefore["ResourceReferenceIndex"]?.DeepClone() ?? new JArray();
+                        projectedAfter["ExecutionReferenceSequence"] = projectedBefore["ExecutionReferenceSequence"]?.DeepClone() ?? new JValue(0L);
                         var replay = new ProjectionReplayState(projectedAfter);
                         ApplyOperations(projectedAfter, writes, replay);
                         replay.Materialize(projectedAfter);

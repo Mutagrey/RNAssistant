@@ -31,8 +31,8 @@ namespace RNAssistant.Core.ModelProtocol
 
         public IReadOnlyList<ChatMessage> ProjectMessages(IReadOnlyList<ChatMessage> messages)
         {
-            return Options.ResponseFormat == LlmResponseFormats.JsonSchema
-                ? ModelProtocolWire.ProjectSchemaGuidance(ProjectSchemaMessages(messages)) : messages;
+            return ModelReferenceProjection.Project(Options.ResponseFormat == LlmResponseFormats.JsonSchema
+                ? ModelProtocolWire.ProjectSchemaGuidance(ProjectSchemaMessages(messages)) : messages);
         }
 
         private IReadOnlyList<ChatMessage> ProjectSchemaMessages(IReadOnlyList<ChatMessage> messages)
@@ -66,7 +66,8 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 Settings = _settings, AcceptedMessages = snapshot.Messages, ContextSnapshot = snapshot,
                 CallableTools = Tools, RunnableCatalog = runnableCatalog, CallContext = _context, Options = Options,
-                CompileRepair = compileRepair, ProjectJsonSchemaMessages = ProjectSchemaMessages
+                CompileRepair = compileRepair, ProjectJsonSchemaMessages = ProjectSchemaMessages,
+                ProjectReferences = ModelReferenceProjection.Project
             };
         }
     }

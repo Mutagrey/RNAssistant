@@ -27,6 +27,8 @@ namespace RNAssistant.Core.Services
                 .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
             var activeIds = new HashSet<string>(active.Select(item => item.Id), StringComparer.Ordinal);
             var runId = session.LastRun?.RunId ?? history.LastOrDefault(item => !string.IsNullOrEmpty(item.RunId))?.RunId;
+            var latestTerminal = history.LastOrDefault(message => message.RunId == runId && message.ExecutionReference != null &&
+                message.Activity == null && message.AcceptedCallOrigin == null && message.ToolResultProtocolVersion != 0);
             var selected = new HashSet<string>(StringComparer.Ordinal);
             var laterSuccesses = new List<ChatMessage>();
             for (var index = history.Count - 1; index >= 0; index--)
@@ -42,8 +44,8 @@ namespace RNAssistant.Core.Services
                     result.Bodies.Add(new Candidate(call, message, false));
                 ToolResultWireReadResult wire; string error;
                 if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
-                    message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok) continue;
-                var mandatory = wire.Result.Status == ToolResultStatus.Unknown ||
+                    message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok && message != latestTerminal) continue;
+                var mandatory = message == latestTerminal || wire.Result.Status == ToolResultStatus.Unknown ||
                     message.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch;
                 var recovery = message.ExecutionProgress?.Recovery;
                 if (message.RunId == runId && recovery != null && recovery.RetryPolicy != ToolRetryPolicy.None &&

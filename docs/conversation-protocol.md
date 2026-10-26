@@ -1,7 +1,9 @@
 # Conversation JSON flow
 
 The current `main` uses the [v8 response contract](protocols/CONVERSATION_RESPONSE_V8.md)
-and format-8 execution streams. Dated v7 audit and qualification records below
+and format-8 execution streams with [typed short references](decisions/ADR-0018-typed-model-references.md).
+Formats 6/7 remain read-only. Intermediate 9/10 candidates have no compatibility path.
+Format-8 history must satisfy the current accepted-call and reference contract. Dated v7 audit and qualification records below
 are historical and do not define the current wire contract.
 
 RNAssistant uses one `Core/Agent/AgentKernel`, invoked by Office's
@@ -136,6 +138,14 @@ model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema,
 bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and
 `action` are never execution evidence.
+
+ChatStore assigns `E1`, `E2`, … in the accepted-call commit. The shared model
+projection puts the same alias into historical call/result correlation fields;
+raw model calls still contain only `name` and `arguments`. Finish citations must
+resolve to a terminal accepted operation of this run and have been delivered in
+the successful model request. Canonical IDs remain runtime-owned. Resource labels
+`R1` / `R1@v2` identify a scoped resource / observed revision; they are neither
+finish evidence nor tool arguments. Native transport pairing remains canonical.
 
 The workspace prompt includes Core's `AgentPromptDefaults.StructuredResponseContract`,
 the same complete response contract used by Office defaults. Both response formats

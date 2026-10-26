@@ -217,6 +217,13 @@ Common skills в Office фильтруются host; Workspace получает 
 
 ## Что далее
 
+Актуализация 2026-10-26: этап 1 выполнен в объёме раздела выше; для этапа 2 есть
+broad/compact пилот, но его lowercase-кандидат не квалифицирует финальные E/R ссылки.
+Текущий chat format и model wire — 8. Повтор на финальном контракте и P7 mixed-language
+задачи остаются открытыми; этапы 3–5 ниже не завершены. UI Inspector показывает
+ссылки и краткую легенду, а inline E/R links в ленте ещё не реализованы.
+Точный следующий scope — [обновлённый Tools plan](../proposals/tools-architecture-plan.md#remaining-work-after-typed-references--2026-10-26).
+
 | Этап | Файлы / owner | Зависимости | Минимальная проверка и приёмка |
 |---|---|---|---|
 | 1. Descriptions и dependencies | Core WorkspaceSkillProvider; Office BuiltInSkillProvider, ExcelBuiltInSkillProvider; host skill declarations; catalogs выше | Нынешний MVP | Host/skill effective-pack fixtures: нет unavailable required tools; documented optional fallback; scope search описан; нет лишних обязательных reads |
@@ -229,5 +236,6 @@ Common skills в Office фильтруются host; Workspace получает 
 exact ToolRuntime binding и source-owner mutation journaling. Следующая файловая миграция
 должна следовать принятому workspace-first направлению, а не создавать параллельный store.
 Требуют отдельного согласования: публичный unified mutation contract, судьба managed
-Markdown/Plan artifacts, расширение исполнения кода и изменение finish admission.
+Markdown/Plan artifacts, расширение исполнения кода. Изменение finish references уже согласовано в ADR-0018;
+дальнейшее ослабление admission этим не разрешено.
 Version preparation не закрывает Windows/Office qualification.

@@ -212,6 +212,8 @@ namespace RNAssistant.Office
                     source.DocumentTitle,
                     ChatSessionService.BuildForkTitle(source));
                 fork.ParentSessionId = source.Id;
+                fork.ExecutionReferenceSequence = source.ExecutionReferenceSequence;
+                fork.ResourceReferenceIndex = source.ResourceReferenceIndex.ToList();
                 fork.DocumentAuthorityId = source.DocumentAuthorityId;
                 fork.DocumentPath = source.DocumentPath;
                 fork.ParentSessionRevision = source.Revision;

@@ -27,6 +27,11 @@ direct cutover объясняют порядок уже выполненной �
 [Аудит оставшихся различий Office/workspace](audits/office-workspace-preparation-audit.md)
 фиксирует общие компоненты, разные профили tools и следующий cutover.
 
+[Аудит коротких ссылок модели](audits/model-reference-contract-review.md)
+разделяет runtime IDs, finish references, semantic targets и Inspector aliases;
+содержит исходный аудит. Согласованное решение и реализация —
+[ADR-0018: типизированные ссылки](decisions/ADR-0018-typed-model-references.md) и canonical v8 contract.
+
 [Парное сравнение broad/compact профилей](audits/tool-profile-comparison.md)
 фиксирует реальные траектории, размеры запросов и ограничения пилота.
 

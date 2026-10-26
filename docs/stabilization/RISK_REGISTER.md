@@ -25,6 +25,26 @@ proves every history/role/authority case or changing host state. Real-model and
 Windows/Office/WebView2 parity remain unverified; do not present this as exact
 live-request qualification.
 
+## Model result reference boundary — 2026-10-26
+
+Owner: Core ModelProtocol/context projection/admission. Implemented per
+[ADR-0018](../decisions/ADR-0018-typed-model-references.md): persisted `E` operation
+references, scoped `R` resource/version labels, exact delivered/current-run terminal
+gates and common Office/workspace projection within current chat format 8. Raw GUID
+fallback is absent. Formats 6/7 remain read-only; intermediate 9/10 and old reference
+shapes have no compatibility path and never trigger data deletion. Product version is unchanged. The duplicate
+Inspector resource allocator is removed: message and saved-request observations share
+one ChatStore registry, and resource rows group by canonical identity. Missing bindings
+remain visible without aliases; they never become guessed execution/resource links.
+
+[Live evidence](../audits/tool-profile-comparison.md#typed-short-reference-repeat--2026-10-26)
+for the withdrawn revision 1 completes all 8 protocol runs but passes 5/8 task contracts.
+It does not qualify uppercase revision 2. Open model-quality risks:
+copy-via-create, incorrect resource search, raw-call ID imitation (3 repaired
+proposals), resource citations in finish (4 corrected proposals). Short references
+are not task acceptance, and no default tool-profile switch is justified. Native
+Windows/Office/WebView2 delivery and formal release qualification remain open.
+
 ## Workspace directory discovery loses directories — 2026-10-26
 
 Fixed host-neutral; owner: Core resource schema / Application WorkspaceResourceHandler.

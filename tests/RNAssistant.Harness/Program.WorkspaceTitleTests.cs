@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void WorkspaceAcceptedCallHistory(bool strict = false)
+        private static void WorkspaceAcceptedCallHistory(bool strict = false, bool rejectFinish = false)
         {
             WithTempPaths(paths =>
             {
@@ -33,13 +33,14 @@ namespace RNAssistant.Harness
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/");
                     listener.Start();
                     var served = 0;
-                    var requests = new string[3];
+                    var expectedRequests = rejectFinish ? 4 : 3;
+                    var requests = new string[expectedRequests];
                     string sessionId = null;
                     var server = Task.Run(async () =>
                     {
                         try
                         {
-                            while (served < 3)
+                            while (served < expectedRequests)
                             {
                                 var context = await listener.GetContextAsync().ConfigureAwait(false);
                                 var number = Interlocked.Increment(ref served);
@@ -51,13 +52,19 @@ namespace RNAssistant.Harness
                                             new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject() },
                                             new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject { ["query"] = "missing" } }
                                         }).ToJson()
-                                    : number == 2
+                                    : number < expectedRequests
                                         ? ScriptedVerifiedFinish(new ChatStore(paths).Load(sessionId),
                                             "Report the resource search.", "Первый ответ.", "Resources inspected.",
                                             "common.resources_find", "common.resources_find")
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer the follow-up from persisted history.", "История читается.",
                                             results: new ConversationResultClaim[0]);
+                                if (rejectFinish && number == 2)
+                                {
+                                    var invalid = JObject.Parse(content);
+                                    invalid["results"][0]["evidence"] = new JArray("r1");
+                                    content = invalid.ToString(Newtonsoft.Json.Formatting.None);
+                                }
                                 if (strict)
                                 {
                                     AssertEqual("json_schema", (string)JObject.Parse(requests[number - 1])["response_format"]?["type"],
@@ -88,7 +95,7 @@ namespace RNAssistant.Harness
                             var first = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                                 SessionId = sessionId, Message = "Посмотри ресурсы", Mode = ChatModes.Agent
                             }, settings, () => "test-key").GetAwaiter().GetResult();
-                            AssertEqual(RunLifecycle.Completed, first.Summary.Lifecycle, "first workspace turn completes");
+                            AssertEqual(RunLifecycle.Completed, first.Summary.Lifecycle, "first workspace turn completes: " + first.Summary.Reason + " " + first.Summary.AssistantMessage);
                             var runView = service.ReadState(workspace, sessionId).RunViewState;
                             AssertEqual(first.Summary.RunId, runView.RunId,
                                 "workspace chat exposes the same typed run state as Office");
@@ -97,7 +104,21 @@ namespace RNAssistant.Harness
                             var calls = service.GetSession(workspace, sessionId).Messages.Where(message =>
                                 message.Role == "assistant" && message.AcceptedCallOrigin != null &&
                                 message.ToolName == "common.resources_find").ToArray();
+                            if (rejectFinish)
+                            {
+                                AssertEqual(3, first.Summary.IterationsUsed, "rejected finish consumes a step of the same run");
+                                AssertTrue(requests[2].Contains("unknown_evidence") && requests[2].Contains("Available terminal references"),
+                                    "correction feedback supplies exact available references");
+                            }
                             AssertEqual(2, calls.Length, "accepted read batch has two durable per-call records");
+                            AssertTrue(calls.Select(call => call.ExecutionReference.Alias).SequenceEqual(new[] { "E1", "E2" }),
+                                "whole batch has distinct stable typed references");
+                            var nextWire = JObject.Parse(requests[1]);
+                            var nextContents = string.Join("\n", nextWire["messages"].Select(item => (string)item["content"]));
+                            AssertTrue(calls.All(call => !nextContents.Contains(call.ToolCallId)),
+                                "model message bodies expose aliases, never canonical GUIDs");
+                            AssertTrue(nextContents.Contains("\"id\":\"E1\"") && nextContents.Contains("\"tool_call_id\":\"E1\""),
+                                "model receives both accepted call and result with the same short reference");
                             AssertTrue(calls.All(call => !string.IsNullOrWhiteSpace(call.ToolCallId) &&
                                 (string)JObject.Parse(call.Content)["tool_calls"]?[0]?["name"] == call.ToolName &&
                                 JObject.Parse(call.Content)["tool_calls"]?.Count() == 1),
@@ -119,7 +140,7 @@ namespace RNAssistant.Harness
                             }, settings, () => "test-key").GetAwaiter().GetResult();
                             AssertEqual(RunLifecycle.Completed, next.Summary.Lifecycle, "next turn reads durable call history");
                             AssertEqual("История читается.", next.Summary.AssistantMessage, "next turn receives model answer");
-                            var modelMessages = (JArray)JObject.Parse(requests[2])["messages"];
+                            var modelMessages = (JArray)JObject.Parse(requests[expectedRequests - 1])["messages"];
                             AssertTrue(modelMessages.Any(item => (string)item["role"] == "assistant" &&
                                 (string)item["content"] == "Первый ответ."),
                                 "next request contains accepted final narration without a protocol envelope");
@@ -198,7 +219,7 @@ namespace RNAssistant.Harness
                                     "calls from a broken v8 batch sequence cannot be rejoined");
                                 AssertTrue(batchService.FindAcceptedInput(workspace, invalidBatch) == null,
                                     "bad v8 batch origin does not accept a new input");
-                                AssertEqual(3, served, "bad v8 batch origin cannot cause a model request");
+                                AssertEqual(expectedRequests, served, "bad v8 batch origin cannot cause a model request");
                             }
                         }
                         forged = new ChatStore(paths).Load(sessionId);
@@ -225,7 +246,7 @@ namespace RNAssistant.Harness
                             catch (InvalidOperationException error) { rejected = error; }
                             AssertTrue(rejected != null && rejected.Message.Contains("Stored workspace tool result is invalid"),
                                 "a result whose saved tool name differs from its wire is refused before replay");
-                            AssertEqual(3, served, "corrupt result cannot cause another model request");
+                            AssertEqual(expectedRequests, served, "corrupt result cannot cause another model request");
                         }
                     }
                     finally { listener.Stop(); }

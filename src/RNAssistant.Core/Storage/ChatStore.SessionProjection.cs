@@ -86,6 +86,11 @@ namespace RNAssistant.Core.Storage
                     _replay = new ProjectionReplayState(_root);
                     return;
                 }
+                if (sessionEvent.Type == SessionEventTypes.LlmRequest)
+                {
+                    if (_root != null) ApplyResourceReferences(_root, sessionEvent.Data);
+                    return;
+                }
                 if (!string.Equals(sessionEvent.Type, SessionEventTypes.SessionCommit, StringComparison.Ordinal)) return;
                 if (_root == null || sessionEvent.Data == null)
                 {
@@ -312,6 +317,7 @@ namespace RNAssistant.Core.Storage
             {
                 if (operation == null || string.IsNullOrWhiteSpace(operation.Type)) continue;
                 var data = operation.Data ?? new JObject();
+                ApplyResourceReferences(root, data["Value"]);
                 switch (operation.Type)
                 {
                     case SessionOperationTypes.SessionMetadataSet:
@@ -335,10 +341,13 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.RunEnded:
                         root["LastRun"] = CloneValue(data["Value"]);
                         break;
+                    case SessionOperationTypes.ToolCallRecorded:
+                        ApplyExecutionReference(root, data["Value"]);
+                        replay.Upsert("Messages", data["Value"]);
+                        break;
                     case SessionOperationTypes.MessageUpdated:
                     case SessionOperationTypes.UserMessageAppended:
                     case SessionOperationTypes.AssistantMessageAppended:
-                    case SessionOperationTypes.ToolCallRecorded:
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:
                     case SessionOperationTypes.ToolExecutionFinished:

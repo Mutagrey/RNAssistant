@@ -848,11 +848,11 @@ namespace RNAssistant.Harness
                         var receipts = 0;
                         foreach (var message in messages)
                         {
-                            ToolResultWireReadResult wire; string error;
-                            if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
-                                wire.Name != CapabilityToolCatalog.ReadToolId) continue;
+                            if (!(message.Content ?? "").StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal)) continue;
+                            var wire = JObject.Parse(message.Content.Substring("TOOL_RESULT:\n".Length));
+                            if ((string)wire["name"] != CapabilityToolCatalog.ReadToolId) continue;
                             receipts++;
-                            AssertTrue(wire.Data["descriptor"] == null && (bool?)wire.Data["schemaInRequest"] == true,
+                            AssertTrue(wire["data"]["descriptor"] == null && (bool?)wire["data"]["schemaInRequest"] == true,
                                 "compiler omits duplicate schema history after admission in " + responseMode);
                         }
                         AssertEqual(2, receipts, "both schema reads remain as compact result receipts");
@@ -1393,7 +1393,14 @@ namespace RNAssistant.Harness
                                 result.ModelResourceRefs)), null));
                     }
 
-                    store.Save(session);
+                    var accepted = session.Messages.Where(message => message.AcceptedCallOrigin != null).ToArray();
+                    var summary = new RunSummary(session.LastRun.RunId, session.LastRun.TurnId, RunLifecycle.Running,
+                        new ToolCounts(), 1, 0, "", null, null);
+                    store.CommitRun(session, new RNAssistant.Core.Persistence.ConversationRunCommit(
+                        new AgentRunEvent(AgentRunEventKind.ResponseAccepted, summary,
+                            response: new AgentResponse(ConversationResponse.ExecuteAction, "Read requested schemas.", "",
+                                accepted.Select(message => new ToolCall(message.ToolCallId, message.ToolName, "{}")))),
+                        accepted, updated: session.Messages.Where(message => message.AcceptedCallOrigin == null)));
                     modelSession.EndResponse("after-overflow");
                     if (oversized)
                     {

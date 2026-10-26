@@ -63,8 +63,8 @@
 | Alias | Сущность |
 |---|---|
 | `R1@v3` | Resource + exact revision |
-| `E12` | Exact observation/evidence |
-| `O8` | Tool invocation/operation |
+| `O12` | Exact observation/evidence |
+| `E8` | Tool invocation/operation |
 | `Q14` | Model request/context snapshot |
 | `T1` | Task |
 | `S3` | Step |
@@ -90,11 +90,11 @@ R6@v1#crop=10,20,200,100
 
 Граф **производный из событий**:
 ```text
-O8 --reads--> R1@v3 --observed_as--> E12
-E12 --covers--> R1@v3#lines=40-90
-O9 --mutates--> R1@v3 --produces--> R1@v4
-Q14 --delivered--> E12
-C2 --verified_by--> E18
+E8 --reads--> R1@v3 --observed_as--> O12
+O12 --covers--> R1@v3#lines=40-90
+E9 --mutates--> R1@v3 --produces--> R1@v4
+Q14 --delivered--> O12
+C2 --verified_by--> O18
 R7 --derived_from--> R2@v1
 ```
 
@@ -166,7 +166,7 @@ freeze authority/catalog/event high-water
  "requestRef":"Q14","authoritySnapshot":"opaque",
  "messages":[
   {"ordinal":0,"role":"system","kind":"core","estimatedTokens":800},
-  {"ordinal":1,"role":"tool","operationRef":"O8","evidenceRef":"E12",
+  {"ordinal":1,"role":"tool","operationRef":"E8","evidenceRef":"O12",
    "resourceRef":"R1@v3","delivery":"excerpt",
    "coverage":{"kind":"lines","start":40,"end":90},"estimatedTokens":1100}
  ],
@@ -238,3 +238,6 @@ freeze authority/catalog/event high-water
 8. Документация, ADR и migration map соответствуют коду.
 
 **Первый шаг агенту:** выполнить только Wave 0, представить таблицу `accept/adapt/reject` и минимальный план Wave 1; не начинать широкий рефакторинг до проверки текущего устройства.
+
+Уточнение 2026-10-26: определения ссылок подчиняются [ADR-0018 revision 2](../../decisions/ADR-0018-typed-model-references.md).
+E/R выдаёт ChatStore; Inspector не нумерует их повторно. O — наблюдение, Q — запрос.

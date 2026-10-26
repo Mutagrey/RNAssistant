@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
-        private const int SqliteProjectionVersion = 2;
+        private const int SqliteProjectionVersion = 4;
         private static readonly object SqliteProviderSync = new object();
         private static bool _sqliteProviderReady;
         private long _sqliteProjectionFullBuildCount;
@@ -394,6 +394,11 @@ namespace RNAssistant.Core.Storage
             }
             if (root == null || !(item.Data is JObject))
                 throw new JsonException("Chat projection commit has no seed.");
+            if (item.Type == SessionEventTypes.LlmRequest)
+            {
+                ApplyResourceReferences(root, item.Data);
+                return;
+            }
             var operations = item.Data["Operations"] as JArray;
             if (operations == null) throw new JsonException("Chat projection operations are missing.");
             foreach (var raw in operations)
@@ -402,6 +407,7 @@ namespace RNAssistant.Core.Storage
                 if (token == null) throw new JsonException("Chat projection operation must be an object.");
                 var type = (string)token["Type"];
                 var data = token["Data"] as JObject ?? new JObject();
+                ApplyResourceReferences(root, data["Value"]);
                 switch (type)
                 {
                     case SessionOperationTypes.SessionMetadataSet:
@@ -420,10 +426,13 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.RunEnded:
                         root["LastRun"] = CloneValue(data["Value"]);
                         break;
+                    case SessionOperationTypes.ToolCallRecorded:
+                        ApplyExecutionReference(root, data["Value"]);
+                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
+                        break;
                     case SessionOperationTypes.MessageUpdated:
                     case SessionOperationTypes.UserMessageAppended:
                     case SessionOperationTypes.AssistantMessageAppended:
-                    case SessionOperationTypes.ToolCallRecorded:
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:
                     case SessionOperationTypes.ToolExecutionFinished:

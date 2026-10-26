@@ -1,5 +1,30 @@
 # Stabilization progress
 
+## One reference owner and uppercase types — 2026-10-26
+
+Owner: Core ChatStore / ModelProtocol and read-only Inspector. [ADR-0018 revision 2](../decisions/ADR-0018-typed-model-references.md)
+uses `E` for accepted execution, `R` for resources, `O` for observations and `Q` for
+requests. The rejected lowercase/uppercase workaround is removed. Message and saved
+request observations use one allocator and the same event-backed reference index;
+Inspector only reads bindings and groups by scope + URI + revision. Unbound old
+metadata remains visible without invented links. Chat format stays 8 per the user's
+predeployment decision; intermediate 9/10 and earlier reference shapes have no compatibility
+path. Prompt 56 / reference revision 2 apply within format 8. Formats 6/7 stay read-only;
+product version is unchanged.
+
+Focused reference, Inspector, trace persistence and Web UI checks pass, including
+mixed message/request versions, restart, stale append and unbound historical rows.
+Final format-8 reference/Inspector checks, Web UI checks, Chrome layout and
+ValidateVersionFormat pass. Diagnostic search now includes a short E/R/O/Q legend;
+[legend](../audits/evidence/references-v8-legend.png) and
+[resource](../audits/evidence/references-v8-resource.png) screenshots use synthetic
+fixtures in Chrome, not Office. Chat narration/action summaries and diagnostic
+navigation exist; inline clickable E/R citations in the chat feed remain a UI gap.
+Earlier broader checks and live 5/8 task results belong to the previous candidate;
+the [archived comparison](../audits/tool-profile-comparison.md#typed-short-reference-repeat--2026-10-26)
+is not qualification of revision 2. Broad defaults remain. Windows/Office/WebView2
+and updated live-model quality evidence stay open.
+
 ## Office next-request preview uses active skill and wire preparation — 2026-10-26
 
 Owner: Office PromptContextInspectorService / ModelContextPreview. The preview now

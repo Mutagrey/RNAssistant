@@ -645,8 +645,8 @@ namespace RNAssistant.Harness
                     var original = inspector().Query(session, new ModelContextQuery { RequestEventId = q1.EventId }, CancellationToken.None);
                     AssertEqual("Q1", original.Events[0].Alias, "first request alias derives from immutable order");
                     AssertEqual("R1@v1", original.Resources[0].Alias, "first exact resource revision");
-                    AssertEqual("O1", original.Operations[0].Alias, "operation alias is separate from its runtime id");
-                    AssertEqual("E1", original.Evidence[0].Alias, "evidence alias is separate from its runtime id");
+                    AssertTrue(original.Operations[0].Alias == null, "trace-only call IDs cannot manufacture accepted execution aliases");
+                    AssertEqual("O1", original.Evidence[0].Alias, "evidence alias is separate from its runtime id");
                     AssertEqual(ModelContextCurrentness.Superseded, original.Resources[0].Currentness,
                         "only the exact current authority head is current");
                     AssertTrue(original.Resources[0].RevisionRecorded == true &&
@@ -742,10 +742,10 @@ namespace RNAssistant.Harness
                     AssertEqual(first.Revision, search.Resources[0].RevisionMetadata.RestoredFrom.Revision, "explicit restore origin");
                     AssertEqual(otherRef.Uri, search.Resources[0].RevisionMetadata.Dependencies[0].Resource.Uri,
                         "dependency provenance is retained without reading dependency bytes");
-                    AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "E1" }, CancellationToken.None).Events[0].Alias,
-                        "evidence lookup resolves the saved request");
                     AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "O1" }, CancellationToken.None).Events[0].Alias,
-                        "operation lookup resolves the saved request");
+                        "evidence lookup resolves the saved request");
+                    RuntimeThrows<InvalidOperationException>(() => inspector().Query(session,
+                        new ModelContextQuery { Alias = "E1" }, CancellationToken.None));
                     AssertEqual("Q1", inspector().Query(session, new ModelContextQuery { Alias = "Q1" }, CancellationToken.None).Events[0].Alias,
                         "request lookup resolves itself");
                     AssertEqual("R1@v1", inspector().Query(session, new ModelContextQuery { Alias = "R1@v1" }, CancellationToken.None).Resources[0].Alias,

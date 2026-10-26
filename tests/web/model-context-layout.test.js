@@ -113,6 +113,9 @@ const { chromium } = require("playwright");
     await page.locator("#modelContextHistory > summary").click();
     assert.equal(await page.locator("#modelContextAliasSearch").isVisible(), true);
     await page.locator("#modelContextAliasSearch").fill("Q1");
+    assert.match(await page.locator("#modelContextReferenceLegend").innerText(),
+      /E — действие и результат; R — ресурс; O — наблюдение; Q — запрос модели/);
+    await screenshot("references-legend");
     await page.locator("#modelContextAliasFind").click();
     await page.waitForFunction(() => document.getElementById("modelContextStatus").textContent.includes("Найдено Q1"));
     await page.locator("#modelContextMode").selectOption("preview");
@@ -224,6 +227,7 @@ const { chromium } = require("playwright");
     const sourceReads = await page.evaluate(() => layoutPayloadReads);
     await screenshot("request-source-coverage");
     await evidence.getByRole("button", { name: "Открыть R1@v1", exact: true }).click();
+    await screenshot("references-resource");
     await body.locator(".model-context-resource[open]").waitFor();
     await page.locator("#modelContextMessagesTab").click(); await evidence.waitFor();
     assert.equal(await evidence.evaluate(node => node.open), true, "source expansion survives resource navigation");

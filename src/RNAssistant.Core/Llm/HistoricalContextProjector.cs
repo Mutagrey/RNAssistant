@@ -27,6 +27,8 @@ namespace RNAssistant.Core.Llm
                 ResponseModelAttemptId = source.ResponseModelAttemptId,
                 ToolResultProtocolVersion = source.ToolResultProtocolVersion,
                 ToolCallId = source.ToolCallId,
+                ExecutionReference = source.ExecutionReference,
+                ResourceModelReferences = source.ResourceModelReferences.ToList(),
                 ResultStepId = source.ResultStepId,
                 AcceptedCallOrigin = source.AcceptedCallOrigin,
                 ToolName = source.ToolName,

@@ -565,7 +565,7 @@ remains separate; full context downloads respect the shared 50 MiB transfer budg
 
 ## Format policy
 
-`ChatSession.CurrentFormatVersion` is 8. Formats 6 and 7 remain readable history;
+`ChatSession.CurrentFormatVersion` remains 8. Formats 6 and 7 remain readable history;
 neither can authorize a new run or pending confirmation. Normalization never
 upgrades them. `MutationPolicy` belongs to session metadata and
 `ConversationPolicy` pins the accepted run, including `AutoConfirmToolActions`
@@ -574,7 +574,7 @@ authority; restart and explicit continuation retain that snapshot.
 `SessionEvent.CurrentSchemaVersion` remains 4: v8 changes the response and chat
 stream format, not the event envelope. No historical bytes or CAS payloads are
 rewritten. Full-history preflight requires format-8 accepted responses with
-complete call origins and terminal results for accepted calls before model
+complete call origins, required typed references and terminal results for accepted calls before model
 preparation. A pending confirmation without valid v8 history and `KernelState`
 cannot continue and must be cancelled or resubmitted in a new chat. Unsupported
 event schemas and old snapshot files are refused rather than guessed or migrated.
@@ -743,3 +743,19 @@ is introduced. Automatic approval is a separate explicit per-run opt-in (see
 [the approval contract](conversation-protocol.md#automatic-action-approval));
 pending decisions retain their original policy. Windows terminal behavior remains
 unqualified by the Mac PTY tests.
+
+## Typed model references — 2026-10-26
+
+[ADR-0018](decisions/ADR-0018-typed-model-references.md) adds immutable
+`ExecutionReference` to accepted call metadata in the same pre-dispatch commit.
+`ResourceModelReferences` records scoped exact observations on message writes and
+LlmRequest events. Both use one allocator; a request append updates the caller's
+index only after success. Requests participate in JSON/SQLite reference replay.
+`ExecutionReferenceSequence` and `ResourceReferenceIndex` are replay-derived caches,
+not independent metadata commits. Message removal preserves their high water/bindings.
+Both JSON replay and SQLite projection apply the same reference reducers. Forks copy
+these projections with history; all resolution remains bound to the destination chat.
+Canonical IDs/origins/outcomes and raw attempt payloads remain unchanged. Current
+chat format stays 8; formats 6/7 remain read-only. Intermediate 9/10 and older experimental
+reference shapes have no compatibility path. Incompatible histories are refused without
+deleting data, relabeling old events or implicitly upgrading/downgrading streams.

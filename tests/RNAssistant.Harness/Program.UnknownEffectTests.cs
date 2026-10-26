@@ -68,9 +68,9 @@ namespace RNAssistant.Harness
                         "Inspection observed an empty range and the sheet write completed.",
                         "Диапазон проверен чтением; лист Report создан.", results: new[] {
                             new ConversationResultClaim("Direct clear verification was uncertain; a later read observed an empty range.",
-                                new[] { clearResult.ToolCallId, inspected.ToolCallId }, ConversationAssessment.Unverified),
+                                new[] { clearResult.ExecutionReference.Alias, inspected.ExecutionReference.Alias }, ConversationAssessment.Unverified),
                             new ConversationResultClaim("Report sheet was created.",
-                                new[] { sheet.ToolCallId }, ConversationAssessment.Satisfied)
+                                new[] { sheet.ExecutionReference.Alias }, ConversationAssessment.Satisfied)
                         });
                     return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
@@ -102,8 +102,8 @@ namespace RNAssistant.Harness
                         "unknown and premature done both request inspection, even with custom prompts");
                 }
                 AssertContains(FlattenSimple(requests[5]), "may have had an effect", "blind replay is rejected before inspection");
-                AssertTrue(!requests[6].Any(message => (message.Content ?? "").StartsWith("COMPLETION_FEEDBACK:")),
-                    "the reminder ends after successful inspection");
+                AssertTrue(!requests[6].Any(message => (message.Content ?? "").Contains(ModelProtocolWire.UnknownEffectGuidance)),
+                    "unknown-effect reminder ends after inspection; reflection budget may remain: " + role + "/" + format);
                 AssertContains(result.AssistantText, "Report создан", "the final answer includes the completed remaining work");
                 var loaded = new ChatStore(FixturePaths.Value).Load(session.Id);
                 AssertEqual(2, loaded.Messages.Count(message => message.ToolName == "common.resources_read" &&

@@ -17,22 +17,20 @@ namespace RNAssistant.Core.Persistence
     {
         public static FinishAdmission Evaluate(IReadOnlyList<SessionEvent> events, string sessionId,
             string runId, string turnId, IReadOnlyList<string> acceptedCallIds,
-            IReadOnlyList<ConversationResultClaim> results, ChatBlobStore payloads)
+            IReadOnlyList<ConversationResultClaim> results, ChatBlobStore payloads, IReadOnlyList<string> deliveredReferences)
         {
             if (events == null || string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(runId) ||
-                string.IsNullOrWhiteSpace(turnId) || acceptedCallIds == null || results == null)
+                string.IsNullOrWhiteSpace(turnId) || acceptedCallIds == null || results == null || deliveredReferences == null)
                 throw new ArgumentException("Complete run/session and durable events are required.");
             if (results.Any(item => item == null) || acceptedCallIds.Any(string.IsNullOrWhiteSpace))
                 throw new InvalidOperationException("Invalid finish proposal or accepted call identity.");
             var expected = new HashSet<string>(acceptedCallIds, StringComparer.Ordinal);
             if (expected.Count != acceptedCallIds.Count)
                 throw new InvalidOperationException("Current-run accepted call IDs are ambiguous.");
-            if (expected.Count != 0 && results.Count == 0)
-                return FinishAdmission.Reject("missing_finish_results", "Report the outcomes of the accepted calls before finish.");
             var references = results.SelectMany(item => item.Evidence).Distinct(StringComparer.Ordinal).ToArray();
-            if (expected.Count != 0 && references.Length == 0)
-                return FinishAdmission.Reject("missing_finish_evidence", "Reference at least one actual terminal tool_call_id from this run.");
 
+            var delivered = new HashSet<string>(deliveredReferences, StringComparer.Ordinal);
+            var byAlias = new Dictionary<string, string>(StringComparer.Ordinal);
             var calls = new Dictionary<string, Accepted>(StringComparer.Ordinal);
             var origins = new HashSet<string>(StringComparer.Ordinal);
             var started = new HashSet<string>(StringComparer.Ordinal);
@@ -78,6 +76,10 @@ namespace RNAssistant.Core.Persistence
                             parsed.Response.ToolCalls[0].Id != message.ToolCallId ||
                             parsed.Response.ToolCalls[0].Name != message.ToolName)
                             throw new InvalidOperationException("Retained accepted call body disagrees with its metadata.");
+                        if (message.ExecutionReference?.Kind != ModelReferenceKind.Execution ||
+                            byAlias.ContainsKey(message.ExecutionReference.Alias))
+                            throw new InvalidOperationException("Accepted execution reference is missing, mistyped or duplicated.");
+                        byAlias.Add(message.ExecutionReference.Alias, message.ToolCallId);
                         calls.Add(message.ToolCallId, new Accepted(message.ToolName, origin.StepId));
                         continue;
                     }
@@ -117,20 +119,31 @@ namespace RNAssistant.Core.Persistence
             }
             if (calls.Count != expected.Count || expected.Any(id => !calls.ContainsKey(id)))
                 throw new InvalidOperationException("Durable current-run accepted calls differ from kernel state.");
+            var available = string.Join(", ", byAlias.Where(pair => delivered.Contains(pair.Key) && finished.ContainsKey(pair.Value))
+                .Take(16).Select(pair => pair.Key + " (" + calls[pair.Value].Name + ": " + finished[pair.Value].Outcome + ")"));
+            var hint = string.IsNullOrEmpty(available) ? " No terminal references are available in the delivered request." :
+                " Available terminal references: " + available + ". Correct the citation without repeating completed tools.";
+            if (expected.Count != 0 && results.Count == 0)
+                return FinishAdmission.Reject("missing_finish_results", "Report the outcomes of the accepted calls before finish." + hint);
+            if (expected.Count != 0 && references.Length == 0)
+                return FinishAdmission.Reject("missing_finish_evidence", "Reference at least one delivered terminal execution reference (E1, E2) from this run." + hint);
             foreach (var reference in references)
             {
-                if (!expected.Contains(reference))
-                    return FinishAdmission.Reject("unknown_evidence", "Evidence " + reference + " is not an accepted call in this run.");
+                string canonicalId;
+                if (!byAlias.TryGetValue(reference, out canonicalId))
+                    return FinishAdmission.Reject("unknown_evidence", "Evidence " + reference + " is not an execution reference of this run." + hint);
+                if (!delivered.Contains(reference))
+                    return FinishAdmission.Reject("undelivered_evidence", "Evidence " + reference + " was not delivered in this request." + hint);
                 Terminal terminal;
-                if (!finished.TryGetValue(reference, out terminal))
-                    return FinishAdmission.Reject("nonterminal_evidence", "Evidence " + reference + " has no canonical terminal execution.");
-                var call = calls[reference];
+                if (!finished.TryGetValue(canonicalId, out terminal))
+                    return FinishAdmission.Reject("nonterminal_evidence", "Evidence " + reference + " has no canonical terminal execution." + hint);
+                var call = calls[canonicalId];
                 if (terminal.Name != call.Name || terminal.StepId != call.StepId)
                     return FinishAdmission.Reject("unknown_evidence", "Evidence " + reference + " disagrees with its accepted name or origin.");
             }
             foreach (var claim in results)
                 if (claim.Assessment == ConversationAssessment.Satisfied && claim.Evidence.Count > 0 &&
-                    claim.Evidence.All(id => finished[id].Outcome != ToolExecutionOutcome.Ok))
+                    claim.Evidence.All(id => finished[byAlias[id]].Outcome != ToolExecutionOutcome.Ok))
                     return FinishAdmission.Reject("contradictory_assessment",
                         "A satisfied claim cites only failed, unknown or undispatched terminal outcomes.");
             return FinishAdmission.Allow();

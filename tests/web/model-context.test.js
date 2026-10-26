@@ -23,7 +23,7 @@ class Node {
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
 function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }
-function fixture(withAliases = false, pdf = false, requestOverride = null) {
+function fixture(withAliases = false, pdf = false, requestOverride = null, unbound = false) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
   const verification = { availability: "Verified", partsAvailability: "Verified", hold: null };
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
@@ -49,7 +49,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
           payloadAvailability: "Unchecked",
           retainedViews: [{ view: "source", coverage: { kind: "whole" }, payloadAvailability: "Unchecked",
             partsCount: 2, partsAvailability: "Unchecked" }],
-          observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "source",
+          observations: [{ requestAlias: "Q1", operationAlias: "E1", evidenceAlias: "O1", view: "source",
             coverage: { kind: "line-range", start: 1, end: 2 }, observationComplete: false, bodyIncludedInMessage: null,
             estimatedWireMessageTokens: 72,
             readMetadata: { requestedCoverage: { kind: "line-range", start: 1, end: 6 },
@@ -59,24 +59,25 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
                 representations: ["source", "outline"], capabilities: ["read"],
                 viewCapabilities: [{ view: "source", supportsOffset: true, supportsStream: true,
                   maxBatchBytes: 65536 }] } } },
-            { requestAlias: "Q1", operationAlias: "O2", evidenceAlias: "E2", view: "source",
+            { requestAlias: "Q1", operationAlias: "E2", evidenceAlias: "O2", view: "source",
               coverage: { kind: "character-range", start: 10, end: 80 }, observationComplete: false,
               readMetadata: { requestedProcedure: "Value", requestedProcedureKind: "property-get",
                 selectionComplete: true, representationComplete: false, sourceComplete: false } },
-            { requestAlias: "Q1", operationAlias: "O3", evidenceAlias: "E3", view: "tree",
+            { requestAlias: "Q1", operationAlias: "E3", evidenceAlias: "O3", view: "tree",
               coverage: { kind: "json-path", path: "/data", start: 1, end: 2 }, observationComplete: false,
               readMetadata: { requestedCoverage: { kind: "json-path", path: "/data", start: 1, end: 3 },
                 requestedDepth: 2, selectionComplete: true, representationComplete: false, sourceComplete: false } },
-            { requestAlias: "Q1", operationAlias: "O4", evidenceAlias: "E4", view: "tree",
+            { requestAlias: "Q1", operationAlias: "E4", evidenceAlias: "O4", view: "tree",
               coverage: { kind: "yaml-path", path: "/config", start: 0, end: 1 }, observationComplete: false,
               readMetadata: { requestedCoverage: { kind: "yaml-path", path: "/config", start: 0, end: 2 },
                 requestedDepth: 1, selectionComplete: true, representationComplete: false, sourceComplete: false } }] }] : [];
+        if (unbound) resources.forEach(row => { row.alias = null; });
         if (pdf) resources.splice(0, resources.length, {
           alias: "R1@v1", resource: { uri: "rna://attachment/pdf", revision: "pdf-r1" },
           scope: { kind: "conversation", id: "chat" }, currentness: "Current",
           retainedViews: [{ view: "binary:render-page:1", coverage: null,
             payloadAvailability: "Unchecked", partsCount: 1, partsAvailability: "Unchecked" }],
-          observations: [{ requestAlias: "Q1", operationAlias: "O1", evidenceAlias: "E1", view: "text",
+          observations: [{ requestAlias: "Q1", operationAlias: "E1", evidenceAlias: "O1", view: "text",
             coverage: { kind: "page-range", start: 1, end: 3 }, observationComplete: false,
             readMetadata: { requestedCoverage: { kind: "page-range", start: 1, end: 3 },
               extractionProfile: "pdf-page-range-text:content-order-v1", sourcePageCount: 12,
@@ -127,16 +128,16 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
               nextOffset: offset + items.length < snapshotCount ? offset + items.length : null, items } };
         }
         if (query.alias) {
-          if (!withAliases || !["Q1", "O1", "E1", "R1@v1"].includes(query.alias)) throw new Error("RESOURCE_NOT_FOUND");
+          if (!withAliases || !["Q1", "E1", "O1", "R1@v1"].includes(query.alias)) throw new Error("RESOURCE_NOT_FOUND");
           return { chatId: "chat", revision, events: [events[0]], resources,
-            operations: [{ canonicalId: "call-1", alias: "O1" }], evidence: [{ canonicalId: "evidence-1", alias: "E1" }],
-            selectedAlias: query.alias, selectedResourceAlias: ["E1", "R1@v1"].includes(query.alias) ? "R1@v1" : null };
+            operations: [{ canonicalId: "call-1", alias: "E1" }], evidence: [{ canonicalId: "evidence-1", alias: "O1" }],
+            selectedAlias: query.alias, selectedResourceAlias: ["O1", "R1@v1"].includes(query.alias) ? "R1@v1" : null };
         }
         if (query.requestEventId) return { chatId: "chat", revision,
           events: events.filter(e => e.eventId === query.requestEventId || e.trace.RequestId === events.find(r => r.eventId === query.requestEventId).trace.RequestId),
           resources: query.requestEventId === "r1" ? resources : [],
-          operations: withAliases ? [{ canonicalId: "call-1", alias: "O1" }] : [],
-          evidence: withAliases ? [{ canonicalId: "evidence-1", alias: "E1" }] : [] };
+          operations: withAliases ? [{ canonicalId: "call-1", alias: "E1" }] : [],
+          evidence: withAliases ? [{ canonicalId: "evidence-1", alias: "O1" }] : [] };
         return query.knownRevision === revision ? { chatId: "chat", revision, unchanged: true } : { chatId: "chat", revision, events: events.filter(e => e.type === "llm.request").slice().reverse() };
       }
       if (hold) await hold;
@@ -458,6 +459,16 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
     /Сохранённое view binary:render-page:1 · покрытие неизвестно/);
   pdfRead.c.RNAssistantModelContext.close();
 
+  const unbound = fixture(true, false, null, true);
+  await unbound.c.RNAssistantModelContext.open();
+  await flush();
+  await unbound.get("modelContextResourcesTab").fire("click");
+  await flush();
+  const unboundNodes = descendants(unbound.get("modelContextBody"));
+  assert.ok(unboundNodes.some(node => /Ресурс без сохранённой ссылки/.test(node.textContent || "")));
+  assert.ok(!unboundNodes.some(node => node.tag === "button" && /Проверить|Показать сохранённые views/.test(node.textContent)));
+  await unbound.c.RNAssistantModelContext.close();
+
   const linked = fixture(true);
   linked.events[0].alias = "Q1";
   linked.events[0].trace.ContextMessages = [{ MessageIndex: 0, Presentation: "Full", ToolCallId: "call-1",
@@ -471,7 +482,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
   let resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
   assert.match(resource.children[0].textContent, /R1@v1 · Устаревшая/);
   assert.match(resource.children[1].children.map(node => node.textContent).join(" "),
-    /Q1 · O1 · E1 · source.*частичное наблюдение.*доставка неизвестна/);
+    /Q1 · E1 · O1 · source.*частичное наблюдение.*доставка неизвестна/);
   const resourceText = () => linked.get("modelContextBody").children.find(node => node.tag === "details")
     .children[1].children.map(node => node.textContent).join(" ");
   assert.match(resourceText(), /Оценка всего сериализованного read-сообщения для этого view: ≈ 72 токенов/);
@@ -549,13 +560,13 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
   assert.match(resourceText(), /отсутствует, повреждено или недоступно/);
   await viewButton(linked).fire("click"); await flush();
   assert.match(resourceText(), /одна или более частей отсутствует, повреждена или недоступна/);
-  linked.get("modelContextAliasSearch").value = "E1";
+  linked.get("modelContextAliasSearch").value = "O1";
   await linked.get("modelContextAliasFind").fire("click"); await flush();
-  assert.equal(linked.calls.at(-1).query.alias, "E1", "search resolves through the typed bridge");
+  assert.equal(linked.calls.at(-1).query.alias, "O1", "search resolves through the typed bridge");
   assert.equal(linked.get("modelContextResourcesTab").classList.contains("active"), true);
   resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
   assert.equal(resource.open, true, "evidence search focuses the linked resource revision");
-  assert.match(linked.get("modelContextStatus").textContent, /Найдено E1 в Q1/);
+  assert.match(linked.get("modelContextStatus").textContent, /Найдено O1 в Q1/);
   linked.get("modelContextAliasSearch").value = "R1@v999";
   await linked.get("modelContextAliasFind").fire("click"); await flush();
   assert.match(linked.get("modelContextStatus").textContent, /RESOURCE_NOT_FOUND/);

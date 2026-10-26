@@ -2240,3 +2240,14 @@ No operation is executed by this path. It never rereads
 Office to construct a prompt and never replays mutations. Bodies may leave the
 request budget without changing their original terminal outcome or existence.
 See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2026-10-01).
+
+## Model resource labels — 2026-10-26
+
+[ADR-0018](decisions/ADR-0018-typed-model-references.md) permits short `R1@v2`
+labels on model result/view headers. `R1` is scoped logical identity; `v2` is the
+ordinal of an observed exact revision, not a resource authority generation or edit
+count. One ChatStore allocator records bindings from typed message observations and
+exact saved-request links in the existing chat stream. Inspector only reads bindings;
+resource grouping uses scope/URI/revision, never display aliases. Same scope/URI/revision keeps its label; another scope cannot share identity.
+The model still supplies semantic targets, never these labels as a revision/guard.
+Body omission, coverage and currentness retain their existing explicit contracts.

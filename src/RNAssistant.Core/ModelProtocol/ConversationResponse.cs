@@ -10,6 +10,7 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ConversationResponse
     {
         public const int ProtocolVersion = 8;
+        public const int ReferenceContractVersion = 2;
         public const string ExecuteAction = "execute";
         public const string ReflectionAction = "reflection";
         public const string FinishAction = "finish";

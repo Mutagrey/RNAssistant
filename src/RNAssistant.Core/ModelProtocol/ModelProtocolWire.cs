@@ -22,9 +22,9 @@ namespace RNAssistant.Core.ModelProtocol
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last. " +
             "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
-            "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns IDs. Batch only independent local reads; return other calls alone and wait for their results. " +
+            "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns IDs; E1 labels an operation/outcome, R1 a resource and R1@v2 an observed version. Resource labels are not evidence of execution or tool arguments. Historical calls may include runtime-added id E1, but new calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
             "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. " +
-            "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (terminal runtime tool_call_id strings), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
+            "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (short execution references such as E1 from terminal results of this run), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             "Without accepted calls results may be empty. After accepted calls include results and at least one real terminal reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
             "execute forbids decision/results; reflection forbids tool_calls/results; finish forbids tool_calls/decision. No extra root fields. " +
             "Assessments are model claims, not runtime success. Ask indispensable questions through the available question tool; explain unresolved outcomes truthfully. Keep the envelope even when the task cannot be fulfilled.";
@@ -40,9 +40,9 @@ namespace RNAssistant.Core.ModelProtocol
             "Return the supplied json_schema exactly: the response property contains the conversation-response-v8 decision. " +
             "Choose execute when a useful authorized tool step remains; batch only independent local reads. " +
             "Choose reflection only to settle uncertainty within the remaining allowance, then act on the decision. " +
-            "Choose finish only to deliver the answer or honest outcomes now. After tool calls cite real terminal results of this run. " +
+            "Choose finish only to deliver the answer or honest outcomes now. After tool calls cite their short execution references (E1, E2) from terminal results of this run. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +
-            "Runtime assigns call IDs. Ask indispensable questions through the question tool. Follow the current REFLECTION_BUDGET. " +
+            "Runtime assigns call IDs; E1 labels an operation/outcome, R1@v2 an observed resource version, never a tool argument or finish evidence. Ask indispensable questions through the question tool. Follow the current REFLECTION_BUDGET. " +
             "Do not repeat accepted calls or invent evidence.";
 
         public const string StringEscapingGuidance =

@@ -104,6 +104,9 @@ namespace RNAssistant.Core.Llm
         public string ContextSnapshotId { get; set; }
         public string DocumentRuntimeId { get; set; }
         public List<ContextMessagePresentation> ContextMessages { get; set; }
+        // Assigned by ChatStore from the same resource registry as message observations.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public List<ModelProtocol.ModelResourceReference> ResourceModelReferences { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public LlmRequestComposition RequestComposition { get; set; }
         public bool? Streaming { get; set; }

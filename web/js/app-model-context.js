@@ -282,7 +282,7 @@
   function sourceLinks(c, parent, entry, key, saved) {
     (entry.EvidenceLinks || []).filter(Boolean).forEach(function (link, index) {
       var selected = resourceFor(c, link), resource = link.Resource || {}, metadata = link.ReadMetadata;
-      var row = sourceDisclosure(parent, selected ? "Ресурс " + selected.alias : resource.uri || link.EvidenceId || "Источник",
+      var row = sourceDisclosure(parent, selected && selected.alias ? "Ресурс " + selected.alias : resource.uri || link.EvidenceId || "Источник",
         link.BodyIncludedInMessage === true ? "Тело включено" : link.BodyIncludedInMessage === false ? "Тело не включено" : "Включение не установлено",
         key + "/resource/" + index, saved);
       var facts = el("dl", undefined, "model-context-source-facts"); row.appendChild(facts);
@@ -298,7 +298,7 @@
           sourceFact(facts, fact[0], fact[1] === true ? "Да" : fact[1] === false ? "Нет" : "Не установлено");
         });
       } else row.appendChild(el("p", "Запрошенный диапазон и раздельная полнота не сохранены.", "model-context-note"));
-      if (selected) row.appendChild(button("Открыть " + selected.alias, function () {
+      if (selected && selected.alias) row.appendChild(button("Открыть " + selected.alias, function () {
         if (!live(c) || !row.isConnected) return;
         c.focusResource = selected.alias; c.tab = "resources"; render(c);
       }));
@@ -799,14 +799,14 @@
           (partsAvailability[view.partsAvailability] || "состояние частей неизвестно") : "") +
         (view.checkedUtc ? " · " + new Date(view.checkedUtc).toLocaleString() : ""));
       body.appendChild(viewNote);
-      if (view.payloadAvailability !== "NotRetained" || view.partsCount > 0) {
+      if (row.alias && (view.payloadAvailability !== "NotRetained" || view.partsCount > 0)) {
         var checkView = button("Проверить view " + view.view, function () {
           return verifyResource(c, row, checkView, viewNote, view.view);
         });
         body.appendChild(checkView);
       }
     });
-    if (payload) {
+    if (payload && row.alias) {
       var check = button("Проверить сохранённое тело", function () { return verifyResource(c, row, check, note); });
       body.appendChild(check);
     }
@@ -819,9 +819,9 @@
       Unavailable: "Недоступна", Unknown: "Неизвестна" };
     rows.forEach(function (row) {
       var detail = el("details", undefined, "model-context-message model-context-resource");
-      detail.appendChild(el("summary", row.alias + " · " + (currentness[row.currentness] || currentness.Unknown)));
+      detail.appendChild(el("summary", (row.alias || "Ресурс без сохранённой ссылки") + " · " + (currentness[row.currentness] || currentness.Unknown)));
       root.appendChild(detail);
-      if (c.focusResource === row.alias) detail.open = true;
+      if (row.alias && c.focusResource === row.alias) detail.open = true;
       var body = el("div", undefined, "model-context-message-body"), ref = row.resource || {};
       detail.appendChild(body);
       body.appendChild(el("p", referenceText(ref)));
@@ -830,7 +830,7 @@
       body.appendChild(el("p", row.revisionRecorded === true ? "Ревизия есть в authority." :
         row.revisionRecorded === false ? "Ревизия не найдена в текущем authority." : "Наличие ревизии не проверено."));
       resourceMetadata(c, row, body);
-      var inventory = c.inventory[row.alias];
+      var inventory = row.alias && c.inventory[row.alias];
       if (inventory) {
         var range = inventory.items.length ? (inventory.offset + 1) + "–" +
           (inventory.offset + inventory.items.length) : "0";
@@ -859,7 +859,7 @@
           }
         });
       }
-      if (row.revisionRecorded === true && (!inventory || inventory.offset > 0 || inventory.nextOffset != null)) {
+      if (row.alias && row.revisionRecorded === true && (!inventory || inventory.offset > 0 || inventory.nextOffset != null)) {
         var inventoryNote = el("p", inventory ? "Доступен переход между страницами views." :
           "Список сохранённых views ещё не загружен.");
         body.appendChild(inventoryNote);

@@ -571,7 +571,8 @@ namespace RNAssistant.Core.Services
                 atom.Kind = "repeated-read";
                 FoldInteraction(atom, new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
-                    ToolName = wire.Name, ToolCallId = wire.ToolCallId,
+                    ToolName = wire.Name, ToolCallId = wire.ToolCallId, ExecutionReference = result.ExecutionReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
+                    RunId = result.RunId,
                     CompletedOperation = new CompletedToolOperation { ToolCallId = wire.ToolCallId,
                         ToolName = wire.Name, Status = wire.Result.Status, Message = "Identical complete read retained in this request." },
                     Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
@@ -730,6 +731,7 @@ namespace RNAssistant.Core.Services
         {
             return new ChatMessage {
                 Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
+                ResourceModelReferences = source.ResourceModelReferences.Where(item => item.Matches(evidence)).ToList(),
                 Content = JsonConvert.SerializeObject(new {
                     target = CurrentSourceLabel(source, evidence) ?? source.ToolName,
                     view = evidence.View, bodyIncluded = true, complete = evidence.Complete, coverage = evidence.Coverage }),
@@ -1241,6 +1243,7 @@ namespace RNAssistant.Core.Services
             return new ChatMessage {
                 Id = result.Id, RunId = result.RunId, CreatedUtc = result.CreatedUtc,
                 Role = "assistant", ProtocolMessage = true, ToolCallId = wire.ToolCallId,
+                ExecutionReference = result.ExecutionReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
                 ToolName = wire.Name, ResourceEffect = effect, ExecutionProgress = result.ExecutionProgress, CompletedOperation = fact,
                 Content = "TOOL_INTERACTION (completed causal frame; historical outcome, not current source):\n" +
                     JsonConvert.SerializeObject(new {

@@ -118,6 +118,10 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RunViewState RunViewState { get; set; }
         public string ToolCallId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.ModelProtocol.ModelReference ExecutionReference { get; set; }
+        public List<RNAssistant.Core.ModelProtocol.ModelResourceReference> ResourceModelReferences { get; set; } =
+            new List<RNAssistant.Core.ModelProtocol.ModelResourceReference>();
         // Runtime origin of a terminal result; not model-facing or an argument.
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string ResultStepId { get; set; }
@@ -304,6 +308,11 @@ namespace RNAssistant.Core.Models
         [JsonProperty(Required = Required.Always)]
         public int FormatVersion { get; set; }
         public long Revision { get; set; }
+        // Replay-derived high water; removals/compaction never lower it.
+        public long ExecutionReferenceSequence { get; set; }
+        // Derived from message and saved-request bindings in the same event stream.
+        public List<RNAssistant.Core.ModelProtocol.ModelResourceReference> ResourceReferenceIndex { get; set; } =
+            new List<RNAssistant.Core.ModelProtocol.ModelResourceReference>();
         [JsonIgnore]
         internal string StorageHeadHash { get; set; }
         [JsonIgnore]

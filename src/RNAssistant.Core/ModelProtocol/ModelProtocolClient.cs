@@ -67,6 +67,7 @@ namespace RNAssistant.Core.ModelProtocol
                         wireMessages = strict && request.ProjectJsonSchemaMessages != null
                             ? request.ProjectJsonSchemaMessages(attemptMessages) : attemptMessages;
                         if (strict) wireMessages = ModelProtocolWire.ProjectSchemaGuidance(wireMessages);
+                        if (request.ProjectReferences != null) wireMessages = request.ProjectReferences(wireMessages);
                         options.TraceMessageContentChanged = ChangedWireMessages(attemptMessages, wireMessages);
                         string budgetError;
                         var repairReserve = lastError == null
@@ -139,7 +140,8 @@ namespace RNAssistant.Core.ModelProtocol
                     if (parsed.Success)
                     {
                         TraceAccepted(options, false, progress);
-                        return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage, sourceModelAttemptId);
+                        return ModelProtocolResult.Accepted(parsed.Response, completion, contextUsage, sourceModelAttemptId,
+                            request.ProjectReferences == null ? new string[0] : ModelReferenceProjection.Delivered(wireMessages));
                     }
                     lastError = parsed.Error;
                     lastErrorKind = parsed.ErrorKind;

@@ -1372,6 +1372,7 @@ namespace RNAssistant.Runtime
                     notice => _compiler.CompileRepair(snapshot, notice)),
                     ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
                 _lastCompletion = result.Completion;
+                _deliveredExecutionReferences = result.DeliveredExecutionReferences;
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
                 if (result.ProviderRefusal != null) return AgentModelResult.Refused(result.ProviderRefusal);
                 if (result.Response == null) return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, "Missing accepted response.");
@@ -1884,6 +1885,8 @@ namespace RNAssistant.Runtime
                 return Task.FromResult(_cursor);
             }
 
+            private IReadOnlyList<string> _deliveredExecutionReferences = new string[0];
+
             public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
                 IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
                 long expectedRevision, CancellationToken cancellationToken)
@@ -1896,7 +1899,7 @@ namespace RNAssistant.Runtime
                 if (events.Count == 0 || events[events.Count - 1].Sequence != _session.Revision)
                     throw new InvalidOperationException("Canonical workspace finish evidence is not current.");
                 return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(events,
-                    _session.Id, runId, turnId, acceptedCallIds, results, _payloads));
+                    _session.Id, runId, turnId, acceptedCallIds, results, _payloads, _deliveredExecutionReferences));
             }
 
             private ChatMessage ProjectToolActivity(AgentRunEvent fact)

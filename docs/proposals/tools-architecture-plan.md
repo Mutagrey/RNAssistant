@@ -93,3 +93,27 @@ v8 schema/parser (two); context body deduplication (one). Total: 23 selected Har
 Chromium `agent-activity-layout.test.js` and `tool-result-presentation.test.js` passed using
 bundled Playwright and installed Chrome. Harness build succeeded with two existing PDF platform
 analyzer warnings. No Office/VSTO validation, full Harness, commit or release was run.
+
+## Remaining work after typed references — 2026-10-26
+
+Chat format and model wire stay at 8. [ADR-0018](../decisions/ADR-0018-typed-model-references.md)
+now owns uppercase E/R/O/Q references; no new resource/tool runtime or parallel store
+was introduced. The interim 9/10 candidates have no compatibility path.
+
+1. Model evidence: rerun the paired profiles with the final uppercase contract and
+   extend evaluation to P7's mixed-language exploration tasks. The archived lowercase
+   edit/copy pilot is not final-candidate qualification. Reproduce tool-choice errors
+   (create instead of copy, failed source discovery) before changing defaults/descriptions.
+2. Presentation: add typed E/R links in chat activity/result summaries if this UI scope
+   is selected. Diagnostics already show/search the saved labels and explain their kinds;
+   chat currently shows narration/action/result text and navigation to the request.
+   Reuse canonical bindings; no parsing of arbitrary prose to infer authority.
+3. File cutover: agree the public create/copy/patch/replace/delete/restore contract,
+   destination ownership and consumers per the [skills/tools audit](../audits/skills-tools-description-review.md#что-далее).
+   Only then migrate consumers and remove old paths. No universal mutation facade is shipped yet.
+4. Qualification: benchmark source revalidation on a large real multilingual workspace;
+   obtain Windows x64 / Office x64 / WebView2 evidence on the exact release candidate.
+   Existing host-neutral and Chrome checks do not close those gates.
+
+C/S references, symbols/LSP and derived resource graphs remain separately scoped options,
+not prerequisites silently added to this implementation.

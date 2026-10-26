@@ -1,5 +1,18 @@
 # RNAssistant Harness
 
+`model refs:` checks typed E/R labels, canonical/raw preservation, all result roles,
+atomic allocation and stale writers, failed commits, restart/removal, resource versions
+and scope, shared message/request allocation, stale trace refusal and unbound historical
+rows, hidden/pending/GUID/type refusal, correction without replay, mandatory
+compacted receipts, repair/fallback and the successful request's delivered set.
+Workspace accepted/strict history, discovery admission, `tool pack:`, conversation v8,
+Inspector and unknown-effect/confirmation checks cover the existing consumers.
+Four scripted profile scenarios and eight live runs of the withdrawn lowercase candidate are recorded in the
+[comparison](../../docs/audits/tool-profile-comparison.md#typed-short-reference-repeat--2026-10-26).
+`tests/web/model-context-layout.test.js` additionally verifies the short reference
+legend and resource navigation in Chrome; screenshots are linked from ADR-0018.
+No VSTO/Office validation is performed by these host-neutral checks.
+
 `--workspace-profile-live <fresh-evidence-directory> <broad|compact> <edit|copy>`
 is an isolated live diagnostic through the production workspace runtime. The
 `tests/cli/tool_profile_comparison.py` runner captures paired requests, model tags,

@@ -1,4 +1,6 @@
 using System;
+using Newtonsoft.Json.Linq;
+using RNAssistant.Core.ModelProtocol;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -183,14 +185,16 @@ namespace RNAssistant.Office.Services
                 {
                     if (link?.Resource?.IsExact != true) continue;
                     var name = aliases.Resource(link.ScopeId, link.Resource);
-                    if (name == null) continue;
+                    // Identity groups observations; a display label never merges resources.
+                    var key = Newtonsoft.Json.JsonConvert.SerializeObject(new[] {
+                        link.ScopeId?.Kind, link.ScopeId?.Id, link.Resource.Uri, link.Resource.Revision });
                     ModelContextResourceDto row;
-                    if (!rows.TryGetValue(name, out row))
+                    if (!rows.TryGetValue(key, out row))
                     {
                         row = new ModelContextResourceDto { Alias = name, Resource = link.Resource.Copy(), Scope = link.ScopeId,
                             Currentness = ModelContextCurrentness.Unknown,
                             Observations = new List<ModelContextResourceObservationDto>() };
-                        rows.Add(name, row);
+                        rows.Add(key, row);
                     }
                     ((List<ModelContextResourceObservationDto>)row.Observations).Add(new ModelContextResourceObservationDto {
                         RequestAlias = aliases.Request(requestEventId), OperationAlias = aliases.Operation(entry.ToolCallId),
@@ -382,8 +386,8 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        // Ordinals are derived from append-only request events in sequence order. No
-        // new store, mutable alias counter or dependence on paginated UI results.
+        // E/R bindings are read from canonical events; Inspector never allocates them.
+        // Only Q/O diagnostic ordinals are derived from immutable request order.
         private sealed class AliasIndex
         {
             private readonly Dictionary<string, string> _requests = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -391,25 +395,40 @@ namespace RNAssistant.Office.Services
             private readonly Dictionary<string, string> _evidence = new Dictionary<string, string>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _resourceNames = new Dictionary<string, string>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _revisions = new Dictionary<string, string>(StringComparer.Ordinal);
-            private readonly Dictionary<string, int> _revisionCounts = new Dictionary<string, int>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _referenceTargets = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly HashSet<string> _resourceAliases = new HashSet<string>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _lastRequest = new Dictionary<string, string>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _resourceForEvidence = new Dictionary<string, string>(StringComparer.Ordinal);
             internal AliasIndex(IEnumerable<SessionEvent> events, bool includeLinks)
             {
+                if (includeLinks)
+                    foreach (var item in events)
+                    {
+                        if (item.Type == SessionEventTypes.SessionCreated || item.Type == SessionEventTypes.SessionForked)
+                        {
+                            foreach (var message in item.Data?["Messages"] as JArray ?? new JArray()) RegisterCanonical(message);
+                            RegisterResourceBindings(item.Data?["ResourceReferenceIndex"]);
+                        }
+                        else if (item.Type == SessionEventTypes.SessionCommit)
+                            foreach (var operation in item.Data?["Operations"] as JArray ?? new JArray())
+                                RegisterCanonical(operation["Data"]?["Value"]);
+                        else if (item.Type == SessionEventTypes.LlmRequest)
+                            RegisterResourceBindings(item.Data?["ResourceModelReferences"]);
+                    }
                 foreach (var request in events.Where(e => e.Type == SessionEventTypes.LlmRequest).OrderBy(e => e.Sequence))
                 {
-                    var q = Register(_requests, request.EventId, "Q");
+                    var q = Register(_requests, request.EventId, ModelReferenceKind.Request);
                     _lastRequest[q] = request.EventId;
                     if (!includeLinks) continue;
                     foreach (var entry in (Trace(request).ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
                     {
-                        var operation = Register(_operations, entry.ToolCallId, "O");
+                        var operation = Operation(entry.ToolCallId);
                         if (operation != null) _lastRequest[operation] = request.EventId;
                         foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
                         {
-                            var resource = RegisterResource(link?.ScopeId, link?.Resource);
+                            var resource = Resource(link?.ScopeId, link?.Resource);
                             if (resource != null) _lastRequest[resource] = request.EventId;
-                            var evidence = Register(_evidence, link?.EvidenceId, "E");
+                            var evidence = Register(_evidence, link?.EvidenceId, ModelReferenceKind.Observation);
                             if (evidence != null)
                             {
                                 _lastRequest[evidence] = request.EventId;
@@ -419,31 +438,46 @@ namespace RNAssistant.Office.Services
                     }
                 }
             }
-            private static string Register(Dictionary<string, string> values, string id, string prefix)
+            private void RegisterCanonical(JToken message)
+            {
+                if (message?.Type != JTokenType.Object) return;
+                var reference = message["ExecutionReference"]?.ToObject<ModelReference>();
+                var callId = (string)message["ToolCallId"];
+                if (reference?.Kind == ModelReferenceKind.Execution && !string.IsNullOrEmpty(callId))
+                    Bind(_operations, callId, reference.Alias, "execution:" + callId);
+                RegisterResourceBindings(message["ResourceModelReferences"]);
+            }
+            private void RegisterResourceBindings(JToken references)
+            {
+                foreach (var token in references as JArray ?? new JArray())
+                {
+                    var reference = token.ToObject<ModelResourceReference>();
+                    var key = ResourceKey(reference.Scope, reference.Resource);
+                    Bind(_resourceNames, key, reference.Reference.Alias, "resource:" + key);
+                    var exact = key + "\0" + reference.Resource.Revision;
+                    Bind(_revisions, exact, reference.Alias, "revision:" + exact);
+                    _resourceAliases.Add(reference.Alias);
+                }
+            }
+            private void Bind(Dictionary<string, string> values, string key, string alias, string target)
+            {
+                string existing;
+                if (values.TryGetValue(key, out existing) && existing != alias ||
+                    _referenceTargets.TryGetValue(alias, out existing) && existing != target)
+                    throw new InvalidOperationException("Conflicting canonical reference bindings in chat events.");
+                values[key] = alias;
+                _referenceTargets[alias] = target;
+            }
+            private static string Register(Dictionary<string, string> values, string id, ModelReferenceKind kind)
             {
                 if (string.IsNullOrWhiteSpace(id)) return null;
                 string alias;
-                if (!values.TryGetValue(id, out alias)) values.Add(id, alias = prefix + (values.Count + 1));
+                if (!values.TryGetValue(id, out alias))
+                    values.Add(id, alias = ModelReference.Create(kind, values.Count + 1).Alias);
                 return alias;
             }
             private static string ResourceKey(ResourceAuthorityScopeId scope, ResourceRef reference)
             { return (scope == null ? "" : scope.Kind + "\0" + scope.Id) + "\0" + reference.Uri; }
-            private string RegisterResource(ResourceAuthorityScopeId scope, ResourceRef reference)
-            {
-                if (reference?.IsExact != true) return null;
-                var resourceKey = ResourceKey(scope, reference);
-                var root = Register(_resourceNames, resourceKey, "R");
-                var key = resourceKey + "\0" + reference.Revision;
-                string alias;
-                if (!_revisions.TryGetValue(key, out alias))
-                {
-                    int count;
-                    _revisionCounts.TryGetValue(resourceKey, out count);
-                    _revisionCounts[resourceKey] = ++count;
-                    _revisions.Add(key, alias = root + "@v" + count);
-                }
-                return alias;
-            }
             internal string Request(string id) { return Find(_requests, id); }
             internal string Operation(string id) { return Find(_operations, id); }
             internal string Evidence(string id) { return Find(_evidence, id); }
@@ -453,7 +487,7 @@ namespace RNAssistant.Office.Services
             { return _lastRequest.TryGetValue(alias, out requestEventId); }
             internal string ResourceFor(string alias)
             { string value; return _resourceForEvidence.TryGetValue(alias, out value) ? value :
-                alias.StartsWith("R", StringComparison.Ordinal) && _lastRequest.ContainsKey(alias) ? alias : null; }
+                _resourceAliases.Contains(alias) && _lastRequest.ContainsKey(alias) ? alias : null; }
             private static string Find(Dictionary<string, string> values, string id)
             { string value; return id != null && values.TryGetValue(id, out value) ? value : null; }
         }

@@ -116,7 +116,14 @@ def main():
                     models=models, digests=tags, upstream=args.upstream,
                     limits={'context': 32768, 'output': 4096, 'iterations': 12, 'tools': 20, 'seconds': 240})
     write_json(out / 'manifest.json', manifest)
-    (out / 'source.patch').write_bytes(subprocess.check_output(['git', 'diff', 'HEAD'], cwd=ROOT))
+    patch = subprocess.check_output(['git', 'diff', 'HEAD'], cwd=ROOT)
+    for name in subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '--', 'src', 'tests'], cwd=ROOT, text=True).splitlines():
+        if Path(name).suffix in ('.cs', '.csproj', '.py'):
+            diff = subprocess.run(['git', 'diff', '--no-index', '--', '/dev/null', name], cwd=ROOT, capture_output=True)
+            if diff.returncode not in (0, 1):
+                raise RuntimeError(diff.stderr.decode())
+            patch += diff.stdout
+    (out / 'source.patch').write_bytes(patch)
     # New diagnostic sources may be untracked before the pilot's evidence commit.
     for path in ['tests/RNAssistant.Harness/Program.ToolProfileDiagnostic.cs', 'tests/cli/tool_profile_comparison.py']:
         (out / Path(path).name).write_bytes((ROOT / path).read_bytes())

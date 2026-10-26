@@ -157,3 +157,56 @@ source commit/patch, диагностические sources, hash Harness binary
 
 [Полный архив пилота](evidence/tool-profile-pilot-20261026.tar.gz) и [SHA-256](evidence/tool-profile-pilot-20261026.tar.gz.sha256).
 Archive SHA-256: `9ab0a560a2934531819fe12ef80f475a88f777a34e70bcfff87e9840bf8e138b`.
+
+## Typed short-reference repeat — 2026-10-26
+
+The [reference contract](../decisions/ADR-0018-typed-model-references.md) was tested
+on the same installed tags/digests, 32768-token context, temperature, synthetic
+multilingual fixtures and broad/compact profiles. This is a new candidate run,
+not an isolated causal comparison: directory discovery was already repaired and
+the full request changes with reference guidance/projection. Broad defaults remain.
+
+| Model / profile | Edit | Copy | HTTP calls edit / copy |
+| --- | --- | --- | --- |
+| Gemma cloud / broad | Pass | Pass | 8 / 6 |
+| Gemma cloud / compact | Pass | Fail: used create | 7 / 3 |
+| Gemma local / broad | Pass | Fail: source not found | 6 / 6 |
+| Gemma local / compact | Pass | Fail: used create | 6 / 3 |
+
+All eight runs reach protocol completion; only five satisfy task acceptance.
+Seven have exact expected bytes; the copy requirement additionally demands
+`files.copy`, so creating identical content does not pass. Local broad copy makes
+37 accepted calls but only 8 charged tool steps; repeated calls are suppressed by
+existing progress guards. Accepted-call count is not a dispatch count.
+
+Both local edit cases now finish with valid `e` citations, whereas the original
+pilot reached iteration limits after correct edits. Four finish proposals also
+cited `r…@v…`; admission rejected them and the model corrected the references.
+Three cloud execute proposals copied `id` from historical calls; raw validation
+rejected them before dispatch. One cloud repair used a scalar evidence string and
+required another format repair. These remaining errors are evidence against
+claiming that short labels alone solve model protocol/tool-selection quality.
+
+Cloud compact copy regressed from the directory-fix repeat; this single sample
+cannot attribute the change to one prompt or projection field. It reinforces the
+decision not to switch the default tool profile. No heuristic task-success rule,
+GUID fallback or replay was introduced to make the pilot pass.
+
+[Evidence archive](evidence/tool-short-refs-20261026.tar.gz) and
+[SHA-256](evidence/tool-short-refs-20261026.tar.gz.sha256) contain four passing
+scripted scenarios and all eight live trajectories, exact requests/responses,
+acceptance, model identities, executed Harness hash and source patches (including
+new untracked source files). Live source base is `afd006db`; unrelated parallel PDF
+work had landed after the initial audit base `c5eb1618`. Subsequent changes add
+fixture coverage and keep Inspector's unbound trace revisions in its diagnostic
+`R` namespace, avoiding collisions with persisted `r` versions. The model wire and
+execution/admission candidate exercised by this live run is unchanged.
+
+### Status after reference revision 2
+
+The archived runs above exercised the withdrawn lowercase revision 1. Their raw
+requests, source patches and hashes remain immutable; they do not qualify the new
+uppercase contract. Revision 2 removes Inspector allocation entirely: one ChatStore
+allocator covers message and saved-request observations; Inspector groups canonical
+identities. Uppercase contract and persistence/UI behavior have focused deterministic
+checks. New live-model quality evidence remains open; no broad/compact default changes.

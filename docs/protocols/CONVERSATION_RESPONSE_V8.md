@@ -1,9 +1,11 @@
 # Conversation Response v8
 
 Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
-Response protocol is 8, new chat stream format is 8, and built-in prompt
-schema is 53. Formats 6 and 7 remain readable history; neither gains v8
-execution authority or is rewritten/deleted automatically.
+Response protocol is 8, reference contract revision is 2, new chat stream format
+is 8, and built-in prompt schema is 56. Formats 6 and 7 remain read-only history;
+intermediate 9/10 candidates were never deployed and have no compatibility path.
+Earlier experimental format-8 histories without the required bindings are refused;
+no automatic rewrite/deletion or execution upgrade. See [ADR-0018](../decisions/ADR-0018-typed-model-references.md).
 
 ## Model envelope
 
@@ -18,8 +20,8 @@ No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
 | `reflection` | Nonblank `decision` | Record a useful interpretation and request another bounded model step. No tool dispatch, result or new authority. |
 | `finish` | `results` array | End the run with the answer or honest outcome. No further work is scheduled by a promise in `message`. |
 
-`results[]` entries contain exactly `summary`, `evidence` (runtime
-`tool_call_id` strings) and `assessment`: `satisfied`,
+`results[]` entries contain exactly `summary`, `evidence` (exact short execution
+references such as `E1` from delivered terminal results) and `assessment`: `satisfied`,
 `partially_satisfied`, `unverified` or `not_satisfied`. A direct answer
 without accepted calls may use `results=[]`. After accepted calls, finish
 needs at least one result and one terminal evidence reference in aggregate;
@@ -48,6 +50,33 @@ dispatch. A fallback separately checks the retained full prompt before sending
 than treated as lack of format support. No-call accepted history rejects stray
 tool transport metadata and a second reason outside its v8 envelope.
 
+## Typed references (revision 2)
+
+`E1`, `E2`, … identify accepted operations and their outcomes within a chat. The
+existing accepted commit allocates them atomically before dispatch, alongside
+canonical call IDs and origins. They survive restart, confirmation, history removal
+and compaction without reuse. Prefix and case are fixed; only exact lookup is valid.
+Raw execute remains `{name, arguments}`. Wire-only historical calls add `id: "E1"`;
+matching results and folded receipts expose `tool_call_id: "E1"`. Canonical history
+keeps its original envelope and ID. Native transport pairing is preserved; its
+call narration exposes the short reference separately. No global text replacement.
+
+`R1` identifies a scoped logical resource; `R1@v2` identifies a registered exact
+revision in that resource's observation history. `resource_refs` on owned result
+and source-view headers contains only those short labels. Runtime URI/hash/revision
+remain private. Resource labels are not tool arguments, finish evidence, permission,
+coverage or currentness. Model reads still use semantic targets. `C`/`S` are deferred.
+ResourceEvidence IDs remain distinct; several observations may belong to one `E`.
+`O` labels observations and `Q` requests in diagnostics. All type prefixes are uppercase;
+`@v` is a version marker. A single ChatStore allocator persists resource bindings on
+message observations and saved request links. Inspector reads these bindings and
+groups by exact canonical identity; it never allocates replacement `E`/`R` names.
+
+An omitted body does not erase the operation's reference. Compaction retains the
+latest current-run terminal receipt; older receipts are bounded by relevance/budget.
+A reference absent from the successful request cannot be guessed from the journal.
+Repair/fallback retain the same aliases and report the actual delivered set.
+
 ## Admission, persistence and presentation
 
 Kernel accepts `execute` calls before dispatch and pins their runtime ID,
@@ -66,8 +95,9 @@ the same run ID, limits and accepted-call identities; a confirmation cannot
 claim a continuation under a new run ID.
 
 Before accepting `finish`, the run store resolves cited IDs against the
-complete validated append-only event stream for this session, run and turn.
-Each citation must match an accepted call and its canonical
+complete validated append-only event stream for this session, run and turn, and
+the references actually delivered in the successful model request. Each citation
+must resolve through its saved `ExecutionReference` to an accepted call and its canonical
 `tool.execution.finished` fact; pending, naked, foreign and invented IDs are
 rejected. Failed/unknown outcomes can support honest unsatisfied or
 unverified claims. An `ok` result or a macro dispatch alone does not prove a
@@ -99,7 +129,7 @@ metadata. User/developer history cannot contain native call metadata; native
 history has exactly one paired call. Workspace replay checks adjacent batch
 siblings against the same run, step and model attempt with consecutive indexes;
 an index reset cannot start a second batch before the preceding results.
-Format-7 chats are read-only after this cutover; no v7 inference,
+Format-6/7/8 chats are read-only after this cutover; no legacy inference,
 dual-write or automatic migration is allowed. Windows x64 + Office x64 +
 WebView2 and real-model qualification remain open.
 
