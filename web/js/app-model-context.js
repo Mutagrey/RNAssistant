@@ -304,7 +304,7 @@
           (link.ObservedCoverage[field] == null ? null : link.ObservedCoverage[field]);
       }) || JSON.stringify(data.coverage.fields || []) !== JSON.stringify(link.ObservedCoverage.fields || [])) return null;
       var excerpt = text == null ? null : Array.from(text).slice(0, 160).join("");
-      return { reference: selected.alias, target: data.target, view: link.View,
+      return { reference: selected.alias, target: data.target, view: link.View, pageIndex: data.pageIndex,
         coverage: data.sourceCoverage || data.coverage, excerpt: excerpt, excerptTruncated: text != null && excerpt.length < text.length };
     } catch (_) { return null; } // Exact raw message remains available without an inferred label.
   }

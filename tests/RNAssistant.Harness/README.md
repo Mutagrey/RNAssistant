@@ -1444,6 +1444,12 @@ no-op versus missing/unverified evidence, artifact parent boundaries and typed b
 content blocks with exact numeric cells. `tests/web/tool-result-presentation.test.js`
 covers lazy requests, collapse/removal cancellation, retry, wrong-source delivery,
 in-flight revision changes and unknown block kinds using the Playwright setup below.
+The same Harness filter covers PDF page/range selection completeness, CAS media
+receipts without invented R or delivery claims, composite table/list/text and missing
+comparisons for verified no-change/change/unknown. `resource context: exact PDF page text`
+also traces actual PDF extraction into the presentation service. Activity and model
+context Chrome suites check one-based PDF captions, bounded notes and actual-request
+attribution. This does not qualify Office/WebView2 or binary media delivery.
 
 `tests/web/agent-activity-layout.test.js` checks action/target/result wrapping at
 wide and narrow chat widths, shipped Markdown line breaks/lists/code/sanitization,

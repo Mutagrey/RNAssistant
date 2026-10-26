@@ -47,8 +47,12 @@ namespace RNAssistant.Office.Services
             if (changes != null && (changes.EvidenceFound || !changes.Complete))
                 result.Blocks.Add(new ToolChangesBlockDto { Title = "Изменения этого шага", Complete = changes.Complete, Changes = changes });
             else if (activity.ExecutionEvidence?.Effect == ToolEffectEvidence.Unknown ||
-                activity.ExecutionEvidence?.Effect == ToolEffectEvidence.VerifiedChange)
-                result.Blocks.Add(new ToolTextBlockDto { Title = "Сравнение", Text = "Сохранённое сравнение для этого вызова недоступно." });
+                activity.ExecutionEvidence?.Effect == ToolEffectEvidence.VerifiedChange ||
+                activity.ExecutionEvidence?.Effect == ToolEffectEvidence.VerifiedNoChange)
+                result.Blocks.Add(new ToolTextBlockDto { Title = "Сравнение", Text =
+                    (effect == ToolEffectEvidence.Unknown ? "Результат действия не подтверждён. " :
+                     effect == ToolEffectEvidence.VerifiedNoChange ? "Подтверждено отсутствие изменений. " : "Изменения подтверждены. ") +
+                    "Сохранённое сравнение для этого вызова недоступно." });
             var questions = activity.ToolId == UserQuestionToolCatalog.AskToolId;
             if (questions) result.QuestionsUnavailableReason = "Сохранённые вопросы недоступны. Повторите загрузку; при повторной ошибке сообщите об этом в чат.";
             // Canonical results/CAS are shared by document and workspace activities.
@@ -144,7 +148,9 @@ namespace RNAssistant.Office.Services
                 var readData = data as ResourceReadPreviewSource;
                 var sourceView = readData?.Kind == "resource-read"
                     ? Source(data.Target, data.Text, readData.Representation, readData.SourceCoverage ?? readData.Coverage) : null;
-                if (sourceView != null && (data.Text != null || data.Table != null || readData.Tree != null))
+                if (sourceView != null) sourceView.PageIndex = readData.PageIndex;
+                if (sourceView != null && readData.Representation != ResourceRepresentations.Media &&
+                    (data.Text != null || data.Table != null || readData.Tree != null))
                     sourceView.Reference = ModelReferenceProjection.BoundSourceReference(terminal, readData.Representation, readData.Coverage)?.Alias;
                 if (data.Matches != null)
                 {
@@ -163,20 +169,22 @@ namespace RNAssistant.Office.Services
                     if (!block.Complete) blocks.Add(new ToolTextBlockDto { Title = "Полнота поиска", Complete = false,
                         Text = "Поиск или выдача неполны. " + string.Join(", ", data.IncompleteReasons ?? new List<string>()) });
                 }
-                var complete = data.Complete != false && !data.Partial && !data.Truncated && !data.Externalized && string.IsNullOrEmpty(data.NextCursor);
+                var complete = (readData?.Kind == "resource-read" ? readData.SelectionComplete ?? data.Complete : data.Complete) != false &&
+                    !data.Partial && !data.Truncated && !data.Externalized && string.IsNullOrEmpty(data.NextCursor);
+                var note = sourceView == null || terminal == null ? null : ReadNote(readData);
                 var table = data.Table ?? (data.Columns != null && data.Rows != null ? new ResourceTableBatch { Columns = data.Columns, Rows = data.Rows, TotalRows = data.TotalRows } : null);
                 if (table?.Columns != null && table.Rows != null)
                 {
                     var columns = table.Columns.Take(12).ToList();
                     if (columns.Any(c => c == null || string.IsNullOrEmpty(c.Key))) throw new JsonSerializationException("Invalid columns.");
-                    var block = new ToolTableBlockDto { Title = "Таблица", Source = sourceView, Complete = complete && table.Rows.Count <= MaxRows &&
+                    var block = new ToolTableBlockDto { Title = "Таблица", Source = sourceView, Note = note, Complete = complete && table.Rows.Count <= MaxRows &&
                         table.Columns.Count <= 12 && table.TotalRows <= table.Rows.Count };
                     block.Columns = columns.Select(c => Clip(c.Label ?? c.Key, 160, block)).ToList();
                     foreach (var row in table.Rows.Take(MaxRows))
                         block.Rows.Add(columns.Select(c => { object value; return Clip(row != null && row.TryGetValue(c.Key, out value) ? Scalar(value) : "", 500, block); }).ToList());
                     blocks.Add(block);
                 }
-                else if (data.Items != null)
+                if (data.Items != null)
                 {
                     var block = new ToolListBlockDto { Title = "Список", Complete = complete && data.Items.Count <= MaxRows };
                     foreach (var item in data.Items.Take(MaxRows))
@@ -193,12 +201,12 @@ namespace RNAssistant.Office.Services
                 var text = data.Text ?? data.Content;
                 if (text != null)
                 {
-                    var block = new ToolTextBlockDto { Title = "Содержимое", Source = sourceView, Complete = complete };
+                    var block = new ToolTextBlockDto { Title = "Содержимое", Source = sourceView, Note = note, Complete = complete };
                     block.Text = Clip(text, MaxText, block); blocks.Add(block);
                 }
                 if (readData?.Tree?.Nodes != null)
                 {
-                    var block = new ToolListBlockDto { Title = "Структура", Source = sourceView, Complete = complete &&
+                    var block = new ToolListBlockDto { Title = "Структура", Source = sourceView, Note = note, Complete = complete &&
                         readData.Tree.NextOffset == null && readData.Tree.Nodes.Count <= MaxRows };
                     foreach (var item in readData.Tree.Nodes.Take(MaxRows)) {
                         if (item == null) { block.Complete = false; continue; }
@@ -207,10 +215,34 @@ namespace RNAssistant.Office.Services
                     }
                     blocks.Add(block);
                 }
-                if (!complete && data.Items == null && table == null && text == null) Notice(blocks);
+                if (sourceView != null && readData.Representation == ResourceRepresentations.Media)
+                {
+                    // A media receipt is not the binary body or evidence of HTTP delivery.
+                    var receipt = Source(data.Target, null, readData.Representation, readData.SourceCoverage ?? readData.Coverage);
+                    blocks.Add(new ToolTextBlockDto { Title = "Медиа", Source = receipt,
+                        Text = terminal != null && readData.HydratedForNextModelStep
+                            ? "Медиа подготовлено для следующего запроса модели. Фактическую отправку показывает диагностика запроса."
+                            : "Сохранены сведения о медиа; подтверждение подготовки для следующего запроса модели отсутствует.",
+                        Note = "Бинарное содержимое не включено в эту карточку. Просмотр доступен в ресурсах чата." });
+                }
+                if (!complete && data.Items == null && table == null && text == null &&
+                    readData?.Representation != ResourceRepresentations.Media) Notice(blocks);
             }
             catch (JsonException) { Notice(blocks); }
             catch (OverflowException) { Notice(blocks); }
+        }
+        private static string ReadNote(ResourceReadPreviewSource data)
+        {
+            var notes = new List<string>();
+            if (data.SelectionComplete == true && (data.Complete == false || data.SourceComplete == false))
+                notes.Add("Выбранный фрагмент получен полностью; весь источник не прочитан.");
+            else if (data.SourceComplete == false)
+                notes.Add("Получена часть источника.");
+            if (data.PageIndex.HasValue || data.StartPage.HasValue)
+                notes.Add("Текст извлечён из PDF; это не просмотр изображений и не подтверждение OCR.");
+            if (data.NextPageIndex.HasValue)
+                notes.Add("Продолжение — со страницы " + ((long)data.NextPageIndex.Value + 1).ToString(CultureInfo.InvariantCulture) + ".");
+            return notes.Count == 0 ? null : string.Join(" ", notes);
         }
         private static ToolSourcePreviewDto Source(string target, string text, string view, ResourceCoverage coverage,
             int? line = null, int? column = null)
@@ -245,6 +277,11 @@ namespace RNAssistant.Office.Services
             public ResourceCoverage Coverage { get; set; }
             public ResourceCoverage SourceCoverage { get; set; }
             public ResourceTree Tree { get; set; }
+            public bool? SelectionComplete { get; set; }
+            public int? PageIndex { get; set; }
+            public int? StartPage { get; set; }
+            public int? NextPageIndex { get; set; }
+            public bool HydratedForNextModelStep { get; set; }
         }
         private class PreviewSource
         {

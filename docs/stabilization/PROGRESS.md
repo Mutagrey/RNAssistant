@@ -23,6 +23,25 @@ and [live output](../audits/evidence/unified-chat-2026-10-26/chat-workspace-stre
 show the same surface; [Office live output](../audits/evidence/unified-chat-2026-10-26/chat-office-stream.png)
 uses the same stream leaf. Windows Office/WebView2 streaming remains unqualified.
 
+## PDF/media and composite tool result captions — 2026-10-26
+
+Owner: Office ToolResultPresentationService / shared Web UI; Core result summaries.
+PDF cards and actual-request captions show one-based pages and exact character
+windows. Selection completeness is separate from source completeness and UI clipping;
+PDF extraction does not claim visual/OCR coverage. Media receipts distinguish saved
+preparation from actual HTTP delivery, without inventing a binary-body R citation.
+Workspace summaries retain the resource-owned hydration flag. Composite results keep
+table, list and text independently. Missing comparison notices preserve verified
+change/no-change/unknown; raw business counts never become changed-object totals.
+
+6 focused Harness checks pass, including actual two-page PDF extraction into the
+presentation service; 3 Chrome suites pass. [Narrow PDF/media cards](../audits/evidence/tool-pdf-media-preview.png)
+were inspected with synthetic UI data. Build has only the 2 existing PDF platform
+warnings. No Office/VSTO validation. Domain-specific counts/diffs, search provenance,
+actual media delivery and Windows/WebView2 qualification remain open in the
+[matrix](../audits/tool-result-presentation-matrix.md). Model wire stays v8; no new
+storage, runtime authority or product version.
+
 ## Tool attempts and workspace result presentation — 2026-10-26
 
 Owner: Core tool display/summary projection; Office presentation service; shared Web UI.

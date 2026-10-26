@@ -26,7 +26,7 @@ skill IDs, а не дополнительные публичные registrations
 | Activity / лента | Отдельная UI projection результата. Краткое описание и статус уже даёт activity; typed blocks читаются лениво по точным chat/run/call; workspace route также проверяет workspace/session. Сохранённый E, действие и объект показываются в receipt, raw JSON берётся из того же canonical result/CAS |
 | Model | Core `ModelResultProjection`, Office `ModelToolResultProjection` для domain families; compiler применяет currentness/budget/CAS; финальный `ModelReferenceProjection` добавляет E и допустимые R |
 | Диагностика | Точный сохранённый HTTP request/response и typed evidence links. Наличие результата/CAS не означает, что тело вошло в конкретный запрос |
-| UI source caption | `ToolSourcePreviewDto`: reference?, target, view?, coverage?, line?/column?, excerpt?, excerptTruncated. Это disposable display data, не новая база и не вход tool |
+| UI source caption | `ToolSourcePreviewDto`: reference?, target, view?, coverage?, line?/column?/pageIndex?, excerpt?, excerptTruncated. Typed block `note` поясняет полноту и ограничения. Это disposable display data, не новая база и не вход tool |
 
 Errors сохраняют причину/recovery; unknown сохраняет неизвестный эффект и запрет
 автоматического replay. После folding остаётся E/outcome; отсутствие тела не выдаётся
@@ -169,8 +169,8 @@ binding. Document/workspace используют общий renderer; налич
 | Пользовательский VBA/JS tool | Exact descriptor/policy/binding + общий result envelope; arbitrary data | Краткий исход и распознанные bounded blocks/JSON; поле ref внутри бизнес-данных не становится ссылкой |
 | Read text/source/metadata/structure/formulas | ResourceReadProjection, исходная representation и coverage | Подпись target + view/range + цитата только из фактически имеющегося текста |
 | Table/tree | Typed table/tree + coverage, no forced text conversion | Таблица с точными display strings; дерево с pointer/type/value, явная частичность |
-| PDF/page/char slices | Page/character coverage остаётся самостоятельным видом | Подпись страниц или символов, не выдуманные file line numbers |
-| Media / attachments | Отдельные selected content parts и exact request manifest | Существующие media viewers; данная правка не создаёт text quote/R caption из бинарного вложения |
+| PDF/page/char slices | Page/character coverage остаётся самостоятельным видом | Страницы с 1, точные символы, полнота selection отдельно от source; явные ограничения извлечения/OCR и следующая страница. Проверен реальный PDF extractor → result → UI projection |
+| Media / attachments | Отдельные selected content parts и exact request manifest | Retained receipt с target и подготовкой, без выдуманной text quote/R. Только OK canonical read подтверждает подготовку; фактическая отправка — в request manifest. Существующие media viewers остаются отдельными |
 | Several resources | Typed evidence остаётся списком; compiler может выдать отдельные source views | Нет присвоения R списку по позиции. Одна подпись read требует одного однозначного наблюдения |
 | Search/find items | Targets/snippets/coordinates остаются navigation data | Компактная подпись есть; **R отсутствует**, пока producer не сохраняет per-item scoped provenance |
 | Large/omitted/missing CAS | Оригинал не заменяется новыми байтами; budget/availability явные | Ограниченная preview либо unavailable notice; E/outcome сохраняются, R к подставленному activity text не приклеивается |
@@ -206,7 +206,7 @@ message, когда saved link подтверждает body inclusion, ref/view
 | Исход / данные | Текущее отображение | Ограничение |
 |---|---|---|
 | `VerifiedChange` | «Изменения подтверждены»; сохранённый diff при наличии exact before/after | Доказанный эффект и доступность diff — разные факты |
-| `VerifiedNoChange` | «Без изменений»; пустое подтверждённое сравнение — «Изменений нет» | Отсутствие сравнения само по себе не означает no-op |
+| `VerifiedNoChange` | «Без изменений»; пустое подтверждённое сравнение — «Изменений нет»; без comparison явно показаны подтверждённый no-op и недоступность сравнения | Отсутствие сравнения само по себе не означает no-op |
 | `Unknown` | «Результат не подтверждён — нужна проверка»; Inspector объясняет проверку перед повтором | Запланированный текст может показываться только как предварительное сравнение |
 | Отказ до dispatch / ошибка | Краткая причина и error code; полный текст и параметры в деталях | Описание неизвестного кода остаётся общим; outcome определяется evidence, не текстом |
 | Создание/удаление/переименование/copy | Diff owner показывает действие и объект; rename — старое → новое имя; large-file hunks/copy имеют отдельные пояснения | Это coverage retained sources/VBA journal, не универсальный diff всех Office объектов |
@@ -259,7 +259,28 @@ fixtures, не реальные Office-документы. Полный Harness/
 
 ## Проверки и оставшиеся gaps
 
-Результат текущей проверки: **14/14 Harness checks**, обе Web suites ниже прошли
+Продолжение PDF/media/composite — 2026-10-26:
+
+- Исправлены технический `pdf-page:N` в подписи, потеря списка рядом с таблицей,
+  отсутствие пояснения verified no-op без comparison и потеря resource-owned
+  hydration flag в общей workspace summary. Storage/model wire не менялись.
+- Media receipt показывает подготовку только по успешному canonical read; ошибка,
+  unknown и arbitrary custom shape не получают такую подпись. Это не подтверждение
+  доставки бинарного тела и не запуск нового viewer.
+- 5 `tool presentation:` checks и `resource context: exact PDF page text` проходят;
+  последний использует настоящий двухстраничный PDF и существующий extractor.
+  Три Chrome suites: result presentation, activity layout, model context layout.
+  Проверены PDF-координаты в фактическом request, инертный текст и narrow light/dark;
+  [пример карточек](evidence/tool-pdf-media-preview.png) использует synthetic UI data.
+- Аудит счётчиков: `replacements` в Word/PowerPoint/Excel — число выбранных совпадений,
+  в том числе при `VerifiedNoChange`, а не число изменённых объектов. Владельцы:
+  [WordService.Replace](../../src/RNAssistant.Office/Domains/Word/WordService.cs),
+  [PowerPointService.Replace](../../src/RNAssistant.Office/Domains/PowerPoint/PowerPointService.cs),
+  [ExcelFindReplaceService](../../src/RNAssistant.Office/Domains/Excel/ExcelFindReplaceService.cs).
+  Универсальный «изменено N» из этого поля запрещён; дальнейшие domain counters
+  требуют собственных единиц и read-back semantics. Generic JSON остаётся доступным.
+
+Проверки первоначального среза source captions: **14/14 Harness checks**, обе Web suites ниже прошли
 в Chrome. [Лента](evidence/source-caption-chat.png),
 [узкая лента](evidence/source-caption-chat-narrow.png) и
 [диагностика](evidence/source-caption-diagnostics.png) проверены визуально на
@@ -281,7 +302,7 @@ fixtures, не реальные Office-документы. Полный Harness/
   `plan mode: question presentation survives storage`, guarded file/VBA/HTML mutation tests.
   Их наличие не означает, что все они перезапускались для данной UI-правки.
 
-Открыто: per-item provenance для search/find и host-specific search; captions для media;
+Открыто: per-item provenance для search/find и host-specific search; реальная media delivery/viewer qualification;
 полная проверка реальных domain payloads на Windows/Office; live-model A/B текущего
 контракта; generic business shapes за пределами известных блоков остаются JSON.
 Ни один из этих gaps не скрывается выдачей ссылки по target, позиции или тексту.

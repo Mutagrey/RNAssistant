@@ -19,9 +19,10 @@
     else if (coverage.kind === "line-range" && coverage.start != null && coverage.end > coverage.start)
       location = coverage.end === coverage.start + 1 ? "строка " + coverage.start : "строки " + coverage.start + "–" + (coverage.end - 1);
     else if (coverage.kind === "character-range" && coverage.start != null && coverage.end != null)
-      location = (coverage.address ? coverage.address + ", " : "") + "символы [" + coverage.start + ", " + coverage.end + ")";
+      location = (Number.isInteger(source.pageIndex) && source.pageIndex >= 0 ? "страница " + (source.pageIndex + 1) + ", " :
+        coverage.address ? coverage.address + ", " : "") + "символы [" + coverage.start + ", " + coverage.end + ")";
     else if (coverage.kind === "page-range" && coverage.start != null && coverage.end != null)
-      location = "страницы " + (coverage.start + 1) + "–" + coverage.end;
+      location = coverage.end === coverage.start + 1 ? "страница " + coverage.end : "страницы " + (coverage.start + 1) + "–" + coverage.end;
     else if (coverage.address) location = coverage.address;
     else if (coverage.path != null) location = "путь " + JSON.stringify(coverage.path);
     else if (coverage.kind === "record-range") location = "записи [" + coverage.start + ", " + coverage.end + ")";
@@ -85,6 +86,7 @@
       var heading = node("summary", block.source ? "tool-source-caption" : "", block.source ? sourceLabel(block.source) : block.title);
       if (block.source) heading.title = "Развернуть сохранённый фрагмент результата";
       card.appendChild(heading);
+      if (block.note) card.appendChild(node("p", "tool-result-note", block.note));
       if (!block.complete && block.kind !== "text_changes")
         card.appendChild(node("p", "tool-result-note", "Показана доступная часть результата. Подробности — в JSON ниже."));
       var body = node("div", "tool-result-preview-body"); card.appendChild(body);

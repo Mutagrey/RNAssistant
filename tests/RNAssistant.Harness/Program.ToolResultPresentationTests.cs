@@ -13,6 +13,74 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ToolPresentationPdfMedia()
+        {
+            WithTempPaths(paths => {
+                var payloads = new ChatBlobStore(paths);
+                var reference = new ResourceRef("rna://artifact/pdf/report", "revision");
+                var scope = new ResourceAuthorityScopeId("chat", "pdf-media");
+                var page = ResourceReadProjection.FromPdfPage(new ResourceReadResult {
+                    Resource = new ResourceDescriptor { Reference = reference }, Representation = "text",
+                    Text = "日本語", ReturnedCharacters = 3, TotalCharacters = 20, Offset = 4,
+                    Complete = false, SourceComplete = false, PageIndex = 1, PageCount = 6,
+                    Coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, address: "pdf-page:1", start: 4, end: 7)
+                }, "report.pdf", "artifact", "conversation", 1, 4, 3, true);
+                var range = ResourceReadProjection.FromPdfRange(new ResourceReadResult {
+                    Resource = new ResourceDescriptor { Reference = reference }, Representation = "text",
+                    Text = "Страница 3\nСтраница 4", ReturnedCharacters = 21, Complete = false, SourceComplete = false, PageCount = 6,
+                    Coverage = new ResourceCoverage(ResourceCoverageKinds.PageRange, start: 2, end: 4),
+                    SourceCoverage = new ResourceCoverage(ResourceCoverageKinds.PageRange, start: 2, end: 4)
+                }, "report.pdf", "artifact", "conversation", 2, 3);
+                foreach (var data in new[] { page, range, new ResourceReadProjection {
+                    Target = "photo.png", Representation = "media", Coverage = ResourceCoverage.Whole(),
+                    Complete = true, HydratedForNextModelStep = true, RawContentIncluded = false } })
+                {
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "common.resources_read" },
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", JsonConvert.SerializeObject(data)), ToolResultRoles.User);
+                    terminal.RunId = "run";
+                    terminal.ResourceEvidence.Add(new ResourceEvidence("observation", scope, reference, data.Representation, data.Coverage, false, 1));
+                    terminal.ResourceModelReferences.Add(new ModelResourceReference(scope, reference, ModelReference.Create(ModelReferenceKind.Resource, 5), 1));
+                    terminal.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(terminal.Content, "application/json"));
+                    terminal.Content = "Retained in CAS.";
+                    var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
+                        Activity = new ChatActivity { ToolId = terminal.ToolName, ToolCallId = terminal.ToolCallId } } } };
+                    var before = JsonConvert.SerializeObject(session);
+                    var result = new ToolResultPresentationService(null, payloads).Read(session, "run", "read");
+                    var block = result.Blocks.OfType<ToolTextBlockDto>().Single();
+                    if (data == page) {
+                        AssertEqual(1, block.Source.PageIndex.Value, "PDF page remains typed and zero-based until display");
+                        AssertEqual("R5@v1", block.Source.Reference, "PDF text uses the exact saved scoped binding");
+                        AssertTrue(block.Complete && block.Note.Contains("весь источник не прочитан"), "complete selection is distinct from partial source");
+                        AssertEqual("日本語", block.Text, "selected PDF bytes are not replaced with the whole document");
+                    } else if (data == range) {
+                        AssertTrue(!block.Complete && block.Note.Contains("страницы 5"), "partial range keeps exact continuation in one-based UI coordinates");
+                        AssertEqual(4L, block.Source.Coverage.End.Value, "range caption describes delivered pages, not requested pages");
+                    } else {
+                        AssertTrue(block.Source.Reference == null && block.Source.Excerpt == null, "media receipt does not manufacture a body citation");
+                        AssertContains(block.Text, "Фактическую отправку", "preparation is not model delivery");
+                        AssertTrue(ToolResultSummaryProjection.Summarize("common.resources_read", result.RawJson).HydratedForNextModelStep,
+                            "shared workspace summary preserves resource-owned media preparation");
+                    }
+                    AssertEqual(before, JsonConvert.SerializeObject(session), "presentation leaves canonical results and evidence unchanged");
+                }
+                foreach (var status in new[] { RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown }) {
+                    var data = JsonConvert.SerializeObject(new ResourceReadProjection { Target = "sound.wav", Representation = "media",
+                        Complete = true, HydratedForNextModelStep = true, Coverage = ResourceCoverage.Whole() });
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "failed", ToolId = "common.resources_read" },
+                        new RNAssistant.Core.Tools.Contracts.ToolResult(status, "Unverified.", data), ToolResultRoles.User);
+                    terminal.RunId = "run";
+                    var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
+                        Activity = new ChatActivity { ToolId = terminal.ToolName, ToolCallId = terminal.ToolCallId } } } };
+                    var block = (ToolTextBlockDto)new ToolResultPresentationService(null).Read(session, "run", "failed").Blocks.Single();
+                    AssertContains(block.Text, "подтверждение подготовки", "failed/unknown media cannot claim prepared delivery");
+                }
+                var custom = new List<ToolResultBlockDto>();
+                ToolResultPresentationService.AppendContent(custom,
+                    "{\"kind\":\"resource-read\",\"target\":\"image.png\",\"representation\":\"media\",\"hydratedForNextModelStep\":true}", "custom.inspect");
+                AssertEqual(0, custom.Count, "arbitrary custom data cannot claim a resource-owned media receipt");
+            });
+        }
+
         private static void ToolPresentationSourceReferences()
         {
             WithTempPaths(paths => {
@@ -226,6 +294,22 @@ namespace RNAssistant.Harness
             AssertEqual("Проверка объекта", custom.Action, "receipt uses catalog action");
             AssertEqual("Object A", custom.Target, "receipt identifies the exact attempted target");
             AssertEqual("{\"text\":\"canonical result\"}", custom.RawJson, "raw view uses the same canonical result instead of a second activity body");
+            blocks.Clear();
+            ToolResultPresentationService.AppendContent(blocks,
+                "{\"text\":\"Summary\",\"table\":{\"columns\":[{\"key\":\"n\"}],\"rows\":[{\"n\":2}],\"totalRows\":1},\"items\":[{\"title\":\"Diagnostic\",\"text\":\"Detail\"}]}");
+            AssertTrue(blocks.OfType<ToolTableBlockDto>().Count() == 1 && blocks.OfType<ToolListBlockDto>().Count() == 1 &&
+                blocks.OfType<ToolTextBlockDto>().Count() == 1, "a composite result retains table, list and text independently");
+            foreach (var effect in new[] { ToolEffectEvidence.VerifiedChange, ToolEffectEvidence.VerifiedNoChange, ToolEffectEvidence.Unknown }) {
+                var mutation = new ChatSession { Messages = new List<ChatMessage> { new ChatMessage { RunId = "run",
+                    Activity = new ChatActivity { ToolId = "files.patch", ToolCallId = "patch",
+                        ExecutionEvidence = new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, effect),
+                        DataJson = "{\"before\":\"invented\",\"after\":\"invented\",\"replacements\":7}" } } } };
+                var receipt = new ToolResultPresentationService(null).Read(mutation, "run", "patch");
+                AssertEqual(1, receipt.Blocks.Count, "arbitrary business counts and before/after never become verified comparisons");
+                AssertContains(((ToolTextBlockDto)receipt.Blocks.Single()).Text, effect == ToolEffectEvidence.VerifiedChange ? "Изменения подтверждены" :
+                    effect == ToolEffectEvidence.VerifiedNoChange ? "Подтверждено отсутствие изменений" : "Результат действия не подтверждён",
+                    "missing comparison preserves the exact effect, including confirmed no-op");
+            }
         }
     }
 }

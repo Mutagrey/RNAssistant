@@ -211,11 +211,31 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#previews .run-change-file-summary").click();
     await page.locator("#previews .vba-diff-line.add").waitFor();
     assert.equal(await page.locator("#previews .vba-diff-line.add").count(), 1);
+    await page.evaluate(() => {
+      const host = document.createElement("div"); host.id = "resource-previews"; document.querySelector("main").appendChild(host);
+      RNAssistantToolResultPresentation.render(host, { blocks: [
+        { kind: "text", title: "Содержимое", complete: true, text: "Выручка за квартал: 120 000 ₽.",
+          source: { reference: "R5@v1", target: "Отчёт.pdf", view: "text", pageIndex: 1,
+            coverage: { kind: "character-range", address: "pdf-page:1", start: 4, end: 32 }, excerpt: "Выручка за квартал" },
+          note: "Выбранный фрагмент получен полностью; весь источник не прочитан. Текст извлечён из PDF; это не просмотр изображений и не подтверждение OCR." },
+        { kind: "text", title: "Медиа", complete: true, source: { target: "Диаграмма.png", view: "media" },
+          text: "Медиа подготовлено для следующего запроса модели. Фактическую отправку показывает диагностика запроса.",
+          note: "Бинарное содержимое не включено в эту карточку. Просмотр доступен в ресурсах чата." },
+        { kind: "text", title: "Сравнение", complete: true,
+          text: "Подтверждено отсутствие изменений. Сохранённое сравнение для этого вызова недоступно." }
+      ] });
+      host.querySelectorAll("details").forEach(node => { node.open = true; });
+    });
+    assert.match(await page.locator("#resource-previews .tool-source-caption").first().innerText(), /R5@v1 — Отчёт.pdf, страница 2, символы \[4, 32\)/);
+    assert.equal(await page.locator("#resource-previews").innerText().then(text => text.includes("Показана доступная часть результата")), false,
+      "a complete selected PDF slice is not labelled as a truncated UI preview");
     for (const theme of ["light", "dark"]) {
       await page.evaluate(theme => document.documentElement.dataset.theme = theme, theme);
       await page.setViewportSize({ width: 360, height: 920 });
       assert.ok(await page.locator("#previews").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "previews fit narrow " + theme + " theme");
+      assert.ok(await page.locator("#resource-previews").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "PDF/media notes fit narrow " + theme + " theme");
     }
+    if (process.env.RESULT_DETAILS_SCREENSHOT) await page.locator("#resource-previews").screenshot({ path: process.env.RESULT_DETAILS_SCREENSHOT });
     await page.evaluate(() => {
       const view = { RunId: "sparse", TurnId: "sparse", Lifecycle: "running", ExecutionHealth: "unknown",
         SuccessfulReads: 2, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 1, FailedCalls: 1, UnknownEffects: 1 };

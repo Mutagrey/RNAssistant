@@ -777,6 +777,7 @@ namespace RNAssistant.Harness
                 Test("tool presentation: artifact call correlation", ToolPresentationArtifactCorrelation),
                 Test("tool presentation: typed content blocks", ToolPresentationContentBlocks),
                 Test("tool presentation: exact source captions and CAS", ToolPresentationSourceReferences),
+                Test("tool presentation: PDF selections and media receipts", ToolPresentationPdfMedia),
                 Test("run changes: retained sources and workspace members", RunChangesRetainedSources),
                 Test("run changes: durable VBA evidence", RunChangesVbaEvidence),
                 Test("run changes: unverified intended previews", RunChangesIntendedPreviews),

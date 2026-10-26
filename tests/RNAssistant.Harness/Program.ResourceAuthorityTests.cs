@@ -70,6 +70,18 @@ namespace RNAssistant.Harness
                     "source coverage names original page");
                 AssertTrue((bool)body["selectionComplete"] && !(bool)body["complete"] &&
                     !(bool)body["sourceComplete"], "full extracted page is not whole PDF or visual completeness");
+                var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                    ToolId = ResourceToolCatalog.ReadToolId, ToolCallId = "pdf-preview" }, selected.Result, ToolResultRoles.User);
+                terminal.RunId = "pdf-preview-run";
+                session.Messages.Add(terminal);
+                session.Messages.Add(new ChatMessage { RunId = terminal.RunId, Activity = new ChatActivity {
+                    ToolId = terminal.ToolName, ToolCallId = terminal.ToolCallId } });
+                var preview = (RNAssistant.Office.Contracts.ToolTextBlockDto)new ToolResultPresentationService(null)
+                    .Read(session, terminal.RunId, terminal.ToolCallId).Blocks.Single();
+                AssertEqual((string)body["text"], preview.Text, "real PDF extraction reaches presentation unchanged");
+                AssertTrue(preview.Complete && preview.Source.PageIndex == 1 && preview.Source.Coverage.Kind == ResourceCoverageKinds.PageRange,
+                    "real full-page selection is complete within its original page, not the whole PDF");
+                AssertContains(preview.Note, "не подтверждение OCR", "PDF caption states extraction limits");
                 AssertEqual(ResourceCoverageKinds.PageRange,
                     selected.ResourceEvidence.Single().ReadMetadata.RequestedCoverage.Kind,
                     "page intent is retained separately from selected characters");

@@ -39,6 +39,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("kind")] public abstract string Kind { get; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("complete")] public bool Complete { get; set; } = true;
+        [JsonProperty("note", NullValueHandling = NullValueHandling.Ignore)] public string Note { get; set; }
         [JsonProperty("source", NullValueHandling = NullValueHandling.Ignore)] public ToolSourcePreviewDto Source { get; set; }
     }
     // A bounded view of this retained result, not proof of delivery to a model.
@@ -50,6 +51,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("coverage", NullValueHandling = NullValueHandling.Ignore)] public ResourceCoverage Coverage { get; set; }
         [JsonProperty("line", NullValueHandling = NullValueHandling.Ignore)] public int? Line { get; set; }
         [JsonProperty("column", NullValueHandling = NullValueHandling.Ignore)] public int? Column { get; set; }
+        [JsonProperty("pageIndex", NullValueHandling = NullValueHandling.Ignore)] public int? PageIndex { get; set; }
         [JsonProperty("excerpt", NullValueHandling = NullValueHandling.Ignore)] public string Excerpt { get; set; }
         [JsonProperty("excerptTruncated")] public bool ExcerptTruncated { get; set; }
     }

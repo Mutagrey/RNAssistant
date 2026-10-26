@@ -80,6 +80,8 @@ namespace RNAssistant.Core.Tools
                 Representation = representation,
                 ReturnedCharacters = characters,
                 ReturnedRows = rows?.Count,
+                HydratedForNextModelStep = data["hydratedForNextModelStep"]?.Type == JTokenType.Boolean &&
+                    data.Value<bool>("hydratedForNextModelStep"),
                 Complete = data.Value<bool>("complete")
             };
         }

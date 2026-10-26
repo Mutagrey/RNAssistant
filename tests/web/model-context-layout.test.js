@@ -261,14 +261,18 @@ const { chromium } = require("playwright");
     await page.evaluate(() => {
       RNAssistantModelContext.close();
       const oldSend = send, oldRead = RNAssistantResourceDownload.read;
-      const coverage = { kind: "line-range", start: 42, end: 43, fields: [] };
-      const resource = { uri: "rna://workspace/files/src/A.cs", revision: "exact-a" }, scope = { kind: "workspace", id: "project-a" };
-      const wire = JSON.stringify({ messages: [{ role: "user", content: "TOOL_RESULT:\n" + JSON.stringify({
+      window.captionFixturePdf = false;
+      const coverage = () => captionFixturePdf ? { kind: "character-range", address: "pdf-page:1", start: 4, end: 17, fields: [] }
+        : { kind: "line-range", start: 42, end: 43, fields: [] };
+      const resource = () => ({ uri: captionFixturePdf ? "rna://workspace/files/report.pdf" : "rna://workspace/files/src/A.cs", revision: "exact-a" });
+      const scope = { kind: "workspace", id: "project-a" };
+      const wire = () => JSON.stringify({ messages: [{ role: "user", content: "TOOL_RESULT:\n" + JSON.stringify({
         tool_call_id: "E7", name: "common.resources_read", status: "ok", message: "Read.",
-        data: { kind: "resource-read", ref: "R3@v1", target: "src/A.cs", representation: "text", coverage,
+        data: { kind: "resource-read", ref: "R3@v1", target: captionFixturePdf ? "report.pdf" : "src/A.cs", representation: "text", coverage: coverage(),
+          pageIndex: captionFixturePdf ? 1 : undefined,
           text: "искомый текст", complete: false }
       }) }] });
-      RNAssistantResourceDownload.read = async (data, options) => data.captionFixture ? new TextEncoder().encode(wire) : oldRead(data, options);
+      RNAssistantResourceDownload.read = async (data, options) => data.captionFixture ? new TextEncoder().encode(wire()) : oldRead(data, options);
       send = async (type, args) => {
         if (type === "getModelContextPayload" && args.eventId === "preview-request")
           return { chatId: args.chatId, eventId: args.eventId, data: { captionFixture: true, payload: { contentType: "application/json" } } };
@@ -276,9 +280,9 @@ const { chromium } = require("playwright");
         if (type === "getModelContext") {
           const request = reply.events.find(event => event.type === "llm.request");
           request.trace = { RunId: "preview-run", StepId: "preview-step", ContextMessages: [{ MessageIndex: 0, Presentation: "Full",
-            ToolCallId: "caption-call", EvidenceLinks: [{ EvidenceId: "caption-evidence", ScopeId: scope, Resource: resource,
-              View: "text", ObservedCoverage: coverage, BodyIncludedInMessage: true }] }] };
-          reply.resources = [{ alias: "R3@v1", resource, scope, currentness: "Unknown", payloadAvailability: "Unknown", observations: [] }];
+            ToolCallId: "caption-call", EvidenceLinks: [{ EvidenceId: "caption-evidence", ScopeId: scope, Resource: resource(),
+              View: "text", ObservedCoverage: coverage(), BodyIncludedInMessage: true }] }] };
+          reply.resources = [{ alias: "R3@v1", resource: resource(), scope, currentness: "Unknown", payloadAvailability: "Unknown", observations: [] }];
           reply.operations = [{ alias: "E7", canonicalId: "caption-call" }];
         }
         return reply;
@@ -294,6 +298,13 @@ const { chromium } = require("playwright");
     assert.match(await exactSource.locator(":scope > summary").innerText(), /R3@v1 — src\/A.cs, строка 42: «искомый текст»/);
     await exactSource.locator(":scope > summary").click();
     await screenshot("source-caption-diagnostics");
+    await page.evaluate(() => { RNAssistantModelContext.close(); captionFixturePdf = true; });
+    await source.click();
+    await size.selectOption("focus");
+    await exactMessage.locator(":scope > summary").click();
+    await exactMessage.locator('[data-context-source="message/0"] > summary').click();
+    assert.match(await exactSource.locator(":scope > summary").innerText(), /R3@v1 — report.pdf, страница 2, символы \[4, 17\)/,
+      "actual-request diagnostics preserve the typed PDF page coordinate");
     await page.evaluate(() => {
       RNAssistantModelContext.close();
       const oldSend = send;

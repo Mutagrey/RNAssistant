@@ -78,6 +78,21 @@ const { chromium } = require("playwright");
       "unbound search item has a useful label without a minted R reference");
     assert.equal(await page.evaluate(() => RNAssistantToolResultPresentation.sourceLabel({ target: "A", coverage: {
       kind: "line-range", start: 42, end: 45 } })), "A, строки 42–44", "exclusive line bounds are displayed correctly");
+    assert.equal(await page.evaluate(() => RNAssistantToolResultPresentation.sourceLabel({ target: "report.pdf", pageIndex: 1, coverage: {
+      kind: "character-range", address: "pdf-page:1", start: 4, end: 7 } })), "report.pdf, страница 2, символы [4, 7)",
+      "PDF character window uses typed page coordinates instead of a technical address");
+    assert.equal(await page.evaluate(() => RNAssistantToolResultPresentation.sourceLabel({ target: "report.pdf", coverage: {
+      kind: "page-range", start: 1, end: 2 } })), "report.pdf, страница 2", "single PDF page uses a singular caption");
+    assert.equal(await page.evaluate(() => RNAssistantToolResultPresentation.sourceLabel({ target: "report.pdf", coverage: {
+      kind: "page-range", start: 2, end: 4 } })), "report.pdf, страницы 3–4", "PDF range is one-based with exclusive end preserved");
+    await page.evaluate(() => RNAssistantToolResultPresentation.render(document.getElementById("source-captions"), { blocks: [{
+      kind: "text", title: "Медиа", complete: true, source: { target: "photo.png", view: "media" },
+      note: "<img src=x onerror=alert(1)> Подготовка не подтверждает отправку.", text: "Сохранены сведения о медиа."
+    }] }));
+    await page.locator("#source-captions > details > summary").click();
+    assert.match(await page.locator("#source-captions").innerText(), /photo.png · медиа/);
+    assert.equal(await page.locator("#source-captions img").count(), 0, "typed block notes remain inert text");
+    assert.equal(await page.evaluate(() => requests.length), 4, "expanding a retained media receipt never rereads the live resource");
     await page.locator("#source-captions").evaluate(node => node.remove());
     await page.locator("#step > summary").click();
     await page.locator("#step > summary").click();

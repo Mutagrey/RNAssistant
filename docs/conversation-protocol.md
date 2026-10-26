@@ -1772,6 +1772,19 @@ display projection. Failed or pending workspace calls do not become completed.
 Actual and intended diff line counts stay separate; bounded hunks/copies without
 complete line comparison do not acquire fabricated zero totals.
 
+PDF captions carry the typed zero-based `pageIndex` to the shared formatter, which
+displays one-based pages in both chat and actual-request diagnostics. Complete
+selected text is distinguished from whole-source completeness and UI clipping;
+PDF extraction notes do not claim visual inspection or OCR. A bounded range keeps
+its actual page coverage and explicit next-page instruction. Media has a retained
+preparation receipt without an invented R/body citation; only an OK canonical read
+can report preparation. Actual HTTP delivery remains request evidence. Shared read
+summaries retain the resource owner's hydration flag, including workspace activities;
+Office materialization still replaces it with actual prepared-attachment availability.
+Composite results keep their table, list and text blocks independently. Missing
+mutation comparisons explicitly distinguish verified change, verified no-change
+and unknown effect; arbitrary business counts never become changed-object totals.
+
 `ToolRuntime` classifies each native invocation from a captured typed policy and
 handler-supplied dispatch/effect facts. Every active tool uses that path; absent
 historical effect evidence remains `Unreported`, never fabricated verification.
