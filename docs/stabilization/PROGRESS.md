@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Paired tool-profile pilot — 2026-10-26
+
+Owner: Core/Application tool composition; Harness diagnostics. The [live pilot](../audits/tool-profile-comparison.md)
+compares broad 18-tool and compact 9-tool surfaces on two identical synthetic tasks
+with Gemma cloud/local: eight runs, plus four passing scripted diagnostic checks.
+Compact reduces initial request size and cloud copy uses exact discovery/admission;
+both profiles complete only 1/4 runs. Local edit bytes are correct but finish evidence
+fails; local compact copy uses create despite an explicit copy requirement. Broad
+production defaults remain. The pilot also reproduces a schema-default routing bug
+that hides directories from ordinary workspace find; fix it separately, then repeat
+the paired tasks. No Office qualification or product version change.
+
 ## Normal CLI build restored — 2026-10-26
 
 Owner: Core.Net8 project composition. Exclude the unused Office UI

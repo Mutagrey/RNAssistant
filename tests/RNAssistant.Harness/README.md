@@ -1,5 +1,14 @@
 # RNAssistant Harness
 
+`--workspace-profile-live <fresh-evidence-directory> <broad|compact> <edit|copy>`
+is an isolated live diagnostic through the production workspace runtime. The
+`tests/cli/tool_profile_comparison.py` runner captures paired requests, model tags,
+byte-level file acceptance and run completion separately; `--scripted` validates
+four fixture paths without a model. Build Harness once, then pass a fresh output
+directory. The runner requires installed tags and never changes production defaults.
+See [protocol and results](../../docs/audits/tool-profile-comparison.md) for limits,
+commands and evidence. This is not part of the default test run or Office validation.
+
 `workspace: discovery admission restart and binding drift` uses a strict mock HTTP
 provider and an explicit small composition profile. A tool absent from the first
 request is found/read, admitted only in the next schema, executed once, restored

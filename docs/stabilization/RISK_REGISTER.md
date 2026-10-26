@@ -8,6 +8,21 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Workspace directory discovery loses directories — 2026-10-26
+
+Open; owner: Core resource schema / Application WorkspaceResourceHandler.
+The [paired profile pilot](../audits/tool-profile-comparison.md) reproduced empty
+`resources_find(type=file)` results at a root containing visible directories.
+The schema's recursive=false default is injected by ToolRuntime before dispatch;
+WorkspaceResourceHandler treats presence of recursive as an explicit file-only
+selector and bypasses ordinary directory browsing. This contradicts Resource Fabric's
+default browsing contract, affects broad and compact profiles, and hides the route
+into nested source files. Provider-only tests bypass default normalization and miss it.
+Fix must preserve omitted/null versus explicit recursive/glob selectors, verify
+runtime dispatch and hidden-path exclusions, and keep search depth model-controlled.
+Separate description issue: a complete nonrecursive text search proves absence only
+at the selected depth, not across all workspace descendants. No data loss observed.
+
 ## CLI Core.Net8 draft-store build blocker — 2026-10-26
 
 Fixed host-neutral; owner: Core project composition / local draft persistence.

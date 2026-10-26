@@ -27,6 +27,9 @@ direct cutover объясняют порядок уже выполненной �
 [Аудит оставшихся различий Office/workspace](audits/office-workspace-preparation-audit.md)
 фиксирует общие компоненты, разные профили tools и следующий cutover.
 
+[Парное сравнение broad/compact профилей](audits/tool-profile-comparison.md)
+фиксирует реальные траектории, размеры запросов и ограничения пилота.
+
 [Таблица всех встроенных skills/tools и пересмотр описаний](audits/skills-tools-description-review.md)
 содержит сравнение семейств и следующие этапы объединения.
 

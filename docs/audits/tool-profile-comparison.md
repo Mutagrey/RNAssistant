@@ -1,0 +1,130 @@
+# Парное сравнение профилей tools — 2026-10-26
+
+Owner: Core tool composition / Application workspace; diagnostic owner: Harness.
+Срез production: `cd77e93e`. Цель — проверить цену discovery и уменьшения начального
+набора, прежде чем менять `workspace-direct`. Это пилот, не квалификация моделей,
+Office или больших реальных проектов.
+
+## Протокол
+
+`tests/cli/tool_profile_comparison.py` запускает общий WorkspaceConversationService
+через Harness `--workspace-profile-live`. На каждый запуск создаются новый workspace,
+чат и store. Две задачи: найти неизвестный путь к `buildInvoiceTitle` и изменить одну
+строку; скопировать файл с Unicode-именем штатным `files.copy`. Корпус: 130 файлов,
+включая 128 отвлекающих `.ts/.py/.cs/.bas`, кириллицу, немецкий/японский текст и CRLF.
+Это текстовый корпус с разными расширениями, а не сборка четырёх языков.
+SHA-256 исходного корпуса и точный текст задачи совпадают внутри каждой пары.
+
+| Профиль | Начальная поверхность |
+| --- | --- |
+| broad | Production `workspace-direct`: 18 доступных non-Skill tools в этом workspace |
+| compact | skills_load, resources_find/read/search, capabilities_search/read, questions_ask, files.create/patch |
+
+В компактном профиле девять ID; первые семь имеют префикс `common.`. Skills и точные
+admissions могут расширить оба набора штатным способом. Нет специальной инструкции,
+подсказывающей модели инструменты, пути поиска или выбранный профиль. Production
+настройки и default-профиль не изменяются.
+
+Один запуск на сочетание модель × задача × профиль: восемь live-прогонов. Порядок
+broad/compact чередуется по задаче и модели. Cloud: `gemma4:cloud`, `json_object`;
+local: `rna-gemma4-12b-32k:latest`, `json_schema`. Внутри каждой пары одинаковы
+runtime, schemas, skills, task, context 32768, output 4096, temperature 0,
+`developer`/tool-result `user`, фактический wire `reasoning_effort=none`.
+Лимиты: 12 model iterations, 20 tool steps, 90 секунд на запрос, 240 секунд на run.
+Format repair может увеличить число HTTP-запросов относительно iterations.
+
+Local digest: `cf94f3793da5f501e0a2948b34825db5baceed926438a78551ffaa83f85a4082`.
+Cloud tag digest: `ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`;
+это digest локального alias, не неизменяемых удалённых весов. Теги не обновлялись.
+До локального этапа проверено отсутствие другой загруженной модели. Cloud context —
+лимит планирования клиента; фактическая серверная ёмкость этим опытом не установлена.
+
+## Независимая приёмка
+
+`taskPassed` проверяет карту всех файлов и точные байты результата: ожидается только
+одна правка либо один новый файл, остальные байты неизменны. Copy дополнительно
+требует успешного `files.copy`. `passed` требует также штатного Completed,
+Workspace acceptance Passed и отсутствия unknown effects/исключений. Правильный
+файл при незавершённом протоколе не считается полным успехом. Ответ модели не
+используется как доказательство выполнения. Scripted-прогон четырёх сочетаний
+проверяет сам диагностический путь; он не измеряет качество модели.
+
+## Результаты
+
+| Модель / задача / профиль | Байты точны | Задача / run | Tool calls / HTTP | Первый запрос, bytes | Все запросы, bytes | Σ prompt tokens |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
+| cloud-edit-broad | нет | нет / нет | 4 / 13 | 44255 | 615310 | 122477 |
+| cloud-edit-compact | нет | нет / нет | 4 / 12 | 32960 | 428148 | 85864 |
+| cloud-copy-compact | да | да / да | 4 / 7 | 33059 | 256992 | 51273 |
+| cloud-copy-broad | да | да / да | 4 / 6 | 44354 | 287313 | 56893 |
+| local-edit-compact | да | да / нет | 4 / 12 | 34465 | 455754 | 36419 |
+| local-edit-broad | да | да / нет | 4 / 12 | 43795 | 568047 | 40475 |
+| local-copy-broad | нет | нет / нет | 4 / 12 | 43894 | 563627 | 39431 |
+| local-copy-compact | да | нет / нет | 3 / 12 | 34564 | 450854 | 35074 |
+
+Оба профиля: 1/4 полностью успешных run; точная правка edit отдельно выполнена
+в обоих локальных прогонах. Это не доказательство равной надёжности.
+
+- cloud: первый edit-запрос 44255 → 32960 bytes (25.5% меньше); provider prompt tokens 8716 → 6515.
+- local: первый edit-запрос 43795 → 34465 bytes (21.3% меньше); provider prompt tokens 2550 → 2207.
+
+## Причины и решение
+
+Cloud edit: оба профиля искали в корне без `recursive=true`, затем выполнили обычный
+`resources_find`, получили пустую выдачу и не изменили файл. Подтверждена ошибка
+маршрутизации: ToolRuntime применяет schema default `recursive=false`, после чего
+WorkspaceResourceHandler видит наличие ключа и выбирает file-only FindPaths вместо
+обычного просмотра каталогов. Корень с подкаталогами выглядит пустым. Прямой тест
+provider.Find этого не обнаруживает; нужна проверка через реальную schema/default
+нормализацию runtime. Сам нерекурсивный поиск соответствует текущему контракту,
+но описание и сообщение о полноте недостаточно явно ограничивают вывод выбранной
+глубиной. Исправление этого дефекта следует отделить от выбора профиля.
+
+Cloud copy compact самостоятельно находит files.copy через capabilities_search/read,
+получает одно durable admission и выполняет точную копию. Broad выбирает workspace.files,
+сначала вызывает copy без наблюдения источника, получает отказ, читает и повторяет
+успешно. Поэтому количество принятых вызовов одинаково, но их полезность различна.
+Меньшая поверхность сама по себе не объясняет все различия траекторий.
+
+Local edit: оба профиля нашли источник рекурсивным поиском с continuation, прочитали
+его и записали точную правку без посторонних изменений. Затем модель повторяла finish
+с путём/прозой вместо допустимых tool result ID в evidence. Оба run достигли лимита
+итераций. Это повторение проблемы model/protocol completion, а не неизвестный эффект
+или повторная запись: каждый run содержит один WriteOk и ноль WriteUnknown.
+
+Local copy broad ошибочно выбирает type=attachment и не находит файл workspace.
+Local copy compact находит и читает файл, но использует files.create вместо явно
+запрошенного files.copy. Даже при совпадении байтов это не выполнение ограничений
+задачи. Таким образом, отсутствие copy в начальном наборе не гарантирует, что модель
+сама выберет discovery; она может применить уже доступную, но неподходящую операцию.
+
+Production broad default сохраняется. Компактная композиция работоспособна и снижает
+первый запрос, но этих двух задач недостаточно для смены default. Следующий этап:
+устранить подтверждённый дефект просмотра каталогов, повторить пары на том же корпусе,
+затем добавить независимые задачи Plan, выбранных skills, plugin и bound-Office
+contributions. Не вводить keyword-router, модельные обходы протокола или частичные
+skills ради прохождения пилота.
+
+Provider usage суммируется отдельно от размера JSON-запросов; это не локальный
+budget estimate. Prompt tokens включают повторный/кэшированный ввод, а не уникальный
+контекст или цену. Нельзя напрямую сравнивать cloud/json_object с local/json_schema:
+схемы передаются разными путями и provider accounting может различаться. Время
+зависит от прогрева и prompt cache; один прогон не даёт статистического превосходства.
+
+## Воспроизведение и evidence
+
+```sh
+dotnet build tests/RNAssistant.Harness/RNAssistant.Harness.csproj --no-restore
+python3 tests/cli/tool_profile_comparison.py /tmp/rna-profile-scripted-NEW --scripted
+python3 tests/cli/tool_profile_comparison.py /tmp/rna-profile-live-NEW
+```
+
+Требуются уже установленные точные model tags; runner ничего не скачивает и не
+выгружает чужую модель. `--model cloud|local` ограничивает этап. Локальный HTTP proxy
+сохраняет тела запросов/ответов без заголовков авторизации. Evidence содержит исходные
+задачи/корпус, before/after hashes, проекты, session/event/CAS, acceptance, HTTP usage,
+source commit/patch, диагностические sources, hash Harness binary и checksums.
+Архив включает неудачные прогоны; выборочного удаления попыток нет.
+
+[Полный архив пилота](evidence/tool-profile-pilot-20261026.tar.gz) и [SHA-256](evidence/tool-profile-pilot-20261026.tar.gz.sha256).
+Archive SHA-256: `9ab0a560a2934531819fe12ef80f475a88f777a34e70bcfff87e9840bf8e138b`.

@@ -108,8 +108,11 @@ metadata to `common.resources_read` (`type=skill`, semantic target) and
 `common.skills_load`; they do not read source, select the skill or execute code.
 Office retains its existing exact skill/reference source reads through ResourceGateway.
 
-Next: compare smaller explicit profiles on the same task/model corpus before
-changing defaults. Adding resources_search/questions_ask to the Office core or
+The [paired live pilot](audits/tool-profile-comparison.md) exercises broad and compact
+profiles on identical synthetic workspaces with Gemma cloud/local. Compact discovery
+and exact admission work, but task/protocol failures prevent a default-change claim.
+The broad default remains. Repair the recorded directory-browsing defect and expand
+the task corpus before changing defaults. Adding resources_search/questions_ask to the Office core or
 narrowing workspace is not part of this cutover. Measure task completion, discovery
 calls, request size and selection errors; no partial skills or keyword-based routing.
 
