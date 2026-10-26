@@ -50,6 +50,23 @@ const { chromium } = require('playwright');
       chat.state = { runId: 'new-run', status: 'running', modelProgress: { RunId: 'run', Message: 'Stale preview.' } };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const scoped = !list.textContent.includes('Stale preview.');
+      const activeList = document.createElement('section');
+      const activeChat = { project: { workspaceId: 'workspace' }, sessionId: 'active-run',
+        messages: [{ Id: 'saved-call', RunId: 'active', Role: 'assistant', Content: '', Activity: {
+          RunId: 'active', Kind: 'tool', ToolId: 'common.resources_read', ToolCallId: 'call',
+          Title: 'Чтение', Status: 'completed', ResultMessage: 'Источник прочитан.' } }],
+        state: { status: 'running', runId: 'active', modelProgress: { RunId: 'active', Message: 'Формирую ответ.' } } };
+      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      const attachedLive = activeList.querySelectorAll('article.agent-run').length === 1 &&
+        !!activeList.querySelector('article.agent-run.live .agent-stream-step') &&
+        activeList.textContent.includes('Формирую ответ.');
+      activeChat.messages.push({ Id: 'accepted', RunId: 'active', Role: 'assistant', Content: 'Ответ готов.',
+        RunViewState: { RunId: 'active', TurnId: 'turn', Lifecycle: 'completed', ExecutionHealth: 'clean',
+          ModelResults: [], FailedCalls: 0, UnknownEffects: 0 } });
+      activeChat.state = { status: 'completed', runId: 'active' };
+      RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);
+      const attachedFinal = activeList.querySelectorAll('article.agent-run').length === 1 &&
+        !activeList.querySelector('.agent-stream-step') && activeList.textContent.includes('Ответ готов.');
       const reflectionList = document.createElement('section');
       RNAssistantWorkspaceChat.renderMessages(reflectionList, {
         project: { workspaceId: 'workspace' }, sessionId: 'reflection-message',
@@ -101,7 +118,8 @@ const { chromium } = require('playwright');
           modelProgressUnavailable: true } }).state.modelProgress == null;
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
-      return { retained, replaced, updated, reset, finished, scoped, oneReflection, cleanClaims, uncleanClaims,
+      return { retained, replaced, updated, reset, finished, scoped, attachedLive, attachedFinal,
+        oneReflection, cleanClaims, uncleanClaims,
         ordered, lostOwner, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);

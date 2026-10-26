@@ -24,7 +24,7 @@ function renderActivityNode(activity, nested, current, context) {
   if (!context || context.renderInlineArtifacts !== false) {
     appendActivityArtifacts(node, activity, context);
   }
-  if (!context || !context.terminal) appendQuestionCards(node, activity, context);
+  if (!context || !context.terminal && !context.workspace) appendQuestionCards(node, activity, context);
   return node;
 }
 
@@ -105,8 +105,12 @@ function renderActivityRow(activity, current, expandable, context) {
   name.textContent = title;
   heading.appendChild(name);
   copy.appendChild(heading);
-
-
+  if (comment && comment !== title) {
+    var target = document.createElement("span");
+    target.className = "agent-activity-object";
+    target.textContent = comment;
+    copy.appendChild(target);
+  }
   var resultText = context && context.terminal && isActiveTimelineStatus(status) ? "Остановлено" : activityDisplayResult(activity);
   if (resultText && resultText !== title && resultText !== comment) {
     var resultLine = document.createElement("span");
@@ -153,6 +157,12 @@ function activityOperationIcon(activity) {
 function activityPrimaryText(activity) {
   if (activityKind(activity) === "diagnostic") return "Выполнение";
   if (activityToolId(activity)) {
+    var summary = activityTypedResultSummary(activity);
+    if (activityToolId(activity) === "common.capabilities_read" && summary) {
+      var representation = activityValue(summary, "Representation", "representation", "");
+      var capabilityTitle = { skill: "Чтение навыка", reference: "Чтение справки навыка", "tool-schema": "Чтение описания инструмента" }[representation];
+      if (capabilityTitle) return capabilityTitle;
+    }
     var display = activityValue(activity, "Display", "display", null);
     var action = activityStatus(activity) === "running"
       ? activityValue(display, "RunningAction", "runningAction", "") : activityValue(display, "Action", "action", "");
@@ -472,7 +482,7 @@ function appendActivityErrorActions(node, activity, context) {
     "Status: " + activityStatus(activity),
     "Reason: " + activityDetailTexts(activity, context).join("\n\n")
   ].join("\n")));
-  actions.appendChild(createAgentTextButton("Причина и детали", "secondary", function () {
+  if (!(context && context.workspace)) actions.appendChild(createAgentTextButton("Причина и детали", "secondary", function () {
     if (state.activeChatId !== sourceChatId || typeof window.openRunJournal !== "function") return;
     var message = context && context.message ? context.message : null;
     window.openRunJournal({
@@ -547,7 +557,8 @@ function appendActivityDetailsContent(node, activity, context) {
     result.textContent = (activityToolId(activity) ? "" : "Диагностика:\n") + text;
     body.appendChild(result);
   });
-  if (typeof appendToolResultPreview === "function") appendToolResultPreview(body, activity, context, node);
+  if (typeof appendToolResultPreview === "function")
+    appendToolResultPreview(body, activity, context, node);
   if (typeof appendArgumentsData === "function") {
     appendArgumentsData(body, activityArgumentsJson(activity));
   }
@@ -560,6 +571,7 @@ function appendActivityDetailsContent(node, activity, context) {
 }
 
 function appendActivityArtifacts(node, activity, context) {
+  if (context && context.workspace) return false;
   var appended = false;
   if (typeof tryRenderChartArtifact === "function") {
     var chart = tryRenderChartArtifact(activity, context || {});
@@ -587,14 +599,15 @@ function agentStatusLabel(status) {
   return labels[status] || status || "Статус";
 }
 
-function appendAgentRunArtifacts(parent, timeline) {
+function appendAgentRunArtifacts(parent, timeline, workspace) {
   var artifacts = document.createElement("div");
   artifacts.className = "agent-run-artifacts";
   (timeline || []).forEach(function (item) {
     appendActivityTreeArtifacts(artifacts, item.activity, {
       messageId: messageId(item.message),
       index: item.index,
-      message: item.message
+      message: item.message,
+      workspace: !!workspace
     });
   });
   if (artifacts.childNodes.length) {

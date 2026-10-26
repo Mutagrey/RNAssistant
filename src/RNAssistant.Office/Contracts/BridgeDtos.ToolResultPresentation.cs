@@ -10,9 +10,18 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
     }
 
+    public sealed class ProjectToolResultPresentationRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("runId", Required = Required.Always)] public string RunId { get; set; }
+        [JsonProperty("toolCallId", Required = Required.Always)] public string ToolCallId { get; set; }
+    }
+
     // Disposable UI blocks. They never become model results or execution evidence.
     public sealed class ToolResultPresentationDto
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }

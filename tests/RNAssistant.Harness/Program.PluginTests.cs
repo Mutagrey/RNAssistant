@@ -675,8 +675,11 @@ namespace RNAssistant.Harness
                     AssertEqual(2, project.Chats.Count, "both conversations appear in the main tree");
                     AssertEqual(message.Content, service.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,
                         SessionId = firstId }).Messages.Single().Content, "creating another chat preserves the first history");
+                    AssertEqual(message.Id, service.ProjectChatSessionForPresentation(item.SourceWorkspaceId, firstId)
+                        .Messages.Single().Id, "tool presentation reads the exact source chat");
                     var other = service.CreateProjectWorkspace(new ProjectConnectionRequest { RootPath = Path.Combine(paths.Root, "other") }).SelectedWorkspaceId;
                     PluginFailure(() => service.ProjectChat(new ProjectChatRequest { WorkspaceId = other, SessionId = secondId }), "project_chat_missing");
+                    PluginFailure(() => service.ProjectChatSessionForPresentation(other, firstId), "project_chat_missing");
                     PluginFailure(() => service.SubmitProjectChatAsync(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId,
                         SessionId = firstId, Input = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest { SessionId = secondId, Message = "wrong chat" } },
                         new AppSettings(), () => "", CancellationToken.None).GetAwaiter().GetResult(), "project_chat_invalid");

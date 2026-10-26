@@ -99,6 +99,27 @@ const root = path.resolve(__dirname, '../..');
         owner + ': historical workspace outcome cannot open an Office-only journal');
       assert.equal(await page.locator('#messages .chat-history-more').count(), 0,
         owner + ': oldest page removes the history control');
+      const grouped = await page.evaluate(() => {
+        const list = document.createElement('section'); document.body.appendChild(list);
+        const runId = 'grouped-workspace-run';
+        const activity = (id, stepId) => ({ Id: id, Role: 'assistant', RunId: runId, Content: '',
+          Activity: { RunId: runId, StepId: stepId, Kind: 'tool', Title: 'Чтение',
+            ToolId: 'common.resources_read', ToolCallId: id, Status: 'completed', ResultMessage: id } });
+        RNAssistantWorkspaceChat.renderMessages(list, { sessionId: 'grouped-session',
+          project: { workspaceId: 'grouped-workspace' }, messages: [activity('first', 'step-1'),
+            activity('second', 'step-2'), { Id: 'final', Role: 'assistant', RunId: runId,
+              Content: 'Готово.', RunViewState: { RunId: runId, TurnId: 'turn', Lifecycle: 'completed',
+                ExecutionHealth: 'clean', ModelResults: [], FailedCalls: 0, UnknownEffects: 0 } }] });
+        const article = list.querySelector('article.agent-run');
+        const history = article && article.querySelector('.agent-run-overview');
+        if (history) history.ensureDisclosureContent();
+        const result = !!article && list.querySelectorAll('article.message').length === 1 &&
+          article.querySelectorAll('.agent-activity-row').length === 2 &&
+          article.textContent.includes('Готово.') &&
+          !article.querySelector('[title="Ответвить чат отсюда"], [title="Удалить сообщения запуска"]');
+        list.remove(); return result;
+      });
+      assert.equal(grouped, true, owner + ': saved actions and final answer share the Office run renderer');
       assert.deepEqual(errors, [], owner + ': no page errors');
       await page.close();
     }

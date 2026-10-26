@@ -308,8 +308,9 @@ function isAgentRunContinuation(message) {
     (kind === "step" || kind === "tool" || kind === "control" || kind === "diagnostic" || kind === "reasoning");
 }
 
-function canCollectAgentRunAt(index) {
-  var message = state.messages[index];
+function canCollectAgentRunAt(index, messages) {
+  messages = messages || state.messages;
+  var message = messages[index];
   if (!message || messageProtocolMessage(message) || messageRole(message) !== "assistant") {
     return false;
   }
@@ -320,7 +321,7 @@ function canCollectAgentRunAt(index) {
   if (!runId) {
     return false;
   }
-  var previous = index > 0 ? state.messages[index - 1] : null;
+  var previous = index > 0 ? messages[index - 1] : null;
   return !previous || messageRunId(previous) !== runId || !messageActivity(previous);
 }
 
@@ -337,15 +338,16 @@ function messageRunId(message) {
   return message ? (message.RunId || message.runId || "") : "";
 }
 
-function collectAgentRun(startIndex) {
-  if (isAgentRunFinalMessage(state.messages[startIndex])) {
-    return { items: [], finalMessage: { message: state.messages[startIndex], index: startIndex }, nextIndex: startIndex + 1 };
+function collectAgentRun(startIndex, messages) {
+  messages = messages || state.messages;
+  if (isAgentRunFinalMessage(messages[startIndex])) {
+    return { items: [], finalMessage: { message: messages[startIndex], index: startIndex }, nextIndex: startIndex + 1 };
   }
-  var items = [{ message: state.messages[startIndex], index: startIndex, activity: messageActivity(state.messages[startIndex]) }];
-  var runId = messageRunId(state.messages[startIndex]);
+  var items = [{ message: messages[startIndex], index: startIndex, activity: messageActivity(messages[startIndex]) }];
+  var runId = messageRunId(messages[startIndex]);
   var index = startIndex + 1;
-  while (index < state.messages.length) {
-    var candidate = state.messages[index];
+  while (index < messages.length) {
+    var candidate = messages[index];
     if (messageProtocolMessage(candidate)) {
       index += 1;
       continue;
@@ -358,9 +360,9 @@ function collectAgentRun(startIndex) {
   }
 
   var finalMessage = null;
-  while (index < state.messages.length && messageProtocolMessage(state.messages[index])) index += 1;
-  if (index < state.messages.length && messageRunId(state.messages[index]) === runId && isAgentRunFinalMessage(state.messages[index])) {
-    finalMessage = { message: state.messages[index], index: index };
+  while (index < messages.length && messageProtocolMessage(messages[index])) index += 1;
+  if (index < messages.length && messageRunId(messages[index]) === runId && isAgentRunFinalMessage(messages[index])) {
+    finalMessage = { message: messages[index], index: index };
     index += 1;
   }
 

@@ -4,7 +4,7 @@
   var watching = new Map();
   new MutationObserver(function () {
     watching.forEach(function (entry, slot) {
-      if (!slot.isConnected || state.activeChatId !== entry.chatId) entry.cancel();
+      if (!slot.isConnected || !entry.active()) entry.cancel();
     });
   }).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("pagehide", function () { watching.forEach(function (entry) { entry.cancel(); }); });
@@ -69,32 +69,45 @@
   }
   window.RNAssistantToolResultPresentation = { render: render };
   window.appendToolResultPreview = function (parent, activity, context, disclosure, renderResponse) {
-    var chatId = state.activeChatId;
+    var workspace = !!(context && context.workspace);
+    var owner = workspace && window.RNAssistantChatInspector ? window.RNAssistantChatInspector.target() : null;
+    var scopeOwner = owner && owner.owner;
+    var chatId = workspace ? owner && owner.sessionId : state.activeChatId;
+    var workspaceId = workspace ? owner && owner.workspaceId : null;
     var runId = activityValue(activity, "RunId", "runId", "") || (context && context.message ? messageRunId(context.message) : "");
     var toolCallId = activityToolCallId(activity);
-    if (!chatId || !runId || !toolCallId) return false;
+    if (!chatId || workspace && !workspaceId || !runId || !toolCallId) return false;
     var slot = node("div", "tool-result-slot"); parent.appendChild(slot);
     var generation = 0, requestId = null, revision = null;
-    function currentRevision() { return (state.chatProjectionRevisions || {})[chatId] || 0; }
+    function currentRevision() { return workspace ? 0 : (state.chatProjectionRevisions || {})[chatId] || 0; }
     function cancel() {
       generation++;
       watching.delete(slot);
       if (requestId && typeof cancelBridgeRequest === "function") cancelBridgeRequest(requestId).catch(function () {});
       requestId = null;
     }
-    function active() { return slot.isConnected && (!disclosure || disclosure.open) && state.activeChatId === chatId; }
+    function active() {
+      if (!slot.isConnected || disclosure && !disclosure.open) return false;
+      if (!workspace) return state.activeChatId === chatId;
+      var current = window.RNAssistantChatInspector && window.RNAssistantChatInspector.target();
+      return !!current && current.owner === scopeOwner && current.workspaceId === workspaceId && current.sessionId === chatId;
+    }
     function load() {
       if (!active()) return;
       cancel(); var ticket = generation; revision = currentRevision();
-      watching.set(slot, { chatId: chatId, cancel: cancel });
+      watching.set(slot, { active: active, cancel: cancel });
       slot.textContent = "Загрузка представления…";
-      var request = send("getToolResultPresentation", { chatId: chatId, runId: runId, toolCallId: toolCallId });
+      var request = workspace
+        ? send("getProjectToolResultPresentation", { workspaceId: workspaceId, sessionId: chatId,
+          runId: runId, toolCallId: toolCallId })
+        : send("getToolResultPresentation", { chatId: chatId, runId: runId, toolCallId: toolCallId });
       requestId = request.requestId;
       request.then(function (response) {
         if (ticket !== generation || !active()) return;
         requestId = null;
         if (revision !== currentRevision()) { load(); return; }
-        if (!response || response.chatId !== chatId || response.runId !== runId || response.toolCallId !== toolCallId)
+        if (!response || response.chatId !== chatId || response.runId !== runId || response.toolCallId !== toolCallId ||
+            workspace && response.workspaceId !== workspaceId)
           throw new Error("Mismatched presentation source.");
         (renderResponse || render)(slot, response);
       }).catch(function () {

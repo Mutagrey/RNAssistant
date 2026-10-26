@@ -29,7 +29,8 @@ function appendAgentRunProcess(parent, timeline, stats) {
       currentActivity: stats.current,
       renderInlineArtifacts: false,
       liveFeed: !!stats.liveFeed,
-      terminal: !!stats.terminal
+      terminal: !!stats.terminal,
+      workspace: !!stats.workspace
     };
     entry.appendChild(renderActivityNode(item.activity, false, isCurrent, activityContext));
     process.appendChild(entry);
@@ -281,7 +282,7 @@ function appendAgentActionStage(parent, actions, stats) {
   parent.appendChild(details);
 }
 
-function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal) {
+function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArtifacts, terminal, workspace) {
   var actions = [];
   function append(item, activity, nested) {
     if (activityKind(activity) !== "step" && activityKind(activity) !== "group") {
@@ -295,6 +296,7 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
     return activityKind(item.activity) !== "notice";
   }), !isLast, null);
   stats.terminal = !!terminal;
+  stats.workspace = !!workspace;
   var active = !terminal && isLast && stats.current && isActiveTimelineStatus(activityStatus(stats.current))
     ? stats.current : null;
   stats.current = active;
@@ -316,7 +318,8 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
       appendAgentRunProcess(parent, [item], stats);
     }
     var artifacts = document.createElement("div");
-    if (!suppressArtifacts) appendActivityArtifacts(artifacts, item.activity, { message: item.message, messageId: messageId(item.message), index: item.index });
+    if (!suppressArtifacts) appendActivityArtifacts(artifacts, item.activity, {
+      message: item.message, messageId: messageId(item.message), index: item.index, workspace: !!workspace });
     if (artifacts.childNodes.length) {
       flush();
       artifacts.className = "agent-run-artifacts";
@@ -403,7 +406,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
       appendAgentStepMessage(section, step.message);
-      appendLiveAgentStep(section, { items: historyItems }, false, true, true, true);
+      appendLiveAgentStep(section, { items: historyItems }, false, true, true, true, stats.workspace);
       content.appendChild(section);
     });
     if (!content.childNodes.length) {
@@ -527,6 +530,7 @@ function renderAgentRunArticle(run) {
   if (finalMessage) timingItems.push(finalMessage);
   var runViewState = agentRunViewState(items, finalMessage);
   var stats = agentRunStats(timingItems, !!finalMessage && !run.live, runViewState);
+  stats.workspace = !!run.workspace;
   var steps = groupAgentRunSteps(timeline);
   var node = document.createElement("article");
   node.setAttribute("aria-label", "Ответ агента");
@@ -545,13 +549,19 @@ function renderAgentRunArticle(run) {
     section.className = "agent-model-step";
     appendAgentStepMessage(section, step.message);
     appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
-      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0);
+      !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace);
     if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);
   if (process.childNodes.length || run.live) body.appendChild(process);
+  if (run.live && run.workspaceProgress) {
+    var stream = document.createElement("section");
+    stream.className = "agent-model-step agent-stream-step";
+    paintLiveModelOutput(stream, run.workspaceProgress);
+    process.appendChild(stream);
+  }
   // This warning is outside collapsed trace and never derived from the model's prose.
-  if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage));
+  if (!run.live) appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage), !run.workspace);
   if (finalMessage) {
     var finalSection = document.createElement("section");
     finalSection.className = "agent-final-step";
@@ -564,29 +574,31 @@ function renderAgentRunArticle(run) {
       finalSection.appendChild(title);
     }
     appendAgentFinalAnswer(finalSection, finalMessage);
+    if (run.workspace && typeof appendAcceptedResponseDetails === "function")
+      appendAcceptedResponseDetails(finalSection, finalMessage.message, runViewState);
     body.appendChild(finalSection);
   }
-  if (!expanded) appendAgentRunArtifacts(body, timeline);
-  if (!run.live && typeof appendAgentRunResourceCards === "function") {
+  if (!expanded) appendAgentRunArtifacts(body, timeline, !!run.workspace);
+  if (!run.live && !run.workspace && typeof appendAgentRunResourceCards === "function") {
     appendAgentRunResourceCards(body, items, finalMessage);
   }
-  if (!run.live && !run.continued && typeof appendRunChanges === "function") {
+  if (!run.live && !run.workspace && !run.continued && typeof appendRunChanges === "function") {
     appendRunChanges(body, state.activeChatId, agentRunId(items, finalMessage));
   }
   node.appendChild(body);
 
   if (!run.live) {
     if (!items.length && finalMessage && typeof appendMessageFooter === "function") {
-      appendMessageFooter(node, finalMessage.message, finalMessage.index, null);
+      appendMessageFooter(node, finalMessage.message, finalMessage.index, null, { workspace: !!run.workspace });
     } else {
-      appendAgentRunFooter(node, items, finalMessage);
+      appendAgentRunFooter(node, items, finalMessage, !!run.workspace);
     }
   }
   enhanceActivity(body);
   return node;
 }
 
-function appendAgentRunFooter(node, items, finalMessage) {
+function appendAgentRunFooter(node, items, finalMessage, workspace) {
   var footer = document.createElement("div");
   footer.className = "message-footer";
   var footerMeta = document.createElement("div");
@@ -606,13 +618,13 @@ function appendAgentRunFooter(node, items, finalMessage) {
     log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
   }));
   if (typeof appendMessageInspectorAction === "function") appendMessageInspectorAction(actions, last.message, null);
-  if (!historyActionsBlocked) {
+  if (!workspace && !historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(last.message, last.index);
     }));
   }
 
-  if (!historyActionsBlocked) {
+  if (!workspace && !historyActionsBlocked) {
     actions.appendChild(smallIconButton("Удалить сообщения запуска", "trash", function () {
       deleteAgentRun(items, finalMessage);
     }));

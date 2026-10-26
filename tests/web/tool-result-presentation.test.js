@@ -103,6 +103,28 @@ const { chromium } = require("playwright");
     });
     assert.match(await page.locator("#missing-question-source").textContent(), /Не удалось определить источник вопросов/);
     assert.equal(await page.evaluate(() => requests.length), 7, "unaddressable questions show an error without guessing a source");
-    console.log("PASS tool presentation: exact addressing, lazy reads, cancellation, retry, revision race, inert blocks and retained questions");
+    await page.evaluate(() => {
+      window.workspaceTarget = { workspaceId: "workspace", sessionId: "session" };
+      window.RNAssistantChatInspector = { target: () => workspaceTarget };
+      const details = document.createElement("details"); details.id = "workspace-result";
+      details.innerHTML = '<summary>Шаг workspace</summary><div id="workspace-preview"></div>';
+      document.body.appendChild(details);
+      appendToolResultPreview(document.getElementById("workspace-preview"),
+        { ToolCallId: "workspace-call", RunId: "workspace-run" }, { workspace: true }, details);
+    });
+    await page.locator("#workspace-result > summary").click();
+    await page.waitForFunction(() => requests.length === 8);
+    assert.deepEqual(await page.evaluate(() => [requests[7].type, requests[7].payload]),
+      ["getProjectToolResultPresentation", { workspaceId: "workspace", sessionId: "session",
+        runId: "workspace-run", toolCallId: "workspace-call" }]);
+    await page.evaluate(() => requests[7].resolve({ workspaceId: "foreign", chatId: "session",
+      runId: "workspace-run", toolCallId: "workspace-call", blocks: [] }));
+    await page.locator("#workspace-preview").getByText("Не удалось загрузить представление · Повторить").click();
+    await page.waitForFunction(() => requests.length === 9);
+    await page.evaluate(() => requests[8].resolve({ workspaceId: "workspace", chatId: "session",
+      runId: "workspace-run", toolCallId: "workspace-call", blocks: [
+        { kind: "text", title: "Содержимое", text: "Workspace content", complete: true }] }));
+    await page.locator("#workspace-preview").getByText("Workspace content").waitFor();
+    console.log("PASS tool presentation: Office/workspace scope, lazy reads, cancellation, retry, revision race, inert blocks and retained questions");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

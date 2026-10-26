@@ -6,6 +6,7 @@ using RNAssistant.Application;
 using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Services;
 using RNAssistant.Runtime;
 namespace RNAssistant.Office.WebView
 {
@@ -55,6 +56,14 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CreateProjectChat: return Plugins.CreateProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.GetPreviousProjectChatMessages: return Plugins.ProjectChatMessages(Payload<ProjectChatHistoryRequest>(payload));
+                    case BridgeOperationId.GetProjectToolResultPresentation:
+                        var presentationRequest = Payload<ProjectToolResultPresentationRequest>(payload);
+                        var presentationSession = Plugins.ProjectChatSessionForPresentation(
+                            presentationRequest.WorkspaceId, presentationRequest.SessionId);
+                        var presentation = new ToolResultPresentationService(null, new ChatBlobStore(_controller.StoragePaths))
+                            .Read(presentationSession, presentationRequest.RunId, presentationRequest.ToolCallId);
+                        presentation.WorkspaceId = presentationRequest.WorkspaceId;
+                        return presentation;
                     case BridgeOperationId.RenameProjectChat: return Plugins.RenameProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectChat:
                         var deletedChat = Payload<ProjectChatRequest>(payload);

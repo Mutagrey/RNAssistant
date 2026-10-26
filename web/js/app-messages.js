@@ -328,7 +328,8 @@ function showChatCopyFeedback(text, failed) {
   } else chatCopyFeedbackTimer = setTimeout(function () { toast.hidden = true; }, 2400);
 }
 
-function appendMessageFooter(node, message, index, activity) {
+function appendMessageFooter(node, message, index, activity, options) {
+  options = options || {};
   var footer = document.createElement("div");
   footer.className = "message-footer";
 
@@ -355,7 +356,7 @@ function appendMessageFooter(node, message, index, activity) {
       meta.appendChild(outcome);
       footer.classList.add("has-status");
     }
-  } else if (!runViewState && messageRole(message) === "assistant" &&
+  } else if (!options.workspace && !runViewState && messageRole(message) === "assistant" &&
       !messageProtocolMessage(message) && !activity && !message.Pending && !message.Failed && !message.Local &&
       messageContent(message).trim()) {
     var incompatibleOutcome = document.createElement("span");
@@ -375,18 +376,18 @@ function appendMessageFooter(node, message, index, activity) {
     log("Сообщение скопировано.");
   }));
   appendMessageInspectorAction(actions, message, activity);
-  if (!historyActionsBlocked) {
+  if (!options.workspace && !historyActionsBlocked) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
       forkChatAtMessage(message, index);
     }));
   }
-  if (messageSupportsEdit(message, index, activity)) {
+  if (!options.workspace && messageSupportsEdit(message, index, activity)) {
     actions.appendChild(smallIconButton("Изменить сообщение", "edit", function () {
       startMessageEdit(message, index);
     }));
   }
 
-  if (!historyActionsBlocked) {
+  if (!options.workspace && !historyActionsBlocked) {
     actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
       deleteMessage(message, index);
     }));
@@ -454,18 +455,12 @@ function renderActivityArticle(message, index, activity, options) {
     messageId: message ? messageId(message) : "",
     index: index,
     message: message || null,
-    currentActivity: options.current ? activity : null
+    currentActivity: options.current ? activity : null,
+    workspace: !!options.workspace
   }));
   node.appendChild(body);
 
-  if (message && !options.live && !options.workspace) {
-    appendMessageFooter(node, message, index, activity);
-  } else if (message && !options.live && options.workspace && !activityStepId(activity)) {
-    var footer = document.createElement("div"); footer.className = "message-footer";
-    var actions = document.createElement("div"); actions.className = "message-actions";
-    appendMessageInspectorAction(actions, message, activity);
-    footer.appendChild(actions); node.appendChild(footer);
-  }
+  if (message && !options.live) appendMessageFooter(node, message, index, activity, options);
 
   enhanceActivity(body);
   return node;
@@ -572,16 +567,8 @@ function renderMessageArticle(message, index, options) {
     appendChatMessageText(node, message);
   var runView = options.workspace ? window.RNAssistantRunViewState.fromMessage(message) : null;
   appendAcceptedResponseDetails(node, message, runView);
-  if (options.workspace) {
-    appendWorkspaceRunOutcome(node, message, runView);
-    if (!message.ReflectionDecision && messageContent(message).trim()) {
-      var footer = document.createElement("div"); footer.className = "message-footer";
-      var actions = document.createElement("div"); actions.className = "message-actions";
-      actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () { copyChatMessage(messageContent(message)); }));
-      appendMessageInspectorAction(actions, message, null);
-      footer.appendChild(actions); node.appendChild(footer);
-    }
-  } else appendMessageFooter(node, message, index, null);
+  if (options.workspace) appendWorkspaceRunOutcome(node, message, runView);
+  if (!message.ReflectionDecision || !options.workspace) appendMessageFooter(node, message, index, null, options);
   return node;
 }
 

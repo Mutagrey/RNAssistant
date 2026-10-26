@@ -200,6 +200,11 @@
     node.title = label; node.setAttribute("aria-label", label);
     node.innerHTML = window.RNAssistantIcons.render(icon); node.onclick = action; return node;
   }
+  function visibleMessage(message) {
+    return !message.ProtocolMessage && (!!(message.Content || "").trim() || !!message.Activity ||
+      !!message.ReflectionDecision || !!message.ReasoningContent ||
+      !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
+  }
   function renderMessages(list, chat) {
     var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
@@ -225,28 +230,58 @@
         return more;
       });
     }
-    var visible = (chat.messages || []).filter(function (message) {
-      return !message.ProtocolMessage && (!!(message.Content || "").trim() || !!message.Activity ||
-        !!message.ReflectionDecision || !!message.ReasoningContent ||
-        !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
-    });
+    var messages = chat.messages || [];
+    var visible = messages.filter(visibleMessage);
     if (!visible.length && !start && !live) {
       appendMessageUnit(units, "empty", "empty", function () { return renderChatEmptyState(!field(chat, "sessionId")
         ? { title: "Чатов пока нет", text: "Нажмите «+», чтобы создать чат." }
         : { title: "С чего начнём?", text: "Опишите задачу или задайте вопрос." }); });
     }
-    visible.forEach(function (message, index) {
-      appendMessageUnit(units, "message:" + (message.Id || "fixture:" + index), JSON.stringify(message),
-        function () { return renderMessageArticle(message, index, { workspace: true }); });
+    var lastRunIndexes = Object.create(null);
+    var liveAttached = false;
+    var liveRunId = field(live, "runId");
+    var liveProgress = live ? { content: field(live, "message"), reasoning: field(live, "reasoning"),
+      reasoningTruncated: field(live, "reasoningTruncated"), retrying: field(live, "retrying"), showStatus: true } : null;
+    if (typeof messageRunId === "function") messages.forEach(function (message, index) {
+      var runId = messageRunId(message);
+      if (runId) lastRunIndexes[runId] = index;
     });
-    if (live) {
-      appendMessageUnit(units, "live:workspace-model", String(field(live, "runId")), function () {
-        var node = document.createElement("section");
-        node.className = "agent-model-step agent-stream-step";
-        return node;
+    for (var index = 0; index < messages.length; index += 1) {
+      var message = messages[index];
+      if (!visibleMessage(message)) continue;
+      if (typeof canCollectAgentRunAt === "function" && canCollectAgentRunAt(index, messages)) {
+        var run = collectAgentRun(index, messages);
+        run.workspace = true;
+        run.continued = !run.finalMessage && lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
+        if (live && !run.finalMessage && !run.continued && run.nextIndex >= messages.length &&
+            agentRunId(run.items, run.finalMessage) === liveRunId) {
+          var savedView = agentRunViewState(run.items, null);
+          if (!savedView || ["completed", "failed", "cancelled"].indexOf(savedView.lifecycle) < 0) {
+            run.live = true;
+            run.workspaceProgress = liveProgress;
+            liveAttached = true;
+          }
+        }
+        appendMessageUnit(units, run.live ? "live:workspace-model" : agentRunUnitKey(run),
+          agentRunUnitSignature(run), (function (captured) {
+            return function () { return renderAgentRunArticle(captured); };
+          }(run)), "", null, run.live ? (function (progress) {
+            return function (node) { paintLiveModelOutput(node.querySelector(".agent-stream-step"), progress); };
+          }(liveProgress)) : null);
+        index = run.nextIndex - 1;
+      } else {
+        appendMessageUnit(units, "message:" + (message.Id || "fixture:" + index), JSON.stringify(message),
+          (function (captured, capturedIndex) {
+            return function () { return renderMessageArticle(captured, capturedIndex, { workspace: true }); };
+          }(message, index)));
+      }
+    }
+    if (live && !liveAttached) {
+      var liveRun = { items: [], workspace: true, live: true, workspaceProgress: liveProgress };
+      appendMessageUnit(units, "live:workspace-model", String(liveRunId), function () {
+        return renderAgentRunArticle(liveRun);
       }, "", null, function (node) {
-        paintLiveModelOutput(node, { content: field(live, "message"), reasoning: field(live, "reasoning"),
-          reasoningTruncated: field(live, "reasoningTruncated"), retrying: field(live, "retrying"), showStatus: true });
+        paintLiveModelOutput(node.querySelector(".agent-stream-step"), liveProgress);
       });
     }
     list._workspaceEntries = reconcileMessageUnits(list, units, false, list._workspaceEntries || Object.create(null));

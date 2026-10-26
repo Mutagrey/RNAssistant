@@ -813,6 +813,20 @@ namespace RNAssistant.Application
             }
         }
 
+        // Scoped canonical session read for the shared, disposable tool-result presentation.
+        public ChatSession ProjectChatSessionForPresentation(string workspaceId, string sessionId)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                if (string.IsNullOrWhiteSpace(sessionId))
+                    throw new PluginException("project_chat_invalid", "A project chat is required.");
+                var workspace = RequireProjectWorkspace(workspaceId);
+                var session = Conversations.GetSession(workspace, sessionId);
+                if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+                return session;
+            }
+        }
+
         public ChatMessageWindowViewDto ProjectChatMessages(ProjectChatHistoryRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths))
