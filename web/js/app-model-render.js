@@ -90,6 +90,9 @@ function renderModelControls() {
 }
 
 function renderReasoningToggle() {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
+    window.RNAssistantWorkspaceChat.refreshComposer(); return;
+  }
   var button = $("chatReasoningToggle");
   if (!button) return;
   var model = activeChatModel() || settingsModel();

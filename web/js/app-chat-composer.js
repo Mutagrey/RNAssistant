@@ -46,7 +46,10 @@ function renderChatModePicker() {
 function bindComposerPickers() {
   $("composerOpenMaterialsButton").addEventListener("click", function () { switchTab("artifacts"); });
   $("chatPlanButton").addEventListener("click", function () {
-    if (!this.disabled) saveChatMode(state.activeChatMode === "plan" ? "agent" : "plan");
+    if (this.disabled) return;
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
+      window.RNAssistantWorkspaceChat.composerAction("togglePlan");
+    else saveChatMode(state.activeChatMode === "plan" ? "agent" : "plan");
   });
   var pickers = [$("composerAddPicker"), $("chatModelPicker")].filter(Boolean);
   pickers.forEach(function (picker) {

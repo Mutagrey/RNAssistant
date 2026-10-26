@@ -125,6 +125,10 @@ footer всем трём owner; edit использует одну панель 
 approval/question controls. Он направляет события текущему owner; тематические
 модули сохраняют transport и состояние своих чатов. Общие controls имеют
 нейтральные ID; временный plugin alias к `projectChat*` удалён.
+Кнопки «+», планирования, модели и reasoning теперь также являются одними и теми
+же DOM-узлами для всех owner; отдельные workspace-копии удалены. В project
+«Файл с компьютера» вызывает workspace upload, в Office — document attachment;
+модель workspace берётся из общих настроек через тот же picker.
 Разрозненные простые рендереры сообщений и вопросов в
 `app-plugins.js`/`app-project-chats.js` удалены.
 Office, проект и плагин собирают сохранённые сообщения через один iterator и

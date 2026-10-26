@@ -9,6 +9,9 @@ delete-message now use typed bridge operations; edit checks the exact revision a
 preserves the previous composer draft. The protected pending-input draft retains
 edit identity for uncertain-send retries. Reflection and live output retain their
 existing DOM during progress updates. The right panel header stays above its body.
+The add, plan, model and reasoning controls are the same DOM elements for each
+owner; duplicate workspace controls were removed. File and model actions route
+through the current owner's existing authority.
 
 Focused workspace history/storage Harness checks and Chrome chat/HTML suites pass;
 [Office](../audits/evidence/unified-chat-2026-10-26/chat-office.png),

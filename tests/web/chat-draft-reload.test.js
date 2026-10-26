@@ -38,9 +38,9 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(id => !!RNAssistantWorkspaceChat.selectedSession(id), workspaceId);
     const sessionId = await page.evaluate(id => RNAssistantWorkspaceChat.selectedSession(id), workspaceId);
     await page.locator('#chatInput').fill('Черновик workspace после reload');
-    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
-    await page.locator('#workspacePlanButton').click();
-    await page.locator('#workspaceReasoningToggle').click();
+    await page.locator('#composerAddPicker .composer-add-trigger').click();
+    await page.locator('#chatPlanButton').click();
+    await page.locator('#chatReasoningToggle').click();
     const firstRequestId = await page.evaluate(async target => {
       const request = RNAssistantChatDrafts.prepareWorkspaceInput(target, 'Черновик workspace после reload',
         {Mode:'plan', ReasoningEnabled:true});
@@ -56,8 +56,8 @@ const root = path.resolve(__dirname, '../..');
     await page.waitForFunction(target => RNAssistantWorkspaceChat.selectedSession(target.workspaceId) === target.sessionId,
       {workspaceId, sessionId});
     assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик workspace после reload');
-    assert.equal(await page.locator('#workspacePlanButton').getAttribute('aria-pressed'), 'true');
-    assert.equal(await page.locator('#workspaceReasoningToggle').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#chatPlanButton').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#chatReasoningToggle').getAttribute('aria-pressed'), 'true');
     const restoredRequestId = await page.evaluate(target => RNAssistantChatDrafts.prepareWorkspaceInput(target,
       'Черновик workspace после reload', {Mode:'plan', ReasoningEnabled:true}).requestId,
     {workspaceId, sessionId});

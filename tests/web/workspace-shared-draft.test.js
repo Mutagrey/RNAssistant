@@ -30,7 +30,7 @@ const root = path.resolve(__dirname, '../..');
       view.dataset.testIdentity = crypto.randomUUID();
       return view.dataset.testIdentity;
     });
-    assert.equal(await page.locator('#workspaceComposerPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).count(), 0,
+    assert.equal(await page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).isVisible(), false,
       'plugin hides project file upload');
     const workspaceId = 'preview-plugin-workspace';
     await page.waitForFunction(id => !!RNAssistantWorkspaceChat.selectedSession(id), workspaceId);
@@ -38,24 +38,27 @@ const root = path.resolve(__dirname, '../..');
     assert.ok(sessionId, 'plugin selects an existing workspace session');
 
     await page.locator('#chatInput').fill('Черновик из плагина');
-    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
-    await page.locator('#workspacePlanButton').click();
-    await page.locator('#workspaceReasoningToggle').click();
+    await page.locator('#composerAddPicker .composer-add-trigger').click();
+    await page.locator('#chatPlanButton').click();
+    await page.locator('#chatReasoningToggle').click();
     await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
     await page.locator('#projectChatTitle').waitFor({state:'visible'});
     assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('#workspaceChatView').length,
       document.querySelectorAll('#chatForm').length, document.querySelector('#workspaceChatView').dataset.testIdentity,
       document.querySelector('#workspaceChatView').parentElement.id]), [1, 1, viewIdentity, 'projectChatLayout'],
       'project and plugin mount the same view and composer');
+    assert.deepEqual(await page.evaluate(() => ['composerAddPicker', 'chatModelPicker', 'chatPlanButton',
+      'chatReasoningToggle'].map(id => document.querySelectorAll('#' + id).length)), [1, 1, 1, 1],
+      'one set of composer controls serves Office, project and plugin');
     assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик из плагина');
-    assert.equal(await page.locator('#workspacePlanButton').getAttribute('aria-pressed'), 'true');
-    assert.equal(await page.locator('#workspaceReasoningToggle').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#chatPlanButton').getAttribute('aria-pressed'), 'true');
+    assert.equal(await page.locator('#chatReasoningToggle').getAttribute('aria-pressed'), 'true');
 
     await page.locator('#chatInput').fill('Черновик из проекта');
-    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
+    await page.locator('#composerAddPicker .composer-add-trigger').click();
     const [chooser] = await Promise.all([
       page.waitForEvent('filechooser', {timeout:5000}),
-      page.locator('#workspaceComposerPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
+      page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
     ]);
     await chooser.setFiles({name:'draft.txt', mimeType:'text/plain', buffer:Buffer.from('hello')});
     await page.waitForFunction(() => document.querySelector('#chatInput').value.includes('Файл проекта: chat-files/'));
@@ -76,10 +79,10 @@ const root = path.resolve(__dirname, '../..');
         return result;
       };
     });
-    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
+    await page.locator('#composerAddPicker .composer-add-trigger').click();
     const [otherChooser] = await Promise.all([
       page.waitForEvent('filechooser', {timeout:5000}),
-      page.locator('#workspaceComposerPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
+      page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
     ]);
     await otherChooser.setFiles({name:'older.txt', mimeType:'text/plain', buffer:Buffer.from('older')});
     await page.waitForFunction(() => !!uploadRace.release);
@@ -87,8 +90,8 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#chatInput').fill('Текст в другой сессии');
     assert.equal(await page.locator('#sendButton').isEnabled(), true,
       'an upload in a previous session must not block text in the selected chat');
-    await page.locator('#workspaceComposerPicker .composer-add-trigger').click();
-    assert.equal(await page.locator('#workspaceComposerPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).isDisabled(), true,
+    await page.locator('#composerAddPicker .composer-add-trigger').click();
+    assert.equal(await page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).isDisabled(), true,
       'the file picker remains unavailable while the single upload slot is occupied');
     await page.evaluate(() => uploadRace.release());
     await page.waitForFunction(() => ((RNAssistantChatDrafts.readWorkspace({workspaceId:'preview-data-workspace',
@@ -169,6 +172,14 @@ const root = path.resolve(__dirname, '../..');
       assert.equal(count, 1, 'lost acknowledgement must not execute the input twice');
       await page.waitForFunction(() => !document.querySelector('#chatInput').value);
     }
+    await page.locator('#chatModelPicker summary').click();
+    assert.equal(await page.locator('#chatModelMenu').getByText('Настройки модели').count(), 1,
+      'workspace model control uses the shared picker and global model setting');
+    await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
+    await page.locator('#chatModelPicker summary').click();
+    await page.waitForFunction(() => !document.querySelector('#chatModelMenu').textContent.includes('Настройки модели'));
+    assert.equal(await page.locator('#chatModelMenu').getByText('Настройки модели').count(), 0,
+      'the shared picker restores Office model choices when its owner changes');
     assert.deepEqual(errors, [], 'no browser errors');
     console.log('PASS workspace shared draft: project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface accepted-input retry');
   } finally { await browser.close(); server.kill(); }

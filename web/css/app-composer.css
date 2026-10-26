@@ -29,12 +29,12 @@
 
 #chatForm[data-owner="office"] .workspace-composer-only,
 #chatForm:not([data-owner="office"]) :is(#inboxAnnouncer, #inboxStatus, #attachmentDrafts,
-  #attachmentStatus, #contextStrip, #contextManager, #composerAddPicker, #attachmentFileInput,
-  #contextMeterWrap, #chatModelPicker, #chatReasoningToggle) {
+  #attachmentStatus, #contextStrip, #contextManager, #attachmentFileInput,
+  #contextMeterWrap, #addSelectionContextButton, #composerOpenMaterialsButton, #compactContextButton) {
   display: none !important;
 }
 
-#chatForm[data-owner="plugin"] #projectChatFileStatus {
+#chatForm[data-owner="plugin"] :is(#projectChatFileStatus, #attachFileButton) {
   display: none !important;
 }
 
@@ -401,9 +401,6 @@
 .composer-model-picker {
   max-width: min(292px, 32vw);
 }
-
-.composer .workspace-chat-model { border: 0; background: transparent; box-shadow: none; }
-.composer .workspace-chat-model:hover { background: var(--composer-control-hover); }
 
 .composer-model-picker .composer-picker-trigger {
   max-width: 100%;

@@ -137,6 +137,9 @@ function bindModelActions() {
     renderModelControls();
   });
   $("chatReasoningToggle").addEventListener("click", function () {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
+      window.RNAssistantWorkspaceChat.composerAction("toggleReasoning"); return;
+    }
     if (effectiveModelSupportsReasoning(activeChatModel() || settingsModel()) === false) return;
     saveChatReasoningSelection(!state.activeChatReasoning);
   });
@@ -145,6 +148,9 @@ function bindModelActions() {
   });
   $("chatModelPicker").addEventListener("toggle", function () {
     if (!$("chatModelPicker").open) return;
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
+      window.RNAssistantWorkspaceChat.refreshComposer(); return;
+    }
     renderChatModelPicker(true);
     if (!state.modelCatalog.loaded && !state.modelCatalog.loading) {
       loadModelCatalog(false);

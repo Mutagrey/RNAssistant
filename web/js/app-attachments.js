@@ -285,7 +285,11 @@ function bindAttachmentActions() {
   var dropZone = $("chatDropZone");
   var dragDepth = 0;
   function clearDrag() { dragDepth = 0; composer.classList.remove("is-dragging"); }
-  button.addEventListener("click", function () { input.click(); });
+  button.addEventListener("click", function () {
+    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
+      window.RNAssistantWorkspaceChat.composerAction("pickFiles");
+    else input.click();
+  });
   input.addEventListener("change", function () {
     ingestChatResourceFiles(input.files);
     input.value = "";

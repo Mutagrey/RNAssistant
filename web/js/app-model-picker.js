@@ -118,10 +118,15 @@ function createChatModelPickerItem(value, model, isDefault, selected) {
 }
 
 function renderChatModelPicker(force) {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
+    window.RNAssistantWorkspaceChat.refreshComposer(); return;
+  }
   var picker = $("chatModelPicker");
   var menu = $("chatModelMenu");
   var label = $("chatModelButtonLabel");
   if (!picker || !menu || !label) return;
+  var previousOwner = menu.dataset && menu.dataset.owner;
+  if (menu.dataset) menu.dataset.owner = "office";
 
   var selected = activeChatModel();
   var defaultValue = settingsModel();
@@ -132,7 +137,7 @@ function renderChatModelPicker(force) {
   var disabled = state.modelSaving || state.reasoningSaving || !!state.chatNavigationPending || !!state.initializePromise ||
     !!currentActiveSend() || hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
   setComposerPickerDisabled(picker, disabled);
-  if (!picker.open) return;
+  if (!picker.open && previousOwner !== "workspace") return;
 
   var catalog = state.modelCatalog;
   var previous = menu.modelRenderState;

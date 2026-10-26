@@ -107,7 +107,7 @@
       list._chatSignature = null;
       delete list.dataset.session;
     }
-    if (changed) ["composerAddPicker", "chatModelPicker", "workspaceComposerPicker"].forEach(function (id) {
+    if (changed) ["composerAddPicker", "chatModelPicker"].forEach(function (id) {
       var picker = document.getElementById(id);
       if (picker) picker.open = false;
     });
@@ -345,7 +345,7 @@
   }
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
-    var input = form.querySelector("textarea"), toolbar = form.querySelector(".composer-toolbar"), actions = form.querySelector(".composer-actions");
+    var input = form.querySelector("textarea");
     var current = null, loaded = null, mode = "agent", reasoning = false, locked = false;
     var draftStore = window.RNAssistantChatDrafts;
     function sameTarget(left, right) {
@@ -363,64 +363,65 @@
         activeRun ? "Office: документ не привязан" : "Office: при отправке";
     }
     var clear = document.getElementById("clearInputButton");
-    var quick = document.createElement("div"); quick.className = "composer-quick-actions workspace-composer-only";
-    var picker = document.createElement("details"); picker.className = "composer-picker composer-add-picker";
-    picker.id = "workspaceComposerPicker";
-    var trigger = document.createElement("summary"); trigger.className = "composer-picker-trigger composer-add-trigger";
-    trigger.setAttribute("aria-label", "Действия чата"); trigger.title = "Действия чата"; trigger.innerHTML = window.RNAssistantIcons.render("plus");
-    var menu = document.createElement("div"); menu.className = "composer-picker-menu composer-add-menu";
-    var fileAction = null, fileInput = null, fileTarget = null, fileOptions = null;
+    var picker = document.getElementById("composerAddPicker"), plan = document.getElementById("chatPlanButton");
+    var fileAction = document.getElementById("attachFileButton"), fileInput = document.createElement("input");
+    var modelPicker = document.getElementById("chatModelPicker"), modelLabel = document.getElementById("chatModelButtonLabel");
+    var modelMenu = document.getElementById("chatModelMenu"), think = document.getElementById("chatReasoningToggle");
+    var fileTarget = null, fileOptions = null;
+    fileInput.id = "workspaceFileInput"; fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
+    picker.appendChild(fileInput);
+    fileInput.onchange = function () {
+      var files = Array.from(fileInput.files || []), target = fileTarget;
+      fileInput.value = "";
+      if (files.length && target && fileOptions) fileOptions.onFiles(files, target);
+    };
     function attachFiles(nextOptions) {
       if (!nextOptions || !nextOptions.onFiles) return;
       fileOptions = nextOptions;
-      if (fileAction) { update(); return; }
-      fileAction = document.getElementById("attachFileButton").cloneNode(true); fileAction.removeAttribute("id");
-      fileInput = document.createElement("input"); fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
-      fileAction.onclick = function () { if (fileAction.disabled || !current) return;
-        fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
-        picker.open = false; fileInput.click(); };
-      fileInput.onchange = function () {
-        var files = Array.from(fileInput.files || []), target = fileTarget;
-        fileInput.value = "";
-        if (files.length && target) fileOptions.onFiles(files, target);
-      };
-      menu.appendChild(fileAction);
-      var divider = document.createElement("hr"); menu.appendChild(divider);
-      quick.appendChild(fileInput);
       if (sharedComposer) update();
     }
-    var plan = document.getElementById("chatPlanButton").cloneNode(true); plan.removeAttribute("id");
-    plan.id = "workspacePlanButton";
-    plan.onclick = function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); picker.open = false; } };
-    menu.appendChild(plan); picker.append(trigger, menu); quick.appendChild(picker); toolbar.insertBefore(quick, toolbar.firstChild);
-    var model = document.createElement("button"); model.type = "button"; model.className = "composer-picker-trigger workspace-chat-model";
-    model.id = "workspaceModelButton";
-    model.title = "Модель из общих настроек"; model.classList.add("workspace-composer-only");
-    model.onclick = function () { switchTab("settings"); };
-    var label = document.createElement("span"); label.className = "composer-picker-trigger-label"; model.appendChild(label);
-    model.insertAdjacentHTML("beforeend", window.RNAssistantIcons.render("down", "composer-picker-trigger-caret"));
-    var think = button("Включить reasoning", "composer-reasoning-button workspace-composer-only", "bulb", function () { if (!locked) { reasoning = !reasoning; save(); update(); } });
-    think.id = "workspaceReasoningToggle";
-    actions.prepend(model, think);
+    function pickFiles() {
+      if (activeOwner !== "project" || locked || !current || !fileOptions ||
+          fileOptions.canAttachFiles && !fileOptions.canAttachFiles()) return;
+      fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
+      picker.open = false; fileInput.click();
+    }
+    function renderWorkspaceModelMenu() {
+      if (modelMenu.dataset.owner === "workspace") return;
+      modelMenu.replaceChildren();
+      var settingsAction = document.createElement("button"); settingsAction.type = "button";
+      settingsAction.className = "composer-picker-item composer-model-item";
+      settingsAction.textContent = "Настройки модели";
+      settingsAction.onclick = function () { modelPicker.open = false; switchTab("settings"); };
+      modelMenu.appendChild(settingsAction);
+      modelMenu.dataset.owner = "workspace";
+    }
     function update() {
       if (activeOwner === "office") return;
       clear.hidden = !input.value; resizeComposerInput(input);
+      setComposerPickerDisabled(picker, locked || !current);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
-      if (fileAction) { fileAction.hidden = activeOwner !== "project"; fileAction.disabled = locked || !current ||
-        activeOwner !== "project" || !!(fileOptions && fileOptions.canAttachFiles && !fileOptions.canAttachFiles()); }
+      fileAction.disabled = locked || !current || !fileOptions ||
+        activeOwner !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
       think.setAttribute("aria-pressed", String(reasoning)); think.title = reasoning ? "Reasoning включён" : "Reasoning выключен";
-      think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning"); think.disabled = locked;
-      label.textContent = field(state.settings, "model") || "Модель";
+      think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning");
+      think.classList.toggle("active", reasoning); think.disabled = locked;
+      modelLabel.textContent = field(state.settings, "model") || "Модель";
+      modelPicker.title = "Модель из общих настроек";
+      setComposerPickerDisabled(modelPicker, locked || !current);
+      modelMenu.modelRenderState = null;
+      renderWorkspaceModelMenu();
     }
     input.addEventListener("input", function () { if (activeOwner !== "office") { save(); update(); } });
-    form.addEventListener("keydown", function (event) { if (event.key === "Escape" && picker.open) { picker.open = false; trigger.focus(); } });
-    document.addEventListener("pointerdown", function (event) { if (!picker.contains(event.target)) picker.open = false; });
     window.addEventListener("resize", update);
     attachFiles(options);
     update();
     sharedComposer = {
       attachFiles: attachFiles,
       refresh: update,
+      pickFiles: pickFiles,
+      togglePlan: function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); } },
+      toggleReasoning: function () { if (!locked) { reasoning = !reasoning; save(); update(); } },
       select: function (target, snapshot) {
         showOfficeContext(snapshot);
         var next = target && target.workspaceId && target.sessionId
@@ -497,6 +498,8 @@
     canMessageAction: canMessageAction, messageAction: messageAction,
     startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
     currentMessageEdit: currentMessageEdit,
+    composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
+    refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
     snapshot: function () { return dispatch("snapshot"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,
