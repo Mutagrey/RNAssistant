@@ -228,33 +228,42 @@
     });
     el("Stop").disabled = cancelBusy();
     var messages = el("Messages");
-    if (!active || !(active.messages || []).length) {
-      messages.replaceChildren(); messages._chatSignature = null;
-      var suggestions = [];
-      if (project() && active) {
-        [["Сравнить периоды", "Сравни сентябрь с августом и выдели главное."],
-          ["Найти риски и слабые места", "Изучи проект и найди риски и слабые места."],
-          ["Подготовить план работы", "Изучи проект и подготовь план дальнейшей работы."]].forEach(function (entry) {
-          var suggest = node("button", "chat-empty-suggestion");
-          suggest.type = "button"; suggest.textContent = entry[0];
-          suggest.addEventListener("click", function () {
-            el("Input").value = entry[1];
-            el("Input").dispatchEvent(new Event("input", { bubbles: true }));
-            el("Input").focus();
+    if (!active || (!(active.messages || []).length && field(runState(), "status", "Status") !== "running")) {
+      var emptyKey = JSON.stringify([projectId(), currentId(), !!(project() && project().available),
+        !!active, window.RNAssistantWorkspaceChat.owner()]);
+      if (messages._projectEmptyKey !== emptyKey) {
+        messages.replaceChildren(); messages._chatSignature = null;
+        messages._workspaceEntries = Object.create(null);
+        var suggestions = [];
+        if (project() && active) {
+          [["Сравнить периоды", "Сравни сентябрь с августом и выдели главное."],
+            ["Найти риски и слабые места", "Изучи проект и найди риски и слабые места."],
+            ["Подготовить план работы", "Изучи проект и подготовь план дальнейшей работы."]].forEach(function (entry) {
+            var suggest = node("button", "chat-empty-suggestion");
+            suggest.type = "button"; suggest.textContent = entry[0];
+            suggest.addEventListener("click", function () {
+              el("Input").value = entry[1];
+              el("Input").dispatchEvent(new Event("input", { bubbles: true }));
+              el("Input").focus();
+            });
+            suggestions.push(suggest);
           });
-          suggestions.push(suggest);
-        });
+        }
+        var pluginChat = window.RNAssistantWorkspaceChat.owner() === "plugin";
+        messages.appendChild(renderChatEmptyState({
+          title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" :
+            pluginChat ? "Чатов пока нет" : "Выберите чат проекта",
+          text: !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
+            "Верните папку на прежний путь или подключите её заново." : pluginChat && !active ?
+            "Нажмите «+», чтобы создать чат исходников." : "Обсудите файлы проекта, подготовку данных или составьте план.",
+          buttons: suggestions
+        }));
+        messages._projectEmptyKey = emptyKey;
       }
-      var pluginChat = window.RNAssistantWorkspaceChat.owner() === "plugin";
-      messages.appendChild(renderChatEmptyState({
-        title: !project() ? "Проект не выбран" : !project().available ? "Папка проекта недоступна" : active ? "С чего начнём?" :
-          pluginChat ? "Чатов пока нет" : "Выберите чат проекта",
-        text: !project() ? "Подключите папку проекта или выберите проект в дереве." : !project().available ?
-          "Верните папку на прежний путь или подключите её заново." : pluginChat && !active ?
-          "Нажмите «+», чтобы создать чат исходников." : "Обсудите файлы проекта, подготовку данных или составьте план.",
-        buttons: suggestions
-      }));
-    } else window.RNAssistantWorkspaceChat.renderMessages(messages, active);
+    } else {
+      messages._projectEmptyKey = null;
+      window.RNAssistantWorkspaceChat.renderMessages(messages, active);
+    }
     window.RNAssistantChatInspector.render();
     if (!chatBusy() && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
     else if (!chatBusy() && !noticeError && statusText()) notice(statusText());

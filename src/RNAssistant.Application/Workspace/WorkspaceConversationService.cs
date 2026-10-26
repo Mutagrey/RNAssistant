@@ -1705,6 +1705,7 @@ namespace RNAssistant.Runtime
                 var text = new StringBuilder(); var reasoning = new StringBuilder();
                 ConversationMessageStreamExtractor extractor = null;
                 var attempt = 0; var lastPaint = DateTime.MinValue; var pending = 0; var truncated = false;
+                var pendingReplacement = false;
                 Action<bool> publish = force => {
                     if (!force && pending < 256 && DateTime.UtcNow - lastPaint < TimeSpan.FromMilliseconds(100)) return;
                     var value = new WorkspaceModelProgress { RunId = request.RunId, StepId = request.StepId,
@@ -1718,7 +1719,9 @@ namespace RNAssistant.Runtime
                 return new ModelProtocolProgress {
                     AttemptStarted = (streaming, strict) => {
                         attempt++; text.Clear(); reasoning.Clear(); truncated = false;
-                        extractor = new ConversationMessageStreamExtractor(strict); publish(true);
+                        extractor = new ConversationMessageStreamExtractor(strict);
+                        pendingReplacement = attempt > 1;
+                        if (!pendingReplacement) publish(true);
                     },
                     StreamUpdate = update => {
                         if (update == null) return;
@@ -1730,9 +1733,12 @@ namespace RNAssistant.Runtime
                         var take = Math.Min(thoughts.Length, Math.Max(0, 24000 - reasoning.Length));
                         reasoning.Append(thoughts, 0, take); truncated |= take < thoughts.Length;
                         pending += content.Length + thoughts.Length;
+                        if (pendingReplacement && string.IsNullOrWhiteSpace(text.ToString()) &&
+                            string.IsNullOrWhiteSpace(reasoning.ToString())) return;
+                        pendingReplacement = false;
                         publish(update.Completed || firstMessage || firstReasoning);
                     },
-                    AttemptCompleted = () => publish(true)
+                    AttemptCompleted = () => { if (!pendingReplacement) publish(true); }
                 };
             }
 

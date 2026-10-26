@@ -754,15 +754,18 @@ function paintLiveModelOutput(section, output) {
   }
   if (previous.content !== content) {
     var body = section.querySelector(".agent-stream-message");
-    if (body && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(body);
     if (content) {
       if (!body) {
         body = document.createElement("div");
         body.className = "agent-step-message markdown agent-stream-message";
         section.insertBefore(body, status);
       }
-      body.innerHTML = markdown(content);
-      enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: content, streaming: true });
+      // Keep the live text node attached while tokens arrive. Rendering Markdown
+      // afresh here replaces every child on each delta and makes the draft blink.
+      if (body.childNodes.length === 1 && body.firstChild.nodeType === 3)
+        body.firstChild.nodeValue = content;
+      else body.textContent = content;
+      // The accepted message is rendered as Markdown once it is saved.
     } else if (body) section.removeChild(body);
   }
   var label = output.retrying ? "Повторная попытка…" : content || output.showStatus ? "Формируется…" : "";
@@ -1009,11 +1012,6 @@ function reconcileMessageUnits(box, units, liveOnly, cachedUnits) {
       if (unit.update) unit.update(node);
       restoreMessageDisclosures(node, disclosures);
       node.messageUnitKey = unit.key;
-      if (!cached && Object.keys(previousCache).length &&
-          !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) &&
-          node.animate) {
-        node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140, easing: "cubic-bezier(.2, .8, .2, 1)" });
-      }
       // Insert first: removing a tall live article first temporarily clamps scrollTop.
       if (cached && cached.node && cached.node.parentNode === box) {
         box.insertBefore(node, cached.node);

@@ -1309,6 +1309,9 @@ Workspace/project/plugin messages have stable identities and retain unchanged DO
 nodes when new activity arrives. Their run snapshot exposes transient, bounded model
 preview only for the exact running run/attempt, including a run owned by another
 local process through read-only IPC; acceptance replaces it with saved messages.
+Office and workspace use one run article and one live-output leaf. Token updates
+change the attached text node; saved answers render Markdown after acceptance.
+Accepted reflection stays expanded in the shared run history after completion.
 An old-format workspace chat is explicitly read-only; unsupported
 protocol bodies display a notice, never raw JSON or a silently migrated response.
 Real WebView2/Office behavior remains a target-host qualification gate.

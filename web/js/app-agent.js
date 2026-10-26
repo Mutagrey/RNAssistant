@@ -57,6 +57,12 @@ function collapseAgentTimelineItems(timeline) {
       activity: item.activity,
       reasoningMessage: typeof messageHasReasoning === "function" && messageHasReasoning(item.message) ? item.message : null
     };
+    // An accepted no-call reflection has no tool origin/StepId in workspace
+    // history. Keep each saved message; a run-level fallback key merges them.
+    if (activityKind(item.activity) === "step" && !activityStepId(item.activity)) {
+      result.push(nextItem);
+      return;
+    }
     var key = activityTimelineKey(item.activity);
     var existingIndex = latestByKey[key];
     if (existingIndex !== undefined) {
@@ -359,6 +365,9 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   var details = document.createElement("details");
   details.className = "agent-run-history agent-run-overview status-" + stats.status;
   details.setAttribute("data-disclosure-key", "overview");
+  details.open = (steps || []).some(function (step) {
+    return step.marker && activityTitle(step.marker.activity) === "Промежуточное решение";
+  });
 
   var summary = document.createElement("summary");
   summary.className = "agent-run-history-summary";
@@ -431,6 +440,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
     }
   });
   parent.appendChild(details);
+  if (details.open) details.ensureDisclosureContent();
   return details;
 }
 

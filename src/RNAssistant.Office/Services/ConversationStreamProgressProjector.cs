@@ -36,6 +36,7 @@ namespace RNAssistant.Office.Services
         private bool _contentReported;
         private bool _reasoningSeen;
         private bool _reasoningCompleted;
+        private bool _pendingReset;
         private DateTime _lastContentReportUtc;
         private DateTime _lastReasoningReportUtc;
 
@@ -51,7 +52,7 @@ namespace RNAssistant.Office.Services
 
         public void Start(bool streamingEnabled)
         {
-            if (streamingEnabled) Report("streaming", string.Empty, null);
+            _pendingReset = streamingEnabled;
         }
 
         public void OnUpdate(LlmStreamUpdate update)
@@ -102,6 +103,8 @@ namespace RNAssistant.Office.Services
         private void FlushContent()
         {
             if (_pendingContent.Length == 0) return;
+            if (_pendingReset && string.IsNullOrWhiteSpace(_pendingContent.ToString())) return;
+            ResetBeforeVisibleOutput();
             Report("streaming", _pendingContent.ToString(), null);
             _pendingContent.Clear();
             _contentReported = true;
@@ -112,6 +115,7 @@ namespace RNAssistant.Office.Services
         {
             if (!_reasoningSeen ||
                 _pendingReasoning.Length == 0 && (!completed || _reasoningCompleted)) return;
+            ResetBeforeVisibleOutput();
             Report("thinking", completed ? "Анализ завершен." : "Модель анализирует запрос...", new ChatActivity
             {
                 Kind = "reasoning",
@@ -123,6 +127,13 @@ namespace RNAssistant.Office.Services
             _pendingReasoning.Clear();
             _reasoningCompleted = completed;
             _lastReasoningReportUtc = DateTime.UtcNow;
+        }
+
+        private void ResetBeforeVisibleOutput()
+        {
+            if (!_pendingReset) return;
+            _pendingReset = false;
+            Report("streaming", string.Empty, null);
         }
 
         private void Report(string phase, string message, ChatActivity activity)

@@ -130,6 +130,19 @@ namespace RNAssistant.Harness
                                 "batch calls keep one exact model attempt and their original positions");
                             AssertEqual("Смотрю ресурсы.", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Content,
                                 "plugin chat presents the accepted narration after a tool call");
+                            AssertEqual("step", PluginApplicationService.PresentWorkspaceMessage(calls[0]).Activity.Kind,
+                                "workspace accepted narration joins the shared run feed");
+                            var reflection = PluginApplicationService.PresentWorkspaceMessage(new ChatMessage
+                            {
+                                Role = "assistant", ProtocolMessage = true, RunId = first.Summary.RunId,
+                                ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
+                                ResponseModelAttemptId = "attempt-reflection-test",
+                                Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.ReflectionAction,
+                                    "Inspect the evidence.", "Проверяю результат.", "Read the exact source.")
+                            });
+                            AssertEqual("step", reflection.Activity.Kind, "workspace reflection joins the shared run feed");
+                            AssertEqual("Проверяю результат.", reflection.Activity.StepMessage,
+                                "workspace reflection keeps the visible commentary");
                         }
                         string oldCallMessageId = null, oldCallId = null, oldToolName = null;
                         AcceptedToolCallOrigin oldOrigin = null;

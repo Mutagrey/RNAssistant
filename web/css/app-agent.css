@@ -140,6 +140,8 @@
   overflow-wrap: anywhere;
 }
 
+.agent-stream-message { white-space: pre-wrap; }
+
 .agent-stream-status {
   color: var(--muted);
   font-size: 12px;

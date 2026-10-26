@@ -320,7 +320,7 @@
       var activeRun = status === "running" || status === "awaitingconfirmation", pinned = office && activeRun;
       note.hidden = activeOwner !== "project";
       note.textContent = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
-        activeRun ? "Office: документ не привязан" : "Office: текущий документ при отправке, если открыт";
+        activeRun ? "Office: документ не привязан" : "Office: при отправке";
       note.title = pinned ? "Документ закреплён за этим запуском, включая подтверждение действий" :
         activeRun ? "В этом запуске Office-инструменты недоступны" : "Новый запуск будет привязан к текущему документу Office, если он открыт";
     }

@@ -287,6 +287,23 @@ for (const lifecycle of ["completed", "cancelled"]) {
     "expanded history keeps the original comments after " + lifecycle);
 }
 assert.equal(JSON.stringify(preparation), originalPreparation, "presentation never changes the stored step identities or comments");
+const reflection = { Kind: "step", RunId: "r", StepId: "reflection-1", StepMessage: "Проверю результат ещё раз.",
+  Title: "Промежуточное решение", Status: "completed" };
+const reflectedArticle = ctx.renderAgentRunArticle({ items: [{ activity: reflection, message: message(reflection, 0), index: 0 }],
+  finalMessage: { message: { Id: "reflected-final", Role: "assistant", RunId: "r", Content: "Ответ готов." }, index: 1 } });
+assert.equal(reflectedArticle.querySelector(".agent-run-overview").open, true,
+  "accepted reflection is expanded after the final answer");
+assert.deepEqual(visibleStepMessages(reflectedArticle), ["Проверю результат ещё раз."],
+  "accepted reflection remains visible in the transcript");
+const reflections = ["Проверю исходные данные.", "Проверю исходные данные."].map(function (text, index) {
+  const activity = { Kind: "step", RunId: "r", StepMessage: text,
+    Title: "Промежуточное решение", Status: "completed" };
+  return { activity, message: { Id: "reflection-" + index, Role: "assistant", RunId: "r", Activity: activity }, index };
+});
+const repeatedReflectionArticle = ctx.renderAgentRunArticle({ items: reflections,
+  finalMessage: { message: { Id: "reflection-final", Role: "assistant", RunId: "r", Content: "Готово." }, index: 2 } });
+assert.deepEqual(visibleStepMessages(repeatedReflectionArticle), ["Проверю исходные данные.", "Проверю исходные данные."],
+  "distinct accepted reflections do not collapse when their text repeats");
 console.log("PASS live projection: silent steps fold below commentary while active work and attention stay visible");
 
 // Streamed text belongs to the current run, with cheap leaf-only token paints.

@@ -35,6 +35,18 @@ namespace RNAssistant.Harness
 
         private static void ConversationStreamsMessageAndThinking()
         {
+            var delayed = new List<Tuple<string, string, ChatActivity>>();
+            var projector = new ConversationStreamProgressProjector(
+                (phase, message, activity) => delayed.Add(Tuple.Create(phase, message, activity)));
+            projector.Start(true);
+            projector.OnUpdate(new LlmStreamUpdate
+                { ContentDelta = "{\"action\":\"finish\",\"reason\":\"Answer.\",\"results\":[],\"message\":\" " });
+            AssertEqual(0, delayed.Count, "an attempt without visible output does not clear the prior draft");
+            projector.OnUpdate(new LlmStreamUpdate { ContentDelta = "Visible\"}" });
+            projector.Complete();
+            AssertEqual(string.Empty, delayed[0].Item2, "the first visible delta starts with one reset");
+            AssertEqual(" Visible", delayed[1].Item2, "replacement text follows that reset");
+
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var thinking = new string('р', 300);

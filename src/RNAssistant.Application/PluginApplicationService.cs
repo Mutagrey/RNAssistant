@@ -670,6 +670,15 @@ namespace RNAssistant.Application
                 return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
                     StepId = message.AcceptedCallOrigin?.StepId,
                     CreatedUtc = message.CreatedUtc, Content = accepted.Response.Message,
+                    Activity = accepted.Response.Action == ConversationResponse.FinishAction ? null : new ChatActivity
+                    {
+                        Kind = "step", RunId = message.RunId, StepId = message.AcceptedCallOrigin?.StepId,
+                        StepMessage = !string.IsNullOrWhiteSpace(accepted.Response.Message)
+                            ? accepted.Response.Message : accepted.Response.Decision,
+                        Title = accepted.Response.Action == ConversationResponse.ReflectionAction
+                            ? "Промежуточное решение" : "Выполняю действие",
+                        Status = "completed"
+                    },
                     RunViewState = message.RunViewState,
                     ReasoningContent = message.ReasoningContent, ReasoningTokens = message.ReasoningTokens,
                     ReasoningTruncated = message.ReasoningTruncated,
