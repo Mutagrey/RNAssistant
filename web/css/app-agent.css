@@ -120,6 +120,8 @@
 .agent-model-step {
   display: grid; gap: 8px; min-width: 0;
 }
+.agent-step-actions { display: flex; justify-content: flex-end; padding: 0 4px 2px; }
+.agent-step-actions > .message-inspect-action { color: var(--ink-muted); }
 
 .agent-model-step + .agent-model-step,
 .agent-model-step + .agent-run-overview {

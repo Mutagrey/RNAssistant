@@ -220,6 +220,7 @@
 }
 
 .shell #workspaceInspectorToggle { margin-left: auto; }
+body.resizing-pane .shell #tab-chat .chat-workspace { transition: none !important; }
 /* Plugin development uses the project chat tree and one right preview dock. */
 .shell.navigation-open > .content > #tab-chat.active #projectChatLayout.plugin-surface-open:not(.with-inspector) {
   grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--plugin-surface-width, 520px) !important;

@@ -2,10 +2,10 @@
   "use strict";
 
   var owner = null, open = false, expanded = false, bound = false, transitionTimer = null;
-  var ratio = 0.42, savedRatioKey = "rnassistant.ui.htmlBrowser.ratio";
+  var ratio = 0.5, savedRatioKey = "rnassistant.ui.htmlBrowser.ratio";
   try {
     var saved = Number(window.localStorage.getItem(savedRatioKey));
-    if (saved >= 0.25 && saved <= 0.7) ratio = saved;
+    if (saved > 0 && saved < 1) ratio = saved;
   } catch (_) { /* Pane geometry is optional. */ }
 
   function el(id) { return document.getElementById(id); }
@@ -21,8 +21,10 @@
     return Math.max(0, layout.clientWidth - nav);
   }
   function bounds() {
-    var available = availableWidth();
-    return { min: 320, max: Math.max(320, available - 360 - 1) };
+    return window.RNAssistantSplitter.rightPaneBounds(availableWidth());
+  }
+  function overlayMode() {
+    return window.RNAssistantShellLayout.mode() === "single" || !bounds().fits;
   }
   function paneWidth() {
     var width = availableWidth(), limit = bounds();
@@ -30,7 +32,7 @@
   }
   function refresh() {
     if (!bound) return;
-    var layout = el("chatLayout"), overlay = availableWidth() < 681;
+    var layout = el("chatLayout"), overlay = overlayMode();
     layout.classList.toggle("browser-overlay", overlay);
     var toggle = el("toggleChatInspectorButton");
     var toggleTarget = open && overlay ? el("htmlWorkspacePreview").querySelector(".preview-surface-panel-head") :
@@ -151,7 +153,7 @@
   function syncSource() { if (owner && !current()) release(); }
   function setWidth(value, persist) {
     var limit = bounds(), available = availableWidth();
-    if (available < 681) return;
+    if (overlayMode()) return;
     expanded = false;
     ratio = Math.max(limit.min, Math.min(limit.max, value)) / available;
     if (persist) try { window.localStorage.setItem(savedRatioKey, String(ratio)); } catch (_) { /* Optional. */ }
@@ -187,8 +189,8 @@
     el("openHtmlWorkspaceRightButton").addEventListener("click", openCurrent);
     window.RNAssistantSplitter.bind(el("chatBrowserSplitter"), {
       getValue: paneWidth, setValue: setWidth, bounds: bounds,
-      defaultValue: function () { return availableWidth() * 0.42; },
-      direction: -1, enabled: function () { return open && availableWidth() >= 681; }
+      defaultValue: function () { return availableWidth() * 0.5; },
+      direction: -1, enabled: function () { return open && !overlayMode(); }
     });
     window.addEventListener("resize", refresh);
     paint();

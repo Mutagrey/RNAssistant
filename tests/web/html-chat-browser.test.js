@@ -122,7 +122,30 @@ const path = require("node:path");
     await splitter.press("ArrowLeft");
     assert.equal(Number(await splitter.getAttribute("aria-valuenow")), before + 12,
       "shared splitter resizes the browser");
-    await page.setViewportSize({ width: 680, height: 800 });
+    await page.waitForFunction(() => !document.getElementById("chatLayout").classList.contains("browser-transition") &&
+      !document.getElementById("chatLayout").classList.contains("inspector-transition"));
+    await page.setViewportSize({ width: 1080, height: 800 });
+    await page.waitForFunction(() => !document.getElementById("chatLayout").classList.contains("browser-overlay") &&
+      Number(document.getElementById("chatBrowserSplitter").getAttribute("aria-valuemax")) < 500);
+    await page.waitForFunction(() => Math.abs(document.getElementById("chatBrowser").getBoundingClientRect().width -
+      parseFloat(document.getElementById("chatLayout").style.getPropertyValue("--browser-width"))) < 2);
+    const browserBefore = await page.locator("#chatBrowser").evaluate(node => node.getBoundingClientRect().width);
+    const chatBefore = await page.locator("#chatLayout .chat-main").evaluate(node => node.getBoundingClientRect().width);
+    const grip = await splitter.boundingBox();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x - 90, grip.y + grip.height / 2, { steps: 5 });
+    await page.mouse.up();
+    await page.waitForFunction(width => document.getElementById("chatBrowser").getBoundingClientRect().width > width + 40,
+      browserBefore);
+    assert.ok(await page.locator("#chatLayout .chat-main").evaluate(node => node.getBoundingClientRect().width) < chatBefore - 40,
+      "dragging changes the actual chat and preview widths");
+    await splitter.press("End");
+    await page.waitForFunction(() => Math.abs(document.getElementById("chatBrowser").getBoundingClientRect().width -
+      Number(document.getElementById("chatBrowserSplitter").getAttribute("aria-valuemax"))) < 2);
+    assert.ok(await page.locator("#chatLayout .chat-main").evaluate(node => node.getBoundingClientRect().width) >= 280,
+      "the preview can stretch until the chat reaches its usable minimum");
+    await page.setViewportSize({ width: 600, height: 800 });
     await page.waitForFunction(() => document.getElementById("chatLayout").classList.contains("browser-overlay"));
     assert.equal(await panelToggle.evaluate(node => node.parentElement.classList.contains("preview-surface-panel-head")), true,
       "the same button remains reachable over the narrow HTML preview");

@@ -30,7 +30,8 @@ function appendAgentRunProcess(parent, timeline, stats) {
       renderInlineArtifacts: false,
       liveFeed: !!stats.liveFeed,
       terminal: !!stats.terminal,
-      workspace: !!stats.workspace
+      workspace: !!stats.workspace,
+      stepActionAtEnd: !!stats.stepActionAtEnd
     };
     entry.appendChild(renderActivityNode(item.activity, false, isCurrent, activityContext));
     process.appendChild(entry);
@@ -243,9 +244,10 @@ function groupAgentRunUpdates(steps) {
     if (previous && silent) {
       previous.items = previous.items.concat(step.items || []);
       previous.ambient = step.ambient;
+      previous.marker = step.marker || previous.marker;
     } else {
       groups.push({ message: step.message, items: (step.items || []).slice(),
-        ambient: step.ambient });
+        ambient: step.ambient, marker: step.marker });
     }
   });
   return groups;
@@ -308,6 +310,7 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
     ? stats.current : null;
   stats.current = active;
   stats.liveFeed = true;
+  stats.stepActionAtEnd = true;
   var adjacent = [];
   function flush() {
     appendAgentActionStage(parent, adjacent, stats);
@@ -342,6 +345,18 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
       hideIcon: true, liveFeed: true, currentActivity: ambient.activity
     }));
   }
+}
+
+function appendAgentStepInspectorAction(parent, step) {
+  if (typeof appendMessageInspectorAction !== "function") return;
+  var items = (step.items || []).filter(function (item) { return !!item && !!item.activity; });
+  var selected = items.slice().reverse().find(function (item) { return !!activityStepId(item.activity); }) ||
+    step.marker || items[items.length - 1];
+  if (!selected) return;
+  var actions = document.createElement("div");
+  actions.className = "agent-step-actions";
+  appendMessageInspectorAction(actions, selected.message, selected.activity);
+  if (actions.childNodes.length) parent.appendChild(actions);
 }
 
 function appendAgentRunSummaryState(summary, status) {
@@ -417,6 +432,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       section.className = "agent-model-step agent-model-step-history";
       appendAgentStepMessage(section, step.message);
       appendLiveAgentStep(section, { items: historyItems }, false, true, true, true, stats.workspace);
+      appendAgentStepInspectorAction(section, step);
       content.appendChild(section);
     });
     if (!content.childNodes.length) {
@@ -561,6 +577,7 @@ function renderAgentRunArticle(run) {
     appendAgentStepMessage(section, step.message);
     appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
       !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace);
+    appendAgentStepInspectorAction(section, step);
     if (section.childNodes.length) process.appendChild(section);
   });
   if (!expanded) appendAgentRunOverview(process, steps, timeline, stats);

@@ -128,7 +128,7 @@ function renderActivityRow(activity, current, expandable, context) {
     caret.setAttribute("aria-hidden", "true");
     copy.appendChild(caret);
   }
-  if (activityStepId(activity) && typeof appendMessageInspectorAction === "function") {
+  if (!(context && context.stepActionAtEnd) && activityStepId(activity) && typeof appendMessageInspectorAction === "function") {
     appendMessageInspectorAction(row, context && context.message, activity);
   }
   return row;

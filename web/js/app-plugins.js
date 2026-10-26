@@ -248,15 +248,11 @@
   }
   function pluginAvailableWidth(){
     var layout=document.getElementById('projectChatLayout'),nav=layout.querySelector('.chat-sidebar');
-    var navWidth=window.RNAssistantShellLayout.isNavigationOpen()?nav.getBoundingClientRect().width:0;
+    var navWidth=window.RNAssistantShellLayout.isNavigationOpen()?nav.getBoundingClientRect().width+1:0;
     return Math.max(0,layout.clientWidth-navWidth);
   }
-  function pluginSurfaceOverlay(){return pluginAvailableWidth()<681;}
-  function pluginWidthBounds(){
-    var width=pluginAvailableWidth();
-    if(!width)return {min:320,max:780};
-    return {min:320,max:Math.max(320,Math.min(780,width-360))};
-  }
+  function pluginWidthBounds(){return window.RNAssistantSplitter.rightPaneBounds(pluginAvailableWidth());}
+  function pluginSurfaceOverlay(){return window.RNAssistantShellLayout.mode()==='single'||!pluginWidthBounds().fits;}
   function setPluginWidth(value,persist){
     var bounds=pluginWidthBounds();pluginWidth=Math.max(bounds.min,Math.min(bounds.max,value));
     if(persist)pluginWidthPreference=pluginWidth;

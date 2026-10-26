@@ -172,7 +172,12 @@
     setSplitterAria(handle, options.getValue(), options.bounds());
   }
 
-  window.RNAssistantSplitter = { bind: bindSplitter, update: setSplitterAria };
+  function rightPaneBounds(available) {
+    var min = 280, main = 280;
+    return { min: min, max: Math.max(min, available - main - 1), fits: available >= min + main + 1 };
+  }
+
+  window.RNAssistantSplitter = { bind: bindSplitter, update: setSplitterAria, rightPaneBounds: rightPaneBounds };
 
   function ratioAttr(layout, name, fallback) {
     var value = Number(layout.getAttribute(name));

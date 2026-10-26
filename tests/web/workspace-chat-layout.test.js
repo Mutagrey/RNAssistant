@@ -190,14 +190,25 @@ fs.mkdirSync(captures, {recursive:true});
     await split.press('ArrowLeft');
     assert.ok(Number(await split.getAttribute('aria-valuenow'))>before,'the right preview width can be changed');
     await page.setViewportSize({width:1080,height:900});
-    await page.waitForFunction(()=>!document.querySelector('#projectChatLayout').classList.contains('plugin-surface-overlay'));
+    await page.waitForFunction(()=>!document.querySelector('#projectChatLayout').classList.contains('plugin-surface-overlay') &&
+      Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuemax'))<500);
+    await page.waitForFunction(()=>!document.querySelector('#projectChatLayout').classList.contains('inspector-transition'));
     assert.equal(await split.isVisible(),true,'the preview divider stays available when chat and preview both fit');
+    const paneBefore=await page.locator('#pluginWorkbench').evaluate(node=>node.getBoundingClientRect().width);
     const dragStart=Number(await split.getAttribute('aria-valuenow')), dragBox=await split.boundingBox();
     await page.mouse.move(dragBox.x+dragBox.width/2,dragBox.y+dragBox.height/2);
     await page.mouse.down();
     await page.mouse.move(dragBox.x+dragBox.width/2+40,dragBox.y+dragBox.height/2,{steps:4});
     await page.mouse.up();
     await page.waitForFunction(value=>Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuenow'))<value,dragStart);
+    await page.waitForFunction(width=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width<width-25,paneBefore);
+    await page.setViewportSize({width:1920,height:900});
+    await page.waitForFunction(()=>Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuemax'))>780);
+    await split.press('End');
+    await page.waitForFunction(()=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width>780);
+    assert.ok(await page.locator('#workspaceChatView').evaluate(node=>node.getBoundingClientRect().width)>=280,
+      'wide previews can stretch past the former 780px cap while keeping the chat usable');
+    await split.press('Enter');
     await page.setViewportSize({width:1360,height:900});
     await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(false));
     assert.equal(await split.isVisible(),true,'preview divider remains usable with the project tree collapsed');

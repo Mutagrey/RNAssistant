@@ -222,6 +222,24 @@ const { chromium } = require("playwright");
     await page.evaluate(() => { state.activeChatId = "another-chat"; state.activeRunViewState = null; RNAssistantChatInspector.render(); });
     await source.dispatchEvent("click");
     assert.doesNotMatch(await page.locator("#chatInspectorBody").textContent(), /Выбранный запуск|Источник из предыдущего запуска/);
+    await page.evaluate(() => {
+      state.activeChatId = "preview-chat";
+      const items = Array.from({ length: 6 }, (_, index) => {
+        const activity = { Kind: "tool", RunId: "grouped-run", StepId: "grouped-step",
+          StepMessage: "Читаю модули", ToolId: "common.resources_read", ToolCallId: "read-" + index,
+          Status: "completed", ResultMessage: "Прочитан модуль " + index };
+        return { message: { Id: "grouped-message-" + index, Role: "assistant",
+          RunId: "grouped-run", Activity: activity }, activity, index };
+      });
+      const article = renderAgentRunArticle({ items, live: true });
+      article.id = "grouped-step-probe";
+      document.getElementById("messages").appendChild(article);
+    });
+    assert.equal(await page.locator("#grouped-step-probe .agent-activity-row").count(), 6);
+    assert.equal(await page.locator("#grouped-step-probe .agent-activity-row .message-inspect-action").count(), 0,
+      "individual calls have no duplicate step buttons");
+    assert.equal(await page.locator("#grouped-step-probe .agent-model-step > .agent-step-actions .message-inspect-action").count(), 1,
+      "six calls expose one step button after the group");
     assert.deepEqual(errors, []);
     console.log("PASS chat inspector: composition, cancellation, exact step/call routes, message entry, pinned run, missing/stale refusal, focus, light/dark and narrow layout");
   } finally { if (browser) await browser.close(); server.kill(); }

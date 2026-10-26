@@ -43,23 +43,28 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
   assert.equal(await page.locator('.chat-visual pre').isVisible(),true);
   const html='<!doctype html><html lang="ru"><head><title>Preview</title></head><body class="authored-body"><img src="https://example.invalid/image"><iframe src="https://example.invalid/frame"></iframe><link rel="stylesheet" href="https://example.invalid/style"><h1>Пример</h1><button id="plus">Нажать</button><output id="count">0</output><div id="chart" style="height:220px"></div><script>let n=0;document.getElementById("plus").onclick=()=>document.getElementById("count").textContent=++n;echarts.init(document.getElementById("chart")).setOption({xAxis:{data:["A","B"]},yAxis:{},series:[{type:"bar",data:[2,4]}]});fetch("https://example.invalid/leak").catch(()=>{});try{parent.document.body.dataset.leak="yes"}catch(e){}</script></body></html>';
   await show('```html\n'+html+'\n```');
-  assert.equal(await page.locator('.chat-visual iframe').count(),0);
-  await page.getByRole('button',{name:'Запустить'}).click();
   await page.frameLocator('.chat-visual iframe').locator('canvas').waitFor();
-  assert.equal(await page.getByRole('button',{name:'Запустить'}).count(),0,'running preview has only Stop');
-  assert.equal(await page.locator('.chat-visual > .block-tools button').count(),4);
+  assert.equal(await page.getByRole('button',{name:/Запустить|Остановить/}).count(),0,
+    'completed HTML starts automatically without a Play or Stop step');
+  assert.equal(await page.locator('.chat-visual > .block-tools button').count(),3);
   const frame=await page.locator('.chat-visual iframe').elementHandle();
   const content=await frame.contentFrame();
   assert.equal(await content.locator('body').getAttribute('class'),'authored-body');
   await content.locator('#plus').click();assert.equal(await content.locator('#count').textContent(),'1');
+  await page.getByRole('button',{name:'Показать код'}).click();
+  assert.equal(await page.locator('.chat-visual pre').isVisible(),true);
+  assert.equal(await page.locator('.chat-visual-surface').isVisible(),false,
+    'code and live HTML are separate views');
+  await page.getByRole('button',{name:'Показать HTML'}).click();
+  assert.equal(await content.locator('#count').textContent(),'1','returning to preview keeps the live frame');
   await page.getByRole('button',{name:'Увеличить',exact:true}).click();
   assert.equal(await content.locator('#count').textContent(),'1','enlarging preserves the live frame');
   await page.getByRole('button',{name:'Свернуть',exact:true}).click();
   assert.equal(await page.evaluate(()=>document.body.dataset.leak),undefined);
   assert.equal(await page.locator('iframe').getAttribute('sandbox'),'allow-scripts');
   assert.ok(external.every(url=>blocked.has(url)),'all external asset attempts must fail with CSP, not DNS/network errors');
-  await page.getByRole('button',{name:'Остановить'}).click();assert.equal(await page.locator('iframe').count(),0);
-  await page.getByRole('button',{name:'Запустить'}).click();
+  await show('New chat');assert.equal(await page.locator('iframe').count(),0);
+  await show('```html\n'+html+'\n```');
   await page.frameLocator('.chat-visual iframe').locator('#count').waitFor();
   assert.equal(await page.frameLocator('.chat-visual iframe').locator('#count').textContent(),'0');
   await show('New chat');assert.equal(await page.locator('iframe').count(),0);
@@ -68,18 +73,13 @@ ${scripts.map(file=>`<script src="/js/${file}"></script>`).join('')}
     window.RNAssistantHtmlVendorRuntime={ensure:()=>new Promise(resolve=>window.resolveVendor=resolve),used:()=>[{}],source:()=>({js:''})};
   });
   await show('```html\n<script>echarts.init()</script>\n```');
-  await page.getByRole('button',{name:'Запустить'}).click();
-  await page.getByRole('button',{name:'Остановить'}).click();
-  assert.equal(await page.getByRole('button',{name:'Запустить'}).count(),1);
-  await page.evaluate(()=>resolveVendor());
-  assert.equal(await page.locator('iframe').count(),0,'Stop cancels pending vendor load');
-  await page.getByRole('button',{name:'Запустить'}).click();
+  await page.waitForFunction(()=>typeof window.resolveVendor==='function');
   await show('Switched session');
-  await page.evaluate(()=>{resolveVendor();window.RNAssistantHtmlVendorRuntime=originalVendorRuntime;});
+  await page.evaluate(()=>resolveVendor());
+  await page.evaluate(()=>{window.RNAssistantHtmlVendorRuntime=originalVendorRuntime;});
   assert.equal(await page.locator('iframe').count(),0,'late vendor load cannot resurrect a closed preview');
 
   await show('```html\n<script>throw new Error("preview failed")</script>\n```');
-  await page.getByRole('button',{name:'Запустить'}).click();
   await page.waitForFunction(()=>document.querySelector('.chat-visual-status').textContent.includes('preview failed'));
   errors.length=0;
   for(const theme of ['light','dark']){

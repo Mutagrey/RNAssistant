@@ -64,13 +64,21 @@
     wrap.setAttribute("aria-label", language === "mermaid" ? "Схема" : "Интерактивный пример");
     var surface = document.createElement("div"); surface.className = "chat-visual-surface";
     var status = document.createElement("div"); status.className = "chat-visual-status"; status.setAttribute("role", "status");
-    var token = 0, disposed = false, seen = false, running = false, intersection;
+    var token = 0, disposed = false, seen = false, htmlStarted = false, intersection;
     function stop() {
       token += 1; surface.replaceChildren();
-      running = false; buttonLabel(play, "Запустить", "play");
+      htmlStarted = false;
     }
-    function fail(error) { status.textContent = "Не удалось показать: " + (error.message || error); pre.hidden = false; }
-    function showSource() { pre.hidden = !pre.hidden; codeButton.setAttribute("aria-expanded", String(!pre.hidden)); buttonLabel(codeButton, pre.hidden ? "Показать код" : "Скрыть код", "code"); }
+    function showCode(value) {
+      pre.hidden = !value;
+      if (language === "html") surface.hidden = value;
+      codeButton.setAttribute("aria-expanded", String(value));
+      buttonLabel(codeButton, value && language === "html" ? "Показать HTML" : value ? "Скрыть код" : "Показать код",
+        value && language === "html" ? "eye" : "code");
+      if (!value && language === "html" && !htmlStarted) startHtml();
+    }
+    function fail(error) { status.textContent = "Не удалось показать: " + (error.message || error); showCode(true); }
+    function showSource() { showCode(pre.hidden); }
     var codeButton = button("Показать код", "code", showSource); codeButton.setAttribute("aria-expanded", "false");
     var copyButton = button("Копировать", "copy", function () { window.copyText(source); });
     var zoom = button("Увеличить", "external", function () {
@@ -82,17 +90,13 @@
     wrap.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && wrap.classList.contains("chat-visual-expanded")) { zoom.click(); zoom.focus(); }
     });
-    var play = button("Запустить", "play", function () {
-      if (running) { stop(); status.textContent = "Просмотр остановлен."; }
-      else startHtml();
-    });
-    if (language === "html") tools.appendChild(play);
     tools.appendChild(codeButton); tools.appendChild(copyButton); tools.appendChild(zoom);
     pre.parentNode.insertBefore(wrap, pre);
     wrap.appendChild(tools); wrap.appendChild(status); wrap.appendChild(surface); wrap.appendChild(pre); pre.hidden = true;
-    status.textContent = language === "html" ? "Нажмите ▶ для просмотра" : "Схема ожидает просмотра…";
+    status.textContent = language === "html" ? "Подготовка просмотра…" : "Схема ожидает просмотра…";
     async function startHtml() {
-      stop(); var current = token; running = true; buttonLabel(play, "Остановить", "stop"); status.textContent = "Подготовка просмотра…";
+      if (disposed || htmlStarted) return;
+      htmlStarted = true; var current = ++token; status.textContent = "Подготовка просмотра…";
       try {
         if (source.length > 200000) throw new Error("HTML превышает лимит 200 000 символов.");
         var js = "";
@@ -148,9 +152,12 @@
     }, theme: function () { if (language === "mermaid" && seen) diagram(); } };
     wrap.__disposeChatVisual = item.dispose;
     mounted.add(item);
-    if (language === "mermaid") {
+    if (language === "mermaid" || language === "html") {
       intersection = new IntersectionObserver(function (entries) {
-        if (entries.some(function (entry) { return entry.isIntersecting; })) { seen = true; intersection.disconnect(); diagram(); }
+        if (entries.some(function (entry) { return entry.isIntersecting; })) {
+          seen = true; intersection.disconnect();
+          if (language === "html") startHtml(); else diagram();
+        }
       });
       intersection.observe(wrap);
     }
