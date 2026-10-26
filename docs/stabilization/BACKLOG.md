@@ -131,8 +131,9 @@ page errors. Причина не установлена; при следующе
 4. **Explorer graph/diff/reread/export.** Owner: existing inspector/UI и trajectory
    exporter. Граф только из событий/refs; revision diff использует существующих
    domain owners. Явное повторное чтение идёт через Gateway и создаёт новое
-   observation. Интегрировать существующий redacted trajectory export вместо нового
-   формата/store; сохранить различие metadata/secrets/full modes и контроль доступа.
+   observation. Переход из Inspector к существующему redacted trajectory export
+   сделан для полного выбранного чата; нового формата/store нет. Граф, revision diff
+   и явный reread остаются открытыми.
 5. **Общий acceptance и target-host evidence.** Owner: qualification плюс владельцы
    изменённого поведения. Сопоставить acceptance §10 MD с existing fixtures, закрыть
    непокрытые visual/PDF и Explorer cases, измерить representative large-source/model

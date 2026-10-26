@@ -186,7 +186,17 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
   await workspace.get("modelContextMode").fire("change");
   assert.equal(workspace.get("modelContextMode").value, "actual");
   assert.ok(!workspace.calls.some(call => call.type === "inspectModelContextPreview"));
-  workspace.c.RNAssistantModelContext.close();
+  let exportRoute;
+  workspace.c.openTrajectoryExport = target => { exportRoute = target; return false; };
+  await workspace.get("modelContextExportChat").fire("click");
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), false,
+    "failed export routing keeps the Inspector open");
+  workspace.c.openTrajectoryExport = target => { exportRoute = target; return true; };
+  await workspace.get("modelContextExportChat").fire("click");
+  assert.equal(exportRoute.owner, "project");
+  assert.equal(exportRoute.workspaceId, "workspace-one");
+  assert.equal(exportRoute.sessionId, "chat");
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), true);
   let finishWorkspacePayload;
   workspace.hold(new Promise(resolve => { finishWorkspacePayload = resolve; }));
   workspace.c.RNAssistantModelContext.open(route); await flush();
@@ -214,7 +224,12 @@ function fixture(withAliases = false, pdf = false, requestOverride = null) {
   scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run-1", stepId: "step-1" }); await flush();
   assert.equal(scoped.get("modelContextAttempt").children.length, 1);
   assert.equal(scoped.get("modelContextAttempt").value, "r1", "exact run+step never opens a newer unrelated request");
-  scoped.c.RNAssistantModelContext.close();
+  let officeExport;
+  scoped.c.openTrajectoryExport = target => { officeExport = target; return true; };
+  await scoped.get("modelContextExportChat").fire("click");
+  assert.equal(officeExport.owner, "office");
+  assert.equal(officeExport.chatId, "chat");
+  assert.equal(officeExport.runId, undefined, "export handoff selects the chat rather than the request's run");
   scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "absent", stepId: "step-1" }); await flush();
   assert.match(scoped.get("modelContextStatus").textContent, /Точный запрос этого шага не найден/);
   assert.equal(scoped.get("modelContextAttempt").children.length, 0);

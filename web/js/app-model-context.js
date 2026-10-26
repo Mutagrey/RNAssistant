@@ -1230,6 +1230,17 @@
       }
       else if (c.selected) downloadEvent(c, c.selected);
     });
+    $("modelContextExportChat").addEventListener("click", function () {
+      var c = current;
+      if (!c || !live(c) || typeof window.openTrajectoryExport !== "function") return;
+      var target = c.owner === "office" ? { owner: "office", chatId: c.chatId } :
+        { owner: c.owner, workspaceId: c.workspaceId, sessionId: c.chatId };
+      if (window.openTrajectoryExport(target)) {
+        close(false);
+        var exportSummary = document.querySelector && document.querySelector("#trajectoryExportOptions > summary");
+        if (exportSummary) exportSummary.focus();
+      } else status(c, "Экспорт диагностики недоступен для этого чата.");
+    });
     $("modelContextDialog").addEventListener("keydown", function (event) {
       if (event.key === "Escape") {
         event.preventDefault(); event.stopPropagation();

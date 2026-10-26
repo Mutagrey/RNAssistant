@@ -41,6 +41,12 @@ or late response for a changed diagnostic context cannot download or rebind to t
 active chat. Actual Windows/WebView2 binary delivery, cancellation and downloaded-ZIP
 qualification remain open.
 
+Model Context Inspector can open these existing export options for its exact chat.
+The handoff selects the whole raw event view, clears prior event/correlation filters,
+and restores metadata redaction with CAS bodies off. It does not start a download;
+the user chooses the export action in Trajectory diagnostics. The same scoped
+exporter, lease reader and redaction checks apply to Office and workspace chats.
+
 ## Redaction modes
 
 - `metadata` (default): removes event/row data and content-derived row titles, hides the search phrase, and excludes CAS bodies. Identifiers, times, event types, correlations, source hashes, usage totals, and CAS reference metadata remain.

@@ -37,6 +37,7 @@ class Element {
   addEventListener(name, handler) { (this.handlers[name] ||= []).push(handler); }
   dispatch(name, event = {}) { (this.handlers[name] || []).forEach(handler => handler(Object.assign({ preventDefault() {}, stopPropagation() {}, key: "" }, event))); }
   click() { if (this.tagName === "a") downloads += 1; if (!this.disabled) this.dispatch("click"); }
+  focus() {}
   select() {}
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   querySelectorAll(selector) {
@@ -130,6 +131,7 @@ const context = vm.createContext({
 context.window = context;
 get("trajectoryViewInput").value = "raw";
 get("trajectoryExportRedactionInput").value = "metadata";
+get("trajectoryExportOptions").appendChild(new Element("summary"));
 
 for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-run-journal.js", "app-trajectory-payload.js", "app-trajectory.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
@@ -268,9 +270,29 @@ function button(root, text) { return root.querySelectorAll("button").find(node =
   assert.equal(trajectoryQueries.at(-1).workspaceId, workspaceId, "full history keeps the same project");
   assert.equal(trajectoryQueries.at(-1).chatId, "chat-1");
   assert.equal(context.openRunJournal({ chatId: "chat-1" }), false, "Office route cannot open over the project");
+  get("trajectoryTypeInput").value = "llm.request";
+  get("trajectoryVisibilityInput").value = "hidden";
+  get("trajectoryExportRedactionInput").value = "none";
+  get("trajectoryExportCasInput").checked = true;
+  const beforeHandoffExports = exportRequests.length;
+  assert.equal(context.openTrajectoryExport({ owner: "project", workspaceId: "foreign", sessionId: "chat-1" }), false);
+  assert.equal(context.openTrajectoryExport({ owner: "project", workspaceId, sessionId: "chat-1" }), true);
+  await settle();
+  assert.equal(exportRequests.length, beforeHandoffExports, "opening export options does not create an archive");
+  const wholeChat = trajectoryQueries.at(-1);
+  assert.equal(wholeChat.view, "raw");
+  assert.equal(wholeChat.runId, undefined);
+  assert.equal(wholeChat.eventTypes.length, 0);
+  assert.equal(wholeChat.visibility, null);
+  assert.equal(get("trajectoryExportRedactionInput").value, "metadata");
+  assert.equal(get("trajectoryExportCasInput").checked, false);
+  assert.equal(get("trajectoryExportOptions").open, true);
   const goodExport = { chatId: "chat-1", workspaceId, contentType: "application/zip", fileName: "workspace.zip", byteLength: 2,
     bundleSha256: "b".repeat(64), data: { leaseId: "e".repeat(64), payload: { byteLength: 2, sha256: "b".repeat(64), contentType: "application/zip" } } };
   exportResponse = goodExport; get("exportTrajectoryButton").click(); await settle();
+  assert.equal(exportRequests.at(-1).view, "raw");
+  assert.equal(exportRequests.at(-1).redactionMode, "metadata");
+  assert.equal(exportRequests.at(-1).includeCasPayloads, false);
   assert.equal(downloads, 2);
   assert.equal(leaseCloses.at(-1).workspaceId, "trajectory-export:workspace-one");
   exportResponse = { ...goodExport, workspaceId: "foreign-workspace" };

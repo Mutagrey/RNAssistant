@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Resource Context Explorer export handoff — 2026-10-26
+
+Owner: Web Model Context Inspector and existing Trajectory diagnostics. Inspector
+now opens the exact chat's existing export options with whole-chat raw events,
+cleared filters, metadata redaction and CAS bodies off. The user starts the export
+there; no new ZIP owner, store or bridge operation was added. Focused Model Context
+and Trajectory Node checks pass for Office/workspace routing, foreign-scope refusal,
+filter reset and redaction. Browser layout could not run here because Playwright is
+not installed; Windows/WebView2 delivery remains unqualified. Wave 5 still lacks
+derived graph, revision diff and explicit reread.
+
 ## Exact PDF page-view extent — 2026-10-26
 
 Owner: Office resource Gateway. PDF render and thumbnail selectors now reject pages

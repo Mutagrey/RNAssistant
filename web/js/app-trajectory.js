@@ -1109,6 +1109,7 @@
 
   function openRunJournal(options) {
     options = options || {};
+    var exportWholeChat = options.openExport === true;
     var source = selectedSource();
     if (source.owner !== "office") {
       if (options.owner !== source.owner || !source.workspaceId || !source.chatId ||
@@ -1125,20 +1126,32 @@
     invalidateTrajectoryRequest();
     correlationFilter = {};
     useSource(source);
-    $("trajectoryViewInput").value = "run-causal";
-    if (options.runId) correlationFilter.runId = String(options.runId);
-    if (options.turnId) correlationFilter.turnId = String(options.turnId);
-    if (options.stepId) correlationFilter.stepId = String(options.stepId);
-    if (options.toolCallId) correlationFilter.toolCallId = String(options.toolCallId);
-    if (!correlationFilter.runId && !correlationFilter.toolCallId) {
+    $("trajectoryViewInput").value = exportWholeChat ? "raw" : "run-causal";
+    if (exportWholeChat) {
+      $("trajectoryTypeInput").value = "";
+      $("trajectoryVisibilityInput").value = "";
+      $("trajectoryExportRedactionInput").value = "metadata";
+      $("trajectoryExportCasInput").checked = false;
+    } else {
+      if (options.runId) correlationFilter.runId = String(options.runId);
+      if (options.turnId) correlationFilter.turnId = String(options.turnId);
+      if (options.stepId) correlationFilter.stepId = String(options.stepId);
+      if (options.toolCallId) correlationFilter.toolCallId = String(options.toolCallId);
+    }
+    if (!exportWholeChat && !correlationFilter.runId && !correlationFilter.toolCallId) {
       var latestRunId = latestKnownRunId();
       if (latestRunId) correlationFilter.runId = latestRunId;
     }
-    journalFilter = options.filter || "all";
+    journalFilter = exportWholeChat ? "all" : options.filter || "all";
     expandedJournalRows = {}; journalParts = {};
     nextCursor = null;
     updateViewControls();
     refreshTrajectory(false);
+    if (exportWholeChat) {
+      var exportOptions = $("trajectoryExportOptions");
+      exportOptions.classList.remove("hidden"); exportOptions.open = true;
+      exportOptions.querySelector("summary").focus();
+    }
     return true;
   }
 
@@ -1186,4 +1199,7 @@
   };
   window.setTrajectoryDiagnosticsMode = setDiagnosticsMode;
   window.openRunJournal = openRunJournal;
+  window.openTrajectoryExport = function (options) {
+    return openRunJournal(Object.assign({}, options || {}, { openExport: true }));
+  };
 }());
