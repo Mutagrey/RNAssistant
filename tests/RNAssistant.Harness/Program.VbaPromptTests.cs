@@ -2930,9 +2930,11 @@ namespace RNAssistant.Harness
                 var lineData = JObject.Parse(lines.DataJson);
                 AssertTrue(lines.Success && ((string)lineData["text"]).Contains("\"before\""),
                     "recovery target reads the current anchor");
-                AssertTrue((bool)lineData["selectionComplete"] && !(bool)lineData["complete"] &&
+                AssertTrue((bool)lineData["selectionComplete"] && (bool)lineData["complete"] &&
+                    !(bool)lineData["sourceComplete"] &&
                     (int)lineData["startLine"] == 2 && (int)lineData["requestedLines"] == 3 &&
-                    (string)lineData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
+                    (string)lineData["coverage"]["kind"] == ResourceCoverageKinds.Whole &&
+                    (string)lineData["sourceCoverage"]["kind"] == ResourceCoverageKinds.LineRange,
                     "line selection reports requested range, actual coverage and distinct completeness");
                 var chars = executor.ExecuteManual(Command(ResourceToolCatalog.ReadToolId,
                     "target", failed.Recovery.SemanticTarget, "representation", "source",

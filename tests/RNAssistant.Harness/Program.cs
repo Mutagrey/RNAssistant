@@ -445,6 +445,7 @@ namespace RNAssistant.Harness
                 Test("context continuity: exact dependency change recovery", ContextContinuityChangeRecovery),
                 Test("context continuity: delivers recovery and allows another tool", ContextContinuityDeliversReplanFeedback),
                 Test("context continuity: restores bounded working set", ContextContinuityRestoresWorkingSet),
+                Test("context continuity: retains bounded VBA lines without whole-source authority", ContextContinuityRetainsVbaLines),
                 Test("context continuity: selects active and archived bodies once", ContextContinuitySelectsBodiesOnce),
                 Test("agent continuity: archived read presentation", AgentContinuityReadPresentation),
                 Test("agent continuity: revised plan survives compaction", AgentContinuityTaskContext),

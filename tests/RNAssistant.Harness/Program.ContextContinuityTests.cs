@@ -992,6 +992,55 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ContextContinuityRetainsVbaLines()
+        {
+            const string excerpt = "Sub Main()\nDebug.Print \"before\"\nEnd Sub\n";
+            var scope = new ResourceAuthorityScopeId("document", "vba-lines");
+            var reference = new ResourceRef("rna://vba/vba-lines/module-lines/Module1/2/5", "r1");
+            var data = new JObject {
+                ["kind"] = "resource-read", ["type"] = "VBA module",
+                ["target"] = "VBA module: Module1", ["representation"] = "source",
+                ["text"] = excerpt, ["complete"] = true, ["sourceComplete"] = false,
+                ["selectionComplete"] = true,
+                ["coverage"] = JObject.FromObject(ResourceCoverage.Whole()),
+                ["sourceCoverage"] = JObject.FromObject(new ResourceCoverage(
+                    ResourceCoverageKinds.LineRange, start: 2, end: 5))
+            };
+            var result = ContinuityResult("lines", "common.resources_read",
+                ToolResult.Ok("Exact selected lines.", data.ToString()));
+            result.ResourceEvidence.Add(new ResourceEvidence("lines", scope, reference, "source",
+                ResourceCoverage.Whole(), false, 1));
+            var session = new ChatSession { Messages = new List<ChatMessage> { ContinuityCall(result), result } };
+            SetContinuityCheckpoint(session, result);
+            var current = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(reference, 1) }) }),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 2000);
+            var restored = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
+                current, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
+                new AppSettings(), 6000, workingSet: set);
+            AssertEqual(1, restored.Receipt.RetainedBodies, "current exact line window is retained after compaction");
+            var retained = restored.Messages.Single(item => item.Role == "tool" && item.ToolCallId == "lines" &&
+                item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
+            ToolResultWireReadResult wire; string error;
+            AssertTrue(ToolResultHistoryReader.TryRead(retained, out wire, out error),
+                "retained line window remains a tool result");
+            AssertEqual(excerpt, (string)JObject.Parse(wire.Result.DataJson)["text"],
+                "the model receives the exact selected lines without another read");
+            AssertEqual(1, restored.DeliveredObservations.Count,
+                "retained line body has an exact delivered observation");
+            AssertTrue(!restored.DeliveredObservations.Single().Complete &&
+                restored.DeliveredObservations.Single().Resource.Identity.Equals(reference.Identity),
+                "a complete line subresource never authorizes whole-module replacement");
+            var stale = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Removed(reference.Identity, 2) }) }),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            var invalidated = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
+                stale, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
+                new AppSettings(), 6000, workingSet: set);
+            AssertEqual(0, invalidated.Receipt.RetainedBodies, "invalidated line window is not restored");
+        }
+
         private static void ContextContinuityRestoresWorkingSet()
         {
             var scope = new ResourceAuthorityScopeId("catalog", "test");

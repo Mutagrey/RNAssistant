@@ -761,7 +761,7 @@ namespace RNAssistant.Core.Services
             if (source.SyntheticResourceObservation) atom = Atom("current-source", Clone(source), false);
             else if (source.ResourceEffect == null && candidate.Call != null &&
                 (source.ToolName == "common.capabilities_read" || (string)data?["type"] == "skill" || evidence.Any(item =>
-                    item.View != ResourceRepresentations.Text && item.View != ResourceRepresentations.Source ||
+                    !item.Complete || item.View != ResourceRepresentations.Text && item.View != ResourceRepresentations.Source ||
                     item.Coverage.Kind != ResourceCoverageKinds.Whole)))
                 atom = InteractionAtom(Clone(candidate.Call), Clone(source), false);
             else
