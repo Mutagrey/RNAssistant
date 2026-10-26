@@ -850,6 +850,16 @@ namespace RNAssistant.Harness
                     "actionable recovery reaches the actual next request");
                 AssertContains(FlattenSimple(requests.Last()), "CURRENT_BODY",
                     "the alternative route delivers the source to the model");
+                var deliveredRead = requests.Last().Where(message => message.Content != null &&
+                        message.Content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal))
+                    .Select(message => JObject.Parse(message.Content.Substring("TOOL_RESULT:\n".Length)))
+                    .Last(root => (string)root["name"] == "common.resources_read" && (string)root["status"] == "ok");
+                var canonicalRead = session.Messages.Last(message => message.ToolName == "common.resources_read" &&
+                    message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
+                AssertEqual(canonicalRead.ResourceModelReferences.Single().Alias, (string)deliveredRead["data"]?["ref"],
+                    "actual next model request binds the read body to its event-backed resource reference");
+                AssertTrue(deliveredRead["data"]?["coverage"] != null && deliveredRead["resource_refs"] == null,
+                    "model receives the slice beside its label, without a loose resource list");
                 AssertEqual(1, session.Messages.Where(m => m.ExecutionProgress?.Outcome == ToolExecutionOutcome.NotDispatched)
                     .Select(m => m.ToolCallId ?? m.Activity?.ToolCallId).Distinct(StringComparer.Ordinal).Count(),
                     "only one accepted duplicate is suppressed; corrected reads are executed");
@@ -869,6 +879,8 @@ namespace RNAssistant.Harness
                 var result = ContinuityResult("archived_source", "common.resources_read", ToolResult.Ok("Read.",
                     "{\"target\":\"VBA module: Review\",\"representation\":\"source\",\"complete\":true}"));
                 result.ResourceEvidence.Add(observation);
+                result.ResourceModelReferences.Add(new ModelResourceReference(scope, exact,
+                    ModelReference.Create(ModelReferenceKind.Resource, 1), 1));
                 var session = new ChatSession { Messages = new List<ChatMessage> { ContinuityCall(result), result } };
                 SetContinuityCheckpoint(session, result);
                 var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
@@ -882,6 +894,10 @@ namespace RNAssistant.Harness
                 AssertEqual(1, restored.Receipt.HydratedPayloads, "one selected exact body is hydrated once");
                 AssertContains(string.Join("\n", restored.Messages.Select(item => item.Content)), body, "the complete current source survives compaction");
                 AssertEqual("source", restored.DeliveredObservations.Single().EvidenceId, "synthetic archived body retains delivery authority");
+                var restoredView = ModelReferenceProjection.Project(restored.Messages.Where(message => message.SyntheticResourceObservation).ToArray()).Single();
+                var restoredHeader = JObject.Parse(restoredView.Content.Split('\n')[1]);
+                AssertEqual("R1@v1", (string)restoredHeader["ref"], "compiler binds the hydrated CAS view to its retained reference");
+                AssertTrue(restoredView.Content.EndsWith(body, StringComparison.Ordinal), "reference projection preserves the hydrated CAS bytes");
                 var write = ContinuityResult("large_write", "files.create", ToolResult.Ok("Written.", "{\"path\":\"other.txt\"}"));
                 write.ResourceEffect = new ResourceEffect("fx", "files.create", ResourceEffectOutcome.VerifiedChanged);
                 var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "files.create",

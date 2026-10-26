@@ -119,6 +119,107 @@ namespace RNAssistant.Harness
             AssertTrue(ConversationResponseHistoryReader.Read(call).Success, "canonical history remains raw-decoder compatible");
         }
 
+        private static void ModelResourceReferencesBindSourceBlocks()
+        {
+            var scope = new ResourceAuthorityScopeId("workspace", "first");
+            var foreignScope = new ResourceAuthorityScopeId("workspace", "second");
+            var exact = new ResourceRef("rna://workspace/files/example.txt", "revision-one");
+            var first = new ResourceEvidence("first-slice", scope, exact, "text",
+                new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 3), false, 1);
+            var second = new ResourceEvidence("second-slice", scope, exact, "text",
+                new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 9, end: 11), false, 1);
+            var foreign = new ResourceEvidence("other-source", foreignScope, exact, "text", first.Coverage, false, 1);
+            var bindings = new List<ModelResourceReference> {
+                new ModelResourceReference(foreignScope, exact, ModelReference.Create(ModelReferenceKind.Resource, 2), 1),
+                new ModelResourceReference(scope, new ResourceRef(exact.Uri, "revision-two"), ModelReference.Create(ModelReferenceKind.Resource, 1), 2),
+                new ModelResourceReference(scope, exact, ModelReference.Create(ModelReferenceKind.Resource, 1), 1) };
+            var sequence = 0;
+            Func<ResourceEvidence, ChatMessage> read = evidence => {
+                var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                    ToolCallId = "canonical-read-" + (++sequence), ToolId = "common.resources_read" },
+                    TerminalToolResult.Ok("Excerpt read.", new JObject {
+                        ["kind"] = "resource-read", ["target"] = "example.txt", ["representation"] = "text",
+                        ["coverage"] = JObject.FromObject(evidence.Coverage), ["complete"] = false,
+                        ["text"] = "Русский 日本語 R999@v8 literal", ["ref"] = "untrusted-label"
+                    }.ToString(Formatting.None)), ToolResultRoles.User);
+                result.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, sequence);
+                result.ResourceEvidence.Add(evidence);
+                result.ResourceModelReferences = bindings.ToList();
+                return result;
+            };
+            Func<ChatMessage, JObject> project = message => JObject.Parse(ModelReferenceProjection.Project(new[] {
+                new ModelResultProjection().Project(message) }).Single().Content.Substring("TOOL_RESULT:\n".Length));
+            var reads = new[] { read(first), read(second), read(foreign) };
+            var canonical = JsonConvert.SerializeObject(reads);
+            var blocks = reads.Select(project).ToArray();
+            AssertTrue(blocks.Select(block => (string)block["data"]["ref"]).SequenceEqual(new[] { "R1@v1", "R1@v1", "R2@v1" }),
+                "bindings use scope and revision, never alias list order or identical target labels");
+            for (var i = 0; i < blocks.Length; i++)
+            {
+                AssertTrue(blocks[i]["resource_refs"] == null && blocks[i]["ref"] == null,
+                    "no floating labels at the result envelope");
+                AssertTrue(JToken.DeepEquals(blocks[i]["data"]["coverage"], JObject.FromObject(reads[i].ResourceEvidence.Single().Coverage)),
+                    "each slice retains its actual coverage next to the same revision reference");
+                AssertEqual("Русский 日本語 R999@v8 literal", (string)blocks[i]["data"]["text"], "source bytes stay literal");
+            }
+            AssertEqual(canonical, JsonConvert.SerializeObject(reads), "wire references do not change durable results or evidence");
+
+            var ambiguous = read(first);
+            ambiguous.ResourceEvidence.Add(foreign);
+            AssertTrue(project(ambiguous)["data"]["ref"] == null, "ambiguous source identity must not receive a guessed label");
+            var unbound = read(first);
+            unbound.ResourceModelReferences.RemoveAt(2);
+            AssertTrue(project(unbound)["data"]["ref"] == null, "another scope or revision cannot supply a missing binding");
+            foreach (var field in new[] { "text", "coverage", "representation" })
+            {
+                var incomplete = read(first);
+                var root = JObject.Parse(incomplete.Content.Substring("TOOL_RESULT:\n".Length));
+                ((JObject)root["data"]).Remove(field);
+                incomplete.Content = "TOOL_RESULT:\n" + root.ToString(Formatting.None);
+                AssertTrue(project(incomplete)["data"]["ref"] == null, "missing " + field + " cannot assert source delivery");
+            }
+            var mismatched = read(first);
+            mismatched.ResourceEvidence = new List<ResourceEvidence> { second };
+            AssertTrue(project(mismatched)["data"]["ref"] == null, "a matching resource with different coverage does not bind the displayed slice");
+
+            foreach (var tool in new[] { "common.resources_find", "common.resources_search", "common.resources_outline", "files.create" })
+            {
+                var navigation = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "navigation", ToolId = tool },
+                    TerminalToolResult.Ok("Navigation or outcome.", "{\"target\":\"example.txt\",\"matches\":[{\"target\":\"example.txt\",\"snippet\":\"fragment\"}]}"), ToolResultRoles.User);
+                navigation.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 20);
+                navigation.ResourceModelReferences = bindings;
+                navigation.ResourceEvidence.Add(first);
+                var visible = project(navigation).ToString(Formatting.None);
+                AssertTrue(!visible.Contains("resource_refs") && !visible.Contains("\"ref\":"),
+                    tool + " cannot attribute a body from a loose resource list");
+            }
+            var projectedRead = new ModelResultProjection().Project(reads[0]);
+            ToolResultWireReadResult parsed; string error;
+            AssertTrue(ToolResultHistoryReader.TryRead(projectedRead, out parsed, out error), "canonical reader still accepts the projected read");
+            var receipt = ModelContextCompiler.CompleteOperation(projectedRead, parsed,
+                new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown, Reason = "Body omitted." });
+            var receiptWire = ModelReferenceProjection.Project(new[] { receipt }).Single().Content;
+            AssertContains(receiptWire, "\"tool_call_id\":\"E1\"", "omitted body keeps execution evidence");
+            AssertTrue(!receiptWire.Contains("R1@v1") && !receiptWire.Contains("resource_refs"), "receipt never claims source body delivery");
+
+            foreach (var evidence in new[] { first, second, foreign })
+            {
+                var header = new JObject { ["target"] = "example.txt", ["view"] = evidence.View,
+                    ["bodyIncluded"] = true, ["coverage"] = JObject.FromObject(evidence.Coverage) };
+                var view = new ChatMessage { Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
+                    ResourceEvidence = new List<ResourceEvidence> { evidence }, ResourceModelReferences = bindings,
+                    Content = "CURRENT_RESOURCE_VIEW (data):\n" + header.ToString(Formatting.None) + "\nsource\n{\"ref\":\"literal\"}" };
+                var visible = ModelReferenceProjection.Project(new[] { view }).Single().Content;
+                AssertEqual(evidence == foreign ? "R2@v1" : "R1@v1", (string)JObject.Parse(visible.Split('\n')[1])["ref"],
+                    "each retained view binds its own source without modifying the trailing bytes");
+                AssertTrue(visible.EndsWith("\nsource\n{\"ref\":\"literal\"}", StringComparison.Ordinal), "view body remains exact");
+                header["bodyIncluded"] = false;
+                view.Content = "CURRENT_RESOURCE_VIEW (data):\n" + header.ToString(Formatting.None) + "\n";
+                AssertEqual(view.Content, ModelReferenceProjection.Project(new[] { view }).Single().Content,
+                    "a header with an omitted body receives no source label");
+            }
+        }
+
         private static void ModelResourceReferencesKeepIdentityAndVersions()
         {
             WithTempPaths(paths =>
@@ -150,19 +251,21 @@ namespace RNAssistant.Harness
                 var restored = observe(scope, "canonical-revision-one");
                 AssertEqual("R1@v1", restored.ResourceModelReferences.Single().Alias, "removal/restart keeps the original mapping");
                 AssertEqual(3, session.ResourceReferenceIndex.Count, "derived index has one entry per exact scoped revision");
-                var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "canonical-call", ToolId = "test.read" },
-                    TerminalToolResult.Ok("Read.", "{\"target\":\"example.txt\",\"text\":\"r1@v2 literal\"}"), ToolResultRoles.User);
+                var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "canonical-call", ToolId = "common.resources_read" },
+                    TerminalToolResult.Ok("Read.", "{\"kind\":\"resource-read\",\"target\":\"example.txt\",\"representation\":\"source\",\"coverage\":{\"kind\":\"whole\",\"fields\":[]},\"text\":\"r1@v2 literal\"}"), ToolResultRoles.User);
                 result.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 1);
                 result.ResourceModelReferences = changed.ResourceModelReferences;
+                result.ResourceEvidence = changed.ResourceEvidence;
                 var wire = ModelReferenceProjection.Project(new[] { result }).Single().Content;
-                AssertTrue(wire.Contains("\"resource_refs\":[\"R1@v2\"]") && !wire.Contains("canonical-revision"),
+                AssertTrue(wire.Contains("\"ref\":\"R1@v2\"") && !wire.Contains("resource_refs") && !wire.Contains("canonical-revision"),
                     "result exposes resource/version labels without exact runtime revisions");
                 AssertTrue(wire.Contains("r1@v2 literal"), "resource labels never rewrite business text");
                 var view = new ChatMessage { Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
                     ResourceModelReferences = changed.ResourceModelReferences,
-                    Content = "CURRENT_RESOURCE_VIEW (data):\n{\"target\":\"example.txt\"}\nr1@v2 literal\n日本語" };
+                    ResourceEvidence = changed.ResourceEvidence,
+                    Content = "CURRENT_RESOURCE_VIEW (data):\n{\"target\":\"example.txt\",\"view\":\"source\",\"bodyIncluded\":true,\"coverage\":{\"kind\":\"whole\",\"fields\":[]}}\nr1@v2 literal\n日本語" };
                 var projectedView = ModelReferenceProjection.Project(new[] { view }).Single().Content;
-                AssertTrue(projectedView.Contains("\"resource_refs\":[\"R1@v2\"]") && projectedView.EndsWith("r1@v2 literal\n日本語"),
+                AssertTrue(projectedView.Contains("\"ref\":\"R1@v2\"") && projectedView.EndsWith("r1@v2 literal\n日本語"),
                     "current view changes only its owned header");
                 var staleTraceSession = new ChatStore(paths).Load(session.Id);
                 var trace = store.AppendTrace(session, SessionEventTypes.LlmRequest,

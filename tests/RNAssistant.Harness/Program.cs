@@ -290,6 +290,7 @@ namespace RNAssistant.Harness
                 Test("model refs: typed wire pairs and folded receipts", ModelReferencesPreserveTypedWirePairs),
                 Test("model refs: durable allocation and finish admission", ModelReferencesPersistAndGateFinish),
                 Test("model refs: resource identity and revision persistence", ModelResourceReferencesKeepIdentityAndVersions),
+                Test("model refs: labels bind only to delivered source blocks", ModelResourceReferencesBindSourceBlocks),
                 Test("model refs: rejected finish corrects citation without replay", () => WorkspaceAcceptedCallHistory(false, true)),
                 Test("model refs: compaction retains last terminal receipt", ModelReferencesSurviveCompactionWithoutBodies),
                 Test("model refs: repair and fallback freeze aliases", ModelReferencesFreezeRepairAndFallback),

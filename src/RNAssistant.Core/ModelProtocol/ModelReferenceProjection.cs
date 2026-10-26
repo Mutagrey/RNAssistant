@@ -36,18 +36,42 @@ namespace RNAssistant.Core.ModelProtocol
                 source.Activity != null || source.AcceptedCallOrigin != null) return source;
             var content = source.Content ?? string.Empty;
             var view = source.SyntheticResourceObservation && content.StartsWith("CURRENT_RESOURCE_VIEW (", StringComparison.Ordinal);
-            var receipt = source.CompletedOperation != null;
-            var result = source.ToolResultProtocolVersion == ToolResultWire.CurrentVersion;
-            if (!view && !receipt && !result) return source;
-            var start = view || receipt ? content.IndexOf('\n') + 1 :
+            // Receipts describe an outcome, not delivery of the observed source.
+            // Discovery/search have no durable per-item source binding. Never zip
+            // their items with references or infer identity from semantic targets.
+            var read = source.CompletedOperation == null && source.ToolName == "common.resources_read" &&
+                source.ToolResultProtocolVersion == ToolResultWire.CurrentVersion;
+            if (!view && !read) return source;
+            var start = view ? content.IndexOf('\n') + 1 :
                 content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal) ? "TOOL_RESULT:\n".Length : 0;
             var end = view ? content.IndexOf('\n', start) : content.Length;
             if (end < start) throw new InvalidOperationException("Current resource view lacks its structured header.");
             var root = JObject.Parse(content.Substring(start, end - start));
-            root["resource_refs"] = new JArray(source.ResourceModelReferences.Select(item => item.Alias).Distinct(StringComparer.Ordinal));
+            var block = view ? root : root["data"] as JObject;
+            if (block == null || block["target"]?.Type != JTokenType.String) return source;
+            if (view ? (bool?)block["bodyIncluded"] != true :
+                (string)root["status"] != "ok" || (string)block["kind"] != "resource-read" ||
+                !new[] { "text", "table", "tree" }.Any(field => block[field] != null && block[field].Type != JTokenType.Null))
+                return source;
+            var alias = SourceAlias(source, block, view ? "view" : "representation");
+            if (alias == null) return source;
+            block.AddFirst(new JProperty("ref", alias));
             var projected = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(source));
             projected.Content = content.Substring(0, start) + root.ToString(Formatting.None) + content.Substring(end);
             return projected;
+        }
+
+        private static string SourceAlias(ChatMessage source, JObject block, string viewField)
+        {
+            // Both admitted shapes describe one source. Bind via typed evidence,
+            // including its scope/revision, and verify the actual displayed slice.
+            // Unbound or ambiguous metadata cannot assert source delivery.
+            if (source.ResourceEvidence.Count != 1) return null;
+            var evidence = source.ResourceEvidence[0];
+            if ((string)block[viewField] != evidence.View ||
+                !JToken.DeepEquals(block["coverage"], JObject.FromObject(evidence.Coverage))) return null;
+            var bindings = source.ResourceModelReferences.Where(item => item.Matches(evidence)).ToArray();
+            return bindings.Length == 1 ? bindings[0].Alias : null;
         }
 
         public static IReadOnlyList<string> Delivered(IReadOnlyList<ChatMessage> messages)

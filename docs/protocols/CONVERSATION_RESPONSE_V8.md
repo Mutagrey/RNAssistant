@@ -62,8 +62,14 @@ keeps its original envelope and ID. Native transport pairing is preserved; its
 call narration exposes the short reference separately. No global text replacement.
 
 `R1` identifies a scoped logical resource; `R1@v2` identifies a registered exact
-revision in that resource's observation history. `resource_refs` on owned result
-and source-view headers contains only those short labels. Runtime URI/hash/revision
+revision in that resource's observation history. A model-only `ref` is attached
+directly to the delivered `common.resources_read` data, or to the structured header
+of a hydrated `CURRENT_RESOURCE_VIEW`. It sits beside that source's semantic target,
+representation/view and coverage; it is never a loose list on the result envelope.
+Two excerpts of one revision share a reference and retain their different coverage.
+The binding requires one typed source observation, matching view/coverage and an exact
+scope/URI/revision mapping. Missing or ambiguous bindings produce no label; target
+text and array order never establish identity. Runtime URI/hash/revision
 remain private. Resource labels are not tool arguments, finish evidence, permission,
 coverage or currentness. Model reads still use semantic targets. `C`/`S` are deferred.
 ResourceEvidence IDs remain distinct; several observations may belong to one `E`.
@@ -76,6 +82,23 @@ An omitted body does not erase the operation's reference. Compaction retains the
 latest current-run terminal receipt; older receipts are bounded by relevance/budget.
 A reference absent from the successful request cannot be guessed from the journal.
 Repair/fallback retain the same aliases and report the actual delivered set.
+
+Discovery/search/outline remain navigation results with semantic targets and bounded
+snippets/coordinates. Their current durable contracts do not map each visible item
+to exact scoped evidence, so they receive no inferred `R` labels. Mutation/omitted-body
+receipts expose `E` and outcome; they do not advertise the observed source as delivered.
+Saved result bodies, CAS, event bindings, diagnostic resource rows and chat presentation
+retain their existing contracts. The saved final model request contains the projected
+`ref` exactly as sent. This projection change stays within format 8.
+
+Example model-facing result (line-range end is exclusive):
+
+```json
+{"tool_call_id":"E7","name":"common.resources_read","status":"ok","message":"Excerpt read.","data":{"ref":"R1@v2","kind":"resource-read","target":"src/example.txt","representation":"text","coverage":{"kind":"line-range","start":10,"end":12,"fields":[]},"text":"first line\nsecond line","complete":false,"selectionComplete":true}}
+```
+
+Here `E7` identifies the execution, `R1@v2` the source revision, and `coverage` the
+delivered excerpt. The label itself includes neither the range nor the text.
 
 ## Admission, persistence and presentation
 

@@ -100,18 +100,37 @@ Chat format and model wire stay at 8. [ADR-0018](../decisions/ADR-0018-typed-mod
 now owns uppercase E/R/O/Q references; no new resource/tool runtime or parallel store
 was introduced. The interim 9/10 candidates have no compatibility path.
 
-1. Model evidence: rerun the paired profiles with the final uppercase contract and
+Current result coverage must not be confused with a tool-by-tool qualification:
+
+| Layer / family | Current coverage | Remaining evidence |
+|---|---|---|
+| Accepted tools, including dynamic registrations | Shared `ToolResult` / wire envelope and `E` correlation; `data` remains domain-specific | Each producer's actual success/error/unknown and omitted/large-result shapes |
+| `common.resources_read` and hydrated current-source views | `ref` beside an unambiguously bound body and matching view/coverage; no loose reference list | Additional table/tree/media and host-specific delivery cases; current focused evidence is text/source |
+| `common.resources_find/search/outline` | Navigation fields retained; no inferred per-item `R` | Decide whether citations for snippets are needed; adding them requires typed per-item provenance, not positional matching |
+| Mutations, capabilities/skills, plans/questions, Office domain tools, plugins/custom tools | Existing shared/domain projections and `E`; no new automatic `R` on arbitrary data | Audit each owned payload and all representations before claiming complete coverage |
+| Storage, diagnostics, chat UI | Canonical results/CAS unchanged; saved exact request shows the projected block | Full result → CAS/events → model → diagnostics/UI matrix; inline chat references remain separate below |
+
+1. Result coverage audit: inventory the actual registered tools (static catalogs plus
+   dynamic bindings), record representative result shapes and trace each through
+   `ToolResultWire`, Core `ModelResultProjection`, Office `ModelToolResultProjection`,
+   `ModelContextCompiler`, `ModelReferenceProjection` and the existing presentation owners.
+   Owner: Core model context with the current domain owners. Reuse existing tests;
+   add only missing checks for misattribution, lost content or false delivery across
+   success/error/unknown, multiple sources, compaction and bounded/omitted bodies.
+   Acceptance: every family has explicit model/storage/UI behavior and a verified
+   check or named gap; no guessed references, blanket data rewriting or new store.
+2. Model evidence: rerun the paired profiles with the final uppercase contract and
    extend evaluation to P7's mixed-language exploration tasks. The archived lowercase
    edit/copy pilot is not final-candidate qualification. Reproduce tool-choice errors
    (create instead of copy, failed source discovery) before changing defaults/descriptions.
-2. Presentation: add typed E/R links in chat activity/result summaries if this UI scope
+3. Presentation: add typed E/R links in chat activity/result summaries if this UI scope
    is selected. Diagnostics already show/search the saved labels and explain their kinds;
    chat currently shows narration/action/result text and navigation to the request.
    Reuse canonical bindings; no parsing of arbitrary prose to infer authority.
-3. File cutover: agree the public create/copy/patch/replace/delete/restore contract,
+4. File cutover: agree the public create/copy/patch/replace/delete/restore contract,
    destination ownership and consumers per the [skills/tools audit](../audits/skills-tools-description-review.md#что-далее).
    Only then migrate consumers and remove old paths. No universal mutation facade is shipped yet.
-4. Qualification: benchmark source revalidation on a large real multilingual workspace;
+5. Qualification: benchmark source revalidation on a large real multilingual workspace;
    obtain Windows x64 / Office x64 / WebView2 evidence on the exact release candidate.
    Existing host-neutral and Chrome checks do not close those gates.
 

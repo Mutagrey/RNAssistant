@@ -42,10 +42,17 @@ Fork наследует mappings/high water, но новый чат остаёт
 запрещает id. Native transport сохраняет provider pairing; alias виден отдельно в
 narration и результате. Бизнес-текст/аргументы не заменяются поиском строк.
 
-`resource_refs` в owned result/view header обозначает наблюдавшиеся ресурсы. Это
-не аргумент tools: чтение/изменение по-прежнему используют semantic target. Метки
-не заменяют coverage/currentness, не дают права читать старую ревизию или писать.
-Compiler сохраняет bindings при folding и на текущих source views. При compaction
+В model-only data чтения и заголовке отдельного source view поле `ref` стоит рядом
+с semantic target, representation/view и coverage. Общий список `resource_refs`
+удалён: он не связывал ссылку с фрагментом и появлялся даже в квитанции без тела.
+Привязка требует единственного typed source observation с совпадающим view/coverage
+и exact scope/URI/revision. Порядок bindings и совпадение имени не используются.
+Несколько срезов одной ревизии сохраняют один `R` и разные диапазоны.
+Поиск/discovery/outline без durable per-item связи не получают придуманные `R`;
+квитанции операций сохраняют `E`, а `R` показывается на включённом source view.
+Это не аргумент tools: чтение/изменение по-прежнему используют semantic target.
+Метки не заменяют coverage/currentness и не дают права читать старую ревизию или писать.
+Canonical ToolResult, CAS, events и UI projection не меняются. При compaction
 последний terminal receipt текущего run сохраняется как обязательный кандидат.
 Весь реестр ссылок в prompt не копируется.
 

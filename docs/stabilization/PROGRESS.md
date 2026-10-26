@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Resource labels bound to delivered source blocks — 2026-10-26
+
+Owner: Core ModelProtocol. The final model projection now places `ref` inside a
+delivered resource-read block or hydrated current-source header, beside its semantic
+target, view and coverage. Loose `resource_refs` arrays are removed. Exact typed
+scope/revision bindings decide the label; target text, list order and ambiguous
+evidence cannot supply it. Multiple slices share the revision label and keep their
+own coverage. Navigation results receive no inferred per-item labels, and operation
+receipts retain `E` without claiming source-body delivery. Canonical results, CAS,
+events, Inspector resource navigation, chat UI and format 8 remain unchanged.
+
+All 7 focused `model refs:` checks and the 2 continuity checks for the actual next
+request and CAS working-set hydration pass host-neutral. Harness builds with the
+existing 2 PDF platform warnings. Docs now show the model-facing read shape. Live
+model usability and Windows/Office/WebView2 qualification remain open.
+
 ## One reference owner and uppercase types — 2026-10-26
 
 Owner: Core ChatStore / ModelProtocol and read-only Inspector. [ADR-0018 revision 2](../decisions/ADR-0018-typed-model-references.md)

@@ -5,6 +5,11 @@ atomic allocation and stale writers, failed commits, restart/removal, resource v
 and scope, shared message/request allocation, stale trace refusal and unbound historical
 rows, hidden/pending/GUID/type refusal, correction without replay, mandatory
 compacted receipts, repair/fallback and the successful request's delivered set.
+Source-block cases check exact scope/revision binding beside coverage, multiple slices,
+reordered bindings, missing/ambiguous evidence, omitted bodies and literal source bytes;
+navigation results get no guessed labels. `context continuity: delivers recovery and
+allows another tool` checks the actual next request; `context continuity: selects active
+and archived bodies once` checks a hydrated CAS source header.
 Workspace accepted/strict history, discovery admission, `tool pack:`, conversation v8,
 Inspector and unknown-effect/confirmation checks cover the existing consumers.
 Four scripted profile scenarios and eight live runs of the withdrawn lowercase candidate are recorded in the

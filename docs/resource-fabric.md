@@ -2244,10 +2244,19 @@ See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2
 ## Model resource labels — 2026-10-26
 
 [ADR-0018](decisions/ADR-0018-typed-model-references.md) permits short `R1@v2`
-labels on model result/view headers. `R1` is scoped logical identity; `v2` is the
+labels beside the actual model source block: `data.ref` on a delivered
+`common.resources_read`, or `ref` on a hydrated current-source header. No floating
+`resource_refs` list is emitted. `R1` is scoped logical identity; `v2` is the
 ordinal of an observed exact revision, not a resource authority generation or edit
 count. One ChatStore allocator records bindings from typed message observations and
 exact saved-request links in the existing chat stream. Inspector only reads bindings;
 resource grouping uses scope/URI/revision, never display aliases. Same scope/URI/revision keeps its label; another scope cannot share identity.
 The model still supplies semantic targets, never these labels as a revision/guard.
 Body omission, coverage and currentness retain their existing explicit contracts.
+The single typed observation must match the displayed view/coverage and the exact
+scoped binding. Multiple excerpts of one revision keep one `R` and separate ranges.
+Search/discovery/outline do not currently persist per-item scoped bindings, so
+their targets/snippets remain navigation without inferred resource labels. Historical
+operation receipts retain `E`; an omitted body gains no source-delivery label.
+This is a model wire projection only; canonical result/CAS/evidence and diagnostic
+resource navigation remain unchanged. Exact saved requests expose the new placement.
