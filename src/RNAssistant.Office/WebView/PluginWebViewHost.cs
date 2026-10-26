@@ -178,7 +178,7 @@ namespace RNAssistant.Office.WebView
                 };
                 frame.NavigationCompleted+=async (s,e)=> {
                     PluginInstance instance;
-                    if(_closed || !e.IsSuccess || _inspectorScript==null || frame.IsDestroyed() ||
+                    if(_closed || !e.IsSuccess || _inspectorScript==null || frame.IsDestroyed()!=0 ||
                         !_frames.TryGetValue(frame,out instance) || instance.Token.IsCancellationRequested)return;
                     try { await frame.ExecuteScriptAsync(_inspectorScript); }
                     catch(Exception error) { Diagnostics.RuntimeLog.Error("Plugin visual inspector injection failed.",error); }

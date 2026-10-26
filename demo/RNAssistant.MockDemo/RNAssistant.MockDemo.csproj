@@ -12,6 +12,10 @@
       <HintPath>..\..\packages\Newtonsoft.Json.13.0.3\lib\net6.0\Newtonsoft.Json.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="YamlDotNet">
+      <HintPath>..\..\packages\YamlDotNet.18.1.0\lib\net8.0\YamlDotNet.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <Reference Include="PDFtoImage">
       <HintPath>..\..\vendor\pdf-rendering\managed\net8.0\PDFtoImage.dll</HintPath>
       <Private>true</Private>
@@ -122,6 +126,7 @@
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.cs" Link="Office\WebView\AssistantWebBridge.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\AssistantWebBridge.Plugins.cs" Link="Office\WebView\AssistantWebBridge.Plugins.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\WebView\BridgeRequestCancellationRegistry.cs" Link="Office\WebView\BridgeRequestCancellationRegistry.cs" />
+    <Compile Include="..\..\tests\RNAssistant.Harness\ProtectedSecretStoreHarnessStub.cs" Link="Testing\ProtectedSecretStoreHarnessStub.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.cs" Link="Testing\FakeOfficeAdapter.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\ConversationStoreFixture.cs" Link="Testing\ConversationStoreFixture.cs" />
     <Compile Include="..\..\tests\RNAssistant.Testing\FakeOfficeAdapter.ExcelWrite.cs" Link="Testing\FakeOfficeAdapter.ExcelWrite.cs" />

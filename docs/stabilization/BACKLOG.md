@@ -12,6 +12,15 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## MockDemo resource workflow: устаревший model wire — 2026-10-26
+
+Owner: MockDemo test fixture. `--resource-workflow-test` собирается, но падает на
+`task setup or skill selection failed`: scripted model replies в
+`Program.ResourceWorkflowTests.cs` всё ещё выдают `action=tool/done` вместо
+текущего conversation-response v8 `execute/finish`. Перевести fixture на v8 и
+сохранить проверки выбранных skills, подтверждений и точных resource snapshots;
+не добавлять совместимость со старым wire в продукт.
+
 ## Геометрия компонентов демо — 2026-10-25
 
 Owner: Web presentation. При сравнении палитры обнаружены отдельные различия
