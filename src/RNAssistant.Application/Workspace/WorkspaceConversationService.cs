@@ -1928,6 +1928,10 @@ namespace RNAssistant.Runtime
                 view.Kind = "tool";
                 view.Title = context.Call.Name;
                 view.ArgumentsJson = context.Call.ArgumentsJson;
+                view.Display = ToolDisplayCatalog.Resolve(_catalog.FirstOrDefault(tool => tool.Id == context.Call.Name));
+                view.Subtitle = ToolDisplayCatalog.Target(new ToolInvocation { ToolId = context.Call.Name,
+                    Display = view.Display, Arguments = JsonConvert.DeserializeObject<Dictionary<string, object>>(
+                        context.Call.ArgumentsJson, new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) });
                 if (fact.Kind == AgentRunEventKind.ToolStarted)
                 {
                     view.Status = "running";
@@ -1937,11 +1941,18 @@ namespace RNAssistant.Runtime
                 else
                 {
                     var record = fact.Execution;
-                    view.Status = record.Outcome == ToolExecutionOutcome.AwaitingConfirmation
-                        ? "waiting_confirmation" : "completed";
-                    view.ExecutionStatus = record.Outcome.ToString().ToLowerInvariant();
+                    view.Status = record.Outcome == ToolExecutionOutcome.AwaitingConfirmation || record.AwaitingUser
+                        ? "waiting" : record.Outcome == ToolExecutionOutcome.Ok ? "completed" : "failed";
+                    view.ExecutionStatus = record.Outcome == ToolExecutionOutcome.AwaitingConfirmation
+                        ? "awaiting_confirmation" : record.AwaitingUser ? "awaiting_user" : record.Outcome.ToString().ToLowerInvariant();
                     view.ResultMessage = record.Message;
                     view.ExecutionEvidence = record.Evidence;
+                    string code; bool? retryable;
+                    ToolResultSummaryProjection.ReadErrorMetadata(record.Result?.DataJson, out code, out retryable);
+                    view.ErrorCode = code;
+                    view.Retryable = retryable;
+                    view.ResultSummary = record.Outcome == ToolExecutionOutcome.Ok
+                        ? ToolResultSummaryProjection.Summarize(context.Call.Name, record.Result?.DataJson) : null;
                     activity.ExecutionProgress = ToolExecutionProgress.Capture(record);
                 }
                 return activity;

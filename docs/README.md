@@ -38,6 +38,9 @@ direct cutover объясняют порядок уже выполненной �
 [Таблица всех встроенных skills/tools и пересмотр описаний](audits/skills-tools-description-review.md)
 содержит сравнение семейств и следующие этапы объединения.
 
+[Матрица результатов tools и подписей источников](audits/tool-result-presentation-matrix.md)
+перечисляет 91 статический ID, model/storage/UI paths, проверенные инварианты и gaps.
+
 Согласованный [план Tools](proposals/tools-architecture-plan.md) и
 [аудит встроенного каталога](audits/tools-architecture-current-state.md) описывают
 общий текстовый поиск workspace/Office и сохранение runtime/v8. Текущее поведение

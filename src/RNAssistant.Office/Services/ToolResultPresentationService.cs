@@ -5,9 +5,12 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
+using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -31,7 +34,13 @@ namespace RNAssistant.Office.Services
             var activity = candidates[0].Activity;
             if (!string.IsNullOrEmpty(activity.RunId) && !string.Equals(activity.RunId, runId, StringComparison.Ordinal))
                 throw new InvalidOperationException("Activity run does not match its message.");
-            var result = new ToolResultPresentationDto { ChatId = session.Id, RunId = runId, ToolCallId = toolCallId };
+            var result = new ToolResultPresentationDto { ChatId = session.Id, RunId = runId, ToolCallId = toolCallId,
+                Action = activity.Display?.Action ?? activity.ToolId, Target = activity.Subtitle };
+            var terminals = session.Messages.Where(m => m != null && m.RunId == runId && m.ToolCallId == toolCallId &&
+                m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && m.Activity == null && m.AcceptedCallOrigin == null).ToArray();
+            var terminal = terminals.Length == 1 && terminals[0].ToolName == activity.ToolId ? terminals[0] : null;
+            result.ExecutionReference = terminal?.ExecutionReference?.Kind == ModelReferenceKind.Execution
+                ? terminal.ExecutionReference.Alias : null;
             var effect = activity.ExecutionEvidence?.Effect;
             var changes = effect == ToolEffectEvidence.VerifiedChange || effect == ToolEffectEvidence.VerifiedNoChange ||
                 effect == ToolEffectEvidence.Unknown ? _changes?.Invoke(toolCallId) : null;
@@ -42,7 +51,34 @@ namespace RNAssistant.Office.Services
                 result.Blocks.Add(new ToolTextBlockDto { Title = "Сравнение", Text = "Сохранённое сравнение для этого вызова недоступно." });
             var questions = activity.ToolId == UserQuestionToolCatalog.AskToolId;
             if (questions) result.QuestionsUnavailableReason = "Сохранённые вопросы недоступны. Повторите загрузку; при повторной ошибке сообщите об этом в чат.";
-            if (activity.ResultPayload == null) AppendActivityContent(result, activity.DataJson, questions);
+            // Canonical results/CAS are shared by document and workspace activities.
+            // References cannot be rebound to an unrelated activity preview.
+            if (terminal != null)
+            {
+                try
+                {
+                    var read = terminal;
+                    if (terminal.ResultPayload != null)
+                    {
+                        if (terminal.ResultPayload.ByteLength > MaxSource * 4L) { Notice(result.Blocks); return result; }
+                        read = RNAssistant.Core.Llm.HistoricalContextProjector.Project(terminal);
+                        read.Content = _payloads?.ReadText(terminal.ResultPayload.ToBlobReference());
+                    }
+                    ToolResultWireReadResult wire; string error;
+                    if (ToolResultHistoryReader.TryRead(read, out wire, out error))
+                    {
+                        result.RawJson = wire.Result.DataJson?.Length <= MaxSource ? wire.Result.DataJson : null;
+                        if (questions) AppendActivityContent(result, wire.Result.DataJson, true, activity.ToolId);
+                        else AppendContent(result.Blocks, wire.Result.DataJson, activity.ToolId,
+                            wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ? terminal : null);
+                    }
+                    else Unavailable(result.Blocks);
+                }
+                catch (Exception ex) when (ex is IOException || ex is System.Security.Cryptography.CryptographicException || ex is UnauthorizedAccessException)
+                { Unavailable(result.Blocks); }
+                return result;
+            }
+            if (activity.ResultPayload == null) AppendActivityContent(result, activity.DataJson, questions, activity.ToolId);
             else if (activity.ResultPayload.ByteLength > MaxSource * 4L) Notice(result.Blocks);
             else
             {
@@ -50,7 +86,7 @@ namespace RNAssistant.Office.Services
                 {
                     var content = _payloads?.ReadText(activity.ResultPayload.ToBlobReference());
                     if (content == null) Unavailable(result.Blocks);
-                    else AppendActivityContent(result, content, questions);
+                    else AppendActivityContent(result, content, questions, activity.ToolId);
                 }
                 catch (Exception ex) when (ex is IOException || ex is System.Security.Cryptography.CryptographicException ||
                     ex is UnauthorizedAccessException)
@@ -59,9 +95,10 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private static void AppendActivityContent(ToolResultPresentationDto result, string source, bool questions)
+        private static void AppendActivityContent(ToolResultPresentationDto result, string source, bool questions, string toolId)
         {
-            if (!questions) { AppendContent(result.Blocks, source); return; }
+            result.RawJson = source?.Length <= MaxSource ? source : null;
+            if (!questions) { AppendContent(result.Blocks, source, toolId); return; }
             if (string.IsNullOrWhiteSpace(source) || source.Length > MaxSource) return;
             try
             {
@@ -84,7 +121,7 @@ namespace RNAssistant.Office.Services
             Text = "Сохранённое содержимое результата недоступно. Статус выполненного действия не изменён." }); }
 
         // Recognize existing content shapes through a typed input projection. No before/after heuristic.
-        internal static void AppendContent(List<ToolResultBlockDto> blocks, string source)
+        internal static void AppendContent(List<ToolResultBlockDto> blocks, string source, string toolId = null, ChatMessage terminal = null)
         {
             if (string.IsNullOrWhiteSpace(source)) return;
             if (source.Length > MaxSource) { Notice(blocks); return; }
@@ -98,11 +135,17 @@ namespace RNAssistant.Office.Services
                     if (!reader.Read()) return;
                     if (reader.TokenType == JsonToken.String) data = new PreviewSource { Text = (string)reader.Value };
                     else if (reader.TokenType == JsonToken.StartArray) data = new PreviewSource { Items = serializer.Deserialize<List<PreviewItem>>(reader) };
-                    else if (reader.TokenType == JsonToken.StartObject) data = serializer.Deserialize<PreviewSource>(reader);
+                    else if (reader.TokenType == JsonToken.StartObject) data = toolId == ResourceToolCatalog.ReadToolId
+                        ? serializer.Deserialize<ResourceReadPreviewSource>(reader) : serializer.Deserialize<PreviewSource>(reader);
                     else return;
                     if (reader.Read()) throw new JsonSerializationException("Trailing data.");
                 }
                 if (data == null) return;
+                var readData = data as ResourceReadPreviewSource;
+                var sourceView = readData?.Kind == "resource-read"
+                    ? Source(data.Target, data.Text, readData.Representation, readData.SourceCoverage ?? readData.Coverage) : null;
+                if (sourceView != null && (data.Text != null || data.Table != null || readData.Tree != null))
+                    sourceView.Reference = ModelReferenceProjection.BoundSourceReference(terminal, readData.Representation, readData.Coverage)?.Alias;
                 if (data.Matches != null)
                 {
                     var block = new ToolListBlockDto { Title = "Совпадения", Complete = data.ScanComplete == true &&
@@ -111,6 +154,8 @@ namespace RNAssistant.Office.Services
                     {
                         if (match == null) { block.Complete = false; continue; }
                         block.Items.Add(new ToolListItemDto { Title = Clip(match.Target ?? data.Target ?? "Ресурс", 240, block),
+                            Source = toolId == ResourceToolCatalog.SearchToolId
+                                ? Source(match.Target ?? data.Target, match.Snippet, "text", null, match.StartLine, match.StartColumn) : null,
                             Detail = Clip((match.StartLine.HasValue ? "Строка " + match.StartLine + ", столбец " + match.StartColumn + "\n" :
                                 match.PartNumber.HasValue ? "Часть " + match.PartNumber + "\n" : "") + match.Snippet, 2000, block) });
                     }
@@ -124,7 +169,7 @@ namespace RNAssistant.Office.Services
                 {
                     var columns = table.Columns.Take(12).ToList();
                     if (columns.Any(c => c == null || string.IsNullOrEmpty(c.Key))) throw new JsonSerializationException("Invalid columns.");
-                    var block = new ToolTableBlockDto { Title = "Таблица", Complete = complete && table.Rows.Count <= MaxRows &&
+                    var block = new ToolTableBlockDto { Title = "Таблица", Source = sourceView, Complete = complete && table.Rows.Count <= MaxRows &&
                         table.Columns.Count <= 12 && table.TotalRows <= table.Rows.Count };
                     block.Columns = columns.Select(c => Clip(c.Label ?? c.Key, 160, block)).ToList();
                     foreach (var row in table.Rows.Take(MaxRows))
@@ -139,6 +184,7 @@ namespace RNAssistant.Office.Services
                         if (item == null) { block.Complete = false; continue; }
                         block.Items.Add(new ToolListItemDto {
                             Title = Clip(item.Title ?? item.Name ?? item.Label ?? item.Target ?? "Результат", 240, block),
+                            Source = toolId == ResourceToolCatalog.FindToolId ? Source(item.Target, item.Snippet, null, null) : null,
                             Detail = Clip(string.Join("\n", new[] { item.Target, item.Description, item.Snippet, item.Text, item.Type ?? item.Kind, item.Scope }
                                 .Where(t => !string.IsNullOrEmpty(t)).Distinct()), 2000, block) });
                     }
@@ -147,13 +193,33 @@ namespace RNAssistant.Office.Services
                 var text = data.Text ?? data.Content;
                 if (text != null)
                 {
-                    var block = new ToolTextBlockDto { Title = "Содержимое", Complete = complete };
+                    var block = new ToolTextBlockDto { Title = "Содержимое", Source = sourceView, Complete = complete };
                     block.Text = Clip(text, MaxText, block); blocks.Add(block);
+                }
+                if (readData?.Tree?.Nodes != null)
+                {
+                    var block = new ToolListBlockDto { Title = "Структура", Source = sourceView, Complete = complete &&
+                        readData.Tree.NextOffset == null && readData.Tree.Nodes.Count <= MaxRows };
+                    foreach (var item in readData.Tree.Nodes.Take(MaxRows)) {
+                        if (item == null) { block.Complete = false; continue; }
+                        block.Items.Add(new ToolListItemDto { Title = item.Pointer,
+                            Detail = Clip(item.Type + (item.Value == null ? "" : ": " + Scalar(item.Value)), 2000, block) });
+                    }
+                    blocks.Add(block);
                 }
                 if (!complete && data.Items == null && table == null && text == null) Notice(blocks);
             }
             catch (JsonException) { Notice(blocks); }
             catch (OverflowException) { Notice(blocks); }
+        }
+        private static ToolSourcePreviewDto Source(string target, string text, string view, ResourceCoverage coverage,
+            int? line = null, int? column = null)
+        {
+            if (string.IsNullOrWhiteSpace(target)) return null;
+            var length = Math.Min(160, text?.Length ?? 0);
+            if (length > 0 && char.IsHighSurrogate(text[length - 1])) length--;
+            return new ToolSourcePreviewDto { Target = target, View = view, Coverage = coverage, Line = line, Column = column,
+                Excerpt = text == null ? null : text.Substring(0, length), ExcerptTruncated = text != null && length < text.Length };
         }
         private static string Scalar(object value)
         {
@@ -171,9 +237,16 @@ namespace RNAssistant.Office.Services
             return text.Substring(0, limit) + "…";
         }
         private static void Notice(List<ToolResultBlockDto> blocks)
-        { blocks.Add(new ToolTextBlockDto { Title = "Представление", Text = "Компактный просмотр недоступен. Данные — в JSON ниже." }); }
+        { blocks.Add(new ToolTextBlockDto { Title = "Представление", Text = "Компактный просмотр недоступен. Подробности доступны в диагностике результата." }); }
 
-        private sealed class PreviewSource
+        private sealed class ResourceReadPreviewSource : PreviewSource {
+            public string Kind { get; set; }
+            public string Representation { get; set; }
+            public ResourceCoverage Coverage { get; set; }
+            public ResourceCoverage SourceCoverage { get; set; }
+            public ResourceTree Tree { get; set; }
+        }
+        private class PreviewSource
         {
             public bool? Complete { get; set; }
             public bool Partial { get; set; }

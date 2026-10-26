@@ -258,6 +258,69 @@ const { chromium } = require("playwright");
     }
     await page.locator("#closeModelContextButton").click();
     await source.click(); await size.selectOption("focus");
+    await page.evaluate(() => {
+      RNAssistantModelContext.close();
+      const oldSend = send, oldRead = RNAssistantResourceDownload.read;
+      const coverage = { kind: "line-range", start: 42, end: 43, fields: [] };
+      const resource = { uri: "rna://workspace/files/src/A.cs", revision: "exact-a" }, scope = { kind: "workspace", id: "project-a" };
+      const wire = JSON.stringify({ messages: [{ role: "user", content: "TOOL_RESULT:\n" + JSON.stringify({
+        tool_call_id: "E7", name: "common.resources_read", status: "ok", message: "Read.",
+        data: { kind: "resource-read", ref: "R3@v1", target: "src/A.cs", representation: "text", coverage,
+          text: "искомый текст", complete: false }
+      }) }] });
+      RNAssistantResourceDownload.read = async (data, options) => data.captionFixture ? new TextEncoder().encode(wire) : oldRead(data, options);
+      send = async (type, args) => {
+        if (type === "getModelContextPayload" && args.eventId === "preview-request")
+          return { chatId: args.chatId, eventId: args.eventId, data: { captionFixture: true, payload: { contentType: "application/json" } } };
+        const reply = await oldSend(type, args);
+        if (type === "getModelContext") {
+          const request = reply.events.find(event => event.type === "llm.request");
+          request.trace = { RunId: "preview-run", StepId: "preview-step", ContextMessages: [{ MessageIndex: 0, Presentation: "Full",
+            ToolCallId: "caption-call", EvidenceLinks: [{ EvidenceId: "caption-evidence", ScopeId: scope, Resource: resource,
+              View: "text", ObservedCoverage: coverage, BodyIncludedInMessage: true }] }] };
+          reply.resources = [{ alias: "R3@v1", resource, scope, currentness: "Unknown", payloadAvailability: "Unknown", observations: [] }];
+          reply.operations = [{ alias: "E7", canonicalId: "caption-call" }];
+        }
+        return reply;
+      };
+    });
+    await source.click();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await size.selectOption("focus");
+    const exactMessage = body.locator(".is-message").first();
+    await exactMessage.locator(":scope > summary").click();
+    await exactMessage.locator('[data-context-source="message/0"] > summary').click();
+    const exactSource = exactMessage.locator('[data-context-source="message/0/resource/0"]');
+    assert.match(await exactSource.locator(":scope > summary").innerText(), /R3@v1 — src\/A.cs, строка 42: «искомый текст»/);
+    await exactSource.locator(":scope > summary").click();
+    await screenshot("source-caption-diagnostics");
+    await page.evaluate(() => {
+      RNAssistantModelContext.close();
+      const oldSend = send;
+      send = async (type, args) => type === "getToolResultPresentation" && args.toolCallId === "caption-call"
+        ? { chatId: args.chatId, runId: args.runId, toolCallId: args.toolCallId, executionReference: "E7", blocks: [{
+          kind: "text", title: "Содержимое", complete: false, text: "искомый текст\nточный сохранённый фрагмент",
+          source: { reference: "R3@v1", target: "src/A.cs", view: "text", coverage: { kind: "line-range", start: 42, end: 43 },
+            excerpt: "искомый текст", excerptTruncated: false }
+        }] } : oldSend(type, args);
+      const activity = { Kind: "tool", ToolId: "common.resources_read", ToolCallId: "caption-call", RunId: "preview-run",
+        Status: "completed", Title: "Чтение исходника", ResultMessage: "Фрагмент прочитан.", ArgumentsJson: '{"target":"src/A.cs"}' };
+      const card = renderActivityNode(activity, false, false, { message: { RunId: "preview-run" } });
+      card.id = "caption-activity"; document.getElementById("messages").replaceChildren(card);
+    });
+    await page.locator("#caption-activity > details > summary").click();
+    await page.locator("#caption-activity .tool-source-caption").waitFor();
+    await screenshot("source-caption-chat");
+    await page.evaluate(() => RNAssistantChatInspector.setOpen(false));
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator("#caption-activity .tool-source-caption").scrollIntoViewIfNeeded();
+    assert.equal(await page.locator("#caption-activity").evaluate(node => node.closest(".chat-main").inert), false,
+      "narrow source caption is in the interactive chat, not behind Inspector");
+    assert.equal(await page.locator("#caption-activity").evaluate(node => node.scrollWidth > node.clientWidth + 1), false,
+      "source caption fits narrow chat without horizontal overflow");
+    await screenshot("source-caption-chat-narrow");
+    await page.evaluate(() => RNAssistantChatInspector.setOpen(true));
+    await source.click();
     await page.evaluate(() => { state.activeChatId = "other-chat"; RNAssistantModelContext.sync(); });
     assert.equal(await page.locator("#modelContextDialog").isVisible(), false);
     assert.equal(await panel.evaluate(node => node.classList.contains("is-request-focus")), false);

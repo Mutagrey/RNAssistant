@@ -2085,24 +2085,24 @@ namespace RNAssistant.Harness
             var slideCall = new ToolInvocation { ToolId = "powerpoint.set_text", Arguments = new Dictionary<string, object>
                 { ["slideIndex"] = 3L, ["target"] = "shape", ["shapeName"] = "Заголовок", ["text"] = "Новый текст" } };
             var exactArguments = JsonConvert.SerializeObject(slideCall.Arguments);
-            AssertEqual("Слайд 3 · Заголовок", RNAssistant.Office.AgentTranscript.ActivityTarget(slideCall), "slide and shape stay visible");
+            AssertEqual("Слайд 3 · Заголовок", ToolDisplayCatalog.Target(slideCall), "slide and shape stay visible");
             AssertEqual(exactArguments, JsonConvert.SerializeObject(slideCall.Arguments), "display does not rewrite model arguments");
-            AssertEqual("Конец документа", RNAssistant.Office.AgentTranscript.ActivityTarget(new ToolInvocation {
+            AssertEqual("Конец документа", ToolDisplayCatalog.Target(new ToolInvocation {
                 ToolId = "word.write_text", Arguments = new Dictionary<string, object> { ["mode"] = "paragraph", ["location"] = "end", ["text"] = "Body" }
             }), "Word insertion location is visible without body text");
-            AssertEqual("Вся презентация · Доход", RNAssistant.Office.AgentTranscript.ActivityTarget(new ToolInvocation {
+            AssertEqual("Вся презентация · Доход", ToolDisplayCatalog.Target(new ToolInvocation {
                 ToolId = "powerpoint.search_text", Arguments = new Dictionary<string, object> { ["query"] = "Доход", ["slideIndex"] = 0L }
             }), "deck search is not described as an active-slide read");
-            AssertEqual("Выделение", RNAssistant.Office.AgentTranscript.ActivityTarget(new ToolInvocation {
+            AssertEqual("Выделение", ToolDisplayCatalog.Target(new ToolInvocation {
                 ToolId = "word.write_text", Arguments = new Dictionary<string, object> { ["mode"] = "replaceSelection", ["location"] = "end" }
             }), "selection replacement ignores paragraph-only location");
-            AssertEqual("Выделение", RNAssistant.Office.AgentTranscript.ActivityTarget(new ToolInvocation {
+            AssertEqual("Выделение", ToolDisplayCatalog.Target(new ToolInvocation {
                 ToolId = "word.format_text", Arguments = new Dictionary<string, object> { ["kind"] = "style", ["style"] = "Heading 1" }
             }), "default style target is the selection");
-            AssertEqual("Ответ всем · Текущее письмо", RNAssistant.Office.AgentTranscript.ActivityTarget(new ToolInvocation {
+            AssertEqual("Ответ всем · Текущее письмо", ToolDisplayCatalog.Target(new ToolInvocation {
                 ToolId = "outlook.create_draft", Arguments = new Dictionary<string, object> { ["kind"] = "replyAll" }
             }), "reply draft retains the addressed operation target");
-            AssertEqual("Отчёт · team@example.test", RNAssistant.Office.AgentTranscript.ActivityTarget(new ToolInvocation {
+            AssertEqual("Отчёт · team@example.test", ToolDisplayCatalog.Target(new ToolInvocation {
                 ToolId = "outlook.create_draft", Arguments = new Dictionary<string, object> { ["kind"] = "new", ["subject"] = "Отчёт", ["to"] = "team@example.test" }
             }), "mail draft shows subject and recipient");
 

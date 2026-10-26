@@ -31,15 +31,15 @@
     if (!items.length && result.complete) return;
     var card = element("details", "run-changes");
     var summary = element("summary", "run-changes-summary");
-    summary.appendChild(element("span", "", "Изменения: " + items.length));
-    var added = 0, removed = 0, compared = 0, plannedAdded = 0, plannedRemoved = 0, planned = 0, unverified = 0, uncertain = !result.complete;
+    summary.appendChild(element("span", "", "Сравнения: " + items.length));
+    var added = 0, removed = 0, compared = 0, uncountedActual = 0, plannedAdded = 0, plannedRemoved = 0, planned = 0, unverified = 0, uncertain = !result.complete;
     var rows = items.map(function (item) {
       if (item.availability === "unverified") unverified++;
       var preview = item.availability === "unverified" && typeof item.before === "string" &&
         typeof item.intendedAfter === "string" && typeof item.intendedAfterExists === "boolean";
       var diff = item.availability === "available" ? window.RNAssistantTextDiff.format(item.before, item.after) :
         preview ? window.RNAssistantTextDiff.format(item.before, item.intendedAfter) : null;
-      if (item.availability === "hunks" || item.availability === "copied") compared++;
+      if (item.availability === "hunks" || item.availability === "copied") uncountedActual++;
       else if (diff && diff.complete && !preview) { added += diff.added; removed += diff.removed; compared++; }
       else if (diff && diff.complete && preview) { plannedAdded += diff.added; plannedRemoved += diff.removed; planned++; }
       else uncertain = true;
@@ -47,7 +47,8 @@
     });
     // Ordinary changes start as the demo's compact row. Missing evidence stays visible.
     card.open = uncertain || unverified > 0;
-    if (compared || planned) counts(summary, added + plannedAdded, removed + plannedRemoved);
+    if (compared) counts(summary, added, removed);
+    if (compared && planned) summary.appendChild(element("span", "run-changes-caption", "фактическое сравнение"));
     card.appendChild(summary);
     if (unverified) {
       var plannedSummary = element("div", "run-changes-caption run-changes-planned", "Предварительное сравнение");
@@ -55,6 +56,7 @@
       card.appendChild(plannedSummary);
     }
     if (uncertain) card.appendChild(element("p", "run-changes-caption run-changes-unavailable", "Часть сравнений недоступна; её строки не учтены."));
+    if (uncountedActual) card.appendChild(element("p", "run-changes-caption", "Полный счётчик строк не вычислялся для объектов: " + uncountedActual + "."));
     rows.forEach(function (entry, index) {
       var item = entry.item, diff = entry.diff;
       var row = element("details", "run-change-file" + (index >= 3 ? " run-change-extra" : ""));

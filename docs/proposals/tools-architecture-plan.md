@@ -105,12 +105,16 @@ Current result coverage must not be confused with a tool-by-tool qualification:
 | Layer / family | Current coverage | Remaining evidence |
 |---|---|---|
 | Accepted tools, including dynamic registrations | Shared `ToolResult` / wire envelope and `E` correlation; `data` remains domain-specific | Each producer's actual success/error/unknown and omitted/large-result shapes |
-| `common.resources_read` and hydrated current-source views | `ref` beside an unambiguously bound body and matching view/coverage; no loose reference list | Additional table/tree/media and host-specific delivery cases; current focused evidence is text/source |
+| `common.resources_read` and hydrated current-source views | `ref` beside an unambiguously bound body and matching view/coverage; source captions, typed table/tree previews | Media and host-specific delivery cases; current focused evidence covers text/CAS, table projection and tree presentation |
 | `common.resources_find/search/outline` | Navigation fields retained; no inferred per-item `R` | Decide whether citations for snippets are needed; adding them requires typed per-item provenance, not positional matching |
 | Mutations, capabilities/skills, plans/questions, Office domain tools, plugins/custom tools | Existing shared/domain projections and `E`; no new automatic `R` on arbitrary data | Audit each owned payload and all representations before claiming complete coverage |
-| Storage, diagnostics, chat UI | Canonical results/CAS unchanged; saved exact request shows the projected block | Full result → CAS/events → model → diagnostics/UI matrix; inline chat references remain separate below |
+| Storage, diagnostics, chat UI | Canonical results/CAS unchanged; saved exact request shows the projected block; 91-ID matrix and shared source captions recorded | Real domain payload qualification; arbitrary-prose chat citations remain separate below |
 
-1. Result coverage audit: inventory the actual registered tools (static catalogs plus
+1. Result coverage audit: the [91-ID matrix](../audits/tool-result-presentation-matrix.md)
+   now records all static families and their model/storage/UI paths, plus dynamic
+   contracts and explicit gaps. Source-caption/CAS/reference checks are implemented;
+   per-item search provenance, media captions and real Office payload qualification remain open.
+   Continue to inventory the actual registered tools (static catalogs plus
    dynamic bindings), record representative result shapes and trace each through
    `ToolResultWire`, Core `ModelResultProjection`, Office `ModelToolResultProjection`,
    `ModelContextCompiler`, `ModelReferenceProjection` and the existing presentation owners.
@@ -123,10 +127,14 @@ Current result coverage must not be confused with a tool-by-tool qualification:
    extend evaluation to P7's mixed-language exploration tasks. The archived lowercase
    edit/copy pilot is not final-candidate qualification. Reproduce tool-choice errors
    (create instead of copy, failed source discovery) before changing defaults/descriptions.
-3. Presentation: add typed E/R links in chat activity/result summaries if this UI scope
-   is selected. Diagnostics already show/search the saved labels and explain their kinds;
-   chat currently shows narration/action/result text and navigation to the request.
-   Reuse canonical bindings; no parsing of arbitrary prose to infer authority.
+3. Presentation: document/workspace typed result cards now show E and source captions with optional exact R,
+   target/range/excerpt; expanding a caption reveals its retained result. Actual-request
+   diagnostics reuse the format only with matching delivery evidence. Arbitrary-prose
+   citations, media captions and search R bindings remain separate open work. Workspace
+   scoped delivery, separate actual/intended counts and common action/target/outcome
+   receipts are implemented. Full domain diffs/counts and Windows delivery remain
+   evidence gaps in the result matrix. Reuse
+   canonical bindings; no parsing of arbitrary prose to infer authority.
 4. File cutover: agree the public create/copy/patch/replace/delete/restore contract,
    destination ownership and consumers per the [skills/tools audit](../audits/skills-tools-description-review.md#что-далее).
    Only then migrate consumers and remove old paths. No universal mutation facade is shipped yet.

@@ -1,5 +1,20 @@
 # RNAssistant Harness
 
+`workspace: failed read activity` verifies a real failed tool outcome remains failed
+with its semantic target after persistence; accepted-history checks cover shared
+display metadata and summaries. `tools: validates save metadata` covers skill
+reference and file source/destination captions. Presentation checks now include
+canonical generic-result JSON and receipts. Chrome activity/run-changes checks cover
+visible attempt targets, distinct skills and separate actual/planned counts.
+
+`tool presentation: exact source captions and CAS` checks native/user/developer result
+roles, exact canonical read vs unrelated activity preview, scoped R resolution,
+missing CAS, ambiguity, Error/Unknown, unbound search captions and tree presentation.
+`tool-result-presentation.test.js` checks inert captions and exact slice disclosure;
+`model-context-layout.test.js` checks actual-request captions and chat layout.
+The [result matrix](../../docs/audits/tool-result-presentation-matrix.md) inventories
+all 91 static IDs without claiming real Office execution for every handler.
+
 `model refs:` checks typed E/R labels, canonical/raw preservation, all result roles,
 atomic allocation and stale writers, failed commits, restart/removal, resource versions
 and scope, shared message/request allocation, stale trace refusal and unbound historical

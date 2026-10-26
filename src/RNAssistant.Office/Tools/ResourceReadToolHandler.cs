@@ -272,25 +272,6 @@ namespace RNAssistant.Office.Tools
             return new ToolHandlerResult(result, ToolEffectEvidence.None, resourceEvidence: observation.Evidence);
         }
 
-        internal static ToolResultSummary Summarize(JObject data)
-        {
-            if (data?["kind"]?.Type != JTokenType.String ||
-                (string)data["kind"] != "resource-read" ||
-                data["representation"]?.Type != JTokenType.String ||
-                data["complete"]?.Type != JTokenType.Boolean) return null;
-            var representation = data.Value<string>("representation");
-            if (representation.Length > 32) return null;
-            var rows = (data["table"] as JObject)?["rows"] as JArray;
-            var characters = data["returnedCharacters"]?.Type == JTokenType.Integer
-                ? data.Value<int?>("returnedCharacters") : null;
-            return new ToolResultSummary {
-                Kind = "resource-read",
-                Representation = representation,
-                ReturnedCharacters = characters,
-                ReturnedRows = rows?.Count,
-                Complete = data.Value<bool>("complete")
-            };
-        }
 
         private static List<string> Fields(IDictionary<string, object> arguments)
         {

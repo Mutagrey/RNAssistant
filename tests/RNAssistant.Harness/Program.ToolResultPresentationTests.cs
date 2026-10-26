@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
@@ -12,6 +13,74 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ToolPresentationSourceReferences()
+        {
+            WithTempPaths(paths => {
+                var payloads = new ChatBlobStore(paths);
+                var scope = new ResourceAuthorityScopeId("workspace", "source-preview");
+                var resource = new ResourceRef("rna://workspace/files/src/A.cs", "revision-a");
+                var coverage = new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 42, end: 43);
+                var evidence = new ResourceEvidence("observation", scope, resource, "text", coverage, false, 1);
+                var references = new List<ModelResourceReference> {
+                    new ModelResourceReference(new ResourceAuthorityScopeId("workspace", "foreign"), resource,
+                        ModelReference.Create(ModelReferenceKind.Resource, 8), 2),
+                    new ModelResourceReference(scope, resource, ModelReference.Create(ModelReferenceKind.Resource, 3), 1) };
+                foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+                {
+                    var data = JsonConvert.SerializeObject(new ResourceReadProjection { Target = "src/A.cs", Representation = "text",
+                        Coverage = coverage, Text = "искомый текст 日本語 <script>literal</script>", Complete = false, SelectionComplete = true });
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "common.resources_read" },
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", data), role);
+                    terminal.RunId = "run"; terminal.ResourceEvidence.Add(evidence); terminal.ResourceModelReferences = references;
+                    terminal.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 7);
+                    terminal.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(terminal.Content, "application/json"));
+                    terminal.Content = "Body retained in CAS.";
+                    var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
+                        Activity = new ChatActivity { ToolId = "common.resources_read", ToolCallId = "read",
+                            DataJson = "{\"kind\":\"resource-read\",\"target\":\"src/A.cs\",\"text\":\"unrelated preview\",\"ref\":\"R999\"}" } } } };
+                    var before = JsonConvert.SerializeObject(session);
+                    var service = new ToolResultPresentationService(null, payloads);
+                    var result = service.Read(session, "run", "read");
+                    var block = result.Blocks.OfType<ToolTextBlockDto>().Single();
+                    AssertEqual("E7", result.ExecutionReference, "all result roles use the saved execution alias");
+                    AssertEqual("R3@v1", block.Source.Reference, "source label resolves scope/revision instead of list order");
+                    AssertEqual("src/A.cs", block.Source.Target, "semantic path is a display label");
+                    AssertEqual(42L, block.Source.Coverage.Start.Value, "caption retains actual line coordinates");
+                    AssertEqual("искомый текст 日本語 <script>literal</script>", block.Text,
+                        "caption and body come from the same canonical CAS result, never a similar activity preview");
+                    AssertEqual(before, JsonConvert.SerializeObject(session), "UI does not rewrite storage or model messages");
+                    terminal.ResourceEvidence.Add(new ResourceEvidence("foreign", references[0].Scope, resource, "text", coverage, false, 1));
+                    AssertTrue(service.Read(session, "run", "read").Blocks.Single().Source.Reference == null, "ambiguous observations get no invented alias");
+                    terminal.ResourceEvidence.RemoveAt(1);
+                    System.IO.File.Delete(payloads.PathFor(terminal.ResultPayload.Sha256));
+                    AssertTrue(service.Read(session, "run", "read").Blocks.All(b => b.Source == null),
+                        "missing exact payload cannot fall back to the activity body with a trusted citation");
+                }
+                foreach (var status in new[] { RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown })
+                {
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "failed", ToolId = "common.resources_read" },
+                        new RNAssistant.Core.Tools.Contracts.ToolResult(status, "Unverified read.", JsonConvert.SerializeObject(new ResourceReadProjection {
+                            Target = "src/A.cs", Representation = "text", Coverage = coverage, Text = "Recovery information" })), ToolResultRoles.User);
+                    terminal.RunId = "run"; terminal.ResourceEvidence.Add(evidence); terminal.ResourceModelReferences = references;
+                    var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
+                        Activity = new ChatActivity { ToolId = terminal.ToolName, ToolCallId = terminal.ToolCallId } } } };
+                    AssertTrue(new ToolResultPresentationService(null).Read(session, "run", "failed").Blocks.Single().Source.Reference == null,
+                        "error/unknown cannot advertise successful source delivery");
+                }
+                var blocks = new List<ToolResultBlockDto>();
+                ToolResultPresentationService.AppendContent(blocks,
+                    "{\"matches\":[{\"target\":\"src/B.cs\",\"startLine\":17,\"startColumn\":2,\"snippet\":\"другое совпадение\",\"ref\":\"R8@v2\"}]}", "common.resources_search");
+                var match = ((ToolListBlockDto)blocks[0]).Items.Single().Source;
+                AssertTrue(match.Reference == null && match.Line == 17 && match.Excerpt == "другое совпадение",
+                    "search retains the compact format without accepting a business ref field as authority");
+                blocks.Clear();
+                ToolResultPresentationService.AppendContent(blocks, "{\"kind\":\"resource-read\",\"target\":\"data.json\",\"representation\":\"tree\",\"complete\":false," +
+                    "\"coverage\":{\"kind\":\"json-path\",\"path\":\"/\"},\"tree\":{\"nodes\":[{\"pointer\":\"/name\",\"type\":\"string\",\"value\":\"日本語\"}],\"nextOffset\":1}}", "common.resources_read");
+                var tree = blocks.OfType<ToolListBlockDto>().Single();
+                AssertTrue(!tree.Complete && tree.Source.Target == "data.json" && tree.Items.Single().Title == "/name", "bounded tree values have a typed preview and source caption");
+            });
+        }
+
         private static void ToolPresentationQuestionsSurviveStorage()
         {
             WithTempPaths(paths => {
@@ -143,6 +212,20 @@ namespace RNAssistant.Harness
                 ExecutionEvidence = new ToolExecutionEvidence(ToolDispatchEvidence.MayHaveDispatched, ToolEffectEvidence.None) } });
             var presentation = new ToolResultPresentationService(call => { throw new Exception("Reads must not load mutation journal"); });
             AssertEqual("ok", ((ToolTextBlockDto)presentation.Read(session, "run", "read").Blocks.Single()).Text, "read previews need no mutation capture");
+            var invocation = new ToolInvocation { ToolId = "custom.inspect", ToolCallId = "custom" };
+            var terminal = AgentJsonProtocol.CreateToolResultMessage(invocation,
+                RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", "{\"text\":\"canonical result\"}"), ToolResultRoles.User);
+            terminal.RunId = "run";
+            session.Messages.Add(terminal);
+            session.Messages.Add(new ChatMessage { RunId = "run", Activity = new ChatActivity {
+                ToolId = invocation.ToolId, ToolCallId = invocation.ToolCallId, Status = "completed",
+                Display = new ToolDisplayMetadata("Проверка объекта"), Subtitle = "Object A", DataJson = "{\"text\":\"unrelated activity\"}" } });
+            var custom = presentation.Read(session, "run", "custom");
+            AssertEqual("canonical result", ((ToolTextBlockDto)custom.Blocks.Single()).Text,
+                "all result families use the canonical body when retained, including workspace activities without data");
+            AssertEqual("Проверка объекта", custom.Action, "receipt uses catalog action");
+            AssertEqual("Object A", custom.Target, "receipt identifies the exact attempted target");
+            AssertEqual("{\"text\":\"canonical result\"}", custom.RawJson, "raw view uses the same canonical result instead of a second activity body");
         }
     }
 }

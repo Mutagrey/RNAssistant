@@ -374,16 +374,21 @@ replaces its hints, with missing `runningAction` defaulting to `action`.
 The model authoring `common.tools_upsert` schema and typed Library mutations both
 support it. Library edits preserve it even without a dedicated form control.
 
-`ToolDisplayCatalog` owns the shipped localized defaults; unknown entries use their
+`Core.Tools.ToolDisplayCatalog` owns the shipped localized defaults and bounded
+semantic target selection for Office and workspace; unknown entries use their
 catalog name and typed policy for a neutral default. `ConversationKernelAdapter`
 captures immutable display metadata alongside the accepted local invocation;
-`AgentTranscript` emits it to activity projections and renders selected scalar
-arguments. Events, confirmation replacement and chat forks retain that captured
+`AgentTranscript` and workspace activity projection use that shared catalog and
+`ToolResultSummaryProjection`; the former Office-only target/summary paths are removed.
+Events, confirmation replacement and chat forks retain that captured
 value. The web renderer consumes labels and icon category, without tool-id/English
 verb dictionaries or per-custom-tool renderers. Display-only updates participate in
 Library revision/read-back checks, but do not alter execution fingerprints, model
 `ToolDescriptor` or the serialized invocation. Existing source-owned Office target
-formatters remain for built-ins without explicit target selectors. Result/effect
+formatters now live in the shared Core catalog for built-ins without explicit target selectors.
+Collapsed rows show action + semantic target + typed outcome; running attempts already
+identify the target, and capability results distinguish skills/references/tool schemas.
+Result/effect
 presentation remains governed by [Conversation protocol](conversation-protocol.md#effect-mapping-and-ui-projection).
 The model receives the shared [semantic result projection](conversation-protocol.md#компактные-модельные-результаты--2026-10-07),
 not the raw diagnostic object. New metadata in a migrated family must be explicitly

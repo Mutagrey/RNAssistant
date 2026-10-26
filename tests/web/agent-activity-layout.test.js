@@ -53,6 +53,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       fixtures.forEach((item, i) => { item.Display = { action: displays[i][0], runningAction: displays[i][0], operation: displays[i][1] }; });
       for (const item of fixtures) document.getElementById("actions").appendChild(renderActivityNode(
         Object.assign({ Kind: "tool", Status: "completed", ArgumentsJson: '{"target":"exact model argument"}' }, item), false, false, null));
+      ["excel-analysis", "vba-edit", "references/formulas.md"].forEach(function (target, index) {
+        document.getElementById("actions").appendChild(renderActivityNode({ Kind: "tool", ToolId: "common.capabilities_read",
+          ToolCallId: "skill-attempt-" + index, Subtitle: target, Status: index === 2 ? "running" : "completed",
+          Display: { action: "Чтение описания", runningAction: "Изучаю", operation: "Learn" },
+          ResultSummary: index === 2 ? null : { Kind: "capability-read", Representation: "skill", Complete: true } }, false, false, null));
+      });
     });
     await page.evaluate(() => {
       const final = { Role: "assistant", Content: "Готово. Отчёт обновлён.", Id: "final", RunId: "r", RunViewState: {
@@ -74,7 +80,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.setViewportSize({ width, height: 920 });
       const bounds = await page.locator("#actions .agent-activity-row").evaluateAll(rows => rows.map(row => ({
         width: row.clientWidth, scroll: row.scrollWidth, text: row.innerText,
-        targetOverflow: getComputedStyle(row.closest(".agent-activity").querySelector(".agent-activity-target")).textOverflow,
+        targetOverflow: getComputedStyle(row.querySelector(".agent-activity-object")).textOverflow,
         colors: [".agent-activity-name", ".agent-activity-mark", ".agent-activity-caption"].map(selector => {
           const element = row.querySelector(selector); return element ? getComputedStyle(element).color : null;
         })
@@ -90,7 +96,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(bounds[6].colors[2], bounds[5].colors[2], "incomplete reads use the same warning color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
       assert.ok(bounds[2].text.includes("Получено строк: 120"));
-      assert.ok((await page.locator("#actions .agent-activity-target").nth(7).textContent()).includes("квартал!A1:F180"));
+      assert.ok(bounds[0].text.includes("excel.write_range"), "capability identity is visible without opening details");
+      assert.ok(bounds[3].text.includes("Продажи!B2:D121"), "mutation receipt includes its target beside the verified outcome");
+      assert.ok(bounds[9].text.includes("Чтение навыка") && bounds[9].text.includes("excel-analysis"));
+      assert.ok(bounds[10].text.includes("vba-edit") && bounds[9].text !== bounds[10].text, "skill calls are distinguishable while collapsed");
+      assert.ok(bounds[11].text.includes("Изучаю") && bounds[11].text.includes("references/formulas.md"), "attempt target is visible before a result exists");
+      assert.ok(bounds[7].text.includes("квартал!A1:F180"), "running attempt retains the complete semantic target");
       const layout = await page.evaluate(() => {
         const box = selector => document.querySelector(selector).getBoundingClientRect();
         const full = document.getElementById("full-run");

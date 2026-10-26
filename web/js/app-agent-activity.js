@@ -557,12 +557,12 @@ function appendActivityDetailsContent(node, activity, context) {
     result.textContent = (activityToolId(activity) ? "" : "Диагностика:\n") + text;
     body.appendChild(result);
   });
-  if (typeof appendToolResultPreview === "function")
+  var hasResultPreview = typeof appendToolResultPreview === "function" &&
     appendToolResultPreview(body, activity, context, node);
   if (typeof appendArgumentsData === "function") {
     appendArgumentsData(body, activityArgumentsJson(activity));
   }
-  if (typeof appendActivityData === "function") {
+  if (!hasResultPreview && typeof appendActivityData === "function") {
     appendActivityData(body, "Результат", activityDataJson(activity));
   }
 

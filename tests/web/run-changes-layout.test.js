@@ -47,8 +47,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     });
     await page.locator('.run-changes-summary').waitFor();
     assert.equal(await page.locator('.run-change-file:visible').count(), 3);
-    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+8');
-    assert.equal(await page.locator('.run-changes-summary .run-change-removed').textContent(), '−5');
+    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+7');
+    assert.equal(await page.locator('.run-changes-summary .run-change-removed').textContent(), '−4');
     await page.locator('.run-change-file-summary').first().click();
     await page.locator('.run-change-diff .vba-diff-line').first().waitFor();
     assert.equal(await page.locator('.run-change-diff .vba-diff-line.add').count(), 2);
@@ -60,7 +60,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     assert.doesNotMatch(await planned.locator('.run-change-scope').textContent(), /Результат не подтверждён/,
       'missing exact source does not contradict separately verified write evidence');
     assert.equal(await page.locator('.run-changes-planned .run-change-added').textContent(), '+1');
-    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+8', 'planned additions included in overall total');
+    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+7', 'planned additions are excluded from actual totals');
     assert.equal(await page.locator('.run-change-file').nth(5).locator('.run-change-counts').count(), 0, 'missing source has no fabricated counts');
     await planned.locator('summary').click();
     await planned.locator('.vba-diff-line.add').waitFor();
@@ -83,7 +83,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
       window.appendRunChanges(document.getElementById('output'), 'chat', 'run');
     });
     await page.locator('.run-changes-planned').waitFor();
-    assert.equal(await page.locator('.run-changes-summary .run-change-added').textContent(), '+1');
+    assert.equal(await page.locator('.run-changes-summary .run-change-counts').count(), 0, 'planned-only result has no actual total');
     assert.equal(await page.locator('.run-changes-unavailable').count(), 0);
     assert.equal(await page.locator('.run-changes > .run-changes-caption').count(), 1);
     await page.evaluate(() => {
@@ -117,6 +117,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     await page.locator('.run-change-file-summary').click();
     await page.waitForFunction(() => document.querySelector('.run-change-diff').textContent.includes('fast(value)'));
     assert.match(await page.locator('.run-change-file-summary').textContent(), /Проверенные фрагменты/);
+    assert.equal(await page.locator('.run-changes-summary .run-change-counts').count(), 0,
+      'bounded hunks never advertise a fabricated full-file +0/−0 total');
     assert.equal(await page.locator('.run-changes-unavailable').count(), 0, 'verified hunks do not claim missing changes');
     // A late result must not attach to a different chat after navigation.
     await page.evaluate(() => {

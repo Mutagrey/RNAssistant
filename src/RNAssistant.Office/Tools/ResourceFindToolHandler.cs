@@ -44,18 +44,6 @@ namespace RNAssistant.Office.Tools
                     new RNAssistant.Core.Models.ResourceEvidence[0]));
         }
 
-        internal static ToolResultSummary Summarize(JObject data)
-        {
-            var items = data?["items"] as JArray;
-            if (items == null || data["complete"]?.Type != JTokenType.Boolean) return null;
-            return new ToolResultSummary {
-                Kind = "resource-find",
-                ReturnedItems = items.Count,
-                TotalItems = data["total"]?.Type == JTokenType.Integer ? data.Value<int?>("total") : null,
-                Complete = data.Value<bool>("complete"),
-                Partial = (data["unavailableScopes"] as JArray)?.Count > 0
-            };
-        }
 
     }
 }

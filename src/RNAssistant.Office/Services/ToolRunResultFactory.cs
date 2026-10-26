@@ -1,9 +1,6 @@
 using RNAssistant.Core.Services;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
-using RNAssistant.Office.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -39,7 +36,7 @@ namespace RNAssistant.Office.Services
             {
                 string code;
                 bool? retryable;
-                ReadErrorMetadata(data, out code, out retryable);
+                ToolResultSummaryProjection.ReadErrorMetadata(data, out code, out retryable);
                 result = ToolRunResult.Unknown(record.Message, data,
                     code ?? "tool_effect_uncertain");
                 result.Retryable = retryable ?? false;
@@ -52,7 +49,7 @@ namespace RNAssistant.Office.Services
             {
                 string code;
                 bool? retryable;
-                ReadErrorMetadata(data, out code, out retryable);
+                ToolResultSummaryProjection.ReadErrorMetadata(data, out code, out retryable);
                 result = ToolRunResult.Error(record.Message, data, code ??
                     (record.Outcome == ToolExecutionOutcome.NotDispatched
                         ? "tool_not_dispatched"
@@ -63,7 +60,7 @@ namespace RNAssistant.Office.Services
             result.ToolStepsConsumed = record.ToolStepsConsumed;
             result.Recovery = record.Recovery;
             if (record.Outcome == ToolExecutionOutcome.Ok && !record.AwaitingUser && record.Result != null)
-                result.ResultSummary = Summarize(record.Context.Call.Name, record.Result.DataJson);
+                result.ResultSummary = ToolResultSummaryProjection.Summarize(record.Context.Call.Name, record.Result.DataJson);
             if (terminal != null) result.ModelResourceRefs = terminal.Resources;
             if (materialized != null)
             {
@@ -77,49 +74,5 @@ namespace RNAssistant.Office.Services
             return result;
         }
 
-        private static RNAssistant.Core.Models.ToolResultSummary Summarize(string toolId, string dataJson)
-        {
-            if (string.IsNullOrWhiteSpace(dataJson)) return null;
-            if (toolId != ResourceToolCatalog.FindToolId && toolId != ResourceToolCatalog.ReadToolId && toolId != ResourceToolCatalog.SearchToolId &&
-                toolId != CapabilityToolCatalog.SearchToolId && toolId != CapabilityToolCatalog.ReadToolId) return null;
-            try
-            {
-                var data = JObject.Parse(dataJson);
-                if (toolId == ResourceToolCatalog.FindToolId) return ResourceFindToolHandler.Summarize(data);
-                if (toolId == ResourceToolCatalog.ReadToolId) return ResourceReadToolHandler.Summarize(data);
-                if (toolId == ResourceToolCatalog.SearchToolId && data["matches"] is JArray matches)
-                    return new RNAssistant.Core.Models.ToolResultSummary { Kind = "resource-search", ReturnedItems = matches.Count,
-                        Complete = data.Value<bool?>("scanComplete") == true && data.Value<bool?>("sourceComplete") == true && data.Value<bool?>("matchesComplete") == true,
-                        Partial = (data["unavailableScopes"] as JArray)?.Count > 0 };
-                if (toolId == CapabilityToolCatalog.SearchToolId) return CapabilityCatalogService.SummarizeSearch(data);
-                return CapabilityCatalogService.SummarizeRead(data);
-            }
-            catch (JsonException) { return null; }
-            catch (System.OverflowException) { return null; }
-        }
-
-        private static void ReadErrorMetadata(string data, out string code,
-            out bool? retryable)
-        {
-            code = null;
-            retryable = null;
-            if (string.IsNullOrWhiteSpace(data)) return;
-            try
-            {
-                var root = JsonConvert.DeserializeObject<JObject>(data,
-                    new JsonSerializerSettings
-                    {
-                        DateParseHandling = DateParseHandling.None
-                    });
-                if (root == null) return;
-                if (root["code"] != null &&
-                    root["code"].Type == JTokenType.String)
-                    code = (string)root["code"];
-                if (root["retryable"] != null &&
-                    root["retryable"].Type == JTokenType.Boolean)
-                    retryable = (bool)root["retryable"];
-            }
-            catch (JsonException) { }
-        }
     }
 }

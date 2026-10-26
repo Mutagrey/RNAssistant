@@ -221,11 +221,21 @@ namespace RNAssistant.Harness
                 AssertTrue(executor.ValidateToolDefinition(targeted).Success, "custom scalar target metadata admitted");
                 var targetCall = new ToolInvocation { ToolId = targeted.Id, Display = targeted.Display,
                     Arguments = new Dictionary<string, object> { ["report"] = "Доходы", ["body"] = "not a target" } };
-                AssertEqual("Доходы", AgentTranscript.ActivityTarget(targetCall), "new target parameter needs no UI or name heuristic");
+                AssertEqual("Доходы", ToolDisplayCatalog.Target(targetCall), "new target parameter needs no UI or name heuristic");
                 targetCall.Display = new ToolDisplayMetadata("Пересчёт", targetArguments: new string[0]);
-                AssertEqual(string.Empty, AgentTranscript.ActivityTarget(targetCall), "explicit empty selectors do not guess a target");
+                AssertEqual(string.Empty, ToolDisplayCatalog.Target(targetCall), "explicit empty selectors do not guess a target");
                 targeted.Display = new ToolDisplayMetadata("Пересчёт", targetArguments: new[] { "missing" });
                 AssertEqual("tool_display_invalid", executor.ValidateToolDefinition(targeted).ErrorCode, "unknown display selector rejected");
+                var capability = new ToolInvocation { ToolId = "common.capabilities_read",
+                    Display = ToolDisplayCatalog.Resolve(CapabilityToolCatalog.GetTools().Single(t => t.Id == "common.capabilities_read")),
+                    Arguments = new Dictionary<string, object> { ["id"] = "excel-analysis", ["referencePath"] = "references/formulas.md", ["body"] = "not a caption" } };
+                AssertEqual("excel-analysis · references/formulas.md", ToolDisplayCatalog.Target(capability),
+                    "skill reference attempts show the exact skill and reference without body text");
+                var file = new ToolInvocation { ToolId = "files.copy", Display = ToolDisplayCatalog.Resolve(new ToolCatalogEntry { Id = "files.copy", BuiltIn = true }),
+                    Arguments = new Dictionary<string, object> { ["relativePath"] = "src/A.cs", ["targetPath"] = "src/B.cs", ["text"] = "not a caption" } };
+                AssertEqual("src/A.cs · src/B.cs", ToolDisplayCatalog.Target(file), "workspace file actions show source and destination");
+                AssertEqual(ToolDisplayOperation.Plan, ToolDisplayCatalog.Resolve(new ToolCatalogEntry { Id = "common.skills_load", BuiltIn = true }).Operation,
+                    "removing a selected skill must not inherit a misleading loaded result caption");
 
             });
         }

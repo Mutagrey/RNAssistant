@@ -1,5 +1,52 @@
 # Stabilization progress
 
+## Tool attempts and workspace result presentation — 2026-10-26
+
+Owner: Core tool display/summary projection; Office presentation service; shared Web UI.
+Collapsed tool rows now retain the exact semantic target and typed outcome, including
+running attempts and distinct skill/reference reads. Core owns the existing catalog,
+target selection and summaries; the former Office-only implementations are removed.
+Workspace activities now carry those fields and preserve failed/pending states.
+Workspace-scoped result delivery uses the same canonical/CAS body for content blocks
+and bounded raw JSON. The old activity-body JSON is not duplicated. Expanded receipts
+show saved E/action/target. Source comparison availability remains independent of effect.
+Actual/planned diff totals are separate; hunks/copies without full comparison get no
+fabricated zero totals. Missing workspace/domain diffs remain explicitly unavailable.
+
+9 focused Harness checks and 3 Chrome suites pass; the build has only the 2 existing
+PDF platform warnings. [Attempt rows](../audits/evidence/tool-attempt-targets.png) and
+[comparison counts](../audits/evidence/mutation-comparison-counts.png) use synthetic
+fixtures. See the [matrix](../audits/tool-result-presentation-matrix.md). Windows/Office/
+WebView2 delivery, media/composite PDF captions, search provenance and full per-domain
+counts/diffs remain open. Format 8 and product version are unchanged.
+
+## Tool result matrix and source captions — 2026-10-26
+
+Owner: Office ToolResultPresentationService / shared Web UI; Core owns reference
+resolution. The [result matrix](../audits/tool-result-presentation-matrix.md) maps
+91 static tool IDs across 21 families through runtime, events/CAS, model and UI;
+dynamic registrations inherit the shared contract. Document-chat result cards show saved E
+and bounded target/range/excerpt captions, with R only from the exact canonical
+read's scoped revision binding. Expanding a caption reveals the retained body.
+Actual-request diagnostics use the same format with matching saved body-delivery
+evidence and the actual request text. Search/find captions do not invent R. Typed
+tree previews are included. No new store, wire format or product version.
+
+14 focused Harness checks pass: 4 tool presentation, 7 model references, literal
+source projection, selected table rows and persisted questions. Two Chrome suites
+pass; [chat](../audits/evidence/source-caption-chat.png),
+[narrow chat](../audits/evidence/source-caption-chat-narrow.png) and
+[diagnostics](../audits/evidence/source-caption-diagnostics.png) were inspected using
+synthetic fixtures. Build has only the existing 2 PDF platform warnings. Per-item
+search provenance, media captions, arbitrary-prose citations, live-model A/B and
+Windows/Office/WebView2 qualification remain open; this is not execution of all
+91 tools on real hosts. Follow-up mutation audit found that workspace activities
+still skip typed result previews, and diff totals combine actual and intended line
+counts. Both are recorded in the matrix and [follow-up matrix](../audits/tool-result-presentation-matrix.md#дополнительный-аудит-мутаций-и-прочих-исходов--2026-10-26);
+the shared renderer does not establish delivery parity. Five focused mutation/
+presentation checks on the existing Harness build, seven run-view Node checks and
+two Chrome layout suites pass; their current expectations do not close these gaps.
+
 ## Resource labels bound to delivered source blocks — 2026-10-26
 
 Owner: Core ModelProtocol. The final model projection now places `ref` inside a

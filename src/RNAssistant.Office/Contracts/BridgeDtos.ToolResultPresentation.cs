@@ -25,6 +25,10 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
+        [JsonProperty("executionReference", NullValueHandling = NullValueHandling.Ignore)] public string ExecutionReference { get; set; }
+        [JsonProperty("action", NullValueHandling = NullValueHandling.Ignore)] public string Action { get; set; }
+        [JsonProperty("target", NullValueHandling = NullValueHandling.Ignore)] public string Target { get; set; }
+        [JsonProperty("rawJson", NullValueHandling = NullValueHandling.Ignore)] public string RawJson { get; set; }
         [JsonProperty("blocks")] public List<ToolResultBlockDto> Blocks { get; set; } = new List<ToolResultBlockDto>();
         [JsonProperty("questions")] public UserQuestionSet Questions { get; set; }
         [JsonProperty("questionsUnavailableReason")] public string QuestionsUnavailableReason { get; set; }
@@ -35,6 +39,19 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("kind")] public abstract string Kind { get; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("complete")] public bool Complete { get; set; } = true;
+        [JsonProperty("source", NullValueHandling = NullValueHandling.Ignore)] public ToolSourcePreviewDto Source { get; set; }
+    }
+    // A bounded view of this retained result, not proof of delivery to a model.
+    public sealed class ToolSourcePreviewDto
+    {
+        [JsonProperty("reference", NullValueHandling = NullValueHandling.Ignore)] public string Reference { get; set; }
+        [JsonProperty("target")] public string Target { get; set; }
+        [JsonProperty("view", NullValueHandling = NullValueHandling.Ignore)] public string View { get; set; }
+        [JsonProperty("coverage", NullValueHandling = NullValueHandling.Ignore)] public ResourceCoverage Coverage { get; set; }
+        [JsonProperty("line", NullValueHandling = NullValueHandling.Ignore)] public int? Line { get; set; }
+        [JsonProperty("column", NullValueHandling = NullValueHandling.Ignore)] public int? Column { get; set; }
+        [JsonProperty("excerpt", NullValueHandling = NullValueHandling.Ignore)] public string Excerpt { get; set; }
+        [JsonProperty("excerptTruncated")] public bool ExcerptTruncated { get; set; }
     }
     public sealed class ToolTextBlockDto : ToolResultBlockDto
     {
@@ -50,6 +67,7 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("detail")] public string Detail { get; set; }
+        [JsonProperty("source", NullValueHandling = NullValueHandling.Ignore)] public ToolSourcePreviewDto Source { get; set; }
     }
     public sealed class ToolTableBlockDto : ToolResultBlockDto
     {

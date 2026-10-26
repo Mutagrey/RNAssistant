@@ -13,6 +13,26 @@
     if (text != null) result.textContent = text;
     return result;
   }
+  function sourceLabel(source) {
+    var coverage = source.coverage || {}, location = "";
+    if (source.line != null) location = "строка " + source.line + (source.column != null ? ", столбец " + source.column : "");
+    else if (coverage.kind === "line-range" && coverage.start != null && coverage.end > coverage.start)
+      location = coverage.end === coverage.start + 1 ? "строка " + coverage.start : "строки " + coverage.start + "–" + (coverage.end - 1);
+    else if (coverage.kind === "character-range" && coverage.start != null && coverage.end != null)
+      location = (coverage.address ? coverage.address + ", " : "") + "символы [" + coverage.start + ", " + coverage.end + ")";
+    else if (coverage.kind === "page-range" && coverage.start != null && coverage.end != null)
+      location = "страницы " + (coverage.start + 1) + "–" + coverage.end;
+    else if (coverage.address) location = coverage.address;
+    else if (coverage.path != null) location = "путь " + JSON.stringify(coverage.path);
+    else if (coverage.kind === "record-range") location = "записи [" + coverage.start + ", " + coverage.end + ")";
+    var views = { text: "текст", source: "исходник", metadata: "метаданные", structure: "структура",
+      table: "таблица", tree: "дерево", media: "медиа", formulas: "формулы" };
+    var text = (source.reference ? source.reference + " — " : "") + (source.target || "Источник");
+    if (location) text += ", " + location;
+    else if (source.view) text += " · " + (views[source.view] || source.view);
+    if (source.excerpt != null && source.excerpt !== "") text += ": «" + source.excerpt + (source.excerptTruncated ? "…" : "") + "»";
+    return text;
+  }
   function rows(body, block) {
     var table = block.kind === "table", items = table ? block.rows : block.items;
     var target = body, shown = 0;
@@ -30,7 +50,7 @@
           var tr = node("tr"); item.forEach(function (value) { tr.appendChild(node("td", "", value)); }); target.appendChild(tr);
         } else {
           var entry = node(item.detail ? "details" : "div", "tool-result-item");
-          entry.appendChild(node(item.detail ? "summary" : "div", "", item.title));
+          entry.appendChild(node(item.detail ? "summary" : "div", item.source ? "tool-source-caption" : "", item.source ? sourceLabel(item.source) : item.title));
           if (item.detail) entry.appendChild(node("pre", "", item.detail));
           target.appendChild(entry);
         }
@@ -54,20 +74,25 @@
   };
   function render(parent, response) {
     parent.textContent = "";
+    if (response.executionReference || response.action) parent.appendChild(node("p", "tool-result-note tool-result-receipt",
+      [response.executionReference, response.action || "Результат инструмента", response.target].filter(Boolean).join(" · ")));
     (response.blocks || []).forEach(function (block) {
       var renderer = renderers[block.kind];
       if (typeof renderer !== "function" || !Object.prototype.hasOwnProperty.call(renderers, block.kind)) {
         parent.appendChild(node("p", "tool-result-note", "Этот вид представления недоступен. Данные — в JSON ниже.")); return;
       }
-      var card = node("details", "tool-result-preview"); card.open = true;
-      card.appendChild(node("summary", "", block.title));
+      var card = node("details", "tool-result-preview"); card.open = !block.source;
+      var heading = node("summary", block.source ? "tool-source-caption" : "", block.source ? sourceLabel(block.source) : block.title);
+      if (block.source) heading.title = "Развернуть сохранённый фрагмент результата";
+      card.appendChild(heading);
       if (!block.complete && block.kind !== "text_changes")
         card.appendChild(node("p", "tool-result-note", "Показана доступная часть результата. Подробности — в JSON ниже."));
       var body = node("div", "tool-result-preview-body"); card.appendChild(body);
       renderer(body, block); parent.appendChild(card);
     });
+    if (response.rawJson) appendActivityData(parent, "Результат JSON", response.rawJson);
   }
-  window.RNAssistantToolResultPresentation = { render: render };
+  window.RNAssistantToolResultPresentation = { render: render, sourceLabel: sourceLabel };
   window.appendToolResultPreview = function (parent, activity, context, disclosure, renderResponse) {
     var workspace = !!(context && context.workspace);
     var owner = workspace && window.RNAssistantChatInspector ? window.RNAssistantChatInspector.target() : null;

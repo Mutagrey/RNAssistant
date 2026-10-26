@@ -164,7 +164,7 @@ namespace RNAssistant.Office
                 Kind = string.IsNullOrWhiteSpace(kind) ? "tool" : kind,
                 Title = title,
                 Display = command == null ? null : command.Display,
-                Subtitle = ActivityTarget(command),
+                Subtitle = ToolDisplayCatalog.Target(command),
                 Status = ToActivityStatus(result),
                 ExecutionStatus = executionStatus,
                 ErrorCode = result == null ? null : result.ErrorCode,
@@ -187,116 +187,6 @@ namespace RNAssistant.Office
             };
 
             return activity;
-        }
-
-        // Display only: accepted semantic arguments, never live discovery or authority.
-        internal static string ActivityTarget(ToolInvocation command)
-        {
-            if (command == null || command.Arguments == null) return string.Empty;
-            Func<string, string> text = key =>
-            {
-                object value;
-                return command.Arguments.TryGetValue(key, out value) && value is string
-                    ? BoundText((string)value, 240).Replace("\r", " ").Replace("\n", " ") : string.Empty;
-            };
-            if (command.Display != null && command.Display.TargetArguments != null)
-                return string.Join(" · ", command.Display.TargetArguments.Select(key =>
-                {
-                    object value;
-                    if (!command.Arguments.TryGetValue(key, out value) || value == null) return string.Empty;
-                    if (value is string) return text(key);
-                    if (value is bool || value is int || value is long || value is double || value is decimal)
-                        return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
-                    return string.Empty; // Never dump arrays, objects, guards or full bodies into a caption.
-                }).Where(value => !string.IsNullOrWhiteSpace(value)));
-            if (command.ToolId == "common.resources_find")
-                return string.Join(" · ", new[] { text("query"), ResourceCaption(text("scope")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
-            if (command.ToolId == "common.resources_read")
-                return string.Join(" · ", new[] { text("target"), ResourceCaption(text("representation")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
-            if (command.ToolId == "common.capabilities_read") return text("id");
-            if (command.ToolId == "common.capabilities_search") return text("query");
-            if ((command.ToolId ?? string.Empty).StartsWith("powerpoint.", StringComparison.Ordinal))
-            {
-                object index;
-                var slide = command.Arguments.TryGetValue("slideIndex", out index) && (index is int || index is long)
-                    ? "Слайд " + Convert.ToString(index, System.Globalization.CultureInfo.InvariantCulture)
-                    : "Текущий слайд";
-                if (command.ToolId == "powerpoint.add_slide") return string.IsNullOrWhiteSpace(text("title")) ? "Новый слайд" : text("title");
-                if (command.ToolId == "powerpoint.list_objects" && text("kind") == "slides") return "Слайды презентации";
-                if ((command.ToolId == "powerpoint.search_text" || command.ToolId == "powerpoint.replace_text") &&
-                    (!command.Arguments.TryGetValue("slideIndex", out index) || Convert.ToString(index, System.Globalization.CultureInfo.InvariantCulture) == "0"))
-                    slide = "Вся презентация";
-                if (command.ToolId == "powerpoint.move_slide" && command.Arguments.TryGetValue("toIndex", out index) &&
-                    (index is int || index is long))
-                    return slide + " → позиция " + Convert.ToString(index, System.Globalization.CultureInfo.InvariantCulture);
-                var target = text("target") == "notes" ? "Заметки" : text("shapeName");
-                if (command.ToolId == "powerpoint.add_object") target = text("kind") == "table" ? "Таблица" :
-                    text("kind") == "picture" ? "Изображение" : text("kind") == "textBox" ? "Текстовый блок" : target;
-                return string.Join(" · ", new[] { slide, target, text("query"), text("find"), text("path") }
-                    .Where(value => !string.IsNullOrWhiteSpace(value)));
-            }
-            if ((command.ToolId ?? string.Empty).StartsWith("word.", StringComparison.Ordinal))
-            {
-                var location = command.ToolId == "word.write_text" && text("mode") != "paragraph" ? "selection" : text("location");
-                if (command.ToolId == "word.inspect") return "Документ";
-                var scope = text("scope");
-                var target = command.ToolId == "word.format_text" && text("kind") == "font" ? "selection" : text("target");
-                if (command.ToolId == "word.format_text" && string.IsNullOrWhiteSpace(target)) target = "selection";
-                if (string.IsNullOrWhiteSpace(scope) && (command.ToolId == "word.find_text" || command.ToolId == "word.replace_text")) scope = "main";
-                var place = location == "start" ? "Начало документа" : location == "end" ? "Конец документа" :
-                    location == "selection" || scope == "selection" || target == "selection" ? "Выделение" :
-                    scope == "main" ? "Текст документа" : scope == "all" || target == "document" ? "Весь документ" : string.Empty;
-                if (string.IsNullOrWhiteSpace(place) && (command.ToolId == "word.write_text" ||
-                    command.ToolId == "word.add_table" || command.ToolId == "word.insert_page_break" ||
-                    command.ToolId == "word.add_comment")) place = "Выделение";
-                return string.Join(" · ", new[] { place, text("query"), text("find"), target == "selection" || target == "document" ? "" : target }
-                    .Where(value => !string.IsNullOrWhiteSpace(value)));
-            }
-            if (command.ToolId == "outlook.create_draft")
-            {
-                var draftTarget = string.Join(" · ", new[] { text("subject"), text("to") }.Where(value => !string.IsNullOrWhiteSpace(value)));
-                var kind = text("kind");
-                if (kind == "reply" || kind == "replyAll" || kind == "forward")
-                    return (kind == "replyAll" ? "Ответ всем" : kind == "forward" ? "Пересылка" : "Ответ") +
-                        " · Текущее письмо" + (string.IsNullOrWhiteSpace(draftTarget) ? "" : " · " + draftTarget);
-                return string.IsNullOrWhiteSpace(draftTarget) ? "Новое письмо" : draftTarget;
-            }
-            if (command.ToolId == "outlook.update_mail")
-                return "Текущее письмо" + (text("kind") == "markRead" ? " · Отметка о прочтении" :
-                    text("kind") == "categories" ? " · Категории: " + text("categories") : "");
-            var sheet = text("sheet");
-            var address = text("address");
-            if (!string.IsNullOrWhiteSpace(sheet)) return sheet + (string.IsNullOrWhiteSpace(address) ? "" : "!" + address);
-            foreach (var key in new[] { "target", "moduleName", "path", "title", "name", "address", "query" })
-            {
-                var value = text(key);
-                if (!string.IsNullOrWhiteSpace(value)) return value;
-            }
-            return string.Empty;
-        }
-
-        private static string ResourceCaption(string value)
-        {
-            switch (value)
-            {
-                case "all": return "Все ресурсы";
-                case "conversation": return "Чат";
-                case "document": return "Документ";
-                case "selection": return "Выделение";
-                case "html": return "Страница";
-                case "vba": return "VBA";
-                case "backups": return "Резервные копии";
-                case "catalogs": return "Каталоги";
-                case "metadata": return "Сведения";
-                case "text": return "Текст";
-                case "structure": return "Структура";
-                case "source": return "Исходный код";
-                case "media": return "Медиа";
-                case "formulas": return "Формулы";
-                case "table": return "Таблица";
-                case "records": return "Записи";
-                default: return value;
-            }
         }
 
         private static string BoundActivityData(ToolRunResult result, string dataJson)

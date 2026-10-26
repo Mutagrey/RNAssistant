@@ -63,15 +63,23 @@ namespace RNAssistant.Core.ModelProtocol
 
         private static string SourceAlias(ChatMessage source, JObject block, string viewField)
         {
+            try { return BoundSourceReference(source, (string)block[viewField], block["coverage"]?.ToObject<ResourceCoverage>())?.Alias; }
+            catch (JsonException) { return null; }
+            catch (ArgumentException) { return null; }
+        }
+
+        // Shared by wire and UI projections; neither consumer allocates references.
+        public static ModelResourceReference BoundSourceReference(ChatMessage source, string view, ResourceCoverage coverage)
+        {
             // Both admitted shapes describe one source. Bind via typed evidence,
             // including its scope/revision, and verify the actual displayed slice.
             // Unbound or ambiguous metadata cannot assert source delivery.
-            if (source.ResourceEvidence.Count != 1) return null;
+            if (source == null || coverage == null || source.ResourceEvidence.Count != 1) return null;
             var evidence = source.ResourceEvidence[0];
-            if ((string)block[viewField] != evidence.View ||
-                !JToken.DeepEquals(block["coverage"], JObject.FromObject(evidence.Coverage))) return null;
+            if (view != evidence.View ||
+                !JToken.DeepEquals(JObject.FromObject(coverage), JObject.FromObject(evidence.Coverage))) return null;
             var bindings = source.ResourceModelReferences.Where(item => item.Matches(evidence)).ToArray();
-            return bindings.Length == 1 ? bindings[0].Alias : null;
+            return bindings.Length == 1 ? bindings[0] : null;
         }
 
         public static IReadOnlyList<string> Delivered(IReadOnlyList<ChatMessage> messages)

@@ -14,6 +14,11 @@ const { chromium } = require("playwright");
       window.activityToolCallId = a => a.ToolCallId;
       window.messageRunId = m => m.RunId;
       window.requests = []; window.cancelled = [];
+      window.appendActivityData = (parent, label, text) => {
+        const details = document.createElement("details"), summary = document.createElement("summary"), pre = document.createElement("pre");
+        details.className = "canonical-json"; summary.textContent = label; pre.textContent = text;
+        details.append(summary, pre); parent.appendChild(details);
+      };
       window.send = (type, payload) => {
         let resolve; const promise = new Promise(done => { resolve = done; }); promise.requestId = String(requests.length);
         requests.push({ type, payload, resolve }); return promise;
@@ -51,6 +56,29 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#preview img").count(), 0);
     assert.match(await page.locator("#preview").textContent(), /Этот вид представления недоступен/);
     assert.equal(await page.locator("#raw").textContent(), "Результат JSONraw source", "presentation never rewrites original results");
+    await page.evaluate(() => {
+      const card = document.createElement("div"); card.id = "source-captions"; document.body.appendChild(card);
+      RNAssistantToolResultPresentation.render(card, { executionReference: "E7", action: "Чтение", target: "src/A.cs", rawJson: '{"business":{"ref":"R999"}}', blocks: [
+        { kind: "text", title: "Содержимое", complete: false, text: "искомый текст\nfull retained slice", source: {
+          reference: "R3@v1", target: "src/A.cs", view: "text", coverage: { kind: "line-range", start: 42, end: 43 },
+          excerpt: "искомый текст", excerptTruncated: false } },
+        { kind: "list", title: "Совпадения", complete: true, items: [{ title: "src/B.cs", detail: "другое совпадение", source: {
+          target: "src/B.cs", line: 17, excerpt: "<img src=x onerror=alert(1)>" } }] }
+      ] });
+    });
+    assert.equal(await page.locator("#source-captions > p").textContent(), "E7 · Чтение · src/A.cs");
+    assert.equal(await page.locator("#source-captions .canonical-json pre").textContent(), '{"business":{"ref":"R999"}}', "arbitrary result data remains available as inert canonical JSON");
+    const sourceHeading = page.locator("#source-captions .tool-source-caption").first();
+    assert.equal(await sourceHeading.textContent(), "R3@v1 — src/A.cs, строка 42: «искомый текст»");
+    assert.equal(await sourceHeading.evaluate(node => node.parentNode.open), false, "source body starts collapsed behind the caption");
+    await sourceHeading.click();
+    assert.equal(await page.locator("#source-captions pre").first().textContent(), "искомый текст\nfull retained slice", "caption opens this retained slice");
+    assert.equal(await page.locator("#source-captions img").count(), 0, "source paths and snippets are inert text");
+    assert.match(await page.locator("#source-captions .tool-source-caption").last().textContent(), /^src\/B.cs, строка 17:/,
+      "unbound search item has a useful label without a minted R reference");
+    assert.equal(await page.evaluate(() => RNAssistantToolResultPresentation.sourceLabel({ target: "A", coverage: {
+      kind: "line-range", start: 42, end: 45 } })), "A, строки 42–44", "exclusive line bounds are displayed correctly");
+    await page.locator("#source-captions").evaluate(node => node.remove());
     await page.locator("#step > summary").click();
     await page.locator("#step > summary").click();
     await page.waitForFunction(() => requests.length === 5);
@@ -125,6 +153,16 @@ const { chromium } = require("playwright");
       runId: "workspace-run", toolCallId: "workspace-call", blocks: [
         { kind: "text", title: "Содержимое", text: "Workspace content", complete: true }] }));
     await page.locator("#workspace-preview").getByText("Workspace content").waitFor();
+    await page.locator("#workspace-result > summary").click();
+    await page.locator("#workspace-result > summary").click();
+    await page.waitForFunction(() => requests.length === 10);
+    await page.evaluate(() => {
+      window.workspaceTarget = { owner: "plugin", workspaceId: "workspace", sessionId: "session" };
+      requests[9].resolve({ workspaceId: "workspace", chatId: "session", runId: "workspace-run", toolCallId: "workspace-call",
+        blocks: [{ kind: "text", title: "Late", text: "stale workspace result", complete: true }] });
+    });
+    assert.equal(await page.locator("#workspace-preview .tool-result-preview").count(), 0,
+      "a late response cannot cross workspace/plugin ownership even for the same canonical IDs");
     console.log("PASS tool presentation: Office/workspace scope, lazy reads, cancellation, retry, revision race, inert blocks and retained questions");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

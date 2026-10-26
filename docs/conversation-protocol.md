@@ -1749,6 +1749,29 @@ render. Windows/Office/WebView2 delivery qualification remains open.
 
 ## Effect mapping and UI projection
 
+Document/workspace tool result cards use disposable typed `ToolSourcePreviewDto` captions. They combine
+an optional exact `R@v`, semantic target, actual coverage and a bounded literal excerpt.
+The shared Core binding resolver checks scoped revision and view/coverage. A read
+card uses its canonical result/CAS body, never an activity preview matched by name;
+missing bytes or ambiguous evidence cannot acquire a citation. Expanding the caption
+reveals the retained result, without a live read. Other result cards may show the
+saved execution `E`; this is not an assertion of verified effect or model delivery.
+Search/find entries retain useful target/coordinates/snippet captions without an `R`
+until their producers persist per-item scoped provenance. The exact-request Inspector
+uses the same label format only with matching saved delivery links and actual request
+content. See the [complete matrix](audits/tool-result-presentation-matrix.md) for
+family projections, checked cases and media/domain gaps. Format 8 and storage owners
+are unchanged; arbitrary business fields named `ref` never create UI authority.
+Workspace uses a workspace/session-scoped bridge route to the same presentation
+service; it never substitutes the currently selected Office chat. All families use
+the exact canonical terminal/CAS body when present, including the bounded `rawJson`
+view. The receipt carries action/target/E; effect remains the activity's runtime
+evidence. A collapsed call shows action, target and outcome before any lazy body
+request. Core ToolDisplayCatalog and ToolResultSummaryProjection own the shared
+display projection. Failed or pending workspace calls do not become completed.
+Actual and intended diff line counts stay separate; bounded hunks/copies without
+complete line comparison do not acquire fabricated zero totals.
+
 `ToolRuntime` classifies each native invocation from a captured typed policy and
 handler-supplied dispatch/effect facts. Every active tool uses that path; absent
 historical effect evidence remains `Unreported`, never fabricated verification.

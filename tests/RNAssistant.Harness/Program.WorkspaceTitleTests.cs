@@ -20,7 +20,7 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static void WorkspaceAcceptedCallHistory(bool strict = false, bool rejectFinish = false)
+        private static void WorkspaceAcceptedCallHistory(bool strict = false, bool rejectFinish = false, bool failedRead = false)
         {
             WithTempPaths(paths =>
             {
@@ -50,12 +50,13 @@ namespace RNAssistant.Harness
                                     ? new ConversationResponse(ConversationResponse.ExecuteAction, "Inspect available resources.",
                                         "Смотрю ресурсы.", calls: new[] {
                                             new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject() },
-                                            new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject { ["query"] = "missing" } }
+                                            failedRead ? new ConversationToolCall { Name = "common.resources_read", Arguments = new JObject { ["target"] = "missing.txt" } }
+                                                : new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject { ["query"] = "missing" } }
                                         }).ToJson()
                                     : number < expectedRequests
                                         ? ScriptedVerifiedFinish(new ChatStore(paths).Load(sessionId),
                                             "Report the resource search.", "Первый ответ.", "Resources inspected.",
-                                            "common.resources_find", "common.resources_find")
+                                            failedRead ? new[] { "common.resources_find" } : new[] { "common.resources_find", "common.resources_find" })
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer the follow-up from persisted history.", "История читается.",
                                             results: new ConversationResultClaim[0]);
@@ -103,7 +104,7 @@ namespace RNAssistant.Harness
                                 "workspace presentation uses kernel lifecycle");
                             var calls = service.GetSession(workspace, sessionId).Messages.Where(message =>
                                 message.Role == "assistant" && message.AcceptedCallOrigin != null &&
-                                message.ToolName == "common.resources_find").ToArray();
+                                (message.ToolName == "common.resources_find" || failedRead && message.ToolName == "common.resources_read")).ToArray();
                             if (rejectFinish)
                             {
                                 AssertEqual(3, first.Summary.IterationsUsed, "rejected finish consumes a step of the same run");
@@ -111,6 +112,16 @@ namespace RNAssistant.Harness
                                     "correction feedback supplies exact available references");
                             }
                             AssertEqual(2, calls.Length, "accepted read batch has two durable per-call records");
+                            var activities = service.GetSession(workspace, sessionId).Messages.Where(message =>
+                                message.RunId == first.Summary.RunId && message.Activity != null && calls.Any(call => call.ToolCallId == message.Activity.ToolCallId))
+                                .Select(message => message.Activity).ToArray();
+                            AssertEqual(2, activities.Length, "each accepted attempt retains its own activity");
+                            AssertTrue(activities.Take(failedRead ? 1 : 2).All(activity => activity.Display?.Action == "Поиск" &&
+                                activity.ResultSummary?.Kind == "resource-find" && activity.Status == "completed"),
+                                "workspace uses the shared catalog and typed result summary");
+                            AssertEqual(failedRead ? "missing.txt" : "missing", activities[1].Subtitle, "workspace keeps the second call's distinct target");
+                            if (failedRead) AssertTrue(activities[1].Status == "failed" && activities[1].ResultSummary == null,
+                                "a failed read cannot appear as completed or inherit a successful read summary");
                             AssertTrue(calls.Select(call => call.ExecutionReference.Alias).SequenceEqual(new[] { "E1", "E2" }),
                                 "whole batch has distinct stable typed references");
                             var nextWire = JObject.Parse(requests[1]);
