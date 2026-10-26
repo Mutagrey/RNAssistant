@@ -24,6 +24,11 @@ direct cutover объясняют порядок уже выполненной �
 Причина перехода к рабочему baseline зафиксирована в
 [ADR-0011](decisions/ADR-0011-working-baseline-and-trunk-development.md).
 
+[Разбор сбоев по десяти фото от 2026-10-26](stabilization/RISK_REGISTER.md#разбор-десяти-фотографий-чат-протокол-и-достоверность--2026-10-26)
+содержит воспроизведения и границы причинности; [очередь восстановления](stabilization/BACKLOG.md#восстановление-рабочих-сценариев-чата--2026-10-26)
+задаёт вертикальные срезы, владельцев и приёмку. Текущий приоритет — в начале PROGRESS;
+это не повторный общий cutover и не закрытая Windows/Office qualification.
+
 [Аудит оставшихся различий Office/workspace](audits/office-workspace-preparation-audit.md)
 фиксирует общие компоненты, разные профили tools и следующий cutover.
 

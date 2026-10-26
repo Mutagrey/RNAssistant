@@ -1,0 +1,121 @@
+{
+  "head": "bde1ae8b014004edabf5988079e4cbd83e332575",
+  "binarySha256": "36545bb61b726ce37a56926f8a2ba0b1a38040f83b1a10cd5896349ae0b83b34",
+  "qualification": "Existing CLI binary; no fresh build or complete proof of source equivalence. Scripted loopback HTTP; no real provider or Office.",
+  "runs": [
+    {
+      "mode": "json_object",
+      "exitCode": 0,
+      "httpRequests": 2,
+      "scriptFileExists": false,
+      "files": [
+        "app.js"
+      ],
+      "stderr": "",
+      "schemaCounterexamples": [
+        {
+          "tool": "common.resources_read",
+          "arguments": {
+            "target": "app.js"
+          },
+          "validAccordingToAdvertisedSchema": false,
+          "errors": [
+            "Additional properties are not allowed ('target' was unexpected)",
+            "{'target': 'app.js'} is not valid under any of the given schemas"
+          ]
+        },
+        {
+          "tool": "common.resources_search",
+          "arguments": {
+            "target": "app.js",
+            "query": "original"
+          },
+          "validAccordingToAdvertisedSchema": false,
+          "errors": [
+            "Additional properties are not allowed ('query', 'target' were unexpected)"
+          ]
+        }
+      ],
+      "terminal": {
+        "lifecycle": "Completed",
+        "reason": "model_finish",
+        "AssistantMessage": "Created script.js.",
+        "ToolCounts": {
+          "ReadOk": 1,
+          "ReadError": 0,
+          "WriteOk": 0,
+          "WriteError": 0,
+          "WriteUnknown": 0
+        },
+        "acceptance": "notrequested",
+        "verifiedFileChanges": 0,
+        "health": "Clean"
+      },
+      "requestContents": [
+        {
+          "request": 1,
+          "messages": 3,
+          "messageTextCharacters": 40724,
+          "identicalWholeMessageDuplicates": 0,
+          "literalSourceOccurrences": 0
+        },
+        {
+          "request": 2,
+          "messages": 5,
+          "messageTextCharacters": 41335,
+          "identicalWholeMessageDuplicates": 0,
+          "literalSourceOccurrences": 1
+        }
+      ]
+    },
+    {
+      "mode": "json_schema",
+      "exitCode": 0,
+      "httpRequests": 2,
+      "scriptFileExists": false,
+      "files": [
+        "app.js"
+      ],
+      "stderr": "",
+      "strictRoot": {
+        "type": "object",
+        "required": [
+          "response"
+        ],
+        "rootAnyOf": false
+      },
+      "terminal": {
+        "lifecycle": "Completed",
+        "reason": "model_finish",
+        "AssistantMessage": "Created script.js.",
+        "ToolCounts": {
+          "ReadOk": 1,
+          "ReadError": 0,
+          "WriteOk": 0,
+          "WriteError": 0,
+          "WriteUnknown": 0
+        },
+        "acceptance": "notrequested",
+        "verifiedFileChanges": 0,
+        "health": "Clean"
+      },
+      "requestContents": [
+        {
+          "request": 1,
+          "messages": 3,
+          "messageTextCharacters": 12515,
+          "identicalWholeMessageDuplicates": 0,
+          "literalSourceOccurrences": 0
+        },
+        {
+          "request": 2,
+          "messages": 5,
+          "messageTextCharacters": 13126,
+          "identicalWholeMessageDuplicates": 0,
+          "literalSourceOccurrences": 1
+        }
+      ]
+    }
+  ],
+  "requestRepresentation": "Decoded synthetic HTTP JSON; no claim of byte-for-byte CAS comparison in this probe."
+}

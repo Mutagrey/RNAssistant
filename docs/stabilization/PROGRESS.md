@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Приоритет: восстановление рабочих сценариев чата — 2026-10-26
+
+Owner: Application conversation delivery совместно с Core ModelProtocol/Storage
+и Web ChatView. По десяти пользовательским фото выполнен
+[incident review I26-01…10](RISK_REGISTER.md#разбор-десяти-фотографий-чат-протокол-и-достоверность--2026-10-26)
+на исходниках `bde1ae8b`. Windows evidence от пользователя — только фотографии;
+логи, выгрузки и файлы не запрашивать. В production Web JS воспроизведены неочищенный принятый
+ввод, блокировка по running при недоступном владельце, отсутствие токенов в общей
+сводке, показ/исчезновение непринятого текста и 30 перестроений дерева на 30 пустых
+progress events. В имеющейся CLI-сборке через scripted HTTP оба response modes
+принимают «файл создан» после одного read, без файла и write; advertised workspace
+json_object schemas противоречат стандартному JSON Schema. Это не установленная
+поломка file read-back: finish admission и цель пользователя — разные проверки.
+
+[Поэтапная очередь](BACKLOG.md#восстановление-рабочих-сценариев-чата--2026-10-26):
+сначала достоверность результата и receipt/recovery, затем schemas/read→patch,
+общие состояния UI и usage, bounded loading/rendering, реальные endpoint/Office
+сценарии. Runtime в рамках этого аудита не менялся. Product build, полный Harness,
+live API и Windows/Office/VSTO проверки не запускались.
+
+Точная ошибка json_schema на пользовательском сервере, hash установленной DLL/web,
+потеря accepted messages, отдельная причина отказа fork и измеренное распределение
+задержек остаются открытыми. В малой HTTP-пробе дублирования message bodies/source
+не найдено; длинный реальный контекст этим не квалифицирован. Предыдущие завершённые
+срезы ниже — локальное evidence, а не подтверждение работоспособности всей системы.
+
 ## V8 architecture stabilization — 2026-10-26
 
 Owner: Core Agent/Storage/ModelProtocol and application/test composition.

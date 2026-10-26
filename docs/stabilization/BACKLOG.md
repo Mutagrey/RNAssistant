@@ -12,6 +12,106 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Восстановление рабочих сценариев чата — 2026-10-26
+
+Owner: Application conversation delivery. Основание —
+[incident review I26-01…10](RISK_REGISTER.md#разбор-десяти-фотографий-чат-протокол-и-достоверность--2026-10-26).
+Аудит и воспроизведения выполнены; перечисленная ниже реализация **ещё не выполнена**.
+
+Принято с пользователем: Windows evidence — только фотографии экрана; не просить
+логи, выгрузки или файлы. Во время run обычная отправка уточняет текущую задачу
+на безопасной границе; отдельное действие ставит следующую задачу в очередь.
+Основная лента показывает только принятые шаги; во время генерации — стадию
+и время. После завершения ход работы сворачивается, итог и токены остаются.
+Это ограниченная очередь исправлений по пользовательским сценариям, без новой
+общей архитектурной миграции. После закрытия строк здесь остаётся только
+незавершённая работа; текущие контракты переносятся в domain docs.
+
+### Целевая граница
+
+Сохранить существующие AgentKernel/ConversationRunCoordinator, ModelContextCompiler,
+ToolRuntime, append-only events/CAS и общий ChatView. Разница Office/workspace/plugin —
+authority источника, capabilities и delivery adapters. Статусы, composer, группировка
+шагов, usage, история и message actions принадлежат общему presentation contract.
+Не нужен второй kernel, store, provider cache или универсальный Office layer.
+
+Путь одного запроса должен проверяться целиком:
+
+`draft version → durable input receipt → delivery → run/step/attempt → frozen request
+→ HTTP response → protocol admission → accepted action → dispatch/read-back →
+terminal facts → shared view → reload`.
+
+UI не выводит состояние выполнения из текста модели, ответа transport или владения
+DOM. Для отсечения запоздавших событий используются существующие session/workspace,
+run/step/attempt IDs, cursor и generation выбора. Они не попадают в аргументы модели.
+
+### Порядок срезов
+
+| Срез / приоритет / owner | Конкретный результат и удаляемый путь | Условие завершения |
+|---|---|---|
+| S0 / выполнен частично / delivery + diagnostics | I26-01…10, 5 UI-проб, 2 HTTP-траектории сохранены. Для Windows сделать читаемый экран: версия DLL/web, endpoint/model/format, стадия и длительность ожидания, код и причина ошибки, подтверждённый эффект. Использовать существующие trajectory/CAS, без второго diagnostic store. | По фото можно различить приём ввода, подготовку, API, tool и terminal outcome. Подробные request/response исследуются в собственных локальных воспроизведениях; их передачу от пользователя не запрашивать. Независимые исправления не ждут Windows evidence. |
+| S1a / P0 / Core outcome + Application/Web | Разделить model claim, завершение run и подтверждённые изменения в общей сводке. Подключать существующий typed acceptance там, где заданы проверяемые file/operation criteria. Удалить отображение `satisfied`/clean finish как доказательства эффекта. | Scripted «создал» после read-only остаётся model claim; UI явно показывает фактические 0 изменений. Заданный критерий существования/bytes не проходит. Реальный create+read-back проходит; noop, unknown и ошибка различимы. Прямой информационный ответ без writes остаётся допустимым; никакого regex по словам «готово». |
+| S1b / P0 / input delivery + Workspace run control | Доставлять typed input receipt, подтверждать точную версию draft независимо от run completion. Подключить existing receipt lookup и lease-guarded abandoned-run reconciliation к UI. Удалить clear-only-on-terminal и blanket running-without-owner. | Сообщение принято один раз; потеря reply, reload, иной чат и новый draft не теряют ввод и не дублируют run. `DeliveryRecorded=false` виден как незавершённая доставка. IPC timeout не считается остановкой; reconciliation получает lease, перечитывает cursor и не replay tools. Cancellation имеет Requested/Stopped/Unconfirmed. |
+| S1c / P1 / Application active-run/input delivery | Подключить workspace к существующему `IRunInputChannel` и input journal. Общий composer показывает допустимые send/queue/steer действия по capabilities и текущему run. Удалить blanket запрет ввода после подключения producer и consumer. | Уточнение принимается ровно один раз и доставляется нужному run; очередь переживает reload, не запускает второго writer и не меняет другой чат. Несовместимые действия имеют явную причину. |
+| S2 / P1 / ModelProtocol + resource/tool owners | Перевести Workspace `PromptToolCatalog` на существующий `ForPrompt`. Проверить один набор инструментов через advertised schema → parser → normalization → dispatch → result в обоих modes. Strict provider admission проверить отдельно на реальном endpoint. Удалить обход canonical schema projection. | Валидные target/query, scope/query, line/character/procedure/PDF selections проходят; несовместимые selectors и stale/ambiguous anchors отвергаются до effect. После read→patch exact diff и read-back совпадают; без десяти одинаковых repair. Invalid schema не маскируется fallback, rejected/truncated calls не исполняются. |
+| S3 / P1 / shared Web chat + typed delivery | Один run/status/composer projection для всех owners. Принятый шаг сохраняется и затем компактно сворачивается; provisional имеет явный статус попытки. Общий footer: время, actions, API usage; общий route fork/edit/journal. Удалить отдельную workspace строку «Агент работает…» после переключения consumers. | Одна матрица Office/project/plugin: load, accepted input, preparation, model wait/stream, tool, approval, question, cancel, failure, recovery, completed; narrow/wide, reload, переключения. Поздний A→B ответ не меняет B. Принятый текст не исчезает. Fork создаёт новый chat с нужной границей истории, исходник не меняется. |
+| S4 / P1 / delivery + Storage + context owners | Разделить progress repaint, state/cursor refresh и message paging. Удалить полный project tree/transcript render на токен и full-session load ради очередной страницы. Начать с существующих SQLite window/event feed и lazy CAS; затем исправлять только измеренные preparation hotspots. | 30 пустых progress events не перестраивают дерево; update затрагивает stream leaf. Warm/cold switch и first request измерены на одинаковых short/long fixtures; counters показывают bounded page/delta. Before/after p50/p95, allocations, hydrated bytes и UI long tasks сохранены. Состояние и data integrity совпадают после restart. |
+| S5 / qualification / endpoint и host owners | Прогнать конечные сценарии с настоящей моделью, затем Windows x64 + Office x64 + WebView2. Версия DLL/web и сценарии закреплены. | Доказаны точные изменения файла и VBA, штатный reopen/navigation/cancel/fork, provider schema acceptance, отсутствие повторного эффекта. Не закрывать по scripted HTTP, fake COM или одному красивому screenshot. |
+
+S1a, S1b и S1c — отдельные изменения; каждый последующий срез также режется по одному
+инварианту. Диагностика стадий добавляется вместе с исправляемым путём, до заявления
+об ускорении. Не удерживать document gate во время model/user wait. Никакого
+автоматического удаления чатов, переписывания event history, сброса unknown или
+увеличения всех лимитов как способа скрыть проблему.
+
+Целевой submit возвращает durable receipt до завершения run; lifetime/cancel/dispose
+и session lease принадлежат application run owner. CLI ожидает terminal result через
+того же owner. Не заменять await на fire-and-forget и не привязывать выполнение
+к существованию DOM выбранного чата. Workspace использует существующий input journal
+и kernel input port; переиспользуемую intake-логику Office inbox перенести в Application,
+оставив Office DTO mapping в адаптере. Не создавать второй concurrent writer.
+
+### UI и токены: критерии, а не новая декоративная перепись
+
+- Одинаковая лента и composer во всех трёх поверхностях. Контекст документа/проекта
+  обозначен в заголовке, а различающиеся services не создают отдельный жизненный цикл.
+- Во время запуска видна конкретная стадия и время ожидания. При длинном JSON
+  argument отсутствие `message` ещё не означает отсутствие генерации. Счётчик
+  полученных данных не раскрывает сырой код аргументов как принятый результат.
+- Завершённый шаг оставляет стабильную строку с действием, объектом и outcome.
+  После завершения run подробности сворачиваются; итог и существенная ошибка видны
+  один раз. Диагностика открывается по exact step/attempt, не по текущему чужому run.
+- Usage последнего запроса, суммарный API usage запуска и оценка следующего контекста
+  различаются. Batch siblings и повторная проекция одного attempt не умножают usage;
+  реальные format/provider retries учитываются отдельно. Reasoning/cached tokens
+  показываются согласно provider accounting и не прибавляются повторно к total.
+  Отсутствующий usage обозначается как неизвестный, не ноль.
+- Контекст проверяется по actual request: source identity + revision + view + coverage,
+  текстовые и бинарные части, skills, catalog, history, reserves. Совпадение CAS/HTTP
+  — отдельный gate; оно не исключает лишний контент. Семантическую дедупликацию нельзя
+  делать простым удалением одинакового текста из разных причинных сообщений.
+
+### Как не вернуться к бесконечным точечным правкам
+
+Для каждого среза: **один нарушенный инвариант → минимальное воспроизведение → один
+owner → producer и consumers вместе → удаление старого пути → проверка полного
+сценария и сохранённых фактов**. Локальная зелёная проверка не закрывает внешний gate.
+Новый abstraction допустим только при удалении названного дубля или зависимости.
+Размер файла и количество interfaces не являются критерием готовности.
+
+Acceptance corpus ограничен задачами пользователя: read/search/patch с Unicode/CRLF,
+create без реального write, invalid schema/arguments, длинный output, lost receipt,
+owner death, A→B→A navigation, pending approval, cancel, reopen, fork, long-history
+first page и состав actual request. Browser regression должна получать настоящие
+DTO/events из application/bridge fixture, а не только вручную придуманный snapshot.
+Scripted-model проверка проверяет runtime; отдельная live-model проверка — способность
+следовать контракту. Предыдущие неизвестные Windows причины остаются неизвестными.
+
+Ненужные расширения схем, новые UI surfaces и косметический рефакторинг этих путей
+не смешиваются с recovery scope. Это локальный приоритет инцидента, не возврат
+исторического общего feature freeze. На каждом шаге фиксировать проверенные
+результаты в canonical doc и evidence; не создавать очередной общий master plan.
+
 ## Аннотации временного и исторического HTML-preview — 2026-10-26
 
 Owner: Web visual annotation UI и Core resource binding. Текущий authored HTML

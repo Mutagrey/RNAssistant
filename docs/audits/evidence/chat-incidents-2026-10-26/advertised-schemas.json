@@ -1,0 +1,798 @@
+[
+  {
+    "Id": "common.resources_read",
+    "Description": "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. files.patch accepts a unique anchor from an observed excerpt of a UTF-8 source. No partial skill activation. For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors. For PDF files or PDF attachments, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content. Use type=attachment with the exact semantic target from discovery to read a visual selection; it does not authorize a source edit.",
+    "Schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                }
+              },
+              "required": [
+                "target"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "First line, 1-based; use only with lineCount."
+                },
+                "lineCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647,
+                  "description": "Number of lines; the selected text must fit this run's model input budget."
+                }
+              },
+              "required": [
+                "target",
+                "startLine",
+                "lineCount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "startChar": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Zero-based UTF-16 character offset; use only with charCount."
+                },
+                "charCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 110592,
+                  "description": "Maximum UTF-16 characters in the selected excerpt."
+                }
+              },
+              "required": [
+                "target",
+                "startChar",
+                "charCount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "procedure": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Unique VBA procedure name, case-insensitive, without brackets. Reads the declaration through its terminator from one exact source revision."
+                },
+                "procedureKind": {
+                  "type": "string",
+                  "enum": [
+                    "sub",
+                    "function",
+                    "property-get",
+                    "property-let",
+                    "property-set"
+                  ],
+                  "description": "Optional kind to disambiguate property accessors; conditional duplicate declarations require line/character selectors."
+                }
+              },
+              "required": [
+                "target",
+                "procedure"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "tree"
+                  ]
+                },
+                "pointer": {
+                  "type": "string",
+                  "description": "RFC 6901-style JSON/YAML pointer; empty string selects the root."
+                },
+                "depth": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "offset": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "limit": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "required": [
+                "target",
+                "representation",
+                "pointer"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "pageIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Zero-based page of an exact PDF original; extracted text may omit visual content."
+                }
+              },
+              "required": [
+                "target",
+                "representation",
+                "pageIndex"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "pageIndex": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Zero-based page of an exact PDF original; extracted text may omit visual content."
+                },
+                "startChar": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Zero-based UTF-16 character offset; use only with charCount."
+                },
+                "charCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 110592,
+                  "description": "Maximum UTF-16 characters in the selected excerpt."
+                }
+              },
+              "required": [
+                "target",
+                "representation",
+                "pageIndex",
+                "startChar",
+                "charCount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Workspace-relative file path, for example notes.txt or src/app.js."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "file"
+                  ],
+                  "description": "Resource kind; defaults to file when omitted or null."
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "startPage": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Zero-based first PDF page."
+                },
+                "pageCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Consecutive complete pages; nextPageIndex continues when the model budget fills."
+                }
+              },
+              "required": [
+                "target",
+                "representation",
+                "startPage",
+                "pageCount"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Exact message attachment target returned by type=attachment discovery."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "attachment"
+                  ]
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                }
+              },
+              "required": [
+                "target",
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Exact message attachment target returned by type=attachment discovery."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "attachment"
+                  ]
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "startLine": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "First line, 1-based; use only with lineCount."
+                },
+                "lineCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647,
+                  "description": "Number of lines; the selected text must fit this run's model input budget."
+                }
+              },
+              "required": [
+                "target",
+                "type",
+                "startLine",
+                "lineCount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Exact message attachment target returned by type=attachment discovery."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "attachment"
+                  ]
+                },
+                "representation": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "startChar": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Zero-based UTF-16 character offset; use only with charCount."
+                },
+                "charCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 110592,
+                  "description": "Maximum UTF-16 characters in the selected excerpt."
+                }
+              },
+              "required": [
+                "target",
+                "type",
+                "startChar",
+                "charCount"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Enabled skill ID from discovery or the catalog."
+                },
+                "referencePath": {
+                  "type": "string",
+                  "description": "One listed reference path of this skill. Omit or use null to read its core instructions."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "skill"
+                  ],
+                  "description": "Select published skills explicitly."
+                }
+              },
+              "required": [
+                "target",
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Enabled skill ID from discovery or the catalog."
+                },
+                "referencePath": {
+                  "type": "string",
+                  "description": "One listed reference path of this skill. Omit or use null to read its core instructions."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "skill"
+                  ],
+                  "description": "Select published skills explicitly."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "First line, 1-based; use only with lineCount."
+                },
+                "lineCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647,
+                  "description": "Number of lines; the selected text must fit this run's model input budget."
+                }
+              },
+              "required": [
+                "target",
+                "type",
+                "startLine",
+                "lineCount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Enabled skill ID from discovery or the catalog."
+                },
+                "referencePath": {
+                  "type": "string",
+                  "description": "One listed reference path of this skill. Omit or use null to read its core instructions."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "skill"
+                  ],
+                  "description": "Select published skills explicitly."
+                },
+                "startChar": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Zero-based UTF-16 character offset; use only with charCount."
+                },
+                "charCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 110592,
+                  "description": "Maximum UTF-16 characters in the selected excerpt."
+                }
+              },
+              "required": [
+                "target",
+                "type",
+                "startChar",
+                "charCount"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false,
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "plan"
+                  ]
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Optional user-visible historical version; a historical read never changes the selected plan."
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "plan"
+                  ]
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Optional user-visible historical version; a historical read never changes the selected plan."
+                },
+                "startLine": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "First line, 1-based; use only with lineCount."
+                },
+                "lineCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647,
+                  "description": "Number of lines; the selected text must fit this run's model input budget."
+                }
+              },
+              "required": [
+                "type",
+                "startLine",
+                "lineCount"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "target": {
+                  "type": "string",
+                  "description": "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves."
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "plan"
+                  ]
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Optional user-visible historical version; a historical read never changes the selected plan."
+                },
+                "startChar": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647,
+                  "description": "Zero-based UTF-16 character offset; use only with charCount."
+                },
+                "charCount": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 110592,
+                  "description": "Maximum UTF-16 characters in the selected excerpt."
+                }
+              },
+              "required": [
+                "type",
+                "startChar",
+                "charCount"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "Id": "common.resources_search",
+    "Description": "Read-only literal or line-oriented .NET regex search. Select one target or a scope. Results contain bounded snippets and 1-based UTF-16 line/column coordinates; no language parser is required. Workspace scope searches only the selected directory (root when omitted), unless recursive=true includes descendants. Only scanComplete and sourceComplete together establish absence within the selected target, depth and filters. Continue with the returned semantic continuation and identical arguments; changed sources or lost continuation state require a fresh search. Search is not a complete source read or patch authorization.",
+    "Schema": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false,
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "target": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "literal",
+                "regex"
+              ],
+              "default": "literal"
+            },
+            "matchCase": {
+              "type": "boolean"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "continuation": {
+              "type": "object",
+              "properties": {
+                "afterTarget": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "afterLine": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "afterColumn": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "afterTarget",
+                "afterLine",
+                "afterColumn"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "target",
+            "query"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "scope": {
+              "type": "string",
+              "enum": [
+                "workspace"
+              ]
+            },
+            "query": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 500
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "literal",
+                "regex"
+              ],
+              "default": "literal"
+            },
+            "matchCase": {
+              "type": "boolean"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50
+            },
+            "continuation": {
+              "type": "object",
+              "properties": {
+                "afterTarget": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "afterLine": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "afterColumn": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "afterTarget",
+                "afterLine",
+                "afterColumn"
+              ],
+              "additionalProperties": false
+            },
+            "directory": {
+              "type": "string",
+              "maxLength": 1000
+            },
+            "recursive": {
+              "type": "boolean",
+              "default": false
+            },
+            "includeGlobs": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "description": "Workspace-relative glob: *, ?, ** and **/. No negation or character classes."
+            },
+            "excludeGlobs": {
+              "type": "array",
+              "maxItems": 16,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "description": "Workspace-relative glob: *, ?, ** and **/. No negation or character classes."
+            }
+          },
+          "required": [
+            "scope",
+            "query"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+]

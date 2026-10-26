@@ -1,5 +1,147 @@
 # Stabilization risk register
 
+## Разбор десяти фотографий: чат, протокол и достоверность — 2026-10-26
+
+Owner: Application conversation delivery; совместно Core ModelProtocol/Storage и
+Web ChatView. Срез исходников: `bde1ae8b014004edabf5988079e4cbd83e332575`, чистый
+worktree до аудита. Это новый incident review после предыдущего V8-среза, а не
+продолжение его закрытых этапов. Текущий приоритет — восстановить проверяемые
+пользовательские сценарии. [Очередь работ и приёмка](BACKLOG.md#восстановление-рабочих-сценариев-чата--2026-10-26).
+
+**Главный вывод:** общий kernel, compiler и физический ChatView уже существуют,
+но lifecycle доставки, подтверждение ввода, восстановление владельца run,
+model-facing schemas и представление результата объединены не до конца.
+Успех протокольного обмена не означает выполнения пользовательской задачи.
+Новая полная перепись kernel/store не обоснована этим аудитом; нужны вертикальные
+срезы через существующих владельцев с удалением конкретного старого пути.
+
+Evidence: [пять UI-проб](../audits/evidence/chat-incidents-2026-10-26/ui-report.json),
+[две контролируемые HTTP-траектории](../audits/evidence/chat-incidents-2026-10-26/wire-report.json),
+[фактически объявленные схемы](../audits/evidence/chat-incidents-2026-10-26/advertised-schemas.json),
+[hash проверенных исходников](../audits/evidence/chat-incidents-2026-10-26/source-hashes.json).
+UI-пробы используют production JS и синтетический preview bridge в Chrome/macOS.
+HTTP-пробы используют имеющуюся CLI-сборку, чей hash записан, и loopback scripted
+endpoint; свежая сборка HEAD не выполнялась. Проверенные пути исходников старше
+этой сборки, но это не полная проверка её происхождения. Позднейшие изменения
+SkillLoadToolHandler не упражнялись. Нет live-model или Windows/Office evidence.
+Версия установленной на фото DLL/web и полный HTTP-ответ сервера неизвестны.
+Пользователь может передавать с Windows только фото экрана. Логи, request/response,
+диагностические выгрузки и файлы не запрашивать; новые сведения показывать на экране
+для фотографии, а подробные payload исследовать на собственных воспроизведениях.
+
+### Подтверждённые причины и открытые границы
+
+| ID / приоритет | Наблюдение и механизм | Владелец / точка изменения |
+|---|---|---|
+| I26-01 / P0 | **Принятый ввод остаётся в composer.** После появления пользовательского сообщения в snapshot поле всё ещё содержит отправленный текст, Send заблокирован. `SubmitInputAsync` пишет durable input и публикует `InputAccepted`; `ReportWorkspaceProgress` пропускает только `ModelProgress`. `composer.accepted` вызывается после ответа `submitProjectChat`, который ждёт весь run. | Application input receipts → typed WebView bridge → `app-project-chats.js`/draft owner. Отдельный receipt о приёме, отдельный terminal result; не очищать более новый черновик. |
+| I26-02 / P0 | **Сохранённый running без владельца навсегда блокирует чат.** При `modelProgressUnavailable=true` UI всё равно пишет «Агент работает…» и запрещает отправку. `ProjectChat` вызывает `GetSession/ReadState`, а восстановление abandoned run находится в `PrepareResume`, используемом CLI. `RequireIdleSession` также блокирует fork/edit/delete по сохранённому running. | Existing Workspace run control + session delivery. Недоступный IPC ещё не доказывает остановку: interruption можно фиксировать только после получения lease и перечитывания exact run/cursor. |
+| I26-03 / P0 | **«Создан файл» может завершиться без записи.** В обоих response modes контролируемый ответ после единственного `resources_read` с `satisfied` и ссылкой на этот read принят: `Completed`, `Clean`, exit 0, `WriteOk=0`, `acceptance=notrequested`; `script.js` отсутствует. Finish admission проверяет terminal reference и противоречие failed/unknown, но successful read не доказывает создание. | Core finish/effect facts, existing Workspace acceptance и общий UI outcome. Это воспроизведённый разрыв между model claim и задачей, не доказанный обход file journal/read-back. |
+| I26-04 / P1 | **Workspace объявляет противоречивые схемы в json_object.** `PromptToolCatalog` вставляет сырой `ArgumentSchemaJson`: закрытый object с пустыми properties и одновременно полными anyOf-ветвями. Стандартный валидатор отвергает `resources_search {target,query}` и `resources_read {target}`, хотя runtime read принимает. Внутренний validator специально рассматривает anyOf как полные альтернативы. Для внешнего представления уже есть `ToolSchemaSupport.ForPrompt`, используемый capability catalog, но этот consumer его обходит. | Workspace prompt composition + Core schema projection. Переключить consumer на существующую нормализацию; удалить raw-schema presentation path. Не ослаблять runtime validation. |
+| I26-05 / P1 | **Непринятый текст выглядит как ответ и исчезает.** Production renderer показывает `Created script.js. Формируется…` из transient preview до admission; после rejection этот текст исчезает. Workspace extractor передаёт `message`, не результат выполнения. Во время repair предыдущий draft может оставаться до нового текста. | Protocol progress handoff + общий run renderer. Развести provisional/accepted/action-result визуально и по identity; accepted сообщения должны переживать handoff/reopen, rejected текст — оставаться только диагностикой попытки. |
+| I26-06 / P1 | **Токены потеряны в групповой сводке.** `appendAgentRunFooter` всегда выводит число сообщений. Проба с доступными `100 input + 20 output` показывает только `1 сообщений`, хотя `messageUsageText` умеет показать 120 токенов. | Shared `app-agent.js` + typed usage projection. Считать уникальные model attempts, не число сообщений/tool siblings. |
+| I26-07 / P1 | **Progress вызывает лишнюю работу всего UI.** 30 событий progress с пустыми неизменными message/reasoning вызывают 30 render дерева проектов и замену его DOM. Цепочка: observer.changed → project render → renderTree → navigation root.replaceChildren. Transcript также сериализуется целиком для signature, включая меняющийся sequence. | Web project controller / shared renderer. Токен обновляет только лист текущей попытки; каталог и сохранённая лента обновляются по своим изменениям. |
+| I26-08 / P1, стоимость не измерена | **Workspace polling читает больше, чем показывает.** Каждые 1200 ms `getProjectChat` загружает session целиком, вызывает ReadState и лишь затем строит 80-message window. Cache-hit тоже проходит `Project(...).ToObject<ChatSession>()`, rebuild derived projections и hydration. Оконная SQLite API уже существует. | PluginApplicationService/Workspace delivery + ChatStore projections. Нужны state/cursor + bounded page/delta через существующую projection; не новый store. |
+| I26-09 / P1, условный сценарий | **Таймаут submit не совпадает с жизнью run.** Bridge idle timeout `SubmitProjectChat` — 300 s; model request default — 1800 s. Receipt, compaction и tool events отбрасываются progress bridge. Долгий nonstream/model/tool wait может дать uncertain bridge timeout при ещё занятом lease. Polling другого request ID не продлевает submit. | Typed bridge delivery/run control. Durable admission должен завершать submit; дальнейшее ожидание — наблюдение run. Существующая RequestId-идемпотентность сохраняется. Пятиминутная задержка в этом аудите не проигрывалась. |
+| I26-10 / P1 | **Ввод во время run имеет разные возможности.** Office adapter реализует `IRunInputChannel`; WorkspacePorts — только `IModelProtocol/IRunStore`, coordinator вызывается без input channel. Поэтому очередь/уточнение в активном workspace не подключены к существующему kernel port, а Send блокируется. | Application active-run/input delivery + общий composer. Подключить существующий input journal/channel через владельца запуска; нельзя просто разблокировать Send и создать второго concurrent writer. |
+
+Точные code anchors для повторной проверки:
+
+- `src/RNAssistant.Application/Workspace/WorkspaceConversationService.cs`:
+  `SubmitInputAsync`, `PrepareResume`, `RequireIdleSession`, `PromptToolCatalog`,
+  `ModelProgress`, `FileHandler.ExecuteAsync`.
+- `src/RNAssistant.Core/Agent/ConversationRunCoordinator.cs`: optional `input`;
+  `AgentRunContracts.cs`: `IRunInputChannel`;
+  `src/RNAssistant.Office/Services/ConversationKernelAdapter.cs`: Office input port.
+- `src/RNAssistant.Application/PluginApplicationService.cs`: `ProjectChat`,
+  `SubmitProjectChatAsync`; `src/RNAssistant.Office/WebView/AssistantWebBridge.Plugins.cs`:
+  `ReportWorkspaceProgress`.
+- `src/RNAssistant.Core/Persistence/ConversationFinishEvidenceAdmission.cs`:
+  `Evaluate`; `src/RNAssistant.Core/Tools/ToolSchemaSupport.cs`: `ForPrompt`,
+  `ForStructuredOutput`, `ValidateValue`.
+- `web/js/app-project-chats.js`: `statusText`, `updateControls`, `render`, `submit`;
+  `web/js/app-workspace-chat.js`: `createRunObserver`, `renderMessages`;
+  `web/js/app-agent.js`: `appendAgentRunFooter`;
+  `web/js/app-navigation-tree.js`: `render`.
+- `src/RNAssistant.Core/Storage/ChatStore.cs`: `ReadProjectedSession`;
+  `ChatStore.SessionProjection.cs`: `Project`; `ChatStore.SqliteProjection.cs`:
+  `ReadSqliteSession`, `ReadMessageWindowAtPath`.
+
+### Что именно объясняют фотографии
+
+1. **Чтение/patch, фото 1, 2, 6.** В фото 1 запрошен startLine=900 при 702 строках:
+   отказ корректен и защищает от выдуманного диапазона. Это не доказательство
+   дефекта самого patch. На фото 2 `unsupported property target` получено до
+   исполнения search; без полного arguments нельзя различить лишнюю комбинацию
+   scope+target, устаревшую схему установленной сборки и I26-04. Проверять полный
+   цикл discovery → нужный excerpt → exact anchor → dispatch → read-back, включая
+   CRLF/Unicode, repeated anchors, stale source и реальные VBA переменные.
+2. **json_schema.** Исторический root-anyOf уже устранён: текущий builder создаёт
+   закрытый object `{response: anyOf(...)}`. Проба подтверждает форму текущего
+   запроса, но scripted endpoint не реализует provider schema admission. Для локального воспроизведения нужны
+   status/body и schema выбранного каталога; на Windows показывать читаемую
+   ошибку API и сервер/model для фотографии, не запрашивать перенос payload.
+   Не объявлять strict исправленным на пользовательском endpoint и не скрывать
+   malformed schema автоматическим fallback. I26-04 относится к json_object.
+3. **Ошибки выбора tools.** Есть подтверждённая неоднозначная внешняя схема,
+   различающиеся Office/workspace selectors и незаквалифицированное качество
+   реальной модели. Старый баг исчезнувших каталогов find уже исправлялся отдельно;
+   он не объясняет автоматически каждый новый search failure.
+4. **Токены.** В малой HTTP-пробе повторов целых message bodies нет, прочитанный
+   source появляется один раз. Это не исключает перекрытия slices/skills/media в
+   длинном диалоге. Initial object prompt: 40 724 текстовых символа; strict prompt:
+   12 515 плюс отдельная schema. Это символы, не provider tokens и не сравнение цены.
+   По умолчанию до 10 format responses на шаг; повторная отправка frozen context
+   умножает общий расход, не доказывая дубликат внутри одного запроса. I26-06 скрывает
+   полезный индикатор. Проверка actual HTTP == CAS из предыдущего аудита не доказывает
+   семантическую оптимальность состава контекста.
+5. **Разный внешний вид, фото 1–5, 9–10.** Общий DOM не устраняет отдельные
+   `statusText`, pending submit, footer и controls. I26-01/02/05/06 объясняют
+   наблюдаемую разницу лучше, чем новый CSS theme или повторное перемещение DOM.
+6. **Тормоза.** I26-07 воспроизведён, I26-08 статически подтверждён. Доля этих путей
+   в задержке пользовательского ПК пока не измерена. Отдельно v8 требует message
+   последним: при длинном tool argument модель может генерировать код, пока visible
+   message ещё пуст. Нужны стадии local preparation / HTTP wait / generation /
+   tool execution; «Формируется…» не различает эти состояния.
+7. **Ввод и черновик, фото 1–4.** I26-01/02/09/10; нельзя лечить удалением draft,
+   сбросом busy по таймеру или повторной отправкой с новым RequestId.
+8. **«Создано», но файла нет, фото 7.** I26-03 и I26-05 — два разных механизма.
+   На фото ещё видна повторная попытка, поэтому окончательный accepted finish
+   не установлен. FileHandler содержит exact read-back; фактический missing effect
+   после подтверждённого write требует локального воспроизведения с call journal и before/after;
+   для пользовательского Windows-сценария доступно только экранное evidence.
+9. **Исчезновение ответов и fork.** Исчезновение provisional воспроизведено;
+   потеря accepted durable сообщения не доказана. Fork может блокироваться I26-02
+   или ожиданием submit, но отдельная ошибка fork требует exact message/revision и
+   bridge response. Текущий typed fork существует; переписывать его вслепую нельзя.
+10. **Переходы между чатами.** Проверки selection serial/revision уже есть. Основные
+    подтверждённые проблемы — стоимость snapshot и смешение saved running с живым
+    процессом. Нужен переход loading → snapshot → live/terminal/recovery с одним
+    ключом выбранной session; delayed ответ старого выбора не меняет новый чат.
+11. **Почему прошлые зелёные проверки не закрыли проблему.** Scripted LLM выдаёт
+    заранее корректные вызовы; preview вручную конструирует snapshots; unit tests
+    проверяют владельцев раздельно. Они не проверяют lost receipt через реальный
+    producer/bridge, качество выбора tools реальной моделью или цель «файл создан».
+    Предыдущие отчёты прямо оставляли эти границы открытыми. Их нельзя превращать в
+    общий статус «система работает» или чинить только ожидания fixtures.
+
+### Повтор evidence без продуктовой сборки
+
+`probe_wire.py` требует существующую CLI DLL и `jsonschema` (тот же dependency,
+что у `tests/RNAssistant.ProtocolTests/requirements.txt`); работает только с
+временным workspace и loopback HTTP. `probe_ui.cjs` требует имеющийся Playwright
+и Chrome. Оба сохраняют результат в переданную отдельную папку и являются
+диагностикой известного поведения, не новой зелёной release suite:
+
+```sh
+python3 -B docs/audits/evidence/chat-incidents-2026-10-26/probe_wire.py /tmp/rna-incident-wire-repeat
+node docs/audits/evidence/chat-incidents-2026-10-26/probe_ui.cjs /tmp/rna-incident-ui-repeat
+```
+
+Для этой машины использовались существующие jsonschema/Playwright и
+`BROWSER_EXECUTABLE=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`;
+никакой установки зависимостей, product build, полного Harness, реального API
+или Office validation не выполнялось. Исходные фотографии в repo не копировались.
+
 ## V8 architecture stabilization evidence — 2026-10-26
 
 Core/Application: duplicate skill budget admission and append recovery paths removed;

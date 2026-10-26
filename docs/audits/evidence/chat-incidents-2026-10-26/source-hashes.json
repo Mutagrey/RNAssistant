@@ -1,0 +1,12 @@
+{
+  "src/RNAssistant.Application/Workspace/WorkspaceConversationService.cs": "057195cd28462fe2d1252e30a7d477eabb8249590d6c79ab55517e5cac240531",
+  "src/RNAssistant.Application/PluginApplicationService.cs": "bf904c674bdac9163827cdc1c321f33985566b65f07b3b60726ad2a963f77d26",
+  "src/RNAssistant.Office/WebView/AssistantWebBridge.Plugins.cs": "5424e40c8600311dbc08469136b9fff6598de69890ab271e11a2f3cc1ccc8a5e",
+  "src/RNAssistant.Core/Tools/ToolSchemaSupport.cs": "fb7bc94387faa295a0c5313da9e8baf1c1efc186ce03bc5da89eb1c14673ede0",
+  "src/RNAssistant.Core/Services/ResourceModelSearchSchema.cs": "2188592e0b989e072c58d042f8508c22189588790d75a0f1059c390a807a70e0",
+  "src/RNAssistant.Core/Persistence/ConversationFinishEvidenceAdmission.cs": "2b3069bcf5dd790220edc891b6c216c10330602c4eb8e5ac78a554b1c866626d",
+  "web/js/app-project-chats.js": "8a9ad47473e35b35491d5a8eefa3f204f091230d1deb9fa252140298913a1b81",
+  "web/js/app-workspace-chat.js": "b490e4e0f5bdcf203ed387869c92a297226cdbd30317897b56dfddcf664d6499",
+  "web/js/app-agent.js": "e122b338e21a3d91945fed6bd55de00c3a483cf77ac83268647713da891da0f6",
+  "web/js/app-navigation-tree.js": "c748d6d34b21513266c83d7a5bf1927f3406f3d84656cddb2f5c982426e565d2"
+}

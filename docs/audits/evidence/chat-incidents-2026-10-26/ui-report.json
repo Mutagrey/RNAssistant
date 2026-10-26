@@ -1,0 +1,38 @@
+{
+  "head": "bde1ae8b014004edabf5988079e4cbd83e332575",
+  "qualification": "Production Web JS with synthetic preview bridge and snapshots, Chrome/macOS. No Office qualification.",
+  "observations": [
+    {
+      "case": "message-visible-before-submit-reply",
+      "input": "AUDIT: accepted input",
+      "sendDisabled": true,
+      "status": "running",
+      "messageInSnapshot": true
+    },
+    {
+      "case": "saved-running-owner-unavailable",
+      "notice": "Агент работает…",
+      "sendDisabled": true,
+      "ownerUnavailable": true,
+      "status": "running"
+    },
+    {
+      "case": "grouped-run-usage",
+      "footer": "1 сообщений",
+      "availableUsage": "120 токенов · вход 100 · ответ 20"
+    },
+    {
+      "case": "unaccepted-model-text",
+      "before": "Created script.js.Формируется…",
+      "after": "С чего начнём?Опишите задачу или задайте вопрос.",
+      "wasVisible": true,
+      "remainsAfterRejection": false
+    },
+    {
+      "case": "empty-model-progress-render-work",
+      "progressEvents": 30,
+      "treeRenders": 30,
+      "treeNodeReplaced": true
+    }
+  ]
+}
