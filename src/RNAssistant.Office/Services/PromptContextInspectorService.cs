@@ -113,60 +113,65 @@ namespace RNAssistant.Office.Services
             var toolPack = CallableToolPack.Create(
                 mode,
                 _adapter == null ? string.Empty : _adapter.HostName,
-                null,
+                previewSession.LastRun?.RunId,
                 runnableCatalog,
                 _eventStore == null ? null : new ToolPackAdmissionJournal(_eventStore, session).ReadAccepted());
-            var runnableTools = toolPack.Tools;
+            var skillSnapshot = new SkillCatalogSnapshot(enabledSkills, publishedSkills?.Generation);
+            var skillSurface = SkillTaskService.Compile(previewSession, skillSnapshot,
+                ToolPackSnapshotFactory.Capture(mode, _adapter?.HostName, runnableCatalog),
+                runnableCatalog, toolPack.Tools, null, settings);
+            var runnableTools = skillSurface.Tools;
             var evidence = previewSession.Messages.SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Concat(previewSession.Messages.SelectMany(message => message.ContextClaims ?? new List<StructuredContextClaim>()).SelectMany(claim => claim.Evidence))
                 .Concat((context?.Notes ?? new List<ContextNote>()).Where(note => note.Evidence != null).Select(note => note.Evidence));
             var scopes = evidence.Select(item => item.ScopeId).Concat(new[] { new ResourceAuthorityScopeId("conversation", session.Id), CatalogPublicationService.ScopeId }).Distinct().ToList();
             if (!string.IsNullOrEmpty(session.DocumentAuthorityId)) scopes.Add(ResourceAuthorityScopeId.Document(new DocumentAuthorityId(session.DocumentAuthorityId)));
             var resources = _authority.CaptureMany(scopes);
-            _frozen = new ModelAuthoritySnapshot(resources, toolPack.Revision,
-                new SkillCatalogSnapshot(enabledSkills, publishedSkills?.Generation), ResourceStateProvider.CaptureSchemas(resources), session.Revision);
-            var capabilityCatalog = toolPack.CapabilityContext(enabledSkills);
-            var options = ModelProtocolWire.CreateRequestOptions(settings.AgentResponseMode, runnableTools,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)));
+            _frozen = new ModelAuthoritySnapshot(resources, skillSurface.Arsenal.ToolFingerprint,
+                skillSnapshot, ResourceStateProvider.CaptureSchemas(resources), session.Revision);
+            var capabilityCatalog = toolPack.CapabilityContext(enabledSkills, runnableTools);
+            var preparation = new ModelRequestPreparation(settings, runnableTools,
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)),
+                ConversationPromptComposer.ProjectJsonSchemaMessages);
+            var options = preparation.Options;
             options.ReasoningEnabled = previewSession.ReasoningEnabled;
             options.TraceSession = previewSession;
             options.TracePurpose = ChatModes.Normalize(mode);
             var repairReserveTokens = ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings);
             var continuationReserveTokens = ModelContextBudget.ContinuationReserveTokens(settings);
             var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
-            var messageBudget = Math.Max(1, inputLimit -
-                EstimateRequestOptionsTokens(options) -
-                repairReserveTokens -
-                continuationReserveTokens);
+            var required = new ConversationPromptComposer().BuildRequiredMessages(mode, draftText,
+                _adapter, runnableTools, enabledSkills, null, settings, previewSession, null, true, 0,
+                capabilityCatalog);
+            if (toolPack.RestorationStateMessage != null) required.Add(toolPack.RestorationStateMessage);
+            var messageBudget = preparation.MessageBudget(required);
 
             var relaxed = false;
             List<ChatMessage> messages;
             try
             {
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, messageBudget, capabilityCatalog);
+                    runnableTools, enabledSkills, attachments, messageBudget, capabilityCatalog,
+                    skillSurface, runnableCatalog, toolPack.RestorationStateMessage);
             }
             catch (PromptBudgetExceededException)
             {
                 relaxed = true;
                 messages = BuildMessages(mode, draftText, previewSession, context, settings,
-                    runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, capabilityCatalog);
+                    runnableTools, enabledSkills, attachments, RelaxedHistoryBudgetTokens, capabilityCatalog,
+                    skillSurface, runnableCatalog, toolPack.RestorationStateMessage);
             }
 
-            var requestTokens = ModelContextBudget.EstimateRequestTokens(messages, options, settings);
-            var admissionTokens = ModelContextBudget.EstimateAdmittedRequestTokens(
-                messages,
-                options,
-                settings,
-                repairReserveTokens,
-                continuationReserveTokens);
+            var projectedMessages = preparation.ProjectMessages(messages).ToList();
+            var requestTokens = ModelContextBudget.EstimateRequestTokens(projectedMessages, options, settings);
+            var admissionTokens = preparation.EstimateAdmittedTokens(messages);
             var contextWindow = Math.Max(4096, ModelContextBudget.ContextWindowTokens(settings));
             var safety = ModelContextBudget.SafetyReserveTokens(contextWindow);
             var reservedOutput = Math.Max(1, contextWindow - safety - inputLimit);
 
             var sections = BuildSections(
                 mode,
-                messages,
+                projectedMessages,
                 options,
                 session,
                 previewSession,
@@ -208,7 +213,7 @@ namespace RNAssistant.Office.Services
                 SafetyTokens = safety,
                 RemainingInputTokens = Math.Max(0, inputLimit - admissionTokens),
                 Percent = inputLimit <= 0 ? 0 : Math.Min(100, (int)Math.Round(admissionTokens * 100.0 / inputLimit)),
-                MessageCount = messages.Count,
+                MessageCount = projectedMessages.Count,
                 OverBudget = relaxed || admissionTokens > inputLimit,
                 Estimated = true,
                 EstimateMultiplier = estimateMultiplier,
@@ -234,7 +239,7 @@ namespace RNAssistant.Office.Services
             if (includeRaw)
             {
                 bool truncated;
-                response.RawRequestJson = BuildRawRequest(mode, settings.Model, messages, options, out truncated, fullRaw);
+                response.RawRequestJson = BuildRawRequest(mode, settings.Model, projectedMessages, options, out truncated, fullRaw);
                 response.RawTruncated = truncated;
             }
 
@@ -251,7 +256,8 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<SkillDefinition> skills,
             IReadOnlyList<ChatAttachment> attachments,
             int historyBudgetTokens,
-            JObject capabilityCatalog)
+            JObject capabilityCatalog, SkillRequestSurface skillSurface,
+            IReadOnlyList<ToolCatalogEntry> runnableCatalog, ChatMessage packState)
         {
             return new ModelContextCompiler(_payloads, projection: ModelToolResultProjection.Instance).BuildPreview(
                 mode,
@@ -265,7 +271,8 @@ namespace RNAssistant.Office.Services
                 attachments,
                 false,
                 historyBudgetTokens,
-                capabilityCatalog, _frozen, receipt => _receipt = receipt);
+                capabilityCatalog, _frozen, receipt => _receipt = receipt,
+                skillSurface, runnableCatalog, packState);
         }
 
         private List<PromptContextSectionDto> BuildSections(
@@ -337,9 +344,15 @@ namespace RNAssistant.Office.Services
             var resourceContext = history.Where(item => (item.Content ?? string.Empty).StartsWith("USER_CONTEXT", StringComparison.Ordinal) ||
                 (item.Content ?? string.Empty).StartsWith("USER_INSTRUCTION:", StringComparison.Ordinal) ||
                 (item.Content ?? string.Empty).StartsWith("CONTEXT_UNAVAILABLE:", StringComparison.Ordinal)).ToList();
-            var protocolHistory = history.Except(resourceContext).Where(IsProtocolMessage).ToList();
-            var regularHistory = history.Except(resourceContext).Where(item => !IsProtocolMessage(item)).ToList();
+            var selectedSkillMessages = history.Where(item =>
+                string.Equals(item.Role, settings.SystemPromptRole, StringComparison.OrdinalIgnoreCase) &&
+                ((item.Content ?? string.Empty).StartsWith("SELECTED_SKILL ", StringComparison.Ordinal) ||
+                 (item.Content ?? string.Empty).StartsWith("SKILL_AVAILABILITY ", StringComparison.Ordinal))).ToList();
+            var remainingHistory = history.Except(resourceContext).Except(selectedSkillMessages).ToList();
+            var protocolHistory = remainingHistory.Where(IsProtocolMessage).ToList();
+            var regularHistory = remainingHistory.Where(item => !IsProtocolMessage(item)).ToList();
             AddMessageSection(sections, "document_context", "Контекст документа", "Типизированные инструкции и evidence/markers из frozen compiler", resourceContext);
+            AddMessageSection(sections, "selected_skills", "Выбранные skills", "Инструкции и доступность выбранных skill-пакетов", selectedSkillMessages);
             AddMessageSection(sections, "history", "История чата", "Активное окно и checkpoint", regularHistory);
             AddMessageSection(sections, "tool_history", "Tool calls и результаты", "Только записи, повторно отправляемые модели", protocolHistory);
 

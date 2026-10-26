@@ -10,20 +10,20 @@ exact-build gate.
 
 ## Office next-request preview diverges from active preparation — 2026-10-26
 
-Open; owner: Office PromptContextInspectorService / ModelContextPreview.
-The context audit found a concrete preparation difference in source: preview
-selects CallableToolPack.Tools and directly calls the compiler without
-SkillTaskService.Compile/skillSurface, while ConversationModelSession includes
-selected skill instructions and dependent tools. Preview also does not apply the
-shared strict-message projection before estimating/serializing its raw request.
-Therefore its catalogue, schemas and size are not an exact forecast even with
-unchanged host state; the direction of the total error is not established.
+Fixed for the known host-neutral preparation differences; owner: Office
+PromptContextInspectorService / ModelContextPreview. Preview now uses
+SkillTaskService.Compile for selected instructions and dependent tools, and the
+same ModelRequestPreparation for strict-message projection, budget and estimate.
+It also includes the tool-pack restoration notice. Raw preview reflects projected
+messages, and selected instructions appear in a dedicated section. A
+selected-skill/strict Harness fixture verifies arsenal, schema, instruction,
+deduplicated prompt parameters and estimate; six context-inspector checks pass.
 
-Saved-request diagnostics use final LlmMessageBuilder output and are independent
-of this gap. Next: a paired selected-skill/strict preview versus active-request
-fixture, then reuse the existing preparation owners without a second compiler.
-This audit changes saved attribution and presentation, not preview composition.
-Real-model and Windows/Office/WebView2 parity remain unverified.
+Saved-request diagnostics still use final LlmMessageBuilder output. Preview is
+an estimate of a future request: no end-to-end paired active-request fixture yet
+proves every history/role/authority case or changing host state. Real-model and
+Windows/Office/WebView2 parity remain unverified; do not present this as exact
+live-request qualification.
 
 ## Workspace directory discovery loses directories — 2026-10-26
 

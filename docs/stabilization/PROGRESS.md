@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Office next-request preview uses active skill and wire preparation — 2026-10-26
+
+Owner: Office PromptContextInspectorService / ModelContextPreview. The preview now
+resolves selected skills and their tool dependencies through SkillTaskService, uses
+ModelRequestPreparation for the strict message projection, budget and estimate,
+and includes tool-pack restoration state. Raw preview and section totals describe
+the projected request; selected instructions have their own section. Six focused
+context-inspector Harness checks pass, including selected-skill/strict coverage.
+The [risk entry](RISK_REGISTER.md#office-next-request-preview-diverges-from-active-preparation--2026-10-26)
+records remaining active-request parity and Windows/Office evidence. This is the
+source status for later Wiki work; the Wiki itself is a separate stage.
+
 ## Resource Context Explorer export handoff — 2026-10-26
 
 Owner: Web Model Context Inspector and existing Trajectory diagnostics. Inspector

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -126,6 +127,52 @@ namespace RNAssistant.Harness
                 "local artifact bytes are separate from prompt tokens");
             AssertTrue(result.RawRequestJson == null, "raw request is not built by default");
             AssertTrue(result.ResourceContextReceipt != null, "inspector exposes the same frozen compiler receipt");
+            });
+            PromptContextInspectorMatchesSelectedSkillStrictRequest();
+        }
+
+        private static void PromptContextInspectorMatchesSelectedSkillStrictRequest()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var session = PackageSession();
+                var dependency = OfficeToolCatalog.ForHost(adapter.HostName)
+                    .Single(tool => tool.Id == "word.add_comment");
+                var catalog = new[] { dependency };
+                var skill = PackageSkill("fixture.selected", dependency.Id);
+                var publication = new SkillCatalogSnapshot(new[] { skill });
+                var runnableCatalog = ConversationRunPolicy.ForSession(session)
+                    .SelectTools(ConversationRunService.PrepareToolsForRun(catalog));
+                var pack = ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, runnableCatalog);
+                SkillTaskService.Select(session, skill.Id, publication, pack, new AppSettings(), "load-skill");
+                var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
+                    ContextWindowOverrideTokens = 32768 };
+
+                var result = new PromptContextInspectorService(adapter, paths).Inspect(session,
+                    NewContext(adapter), settings, catalog, new[] { skill }, new ChatAttachment[0],
+                    "Use the selected procedure", true, publication, true);
+                var raw = Newtonsoft.Json.Linq.JObject.Parse(result.RawRequestJson);
+                var wireMessages = raw["messages"].Select(item => new ChatMessage
+                {
+                    Role = (string)item["role"], Content = (string)item["content"]
+                }).ToArray();
+                var options = ModelProtocolWire.CreateRequestOptions(settings.AgentResponseMode,
+                    runnableCatalog,
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)));
+                AssertTrue(result.ResourceContextReceipt.Arsenal.Tools.Any(item => item.Id == dependency.Id),
+                    "selected skill dependency enters the compiled request arsenal: " +
+                    Newtonsoft.Json.JsonConvert.SerializeObject(result.ResourceContextReceipt.Arsenal.Selected));
+                AssertTrue(result.Sections.Any(section => section.Id == "selected_skills" && section.Included),
+                    "selected skill instruction is attributed separately from history");
+                AssertTrue(wireMessages.Any(item => (item.Content ?? "").Contains("SELECTED_SKILL " + skill.Id)),
+                    "selected skill instructions enter the previewed request");
+                AssertTrue(!wireMessages[0].Content.Contains("\"parameters\""),
+                    "strict preview removes duplicated tool parameters from the prompt");
+                AssertContains((string)raw["requestOptions"]["responseSchemaJson"], dependency.Id,
+                    "strict response schema exposes the selected dependency");
+                AssertEqual(ModelContextBudget.EstimateRequestTokens(wireMessages, options, settings),
+                    result.UsedTokens, "preview estimate uses the same projected wire messages as raw preview");
             });
         }
 

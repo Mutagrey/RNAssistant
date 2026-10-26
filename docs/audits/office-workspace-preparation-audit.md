@@ -41,11 +41,17 @@ Web: model-context, model-context-layout и workspace-inspector; Chromium,
 точный scope и повторное использование payload. Полный Harness не запускался.
 
 Отдельно найдено [расхождение Office-предпросмотра](../stabilization/RISK_REGISTER.md#office-next-request-preview-diverges-from-active-preparation--2026-10-26):
-он не проходит тот же selected-skill surface и strict projection. Это открытый
-риск оценки следующего запроса; сохранённый фактический запрос от него не зависит.
+на момент этого аудита он не проходил selected-skill surface и strict projection.
+Следующий host-neutral срез устранил оба расхождения через общие owners и учёл
+tool-pack restoration state; [текущий статус](../stabilization/PROGRESS.md#office-next-request-preview-uses-active-skill-and-wire-preparation--2026-10-26)
+важнее этой исходной находки. Сохранённый фактический запрос от предпросмотра не зависит.
 Полная parity исторических role projections, реальные модели и Windows/Office/
 WebView2 не квалифицированы. Потеря данных или двойная отправка в выбранных
 проверках не воспроизведены.
+
+Для отдельного Wiki-этапа брать текущие контракты из [карты документации](../README.md),
+оперативный статус из PROGRESS и открытое evidence из RISK_REGISTER; таблица
+исходного аудита ниже остаётся историческим срезом, а не текущей спецификацией.
 
 Ниже сохранён исходный статический срез `f1d86260`; его «следующий cutover» исторический.
 
