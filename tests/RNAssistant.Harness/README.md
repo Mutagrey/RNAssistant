@@ -2139,3 +2139,17 @@ at narrow width. Pair with Markdown raw-HTML/JSON tests, stream-render-cost and
 vendor gate. Filter `skill packages: built-ins` verifies the shared instruction-only
 visualization skill in Office/workspace. Native WebView2 navigation and frame-name
 binding require a separate Windows check; these browser tests do not qualify it.
+
+### V8 architecture stabilization (2026-10-26)
+
+Focused filters: `kernel:`, `kernel replay:`, `model refs:`, `skill packages:`,
+`model request:`, `model context: saved request composition`,
+`storage: own append`, `storage: partial append`, `storage: metadata conflict`,
+`model protocol: fallback`, `model protocol: invalid schema`.
+The append fixtures inject before-write/after-record/after-flush failures; they do
+not qualify power-loss or Office COM behavior. Inspection fixtures retain target
+and completion-time facts across restoration and reject unrelated/stale/partial
+or immutable evidence without allowing unknown replay. Saved request composition
+opens exact bytes through a new store/Inspector. Actual HTTP/CAS byte equality and
+frozen repair are covered by `tests/cli/tool_result_projection_smoke.py`.
+Commands/results and scope: [V8 evidence](../../docs/audits/evidence/v8-architecture-2026-10-26/README.md).

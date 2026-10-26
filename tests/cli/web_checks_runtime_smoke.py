@@ -2,6 +2,7 @@
 
 This checks orchestration/guards, not real-model reasoning quality.
 """
+from conversation_transport import conversation_content
 import json
 import os
 import shutil
@@ -23,7 +24,7 @@ def run_case(root, ending):
     requests = []
 
     def call(name, arguments):
-        return {"message": "Run the accepted counter checks.", "action": "tool",
+        return {"message": "Run the accepted counter checks.", "action": "execute", "reason": "Perform the checked step.",
                 "tool_calls": [{"name": name, "arguments": arguments}]}
 
     responses = [
@@ -43,7 +44,7 @@ def run_case(root, ending):
             responses.append(call("web.verify", {"entryPath": "index.html"}))
     if ending == "late_edit":
         responses.append("invalid JSON")
-    done = {"message": "Verified repair.", "action": "done", "tool_calls": []}
+    done = {"message": "Verified repair.", "finish_from_request": True}
     responses.append(done)
     first_done = len(responses) - 1
     if ending == "late_edit":
@@ -79,7 +80,7 @@ def run_case(root, ending):
                 if index == 6 and ending == "late_edit":
                     script = workspace / "app.js"
                     script.write_text(script.read_text().replace("count += 1", "count += 0"))
-                content = responses[index] if isinstance(responses[index], str) else json.dumps(responses[index])
+                content = conversation_content(request, responses[index])
             body = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -177,7 +178,7 @@ def run_recovery_guards(root):
         shutil.copytree(REPO / "tests/cli/fixtures/counter-repair", scenario.workspace, dirs_exist_ok=True)
         original = (scenario.workspace / "app.js").read_text()
         def tool(name, **arguments):
-            return {"message": "Exercise exact recovery.", "action": "tool",
+            return {"message": "Exercise exact recovery.", "action": "execute", "reason": "Perform the checked step.",
                     "tool_calls": [{"name": name, "arguments": arguments}]}
         verify = tool("web.verify", entryPath="index.html")
         scenario.responses.extend([
@@ -187,7 +188,7 @@ def run_recovery_guards(root):
             tool("files.replace", relativePath="app.js", text=original), verify,
             tool("files.patch", relativePath="app.js", oldText="count += increment", newText="count += 1"),
             tool("common.resources_read", target="app.js"), verify,
-            {"message": "Verified repair.", "action": "done", "tool_calls": []},
+            {"message": "Verified repair.", "finish_from_request": True},
         ])
         output = scenario.cli("run", "--message", "Repair the counter and verify its checked snapshot.",
                               "--auto-confirm", "on", "--web-checks", str(REPO / "tests/cli/counter_checks.json"),

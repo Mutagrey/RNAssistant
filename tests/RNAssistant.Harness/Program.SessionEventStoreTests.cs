@@ -69,7 +69,7 @@ namespace RNAssistant.Harness
                         "Report the observed draft outcome.", outcome == "ok" ? "Draft created." :
                             outcome == "error" ? "Draft creation failed." : "The draft cannot be inspected with available tools.",
                         results: new[] { new ConversationResultClaim("Draft creation outcome: " + outcome + ".",
-                            new[] { write.ToolCallId }, assessment) });
+                            new[] { write.ExecutionReference.Alias }, assessment) });
                     return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });
                 ChatTurnResult result;

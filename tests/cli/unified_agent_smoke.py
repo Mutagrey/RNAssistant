@@ -1,4 +1,5 @@
 """Unified intent/permission contract through production CLI, controlled HTTP only."""
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 import subprocess
@@ -20,9 +21,11 @@ def check(root):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             try:
-                requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if reply_to_title(self, request): return
+                requests.append(request)
                 assert responses, "Unexpected extra model request"
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(responses.popleft())}}]}).encode()
+                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(requests[-1], responses.popleft())}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -60,7 +63,7 @@ def check(root):
         assert "common.plan_doc_save" in denied_tools
         responses.append(DONE)
         direct = run()
-        assert len(requests) == 1 and direct["reason"] == "model_done", direct
+        assert len(requests) == 1 and direct["reason"] == "model_finish", direct
         print("PASS unified CLI: one request, no tools")
 
         responses.extend([call("common.resources_read", target="source.txt"), DONE])
@@ -74,7 +77,7 @@ def check(root):
         assert len(responses) == 1, "approval wait must stop model generation"
         inspected = cli("inspect", "--session", waiting["SessionId"])
         approved = cli("approve", "--session", waiting["SessionId"], "--pending", pending_id(waiting))
-        assert (workspace / "new.txt").read_text() == "approved" and approved["reason"] == "model_done", approved
+        assert (workspace / "new.txt").read_text() == "approved" and approved["reason"] == "model_finish", approved
         print("PASS unified CLI: create waits, restart inspection, explicit approval")
 
         responses.extend([call("files.create", relativePath="automatic.txt", text="first"),
@@ -128,7 +131,7 @@ def check(root):
 
         responses.extend([call("common.plan_doc_save", title="Plan", markdown="# Plan\n\nRead, then implement.", status="ready"), DONE])
         plan = run("--mode", "plan", "--mutation-policy", "deny", "--auto-confirm", "on")
-        assert plan["reason"] == "model_done", plan
+        assert plan["reason"] == "model_finish", plan
         responses.append(DONE)
         run("--session", plan["SessionId"])
         assert cli("inspect", "--session", plan["SessionId"])["Mode"] == "plan"

@@ -1,4 +1,5 @@
 """Scripted endpoint: one batch narrative, bounded source and verified patch delivery."""
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 import subprocess
@@ -12,7 +13,8 @@ CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 
 
 def response(message, *calls):
-    return {"message": message, "action": "tool" if calls else "done", "tool_calls": list(calls)}
+    return ({"action": "execute", "reason": "Perform the checked step.", "tool_calls": list(calls), "message": message}
+            if calls else {"finish_from_request": True, "message": message})
 
 
 def call(name, **arguments):
@@ -42,9 +44,11 @@ def main():
 
         class Handler(BaseHTTPRequestHandler):
             def do_POST(self):
-                requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if reply_to_title(self, request): return
+                requests.append(request)
                 reply = replies[len(requests) - 1] if len(requests) <= len(replies) else response("Unexpected extra step.")
-                payload = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(reply)}}]}).encode()
+                payload = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(requests[-1], reply)}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(payload)))

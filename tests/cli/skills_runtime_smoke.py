@@ -1,4 +1,5 @@
 """Published skills through the production CLI/compiler; scripted contract evidence."""
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 import subprocess
@@ -59,14 +60,16 @@ def run_case(root):
         def do_POST(self):
             try:
                 assert self.path == "/v1/chat/completions"
-                requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if reply_to_title(self, request): return
+                requests.append(request)
                 index = len(requests) - 1
                 if index == 0:
                     draft.write_text(draft.read_text().replace("PUBLISHED_CORE_MARKER", "UNPUBLISHED_CORE_DRIFT"))
                     reference.write_text("UNPUBLISHED_REFERENCE_DRIFT")
                 assert index < len(responses), "Unexpected extra agent loop"
                 body = json.dumps({"choices": [{"message": {"role": "assistant",
-                    "content": json.dumps(responses[index])}}]}).encode()
+                    "content": conversation_content(requests[-1], responses[index])}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -88,7 +91,7 @@ def run_case(root):
     def run(*extra, iterations="16"):
         return subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
             "--message", "Use installed instructions to create, repair and read app.txt.",
-            "--tool-result-role", "tool", "--context-tokens", "32768", "--max-iterations", iterations,
+            "--auto-confirm", "on", "--tool-result-role", "tool", "--context-tokens", "32768", "--max-iterations", iterations,
             "--max-tool-steps", "16", "--min-reads", "1", "--jsonl", *extra],
             cwd=REPO, env=env, text=True, capture_output=True, timeout=60, check=False)
 
@@ -99,7 +102,7 @@ def run_case(root):
         result = run("--expect-files", "app.txt", "--min-writes", "2")
         assert result.returncode == 0, (result.stdout, result.stderr, server_errors)
         final = json.loads(result.stdout.splitlines()[-1])["data"]
-        assert final["reason"] == "model_done" and final["completeFileReads"] == 1, final
+        assert final["reason"] == "model_finish" and final["completeFileReads"] == 1, final
         assert len(requests) == 11, len(requests)
         assert (workspace / "app.txt").read_text() == "fixed"
         assert (workspace / "common.example").read_text() == "ORIGINAL_FILE_BYTES"
@@ -117,7 +120,8 @@ def run_case(root):
         for index, request in enumerate(requests):
             assert read_progress(request)["currentCompleteFileReads"] == (1 if index in (8, 10) else 0), index
         # Inspect the actual native call/result pair, not only durable records.
-        messages = requests[3]["messages"]
+        messages = [message for message in requests[3]["messages"]
+                    if message.get("role") != "developer"]
         assert messages[-1]["role"] == "tool", messages[-1]
         assert messages[-1]["tool_call_id"] == messages[-2]["tool_calls"][0]["id"]
         assert json.loads(messages[-2]["tool_calls"][0]["function"]["arguments"])["type"] == "skill"
@@ -132,15 +136,17 @@ def run_case(root):
         assert "UNPUBLISHED_CORE_DRIFT" not in json.dumps(requests)
         assert "UNPUBLISHED_REFERENCE_DRIFT" not in json.dumps(requests)
         for read_only in (False, True):
-            responses.append(DONE)
+            responses.extend([call("common.skills_load", id="workspace.files" if read_only else "workspace.web_verify_repair"), DONE])
             env["RNA_BROWSER_EXECUTABLE"] = "/missing/chromium"
-            hidden = run(*(["--read-only"] if read_only else []), iterations="1")
+            hidden = run(*(["--read-only"] if read_only else []), iterations="2")
             assert hidden.returncode == 5, (hidden.stdout, hidden.stderr)
             prompt = requests[-1]["messages"][0]["content"]
             metadata, _ = json.JSONDecoder().raw_decode(prompt.split("Available skill metadata: ", 1)[1])
             ids = {item["target"] for item in metadata["items"]}
-            assert "workspace.web_verify_repair" not in ids, ids
-            assert ("workspace.files" in ids) is not read_only, ids
+            # Discovery retains unavailable metadata; admission owns capability refusal.
+            assert "workspace.web_verify_repair" in ids and "workspace.files" in ids, ids
+            assert "Required tool unavailable" in text_at(len(requests) - 1)
+            assert "SELECTED_SKILL workspace." not in text_at(len(requests) - 1)
         print("PASS CLI skills: shared publication, metadata/body separation, host/enabled/shadow filtering, "
               "exact reference reads, native pair, no file authority/count, repair, process continuation and capability filtering")
     finally:

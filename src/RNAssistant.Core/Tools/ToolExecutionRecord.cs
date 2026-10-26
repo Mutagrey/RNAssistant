@@ -65,13 +65,15 @@ namespace RNAssistant.Core.Tools
         public ToolRecoveryContract Recovery { get; private set; }
         public string ResultFingerprint { get; private set; }
         public bool IndependentLocalRead { get; private set; }
+        public DateTime? CompletedUtc { get; private set; }
         public string AdmissionRevision { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
-            string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null)
+            string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null, DateTime? completedUtc = null)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
+            CompletedUtc = completedUtc;
             IndependentLocalRead = independentLocalRead;
             AdmissionRevision = admissionRevision;
         }
@@ -87,7 +89,7 @@ namespace RNAssistant.Core.Tools
             }
             return new ToolExecutionProgress(record.Outcome, record.Recovery, fingerprint,
                 record.Context.Policy.IndependentLocalRead,
-                record.Context.Policy.AdmissionRevision ?? record.Context.Policy.Revision);
+                record.Context.Policy.AdmissionRevision ?? record.Context.Policy.Revision, record.CompletedUtc);
         }
     }
 

@@ -53,10 +53,10 @@ namespace RNAssistant.Core.Tools
                     return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Skill removed for the next request: " + id,
                         new JObject { ["id"] = id, ["status"] = "removed_for_next_request" }.ToString(Formatting.None))));
                 }
+                if (_admit == null) throw new InvalidOperationException("Complete next-request admission is required before selecting a skill.");
                 var selected = SkillTaskService.Select(_session, (string)context.Arguments["id"], _skills(), _tools(),
-                    _settings, context.Execution.Call.Id, (candidate, pending) =>
+                    context.Execution.Call.Id, (candidate, pending) =>
                     {
-                        if (_admit == null) return null;
                         var role = ToolResultRoles.Normalize(_settings.ToolResultRole);
                         var wire = ToolResultWire.Write(context.Execution.Call.Id, ToolId, SelectionResult(pending));
                         return _admit(candidate, new ChatMessage { Role = role, ToolResultRole = role,

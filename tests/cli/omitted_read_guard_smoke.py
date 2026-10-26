@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """An exact read omitted from model context must not authorize a file mutation."""
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 from pathlib import Path
@@ -18,23 +19,25 @@ def main():
         raise SystemExit("Build src/RNAssistant.Cli/RNAssistant.Cli.csproj first.")
     requests = []
     responses = [
-        {"message": "Attempt a replacement before reading.", "action": "tool", "tool_calls": [
+        {"message": "Attempt a replacement before reading.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
             {"name": "files.replace", "arguments": {"relativePath": "large.txt", "text": "UNSAFE_REPLACEMENT"}}]},
-        {"message": "Read the source.", "action": "tool", "tool_calls": [
+        {"message": "Read the source.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
             {"name": "common.resources_read", "arguments": {"target": "large.txt"}}]},
-        {"message": "Attempt a replacement despite the omitted source.", "action": "tool", "tool_calls": [
+        {"message": "Attempt a replacement despite the omitted source.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
             {"name": "files.replace", "arguments": {"relativePath": "large.txt", "text": "UNSAFE_REPLACEMENT"}}]},
-        {"message": "The source cannot fit in context.", "action": "blocked", "tool_calls": []},
+        {"message": "The source cannot fit in context.", "finish_from_request": True, "assessment": "not_satisfied"},
     ]
 
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             assert self.path == "/v1/chat/completions", self.path
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if reply_to_title(self, request): return
+            requests.append(request)
             index = len(requests) - 1
             assert index < len(responses), "Unexpected extra model request"
             body = json.dumps({"choices": [{"message": {"role": "assistant",
-                "content": json.dumps(responses[index])}}]}).encode()
+                "content": conversation_content(requests[-1], responses[index])}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -63,7 +66,7 @@ def main():
                 "--message", "Read large.txt and replace it only after seeing its complete source.",
                 "--context-tokens", "24576", "--min-reads", "1", "--max-iterations", "4", "--max-tool-steps", "3",
                 "--jsonl"], cwd=REPO, env=env, text=True, capture_output=True, timeout=45, check=False)
-            assert run.returncode == 5, (run.stdout, run.stderr)
+            assert run.returncode == 0, (run.stdout, run.stderr)
             assert len(requests) == 4, (len(requests), run.stdout, run.stderr)
             initial_context = "\n".join(message.get("content") or "" for message in requests[1]["messages"])
             assert "source_observation_required" in initial_context and "RefreshRequired" in initial_context
@@ -75,8 +78,8 @@ def main():
             assert target.read_text(encoding="utf-8") == source, "Omitted source authorized a destructive write"
             assert "rna://" not in json.dumps(requests), "Runtime identity leaked to the model"
             final = json.loads(run.stdout.splitlines()[-1])["data"]
-            assert final["reason"] == "model_blocked", final
-            assert final["completeFileReads"] == 1 and final["acceptance"] == "failed", final
+            assert final["reason"] == "model_finish", final
+            assert final["completeFileReads"] == 1 and final["acceptance"] == "passed", final
             assert final["ToolCounts"]["WriteOk"] == 0 and final["ToolCounts"]["WriteUnknown"] == 0, final
             print("PASS typed recovery and shared compiler: omitted exact read cannot authorize replacement; original bytes preserved")
     finally:

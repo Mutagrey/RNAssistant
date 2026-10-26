@@ -1,5 +1,6 @@
 """Read prerequisites reach the kernel as typed, target-bound recovery."""
 
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 import subprocess
@@ -14,11 +15,11 @@ CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 
 
 def call(name, **arguments):
-    return {"message": "Execute the next checked step.", "action": "tool",
+    return {"message": "Execute the next checked step.", "action": "execute", "reason": "Perform the checked step.",
             "tool_calls": [{"name": name, "arguments": arguments}]}
 
 
-DONE = {"message": "Verified.", "action": "done", "tool_calls": []}
+DONE = {"message": "Verified.", "finish_from_request": True}
 
 
 def results(request):
@@ -53,11 +54,13 @@ def run_case(root, operation, restart=False):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             assert self.path == "/v1/chat/completions", self.path
-            requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            if reply_to_title(self, request): return
+            requests.append(request)
             index = len(requests) - 1
             response = responses[index] if index < len(responses) else DONE
             body = json.dumps({"choices": [{"message": {"role": "assistant",
-                "content": json.dumps(response)}}]}).encode()
+                "content": conversation_content(requests[-1], response)}}]}).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -102,7 +105,7 @@ def run_case(root, operation, restart=False):
         assert run.returncode == 0, (run.stdout, run.stderr)
         assert len(requests) == len(responses), (len(requests), len(responses))
         final = json.loads(run.stdout.splitlines()[-1])["data"]
-        assert final["reason"] == "model_done" and final["acceptance"] == "passed", final
+        assert final["reason"] == "model_finish" and final["acceptance"] == "passed", final
         assert final["ToolCounts"]["WriteOk"] == (2 if restart else 1), final
         retry_index = 3 if restart else 2
         rejected = list(results(requests[retry_index + 1]))[-1]

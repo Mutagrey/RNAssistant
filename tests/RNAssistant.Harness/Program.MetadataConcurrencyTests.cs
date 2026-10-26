@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
@@ -8,6 +9,59 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void CommitFaultsRetainOnlyOwnAuthority()
+        {
+            foreach (var scalar in new[] { false, true })
+            foreach (var boundary in new[] { "before-write", "after-record", "after-flush" })
+                WithTempPaths(paths =>
+                {
+                    var store = new ChatStore(paths);
+                    var port = new ChatConversationStoreAdapter(store);
+                    var session = port.CreateTransient("Word", "append-fault", "Test.docx", "Original");
+                    port.Commit(session, new ConversationCommit());
+                    var revision = session.Revision;
+                    var bytes = File.ReadAllBytes(SessionEventFile(paths, session));
+                    session.Title = "Own change";
+                    store.AppendFaultPoint = point => { if (point == boundary) throw new IOException("injected " + boundary); };
+                    RuntimeThrows<IOException>(() => {
+                        if (scalar) port.SetTitle(session, session.Title);
+                        else port.Commit(session, new ConversationCommit());
+                    });
+                    store.AppendFaultPoint = null;
+                    var replay = port.Load(session.Id);
+                    if (boundary == "before-write")
+                    {
+                        AssertEqual(revision, session.Revision, "refused append keeps old cursor");
+                        AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(SessionEventFile(paths, session))), "no bytes before dispatch");
+                        AssertEqual("Original", replay.Title, "refused title never reaches replay");
+                    }
+                    else
+                    {
+                        AssertTrue(session.Revision > revision, "verified own complete append advances cursor");
+                        AssertEqual(replay.Revision, session.Revision, "cursor matches canonical own append");
+                        AssertEqual("Own change", replay.Title, "durable fact survives projection failure");
+                    }
+                });
+        }
+
+        private static void PartialCommitCannotAdvanceWriter()
+        {
+            WithTempPaths(paths => {
+                var store = new ChatStore(paths); var port = new ChatConversationStoreAdapter(store);
+                var session = port.CreateTransient("Word", "partial-append", "Test.docx", "Before");
+                port.Commit(session, new ConversationCommit());
+                var revision = session.Revision;
+                session.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn", Status = "running" };
+                store.AppendFaultPoint = point => { if (point == "after-record") throw new IOException("partial batch"); };
+                RuntimeThrows<IOException>(() => port.Commit(session, new ConversationCommit()));
+                AssertEqual(revision, session.Revision, "a prefix of own batch is not a complete append");
+                store.AppendFaultPoint = null;
+                RuntimeThrows<ChatConcurrencyException>(() => port.Commit(session, new ConversationCommit()));
+                var replay = port.Load(session.Id);
+                AssertTrue(replay.Revision > revision, "reload sees the retained valid prefix without replaying effects");
+            });
+        }
+
         private static void MetadataConflictPreservesStaleRevision()
         {
             foreach (var field in new[] { "title", "model", "reasoning" })

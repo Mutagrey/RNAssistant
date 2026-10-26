@@ -46,6 +46,12 @@ direct cutover объясняют порядок уже выполненной �
 общий текстовый поиск workspace/Office и сохранение runtime/v8. Текущее поведение
 по-прежнему принадлежит Resource Fabric и Tool Library.
 
+По запросу пользователя выполнен [V8 architecture audit](audits/v8-architecture-drift-2026-10-26.md),
+с [картой владельцев](audits/v8-ownership-dependency-matrix.md) и
+[ограниченным планом реализации](proposals/v8-stabilization-execution-plan.md).
+Owner — Core/Application; после принятия diff это исторический срез, текущие
+контракты остаются в canonical docs, следующие решения — в BACKLOG.
+
 ## Канонические документы
 
 | Область | Владелец текущего контракта |

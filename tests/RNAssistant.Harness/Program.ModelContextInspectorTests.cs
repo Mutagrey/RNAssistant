@@ -469,7 +469,7 @@ namespace RNAssistant.Harness
                                 AgentResponseMode = mode, ContextWindowOverrideTokens = 131072 };
                             session.LastRun.SelectedSkills.Clear();
                             if (selection.Length > 0)
-                                SkillTaskService.Select(session, selection, skills, allTools, settings, "size-load");
+                                SkillTaskService.Select(session, selection, skills, allTools, "size-load");
                             var surface = SkillTaskService.Compile(session, skills, allTools, catalog, pack.Tools,
                                 "size-step", settings);
                             var callable = surface.Tools;
@@ -501,9 +501,12 @@ namespace RNAssistant.Harness
                             var requestId = selection + "/" + mode;
                             options.TraceSink(new LlmTraceRecord { Type = "request", RequestId = requestId,
                                 PayloadUtf8Bytes = bytes, PayloadContentType = "application/json" });
-                            var request = inspector.Query(session, new ModelContextQuery(), CancellationToken.None)
+                            var reopenedStore = new ChatStore(FixturePaths.Value);
+                            var reopenedSession = reopenedStore.Load(session.Id);
+                            var reopenedInspector = new ModelContextInspectorService(new ChatEventStoreAdapter(reopenedStore), blobs, data);
+                            var request = reopenedInspector.Query(reopenedSession, new ModelContextQuery(), CancellationToken.None)
                                 .Events.First(item => item.Trace.RequestId == requestId);
-                            var opened = inspector.Open(session, new ModelContextPayloadQuery { EventId = request.EventId },
+                            var opened = reopenedInspector.Open(reopenedSession, new ModelContextPayloadQuery { EventId = request.EventId },
                                 CancellationToken.None);
                             string mime;
                             var retained = data.ReadDownload(opened.Data.LeaseId, 0, bytes.Length,

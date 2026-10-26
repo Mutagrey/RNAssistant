@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## V8 architecture stabilization — 2026-10-26
+
+Owner: Core Agent/Storage/ModelProtocol and application/test composition.
+Removed the duplicate half-budget skill gate; tool loading now requires complete
+request admission. Normal and scalar commits share own-batch fault recovery;
+partial/foreign tails cannot advance a stale writer. Unknown inspection now needs
+fresh complete evidence of every affected target and never clears replay guards.
+Fixed catalogue-only CLI env composition and stale v8 fixtures; production wire,
+reference allocation, shared UI and saved-data layout remain unchanged.
+
+Targeted Harness, 12 controlled CLI scripts, MockDemo workflow and Web checks are
+recorded in the [audit/evidence](../audits/v8-architecture-drift-2026-10-26.md).
+Exact HTTP bytes match retained CAS, including repair; saved Inspector is checked
+through a new store. No full-suite, live-model, Windows/Office/VSTO qualification.
+D07 relocation, records migration, incremental projection/performance and host
+qualification remain open. No new runtime subsystem or migration adapter.
+
+
 ## Image cutoff and attachment budget corrected — 2026-10-26
 
 Owner: Core LlmMessageBuilder. One request-local selection now supplies image/PDF
@@ -16,7 +34,7 @@ Original messages, storage, media limits, resizing and v8 are unchanged.
 attachment-manifest checks, PDF preparation/cache, helper isolation, multimodal
 primary, saved request composition and agent media retention across format repair.
 An extra fallback test fails on an unchanged stale ReferenceEquals assertion;
-[tracked separately](BACKLOG.md#model-request-fallback-устаревший-referenceequals--2026-10-26).
+[corrected in the V8 audit](../audits/v8-architecture-drift-2026-10-26.md).
 Build has only the 2 existing PDF platform warnings. No Office/VSTO or real endpoint
 qualification; real media rendering/delivery and model A/B remain open.
 
@@ -910,7 +928,7 @@ from a Web test context after the shared-draft change. These fixtures are fixed.
 The host-neutral Harness builds; 38 focused protocol/history/Workspace/question/
 context/plugin cases, eight Node cases and the shared-chat browser routing case
 pass. No complete suite or Office/VSTO validation was run. Remaining v7 CLI
-fixtures are listed in [BACKLOG](BACKLOG.md#cli-smoke-v7-fixtures-after-v8-cutover--2026-10-23);
+fixtures are listed in [the V8 audit](../audits/v8-architecture-drift-2026-10-26.md);
 formal real-model and Windows/Office/WebView2 qualification remain open.
 
 ## Conversation v8 integration on main — 2026-10-23

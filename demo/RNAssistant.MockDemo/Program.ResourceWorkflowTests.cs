@@ -46,11 +46,19 @@ namespace RNAssistant.MockDemo
                                 if (!messages.Any(message => (message.Content ?? "").StartsWith("SELECTED_SKILL " + skill + "\n", StringComparison.Ordinal)))
                                     throw new Exception("selected skill lost after confirmation/restart: " + skill);
                         if (responses.Count == 0) throw new Exception("unexpected extra model request");
-                        return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                        var response = responses.Dequeue();
+                        if (response == "fixture-finish") {
+                            var refs = RNAssistant.Core.ModelProtocol.ModelReferenceProjection.Delivered(messages.ToArray());
+                            response = RNAssistant.Core.ModelProtocol.ModelProtocolWire.WriteAcceptedDecision("finish", "Report the observed outcome.", "Done",
+                                results: refs.Count == 0 ? new RNAssistant.Core.ModelProtocol.ConversationResultClaim[0] :
+                                    new[] { new RNAssistant.Core.ModelProtocol.ConversationResultClaim("Requested change", new[] { refs.Last() },
+                                        RNAssistant.Core.ModelProtocol.ConversationAssessment.Satisfied) });
+                        }
+                        return Task.FromResult(new LlmCompletionResult { Content = response });
                     };
                 Func<string, object, string> tool = (name, arguments) => JsonConvert.SerializeObject(new {
-                    message = "", action = "tool", tool_calls = new[] { new { name, arguments } } });
-                const string done = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}";
+                    message = "", action = "execute", reason = "Perform the checked step.", tool_calls = new[] { new { name, arguments } } });
+                const string done = "fixture-finish";
                 new SettingsService(paths).Save(new AppSettings { AutoConfirmToolActions = false, ContextWindowOverrideTokens = 131072 });
                 controller = new AssistantController(adapter, paths, model);
                 var id = controller.Initialize().ActiveChatId;
@@ -69,7 +77,7 @@ namespace RNAssistant.MockDemo
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
                 responses.Enqueue(tool("common.html_workspace_apply_patch", new { path = "index.html", patch = new[] { new { op = "replace", find = "Before", text = "After" } } }));
-                await controller.ConfirmAgentToolAsync(pending.PendingId, id);
+                await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (session.LastRun.SelectedSkills.Count != 2)
                     throw new Exception("selected skills disappeared from durable run during confirmation");
@@ -82,7 +90,7 @@ namespace RNAssistant.MockDemo
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
                 responses.Enqueue(tool("common.html_workspace_write_file", new { path = "index.html", content = "<main>Final</main>" }));
-                await controller.ConfirmAgentToolAsync(pending.PendingId, id);
+                await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (session.HtmlWorkspace.Files.Single().Content != "<main>After</main>")
                     throw new Exception("confirmed patch did not persist exact final source");
@@ -96,7 +104,7 @@ namespace RNAssistant.MockDemo
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
                 responses.Enqueue(tool("common.html_workspace_write_file", new { path = "index.html", content = "<main>Final</main>" }));
-                await controller.ConfirmAgentToolAsync(pending.PendingId, id);
+                await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (session.HtmlWorkspace.Files.Single().Content != "<main>Final</main>")
                     throw new Exception("confirmed full replacement lost its current-source observation");
@@ -106,7 +114,7 @@ namespace RNAssistant.MockDemo
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
                 responses.Enqueue(done);
-                var result = await controller.ConfirmAgentToolAsync(pending.PendingId, id);
+                var result = await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (result.RunViewState.Lifecycle != "completed" || session.ActiveHtmlArtifactId != finalSnapshot ||
                     session.HtmlWorkspace.Files.Single().Content != "<main>Final</main>")

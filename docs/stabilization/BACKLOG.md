@@ -12,17 +12,6 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Model request fallback: устаревший ReferenceEquals — 2026-10-26
-
-Owner: Harness ModelRequestPreparation fixture. Проверка
-`model request: snapshot surface budget and fallback` падает на `ReferenceEquals`
-для списка сообщений. `ModelRequestPreparation.ProjectMessages` всегда вызывает
-`ModelReferenceProjection.Project`, который создаёт новый массив и для json_object.
-Проверка и production path не менялись в media-cutoff исправлении; этот тест не
-вызывает `LlmMessageBuilder`. Заменить требование object identity проверкой
-сохранности полного fallback-содержимого и корректности E/R projection; проверить
-также оставшийся budget assertion. Не менять продукт ради возврата того же массива.
-
 ## Аннотации временного и исторического HTML-preview — 2026-10-26
 
 Owner: Web visual annotation UI и Core resource binding. Текущий authored HTML
@@ -33,15 +22,6 @@ workspace в «Материалах»/правой панели и iframe пла
 не подставлять вместо них текущую версию проекта. Загруженный HTML проходит
 явный импорт в authored workspace перед аннотированием.
 
-## MockDemo resource workflow: устаревший model wire — 2026-10-26
-
-Owner: MockDemo test fixture. `--resource-workflow-test` собирается, но падает на
-`task setup or skill selection failed`: scripted model replies в
-`Program.ResourceWorkflowTests.cs` всё ещё выдают `action=tool/done` вместо
-текущего conversation-response v8 `execute/finish`. Перевести fixture на v8 и
-сохранить проверки выбранных skills, подтверждений и точных resource snapshots;
-не добавлять совместимость со старым wire в продукт.
-
 ## Геометрия компонентов демо — 2026-10-25
 
 Owner: Web presentation. При сравнении палитры обнаружены отдельные различия
@@ -50,20 +30,6 @@ Owner: Web presentation. При сравнении палитры обнаруж
 компоновку демо с текущим полноширинным правилом и единым радиусом; проверить
 узкое окно. Не возвращать в продукт прежнюю узкую колонку демо. Палитра,
 каталог акцентов, вложенный hover дерева и цвета статусов уже согласованы.
-
-## CLI smoke v7 fixtures after v8 cutover — 2026-10-23
-
-Owner: Workspace/CLI test fixtures. Static post-merge review found v7 response
-bodies, `model_done` expectations or v7 schema assertions in these active scripts:
-`tool_result_projection_smoke.py`, `read_recovery_smoke.py`,
-`skill_packages_smoke.py`, `unified_agent_smoke.py`, `omitted_read_guard_smoke.py`,
-`turn_decisions_smoke.py`, `binary_resource_smoke.py`, `stabilization_smoke.py`,
-`read_acceptance_context_smoke.py`, `web_checks_runtime_smoke.py`,
-`skills_runtime_smoke.py`. Migrate them and their shared fixture consumers to
-explicit v8 replies with current-run terminal evidence, typed questions and
-current schema assertions; preserve each scenario's behavioral checks. Do not
-add product compatibility for obsolete test wire. These scripts were not run
-in this review and cannot currently establish v8 regression coverage.
 
 ## Resource read Harness: устаревшая фраза результата — 2026-10-23
 
@@ -238,7 +204,7 @@ catalogs` проверяет `## Definition of done` и schema-authority тек�
 Сверка 2026-10-15: актуальные воспроизведения и результаты выборочных проверок —
 в [ревью](RISK_REGISTER.md#architecture-and-regression-review--2026-10-15).
 Старые counts/failures относятся к названным там ревизиям. Приоритетные
-архитектурные slices — D05–D09 ниже; это предложения, а не завершённые изменения.
+оставшиеся архитектурные slices — ниже; D05/D08 и recovery-часть D06 закрыты в [V8 audit](../audits/v8-architecture-drift-2026-10-26.md).
 Закрытые короткие записи сохраняют anchors исторических ссылок.
 
 ## Загрузка UI-прототипа при серии перезагрузок — 2026-10-18
@@ -807,11 +773,9 @@ Windows/Office/WebView2 delivery remains unqualified.
 | D02 — single composition path | Application. `AssistantController` одновременно orchestrates и конструирует concrete storage/runtime/model/catalog/session/diagnostics graph | Следующее конкретное изменение production lifecycle/dependency graph; Windows evidence остаётся отдельным gate | Один existing application owner владеет construction и dispose order. Новый composition type допустим при удалении нескольких construction paths; без factory/interface только ради DI. Targeted lifecycle + architecture checks |
 | D03 — typed bridge projections | Office Contracts / Web. Versioned operation catalog, shared cancellation/waits and init/navigation/progress casing are implemented in A3; embedded Core DTOs still have both-case readers | Next change to the specific embedded projection, with exact C#/JS shape identified | Switch the typed producer and consumers together, delete aliases, preserve opaque tool JSON. Remaining seam and removal gate: [MIGRATION_MAP](MIGRATION_MAP.md#runtime-commit-boundary--2026-10-15); Windows WebView delivery stays separate |
 | D04 — change-driven hotspot extraction | Владельцы Controller, ToolRuntime, prompts, storage и UI. Крупные файлы затрудняют локальные изменения, но не доказывают смешение ответственности | Только когда ближайший approved change требует чтения несвязанного behavior | Извлекается один тематический owner из `AssistantController*`, `OfficeToolExecutor`, `PromptContextInspectorService`, `ChatStore*` или крупного `app-*.js`; старый path удаляется, targeted tests сохраняют контракт |
-| D05 — complete skill admission | Core `SkillTaskService` + Office/Runtime request preparation. Половинный budget check допускает selection, после которого не компилируются следующий запрос и новый turn | Первый приоритет после исправленного metadata conflict; воспроизведение 32K — в risk review | Candidate → тот же frozen compiler с полными prompts, receipts, schemas и reserves → одна публикация. Удалить отдельную оценку как admission authority; без второго compiler или скрытого eviction. Проверить близкий budget, оба response formats, отказ без изменения selection, cold restart и одинаковый Office/CLI контракт |
-| D06 — one commit outcome and incremental projection | Core persistence. `CommitScalarMetadata` и `SaveInternalLocked` отдельно восстанавливают cursor; общий save всё ещё клонирует весь `Messages`, сравнивает metadata/artifacts и перестраивает derived bodies | Следующее изменение commit после закрытого stale-cursor дефекта | Один append outcome различает refusal и durable own append. Использовать существующие typed operations для затронутых projections; убрать дублирующий catch/recovery и ненужные полные clone/rebuild. Проверить stale writer, append fault, replay parity и счётчики работы на длинной истории; без O(1)/ускорения до измерений |
+| D06 — incremental projection | Core persistence. Общий append outcome/recovery реализован 2026-10-26; save всё ещё клонирует Messages и перестраивает derived bodies | После измерения touched operations, latency и RSS длинной истории | Использовать existing typed operations, удалить только измеренно лишние clone/rebuild; сохранить append faults/replay parity, без второго store и обещаний O(1) |
 | D07 — stable chat storage identity | Core chat storage / application binding. Document reassociation требует metadata append + `File.Move`; `MoveDocument` может перенести только часть чатов | Отдельное решение о layout до заявления crash-safe Save As; совместить с M7 partition seam из MIGRATION_MAP | Предпочтительное направление: стабильный путь по ChatId, document binding только в canonical events/catalog projection. Удалить физический rename из обычной перепривязки; не добавлять mutable mapping store. До cutover нужен явный отказ/перенос старого layout без fallback. Проверить crash boundaries, весь набор чатов, destination conflict и холодный catalog |
-| D08 — target-correlated inspection | Core progress/recovery + domain evidence producers. Любой successful independent read снимает `InspectionRequired`, включая чтение без evidence затронутого target | Следующее изменение unknown-effect continuation; текущее поведение явно является только workflow floor | Использовать имеющиеся typed impacts/evidence для текущего read затронутой цели вместо глобального bool. Удалить безусловный сброс по read policy. Проверить unrelated catalog read, несколько unknown targets, stale/partial coverage и restart; unknown history и replay prohibition не очищать |
-| D09 — contract-owned regression fixtures | Harness/Web test owners. Hard-coded counts/cache keys, неполная composition и старые replay ожидания скрывают полезный сигнал | Текущие семь Harness и четыре Web failures из review; сначала локализовать VBA admission | Проверять membership/semantic boundaries и script dependency graph; fixture composition строить через существующие helpers с явными policy/budget. Удалить дублирующие magic counts/датированные asset assertions, сохранив negative controls для removed aliases, source inclusion, lazy rendering и incomplete exchanges. Запустить только затронутые filters/scripts |
+| D09 — contract-owned regression fixtures | Harness/Web test owners. Hard-coded counts/cache keys, неполная composition и старые replay ожидания скрывают полезный сигнал | Новые воспроизводимые failures текущего HEAD; исторические семь Harness/четыре Web не считать текущим baseline | Проверять membership/semantic boundaries и script dependency graph; fixture composition строить через существующие helpers с явными policy/budget. Удалить дублирующие magic counts/датированные asset assertions, сохранив negative controls для removed aliases, source inclusion, lazy rendering и incomplete exchanges. Запустить только затронутые filters/scripts |
 
 Не проводить общий предварительный split/rename, массовый namespace move, новый
 service locator, второй store/read model или универсальный Office abstraction.

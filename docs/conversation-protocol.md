@@ -175,22 +175,25 @@ explicit `WasCancelled` fact identifies cancelled/superseded calls; rejected
 replays and other undispatched work retain their error code and explanation in
 Office/Web. These presentation distinctions do not change dispatch, counts or
 the prohibition on repeating an unknown effect.
-Schema 50 directs the model to inspect the affected current state after `unknown`
-and continue feasible authorized work. Core rejects `done` until a subsequent
-successful independent local read, returning completion feedback in the same run
-under its existing budgets. Office and workspace adapters retain that feedback in
-required model context, including with custom prompts. Failed reads, unrelated
-writes, confirmations and rejected replays do not satisfy this workflow floor;
-the captured read policy and unknown facts reconstruct it on continuation.
-The guard does not establish target reconciliation or goal success: the model
-must choose the affected semantic target and compare the actual state with the
-request. `blocked` and `needs_input` remain available for a concrete obstacle or
-indispensable user decision. Inspection never clears cumulative uncertainty or
-permits replay of the uncertain call.
+The model is directed to inspect affected current state after `unknown` and
+continue feasible authorized work. Core rejects finish while target inspection
+is unresolved, returning completion feedback under the existing run budgets.
+Pending targets come from typed effect impacts and recovery identity, with the
+terminal completion timestamp retained in ToolExecutionProgress. A successful
+independent local read clears only matching ResourceIdentity targets with complete
+whole coverage, non-immutable evidence and ObservedAt later than that completion.
+Unrelated catalog reads, partial/stale/historical evidence, failed reads, writes,
+confirmations and rejected replays do not satisfy this floor. Multiple unknown
+resources require each target; missing identity/time remains unresolved rather
+than inferring authority from text. Continuation reconstructs this from terminal facts.
+This is an inspection prerequisite, not proof of goal success or reconciliation.
+The model still compares actual state with the requested result; questions use the
+typed question tool and unresolved outcomes must be reported honestly. Inspection
+never clears cumulative uncertainty or permits replay of the uncertain call.
 `RunViewState.GoalVerification=not_assessed` records that no independent general
 goal check occurred. It remains separate from verified write/no-change counts in
 the typed state; clean execution health never certifies the requested outcome or
-Office/browser behavior. An ordinary `model_done` answer adds no completion or
+Office/browser behavior. An ordinary `model_finish` answer adds no completion or
 goal-verification card. Failed attempts, cancellation, failure and unknown effects
 remain visible outside collapsed history, independently of goal verification.
 `ModelProtocolWire.MessageGuidance` gives defaults, response schema and repair one

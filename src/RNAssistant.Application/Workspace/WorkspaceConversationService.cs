@@ -1104,7 +1104,7 @@ namespace RNAssistant.Runtime
                 _modelTrace = new ModelTracePersistenceService(new ChatEventStoreAdapter(chats));
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
-                _chatAttachments = new WorkspaceChatAttachmentResourceProvider(paths, session);
+                _chatAttachments = session == null ? null : new WorkspaceChatAttachmentResourceProvider(paths, session);
                 var client = new LlmClient(apiKeyProvider);
                 _compaction = new ContextCompactionRuntime((configuration, messages, options, stream, token) =>
                 {

@@ -35,11 +35,13 @@ namespace RNAssistant.Harness
                 "Read the requested range.", null,
                 ToolResultRoles.User, FixtureCallOrigin("inspector-step"));
             callMessage.RunId = "run-1";
+            callMessage.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 1);
             session.Messages.Add(callMessage);
             var resultMessage = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.User);
             resultMessage.RunId = "run-1";
+            resultMessage.ExecutionReference = callMessage.ExecutionReference;
             session.Messages.Add(resultMessage);
             session.Messages.Add(new ChatMessage
             {
@@ -145,7 +147,7 @@ namespace RNAssistant.Harness
                 var runnableCatalog = ConversationRunPolicy.ForSession(session)
                     .SelectTools(ConversationRunService.PrepareToolsForRun(catalog));
                 var pack = ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, runnableCatalog);
-                SkillTaskService.Select(session, skill.Id, publication, pack, new AppSettings(), "load-skill");
+                SkillTaskService.Select(session, skill.Id, publication, pack, "load-skill");
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
                     ContextWindowOverrideTokens = 32768 };
 

@@ -2,6 +2,7 @@
 
 This checks request delivery and repair, not real-model quality or Office delivery.
 """
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 import subprocess
@@ -19,7 +20,8 @@ def run_case(root, result_role, response_mode):
     for name in ("first.txt", "second.txt"):
         (workspace / name).write_text(name, encoding="utf-8")
     narrative = {"message": "I will read the next file.", "action": "continue", "tool_calls": []}
-    question = {"message": "Which file should I read next?", "action": "needs_input", "tool_calls": []}
+    question = call("common.questions_ask", questions=[{"header": "File", "prompt": "Which file should I read next?",
+        "selection": "single", "allowFreeText": True, "options": [{"label": "second.txt", "description": "Read second.txt."}, {"label": "first.txt", "description": "Read first.txt again"}]}])
     responses = [call("common.resources_read", target="first.txt"), narrative,
                  question, call("common.resources_read", target="second.txt"), DONE]
     requests, errors = [], []
@@ -28,10 +30,12 @@ def run_case(root, result_role, response_mode):
         def do_POST(self):
             try:
                 assert self.path == "/v1/chat/completions", self.path
-                requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if reply_to_title(self, request): return
+                requests.append(request)
                 assert len(requests) <= len(responses), "Unexpected request or replay"
                 body = json.dumps({"choices": [{"message": {"role": "assistant",
-                    "content": json.dumps(responses[len(requests) - 1])}}]}).encode()
+                    "content": conversation_content(requests[-1], responses[len(requests) - 1])}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -63,20 +67,28 @@ def run_case(root, result_role, response_mode):
         waiting = run("Read first.txt, then ask me which file to read next.")
         assert waiting.returncode == 3, (waiting.stdout, waiting.stderr, errors)
         question_result = json.loads(waiting.stdout.splitlines()[-1])["data"]
-        assert question_result["reason"] == "model_needs_input" and question_result["action"] == "needs_input", question_result
+        assert question_result["reason"] == "awaiting_user" and question_result["action"] == "awaiting_user", question_result
         assert len(requests) == 3, "The question must stop model generation"
-        result = run("Read second.txt.", question_result["SessionId"])
+        pending = question_result["userInput"]
+        questions = pending["QuestionSet"]
+        answers = root / "answers.json"
+        answers.write_text(json.dumps({"runId": pending["RunId"], "questionSetId": questions["questionSetId"],
+            "answers": [{"questionId": questions["questions"][0]["id"],
+                "optionIds": [questions["questions"][0]["options"][0]["id"]], "freeText": "Read second.txt."}]}))
+        result = subprocess.run(["dotnet", str(CLI), "answer", "--workspace", str(workspace),
+            "--session", question_result["SessionId"], "--answers-file", str(answers), "--jsonl"],
+            cwd=REPO, env=env, text=True, capture_output=True, timeout=30)
         assert result.returncode == 0, (result.stdout, result.stderr, errors)
         final = json.loads(result.stdout.splitlines()[-1])["data"]
-        assert final["reason"] == "model_done" and final["ToolCounts"]["ReadOk"] == 1, final
+        assert final["reason"] == "model_finish" and final["ToolCounts"]["ReadOk"] == 1, final
         assert len(requests) == len(responses) and not errors, (len(requests), errors)
         for request in requests:
             assert not any((message.get("content") or "").startswith("RUNTIME_FEEDBACK:")
                            for message in request["messages"]), "Obsolete feedback must not be injected"
             if response_mode == "json_schema":
                 schema = request["response_format"]["json_schema"]
-                assert schema["name"] == "rnassistant_conversation_response_v7", schema["name"]
-                assert schema["schema"]["properties"]["action"]["enum"] == ["tool", "done", "blocked", "needs_input"]
+                assert schema["name"] == "rnassistant_conversation_response_v8", schema["name"]
+                assert {branch["properties"]["action"]["const"] for branch in schema["schema"]["properties"]["response"]["anyOf"]} == {"execute", "reflection", "finish"}
         original = requests[1]["messages"]
         repaired = requests[2]["messages"]
         assert repaired[:-1] == original and repaired[-1]["content"].startswith("FORMAT_REPAIR:"), repaired

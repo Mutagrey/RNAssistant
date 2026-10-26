@@ -1,6 +1,6 @@
 """Mode admission and typed questions across production CLI processes (scripted HTTP)."""
 import copy
-from conversation_transport import conversation_content
+from conversation_transport import conversation_content, finish
 
 import json
 import os
@@ -34,26 +34,16 @@ def call(name, **arguments):
             "message": "Perform the requested step."}
 
 
-def finish(request, direct=False):
-    evidence = []
-    if not direct:
-        for item in request["messages"]:
-            content = item.get("content") or ""
-            if item.get("role") == "tool" and item.get("tool_call_id"):
-                evidence.append(item["tool_call_id"])
-            elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
-                evidence.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
-    return {"action": "finish", "reason": "Report the current request outcome.",
-            "results": [{"summary": "Finished.", "evidence": [evidence[-1]],
-                         "assessment": "satisfied"}] if evidence else [],
-            "message": "Finished."}
-
-
 def catalog(request):
-    prompt = request["messages"][0]["content"]
-    suffix = prompt.split("Available tools and exact argument schemas: ", 1)[1]
-    entries, _ = json.JSONDecoder().raw_decode(suffix)
-    return {tool["Id"]: tool for tool in entries}
+    schema = request.get("response_format", {}).get("json_schema", {}).get("schema")
+    if schema:
+        branches = schema["properties"]["response"]["anyOf"]
+        execute = next(b for b in branches if b["properties"]["action"]["const"] == "execute")
+        shape = execute["properties"]["tool_calls"]
+        arrays = shape.get("anyOf", [shape])
+        calls = [call for array in arrays for call in array["items"]["anyOf"]]
+        return {call["properties"]["name"]["const"] for call in calls}
+    return {tool["function"]["name"] for tool in request.get("tools", [])}
 
 
 def run_case(root, mode, role):

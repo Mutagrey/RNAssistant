@@ -303,6 +303,57 @@ namespace RNAssistant.Harness
                 "read and successful retry reach the tool runtime once each");
         }
 
+        private static readonly ResourceIdentity InspectionTarget = new ResourceIdentity(ResourceUri.Create("state", "conversation", "fixture", "inspection"));
+        private static ToolExecutionRecord InspectedKernelRecord(ToolExecutionContext context, ToolExecutionOutcome outcome)
+        {
+            var effect = outcome == ToolExecutionOutcome.Unknown ? new ResourceEffect("unknown", "write", ResourceEffectOutcome.UnknownAfterDispatch,
+                new[] { new ResourceImpact(InspectionTarget, ResourceImpactRelation.Exact) }) : null;
+            var evidence = outcome == ToolExecutionOutcome.Ok && context.Policy.IndependentLocalRead
+                ? new[] { new ResourceEvidence("inspection", new ResourceAuthorityScopeId("conversation", "fixture"),
+                    new ResourceRef(InspectionTarget.Uri, "observed"), "text", ResourceCoverage.Whole(), true, 1,
+                    observedAt: context.StartedUtc.AddSeconds(1)) } : null;
+            return KernelRecord(context, outcome, resourceEvidence: evidence, resourceEffect: effect);
+        }
+
+        private static void KernelInspectionRequiresTargetEvidence()
+        {
+            var tracker = new AgentProgressTracker();
+            var when = DateTime.UtcNow;
+            var other = new ResourceIdentity(ResourceUri.Create("state", "conversation", "fixture", "other"));
+            var write = new ToolCall("write", "write", "{}");
+            foreach (var target in new[] { InspectionTarget, other })
+                tracker.Observe(write, Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(new ToolExecutionProgress(ToolExecutionOutcome.Unknown, completedUtc: when))), "unknown", null,
+                    new ResourceEffect(target.Uri, "write", ResourceEffectOutcome.UnknownAfterDispatch,
+                        new[] { new ResourceImpact(target, ResourceImpactRelation.Exact) }));
+            Action<ResourceIdentity, bool, DateTime> read = (target, complete, observed) => tracker.Observe(
+                new ToolCall("read", "read", "{}"), new ToolExecutionProgress(ToolExecutionOutcome.Ok, independentLocalRead: true),
+                "read", new[] { new ResourceEvidence("read", new ResourceAuthorityScopeId("conversation", "fixture"),
+                    new ResourceRef(target.Uri, "revision"), "text", ResourceCoverage.Whole(), complete, 1, observedAt: observed) }, null);
+            read(new ResourceIdentity(ResourceUri.Create("state", "conversation", "fixture", "unrelated")), true, when.AddSeconds(1));
+            tracker.Observe(new ToolCall("historical", "read", "{}"),
+                new ToolExecutionProgress(ToolExecutionOutcome.Ok, independentLocalRead: true), "historical",
+                new[] { new ResourceEvidence("read", new ResourceAuthorityScopeId("conversation", "fixture"),
+                    new ResourceRef(InspectionTarget.Uri, "old"), "text", ResourceCoverage.Whole(), true, 1,
+                    observedAt: when.AddSeconds(1), immutable: true) }, null);
+            tracker.Observe(new ToolCall("partial", "read", "{}"),
+                new ToolExecutionProgress(ToolExecutionOutcome.Ok, independentLocalRead: true), "partial",
+                new[] { new ResourceEvidence("read", new ResourceAuthorityScopeId("conversation", "fixture"),
+                    new ResourceRef(InspectionTarget.Uri, "current"), "text",
+                    new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2), true, 1,
+                    observedAt: when.AddSeconds(1)) }, null);
+            AssertTrue(tracker.InspectionRequired, "unrelated, immutable and partial evidence cannot inspect a live effect");
+            read(InspectionTarget, true, when.AddSeconds(-1));
+            read(other, false, when.AddSeconds(1));
+            AssertTrue(tracker.InspectionRequired, "stale and incomplete reads do not inspect targets");
+            read(InspectionTarget, true, when.AddSeconds(1));
+            AssertTrue(tracker.InspectionRequired, "one inspected target does not clear another");
+            read(other, true, when.AddSeconds(1));
+            AssertTrue(!tracker.InspectionRequired, "complete fresh reads inspect every affected target");
+            string reason, message; int delay;
+            AssertTrue(!tracker.CanDispatch(write, out reason, out message, out delay), "inspection never authorizes replay");
+        }
+
         private static async Task KernelNeverRepeatsUnknownCallAfterInterveningSuccess()
         {
             const string uncertain = "{\"target\":\"same possible effect\"}";
@@ -316,7 +367,7 @@ namespace RNAssistant.Harness
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, outcomes.Dequeue()));
+                InspectedKernelRecord(context, outcomes.Dequeue()));
 
             var result = await f.RunAsync();
 
@@ -354,7 +405,7 @@ namespace RNAssistant.Harness
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, outcomes.Dequeue()));
+                InspectedKernelRecord(context, outcomes.Dequeue()));
 
             var result = await f.RunAsync();
 
@@ -400,7 +451,7 @@ namespace RNAssistant.Harness
                 AgentMessage.AcceptedToolResult("read", "Inspected", "{}", progress) }).ToArray();
             tracker = new AgentProgressTracker();
             tracker.Restore(history);
-            AssertTrue(!tracker.InspectionRequired, "replayed successful read satisfies the workflow floor");
+            AssertTrue(tracker.InspectionRequired, "unbound read cannot satisfy an unknown target after replay");
             string reason, message; int delay;
             AssertTrue(!tracker.CanDispatch(new ToolCall("retry", "write", "{}"), out reason, out message, out delay),
                 "replayed inspection never clears the unknown replay guard");
@@ -720,7 +771,7 @@ namespace RNAssistant.Harness
                 ToolExecutionOutcome.Ok
             });
             f.Tools.OnExecute = (context, token) => Task.FromResult(
-                KernelRecord(context, outcomes.Dequeue()));
+                InspectedKernelRecord(context, outcomes.Dequeue()));
 
             var result = await f.RunAsync();
 

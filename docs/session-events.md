@@ -452,6 +452,16 @@ Current history encryption does not cover transient attachment staging, settings
 - Each append is flushed to stable storage before returning.
 - The final materialized model request remains a synchronous durability barrier before network dispatch. Model response/failure is another barrier: every earlier queued `assistant.chunk` batch for that session is durable before the terminal event is appended.
 - Adjacent lifecycle and trace/commit records remain separate hash-linked lines but share one locked durable append batch.
+- Normal saves and scalar metadata commits share a private typed append attempt:
+  not appended, appended, or indeterminate. Exception recovery advances the caller
+  only after validating the complete own batch by sequence/EventId/hash against a
+  stable log and flushing it durably. A foreign tail or partial batch cannot grant
+  authority to the stale in-memory projection. Otherwise the whole original cursor
+  and timestamp remain unchanged. The exception is still propagated; the caller
+  stops and reloads, never automatically repeats a possible effect. Derived caches
+  are invalidated after recovered durable append. Fault fixtures cover before-write,
+  after-record, after-flush and partial multi-record append; this is not power-loss
+  or Office COM qualification.
 - Only an unterminated syntactically incomplete final JSONL fragment is recoverable and ignored; a valid unterminated final row remains readable. A complete row rejected by the event contract, even without a final newline, invalidates the stream and is never discarded. Any terminated blank or malformed row also invalidates the stream. The next successful append adds a newline to a valid unterminated row or atomically copies only the validated byte prefix over an incomplete fragment; it does not deserialize and rewrite the full history.
 - First indexing and explicit maintenance audit validate sequence continuity and the complete hash-chain. Routine reads revalidate the exact indexed final record; a longer file validates only its suffix. Shrink, replacement and incompatible protection rebuild the index. A corrupt stream is not projected or listed once validation reaches the corrupt record.
 - Startup recovery marks tool effect as unknown only when the stream contains `tool.execution.started` without the matching `tool.execution.finished` for that run.

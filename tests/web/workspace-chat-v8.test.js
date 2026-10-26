@@ -38,6 +38,10 @@ class Element {
 
 const context = vm.createContext({ document: { createElement: tag => new Element(tag), activeElement: null } });
 context.window = context;
+for (const script of ["app-utils.js", "app-agent-model.js"]) {
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/" + script), "utf8"), context,
+    { filename: script });
+}
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-messages.js"), "utf8"), context,
   { filename: "app-messages.js" });
 const rendered = [];
@@ -67,7 +71,7 @@ const list = new Element("section");
 context.RNAssistantWorkspaceChat.renderMessages(list, { sessionId: "chat-1", messages: [
   { Id: "reflection", Role: "assistant", Content: "", ReflectionDecision: "Inspect the exact file first." },
   { Id: "finish", Role: "assistant", Content: "Chart remains unfinished.", Results: [
-    { Summary: "Chart absent", Assessment: "partially_satisfied", Evidence: ["call-1"] }
+    { Summary: "Chart absent", Assessment: "partially_satisfied", Evidence: ["E1"] }
   ] },
   { Id: "hidden", Role: "assistant", ProtocolMessage: true, Content: "private v8 JSON" }
 ] });
@@ -76,7 +80,7 @@ assert.equal(rendered.length, 2, "one shared renderer receives both visible v8 p
 assert.equal(list.childNodes.length, 2);
 assert.equal(rendered[0].ReflectionDecision, "Inspect the exact file first.");
 assert.equal(rendered[1].Results[0].Assessment, "partially_satisfied");
-assert.equal(rendered[1].Results[0].Evidence[0], "call-1");
+assert.equal(rendered[1].Results[0].Evidence[0], "E1");
 assert.ok(!rendered.some(message => message.Id === "hidden"), "raw protocol bodies stay out of transcript");
 const firstNode = list.childNodes[0], answerNode = list.childNodes[1];
 const sameMessages = JSON.parse(list._chatSignature)[0];

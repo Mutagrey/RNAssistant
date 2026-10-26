@@ -1,0 +1,58 @@
+[
+  {
+    "command": [
+      "node",
+      "tests/web/workspace-chat-v8.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS workspace: shared views, stable nodes, paging and read-only history\n"
+  },
+  {
+    "command": [
+      "node",
+      "tests/web/run-view-state.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS run view state: strict immutable normalization keeps narrative separate\nPASS run view state: per-chat monotonic ordering rejects stale concurrent responses\nPASS run view state: catalog merge preserves order, deletions and newest per-chat revision\nPASS run view state: integrated chat state rejects stale transcript and outcome\nPASS run view state: bridge/UI consumers use the typed projection without model-status inference\nPASS run view state: partial model claim is visible without promoting task success\nPASS chat ordering: activity ignores navigation/save time and includes background updates\nOK 7/7\n"
+  },
+  {
+    "command": [
+      "node",
+      "tests/web/model-context.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS model context: exact workspace identity, owner changes, lease cleanup and missing/foreign scope refusal\nPASS model context: exact step navigation and missing/foreign request refusal\nPASS model context: history keeps saved requests and refuses future-request previews locally\nPASS model context: file-backed save keeps an exact chunked body and closes its lease\nPASS model context: empty history and late previews retain the read-only state\nPASS model context: exact JSON, full download, following, preview staleness and cancellation\nPASS model context: missing/ambiguous provenance and attachment omissions stay explicit\nPASS model context: saved composition conservation, schema and message scope\nPASS model context: lazy history groups, message paging and separate resource references\nPASS model context: stable aliases, resource evidence and scoped lookup\nPASS model context: explicit payload verification, refresh and late-response isolation\nPASS model context: late payload respects the selected tab\nPASS model context: refresh disclosures, mode-change races, stale errors and failed request selection\nPASS model context: readable v8 empty messages, strict wrapper and exact raw response\n"
+  },
+  {
+    "command": [
+      "node",
+      "tests/web/stream-render-cost.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS stream: coalesced tail rendering retains 1000 attached history nodes, orders/replaces/removes live nodes and handles navigation\nPASS stream: live update preserves explicitly opened and closed action history\nPASS background stream: 100 deltas produce one sidebar refresh without dropping tokens\nPASS foreground progress: 100 activities and content deltas share one frame without dropping events\nPASS stream lifecycle: immediate reset, empty retries, background navigation and coalesced first-token paints\nPASS reflection: accepted reasoning handoff survives next attempt reset\n"
+  },
+  {
+    "command": [
+      "node",
+      "tests/web/chat-view-routing.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS chat view routing: project approval/question and plugin rejection use the mounted owner\n"
+  },
+  {
+    "command": [
+      "node",
+      "tests/web/workspace-chat-races.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS workspace chat session and catalog races\n"
+  },
+  {
+    "command": [
+      "node",
+      "tests/web/chat-draft-reload.test.js"
+    ],
+    "exitCode": 0,
+    "output": "PASS protected draft reload: Office text/retry ID, shared workspace text/options/retry ID and acknowledgement\n"
+  }
+]

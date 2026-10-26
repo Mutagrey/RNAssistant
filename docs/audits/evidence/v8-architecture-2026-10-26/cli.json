@@ -1,0 +1,98 @@
+[
+  {
+    "command": [
+      "python3",
+      "tests/cli/tool_result_projection_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS shared compiler and trace: exact wire bytes, rejected body, correlated repair, stale receipts and durable verification origin\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/read_recovery_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS replace target-bound read recovery\nPASS patch target-bound read recovery\nPASS copy target-bound read recovery\nPASS move target-bound read recovery\nPASS delete target-bound read recovery\nPASS replace restored recovery\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/skill_packages_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS skill packages CLI: canonical load, guarded read/patch/report/readback, approvals, exact publication, follow-up/removal, whole-request admission refusal and cold restart\n{\"controlledModelRequests\": 20, \"pilotRequests\": 8, \"selectedInstructionCharacters\": 91, \"realModelEvaluation\": false}\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/unified_agent_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS unified CLI: one request, no tools\nPASS unified CLI: Deny allows actual reads\nPASS unified CLI: create waits, restart inspection, explicit approval\nPASS auto-confirm CLI: multistep, persisted policy, next-run default and pending policy after restart\nPASS auto-confirm CLI: unread-file guard and invalid flag remain fail-closed\nPASS unified CLI: patch restores accepted read on approval\nPASS unified CLI: rejection has no effect\nPASS unified CLI: injected write under Deny never dispatches\nPASS unified CLI: planning exception, sticky Plan, explicit switch\nPASS unified CLI: policy change closes pending call without execution\nPASS unified CLI: emergency disable preserves inspection\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/omitted_read_guard_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS typed recovery and shared compiler: omitted exact read cannot authorize replacement; original bytes preserved\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/turn_decisions_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS turn decisions: user/json_schema\nPASS turn decisions: user/json_object\nPASS turn decisions: tool/json_schema\nPASS turn decisions: tool/json_object\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/binary_resource_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS binary views: PNG/JPEG metadata, exact raw export, restart/deletion, bounds, no model authority\nPASS binary browser: exact snapshot routes/MIME, historical replay, mismatch and broken decode\nPASS binary acceptance: unchanged image evidence accepted\nPASS binary acceptance: external image edit rejects done\nPASS binary acceptance: final-wait image edit rejects done\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/stabilization_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS five-call narrative, bounded tail read, whole-write refusal, patch \u2192 delivered after-source \u2192 patch\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/read_acceptance_context_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS read-acceptance context: early\nPASS read-acceptance context: repair\nPASS read-acceptance context: late_edit\nPASS explicit completion criteria: repair\nPASS explicit completion criteria: plain\nPASS explicit completion criteria: blocked\nPASS explicit completion criteria: needs_input\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/web_checks_runtime_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS browser acceptance context: passed\nPASS browser acceptance context: late_edit\nPASS browser acceptance context: stale\nPASS browser acceptance context: reverified\nPASS browser recovery: unchanged retry, unrelated write, fresh read and no-op stay blocked; exact repair permits one verification\nPASS scripted production runtime: verify/read/repair/read/verify/done, frozen checks, stale final evidence rejected\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/skills_runtime_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS CLI skills: shared publication, metadata/body separation, host/enabled/shadow filtering, exact reference reads, native pair, no file authority/count, repair, process continuation and capability filtering\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tests/cli/mode_questions_smoke.py"
+    ],
+    "exitCode": 0,
+    "output": "PASS plan/tool: typed questions, restored state, 10 invalid answers rejected without writes, semantic answers/new turn, duplicate/conflicting receipts, inherited mode/role, acceptance, no ID leak/replay\nPASS agent/user: typed questions, restored state, 10 invalid answers rejected without writes, semantic answers/new turn, duplicate/conflicting receipts, inherited mode/role, acceptance, no ID leak/replay\n"
+  }
+]

@@ -1,4 +1,5 @@
 """Real terminal/pipe CLI boundaries using controlled HTTP, not model qualification."""
+from conversation_transport import conversation_content
 import json
 import os
 import pty
@@ -85,7 +86,7 @@ class Scenario:
                         owner.requests.append(request)
                         owner.before_response()
                         assert owner.responses, "Unexpected request after pause/terminal result"
-                        content = json.dumps(owner.responses.pop(0))
+                        content = conversation_content(request, owner.responses.pop(0))
                     body = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "application/json")

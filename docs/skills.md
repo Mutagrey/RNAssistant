@@ -134,13 +134,15 @@ effects keep their replay guard regardless of later admission changes.
 Office refreshes complete
 catalog authority at the next model-request boundary after an in-run publication;
 the already accepted request stays pinned. Instructions and schemas must fit the
-budget: the Core half-input check is an initial bound, then Office and workspace
-stage a candidate surface and the projected load result through their existing
-complete request compiler, including schemas and reserves. Only an admitted
+budget: Office and workspace stage a candidate surface and the projected load
+result through their existing complete request compiler, including schemas and reserves. Only an admitted
 candidate replaces the selection in the accepted run record. Refusal returns
 bounded feedback through the previous usable surface. Preview results never enter
 history or count as execution facts; preflight performs no LLM call or compaction.
 Actual dispatch still recompiles against its own frozen authority.
+There is no separate half-input admission gate. The tool-facing load handler
+refuses selection without the complete-request admission callback; removal remains
+available. Pure Select remains usable by explicit setup code, not a tool bypass.
 Office budget-refusal guidance names `common.skills_load` with `action=remove`
 for a completed or currently unneeded selection, followed by a separate new load.
 It does not remove a skill automatically. Unloaded-tool protocol repair requires

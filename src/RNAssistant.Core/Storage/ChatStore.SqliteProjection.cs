@@ -681,6 +681,7 @@ namespace RNAssistant.Core.Storage
                     throw new ChatConcurrencyException("The chat event log no longer exists.");
                 var previousRevision = session.Revision;
                 var previousUpdatedUtc = session.UpdatedUtc;
+                var attempt = new AppendAttempt(session);
                 session.UpdatedUtc = DateTime.UtcNow;
                 metadata["UpdatedUtc"] = session.UpdatedUtc;
                 try
@@ -692,7 +693,7 @@ namespace RNAssistant.Core.Storage
                     var appended = AppendEvents(path, session.Id, previousRevision,
                         session.StorageHeadHash, session.StorageByteLength,
                         session.StorageLastWriteUtcTicks, session.StorageTailByteOffset,
-                        pending, null);
+                        pending, null, attempt);
                     var tail = appended[appended.Count - 1];
                     session.Revision = tail.Sequence;
                     session.StorageHeadHash = tail.Hash;
@@ -701,29 +702,9 @@ namespace RNAssistant.Core.Storage
                     RemoveProjectionCache(path);
                     RemoveHeaderCache(path);
                 }
-                catch (ChatConcurrencyException)
-                {
-                    // Append rejected before writing. A foreign tail cannot
-                    // advance this still-stale projection's write authority.
-                    session.UpdatedUtc = previousUpdatedUtc;
-                    throw;
-                }
                 catch
                 {
-                    session.UpdatedUtc = previousUpdatedUtc;
-                    try
-                    {
-                        var recovered = ReadEventLog(path);
-                        var tail = LastEvent(recovered);
-                        if (tail != null)
-                        {
-                            session.Revision = tail.Sequence;
-                            session.StorageHeadHash = tail.Hash;
-                            session.StorageTailByteOffset = tail.StorageByteOffset;
-                            CaptureStorageState(session, path);
-                        }
-                    }
-                    catch { session.Revision = previousRevision; }
+                    RecoverOwnAppend(session, path, attempt, previousRevision, previousUpdatedUtc);
                     throw;
                 }
             }

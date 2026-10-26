@@ -49,8 +49,8 @@ namespace RNAssistant.Harness
                 var initial = compile(direct);
                 AssertEqual(compile(previousDirect).Arsenal.ToolFingerprint, initial.Arsenal.ToolFingerprint,
                     profile.Id + " preserves initial exact registrations");
-                SkillTaskService.Select(session, one.Id, skills, pack, new AppSettings(), "load-one");
-                SkillTaskService.Select(session, two.Id, skills, pack, new AppSettings(), "load-two");
+                SkillTaskService.Select(session, one.Id, skills, pack, "load-one");
+                SkillTaskService.Select(session, two.Id, skills, pack, "load-two");
                 var selected = compile(direct);
                 AssertEqual(compile(previousDirect).Arsenal.ToolFingerprint, selected.Arsenal.ToolFingerprint,
                     profile.Id + " preserves loaded descriptor/policy/binding revisions");
@@ -69,6 +69,42 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void SkillAdmissionUsesCompleteBudgetOnly()
+        {
+            foreach (var format in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
+            {
+                var settings = new AppSettings { AgentResponseMode = format, ContextWindowOverrideTokens = 32768, MaxTokens = 4096 };
+                var skill = PackageSkill("fixture.large"); skill.Package = null;
+                var limit = ModelContextBudget.InputBudgetTokens(settings);
+                skill.BodyMarkdown = "Instruction. ";
+                while (ModelContextBudget.EstimateTextTokens(skill.BodyMarkdown, settings) <= limit / 2 + 100)
+                    skill.BodyMarkdown += new string('x', 512);
+                var skills = new SkillCatalogSnapshot(new[] { skill });
+                var catalog = new[] { PackageTool("fixture.read", ToolExposure.Direct) };
+                var pack = PackageTools(catalog); var session = PackageSession();
+                Func<IReadOnlyList<SelectedSkill>, ArsenalSkill, string> admit = (candidate, pending) => {
+                    var surface = SkillTaskService.Compile(session, skills, pack, catalog, catalog, "step", settings, candidate);
+                    var preparation = new ModelRequestPreparation(settings, surface.Tools,
+                        new ModelProtocolCallContext(new[] { catalog[0].Id }), (messages, tools, schema) => messages);
+                    var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                        pack.Generation, skills, null, session.Revision);
+                    var required = new[] { new ChatMessage { Role = "developer", Content = "Follow instructions." } };
+                    try {
+                        var snapshot = new ModelContextCompiler().Compile(authority, required, new ChatMessage[0], null,
+                            catalog, settings, preparation.MessageBudget(required), skillSurface: surface);
+                        return preparation.EstimateAdmittedTokens(snapshot.Messages) <= limit ? null : "Full request overflow";
+                    } catch (PromptBudgetExceededException) { return "Full request overflow"; }
+                };
+                SkillTaskService.Select(session, skill.Id, skills, pack, "load", admit);
+                AssertEqual(1, session.LastRun.SelectedSkills.Count, "fitting skill above half budget is accepted");
+                var previous = session.LastRun.SelectedSkills;
+                SkillTaskService.Select(session, skill.Id, skills, pack, "same", admit);
+                AssertTrue(ReferenceEquals(previous, session.LastRun.SelectedSkills), "identical selection remains stable");
+                RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, skill.Id, skills, pack, "refused", (candidate, pending) => "Full request overflow"));
+                AssertTrue(ReferenceEquals(previous, session.LastRun.SelectedSkills), "refusal preserves selection");
+            }
+        }
+
         private static void ModelRequestPreparationBindsSnapshotAndBudget()
         {
             var read = PackageTool("fixture.read", ToolExposure.Direct);
@@ -78,7 +114,7 @@ namespace RNAssistant.Harness
             var skills = new SkillCatalogSnapshot(new[] { skill });
             var session = PackageSession();
             var pack = PackageTools(tools);
-            SkillTaskService.Select(session, skill.Id, skills, pack, new AppSettings(), "load");
+            SkillTaskService.Select(session, skill.Id, skills, pack, "load");
             var snapshot = CompilePackage(session, skills, pack, tools);
             var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
                 ContextWindowOverrideTokens = 32768, MaxTokens = 4096 };
@@ -101,7 +137,9 @@ namespace RNAssistant.Harness
             var stale = new ModelRequestPreparation(settings, new[] { read }, context, projection);
             RuntimeThrows<InvalidOperationException>(() => stale.CreateRequest(snapshot, tools, notice => snapshot.Messages));
             request.Options.ResponseFormat = LlmResponseFormats.JsonObject;
-            AssertTrue(ReferenceEquals(required, preparation.ProjectMessages(required)), "fallback uses the original complete messages");
+            AssertEqual(required[0].Content, preparation.ProjectMessages(required)[0].Content, "fallback preserves the complete prompt");
+            request.Options.ResponseSchemaName = null;
+            request.Options.ResponseSchemaJson = null;
             AssertTrue(preparation.MessageBudget(required) > strictBudget, "json_object releases strict schema budget");
         }
 
@@ -117,13 +155,13 @@ namespace RNAssistant.Harness
             var pluginCatalog = new SkillCatalogSnapshot(new[] { pluginAuthoring });
             var fileTools = pluginAuthoring.Package.RequiredTools.Select(item => PackageTool(item.Id)).ToArray();
             var withoutPlugins = SkillTaskService.Select(PackageSession(), pluginAuthoring.Id,
-                pluginCatalog, PackageTools(fileTools), new AppSettings(), "plugin-without-capabilities");
+                pluginCatalog, PackageTools(fileTools), "plugin-without-capabilities");
             AssertContains(withoutPlugins.Reason, "package validation", "missing check has explicit fallback");
             AssertContains(withoutPlugins.Reason, "activation is unavailable", "missing apply has explicit fallback");
             var withPlugins = fileTools.Concat(new[] { PackageTool("plugins.check"), PackageTool("plugins.apply") }).ToArray();
             var pluginSession = PackageSession();
             SkillTaskService.Select(pluginSession, pluginAuthoring.Id, pluginCatalog,
-                PackageTools(withPlugins), new AppSettings(), "plugin-with-capabilities");
+                PackageTools(withPlugins), "plugin-with-capabilities");
             var pluginSurface = SkillTaskService.Compile(pluginSession, pluginCatalog, PackageTools(withPlugins),
                 withPlugins, fileTools, "plugin-next-step", new AppSettings());
             AssertTrue(pluginSurface.Tools.Any(tool => tool.Id == "plugins.check") &&
@@ -163,7 +201,7 @@ namespace RNAssistant.Harness
                     var session = NewSession(adapter);
                     session.LastRun = new ChatRunRecord { RunId = "host-skill", TurnId = "host-skill",
                         StartedUtc = DateTime.UtcNow, ConversationPolicy = ConversationRunPolicy.For(ChatModes.Agent) };
-                    var selected = SkillTaskService.Select(session, skill.Id, skills, pack, settings, "load");
+                    var selected = SkillTaskService.Select(session, skill.Id, skills, pack, "load");
                     AssertEqual(skill.Id, selected.Id, host + " can select its advertised skill " + skill.Id);
                     AssertTrue(selected.Tools.All(id => tools.Any(tool => tool.Id == id)),
                         host + " selection binds only its published tools: " + skill.Id);
@@ -248,11 +286,11 @@ namespace RNAssistant.Harness
             // Reading bytes or even a successful resource frame does not mutate task selection.
             session.Messages.Add(new ChatMessage { Role = "user", Content = one.BodyMarkdown, ProtocolMessage = true, ToolName = "common.resources_read" });
             AssertEqual(0, CompilePackage(session, skills, pack, catalog).Receipt.Arsenal.Selected.Count, "S12 source is not selection");
-            SkillTaskService.Select(session, plain.Id, skills, pack, new AppSettings(), "load-plain");
+            SkillTaskService.Select(session, plain.Id, skills, pack, "load-plain");
             AssertEqual(1, CompilePackage(session, skills, pack, catalog).Receipt.Arsenal.Tools.Count, "S01 instruction-only loads");
-            SkillTaskService.Select(session, one.Id, skills, pack, new AppSettings(), "load-one");
-            SkillTaskService.Select(session, two.Id, skills, pack, new AppSettings(), "load-two");
-            SkillTaskService.Select(session, one.Id, skills, pack, new AppSettings(), "load-again");
+            SkillTaskService.Select(session, one.Id, skills, pack, "load-one");
+            SkillTaskService.Select(session, two.Id, skills, pack, "load-two");
+            SkillTaskService.Select(session, one.Id, skills, pack, "load-again");
             AssertEqual(3, session.LastRun.SelectedSkills.Count, "idempotent selection");
             var next = CompilePackage(session, skills, pack, catalog);
             AssertEqual(2, next.Receipt.Arsenal.Tools.Count, "S03/S05 shared tool appears once");
@@ -281,19 +319,19 @@ namespace RNAssistant.Harness
             var incompatible = PackageSkill("fixture.incompatible", tool.Id);
             incompatible.Package.RequiredTools[0].ContractVersion = "2";
             var skills = new SkillCatalogSnapshot(new[] { good, missing, optional, incompatible }); var session = PackageSession();
-            RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, missing.Id, skills, pack, new AppSettings(), "missing"));
-            RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, incompatible.Id, skills, pack, new AppSettings(), "version"));
+            RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, missing.Id, skills, pack, "missing"));
+            RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, incompatible.Id, skills, pack, "version"));
             AssertEqual(0, session.LastRun.SelectedSkills.Count, "S06/S09 missing or incompatible dependencies never partially select");
-            var loaded = SkillTaskService.Select(session, optional.Id, skills, pack, new AppSettings(), "optional");
+            var loaded = SkillTaskService.Select(session, optional.Id, skills, pack, "optional");
             AssertTrue(loaded.Reason.Contains("Report unavailable"), "S07 optional fallback is explicit");
-            SkillTaskService.Select(session, good.Id, skills, pack, new AppSettings(), "good");
+            SkillTaskService.Select(session, good.Id, skills, pack, "good");
             var replacement = PackageTool(binding: "replacement"); var updated = PackageTools(replacement);
             var suspended = CompilePackage(session, skills, updated, new[] { replacement });
             AssertEqual("unavailable", suspended.Receipt.Arsenal.Selected.Single(item => item.Id == good.Id).Status, "S10 update suspends pin");
             AssertEqual(0, suspended.Receipt.Arsenal.Tools.Count, "suspended binding is not exposed");
             var conflicting = PackageSkill("fixture.conflict", tool.Id);
             var all = new SkillCatalogSnapshot(new[] { good, conflicting, optional });
-            RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, conflicting.Id, all, updated, new AppSettings(), "conflict"));
+            RuntimeThrows<InvalidOperationException>(() => SkillTaskService.Select(session, conflicting.Id, all, updated, "conflict"));
             AssertTrue(session.LastRun.SelectedSkills.All(item => item.Id != conflicting.Id), "S08 no last-wins conflict");
             optional.Package.OptionalTools[0].Fallback = null;
             AssertTrue(SkillTaskService.Validate(optional.Package) != null, "fallback is mandatory");
@@ -309,7 +347,13 @@ namespace RNAssistant.Harness
             var skills = new SkillCatalogSnapshot(new[] { skill }); var session = PackageSession();
             var registry = new ToolHandlerRegistry(); var probe = new PackageProbeHandler();
             registry.Register(pack.Find(tool.Id), probe);
-            registry.Register(pack.Find(load.Id), new SkillLoadToolHandler(session, () => skills, () => pack, new AppSettings()));
+            registry.Register(pack.Find(load.Id), new SkillLoadToolHandler(session, () => skills, () => pack, new AppSettings(), (candidate, preview) => {
+                var surface = SkillTaskService.Compile(session, skills, pack, catalog, new[] { load }, "admission", new AppSettings(), candidate);
+                new ModelContextCompiler().Compile(new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
+                    pack.Revision, skills, null, session.Revision), new ChatMessage[0], new[] { preview }, null, catalog,
+                    new AppSettings(), 100000, skillSurface: surface);
+                return null;
+            }));
             var currentPack = pack;
             var runtime = new ToolRuntime(registry, "agent", false, true,
                 dispatchGuard: context => SkillTaskService.CheckDispatch(session, context, currentPack),
@@ -321,6 +365,11 @@ namespace RNAssistant.Harness
                 var command = new ToolCall(Guid.NewGuid().ToString("N"), id, arguments);
                 return new ToolExecutionContext(command, runtime.Describe(command), "run", "run", "step", DateTime.UtcNow, false, 5);
             };
+            var unbound = await new SkillLoadToolHandler(session, () => skills, () => pack, new AppSettings())
+                .ExecuteAsync(new ToolHandlerContext(call(load.Id, "{}"),
+                    new Dictionary<string, object> { ["id"] = skill.Id }), CancellationToken.None);
+            AssertEqual("Error", unbound.Result.Status.ToString(), "loader without complete admission refuses selection");
+            AssertEqual(0, session.LastRun.SelectedSkills.Count, "missing admission changes no selection");
             var guessed = await runtime.ExecuteAsync(call(tool.Id, "{}"), CancellationToken.None);
             AssertTrue(!guessed.MayHaveDispatched && probe.Calls == 0, "S02 guessed call refused");
             AssertEqual(ToolRetryPolicy.Replan, guessed.Recovery.RetryPolicy, "admission failure is replannable");
@@ -398,7 +447,7 @@ namespace RNAssistant.Harness
                 AssertEqual(SkillRevision.Compute(skill), SkillPackageSource.Capture(skill).Revision, "immutable package includes dependencies");
                 AssertTrue(!SkillStore.TryNormalizeReferencePath("scripts/../escape.py", out error), "S24 traversal refused");
                 var pack = PackageTools(PackageTool()); var catalog = new[] { PackageTool() }; var skills = new SkillCatalogSnapshot(new[] { skill });
-                var session = PackageSession(); SkillTaskService.Select(session, skill.Id, skills, pack, new AppSettings(), "load");
+                var session = PackageSession(); SkillTaskService.Select(session, skill.Id, skills, pack, "load");
                 session.LastContextReceipt = CompilePackage(session, skills, pack, catalog).Receipt;
                 new ChatStore(paths).Save(session);
                 var restored = new ChatStore(paths).Load(session.Host, session.DocumentKey, session.Id);

@@ -1,0 +1,62 @@
+[
+  {
+    "filter": "kernel:",
+    "exitCode": 0,
+    "output": "PASS kernel: read ok\nPASS kernel: read error\nPASS kernel: write ok\nPASS kernel: write error\nPASS kernel: write unknown\nPASS kernel: external unknown\nPASS kernel: error then success\nPASS kernel: success then error\nPASS kernel: read inspection after unknown effect\nPASS kernel: unknown inspection is bounded and restored\nPASS kernel: narrative cannot claim effects\nPASS kernel: completion rejection continues within the run\nPASS kernel: completion rejection stops at existing boundaries\nPASS kernel: completion rejection preserves unknown-effect guard\nPASS kernel: identical definite failure returns recovery\nPASS kernel: changed conflicts allow recovery\nPASS kernel: failed call after corrective success proceeds\nPASS kernel: alternating definite failures reject duplicate dispatch\nPASS kernel: definite failure can recover after read\nPASS kernel: unknown call remains non-repeatable\nPASS kernel: independent reads execute in order\nPASS kernel: mutations require separate responses\nPASS kernel: runtime id collision within batch\nPASS kernel: runtime id collision across steps\nPASS kernel: repeated calls receive unique runtime ids\nPASS kernel: invalid allocator output fails before acceptance\nPASS kernel: restored pending call retains its allocated id\nPASS kernel: requests are detached turn snapshots\nPASS kernel: typed model failures and native refusal\nPASS kernel: cancellation at run start\nPASS kernel: cancellation before model dispatch\nPASS kernel: cancellation after accepted response\nPASS kernel: cancellation before tool dispatch\nPASS kernel: cancellation during policy recheck\nPASS kernel: late cancelled response is not accepted\nPASS kernel: cancellation after possible write dispatch\nPASS kernel: cancellation after read entry\nPASS kernel: cancellation preserves terminal evidence\nPASS kernel: cancelled batch closes all calls\nPASS kernel: iteration limit\nPASS kernel: stopped continuation preserves accounting\nPASS kernel: stopped continuation rejects unsafe history\nPASS kernel: tool step limit\nPASS kernel: confirmation preserves prior error\nPASS kernel: confirmation allowed after unknown effect\nPASS kernel: confirmation records error\nPASS kernel: confirmation records unknown\nPASS kernel: runtime id collision after confirmation\nPASS kernel: stale confirmation cannot dispatch twice\nPASS kernel: cancelled confirmation closes pending call\nPASS kernel: denied confirmation never dispatches\nPASS kernel: policy change stops accepted call\nPASS kernel: policy change stops confirmation\nPASS kernel: store failure stops before dispatch\nPASS kernel: store failure preserves unpersisted evidence\nPASS kernel: missing execution evidence remains unknown\nPASS kernel: local interaction ends the invocation\nPASS kernel: inspection requires affected target evidence\nOK passed=58 failed=0 total=58\n"
+  },
+  {
+    "filter": "storage: own append",
+    "exitCode": 0,
+    "output": "PASS storage: own append fault recovery\nOK passed=1 failed=0 total=1\n"
+  },
+  {
+    "filter": "storage: partial append",
+    "exitCode": 0,
+    "output": "PASS storage: partial append preserves stale writer\nOK passed=1 failed=0 total=1\n"
+  },
+  {
+    "filter": "storage: metadata conflict",
+    "exitCode": 0,
+    "output": "PASS storage: metadata conflict preserves stale revision\nOK passed=1 failed=0 total=1\n"
+  },
+  {
+    "filter": "skill packages:",
+    "exitCode": 0,
+    "output": "PASS skill packages: selection deduplication compaction budget and scope\nPASS skill packages: built-ins load for every Office host\nPASS skill packages: dependencies conflicts updates and revocation\nPASS skill packages: exact request dispatch and next-step loading\nPASS skill packages: VBA schema inspection does not loop\nPASS skill packages: full budget has one admission owner\nPASS skill packages: strict VBA selection fits actual request budget\nPASS skill packages: complete request admission preserves usable selection\nPASS skill packages: restart supporting files and inert arsenal\nOK passed=9 failed=0 total=9\n"
+  },
+  {
+    "filter": "model request:",
+    "exitCode": 0,
+    "output": "PASS model request: snapshot surface budget and fallback\nOK passed=1 failed=0 total=1\n"
+  },
+  {
+    "filter": "model context: saved request composition",
+    "exitCode": 0,
+    "output": "PASS model context: saved request composition\nOK passed=1 failed=0 total=1\n"
+  },
+  {
+    "filter": "model refs:",
+    "exitCode": 0,
+    "output": "PASS model refs: typed wire pairs and folded receipts\nPASS model refs: durable allocation and finish admission\nPASS model refs: resource identity and revision persistence\nPASS model refs: labels bind only to delivered source blocks\nPASS model refs: rejected finish corrects citation without replay\nPASS model refs: compaction retains last terminal receipt\nPASS model refs: repair and fallback freeze aliases\nOK passed=7 failed=0 total=7\n"
+  },
+  {
+    "filter": "kernel replay:",
+    "exitCode": 0,
+    "output": "PASS kernel replay: native resource read evidence\nPASS kernel replay: normal effect and own trace CAS\nPASS kernel replay: write error\nPASS kernel replay: unknown without inspection cannot finish\nPASS kernel replay: confirmation and stale cursor\nPASS kernel replay: cancelled confirmation\nPASS kernel replay: known effect survives model preparation failure\nPASS kernel replay: known unprojected effect survives recovery\nPASS kernel replay: failed append prevents dispatch\nPASS kernel replay: interrupted write remains unknown\nOK passed=10 failed=0 total=10\n"
+  },
+  {
+    "filter": "model protocol: fallback",
+    "exitCode": 0,
+    "output": "PASS model protocol: fallback stays within one run\nPASS model protocol: fallback is explicit and bounded\nPASS model protocol: fallback works during format repair\nOK passed=3 failed=0 total=3\n"
+  },
+  {
+    "filter": "model protocol: invalid schema",
+    "exitCode": 0,
+    "output": "PASS model protocol: invalid schema does not trigger fallback\nOK passed=1 failed=0 total=1\n"
+  },
+  {
+    "filter": "context inspector: builds agent snapshot",
+    "exitCode": 0,
+    "output": "PASS context inspector: builds agent snapshot\nOK passed=1 failed=0 total=1\n"
+  }
+]

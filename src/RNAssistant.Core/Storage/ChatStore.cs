@@ -29,6 +29,68 @@ namespace RNAssistant.Core.Storage
     /// </summary>
     public sealed partial class ChatStore
     {
+        // Test-only fault injection at durable append boundaries; never a replay hook.
+        internal Action<string> AppendFaultPoint { get; set; }
+        private enum AppendState { NotAppended, Appended, Indeterminate }
+        private sealed class AppendAttempt
+        {
+            internal readonly string HeadHash;
+            internal readonly long TailOffset, ByteLength, LastWriteTicks;
+            internal AppendAttempt(ChatSession session)
+            {
+                HeadHash = session.StorageHeadHash;
+                TailOffset = session.StorageTailByteOffset;
+                ByteLength = session.StorageByteLength;
+                LastWriteTicks = session.StorageLastWriteUtcTicks;
+            }
+            internal AppendState State;
+            internal IReadOnlyList<SessionEvent> Events;
+        }
+
+        private void RecoverOwnAppend(ChatSession session, string path, AppendAttempt attempt,
+            long previousRevision, DateTime previousUpdatedUtc)
+        {
+            // Never adopt a foreign tail as authority for this in-memory projection.
+            if (attempt.State != AppendState.NotAppended && attempt.Events != null)
+            {
+                try
+                {
+                    var log = ReadEventLog(path);
+                    var own = attempt.Events;
+                    var tail = LastEvent(log);
+                    if (tail != null && !log.HasIncompleteTail && log.IsStableSnapshot &&
+                        tail.Sequence == own[own.Count - 1].Sequence &&
+                        own.All(expected => log.Events.Any(actual => actual.Sequence == expected.Sequence &&
+                            actual.EventId == expected.EventId && actual.Hash == expected.Hash)))
+                    {
+                        // A write/flush exception is not success merely because bytes are readable.
+                        using (var stream = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.Read))
+                        {
+                            if (stream.Length != log.ByteLength)
+                                throw new ChatConcurrencyException("Chat changed during append recovery.");
+                            stream.Flush(true);
+                        }
+                        attempt.State = AppendState.Appended;
+                        session.Revision = tail.Sequence;
+                        session.StorageHeadHash = tail.Hash;
+                        session.StorageTailByteOffset = tail.StorageByteOffset;
+                        session.StorageByteLength = log.ByteLength;
+                        session.StorageLastWriteUtcTicks = log.LastWriteUtcTicks;
+                        RemoveProjectionCache(path);
+                        RemoveHeaderCache(path);
+                        return;
+                    }
+                }
+                catch { /* Preserve refusal/uncertainty; caller must stop and reload. */ }
+            }
+            session.StorageHeadHash = attempt.HeadHash;
+            session.StorageTailByteOffset = attempt.TailOffset;
+            session.StorageByteLength = attempt.ByteLength;
+            session.StorageLastWriteUtcTicks = attempt.LastWriteTicks;
+            session.Revision = previousRevision;
+            session.UpdatedUtc = previousUpdatedUtc;
+        }
+
         private const string EventFileSuffix = ".events.jsonl";
         private const int MaxProjectionCacheEntries = 16;
         private const long MaxProjectionCacheCharacters = 16L * 1024 * 1024;
@@ -862,7 +924,7 @@ namespace RNAssistant.Core.Storage
             AllocateResourceReferences(session, stored, commit);
             var previousRevision = session.Revision;
             var previousUpdatedUtc = session.UpdatedUtc;
-            var durableRevision = previousRevision;
+            var attempt = new AppendAttempt(session);
             session.UpdatedUtc = DateTime.UtcNow;
             try
             {
@@ -928,7 +990,7 @@ namespace RNAssistant.Core.Storage
                     stored == null ? 0 : stored.StorageLastWriteUtcTicks,
                     stored == null ? 0 : stored.StorageTailByteOffset,
                     pending,
-                    log);
+                    log, attempt);
                 var appendMs = timer.ElapsedMilliseconds - externalizeMs - readMs - projectionMs - diffMs;
                 AdvanceHeaderCache(
                     path,
@@ -938,12 +1000,11 @@ namespace RNAssistant.Core.Storage
                     stored == null ? 0 : stored.StorageByteLength,
                     appended);
                 var tail = appended[appended.Count - 1];
-                durableRevision = tail.Sequence;
-                session.Revision = durableRevision;
+                session.Revision = tail.Sequence;
                 session.StorageHeadHash = tail.Hash;
                 session.StorageTailByteOffset = tail.StorageByteOffset;
                 CaptureStorageState(session, path);
-                projectedAfter["Revision"] = durableRevision;
+                projectedAfter["Revision"] = tail.Sequence;
                 StoreProjectionCache(path, projectedAfter, session);
                 DocumentArtifacts.ProjectRemovals(session);
                 RebuildHtmlWorkspaceProjection(session);
@@ -956,24 +1017,7 @@ namespace RNAssistant.Core.Storage
             }
             catch
             {
-                try
-                {
-                    if (File.Exists(path))
-                    {
-                        var recovered = ReadEventLog(path);
-                        var recoveredTail = LastEvent(recovered);
-                        durableRevision = recoveredTail == null ? 0 : recoveredTail.Sequence;
-                        session.StorageHeadHash = recoveredTail == null ? null : recoveredTail.Hash;
-                        session.StorageTailByteOffset = recoveredTail == null ? 0 : recoveredTail.StorageByteOffset;
-                        CaptureStorageState(session, path);
-                    }
-                }
-                catch
-                {
-                    // Keep the last revision that this writer knows was made durable.
-                }
-                session.Revision = durableRevision;
-                if (durableRevision == previousRevision) session.UpdatedUtc = previousUpdatedUtc;
+                RecoverOwnAppend(session, path, attempt, previousRevision, previousUpdatedUtc);
                 throw;
             }
         }
@@ -987,7 +1031,7 @@ namespace RNAssistant.Core.Storage
             long expectedLastWriteUtcTicks,
             long expectedTailByteOffset,
             IReadOnlyList<PendingSessionEvent> pending,
-            EventLogReadResult validatedLog)
+            EventLogReadResult validatedLog, AppendAttempt attempt = null)
         {
             if (pending == null || pending.Count == 0) return new List<SessionEvent>();
 
@@ -1051,18 +1095,24 @@ namespace RNAssistant.Core.Storage
                 appendOffset += bytes.LongLength + 1;
             }
 
+            if (attempt != null) attempt.Events = appended;
+            AppendFaultPoint?.Invoke("before-write");
             using (var stream = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.Read))
             {
                 if (stream.Length != appended[0].StorageByteOffset)
                 {
                     throw new ChatConcurrencyException("Chat was changed while the append batch was being prepared.");
                 }
+                if (attempt != null) attempt.State = AppendState.Indeterminate;
                 foreach (var bytes in serialized)
                 {
                     stream.Write(bytes, 0, bytes.Length);
                     stream.WriteByte((byte)'\n');
+                    AppendFaultPoint?.Invoke("after-record");
                 }
                 stream.Flush(true);
+                if (attempt != null) attempt.State = AppendState.Appended;
+                AppendFaultPoint?.Invoke("after-flush");
             }
             AdvanceSqliteProjection(path, appended);
             return appended;

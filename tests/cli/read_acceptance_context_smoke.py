@@ -1,5 +1,6 @@
 """Current read requirements remain visible through edits and frozen repair."""
 
+from conversation_transport import conversation_content
 import json
 import os
 import subprocess
@@ -14,11 +15,11 @@ CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 
 
 def call(name, **arguments):
-    return {"message": "Perform the checked file step.", "action": "tool",
+    return {"message": "Perform the checked file step.", "action": "execute", "reason": "Perform the checked step.",
             "tool_calls": [{"name": name, "arguments": arguments}]}
 
 
-DONE = {"message": "Finished.", "action": "done", "tool_calls": []}
+DONE = {"message": "Finished.", "finish_from_request": True}
 
 
 def read_progress(request):
@@ -67,7 +68,7 @@ def run_case(root, ending):
                 if index == first_done and ending == "late_edit":
                     (workspace / "app.txt").write_text("external edit during final model wait")
                 response = responses[index] if index < len(responses) else DONE
-                content = json.dumps(response)
+                content = conversation_content(request, response)
             body = json.dumps({"choices": [{"message": {"role": "assistant",
                 "content": content}}]}).encode()
             self.send_response(200)
@@ -98,7 +99,7 @@ def run_case(root, ending):
         result = run("--min-writes", "3")
         assert result.returncode == 0, (result.stdout, result.stderr)
         final = json.loads(result.stdout.splitlines()[-1])["data"]
-        assert final["reason"] == "model_done", final
+        assert final["reason"] == "model_finish", final
         assert final["completeFileReads"] == 2 and final["acceptance"] == "passed", final
         assert len(requests) == first_run_requests, "Only the existing kernel continues after unmet criteria"
         if ending != "repair":
@@ -151,9 +152,13 @@ def run_completion_case(root, ending):
             scenario.responses.extend([DONE, {"invalid": "Preserve completion feedback during repair."},
                 call("files.create", relativePath="required.txt", text="Delivered"), DONE])
         else:
-            scenario.responses.append({**DONE, "action": ending if ending in ("blocked", "needs_input") else "done"})
-        expected = {"repair": (0, "model_done"), "plain": (0, "model_done"),
-                    "blocked": (5, "model_blocked"), "needs_input": (3, "model_needs_input")}[ending]
+            if ending == "needs_input":
+                scenario.responses.append(call("common.questions_ask", questions=[{"header": "Obstacle", "prompt": "What should I create?",
+                    "selection": "single", "allowFreeText": True, "options": [{"label": "required.txt", "description": "Create the required file"}, {"label": "Stop", "description": "Leave the task incomplete"}]}]))
+            else:
+                scenario.responses.append({**DONE, "assessment": "not_satisfied" if ending == "blocked" else "satisfied"})
+        expected = {"repair": (0, "model_finish"), "plain": (0, "model_finish"),
+                    "blocked": (5, "model_finish"), "needs_input": (3, "awaiting_user")}[ending]
         result = scenario.json("run", "--message", "Create the required file, or name the concrete obstacle.",
             "--auto-confirm", "on", "--max-iterations", "4", "--max-tool-steps", "2",
             *([] if ending == "plain" else ["--expect-files", "required.txt", "--min-writes", "1"]), code=expected[0])

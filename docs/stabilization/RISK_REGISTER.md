@@ -1,5 +1,16 @@
 # Stabilization risk register
 
+## V8 architecture stabilization evidence — 2026-10-26
+
+Core/Application: duplicate skill budget admission and append recovery paths removed;
+unknown inspection no longer clears on unrelated reads. CLI catalogue construction
+without session fixed. [Audit and remaining gaps](../audits/v8-architecture-drift-2026-10-26.md)
+distinguish current tests from historical failures below. D07 physical relocation,
+records migration, performance and real Windows/Office remain open. Exception fault
+injection is not power-loss/COM qualification. Old progress without completion time
+cannot silently satisfy the stricter inspection prerequisite.
+
+
 Current triage is at the beginning of [PROGRESS](PROGRESS.md).
 The dated incident notes distinguish observed symptoms, reproduced host-neutral
 causes and remaining Windows/target-model evidence. The R-number table retains
@@ -777,10 +788,10 @@ remain open. See the [unified report](PROGRESS.md#unified-stabilization--2026-10
 
 **Existing open risks confirmed by source review:** chat relocation still appends
 the binding before physical rename; interruption between them is not covered by
-the six refusal tests. `AgentProgressTracker` clears its inspection floor after
-any successful independent read, even one without evidence for the affected
-target. This is the documented workflow floor, not a new claim that unknown
-effects become verified: health and replay guards remain unknown/protected.
+the six refusal tests. The former global inspection floor was replaced on
+2026-10-26 with target-correlated complete fresh evidence; unknown health and
+replay guards remain protected. Missing target/time remains unresolved. See the
+[V8 audit](../audits/v8-architecture-drift-2026-10-26.md) for current evidence.
 Concrete owners/removal gates are in [Structural debt](BACKLOG.md#structural-debt).
 
 Current regression evidence (filters overlap; no aggregate coverage claim):

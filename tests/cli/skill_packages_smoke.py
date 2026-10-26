@@ -1,4 +1,5 @@
 """Task-scoped skill selection and actual guarded file changes; controlled HTTP, no LLM claims."""
+from conversation_transport import conversation_content, reply_to_title
 import json
 import os
 import subprocess
@@ -33,9 +34,10 @@ def check(root):
         def do_POST(self):
             try:
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if reply_to_title(self, request): return
                 requests.append(request)
                 assert responses, "Unexpected model request"
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(responses.popleft())}}]}).encode()
+                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(requests[-1], responses.popleft())}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -85,7 +87,7 @@ def check(root):
         assert (workspace / "source.txt").read_text() == "total=13\n"
         assert not (workspace / "report.txt").exists()
         final = cli("approve", "--session", second["SessionId"], "--pending", second["pendingId"])
-        assert final["reason"] == "model_done", final
+        assert final["reason"] == "model_finish", final
         assert (workspace / "report.txt").read_text() == "Verified total: 13\n"
         assert all(selected(request) == ["SELECTED_SKILL fixture.report\n" + marker] for request in requests[2:])
         assert all("UNPUBLISHED_CHANGED_BODY" not in json.dumps(request) for request in requests)

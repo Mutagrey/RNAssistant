@@ -124,7 +124,7 @@ namespace RNAssistant.Core.Services
         }
 
         public static ArsenalSkill Select(ChatSession session, string id, SkillCatalogSnapshot skills,
-            ToolPackSnapshot pack, AppSettings settings, string callId,
+            ToolPackSnapshot pack, string callId,
             Func<IReadOnlyList<SelectedSkill>, ArsenalSkill, string> admit = null)
         {
             if (session?.LastRun == null) throw new InvalidOperationException("An active task is required.");
@@ -140,14 +140,6 @@ namespace RNAssistant.Core.Services
             foreach (var group in candidate.SelectMany(item => item.Tools).GroupBy(item => item.Id, StringComparer.Ordinal))
                 if (group.Select(item => item.Revision).Distinct(StringComparer.Ordinal).Count() != 1)
                     throw new InvalidOperationException("Selected skills require conflicting bindings: " + group.Key);
-            var definitions = skills.Skills;
-            var bodies = candidate.Select(item => definitions.SingleOrDefault(def => def.Id == item.Id &&
-                skills.Revision(def.Id) == item.Revision)).Where(item => item != null).ToArray();
-            var tokens = bodies.Sum(item => ModelContextBudget.EstimateTextTokens(item.BodyMarkdown, settings));
-            tokens += candidate.SelectMany(item => item.Tools).Select(item => item.Id).Distinct(StringComparer.Ordinal)
-                .Sum(tool => ModelContextBudget.EstimateTextTokens(pack.Find(tool)?.Descriptor.ParametersJson ?? "", settings));
-            if (tokens > ModelContextBudget.InputBudgetTokens(settings) / 2)
-                throw new InvalidOperationException("Skill instructions and dependencies exceed the task context budget.");
             var pending = Describe(skill, "pending", optional, pins, skills.Revision(id));
             var admissionError = admit?.Invoke(candidate, pending);
             if (admissionError != null) throw new InvalidOperationException(admissionError);

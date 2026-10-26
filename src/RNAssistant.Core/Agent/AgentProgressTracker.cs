@@ -18,6 +18,12 @@ namespace RNAssistant.Core.Agent
             internal string Message;
             internal string AdmissionRevision;
         }
+        private sealed class PendingInspection
+        {
+            internal ResourceIdentity Target;
+            internal DateTime? AfterUtc;
+        }
+        private readonly List<PendingInspection> _inspections = new List<PendingInspection>();
         private readonly HashSet<string> _unknown = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Failure> _failures = new Dictionary<string, Failure>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _seenResults = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -38,7 +44,7 @@ namespace RNAssistant.Core.Agent
 
         // A workflow floor, not proof that the requested state was achieved.
         // Reconstructed from terminal facts; never clears unknown replay guards.
-        internal bool InspectionRequired { get; private set; }
+        internal bool InspectionRequired => _inspections.Count != 0;
 
         internal bool CanDispatch(ToolCall call, out string reason, out string message, out int delayMilliseconds,
             ToolPolicySnapshot policy = null)
@@ -87,7 +93,13 @@ namespace RNAssistant.Core.Agent
             if (progress.Outcome == ToolExecutionOutcome.Unknown)
             {
                 _unknown.Add(key);
-                InspectionRequired = true;
+                var targets = (effect?.Impacts ?? new ResourceImpact[0]).Select(impact => impact.Identity)
+                    .Concat(progress.Recovery?.ResourceIdentity == null ? new ResourceIdentity[0] :
+                        new[] { progress.Recovery.ResourceIdentity }).Distinct().ToArray();
+                // Missing typed identity cannot be supplied by a later unrelated read.
+                if (targets.Length == 0) targets = new ResourceIdentity[] { null };
+                foreach (var target in targets)
+                    _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc });
                 return;
             }
             if (progress.Outcome == ToolExecutionOutcome.Error)
@@ -98,9 +110,12 @@ namespace RNAssistant.Core.Agent
                 previous.AdmissionRevision = progress.AdmissionRevision;
                 return;
             }
-            if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
-                InspectionRequired = false;
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
+            if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
+                _inspections.RemoveAll(pending => pending.Target != null && pending.AfterUtc.HasValue &&
+                    observations.Any(observation => pending.Target.Equals(observation.Resource.Identity) &&
+                        !observation.Immutable && observation.ObservedAt > pending.AfterUtc.Value &&
+                        observation.Complete && observation.Coverage.Kind == ResourceCoverageKinds.Whole));
             foreach (var pair in _failures.ToArray())
                 if (pair.Value.Recovery?.IsSatisfiedBy(observations, effect) == true)
                     _failures.Remove(pair.Key);
