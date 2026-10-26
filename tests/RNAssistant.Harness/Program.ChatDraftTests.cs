@@ -67,6 +67,14 @@ namespace RNAssistant.Harness
                     "unfinished plugin annotation survives protected draft reopen");
                 AssertEqual("plugin-selection-a", reopened.Single(item => item.WorkspaceId == "project-a").PendingInput.ResourceDraftIds.Single(),
                     "uncertain workspace input keeps the exact visual draft identity");
+                workspace.PendingInput = new PendingChatInput { RequestId = "edit-request", Message = "revised",
+                    EditMessageId = "user-message", ExpectedRevision = 7, Mode = "plan" };
+                store.Save(workspace);
+                var editPending = new ProtectedChatDraftStore(paths, codec, codec).Load()
+                    .Single(item => item.WorkspaceId == "project-a").PendingInput;
+                AssertTrue(editPending.RequestId == "edit-request" && editPending.EditMessageId == "user-message" &&
+                    editPending.ExpectedRevision == 7 && editPending.ResourceDraftIds.Count == 0,
+                    "uncertain workspace edit keeps exact message and revision without new resources");
                 store.DeleteWorkspace("project-a", "session-a");
                 AssertTrue(store.Load().Count == 2 && store.Load().Any(item => item.WorkspaceId == "project-b"),
                     "workspace deletion is exact");

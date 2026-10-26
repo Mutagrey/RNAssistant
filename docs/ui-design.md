@@ -117,14 +117,22 @@ Markdown, пустое состояние и стили composer; workspace-spec
 Все три экрана
 переносят одну физическую ленту сообщений и одну форму ввода с теми же
 textarea/Send/Stop. Черновик и доступные действия переключаются по owner;
-Office сохраняет history/attachment/edit/queue действия, проект — загрузку
-файлов, плагин — source chat. Единый ChatView controller в `app-workspace-chat.js`
+Office сохраняет document queue/attachment actions, проект — загрузку файлов,
+плагин — source chat. Fork, edit, delete и копирование сообщений доступны в общем
+footer всем трём owner; edit использует одну панель composer и прежний черновик
+восстанавливается при отмене. Единый ChatView controller в `app-workspace-chat.js`
 владеет mount, общей формой, Enter/Send/Stop и общими workspace
 approval/question controls. Он направляет события текущему owner; тематические
 модули сохраняют transport и состояние своих чатов. Общие controls имеют
 нейтральные ID; временный plugin alias к `projectChat*` удалён.
 Разрозненные простые рендереры сообщений и вопросов в
 `app-plugins.js`/`app-project-chats.js` удалены.
+Office, проект и плагин собирают сохранённые сообщения через один iterator и
+одни builders DOM-узлов/footers; live-состояние и transport остаются у owner.
+Workspace fork сохраняет точный префикс истории и CAS-вложения. Edit заменяет
+выбранное user-сообщение, обрезает последующую историю и запускает новый run с
+revision guard; delete сохраняет целостность tool exchange. Прототипные
+скриншоты и браузерные проверки не квалифицируют Office/WebView2 на Windows.
 Возврат формы Office использует собственную DOM-позицию ChatView и не зависит
 от расположения диагностики. Неподтверждённый workspace input хранит один request ID
 на точную пару workspace/session в общем владельце черновиков; переход между

@@ -230,8 +230,9 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetPluginChat:
                     case BridgeOperationId.GetPluginVendors: case BridgeOperationId.ImportPluginVendor: case BridgeOperationId.ResolveHtmlVendor:
                     case BridgeOperationId.GetProjectChats: case BridgeOperationId.ConnectProjectWorkspace: case BridgeOperationId.CreateProjectWorkspace:
-                    case BridgeOperationId.CreateProjectChat: case BridgeOperationId.GetProjectChat:
+                    case BridgeOperationId.CreateProjectChat: case BridgeOperationId.ForkProjectChat: case BridgeOperationId.GetProjectChat:
                     case BridgeOperationId.GetPreviousProjectChatMessages: case BridgeOperationId.GetProjectToolResultPresentation:
+                    case BridgeOperationId.DeleteProjectChatMessage:
                     case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.DeleteProjectHistory:
                     case BridgeOperationId.SubmitProjectChat:
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:

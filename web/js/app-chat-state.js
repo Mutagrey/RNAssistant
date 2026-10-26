@@ -119,7 +119,8 @@ function persistentDraft(key) {
     NextAnnotationNumber: saved ? saved.nextAnnotationNumber || 1 : 1,
     PendingVisualAnnotation: saved ? saved.pendingVisualAnnotation || null : null,
     PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message,
-      ResourceDraftIds: pending.ResourceDraftIds || [], Mode: pending.Mode, Reasoning: pending.ReasoningEnabled } : null };
+      ResourceDraftIds: pending.ResourceDraftIds || [], Mode: pending.Mode, Reasoning: pending.ReasoningEnabled,
+      EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision } : null };
 }
 function persistDraft(key) {
   if (!key || !draftStoreReady) return Promise.resolve();
@@ -193,7 +194,8 @@ async function hydrateChatDrafts() {
       var pending = item.PendingInput;
       if (pending) workspacePendingInputs[key] = { sessionId: item.SessionId, requestId: pending.RequestId,
         message: pending.Message, ResourceDraftIds: pending.ResourceDraftIds || [],
-        Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning };
+        Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning,
+        EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision == null ? null : pending.ExpectedRevision };
       if (view.attachmentError) log(view.attachmentError, "warning");
     }
   });
@@ -265,11 +267,16 @@ function forgetWorkspaceDraft(target) {
 }
 function prepareWorkspaceInput(target, text, options) {
   var key = workspaceDraftKey(target), pending = workspacePendingInputs[key];
-  var ids = ((readWorkspaceDraft(target) || {}).attachments || []).map(officeDraftAttachmentId);
+  var ids = options.EditMessageId ? [] : ((readWorkspaceDraft(target) || {}).attachments || []).map(officeDraftAttachmentId);
   if (!pending || pending.message !== text || pending.Mode !== options.Mode ||
-      pending.ReasoningEnabled !== options.ReasoningEnabled || JSON.stringify(pending.ResourceDraftIds || []) !== JSON.stringify(ids))
+      pending.ReasoningEnabled !== options.ReasoningEnabled ||
+      (pending.EditMessageId || null) !== (options.EditMessageId || null) ||
+      (pending.ExpectedRevision == null ? null : pending.ExpectedRevision) !==
+        (options.ExpectedRevision == null ? null : options.ExpectedRevision) ||
+      JSON.stringify(pending.ResourceDraftIds || []) !== JSON.stringify(ids))
     pending = workspacePendingInputs[key] = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
-      message: text, ResourceDraftIds: ids, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled };
+      message: text, ResourceDraftIds: ids, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled,
+      EditMessageId: options.EditMessageId || null, ExpectedRevision: options.ExpectedRevision === undefined ? null : options.ExpectedRevision };
   persistDraft(key).catch(function () {});
   return pending;
 }

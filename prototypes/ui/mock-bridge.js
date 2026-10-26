@@ -64,6 +64,7 @@
   ] : [];
   var hiddenWorkspaceProjects = [], workspaceSequence = 0;
   var projectMessages = { "preview-project-review": [], "preview-project-clean": [] };
+  var projectRevisions = Object.create(null);
   if (dataProject) projectMessages["preview-plan-chat"] = [];
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
   var projectFileUploads = Object.create(null);
@@ -226,6 +227,7 @@
     var entry = requireWorkspace(payload), chat = requireProjectChat(payload), run = projectRuns[chat.Id];
     return { project: clone(entry), sessionId: chat.Id,
       state: { id: chat.Id, workspaceId: entry.workspaceId, title: chat.Title,
+        revision: projectRevisions[chat.Id] || 0,
         status: run ? "running" : chat.RunStatus, runId: run && run.runId || null,
         cursor: run && run.cursor || "preview-project-cursor", userInput: null,
         modelProgress: run && run.modelProgress || null },
@@ -678,6 +680,29 @@
       targetWorkspace.chats.unshift(created); projectMessages[created.Id] = [];
       return projectChatState({ workspaceId: targetWorkspace.workspaceId, sessionId: created.Id });
     }
+    if (type === "forkProjectChat") {
+      var forkWorkspace = requireWorkspace(payload), forkSource = requireProjectChat(payload);
+      if (projectRuns[payload.sessionId]) fail("Сначала остановите чат.", "preview_run_busy");
+      var sourceMessages = projectMessages[forkSource.Id] || [];
+      var forkIndex = sourceMessages.findIndex(function (message) { return message.Id === payload.messageId; });
+      if (forkIndex < 0) fail("Сообщение не найдено.", "preview_message_missing");
+      var forked = { Id: "preview-project-" + (++projectChatSequence),
+        Title: forkSource.Title + " (ветка)", RunStatus: "" };
+      forkWorkspace.chats.unshift(forked);
+      projectMessages[forked.Id] = JSON.parse(JSON.stringify(sourceMessages.slice(0, forkIndex + 1)));
+      projectRevisions[forked.Id] = 1;
+      return projectChatState({ workspaceId: forkWorkspace.workspaceId, sessionId: forked.Id });
+    }
+    if (type === "deleteProjectChatMessage") {
+      requireProjectChat(payload);
+      if (projectRuns[payload.sessionId]) fail("Сначала остановите чат.", "preview_run_busy");
+      var history = projectMessages[payload.sessionId] || [];
+      var removedIndex = history.findIndex(function (message) { return message.Id === payload.messageId; });
+      if (removedIndex < 0) fail("Сообщение не найдено.", "preview_message_missing");
+      history.splice(removedIndex, 1);
+      projectRevisions[payload.sessionId] = (projectRevisions[payload.sessionId] || 0) + 1;
+      return projectChatState(payload);
+    }
     if (type === "renameProjectChat") {
       var renamed = requireProjectChat(payload);
       if (!payload.title || !payload.title.trim()) fail("Название чата пусто.", "preview_chat_invalid");
@@ -713,8 +738,20 @@
         fail("ID запроса уже занят другим сообщением.", "preview_input_invalid");
       if (!accepted) {
         if (projectRuns[submitting.Id]) fail("Дождитесь ответа примера.", "preview_run_busy");
+        if (input.EditMessageId) {
+          if (input.ResourceDraftIds && input.ResourceDraftIds.length)
+            fail("Новые вложения при редактировании не поддерживаются.", "preview_input_invalid");
+          if (input.ExpectedRevision !== (projectRevisions[submitting.Id] || 0))
+            fail("Чат изменился. Откройте его заново.", "preview_chat_changed");
+          var editIndex = projectMessages[submitting.Id].findIndex(function (item) {
+            return item.Id === input.EditMessageId && item.Role === "user";
+          });
+          if (editIndex < 0) fail("Сообщение не найдено.", "preview_message_missing");
+          projectMessages[submitting.Id].splice(editIndex);
+        }
         projectRequests[input.requestId] = { sessionId: submitting.Id, message: input.message };
         projectMessages[submitting.Id].push({ Id: input.requestId, Role: "user", Content: input.message });
+        projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
         var run = { runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
         projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
         ["Проверяю запрос…", "Готовлю ответ проекта…"].forEach(function (message, index) {
@@ -735,6 +772,7 @@
             : "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
           if (sourcePlugin) pluginSourceRevision[sourcePlugin] = (pluginSourceRevision[sourcePlugin] || 0) + 1;
           delete projectRuns[submitting.Id]; submitting.RunStatus = "completed";
+          projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
         }
       }
       return projectChatState(payload);

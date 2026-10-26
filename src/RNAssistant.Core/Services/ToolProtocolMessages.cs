@@ -117,6 +117,33 @@ namespace RNAssistant.Core.Services
             return safeCount;
         }
 
+        public static List<ChatMessage> SelectMessagesForDeletion(IReadOnlyList<ChatMessage> messages, int targetIndex)
+        {
+            if (messages == null || targetIndex < 0 || targetIndex >= messages.Count)
+                return new List<ChatMessage>();
+            var target = messages[targetIndex];
+            var toolCallIds = Ids(target);
+            if (toolCallIds.Count == 0) return new List<ChatMessage> { target };
+            var first = targetIndex;
+            if (!IsCall(target))
+                for (var index = targetIndex - 1; index >= 0 && IsExchange(messages[index]); index--)
+                {
+                    if (!IsCall(messages[index])) continue;
+                    if (Uses(messages[index], toolCallIds)) first = index;
+                    break;
+                }
+            var callIds = Ids(messages[first]);
+            if (IsCall(messages[first]) && callIds.Count > 0) toolCallIds = callIds;
+            var last = first;
+            while (last + 1 < messages.Count && IsExchange(messages[last + 1]) && !IsCall(messages[last + 1]))
+                last++;
+            var result = new List<ChatMessage>();
+            for (var index = first; index <= last; index++)
+                if (ReferenceEquals(messages[index], target) || Uses(messages[index], toolCallIds))
+                    result.Add(messages[index]);
+            return result;
+        }
+
         private static void AddIds(ChatMessage message, ISet<string> target)
         {
             if (message == null || target == null) return;

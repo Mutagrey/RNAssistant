@@ -262,7 +262,9 @@ sessions. Пользователь может подключить сущест�
 чаты привязаны к точному `WorkspaceId`, а не к Office document session или
 текущему grant плагина. Подключённый workspace доступен чату для изменений.
 Смена, отключение и удаление плагина не удаляют workspace-чаты. Create/rename/delete,
-submit/cancel/resolve идут через `WorkspaceConversationService` и typed bridge.
+fork/edit/delete-message, submit/cancel/resolve идут через `WorkspaceConversationService`
+и typed bridge. Правка user-сообщения требует exact revision, обрезает последующую
+ветку истории и запускает новый run; fork сохраняет точный префикс и CAS-вложения.
 Удаление истории удаляет сессии выбранного workspace и скрывает его из дерева,
 сохраняя папку и файлы; оно доступно и когда папка временно отсутствует.
 Повторное подключение возвращает прежний `WorkspaceId`.

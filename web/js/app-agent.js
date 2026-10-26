@@ -125,7 +125,7 @@ function enhanceActivity(root) {
   });
 }
 
-async function deleteAgentRun(items, finalMessage) {
+async function deleteAgentRun(items, finalMessage, workspace) {
   var targets = (items || []).slice();
   if (finalMessage) {
     targets.push(finalMessage);
@@ -135,7 +135,8 @@ async function deleteAgentRun(items, finalMessage) {
   }
 
   for (var i = targets.length - 1; i >= 0; i -= 1) {
-    await deleteMessage(targets[i].message, targets[i].index);
+    if (workspace) await window.RNAssistantWorkspaceChat.messageAction("delete", targets[i].message, targets[i].index);
+    else await deleteMessage(targets[i].message, targets[i].index);
   }
 }
 
@@ -628,15 +629,22 @@ function appendAgentRunFooter(node, items, finalMessage, workspace) {
     log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
   }));
   if (typeof appendMessageInspectorAction === "function") appendMessageInspectorAction(actions, last.message, null);
-  if (!workspace && !historyActionsBlocked) {
+  var canFork = workspace
+    ? window.RNAssistantWorkspaceChat.canMessageAction("fork", last.message, last.index)
+    : !historyActionsBlocked;
+  if (canFork) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
-      forkChatAtMessage(last.message, last.index);
+      if (workspace) window.RNAssistantWorkspaceChat.messageAction("fork", last.message, last.index);
+      else forkChatAtMessage(last.message, last.index);
     }));
   }
 
-  if (!workspace && !historyActionsBlocked) {
+  var canDelete = workspace
+    ? window.RNAssistantWorkspaceChat.canMessageAction("delete", last.message, last.index)
+    : !historyActionsBlocked;
+  if (canDelete) {
     actions.appendChild(smallIconButton("Удалить сообщения запуска", "trash", function () {
-      deleteAgentRun(items, finalMessage);
+      deleteAgentRun(items, finalMessage, workspace);
     }));
   }
 

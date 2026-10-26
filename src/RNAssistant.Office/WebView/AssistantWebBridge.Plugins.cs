@@ -54,6 +54,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ConnectProjectWorkspace: return Plugins.ConnectProjectWorkspace(Payload<ProjectConnectionRequest>(payload));
                     case BridgeOperationId.CreateProjectWorkspace: return Plugins.CreateProjectWorkspace(Payload<ProjectConnectionRequest>(payload));
                     case BridgeOperationId.CreateProjectChat: return Plugins.CreateProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.ForkProjectChat: return Plugins.ForkProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.DeleteProjectChatMessage: return Plugins.DeleteProjectChatMessage(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.GetPreviousProjectChatMessages: return Plugins.ProjectChatMessages(Payload<ProjectChatHistoryRequest>(payload));
                     case BridgeOperationId.GetProjectToolResultPresentation:

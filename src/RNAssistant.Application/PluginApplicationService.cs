@@ -861,6 +861,29 @@ namespace RNAssistant.Application
             }
         }
 
+        public ProjectChatStateDto ForkProjectChat(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+                ChatSession fork;
+                try { fork = Conversations.ForkSession(workspace, request.SessionId, request.MessageId); }
+                catch (InvalidOperationException error) { throw new PluginException("project_chat_invalid", error.Message); }
+                return ProjectChat(new ProjectChatRequest { WorkspaceId = workspace.WorkspaceId, SessionId = fork.Id });
+            }
+        }
+
+        public ProjectChatStateDto DeleteProjectChatMessage(ProjectChatRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+                try { Conversations.DeleteMessage(workspace, request.SessionId, request.MessageId); }
+                catch (InvalidOperationException error) { throw new PluginException("project_chat_invalid", error.Message); }
+                return ProjectChat(request);
+            }
+        }
+
         public ProjectChatCatalogDto RenameProjectChat(ProjectChatRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths))

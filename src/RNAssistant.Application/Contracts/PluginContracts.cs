@@ -168,6 +168,7 @@ namespace RNAssistant.Application.Contracts
     {
         [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
         [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("messageId")] public string MessageId { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }

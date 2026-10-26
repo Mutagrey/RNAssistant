@@ -358,7 +358,7 @@ function appendMessageFooter(node, message, index, activity, options) {
     }
   } else if (!options.workspace && !runViewState && messageRole(message) === "assistant" &&
       !messageProtocolMessage(message) && !activity && !message.Pending && !message.Failed && !message.Local &&
-      messageContent(message).trim()) {
+      !message.ReflectionDecision && messageContent(message).trim()) {
     var incompatibleOutcome = document.createElement("span");
     incompatibleOutcome.className = "message-outcome status-unknown";
     incompatibleOutcome.textContent = "Нет typed runtime state · требуется новый запуск";
@@ -376,20 +376,32 @@ function appendMessageFooter(node, message, index, activity, options) {
     log("Сообщение скопировано.");
   }));
   appendMessageInspectorAction(actions, message, activity);
-  if (!options.workspace && !historyActionsBlocked) {
+  var canFork = options.workspace
+    ? window.RNAssistantWorkspaceChat.canMessageAction("fork", message, index)
+    : !historyActionsBlocked;
+  if (canFork) {
     actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
-      forkChatAtMessage(message, index);
+      if (options.workspace) window.RNAssistantWorkspaceChat.messageAction("fork", message, index);
+      else forkChatAtMessage(message, index);
     }));
   }
-  if (!options.workspace && messageSupportsEdit(message, index, activity)) {
+  var canEdit = options.workspace
+    ? window.RNAssistantWorkspaceChat.canMessageAction("edit", message, index)
+    : messageSupportsEdit(message, index, activity);
+  if (canEdit) {
     actions.appendChild(smallIconButton("Изменить сообщение", "edit", function () {
-      startMessageEdit(message, index);
+      if (options.workspace) window.RNAssistantWorkspaceChat.messageAction("edit", message, index);
+      else startMessageEdit(message, index);
     }));
   }
 
-  if (!options.workspace && !historyActionsBlocked) {
+  var canDelete = options.workspace
+    ? window.RNAssistantWorkspaceChat.canMessageAction("delete", message, index)
+    : !historyActionsBlocked;
+  if (canDelete) {
     actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
-      deleteMessage(message, index);
+      if (options.workspace) window.RNAssistantWorkspaceChat.messageAction("delete", message, index);
+      else deleteMessage(message, index);
     }));
   }
 
@@ -568,7 +580,7 @@ function renderMessageArticle(message, index, options) {
   var runView = options.workspace ? window.RNAssistantRunViewState.fromMessage(message) : null;
   appendAcceptedResponseDetails(node, message, runView);
   if (options.workspace) appendWorkspaceRunOutcome(node, message, runView);
-  if (!message.ReflectionDecision || !options.workspace) appendMessageFooter(node, message, index, null, options);
+  appendMessageFooter(node, message, index, null, options);
   return node;
 }
 
@@ -789,6 +801,9 @@ function messageUnitSignature(message) {
     runViewState: message.RunViewState || message.runViewState || null,
     attachments: messageAttachments(message),
     artifacts: message.Artifacts || message.artifacts || null,
+    reflectionDecision: message.ReflectionDecision || message.reflectionDecision || "",
+    results: message.Results || message.results || null,
+    resourceRefs: message.ResourceRefs || message.resourceRefs || null,
     reasoning: {
       content: message.ReasoningContent || message.reasoningContent || "",
       tokens: message.ReasoningTokens || message.reasoningTokens || null,
@@ -831,6 +846,50 @@ function appendMessageUnit(units, key, signature, render, actionsSignature, refr
     actionsSignature: actionsSignature, refreshActions: refreshActions, update: update });
 }
 
+function appendSavedRunUnit(units, run, workspace, actionsSignature, key, update) {
+  appendMessageUnit(units, key || agentRunUnitKey(run), agentRunUnitSignature(run),
+    function () { return renderAgentRunArticle(run); }, actionsSignature, function (node) {
+      refreshMessageFooter(node, function (target) {
+        if (!run.items.length && run.finalMessage)
+          appendMessageFooter(target, run.finalMessage.message, run.finalMessage.index, null,
+            workspace ? { workspace: true } : null);
+        else appendAgentRunFooter(target, run.items, run.finalMessage, workspace);
+      });
+    }, update);
+}
+
+function appendSavedMessageUnit(units, message, index, workspace, actionsSignature) {
+  appendMessageUnit(units, "message:" + (messageId(message) || index), messageUnitSignature(message),
+    function () { return renderMessageArticle(message, index, workspace ? { workspace: true } : null); },
+    actionsSignature, function (node) {
+      refreshMessageFooter(node, function (target) {
+        appendMessageFooter(target, message, index, messageActivity(message), workspace ? { workspace: true } : null);
+      });
+    });
+}
+
+// One saved-history projection for Office, project and plugin ChatView owners.
+// Owners supply only their live state and history actions around these entries.
+function forEachChatDisplayEntry(messages, visible, onRun, onMessage) {
+  messages = messages || [];
+  var lastRunIndexes = Object.create(null);
+  messages.forEach(function (message, index) {
+    var runId = messageRunId(message);
+    if (runId) lastRunIndexes[runId] = index;
+  });
+  for (var index = 0; index < messages.length; index += 1) {
+    var message = messages[index];
+    if (messageProtocolMessage(message) || visible && !visible(message)) continue;
+    if (canCollectAgentRunAt(index, messages)) {
+      var run = collectAgentRun(index, messages);
+      run.continued = !run.finalMessage &&
+        lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
+      onRun(run, index);
+      index = run.nextIndex - 1;
+    } else onMessage(message, index);
+  }
+}
+
 function messageActionsSignature() {
   return JSON.stringify({
     sending: !!currentActiveSend(),
@@ -870,23 +929,14 @@ function buildMessageUnits() {
   renderedLiveRunPastSteps = {};
   var lastVisibleIndex = state.messages.length - 1;
   while (lastVisibleIndex >= 0 && messageProtocolMessage(state.messages[lastVisibleIndex])) lastVisibleIndex -= 1;
-  var lastRunIndexes = {};
-  state.messages.forEach(function (message, index) { if (messageRunId(message)) lastRunIndexes[messageRunId(message)] = index; });
-  for (var index = 0; index < state.messages.length; index += 1) {
-    if (messageProtocolMessage(state.messages[index])) {
-      continue;
-    }
-    if (canCollectAgentRunAt(index)) {
-      var run = collectAgentRun(index);
-      run.continued = !run.finalMessage && lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
+  forEachChatDisplayEntry(state.messages, null, function (run) {
       if (liveRunId && agentRunId(run.items, run.finalMessage) === liveRunId) {
         var savedView = agentRunViewState(run.items, run.finalMessage);
         var terminalRun = savedView && ["completed", "failed", "cancelled"].indexOf(savedView.lifecycle) >= 0;
         if (!run.finalMessage && !terminalRun && run.nextIndex > lastVisibleIndex) {
           renderedLiveRunBase = run;
           renderedLiveRunBaseSignature = agentRunUnitSignature(run);
-          index = run.nextIndex - 1;
-          continue;
+          return;
         }
         if (run.finalMessage || terminalRun) renderedLiveRunSuppressed = true;
         else run.items.forEach(function (item) {
@@ -895,33 +945,10 @@ function buildMessageUnits() {
           if (stepId) renderedLiveRunPastSteps[stepId] = true;
         });
       }
-      appendMessageUnit(units, agentRunUnitKey(run), agentRunUnitSignature(run), (function (capturedRun) {
-        return function () { return renderAgentRunArticle(capturedRun); };
-      }(run)), actionsSignature, (function (capturedRun) {
-        return function (node) {
-          refreshMessageFooter(node, function (target) {
-            if (!capturedRun.items.length && capturedRun.finalMessage) {
-              appendMessageFooter(target, capturedRun.finalMessage.message, capturedRun.finalMessage.index, null);
-            } else {
-              appendAgentRunFooter(target, capturedRun.items, capturedRun.finalMessage);
-            }
-          });
-        };
-      }(run)));
-      index = run.nextIndex - 1;
-    } else {
-      appendMessageUnit(units, "message:" + (messageId(state.messages[index]) || index),
-        messageUnitSignature(state.messages[index]), (function (message, messageIndex) {
-          return function () { return renderMessageArticle(message, messageIndex); };
-        }(state.messages[index], index)), actionsSignature + ":" + index, (function (message, messageIndex) {
-          return function (node) {
-            refreshMessageFooter(node, function (target) {
-              appendMessageFooter(target, message, messageIndex, messageActivity(message));
-            });
-          };
-        }(state.messages[index], index)));
-    }
-  }
+      appendSavedRunUnit(units, run, false, actionsSignature);
+    }, function (message, index) {
+      appendSavedMessageUnit(units, message, index, false, actionsSignature + ":" + index);
+    });
 
   if (state.messageStartIndex + state.messages.length < state.messageTotalCount) {
     appendMessageUnit(units, "latest-messages", String(state.messageTotalCount), function () {

@@ -11,6 +11,8 @@ namespace RNAssistant.Runtime.Contracts
         public string SessionId { get; set; }
         public string RequestId { get; set; }
         public string Message { get; set; }
+        public string EditMessageId { get; set; }
+        public long? ExpectedRevision { get; set; }
         [JsonProperty("resourceDraftIds", NullValueHandling = NullValueHandling.Ignore)]
         public List<string> ResourceDraftIds { get; set; }
         public string Mode { get; set; }

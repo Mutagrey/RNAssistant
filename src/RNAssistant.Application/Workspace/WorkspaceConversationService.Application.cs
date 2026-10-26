@@ -211,6 +211,12 @@ namespace RNAssistant.Runtime
                 throw new ArgumentException("A task message or resource is required.");
             if (request.Answers != null && (string.IsNullOrWhiteSpace(request.SessionId) || request.Message != null || draftIds.Count > 0))
                 throw new ArgumentException("Typed answers require an existing session and cannot include a task message.");
+            if (request.EditMessageId != null && (string.IsNullOrWhiteSpace(request.EditMessageId) ||
+                string.IsNullOrWhiteSpace(request.SessionId) || string.IsNullOrWhiteSpace(request.Message) ||
+                request.Answers != null || draftIds.Count > 0 || !request.ExpectedRevision.HasValue))
+                throw new ArgumentException("Editing requires an exact message, revision and replacement text without new resources.");
+            if (request.ExpectedRevision.HasValue && (request.ExpectedRevision < 0 || request.EditMessageId == null))
+                throw new ArgumentException("A revision is accepted only for an exact message edit.");
             if (request.Mode != null) ConversationRunPolicy.For(request.Mode);
             if (request.MutationPolicy.HasValue && !Enum.IsDefined(typeof(MutationPolicy), request.MutationPolicy.Value))
                 throw new ArgumentException("Invalid mutation policy.");
@@ -222,6 +228,7 @@ namespace RNAssistant.Runtime
             // Transport identity is bound to submitted intent. Environment/model
             // settings are execution configuration; a duplicate never reapplies them.
             var canonical = new WorkspaceSubmitInputRequest { Message = request.Message,
+                EditMessageId = request.EditMessageId, ExpectedRevision = request.ExpectedRevision,
                 ResourceDraftIds = request.ResourceDraftIds?.Count > 0 ? request.ResourceDraftIds : null,
                 Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), MutationPolicy = request.MutationPolicy,
                 AutoConfirmToolActions = request.AutoConfirmToolActions, ReasoningEnabled = request.ReasoningEnabled,

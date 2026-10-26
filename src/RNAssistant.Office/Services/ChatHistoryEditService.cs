@@ -144,39 +144,7 @@ namespace RNAssistant.Office.Services
             IReadOnlyList<ChatMessage> messages,
             int targetIndex)
         {
-            if (messages == null || targetIndex < 0 || targetIndex >= messages.Count)
-            {
-                return new List<ChatMessage>();
-            }
-
-            var targetMessage = messages[targetIndex];
-            var toolCallIds = ToolProtocolMessages.Ids(targetMessage);
-            if (toolCallIds.Count == 0) return new List<ChatMessage> { targetMessage };
-
-            var first = FindExchangeStart(messages, targetIndex, toolCallIds);
-            var callIds = ToolProtocolMessages.Ids(messages[first]);
-            if (ToolProtocolMessages.IsCall(messages[first]) && callIds.Count > 0)
-            {
-                toolCallIds = callIds;
-            }
-            var last = first;
-            while (last + 1 < messages.Count &&
-                ToolProtocolMessages.IsExchange(messages[last + 1]) &&
-                !ToolProtocolMessages.IsCall(messages[last + 1]))
-            {
-                last += 1;
-            }
-
-            var result = new List<ChatMessage>();
-            for (var index = first; index <= last; index++)
-            {
-                var message = messages[index];
-                if (ReferenceEquals(message, targetMessage) || ToolProtocolMessages.Uses(message, toolCallIds))
-                {
-                    result.Add(message);
-                }
-            }
-            return result;
+            return ToolProtocolMessages.SelectMessagesForDeletion(messages, targetIndex);
         }
 
         internal static bool HasResultForLatestToolCall(
@@ -198,20 +166,6 @@ namespace RNAssistant.Office.Services
                 }
             }
             return false;
-        }
-
-        private static int FindExchangeStart(
-            IReadOnlyList<ChatMessage> messages,
-            int targetIndex,
-            ISet<string> toolCallIds)
-        {
-            if (ToolProtocolMessages.IsCall(messages[targetIndex])) return targetIndex;
-            for (var index = targetIndex - 1; index >= 0 && ToolProtocolMessages.IsExchange(messages[index]); index--)
-            {
-                if (!ToolProtocolMessages.IsCall(messages[index])) continue;
-                return ToolProtocolMessages.Uses(messages[index], toolCallIds) ? index : targetIndex;
-            }
-            return targetIndex;
         }
 
         private static void InvalidateContextCheckpoints(ChatSession session)

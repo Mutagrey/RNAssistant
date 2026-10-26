@@ -704,6 +704,127 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PluginsProjectChatFork()
+        {
+            WithPluginPaths(paths => {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var workspaceId = service.CreateProjectWorkspace(new ProjectConnectionRequest {
+                        RootPath = Path.Combine(paths.Root, "fork-project") }).SelectedWorkspaceId;
+                    var source = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                    var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
+                    var session = service.Conversations.GetSession(workspace, source.SessionId);
+                    var first = new ChatMessage { Role = "user", Content = "Сохранить первый шаг" };
+                    session.Messages.Add(first);
+                    var attachmentStore = new AttachmentStore(paths);
+                    first.Attachments.Add(attachmentStore.Import("note.txt", "text/plain",
+                        System.Text.Encoding.UTF8.GetBytes("Точное вложение"), source.SessionId));
+                    attachmentStore.CommitToCas(first);
+                    ChatMessageAttachmentService.Link(session, first);
+                    var store = new ChatStore(paths);
+                    store.Commit(session, ConversationCommit.UserInput(first));
+                    var second = new ChatMessage { Role = "user", Content = "Будущий шаг" };
+                    session.Messages.Add(second);
+                    store.Commit(session, ConversationCommit.UserInput(second));
+
+                    var fork = service.ForkProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = source.SessionId, MessageId = first.Id });
+                    AssertTrue(fork.SessionId != source.SessionId && fork.Messages.Count == 1,
+                        "fork creates one new session with only the selected prefix");
+                    AssertEqual(first.Id, fork.Messages[0].Id, "fork retains exact message identity");
+                    var loaded = service.Conversations.GetSession(workspace, fork.SessionId);
+                    AssertEqual(source.SessionId, loaded.ParentSessionId, "fork records source identity");
+                    AssertEqual(first.Id, loaded.ForkedThroughMessageId, "fork records the selected boundary");
+                    AssertEqual(1, loaded.Artifacts.Count, "fork retains only the selected attachment artifact");
+                    AssertEqual("Точное вложение", System.Text.Encoding.UTF8.GetString(
+                        attachmentStore.ReadBytes(loaded.Messages[0].Attachments[0])),
+                        "forked attachment reads the same immutable CAS bytes");
+                    AssertEqual(ChatResourceUri.CreateArtifactRevision(loaded, loaded.Artifacts[0]).Uri,
+                        loaded.Messages[0].ResourceRefs[0].Uri, "fork rebinds the chat resource to its new scope");
+                    AssertEqual(2, service.ProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = source.SessionId }).Messages.Count, "fork does not rewrite source history");
+                    AssertTrue(service.ProjectChats().Projects.Single(item => item.WorkspaceId == workspaceId).Chats
+                        .Any(item => item.Id == fork.SessionId), "fork appears in the common chat tree");
+                    var deleted = service.DeleteProjectChatMessage(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = fork.SessionId, MessageId = first.Id });
+                    AssertEqual(0, deleted.Messages.Count, "deleting in the fork updates its event-backed history");
+                    AssertEqual(0, service.Conversations.GetSession(workspace, fork.SessionId).Artifacts.Count,
+                        "deleted attachment is no longer a fork artifact head");
+                    AssertEqual(2, service.ProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = source.SessionId }).Messages.Count, "deleting in a fork does not touch the source");
+                    PluginFailure(() => service.ForkProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = source.SessionId, MessageId = "missing" }), "project_chat_invalid");
+                }
+            });
+        }
+
+        private static void PluginsProjectChatEdit()
+        {
+            WithPluginPaths(paths => {
+                var probe = new TcpListener(IPAddress.Loopback, 0);
+                probe.Start(); var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                    var server = Task.Run(async () => {
+                        var context = await listener.GetContextAsync().ConfigureAwait(false);
+                        var response = new JObject { ["choices"] = new JArray(new JObject {
+                            ["message"] = new JObject { ["content"] =
+                                ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                    "The edit is complete.", "Ответ на исправленный запрос.",
+                                    results: new ConversationResultClaim[0]) } }) }.ToString(Formatting.None);
+                        var bytes = Encoding.UTF8.GetBytes(response);
+                        context.Response.ContentType = "application/json";
+                        context.Response.ContentLength64 = bytes.Length;
+                        await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                        context.Response.Close();
+                    });
+                    try
+                    {
+                        using (var service = new PluginApplicationService(paths))
+                        {
+                            var workspaceId = service.CreateProjectWorkspace(new ProjectConnectionRequest {
+                                RootPath = Path.Combine(paths.Root, "edit-project") }).SelectedWorkspaceId;
+                            var created = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                            var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
+                            var session = service.Conversations.GetSession(workspace, created.SessionId);
+                            var first = new ChatMessage { Role = "user", Content = "Исходный запрос" };
+                            var attachments = new AttachmentStore(paths);
+                            first.Attachments.Add(attachments.Import("evidence.txt", "text/plain",
+                                Encoding.UTF8.GetBytes("Сохранить файл"), created.SessionId));
+                            attachments.CommitToCas(first);
+                            session.Messages.Add(first); ChatMessageAttachmentService.Link(session, first);
+                            var store = new ChatStore(paths); store.Commit(session, ConversationCommit.UserInput(first));
+                            var later = new ChatMessage { Role = "user", Content = "Будущий запрос" };
+                            session.Messages.Add(later); store.Commit(session, ConversationCommit.UserInput(later));
+                            var revision = session.Revision;
+                            var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                                Model = "test-model", StreamResponses = false, SmartChatTitles = false,
+                                AutoCompressContext = false };
+                            service.SubmitProjectChatAsync(new ProjectChatRequest { WorkspaceId = workspaceId,
+                                SessionId = created.SessionId, Input = new WorkspaceSubmitInputRequest {
+                                    SessionId = created.SessionId, RequestId = "edit-request", EditMessageId = first.Id,
+                                    ExpectedRevision = revision, Message = "Исправленный запрос", Mode = ChatModes.Agent }
+                            }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            var after = service.Conversations.GetSession(workspace, created.SessionId);
+                            var users = after.Messages.Where(message => message.Role == "user" && !message.ProtocolMessage).ToArray();
+                            AssertEqual(1, users.Length, "edit replaces the selected user message and future history");
+                            AssertEqual("Исправленный запрос", users[0].Content, "edit sends replacement text");
+                            AssertTrue(users[0].Id != first.Id && after.Messages.All(message => message.Id != later.Id),
+                                "edit uses a new accepted identity and removes the old tail");
+                            AssertEqual("Сохранить файл", Encoding.UTF8.GetString(
+                                attachments.ReadBytes(users[0].Attachments[0])), "edit preserves immutable attachment bytes");
+                            AssertEqual(users[0].Id, after.Artifacts.Single(item => item.Id ==
+                                "attachment_" + users[0].Attachments[0].Id).SourceMessageId,
+                                "edited attachment remains bound to the new message");
+                        }
+                        server.GetAwaiter().GetResult();
+                    }
+                    finally { listener.Stop(); }
+                }
+            });
+        }
+
         private static void PluginsProjectChatHistoryPages()
         {
             WithPluginPaths(paths => {

@@ -137,8 +137,8 @@ const path = require("node:path");
       document.getElementById("inspectHtmlWorkspaceButton").parentElement.className,
       document.getElementById("attachHtmlWorkspaceSelectionButton").hidden,
       document.getElementById("toggleChatInspectorButton").getAttribute("aria-controls")
-    ]), ["htmlWorkspaceEditor", "html-workspace-toolbar", false, "chatInspector"],
-    "Materials gets the same frame and controls back");
+    ]), ["htmlWorkspaceEditor", "html-workspace-toolbar", true, "chatInspector"],
+    "Materials gets the same frame and inline annotation controls back");
     await page.evaluate(() => {
       document.getElementById("artifactCatalogOverview").hidden = true;
       document.getElementById("artifactCatalogPreview").hidden = true;

@@ -28,13 +28,12 @@
 }
 
 #chatForm[data-owner="office"] .workspace-composer-only,
-#chatForm:not([data-owner="office"]) :is(#inboxAnnouncer, #inboxStatus, #messageEditBar, #attachmentDrafts,
+#chatForm:not([data-owner="office"]) :is(#inboxAnnouncer, #inboxStatus, #attachmentDrafts,
   #attachmentStatus, #contextStrip, #contextManager, #composerAddPicker, #attachmentFileInput,
   #contextMeterWrap, #chatModelPicker, #chatReasoningToggle) {
   display: none !important;
 }
 
-#chatForm[data-owner="plugin"] #projectChatContextNote,
 #chatForm[data-owner="plugin"] #projectChatFileStatus {
   display: none !important;
 }

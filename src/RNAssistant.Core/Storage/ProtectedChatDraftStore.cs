@@ -116,7 +116,11 @@ namespace RNAssistant.Core.Storage
                 pending.RequestId.Length > 128 || pending.Message == null || pending.Message.Length > MaxTextLength ||
                 (pending.Mode != "agent" && pending.Mode != "plan") ||
                 pending.ResourceDraftIds == null || pending.ResourceDraftIds.Count > 10 ||
-                pending.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128)))
+                pending.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
+                (pending.EditMessageId != null && (string.IsNullOrWhiteSpace(pending.EditMessageId) ||
+                    pending.EditMessageId.Length > 128 || !pending.ExpectedRevision.HasValue ||
+                    pending.ResourceDraftIds.Count > 0)) ||
+                (pending.ExpectedRevision.HasValue && (pending.ExpectedRevision < 0 || pending.EditMessageId == null))))
                 throw new InvalidDataException("Chat draft pending input is invalid.");
             var officePending = item.PendingOfficeInput;
             if (officePending != null && (item.Owner != "office" || string.IsNullOrWhiteSpace(officePending.OperationId) ||
@@ -182,6 +186,8 @@ namespace RNAssistant.Core.Storage
     {
         public string RequestId { get; set; }
         public string Message { get; set; }
+        public string EditMessageId { get; set; }
+        public long? ExpectedRevision { get; set; }
         public List<string> ResourceDraftIds { get; set; } = new List<string>();
         public string Mode { get; set; }
         public bool Reasoning { get; set; }

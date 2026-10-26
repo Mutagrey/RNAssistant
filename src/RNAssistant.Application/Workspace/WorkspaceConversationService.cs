@@ -154,6 +154,160 @@ namespace RNAssistant.Runtime
             return _workspaces.CreateSession(_chats, workspace, title);
         }
 
+        public ChatSession ForkSession(WorkspaceDescriptor workspace, string sessionId, string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(messageId))
+                throw new ArgumentException("An exact chat and message are required.");
+            using (AcquireSessionLease(sessionId))
+            {
+                var source = _workspaces.LoadSession(_chats, workspace, sessionId);
+                if (source == null) throw new InvalidOperationException("Workspace session was not found.");
+                if (source.FormatVersion != ChatSession.CurrentFormatVersion)
+                    throw new InvalidOperationException("Create a current-format chat before branching history.");
+                RequireIdleSession(workspace, sessionId);
+                var index = source.Messages.FindIndex(message => message != null &&
+                    string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) throw new InvalidOperationException("Message was not found.");
+
+                var title = (source.Title ?? "Новый чат").Trim();
+                title = title.Length > 192 ? title.Substring(0, 192).TrimEnd() : title;
+                var fork = _chats.CreateTransient("Workspace", workspace.WorkspaceId, workspace.Name, title + " (ветка)");
+                fork.WorkspaceId = workspace.WorkspaceId;
+                fork.ParentSessionId = source.Id;
+                fork.ParentSessionRevision = source.Revision;
+                fork.ForkedThroughMessageId = source.Messages[index].Id;
+                fork.Model = source.Model;
+                fork.Mode = source.Mode;
+                fork.MutationPolicy = source.MutationPolicy;
+                fork.ReasoningEnabled = source.ReasoningEnabled;
+                fork.Context = source.Context == null ? null :
+                    JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(source.Context));
+                fork.Messages = JsonConvert.DeserializeObject<List<ChatMessage>>(
+                    JsonConvert.SerializeObject(source.Messages.Take(index + 1))) ?? new List<ChatMessage>();
+                ToolProtocolMessages.ExcludeUnmatchedToolCalls(fork.Messages);
+
+                var retainedIds = WorkspaceMessageArtifactIds(fork.Messages, source);
+                var attachmentStore = new AttachmentStore(_paths);
+                foreach (var message in fork.Messages)
+                {
+                    for (var referenceIndex = 0; referenceIndex < (message.ResourceRefs?.Count ?? 0); referenceIndex++)
+                    {
+                        var reference = message.ResourceRefs[referenceIndex];
+                        string owner, artifactId; int revision;
+                        if (!ChatResourceUri.TryParseArtifactRevision(reference, out owner, out artifactId, out revision)) continue;
+                        if (owner == source.Id)
+                            message.ResourceRefs[referenceIndex] = ChatResourceUri.RebaseArtifactRevision(reference, fork.Id);
+                    }
+                    string checkpointOwner, checkpointArtifact; int checkpointRevision;
+                    if (ChatResourceUri.TryParseArtifactRevision(message.HtmlWorkspaceCheckpoint,
+                            out checkpointOwner, out checkpointArtifact, out checkpointRevision) && checkpointOwner == source.Id)
+                        message.HtmlWorkspaceCheckpoint = ChatResourceUri.RebaseArtifactRevision(message.HtmlWorkspaceCheckpoint, fork.Id);
+                    attachmentStore.CloneMessageAttachments(message);
+                }
+                fork.Artifacts = (source.Artifacts ?? new List<ChatArtifact>())
+                    .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id))
+                    .Select(artifact => JsonConvert.DeserializeObject<ChatArtifact>(JsonConvert.SerializeObject(artifact)))
+                    .ToList();
+                var retainedReferences = new HashSet<string>(fork.Messages
+                    .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
+                    .Select(reference => reference.ExactKey), StringComparer.Ordinal);
+                fork.ResourceReferenceIndex = (source.ResourceReferenceIndex ?? new List<ModelResourceReference>())
+                    .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
+                fork.ExecutionReferenceSequence = source.ExecutionReferenceSequence;
+                _chats.Commit(fork, new ConversationCommit());
+                return fork;
+            }
+        }
+
+        public ChatSession DeleteMessage(WorkspaceDescriptor workspace, string sessionId, string messageId)
+        {
+            if (string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(messageId))
+                throw new ArgumentException("An exact chat and message are required.");
+            using (AcquireSessionLease(sessionId))
+            {
+                var session = _workspaces.LoadSession(_chats, workspace, sessionId);
+                if (session == null) throw new InvalidOperationException("Workspace session was not found.");
+                if (session.FormatVersion != ChatSession.CurrentFormatVersion)
+                    throw new InvalidOperationException("Old-format history is read-only.");
+                RequireIdleSession(workspace, sessionId);
+                var index = session.Messages.FindIndex(message => message != null &&
+                    string.Equals(message.Id, messageId, StringComparison.OrdinalIgnoreCase));
+                if (index < 0) throw new InvalidOperationException("Message was not found.");
+                var previousIds = session.Messages.Select(message => message.Id).ToArray();
+                var removed = ToolProtocolMessages.SelectMessagesForDeletion(session.Messages, index);
+                session.Messages.RemoveAll(message => removed.Contains(message));
+                session.LastRun = null;
+                session.LastContextReceipt = null;
+                session.ContextCheckpoints = new List<ContextCheckpoint>();
+                session.ActiveContextCheckpointId = null;
+                session.ActiveTaskListArtifactId = null;
+                session.ActivePlanDocumentArtifactId = null;
+                session.ArtifactLinks = new List<ChatArtifactLink>();
+                var retainedIds = WorkspaceMessageArtifactIds(session.Messages, session);
+                session.Artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                    .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id)).ToList();
+                var retainedReferences = new HashSet<string>(session.Messages
+                    .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
+                    .Select(reference => reference.ExactKey), StringComparer.Ordinal);
+                session.ResourceReferenceIndex = (session.ResourceReferenceIndex ?? new List<ModelResourceReference>())
+                    .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
+                _chats.Commit(session, ConversationCommit.RewriteHistory(previousIds, session.Messages));
+                return session;
+            }
+        }
+
+        private static ChatMessage PrepareWorkspaceMessageEdit(ChatSession session,
+            WorkspaceSubmitInputRequest request, out string[] previousIds)
+        {
+            if (session.Revision != request.ExpectedRevision.Value)
+                throw new ChatConcurrencyException("Chat changed while the message was being edited. Reload it before retrying.");
+            if (string.Equals(session.LastRun?.Status, "running", StringComparison.OrdinalIgnoreCase) ||
+                session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
+                throw new InvalidOperationException("Stop or resolve the active run before editing history.");
+            var index = session.Messages.FindIndex(message => message != null &&
+                string.Equals(message.Id, request.EditMessageId, StringComparison.OrdinalIgnoreCase));
+            if (index < 0 || session.Messages[index].Role != "user" || session.Messages[index].ProtocolMessage)
+                throw new InvalidOperationException("Only an existing user message can be edited.");
+            previousIds = session.Messages.Select(message => message.Id).ToArray();
+            var source = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(session.Messages[index]));
+            session.Messages = session.Messages.Take(index).ToList();
+            session.LastRun = null;
+            session.LastContextReceipt = null;
+            session.ContextCheckpoints = new List<ContextCheckpoint>();
+            session.ActiveContextCheckpointId = null;
+            session.ActiveTaskListArtifactId = null;
+            session.ActivePlanDocumentArtifactId = null;
+            session.ArtifactLinks = new List<ChatArtifactLink>();
+            var retainedIds = WorkspaceMessageArtifactIds(session.Messages.Concat(new[] { source }), session);
+            session.Artifacts = (session.Artifacts ?? new List<ChatArtifact>())
+                .Where(artifact => artifact != null && retainedIds.Contains(artifact.Id)).ToList();
+            var retainedReferences = new HashSet<string>(session.Messages
+                .SelectMany(message => message.ResourceModelReferences ?? new List<ModelResourceReference>())
+                .Select(reference => reference.ExactKey), StringComparer.Ordinal);
+            session.ResourceReferenceIndex = (session.ResourceReferenceIndex ?? new List<ModelResourceReference>())
+                .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
+            return source;
+        }
+
+        private static HashSet<string> WorkspaceMessageArtifactIds(IEnumerable<ChatMessage> messages, ChatSession source)
+        {
+            var result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var message in messages ?? new ChatMessage[0])
+            {
+                foreach (var attachment in message.Attachments ?? new List<ChatAttachment>())
+                    if (attachment != null && !string.IsNullOrWhiteSpace(attachment.Id))
+                        result.Add("attachment_" + attachment.Id);
+                foreach (var reference in (message.ResourceRefs ?? new List<ResourceRef>())
+                    .Concat(new[] { message.HtmlWorkspaceCheckpoint }))
+                {
+                    string owner, artifactId; int revision;
+                    if (ChatResourceUri.TryParseArtifactRevision(reference, out owner, out artifactId, out revision) &&
+                        (owner == source.Id || owner == source.WorkspaceId)) result.Add(artifactId);
+                }
+            }
+            return result;
+        }
+
         public ChatSessionHeader[] ListSessions(WorkspaceDescriptor workspace)
         {
             return _workspaces.ListSessions(_chats, workspace);
@@ -188,7 +342,8 @@ namespace RNAssistant.Runtime
             var session = GetSession(workspace, sessionId);
             if (session == null) throw new InvalidOperationException("Workspace session was not found.");
             var lifecycle = session.LastRun?.KernelState?.Summary?.Lifecycle;
-            if (lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation)
+            if (lifecycle == RunLifecycle.Running || lifecycle == RunLifecycle.AwaitingConfirmation ||
+                string.Equals(session.LastRun?.Status, "running", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Stop or resolve the active run before changing this chat.");
         }
 
@@ -345,6 +500,11 @@ namespace RNAssistant.Runtime
                 message = VisualAnnotationSourceWorkflow.UserText(message, drafts);
                 InterruptAbandonedRun(session);
 
+                string[] editedPreviousIds = null;
+                var selectedSkills = SkillTaskService.CopySelections(session.LastRun);
+                var editedSource = request.EditMessageId == null ? null :
+                    PrepareWorkspaceMessageEdit(session, request, out editedPreviousIds);
+
                 if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
                 session.Mode = acceptedMode;
                 session.MutationPolicy = policy.MutationPolicy;
@@ -362,8 +522,13 @@ namespace RNAssistant.Runtime
                     extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId),
                     pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                 var userMessage = new ChatMessage { Id = Guid.NewGuid().ToString("N"), Role = "user",
-                    Content = message ?? string.Empty, RunId = runId, Attachments = drafts };
+                    Content = message ?? string.Empty, RunId = runId,
+                    Attachments = editedSource == null ? drafts : editedSource.Attachments ?? new List<ChatAttachment>(),
+                    ResourceRefs = editedSource == null ? new List<ResourceRef>() :
+                        (editedSource.ResourceRefs ?? new List<ResourceRef>()).Where(reference => reference != null)
+                            .Select(reference => reference.Copy()).ToList() };
                 if (drafts.Count > 0) attachmentStore.CommitToCas(userMessage);
+                if (editedSource != null) attachmentStore.CloneMessageAttachments(userMessage);
                 var input = new ConversationInput { Id = userMessage.Id,
                     OperationId = request.RequestId ?? Guid.NewGuid().ToString("N"), Revision = 1,
                     Text = message ?? string.Empty,
@@ -379,7 +544,7 @@ namespace RNAssistant.Runtime
                 { RunId = runId, TurnId = runId, StartedUtc = DateTime.UtcNow, ConversationPolicy = policy,
                     OfficeTarget = officeTarget,
                     ProvisionalTitle = settings.SmartChatTitles ? provisionalTitle : null,
-                    SelectedSkills = SkillTaskService.CopySelections(session.LastRun),
+                    SelectedSkills = selectedSkills,
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                     ModelConfiguration = new ModelRunMetadata
                     {
@@ -396,14 +561,21 @@ namespace RNAssistant.Runtime
                     WorkspaceAcceptance = acceptedContract };
                 session.Model = settings.Model;
                 session.Messages.Add(userMessage);
-                if (drafts.Count > 0)
+                if (userMessage.Attachments.Count > 0)
                 {
+                    if (editedSource != null)
+                        foreach (var attachment in userMessage.Attachments)
+                        {
+                            var artifact = session.Artifacts.SingleOrDefault(item => item.Id == "attachment_" + attachment.Id);
+                            if (artifact != null) artifact.SourceMessageId = userMessage.Id;
+                        }
                     ChatMessageAttachmentService.Link(session, userMessage);
                     foreach (var source in drafts.Select(item => item.VisualSelectionSource))
                         if (!userMessage.ResourceRefs.Any(item => item.Uri == source.Uri && item.Revision == source.Revision))
                             userMessage.ResourceRefs.Add(source.Copy());
                 }
-                _chats.Commit(session, ConversationCommit.UserInput(userMessage));
+                _chats.Commit(session, editedSource == null ? ConversationCommit.UserInput(userMessage) :
+                    ConversationCommit.RewriteHistory(editedPreviousIds, session.Messages));
                 if (drafts.Count > 0) attachmentStore.DeleteDrafts(userMessage);
                 input.Status = ConversationInputStatus.Applied; input.Revision++;
                 inputs.Append(session, new ConversationInputEvent { Input = input });

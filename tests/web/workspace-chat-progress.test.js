@@ -90,7 +90,8 @@ const { chromium } = require('playwright');
       const reflectionArticles = Array.from(reflectionList.querySelectorAll('article.message'))
         .filter(article => article.querySelector('.workspace-reflection-step'));
       const oneReflection = reflectionSteps.length === 2 &&
-        reflectionArticles.every(article => !article.querySelector('.markdown, .message-footer')) &&
+        reflectionArticles.every(article => !article.querySelector('.markdown') &&
+          !!article.querySelector('.message-footer')) &&
         reflectionSteps[0].textContent.split('Проверю источник.').length === 2 &&
         reflectionSteps[1].textContent.includes('Сначала нужен точный источник.') &&
         reflectionSteps[1].textContent.includes('Отвечу после чтения.');
@@ -140,6 +141,8 @@ const { chromium } = require('playwright');
       await page.locator('#chatInput').fill('Проверка живого ответа');
       await page.locator('#chatInput').press('Enter');
       await page.waitForFunction(() => document.querySelector('#messages .agent-stream-step')?.textContent.includes('Готовлю ответ проекта'));
+      if (owner === 'project' && process.env.RNA_CHAT_STREAM_SCREENSHOT)
+        await page.screenshot({ path: process.env.RNA_CHAT_STREAM_SCREENSHOT, animations: 'disabled' });
       const delivered = await page.evaluate(() => {
         const events = window.__workspaceProgress;
         const last = events[events.length - 1];

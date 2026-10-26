@@ -2,6 +2,7 @@
   "use strict";
   var selectedSessions = new Map();
   var activeOwner = "office", sharedComposer = null, actions = Object.create(null), actionsBound = false;
+  var workspaceMessageEdit = null;
   var officeComposerAnchor = null;
   var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
     Notice: "workspaceChatNotice", Control: "workspaceChatControl", Pending: "workspaceChatPending",
@@ -14,6 +15,54 @@
   function dispatch(name, value) {
     var handler = actions[activeOwner] && actions[activeOwner][name];
     if (handler) return handler(value);
+  }
+  function canMessageAction(name, message, index) {
+    if (activeOwner === "office") return false;
+    var handler = actions[activeOwner] && actions[activeOwner].canMessageAction;
+    return !!handler && !!handler(name, message, index);
+  }
+  function messageAction(name, message, index) {
+    if (!canMessageAction(name, message, index)) return;
+    return dispatch("messageAction", { name: name, message: message, index: index });
+  }
+  function paintMessageEdit() {
+    var editing = activeOwner !== "office" && !!workspaceMessageEdit;
+    var form = node("Form"), bar = document.getElementById("messageEditBar");
+    form.classList.toggle("is-message-editing", editing);
+    bar.classList.toggle("hidden", !editing);
+    bar.setAttribute("aria-hidden", String(!editing));
+    document.getElementById("cancelMessageEditButton").disabled = !editing;
+    node("Send").title = editing ? "Отправить заново" : "Отправить";
+    node("Send").setAttribute("aria-label", editing ? "Отправить заново" : "Отправить");
+  }
+  function cancelWorkspaceMessageEdit(restore) {
+    if (!workspaceMessageEdit) return;
+    var prior = workspaceMessageEdit;
+    workspaceMessageEdit = null;
+    if (restore !== false && activeOwner === prior.owner) {
+      node("Input").value = prior.draft;
+      node("Input").dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    paintMessageEdit();
+  }
+  function startWorkspaceMessageEdit(message) {
+    if (activeOwner === "office" || !message || !message.Id) return;
+    var snapshot = dispatch("snapshot"), workspaceId = field(field(snapshot, "project"), "workspaceId");
+    var sessionId = field(snapshot, "sessionId"), revision = field(field(snapshot, "state"), "revision");
+    if (!workspaceId || !sessionId || !Number.isSafeInteger(revision)) return;
+    if (sharedComposer) sharedComposer.draftVersion();
+    workspaceMessageEdit = { owner: activeOwner, workspaceId: workspaceId, sessionId: sessionId,
+      messageId: message.Id, revision: revision, draft: node("Input").value };
+    node("Input").value = messageContent(message);
+    node("Input").dispatchEvent(new Event("input", { bubbles: true }));
+    paintMessageEdit();
+    node("Input").focus();
+  }
+  function currentMessageEdit() {
+    if (!workspaceMessageEdit || activeOwner !== workspaceMessageEdit.owner) return null;
+    var snapshot = dispatch("snapshot");
+    return field(field(snapshot, "project"), "workspaceId") === workspaceMessageEdit.workspaceId &&
+      field(snapshot, "sessionId") === workspaceMessageEdit.sessionId ? workspaceMessageEdit : null;
   }
   function bindActions() {
     if (actionsBound) return;
@@ -35,6 +84,9 @@
     });
     node("Approve").addEventListener("click", function () { dispatch("resolve", true); });
     node("Reject").addEventListener("click", function () { dispatch("resolve", false); });
+    document.getElementById("cancelMessageEditButton").addEventListener("click", function () {
+      if (activeOwner !== "office") { cancelWorkspaceMessageEdit(true); dispatch("refresh"); }
+    });
   }
   function mount(owner, container) {
     var view = document.getElementById("workspaceChatView");
@@ -43,6 +95,7 @@
     if (!view || !list || !form || !input || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
     if (owner !== "office" && !container) return false;
     var changed = activeOwner !== owner;
+    if (changed && workspaceMessageEdit) cancelWorkspaceMessageEdit(false);
     if (changed && activeOwner !== "office") dispatch("suspend");
     if (activeOwner === "office" && owner !== "office") {
       if (!officeComposerAnchor) {
@@ -72,6 +125,7 @@
     if (pluginDrafts) pluginDrafts.hidden = owner !== "plugin" || pluginDrafts.childElementCount === 0;
     form.classList.toggle("project-chat-composer", owner !== "office");
     if (owner === "office") {
+      form.title = "";
       if (form.parentNode !== document.getElementById("chatDropZone"))
         document.getElementById("chatDropZone").insertBefore(form, officeComposerAnchor);
       document.getElementById("stopButton").hidden = false;
@@ -101,6 +155,7 @@
     input.setAttribute("aria-label", "Сообщение в чат проекта");
     list.setAttribute("aria-label", "Сообщения чата проекта");
     if (sharedComposer) sharedComposer.refresh();
+    paintMessageEdit();
     window.RNAssistantChatInspector.mount(owner);
     return changed;
   }
@@ -205,13 +260,17 @@
       !!message.ReflectionDecision || !!message.ReasoningContent ||
       !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
   }
-  function renderMessages(list, chat) {
+  function renderMessages(list, chat, emptyOptions) {
+    chat = chat || { messages: [], state: {} };
     var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
     var snapshot = field(chat, "state"), live = field(snapshot, "modelProgress");
     if (field(snapshot, "status") !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
     var start = field(chat, "messageStartIndex") || 0;
-    var signature = JSON.stringify([chat.messages || [], live, start, field(chat, "messageTotalCount")]);
+    var messages = chat.messages || [];
+    var actionMessage = messages.find(visibleMessage);
+    var historyActions = !!actionMessage && canMessageAction("fork", actionMessage, 0);
+    var signature = JSON.stringify([chat.messages || [], live, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
     if (!changed && list._chatSignature === signature) return;
     var scroll = list.scrollTop, height = list.scrollHeight;
     var oldStart = changed ? null : Number(list.dataset.startIndex);
@@ -230,29 +289,18 @@
         return more;
       });
     }
-    var messages = chat.messages || [];
     var visible = messages.filter(visibleMessage);
     if (!visible.length && !start && !live) {
-      appendMessageUnit(units, "empty", "empty", function () { return renderChatEmptyState(!field(chat, "sessionId")
+      appendMessageUnit(units, "empty", JSON.stringify(emptyOptions || {}), function () { return renderChatEmptyState(emptyOptions || (!field(chat, "sessionId")
         ? { title: "Чатов пока нет", text: "Нажмите «+», чтобы создать чат." }
-        : { title: "С чего начнём?", text: "Опишите задачу или задайте вопрос." }); });
+        : { title: "С чего начнём?", text: "Опишите задачу или задайте вопрос." })); });
     }
-    var lastRunIndexes = Object.create(null);
     var liveAttached = false;
     var liveRunId = field(live, "runId");
     var liveProgress = live ? { content: field(live, "message"), reasoning: field(live, "reasoning"),
       reasoningTruncated: field(live, "reasoningTruncated"), retrying: field(live, "retrying"), showStatus: true } : null;
-    if (typeof messageRunId === "function") messages.forEach(function (message, index) {
-      var runId = messageRunId(message);
-      if (runId) lastRunIndexes[runId] = index;
-    });
-    for (var index = 0; index < messages.length; index += 1) {
-      var message = messages[index];
-      if (!visibleMessage(message)) continue;
-      if (typeof canCollectAgentRunAt === "function" && canCollectAgentRunAt(index, messages)) {
-        var run = collectAgentRun(index, messages);
+    forEachChatDisplayEntry(messages, visibleMessage, function (run) {
         run.workspace = true;
-        run.continued = !run.finalMessage && lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
         if (live && !run.finalMessage && !run.continued && run.nextIndex >= messages.length &&
             agentRunId(run.items, run.finalMessage) === liveRunId) {
           var savedView = agentRunViewState(run.items, null);
@@ -262,20 +310,13 @@
             liveAttached = true;
           }
         }
-        appendMessageUnit(units, run.live ? "live:workspace-model" : agentRunUnitKey(run),
-          agentRunUnitSignature(run), (function (captured) {
-            return function () { return renderAgentRunArticle(captured); };
-          }(run)), "", null, run.live ? (function (progress) {
+        appendSavedRunUnit(units, run, true, String(historyActions), run.live ? "live:workspace-model" : null,
+          run.live ? (function (progress) {
             return function (node) { paintLiveModelOutput(node.querySelector(".agent-stream-step"), progress); };
           }(liveProgress)) : null);
-        index = run.nextIndex - 1;
-      } else {
-        appendMessageUnit(units, "message:" + (message.Id || "fixture:" + index), JSON.stringify(message),
-          (function (captured, capturedIndex) {
-            return function () { return renderMessageArticle(captured, capturedIndex, { workspace: true }); };
-          }(message, index)));
-      }
-    }
+      }, function (message, index) {
+        appendSavedMessageUnit(units, message, index, true, String(historyActions));
+      });
     if (live && !liveAttached) {
       var liveRun = { items: [], workspace: true, live: true, workspaceProgress: liveProgress };
       appendMessageUnit(units, "live:workspace-model", String(liveRunId), function () {
@@ -311,18 +352,15 @@
       return !!left && !!right && left.workspaceId === right.workspaceId && left.sessionId === right.sessionId;
     }
     function save() {
+      if (workspaceMessageEdit) return;
       if (current) loaded = draftStore.saveWorkspace(current, { text: input.value, mode: mode, reasoning: reasoning });
     }
-    var note = toolbar.querySelector(".project-chat-context-note");
     function showOfficeContext(snapshot) {
-      if (!note) return;
+      if (activeOwner !== "project") { form.title = ""; return; }
       var office = field(snapshot, "office"), status = String(field(snapshot, "status") || "").toLowerCase();
       var activeRun = status === "running" || status === "awaitingconfirmation", pinned = office && activeRun;
-      note.hidden = activeOwner !== "project";
-      note.textContent = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
+      form.title = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
         activeRun ? "Office: документ не привязан" : "Office: при отправке";
-      note.title = pinned ? "Документ закреплён за этим запуском, включая подтверждение действий" :
-        activeRun ? "В этом запуске Office-инструменты недоступны" : "Новый запуск будет привязан к текущему документу Office, если он открыт";
     }
     var clear = document.getElementById("clearInputButton");
     var quick = document.createElement("div"); quick.className = "composer-quick-actions workspace-composer-only";
@@ -360,6 +398,7 @@
     model.title = "Модель из общих настроек"; model.classList.add("workspace-composer-only");
     model.onclick = function () { switchTab("settings"); };
     var label = document.createElement("span"); label.className = "composer-picker-trigger-label"; model.appendChild(label);
+    model.insertAdjacentHTML("beforeend", window.RNAssistantIcons.render("down", "composer-picker-trigger-caret"));
     var think = button("Включить reasoning", "composer-reasoning-button workspace-composer-only", "bulb", function () { if (!locked) { reasoning = !reasoning; save(); update(); } });
     think.id = "workspaceReasoningToggle";
     actions.prepend(model, think);
@@ -387,6 +426,8 @@
         var next = target && target.workspaceId && target.sessionId
           ? { workspaceId: target.workspaceId, sessionId: target.sessionId } : null;
         var same = sameTarget(current, next);
+        if (workspaceMessageEdit && (!same || draftStore.readWorkspace(next) !== loaded))
+          cancelWorkspaceMessageEdit(false);
         current = next;
         var saved = draftStore.readWorkspace(next);
         if (same && saved === loaded) { update(); return; }
@@ -395,7 +436,10 @@
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
       options: function () { return { Mode: mode, ReasoningEnabled: reasoning }; },
-      prepareInput: function (target, text) { return draftStore.prepareWorkspaceInput(target, text, this.options()); },
+      prepareInput: function (target, text, edit) {
+        return draftStore.prepareWorkspaceInput(target, text, Object.assign({}, this.options(), edit ?
+          { EditMessageId: edit.messageId, ExpectedRevision: edit.revision } : {}));
+      },
       draftVersion: function () {
         if (!current) return null;
         var saved = draftStore.readWorkspace(current);
@@ -422,6 +466,10 @@
         if (cleared && sameTarget(current, target) && loaded === previous) {
           input.value = ""; loaded = cleared; update();
         }
+      },
+      acceptedEdit: function (target, request) {
+        draftStore.acknowledgeWorkspaceInput(target, request);
+        if (currentMessageEdit() && sameTarget(current, target)) cancelWorkspaceMessageEdit(true);
       }
     };
     return sharedComposer;
@@ -446,6 +494,9 @@
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     registerActions: registerActions, bindActions: bindActions,
+    canMessageAction: canMessageAction, messageAction: messageAction,
+    startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
+    currentMessageEdit: currentMessageEdit,
     snapshot: function () { return dispatch("snapshot"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,

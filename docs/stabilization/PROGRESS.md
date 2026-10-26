@@ -1,5 +1,25 @@
 # Stabilization progress
 
+## One ChatView history and message actions — 2026-10-26
+
+Owner: shared Web chat presentation; workspace history operations in Application.
+Office, project and plugin move the same transcript/composer DOM and use common
+saved-message grouping, rendering and footer actions. Workspace fork, edit and
+delete-message now use typed bridge operations; edit checks the exact revision and
+preserves the previous composer draft. The protected pending-input draft retains
+edit identity for uncertain-send retries. Reflection and live output retain their
+existing DOM during progress updates. The right panel header stays above its body.
+
+Focused workspace history/storage Harness checks and Chrome chat/HTML suites pass;
+[Office](../audits/evidence/unified-chat-2026-10-26/chat-office.png),
+[project](../audits/evidence/unified-chat-2026-10-26/chat-workspace.png),
+[plugin](../audits/evidence/unified-chat-2026-10-26/chat-plugin.png) and
+[HTML](../audits/evidence/unified-chat-2026-10-26/chat-html.png) screenshots use
+synthetic preview data. [Workspace edit](../audits/evidence/unified-chat-2026-10-26/chat-workspace-edit.png)
+and [live output](../audits/evidence/unified-chat-2026-10-26/chat-workspace-stream.png)
+show the same surface; [Office live output](../audits/evidence/unified-chat-2026-10-26/chat-office-stream.png)
+uses the same stream leaf. Windows Office/WebView2 streaming remains unqualified.
+
 ## Tool attempts and workspace result presentation — 2026-10-26
 
 Owner: Core tool display/summary projection; Office presentation service; shared Web UI.

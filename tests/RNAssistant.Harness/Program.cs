@@ -62,6 +62,8 @@ namespace RNAssistant.Harness
                 Test("plugins: paged published history and guarded restore", PluginsPublishedHistoryAndRestore),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),
                 Test("plugins: source chats share project history", PluginsSourceChatSessions),
+                Test("plugins: project chat fork preserves exact prefix", PluginsProjectChatFork),
+                Test("plugins: project chat edit replaces history before rerun", PluginsProjectChatEdit),
                 Test("plugins: project chat history uses shared pages", PluginsProjectChatHistoryPages),
                 Test("plugins: source chat excludes Office", PluginsSourceChatExcludesOffice),
                 Test("plugins: project chat busy lease is typed", PluginsProjectChatBusyLeaseIsTyped),
