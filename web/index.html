@@ -107,7 +107,12 @@
           <button type="button" class="link-button" id="openDocumentButton">Открыть файл</button>
         </div>
         <div class="chat-scroll-region" id="officeChatTranscriptMount">
-          <div class="messages" id="messages" role="region" aria-label="Сообщения чата" tabindex="0"></div>
+          <div class="messages" id="messages" role="region" aria-label="Сообщения чата" tabindex="0">
+            <div class="chat-empty" role="status" aria-live="polite">
+              <div class="chat-empty-title">Загрузка RN Assistant</div>
+              <div class="chat-empty-text">Загружаю чаты и настройки…</div>
+            </div>
+          </div>
           <button type="button" class="chat-scroll-button" id="chatScrollBottomButton" title="К последним сообщениям" aria-label="К последним сообщениям" aria-hidden="true" tabindex="-1">
             <svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg>
           </button>

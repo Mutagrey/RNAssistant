@@ -317,6 +317,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = null;
                         break;
                     case BridgeOperationId.Init:
+                        RuntimeLog.Info("Bridge init started.");
                         responsePayload = await RunBridgeWorkAsync(
                             () => Bootstrap(_controller.Initialize()),
                             cancellationToken).ConfigureAwait(false);

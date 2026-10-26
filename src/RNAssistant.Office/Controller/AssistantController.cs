@@ -248,17 +248,19 @@ namespace RNAssistant.Office
         {
             var timer = Stopwatch.StartNew();
             EnsureStartupRecovery();
+            var recoveryMs = timer.ElapsedMilliseconds;
             var session = _chatSessions.GetActiveSessionForOfficeState();
-            var sessionMs = timer.ElapsedMilliseconds;
+            var sessionMs = timer.ElapsedMilliseconds - recoveryMs;
             var settings = _settingsService.Load();
+            var settingsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs;
             var officeContext = _officeContextCapture.CaptureOfficeContext();
-            var officeMs = timer.ElapsedMilliseconds - sessionMs;
+            var officeMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs;
             var prompts = _toolExecutor.GetPromptLibrary();
-            var promptsMs = timer.ElapsedMilliseconds - sessionMs - officeMs;
+            var promptsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs;
             var tools = ToolLibraryResponse.From(_toolCatalog.GetVisibleTools());
-            var toolsMs = timer.ElapsedMilliseconds - sessionMs - officeMs - promptsMs;
+            var toolsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - promptsMs;
             var skills = GetSkills();
-            var skillsMs = timer.ElapsedMilliseconds - sessionMs - officeMs - promptsMs - toolsMs;
+            var skillsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - promptsMs - toolsMs;
             var librariesMs = promptsMs + toolsMs + skillsMs;
             var response = new InitResponse
             {
@@ -279,9 +281,9 @@ namespace RNAssistant.Office
             };
             PopulateChatState(session, response, settings: settings);
             if (timer.ElapsedMilliseconds >= 500)
-                RuntimeLog.Info("Startup timing: session=" + sessionMs + "ms, office=" + officeMs + "ms, libraries=" + librariesMs +
+                RuntimeLog.Info("Startup timing: recovery=" + recoveryMs + "ms, session=" + sessionMs + "ms, settings=" + settingsMs + "ms, office=" + officeMs + "ms, libraries=" + librariesMs +
                     "ms (prompts=" + promptsMs + "ms, tools=" + toolsMs + "ms, skills=" + skillsMs + "ms)," +
-                    " chatState=" + (timer.ElapsedMilliseconds - sessionMs - officeMs - librariesMs) + "ms.");
+                    " chatState=" + (timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - librariesMs) + "ms.");
             return response;
         }
 
