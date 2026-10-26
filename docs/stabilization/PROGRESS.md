@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Image cutoff audit: open request-preparation defects — 2026-10-26
+
+Owner: Core LlmMessageBuilder / ModelContextBudget. Host-neutral reproduction found
+duplicate image reservation against attachment-text budget, diagnostic-only cutoff
+reasons and a scanned-PDF capability error caused by exhausted image quota.
+[Details and acceptance](BACKLOG.md#image-cutoff-и-бюджет-текста-вложений--2026-10-26).
+The saved mixed-media manifest check passes; it does not cover these failures.
+Fix request selection/budget/omission semantics before final media/model A/B.
+The PDF/media presentation commit does not claim these transport defects are fixed.
+
 ## One ChatView history and message actions — 2026-10-26
 
 Owner: shared Web chat presentation; workspace history operations in Application.
