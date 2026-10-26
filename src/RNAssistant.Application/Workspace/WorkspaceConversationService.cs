@@ -579,7 +579,9 @@ namespace RNAssistant.Runtime
                 if (drafts.Count > 0) attachmentStore.DeleteDrafts(userMessage);
                 input.Status = ConversationInputStatus.Applied; input.Revision++;
                 inputs.Append(session, new ConversationInputEvent { Input = input });
-                receipt.DeliveryRecorded = true;
+                receipt = Receipt(accepted, input, true);
+                progress?.Invoke(new WorkspaceRunEvent("InputApplied", null, null,
+                    ConversationEventFeed.Cursor(session), receipt));
 
                 using (var control = OpenRunControl(session, cancellationToken))
                 {

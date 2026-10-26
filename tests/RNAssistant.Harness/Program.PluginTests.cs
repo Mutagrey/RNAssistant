@@ -63,6 +63,81 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void PluginsInputReceiptBeforeModelResponse()
+        {
+            WithPluginPaths(paths =>
+            {
+                var probe = new TcpListener(IPAddress.Loopback, 0);
+                probe.Start(); var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                using (var entered = new ManualResetEventSlim())
+                using (var release = new ManualResetEventSlim())
+                using (var service = new PluginApplicationService(paths))
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                    var server = Task.Run(async () =>
+                    {
+                        var context = await listener.GetContextAsync().ConfigureAwait(false);
+                        using (var reader = new StreamReader(context.Request.InputStream))
+                            await reader.ReadToEndAsync().ConfigureAwait(false);
+                        entered.Set();
+                        if (!release.Wait(10000)) throw new TimeoutException("Receipt test did not release the model.");
+                        var bytes = Encoding.UTF8.GetBytes(new JObject { ["choices"] = new JArray(new JObject {
+                            ["message"] = new JObject { ["content"] = ModelProtocolWire.WriteAcceptedDecision(
+                                ConversationResponse.FinishAction, "No tools needed.", "Reply.", results: new ConversationResultClaim[0]) } })
+                        }.ToString(Formatting.None));
+                        context.Response.ContentLength64 = bytes.Length;
+                        await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+                        context.Response.Close();
+                    });
+                    new SettingsService(paths).Save(new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
+                        Model = "test-model", AgentResponseMode = "json_object", StreamResponses = false,
+                        AutoCompressContext = false, SmartChatTitles = false });
+                    var plugin = service.Create(new PluginCreateRequest { Name = "Input receipt",
+                        RootPath = Path.Combine(paths.Root, "receipt-source"), Description = "Test" });
+                    var chat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = plugin.SourceWorkspaceId });
+                    var request = new ProjectChatRequest { WorkspaceId = plugin.SourceWorkspaceId, SessionId = chat.SessionId,
+                        Input = new WorkspaceSubmitInputRequest { SessionId = chat.SessionId, RequestId = "receipt-once",
+                            Message = "Read this message", Mode = ChatModes.Agent } };
+                    var wire = new System.Collections.Concurrent.ConcurrentQueue<string>();
+                    using (var bridge = new AssistantWebBridge(new AssistantController(paths), wire.Enqueue) { Plugins = service })
+                    {
+                        var pending = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new { contractVersion = 2,
+                            id = "receipt-submit", type = "submitProjectChat", bridgeToken = BridgeToken(bridge), payload = request }));
+                        JObject[] receipts;
+                        try
+                        {
+                            AssertTrue(entered.Wait(5000), "model request starts");
+                            AssertTrue(!pending.IsCompleted, "terminal reply still waits for the model");
+                            receipts = wire.Select(JObject.Parse).Where(item => item["payload"]?["inputReceipt"] != null).ToArray();
+                            AssertEqual(2, receipts.Length, "accepted and applied receipts cross the real bridge before the response");
+                            AssertTrue(!(bool)receipts[0]["payload"]["inputReceipt"]["DeliveryRecorded"] &&
+                                (bool)receipts[1]["payload"]["inputReceipt"]["DeliveryRecorded"], "admission and history delivery are distinct");
+                            AssertEqual("receipt-submit", (string)receipts[1]["id"], "receipt keeps the transport request identity");
+                            AssertEqual(chat.SessionId, (string)receipts[1]["payload"]["inputReceipt"]["SessionId"], "receipt keeps session identity");
+                        }
+                        finally { release.Set(); }
+                        var terminal = JObject.Parse(pending.GetAwaiter().GetResult());
+                        server.GetAwaiter().GetResult();
+                        AssertTrue((bool)terminal["ok"], "submission succeeds");
+                        AssertTrue(JToken.DeepEquals(receipts[1]["payload"]["inputReceipt"], terminal["payload"]["inputReceipt"]),
+                            "terminal response repeats the exact delivered receipt");
+                        var duplicate = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "submitProjectChat", request);
+                        AssertTrue((bool)duplicate["ok"] && JToken.DeepEquals(terminal["payload"]["inputReceipt"], duplicate["payload"]["inputReceipt"]),
+                            "retry returns the same receipt without a second model request");
+                        AssertEqual(1, service.ProjectChat(request).Messages.Count(item => item.Role == "user"), "one persisted input");
+                        var fixture = Environment.GetEnvironmentVariable("RNA_WORKSPACE_RECEIPT_FIXTURE");
+                        if (!string.IsNullOrWhiteSpace(fixture))
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(fixture)));
+                            File.WriteAllText(fixture, new JObject { ["accepted"] = receipts[0], ["applied"] = receipts[1],
+                                ["terminal"] = terminal }.ToString(Formatting.Indented));
+                        }
+                    }
+                }
+            });
+        }
+
         private static void PluginsSourceChatExcludesOffice()
         {
             WithPluginPaths(paths =>

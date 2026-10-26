@@ -464,13 +464,13 @@
         draftStore.acknowledgeWorkspaceInput(target, request);
         var previous = draftStore.readWorkspace(target);
         var cleared = draftStore.acceptWorkspace(target, text, version);
-        if (cleared && sameTarget(current, target) && loaded === previous) {
+        if (cleared && activeOwner !== "office" && sameTarget(current, target) && loaded === previous) {
           input.value = ""; loaded = cleared; update();
         }
       },
       acceptedEdit: function (target, request) {
         draftStore.acknowledgeWorkspaceInput(target, request);
-        if (currentMessageEdit() && sameTarget(current, target)) cancelWorkspaceMessageEdit(true);
+        if (activeOwner !== "office" && currentMessageEdit() && sameTarget(current, target)) cancelWorkspaceMessageEdit(true);
       }
     };
     return sharedComposer;

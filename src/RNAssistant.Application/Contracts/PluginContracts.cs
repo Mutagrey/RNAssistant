@@ -239,6 +239,7 @@ namespace RNAssistant.Application.Contracts
     }
     public sealed class ProjectChatStateDto
     {
+        [JsonProperty("inputReceipt", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceInputReceipt InputReceipt { get; set; }
         [JsonProperty("project")] public ProjectChatProjectDto Project { get; set; }
         [JsonProperty("sessionId")] public string SessionId { get; set; }
         [JsonProperty("state")] public WorkspaceSessionSnapshot State { get; set; }

@@ -933,9 +933,10 @@ namespace RNAssistant.Application
                 throw new PluginException("project_chat_invalid", "The submitted chat identity changed.");
             if (Conversations.GetSession(workspace, request.SessionId) == null)
                 throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+            WorkspaceRunResult result;
             try
             {
-                await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
+                result = await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
                     progress: progress, cancellationToken: token).ConfigureAwait(false);
             }
             catch (WorkspaceSessionLeaseUnavailableException)
@@ -943,7 +944,9 @@ namespace RNAssistant.Application
                 throw new PluginException("project_chat_busy",
                     "This chat is running or its storage lease is unavailable. Refresh the chat before submitting again.");
             }
-            return ProjectChat(request);
+            var snapshot = ProjectChat(request);
+            snapshot.InputReceipt = result.Receipt;
+            return snapshot;
             }
         }
 

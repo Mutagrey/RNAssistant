@@ -359,6 +359,14 @@ view and composer, one session draft and preferences across both screens, append
 identity, double submit and late acknowledgement with identical later text.
 It also loses replies after acceptance and retries across project/plugin screens,
 checking one request identity and one persisted user message.
+`plugins: input receipt crosses bridge before model response` holds the scripted
+model response while checking both receipts through the real Application/WebView
+bridge and retry idempotency. Set `RNA_WORKSPACE_RECEIPT_FIXTURE` to an output JSON
+path; `node tests/web/workspace-input-receipt.test.js <that-path>` consumes those
+actual envelopes in Chromium. It checks early draft clearing, exact input identity,
+repeated acknowledgements, a newer identical draft, background Office isolation,
+unconfirmed delivery and recovery from a lost progress event. This is host-neutral
+bridge/browser evidence, not real Windows/WebView2 qualification.
 `node tests/web/workspace-chat-races.test.js` delays running snapshots past the
 terminal response in both screens and switches plugin selection before an input
 reply arrives; completed chats must remain writable without stale busy state.

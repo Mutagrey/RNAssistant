@@ -287,7 +287,7 @@ function refreshBridgeWait(id) {
   }, pending.idleTimeoutMs);
 }
 
-function send(type, payload) {
+function send(type, payload, onProgress) {
   var id = String(state.seq++);
   var promise = new Promise(function (resolve, reject) {
     if (!window.chrome || !window.chrome.webview) {
@@ -305,7 +305,7 @@ function send(type, payload) {
         return;
       }
       state.pending[id] = { resolve: resolve, reject: reject, type: type, payload: normalizedPayload,
-        idleTimeoutMs: operation.idleTimeoutMs };
+        idleTimeoutMs: operation.idleTimeoutMs, onProgress: onProgress };
       refreshBridgeWait(id);
       try {
         window.chrome.webview.postMessage({ contractVersion: bridgeContractVersion, id: id, type: type,
@@ -456,6 +456,7 @@ if (window.chrome && window.chrome.webview) {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
       if (progressPending) refreshBridgeWait(response.id);
+      if (progressPending && typeof progressPending.onProgress === "function") progressPending.onProgress(progress);
       if (progress.workspaceId) {
         if (window.RNAssistantWorkspaceChat) window.RNAssistantWorkspaceChat.acceptProgress(progress);
         return;

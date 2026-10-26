@@ -579,11 +579,25 @@
         var target = { workspaceId: pid, sessionId: sid }, edit = window.RNAssistantWorkspaceChat.currentMessageEdit();
         var draftVersion = edit ? null : composer.draftVersion();
         var request = composer.prepareInput(target, text, edit);
-        runChat(async function () { await window.RNAssistantChatDrafts.flushWorkspace(target);
-          return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-          input: request }).then(function (result) {
+        var acknowledged = false;
+        function acceptReceipt(receipt) {
+          if (acknowledged) return true;
+          if (!receipt || receipt.SessionId !== sid || receipt.RequestId !== request.requestId ||
+              !receipt.InputId || !receipt.RunId || !receipt.AcceptedCursor ||
+              !Number.isSafeInteger(receipt.AcceptedSequence) || receipt.AcceptedSequence < 1 ||
+              receipt.DeliveryRecorded !== true) return false;
           if (edit) composer.acceptedEdit(target, request);
           else composer.accepted(target, text, draftVersion, request);
+          acknowledged = true;
+          return true;
+        }
+        runChat(async function () { await window.RNAssistantChatDrafts.flushWorkspace(target);
+          return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
+          input: request }, function (progress) {
+            if (progress.workspaceId === pid && progress.sessionId === sid) acceptReceipt(progress.inputReceipt);
+          }).then(function (result) {
+          if (!acceptReceipt(result && result.inputReceipt))
+            throw new Error("Доставка сообщения не подтверждена. Черновик сохранён.");
           return result;
         }); });
       },

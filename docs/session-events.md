@@ -651,6 +651,19 @@ resource IDs, not chat events, resource bodies or a second durable input journal
 Abrupt-close timing and Windows DPAPI/WebView2 behavior still require target-host
 evidence.
 
+Workspace delivery publishes separate `InputAccepted` (journal admission) and
+`InputApplied` (user message and applied transition persisted) receipt snapshots.
+The typed WebView progress payload carries `inputReceipt` under the original
+transport request ID; `submitProjectChat` also returns that receipt, including
+duplicate submissions. A successful transport response alone does not acknowledge
+the input. The request-scoped UI callback clears only the matching draft version
+after `DeliveryRecorded=true`, without waiting for model completion. Repeated
+receipts cannot clear a later draft; background receipts never alter the Office
+composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
+This fixes delivery acknowledgement, not run ownership: the current submit still
+awaits terminal completion, and queue/steer plus abandoned-run recovery remain
+separate application work.
+
 Office `submitChatInput` requires an operation ID and uses the same conflict check.
 Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup
 precedes draft loading, so a retry works after drafts were consumed; a matching

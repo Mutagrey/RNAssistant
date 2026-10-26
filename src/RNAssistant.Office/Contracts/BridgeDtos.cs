@@ -140,6 +140,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)]
         public WorkspaceModelProgress ModelProgress { get; set; }
 
+        [JsonProperty("inputReceipt", NullValueHandling = NullValueHandling.Ignore)]
+        public WorkspaceInputReceipt InputReceipt { get; set; }
+
         [JsonProperty("chatId")]
         public string ChatId { get; set; }
 

@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Исправлена доставка workspace input receipt — 2026-10-27
+
+Owner: Application input delivery / typed WebView bridge / shared workspace composer.
+I26-01 закрыт: подтверждение сохранённого user message очищает только отправленную
+версию draft до ответа модели. Terminal response и duplicate submit возвращают тот
+же receipt; `DeliveryRecorded=false` или чужая identity не означают успешную доставку.
+Новый draft и composer Office сохраняются при фоновом подтверждении workspace.
+
+Проверки: targeted host-neutral Harness (реальный Application/bridge до ответа модели,
+existing recovery доставки), Chromium с экспортированными bridge envelopes,
+shared draft/progress и bridge bootstrap — pass. Build Harness: 0 errors, 2 CA1416
+warnings в существующем PDF viewer. Office/VSTO/Windows validation не выполнялось.
+Остаются I26-02/09/10: abandoned-run recovery, lifetime длинного submit и steer/queue.
+Следующий дефект — сохранённый running без доступного владельца.
+
 ## Исправлен workspace tool catalog — 2026-10-26
 
 Owner: Application Workspace prompt / Core schema projection. I26-04 закрыт:

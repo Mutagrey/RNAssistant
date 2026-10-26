@@ -31,6 +31,14 @@ SkillLoadToolHandler не упражнялись. Нет live-model или Windo
 
 ### Подтверждённые причины и открытые границы
 
+I26-01 исправлен 2026-10-27: `InputApplied` публикуется после user message и applied
+event, оба receipt проходят реальный bridge; terminal response повторяет receipt.
+UI принимает только совпавший `DeliveryRecorded=true`, не сам факт transport success.
+Проверены задержанный model response, duplicate submit, новые/фоновые drafts и
+неподтверждённая доставка; fixtures browser получены из реального Application/bridge.
+I26-02/09/10 остаются открытыми: этот срез не меняет ownership запуска и не подключает
+steer/queue. Windows/WebView2 по-прежнему требуют отдельного экранного evidence.
+
 I26-04 исправлен после аудита: Workspace `PromptToolCatalog` переведён на существующий
 `ForPrompt`; внутренний descriptor и runtime gate не менялись. Расширенный
 `response_mode_smoke.py` воспроизвёл отказ `{target}` до правки и прошёл после неё:

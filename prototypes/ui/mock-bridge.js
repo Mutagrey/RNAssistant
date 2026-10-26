@@ -749,11 +749,16 @@
           if (editIndex < 0) fail("Сообщение не найдено.", "preview_message_missing");
           projectMessages[submitting.Id].splice(editIndex);
         }
-        projectRequests[input.requestId] = { sessionId: submitting.Id, message: input.message };
+        accepted = projectRequests[input.requestId] = { sessionId: submitting.Id, message: input.message };
         projectMessages[submitting.Id].push({ Id: input.requestId, Role: "user", Content: input.message });
         projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
         var run = { runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
         projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
+        accepted.receipt = { SessionId: submitting.Id, RequestId: input.requestId, InputId: input.requestId,
+          RunId: run.runId, AcceptedSequence: projectRevisions[submitting.Id], AcceptedCursor: run.cursor,
+          DeliveryRecorded: true };
+        emit({ type: "progress", id: requestId, payload: { workspaceId: payload.workspaceId,
+          sessionId: submitting.Id, runId: run.runId, phase: "input_receipt", inputReceipt: accepted.receipt } });
         ["Проверяю запрос…", "Готовлю ответ проекта…"].forEach(function (message, index) {
           setTimeout(function () {
             if (projectRuns[submitting.Id] !== run) return;
@@ -775,7 +780,7 @@
           projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
         }
       }
-      return projectChatState(payload);
+      return Object.assign(projectChatState(payload), { inputReceipt: accepted.receipt });
     }
     if (type === "cancelProjectChat") {
       var stopped = requireProjectChat(payload), currentRun = projectRuns[stopped.Id];
