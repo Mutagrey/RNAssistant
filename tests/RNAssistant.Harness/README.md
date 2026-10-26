@@ -101,6 +101,11 @@ and `node tests/web/workspace-chat-progress.test.js` for the corresponding UI pa
 the last checks project/plugin progress bridge routing and uses Playwright with
 optional `BROWSER_EXECUTABLE`. Scripted CLI coverage is
 `tests/cli/conversation_v8_finish_smoke.py` and `tests/cli/response_mode_smoke.py`.
+The latter requires `jsonschema` from `tests/RNAssistant.ProtocolTests/requirements.txt`.
+It validates the actual HTTP `json_object` catalog with an independent JSON Schema
+validator: valid read/find/search selectors, incomplete and mixed-selector refusal,
+then real search/read dispatch. Native transport call IDs and model evidence refs
+are checked separately; scripted finishes use the shared conversation helper.
 `tests/cli/model_preview_ipc_smoke.py` checks live SSE preview read by a separate
 CLI process, inert repeated reads and terminal retirement; `run_control_smoke.py`
 checks cancellation on the same IPC path.

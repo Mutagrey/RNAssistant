@@ -1920,7 +1920,7 @@ namespace RNAssistant.Runtime
                 return (includeSchemas ? "Available tools and exact argument schemas: " : "Available tools (argument contracts are in json_schema): ") +
                     new JArray(tools.Select(tool => {
                         var descriptor = new JObject { ["Id"] = tool.Id, ["Description"] = tool.Description };
-                        if (includeSchemas) descriptor["Schema"] = JObject.Parse(tool.ArgumentSchemaJson);
+                        if (includeSchemas) descriptor["Schema"] = ToolSchemaSupport.ForPrompt(JObject.Parse(tool.ArgumentSchemaJson));
                         return descriptor;
                     })).ToString(Formatting.None);
             }

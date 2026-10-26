@@ -1,33 +1,20 @@
 """Check CLI wire settings and their persistence across confirmation."""
 
-from conversation_transport import conversation_content
+from conversation_transport import conversation_content, finish
 
 import json
 import os
+import re
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from jsonschema import Draft202012Validator
 
 
 REPO = Path(__file__).resolve().parents[2]
 CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
-
-
-def finish(request, message="Ready."):
-    evidence = []
-    for item in request["messages"]:
-        content = item.get("content") or ""
-        if item.get("role") == "tool" and item.get("tool_call_id"):
-            evidence.append(item["tool_call_id"])
-        elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
-            receipt = json.loads(content.split("\n", 1)[1])
-            evidence.append(receipt["tool_call_id"])
-    return {"action": "finish", "reason": "Report observed results.",
-            "results": [{"summary": message, "evidence": evidence,
-                         "assessment": "satisfied"}] if evidence else [],
-            "message": message}
 
 
 def execute(message, name, arguments):
@@ -125,6 +112,30 @@ def main():
             assert "argument contracts are in json_schema" in strict_prompt
             assert "exact argument schemas" in object_prompt
 
+            # Validate what the model actually sees, not the internal schema dialect.
+            catalog = json.JSONDecoder().raw_decode(object_prompt.split(
+                "Available tools and exact argument schemas: ", 1)[1])[0]
+            schemas = {tool["Id"]: tool["Schema"] for tool in catalog}
+            for schema in schemas.values():
+                Draft202012Validator.check_schema(schema)
+            for name, arguments, valid in (
+                ("common.resources_read", {"target": "catalog.txt"}, True),
+                ("common.resources_read", {"target": "catalog.txt", "startLine": 1, "lineCount": 2}, True),
+                ("common.resources_read", {"target": "catalog.txt", "startChar": 0, "charCount": 12}, True),
+                ("common.resources_read", {"target": "catalog.txt", "startLine": 1}, False),
+                ("common.resources_read", {"target": "catalog.txt", "startLine": 1, "lineCount": 2,
+                                           "startChar": 0, "charCount": 12}, False),
+                ("common.resources_search", {"target": "catalog.txt", "query": "needle"}, True),
+                ("common.resources_search", {"scope": "workspace", "query": "needle"}, True),
+                ("common.resources_search", {"scope": "workspace", "target": "catalog.txt", "query": "needle"}, False),
+                ("common.resources_search", {"target": "catalog.txt"}, False),
+                ("common.resources_find", {"query": "catalog.txt"}, True),
+                ("common.resources_find", {"type": "skill", "query": "VBA"}, True),
+                ("common.resources_find", {"target": "catalog.txt"}, False),
+            ):
+                errors = list(Draft202012Validator(schemas[name]).iter_errors(arguments))
+                assert (not errors) == valid, (name, arguments, [e.message for e in errors])
+
             def assert_pair(request, role, name, arguments):
                 assert "tools" not in request, "v8 stays the only generation protocol"
                 messages = request["messages"]
@@ -149,7 +160,8 @@ def main():
                     assert native["function"]["name"] == name, native
                     assert json.loads(native["function"]["arguments"]) == arguments, native
                     receipt = json.loads(output["content"])
-                    assert receipt["tool_call_id"] == native["id"], receipt
+                    # Native tool pairing uses its transport ID; model evidence uses E refs.
+                    assert re.fullmatch(r"E[1-9][0-9]*", receipt["tool_call_id"]), receipt
                 else:
                     assert any(m.get("content", "").startswith("TOOL_RESULT:\n") for m in messages), [
                         (m["role"], m.get("content", "")[-1600:]) for m in messages[1:]]
@@ -157,11 +169,25 @@ def main():
                                   if messages[i].get("content", "").startswith("TOOL_RESULT:\n"))
                     call, output = messages[result - 1], messages[result]
                     assert call["role"] == "assistant" and output["role"] == role, messages
-                    assert json.loads(call["content"])["tool_calls"] == [
-                        {"name": name, "arguments": arguments}], call
                     receipt = json.loads(output["content"].split("\n", 1)[1])
+                    assert re.fullmatch(r"E[1-9][0-9]*", receipt["tool_call_id"]), receipt
+                    assert json.loads(call["content"])["tool_calls"] == [
+                        {"id": receipt["tool_call_id"], "name": name, "arguments": arguments}], call
                 assert receipt["status"] == "ok" and receipt["name"] == name, receipt
                 assert "rna://" not in output["content"], output
+
+            (workspace / "catalog.txt").write_text("needle in source\n", encoding="utf-8")
+            scripted.extend([
+                execute("Search one source.", "common.resources_search", {"target": "catalog.txt", "query": "needle"}),
+                execute("Read the source.", "common.resources_read", {"target": "catalog.txt"}),
+            ])
+            start = len(requests)
+            run = cli("run", "--workspace", str(workspace), "--message", "Find needle in catalog.txt and read it.",
+                      "--response-mode", "json_object")
+            assert run.returncode == 0 and len(requests) == start + 3 and not scripted, (run.stdout, run.stderr)
+            assert_pair(requests[start + 1], "user", "common.resources_search", {"target": "catalog.txt", "query": "needle"})
+            assert_pair(requests[start + 2], "user", "common.resources_read", {"target": "catalog.txt"})
+            assert json.loads(run.stdout.splitlines()[-1])["data"]["ToolCounts"]["ReadOk"] == 2
 
             for role in ("user", "developer", "tool"):
                 path = role + ".html"
@@ -218,7 +244,7 @@ def main():
             assert_pair(requests[-1], "tool", "files.delete", {"relativePath": "victim.txt"})
             assert not (workspace / "victim.txt").exists()
             assert json.loads(approved.stdout.splitlines()[-1])["data"]["ToolCounts"]["WriteOk"] == 1
-            print("PASS CLI response modes, all tool-result roles through compiler/HTTP, exact pairs and guarded approval inheritance")
+            print("PASS CLI response modes, advertised JSON schemas, search/read dispatch, all tool-result roles, exact pairs and guarded approval inheritance")
     finally:
         server.shutdown()
         server.server_close()

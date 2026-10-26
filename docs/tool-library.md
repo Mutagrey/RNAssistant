@@ -124,6 +124,12 @@ PDF page/range, tree, table, procedure or paired text window therefore has the
 same admission shape in both routes. Provider availability and exact target
 binding remain separate runtime checks.
 
+Model-facing argument schemas in `json_object` use `ToolSchemaSupport.ForPrompt`
+in both the capability catalog and workspace prompt. Complete `anyOf` alternatives
+must not retain the internal closed parent that forbids their branch properties.
+The original descriptor still owns runtime validation; strict output keeps its
+separate `ForStructuredOutput` projection. Prompt normalization grants no authority.
+
 Once a direct tool is in the frozen callable surface, its successful schema-read
 result is projected as a compact receipt with `schemaInRequest=true`. The compiler
 passes that surface separately from the discoverable catalog; the projection must

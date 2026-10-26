@@ -1,6 +1,20 @@
 # Stabilization progress
 
-## Приоритет: восстановление рабочих сценариев чата — 2026-10-26
+## Исправлен workspace tool catalog — 2026-10-26
+
+Owner: Application Workspace prompt / Core schema projection. I26-04 закрыт:
+`json_object` больше не объявляет закрытый пустой object, запрещающий аргументы
+его `anyOf`-ветвей. Consumer использует существующий `ForPrompt`; runtime validation
+и protocol не ослаблены. Служебные подписи в ленту не добавлялись.
+
+Проверка: targeted CLI build — 0 warnings/errors; `response_mode_smoke.py` — pass,
+включая independent validation фактического HTTP catalog и search/read dispatch.
+Новая проверка `{target}` была красной до исправления. В тесте удалён устаревший
+дубль finish helper; transport IDs и `E` evidence проверяются раздельно.
+Реальный endpoint и Windows/Office/VSTO не проверялись. Следующий дефект — потеря
+input receipt в bridge; UI-реконструкция не считается исправлением выполнения.
+
+## Исходный аудит: восстановление рабочих сценариев чата — 2026-10-26
 
 Owner: Application conversation delivery совместно с Core ModelProtocol/Storage
 и Web ChatView. По десяти пользовательским фото выполнен

@@ -31,6 +31,14 @@ SkillLoadToolHandler не упражнялись. Нет live-model или Windo
 
 ### Подтверждённые причины и открытые границы
 
+I26-04 исправлен после аудита: Workspace `PromptToolCatalog` переведён на существующий
+`ForPrompt`; внутренний descriptor и runtime gate не менялись. Расширенный
+`response_mode_smoke.py` воспроизвёл отказ `{target}` до правки и прошёл после неё:
+стандартная проверка HTTP-каталога, 12 положительных/отрицательных selector cases,
+реальные search/read calls, оба response modes и все result roles. Это не закрывает
+ошибку `json_schema` пользовательского endpoint. Исходные пробы ниже сохранены как
+evidence состояния до исправления.
+
 | ID / приоритет | Наблюдение и механизм | Владелец / точка изменения |
 |---|---|---|
 | I26-01 / P0 | **Принятый ввод остаётся в composer.** После появления пользовательского сообщения в snapshot поле всё ещё содержит отправленный текст, Send заблокирован. `SubmitInputAsync` пишет durable input и публикует `InputAccepted`; `ReportWorkspaceProgress` пропускает только `ModelProgress`. `composer.accepted` вызывается после ответа `submitProjectChat`, который ждёт весь run. | Application input receipts → typed WebView bridge → `app-project-chats.js`/draft owner. Отдельный receipt о приёме, отдельный terminal result; не очищать более новый черновик. |
