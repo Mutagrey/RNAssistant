@@ -829,6 +829,29 @@ text, image, rendered PDF page and audio parts, plus an image omitted by the
 shared request limit. It checks final message/part positions, selected-byte
 digests and confirmed PDF omissions without claiming real provider delivery.
 
+Media selection (2026-10-26): `LlmMessageBuilder` prepares one request-local set
+before allocating optional attachment text. Message order and images-before-PDF
+ordering within each message remain unchanged; image/PDF quota is shared. Only
+selected images/pages and actual selected audio bytes reserve media tokens. Native,
+excluded and analysis-replaced attachments do not consume that quota or reserve.
+The former separate PDF estimate is removed; it counted ordinary images twice.
+Request options, generated notices and text framing are included when allocating
+attachment-text space. Final request admission remains the existing exact-wire gate.
+This selection governs the transport attachment-text budget; earlier compiler and
+protocol admission estimates retain their existing policy and reserves.
+
+The model receives a compact `ATTACHMENT_DELIVERY` text block: semantic filenames,
+one-based image order within the message, renderer-supplied PDF page numbers and
+omission reasons/counts when confirmed. Filenames are JSON-escaped untrusted data;
+canonical attachment IDs/hashes and the diagnostic manifest stay out of this block.
+Partial PDF omission does not label the whole file omitted. Native tool-call/result
+messages keep their wire contract and diagnostic-only attachment exclusion.
+Quota exhaustion, explicit unsupported vision and unavailable preparation are
+distinct outcomes. A skipped scanned PDF does not invent a capability failure;
+its omission is visible to the model even when no other part of that message was
+selected. Missing source-byte errors still fail preparation. No automatic reread,
+new persistent cache, media-limit increase or image-resizing change is introduced.
+
 The compiler receipt also keeps typed tool-call IDs and links to exact evidence
 ID, resource revision, view and **observed** coverage. These are source links,
 not inferred delivered coverage. `BodyIncludedInMessage=true` requires verified

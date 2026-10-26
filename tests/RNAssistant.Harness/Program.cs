@@ -788,6 +788,8 @@ namespace RNAssistant.Harness
                 Test("artifact library: synthetic transport", ArtifactLibrarySyntheticTransport),
                 Test("artifact library: history pages reject stale session", ArtifactLibraryHistoryPagesRejectStale),
                 Test("attachments: visual pdf payload", AttachmentBuildsVisualPdfPayload),
+                Test("attachments: selected media budget", AttachmentSelectedMediaBudget),
+                Test("attachments: media cutoff and model notices", AttachmentMediaCutoffNotices),
                 Test("attachments: rejects unsupported file", AttachmentRejectsUnsupportedFile),
                 Test("attachments: cleans stale drafts", AttachmentCleansStaleDrafts),
 

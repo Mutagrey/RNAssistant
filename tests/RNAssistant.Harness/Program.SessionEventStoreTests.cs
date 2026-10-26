@@ -3937,6 +3937,8 @@ namespace RNAssistant.Harness
                     "media uses existing image/audio estimates, not base64 transport text length");
                 AssertEqual(0, selectedText.PartIndex.Value, "attachment text points to the actual text part");
                 var wireText = (string)wireParts[0]["text"];
+                AssertContains(wireText, "ATTACHMENT_DELIVERY", "saved request explains media selection to the model");
+                AssertContains(wireText, "\"image\":2,\"page\":2", "model-visible PDF page agrees with the final visual-part order");
                 var marker = "[Attachment: note.txt]" + Environment.NewLine;
                 var start = wireText.IndexOf(marker, StringComparison.Ordinal);
                 AssertTrue(start >= 0, "serialized text contains the unique attachment boundary");
@@ -3976,6 +3978,7 @@ namespace RNAssistant.Harness
                     "later image is omitted after the shared request image limit");
                 AssertTrue(!omitted.PartIndex.HasValue && wire[2]["content"].Type == JTokenType.String,
                     "omitted image has no invented JSON part position");
+                AssertContains((string)wire[2]["content"], "Лимит изображений", "cutoff reason survives in the exact saved model payload");
                 AssertTrue(request["ContextMessages"] == null &&
                     !Encoding.UTF8.GetString(savedBytes).Contains("SourceAttachmentId"),
                     "diagnostic manifest is not duplicated in provider payload");

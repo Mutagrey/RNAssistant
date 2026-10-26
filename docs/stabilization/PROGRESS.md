@@ -1,14 +1,24 @@
 # Stabilization progress
 
-## Image cutoff audit: open request-preparation defects — 2026-10-26
+## Image cutoff and attachment budget corrected — 2026-10-26
 
-Owner: Core LlmMessageBuilder / ModelContextBudget. Host-neutral reproduction found
-duplicate image reservation against attachment-text budget, diagnostic-only cutoff
-reasons and a scanned-PDF capability error caused by exhausted image quota.
-[Details and acceptance](BACKLOG.md#image-cutoff-и-бюджет-текста-вложений--2026-10-26).
-The saved mixed-media manifest check passes; it does not cover these failures.
-Fix request selection/budget/omission semantics before final media/model A/B.
-The PDF/media presentation commit does not claim these transport defects are fixed.
+Owner: Core LlmMessageBuilder. One request-local selection now supplies image/PDF
+parts, actual audio bytes, budget reservation and wire/diagnostic projections.
+The separate PDF estimate that counted ordinary images again is removed. Analyzed,
+excluded and native-message attachments consume no image slots or media reserve.
+Model-visible ATTACHMENT_DELIVERY notices name selected image order/PDF pages and
+omissions without runtime IDs; quota, explicit unsupported vision and unavailable
+preparation have distinct reasons. Exhausted quota no longer throws a false scanned-
+PDF capability error. Attachment-text framing and generated notices are budgeted.
+Original messages, storage, media limits, resizing and v8 are unchanged.
+
+9 focused Harness checks pass: two new selection/budget regressions, both saved
+attachment-manifest checks, PDF preparation/cache, helper isolation, multimodal
+primary, saved request composition and agent media retention across format repair.
+An extra fallback test fails on an unchanged stale ReferenceEquals assertion;
+[tracked separately](BACKLOG.md#model-request-fallback-устаревший-referenceequals--2026-10-26).
+Build has only the 2 existing PDF platform warnings. No Office/VSTO or real endpoint
+qualification; real media rendering/delivery and model A/B remain open.
 
 ## One ChatView history and message actions — 2026-10-26
 

@@ -1083,6 +1083,88 @@ namespace RNAssistant.Harness
             AssertEqual(1, providerCalls, "pdf model image is cached for one run");
         }
 
+        private static void AttachmentSelectedMediaBudget()
+        {
+            var settings = new AppSettings { Model = "media-budget", MaxTokens = 1024 };
+            settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings {
+                SupportsImages = true, MaxContextTokens = 16384, MaxImagesPerPrompt = 1 };
+            var image = new ChatAttachment { Id = "image", Kind = "image", FileName = "image.png", ContentType = "image/png" };
+            var text = new ChatAttachment { Id = "text", Kind = "text", FileName = "large.txt",
+                ExtractedText = new string('x', 100000), ExtractedCharCount = 100000 };
+            var source = new ChatMessage { Role = "user", Content = "inspect", Attachments = new List<ChatAttachment> { image, text } };
+            var before = JsonConvert.SerializeObject(source);
+            var reads = 0;
+            var builder = new LlmMessageBuilder(attachment => { reads++; return new byte[] { 1, 2, 3 }; });
+            var result = builder.Build(new[] { source }, settings);
+            var content = (Newtonsoft.Json.Linq.JArray)Newtonsoft.Json.Linq.JArray.FromObject(result.Messages)[0]["content"];
+            var wireText = (string)content[0]["text"];
+            var selected = result.MessageParts.Single().Single(part => part.Kind == "attachment_text");
+            var actualEstimate = 4 + ModelContextBudget.EstimateTextTokens("user") + ModelContextBudget.EstimateTextTokens(wireText) +
+                ModelContextBudget.EstimatedImageTokens;
+            AssertEqual(1, reads, "selection reads the emitted image once per build");
+            AssertEqual(2, content.Count, "exactly one selected image follows the text part");
+            AssertEqual(actualEstimate, result.BaseEstimatedPromptTokens, "final estimate is derived from emitted text and selected media");
+            var budget = ModelContextBudget.InputBudgetTokens(settings);
+            AssertTrue(actualEstimate <= budget && budget - actualEstimate < ModelContextBudget.EstimatedImageTokens,
+                "text consumes the available budget without a second image reserve or unbudgeted framing");
+            AssertTrue(selected.SelectedCharacters > 0 && selected.Presentation == ContextPresentationKind.Fragment && wireText.Contains("[Content truncated]"),
+                "bounded text selection remains explicit in model payload and manifest");
+            AssertEqual(before, JsonConvert.SerializeObject(source), "selection does not mutate retained source messages");
+            var audio = new ChatAttachment { Kind = "audio", FileName = "voice.wav", ContentType = "audio/wav", Size = 9999999 };
+            var audioBuild = builder.Build(new[] { new ChatMessage { Role = "user", Content = "listen",
+                Attachments = new List<ChatAttachment> { audio, text } } }, settings);
+            AssertTrue(ModelContextBudget.InputBudgetTokens(settings) - audioBuild.EstimatedPromptTokens < ModelContextBudget.EstimatedImageTokens,
+                "audio reservation uses selected bytes, not stale attachment size");
+        }
+
+        private static void AttachmentMediaCutoffNotices()
+        {
+            var settings = new AppSettings { Model = "media-cutoff", MaxTokens = 1024 };
+            settings.ModelCapabilities[settings.Model] = new ModelCapabilitySettings { SupportsImages = true, MaxImagesPerPrompt = 1 };
+            var image = new ChatAttachment { Id = "image-id", Kind = "image", FileName = "photo.png", ContentType = "image/png" };
+            var skipped = new ChatAttachment { Id = "skip-id", Kind = "image", FileName = "other.png", ContentType = "image/png" };
+            var pdf = new ChatAttachment { Id = "pdf-id", Kind = "pdf", FileName = "scan.pdf", PageCount = 4, PageTextLengths = new List<int> { 0, 0, 0, 0 } };
+            var pdfReads = 0; var pdfLimit = 0; var imageReads = 0;
+            var builder = new LlmMessageBuilder(a => { imageReads++; return new byte[] { 1 }; }, null,
+                (s, a, limit, token) => {
+                    if (a.Kind != "pdf") return null;
+                    pdfReads++; pdfLimit = limit;
+                    return new[] { new ModelImagePart { Bytes = new byte[] { 2 }, ContentType = "image/jpeg", PageNumber = 3, TotalPages = 4 } };
+                });
+            var analyzed = new ChatMessage { Role = "user", Content = "analysis", Attachments = new List<ChatAttachment> { image },
+                AttachmentAnalysis = new AttachmentAnalysisContext { Content = "auxiliary result", AttachmentIds = new List<string> { image.Id } } };
+            var native = new ChatMessage { Role = "tool", ToolCallId = "native", Content = "{}", Attachments = new List<ChatAttachment> { image } };
+            var messages = new[] { new ChatMessage { Role = "user", ExcludeFromModelContext = true, Attachments = new List<ChatAttachment> { image } },
+                native, analyzed, new ChatMessage { Role = "user", Content = "Compare", Attachments = new List<ChatAttachment> { image, skipped } },
+                new ChatMessage { Role = "user", Content = "read scan", Attachments = new List<ChatAttachment> { pdf } } };
+            var result = builder.Build(messages, settings);
+            var wire = Newtonsoft.Json.Linq.JArray.FromObject(result.Messages);
+            AssertEqual(1, imageReads, "native, excluded, analyzed and cutoff images are not read");
+            AssertEqual(0, pdfReads, "exhausted PDF quota never invokes the renderer");
+            AssertEqual("{}", (string)wire[0]["content"], "native tool-result content stays unchanged");
+            AssertContains((string)wire[1]["content"], "auxiliary result", "analysis remains present without consuming image quota");
+            AssertContains((string)wire[2]["content"][0]["text"], "other.png", "omitted image identity reaches the model");
+            AssertContains((string)wire[3]["content"], "Лимит визуальных страниц", "scanned PDF cutoff remains explicit instead of a false capability error");
+            AssertTrue(!result.MessageParts.Last().Single().OmittedCount.HasValue, "unrendered PDF omission count remains unknown");
+            AssertTrue(!wire.ToString().Contains("skip-id"), "model notice does not expose diagnostic attachment IDs");
+            settings.ModelCapabilities[settings.Model].MaxImagesPerPrompt = 2;
+            var mixed = builder.Build(new[] { new ChatMessage { Role = "user", Content = "inspect", Attachments = new List<ChatAttachment> { image, pdf } } }, settings);
+            var mixedText = (string)Newtonsoft.Json.Linq.JArray.FromObject(mixed.Messages)[0]["content"][0]["text"];
+            AssertEqual(1, pdfReads, "PDF parts are selected only once");
+            AssertEqual(1, pdfLimit, "renderer receives the remaining shared quota");
+            AssertContains(mixedText, "\"image\":2,\"page\":3", "selected PDF page maps to the second emitted image");
+            AssertContains(mixedText, "\"omittedPages\":3", "confirmed omitted pages reach the model");
+            AssertEqual(3, mixed.MessageParts.Single().Single(p => p.Kind == "image_url" && p.SourceAttachmentId == pdf.Id).PageNumber.Value,
+                "model caption and manifest use the same selected PDF part");
+            settings.ModelCapabilities[settings.Model].SupportsImages = false;
+            var unsupported = builder.Build(new[] { messages.Last() }, settings);
+            AssertContains(JsonConvert.SerializeObject(unsupported.Messages), "не поддерживает изображения", "unsupported vision has its own model-visible reason");
+            AssertEqual(1, pdfReads, "unsupported vision does not render PDF pages");
+            settings.ModelCapabilities[settings.Model].SupportsImages = true;
+            var unavailable = new LlmMessageBuilder().Build(new[] { messages.Last() }, settings);
+            AssertContains(JsonConvert.SerializeObject(unavailable.Messages), "не подготовлены", "missing preparation differs from capability and quota");
+        }
+
         private static void AttachmentRejectsUnsupportedFile()
         {
             WithTempPaths(delegate(AppDataPaths paths)

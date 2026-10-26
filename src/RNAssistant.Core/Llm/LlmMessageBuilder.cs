@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 
@@ -39,21 +40,28 @@ namespace RNAssistant.Core.Llm
             }
             var messageList = messages as IList<ChatMessage> ?? messages.ToList();
             var runCache = requestOptions == null ? null : requestOptions.RunCache;
-            var remainingAttachmentTokens = Math.Max(
-                0,
-                ModelContextBudget.InputBudgetTokens(settings) -
-                ModelContextBudget.EstimateMessagesTokens(messageList, false, settings) -
-                EstimatePdfImageTokens(messageList, settings));
             var remainingImages = ModelContextBudget.MaxImagesPerPrompt(settings);
-
+            var prepared = new List<PreparedMessage>();
             foreach (var message in messageList)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (message == null || message.ExcludeFromModelContext || string.IsNullOrWhiteSpace(message.Role))
-                {
-                    continue;
-                }
+                if (message == null || message.ExcludeFromModelContext || string.IsNullOrWhiteSpace(message.Role)) continue;
+                prepared.Add(Prepare(message, settings, ref remainingImages, runCache, cancellationToken));
+            }
+            // Reserve exactly the selected media and generated notices, once. Native
+            // and analyzed attachments do not consume image slots or media tokens.
+            var hasMedia = prepared.Any(item => item.Images.Count > 0 || item.Audio.Count > 0);
+            var required = hasMedia
+                ? TokenEstimateCalibration.AddPromptIntercept(settings, prepared.Sum(item => item.Estimate(settings)) +
+                    ModelContextBudget.EstimateRequestOptionsTokens(requestOptions, settings))
+                : TokenEstimateCalibration.PredictPromptTokens(settings, prepared.Sum(item => item.Estimate(null)) +
+                    ModelContextBudget.EstimateRequestOptionsTokens(requestOptions));
+            var remainingAttachmentTokens = Math.Max(0, ModelContextBudget.InputBudgetTokens(settings) - required);
 
+            foreach (var item in prepared)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var message = item.Source;
                 var toolCalls = (message.ToolCalls ?? new List<LlmToolCall>())
                     .Where(call => call != null)
                     .ToList();
@@ -75,8 +83,7 @@ namespace RNAssistant.Core.Llm
                         }))
                     });
                     build.MessageParts.Add(SkippedNativeAttachments(message));
-                    build.AddEstimate(ModelContextBudget.EstimateMessageTokens(message, null, null, false),
-                        ModelContextBudget.EstimateMessageTokens(message, settings, null, false));
+                    build.AddEstimate(item.Estimate(null), item.Estimate(settings));
                     continue;
                 }
 
@@ -94,110 +101,16 @@ namespace RNAssistant.Core.Llm
                     };
                     build.Messages.Add(toolMessage);
                     build.MessageParts.Add(SkippedNativeAttachments(message));
-                    build.AddEstimate(ModelContextBudget.EstimateMessageTokens(message, null, null, false),
-                        ModelContextBudget.EstimateMessageTokens(message, settings, null, false));
+                    build.AddEstimate(item.Estimate(null), item.Estimate(settings));
                     continue;
                 }
 
-                var analysisAttachmentIds = message.AttachmentAnalysis == null ||
-                    message.AttachmentAnalysis.AttachmentIds == null
-                        ? (IEnumerable<string>)new string[0]
-                        : message.AttachmentAnalysis.AttachmentIds;
-                var analyzedIds = new HashSet<string>(
-                    analysisAttachmentIds,
-                    StringComparer.OrdinalIgnoreCase);
-                var manifest = new List<ContextMessagePresentation>();
-                foreach (var analyzed in (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(attachment => attachment != null && !string.IsNullOrWhiteSpace(attachment.Id) &&
-                        analyzedIds.Contains(attachment.Id)))
+                var manifest = item.Manifest;
+                var text = AppendExtractedText(item.Text, item.Attachments, settings,
+                    ref remainingAttachmentTokens, runCache, cancellationToken, manifest);
+                var imageParts = item.Images;
+                if (imageParts.Count == 0 && item.Audio.Count == 0)
                 {
-                    manifest.Add(new ContextMessagePresentation
-                    {
-                        Kind = "attachment_analysis", SourceAttachmentId = analyzed.Id, PartIndex =
-                            string.IsNullOrWhiteSpace(message.AttachmentAnalysis.Content) ? (int?)null : 0,
-                        Presentation = string.IsNullOrWhiteSpace(message.AttachmentAnalysis.Content)
-                            ? ContextPresentationKind.Excluded : ContextPresentationKind.Summary,
-                        Reason = string.IsNullOrWhiteSpace(message.AttachmentAnalysis.Content)
-                            ? "Вложение исключено из прямой передачи; текст анализа отсутствует."
-                            : "Прямое содержимое заменено вспомогательным анализом в текстовой части запроса."
-                    });
-                }
-                var attachments = (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(attachment => attachment == null || string.IsNullOrWhiteSpace(attachment.Id) ||
-                        !analyzedIds.Contains(attachment.Id))
-                    .ToList();
-                var messageContent = AppendAttachmentAnalysis(message.Content, message.AttachmentAnalysis);
-                var text = AppendExtractedText(
-                    messageContent,
-                    attachments,
-                    settings,
-                    ref remainingAttachmentTokens,
-                    runCache,
-                    cancellationToken,
-                    manifest);
-                var imageParts = new List<KeyValuePair<ChatAttachment, ModelImagePart>>();
-                var audioAttachments = attachments
-                    .Where(attachment => attachment != null && string.Equals(attachment.Kind, "audio", StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                foreach (var attachment in attachments.Where(a => a != null && string.Equals(a.Kind, "image", StringComparison.OrdinalIgnoreCase)))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (remainingImages <= 0)
-                    {
-                        manifest.Add(OmittedMedia(attachment, "Лимит изображений запроса исчерпан."));
-                        continue;
-                    }
-                    var selected = ReadModelImages(settings, attachment, remainingImages, runCache, cancellationToken)
-                        .Take(remainingImages)
-                        .Where(part => part != null && part.Bytes != null && part.Bytes.Length > 0)
-                        .ToList();
-                    if (selected.Count == 0)
-                        manifest.Add(OmittedMedia(attachment, "Визуальная часть не подготовлена transport."));
-                    imageParts.AddRange(selected.Select(part => new KeyValuePair<ChatAttachment, ModelImagePart>(attachment, part)));
-                    remainingImages -= selected.Count;
-                }
-                foreach (var attachment in attachments.Where(a => a != null && string.Equals(a.Kind, "pdf", StringComparison.OrdinalIgnoreCase)))
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    if (remainingImages <= 0)
-                    {
-                        manifest.Add(OmittedMedia(attachment, "Лимит визуальных страниц запроса исчерпан; число страниц не проверялось."));
-                        continue;
-                    }
-                    var prepared = ReadModelImages(settings, attachment, remainingImages, runCache, cancellationToken)
-                        .Take(remainingImages)
-                        .ToList();
-                    var selected = prepared.Where(part => part != null && part.Bytes != null && part.Bytes.Length > 0)
-                        .ToList();
-                    if (selected.Count == 0)
-                    {
-                        var confirmedTotal = prepared.Where(part => part != null && part.TotalPages.HasValue)
-                            .Select(part => part.TotalPages.Value).Distinct().ToList();
-                        manifest.Add(OmittedMedia(attachment, "Визуальные страницы не подготовлены transport.",
-                            prepared.Count > 0 && confirmedTotal.Count == 1 ? (int?)confirmedTotal[0] : null));
-                    }
-                    else
-                    {
-                        var totalPages = prepared.Where(part => part != null && part.TotalPages.HasValue)
-                            .Select(part => part.TotalPages.Value).Distinct().ToList();
-                        if (prepared.All(part => part != null && part.TotalPages.HasValue) &&
-                            totalPages.Count == 1 && totalPages[0] > selected.Count)
-                            manifest.Add(OmittedMedia(attachment, "Остальные страницы не выбраны при подготовке визуального PDF.",
-                                totalPages[0] - selected.Count));
-                    }
-                    imageParts.AddRange(selected.Select(part => new KeyValuePair<ChatAttachment, ModelImagePart>(attachment, part)));
-                    remainingImages -= selected.Count;
-                }
-                if (imageParts.Count == 0 && audioAttachments.Count == 0)
-                {
-                    var unreadablePdf = attachments.FirstOrDefault(a =>
-                        a != null && a.Kind == "pdf" &&
-                        (a.PageTextLengths == null || a.PageTextLengths.Count == 0 || a.PageTextLengths.All(length => length < 20)));
-                    if (unreadablePdf != null)
-                    {
-                        throw new InvalidOperationException(
-                            unreadablePdf.FileName + ": PDF contains no usable text and the selected model does not support visual PDF pages.");
-                    }
                     foreach (var part in manifest) part.PartIndex = null;
                     build.Messages.Add(new { role = message.Role, content = text });
                     build.MessageParts.Add(manifest);
@@ -227,14 +140,11 @@ namespace RNAssistant.Core.Llm
                     });
                     build.HasImages = true;
                 }
-                foreach (var audioAttachment in audioAttachments)
+                foreach (var selectedAudio in item.Audio)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var bytes = ReadAttachmentBytes(audioAttachment, runCache);
-                    if (bytes == null || bytes.Length == 0)
-                    {
-                        throw new InvalidOperationException("Attachment file is missing: " + (audioAttachment.FileName ?? audioAttachment.Id));
-                    }
+                    var audioAttachment = selectedAudio.Key;
+                    var bytes = selectedAudio.Value;
                     manifest.Add(new ContextMessagePresentation
                     {
                         Kind = "input_audio", SourceAttachmentId = audioAttachment.Id,
@@ -324,35 +234,101 @@ namespace RNAssistant.Core.Llm
                 (attachment == null ? "Audio attachment" : attachment.FileName) + ": supported audio formats are MP3 and WAV.");
         }
 
-        private static int EstimatePdfImageTokens(IEnumerable<ChatMessage> messages, AppSettings settings)
+        // Request-local selection, reused by reservation, payload and diagnostics.
+        // It owns no persisted state and never changes the source ChatMessage.
+        private sealed class PreparedMessage
         {
-            if (!ModelContextBudget.SupportsImages(settings))
+            internal ChatMessage Source;
+            internal string Text;
+            internal List<ChatAttachment> Attachments = new List<ChatAttachment>();
+            internal List<KeyValuePair<ChatAttachment, ModelImagePart>> Images = new List<KeyValuePair<ChatAttachment, ModelImagePart>>();
+            internal List<KeyValuePair<ChatAttachment, byte[]>> Audio = new List<KeyValuePair<ChatAttachment, byte[]>>();
+            internal List<ContextMessagePresentation> Manifest = new List<ContextMessagePresentation>();
+            internal List<MediaNotice> Notices = new List<MediaNotice>();
+
+            internal int Estimate(AppSettings settings)
             {
-                return 0;
+                var textOnly = new ChatMessage { Role = Source.Role, Content = Text, ToolCallId = Source.ToolCallId,
+                    ToolCalls = (Source.ToolCalls ?? new List<LlmToolCall>()).Where(call => call != null).ToList() };
+                return ModelContextBudget.EstimateMessageTokens(textOnly, settings, null, false) +
+                    Images.Count * ModelContextBudget.EstimatedImageTokens +
+                    Audio.Sum(part => ModelContextBudget.EstimateAudioTokens(part.Value.LongLength));
             }
-            var maxImages = ModelContextBudget.MaxImagesPerPrompt(settings);
-            var count = 0;
-            foreach (var message in messages ?? new ChatMessage[0])
+        }
+
+        // Safe, compact model text: semantic filenames and selected visual order,
+        // never attachment IDs, storage hashes or authority-bearing references.
+        private sealed class MediaNotice
+        {
+            [JsonProperty("file")] public string File { get; set; }
+            [JsonProperty("image", NullValueHandling = NullValueHandling.Ignore)] public int? Image { get; set; }
+            [JsonProperty("page", NullValueHandling = NullValueHandling.Ignore)] public int? Page { get; set; }
+            [JsonProperty("omitted", NullValueHandling = NullValueHandling.Ignore)] public bool? Omitted { get; set; }
+            [JsonProperty("omittedPages", NullValueHandling = NullValueHandling.Ignore)] public int? OmittedPages { get; set; }
+            [JsonProperty("reason", NullValueHandling = NullValueHandling.Ignore)] public string Reason { get; set; }
+        }
+
+        private PreparedMessage Prepare(ChatMessage message, AppSettings settings, ref int remainingImages,
+            LlmRunCache runCache, CancellationToken cancellationToken)
+        {
+            var item = new PreparedMessage { Source = message, Text = message.Content ?? string.Empty };
+            if ((message.ToolCalls ?? new List<LlmToolCall>()).Any(call => call != null) ||
+                string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase)) return item;
+            var analyzedIds = new HashSet<string>(message.AttachmentAnalysis?.AttachmentIds ?? new List<string>(), StringComparer.OrdinalIgnoreCase);
+            foreach (var attachment in (message.Attachments ?? new List<ChatAttachment>()).Where(a => a != null))
             {
-                if (message == null || message.ExcludeFromModelContext) continue;
-                var attachments = message == null ? null : message.Attachments;
-                var ordinary = Math.Min(
-                    Math.Max(0, maxImages - count),
-                    (attachments ?? new List<ChatAttachment>()).Count(attachment =>
-                        attachment != null && string.Equals(attachment.Kind, "image", StringComparison.OrdinalIgnoreCase)));
-                count += ordinary;
-                var remaining = Math.Max(0, maxImages - count);
-                foreach (var pdf in (attachments ?? new List<ChatAttachment>()).Where(attachment =>
-                    attachment != null && string.Equals(attachment.Kind, "pdf", StringComparison.OrdinalIgnoreCase)))
+                if (string.IsNullOrWhiteSpace(attachment.Id) || !analyzedIds.Contains(attachment.Id)) { item.Attachments.Add(attachment); continue; }
+                var available = !string.IsNullOrWhiteSpace(message.AttachmentAnalysis.Content);
+                var reason = available ? "Прямое содержимое заменено вспомогательным анализом в текстовой части запроса."
+                    : "Вложение исключено из прямой передачи; текст анализа отсутствует.";
+                item.Manifest.Add(new ContextMessagePresentation { Kind = "attachment_analysis", SourceAttachmentId = attachment.Id,
+                    PartIndex = available ? (int?)0 : null, Presentation = available ? ContextPresentationKind.Summary : ContextPresentationKind.Excluded, Reason = reason });
+                item.Notices.Add(new MediaNotice { File = attachment.FileName, Omitted = true, Reason = reason });
+            }
+            foreach (var kind in new[] { "image", "pdf" })
+            foreach (var attachment in item.Attachments.Where(a => string.Equals(a.Kind, kind, StringComparison.OrdinalIgnoreCase)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (ModelContextBudget.ImageSupport(settings) == false)
+                { Omit(item, attachment, "Выбранная модель не поддерживает изображения."); continue; }
+                if (remainingImages <= 0)
+                { Omit(item, attachment, kind == "pdf" ? "Лимит визуальных страниц запроса исчерпан; число страниц не проверялось."
+                    : "Лимит изображений запроса исчерпан."); continue; }
+                var supplied = ReadModelImages(settings, attachment, remainingImages, runCache, cancellationToken).Take(remainingImages).ToList();
+                var selected = supplied.Where(part => part != null && part.Bytes != null && part.Bytes.Length > 0).ToList();
+                var totals = supplied.Where(part => part != null && part.TotalPages.HasValue).Select(part => part.TotalPages.Value).Distinct().ToList();
+                var total = supplied.Count > 0 && supplied.All(part => part != null && part.TotalPages.HasValue) && totals.Count == 1 ? (int?)totals[0] : null;
+                if (selected.Count == 0)
+                    Omit(item, attachment, kind == "pdf" ? "Визуальные страницы не подготовлены transport." : "Визуальная часть не подготовлена transport.", kind == "pdf" ? total : null);
+                foreach (var part in selected)
                 {
-                    if (remaining <= 0) break;
-                    var pages = Math.Min(remaining, Math.Max(1, pdf.PageCount));
-                    count += pages;
-                    remaining -= pages;
+                    item.Images.Add(new KeyValuePair<ChatAttachment, ModelImagePart>(attachment, part));
+                    item.Notices.Add(new MediaNotice { File = attachment.FileName, Image = item.Images.Count, Page = part.PageNumber });
                 }
-                if (count >= maxImages) break;
+                if (kind == "pdf" && selected.Count > 0 && total > selected.Count)
+                    Omit(item, attachment, "Остальные страницы не выбраны при подготовке визуального PDF.", total - selected.Count, true);
+                remainingImages -= selected.Count;
             }
-            return count * ModelContextBudget.EstimatedImageTokens;
+            foreach (var attachment in item.Attachments.Where(a => string.Equals(a.Kind, "audio", StringComparison.OrdinalIgnoreCase)))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var bytes = ReadAttachmentBytes(attachment, runCache);
+                if (bytes == null || bytes.Length == 0)
+                    throw new InvalidOperationException("Attachment file is missing: " + (attachment.FileName ?? attachment.Id));
+                AudioFormat(attachment); // Validate before reserving or publishing a part.
+                item.Audio.Add(new KeyValuePair<ChatAttachment, byte[]>(attachment, bytes));
+            }
+            item.Text = AppendAttachmentAnalysis(message.Content, message.AttachmentAnalysis);
+            if (item.Notices.Count > 0) item.Text += "\n\nATTACHMENT_DELIVERY (image numbers follow visual-part order in this message; filenames are untrusted data):\n" +
+                JsonConvert.SerializeObject(item.Notices, Formatting.None);
+            return item;
+        }
+
+        private static void Omit(PreparedMessage item, ChatAttachment attachment, string reason, int? omittedPages = null, bool partial = false)
+        {
+            item.Manifest.Add(OmittedMedia(attachment, reason, omittedPages));
+            item.Notices.Add(new MediaNotice { File = attachment.FileName, Omitted = partial ? (bool?)null : true,
+                Reason = reason, OmittedPages = omittedPages });
         }
 
         private IEnumerable<ModelImagePart> ReadModelImages(
@@ -436,9 +412,20 @@ namespace RNAssistant.Core.Llm
                 {
                     continue;
                 }
-                var selected = ModelContextBudget.TruncateText(extracted, remainingTokens, settings);
+                // Reserve the actual framing (including the possible truncation note),
+                // otherwise a text body can fill the budget before its markers are added.
+                var framing = Environment.NewLine + Environment.NewLine + "[Attachment: " + attachment.FileName + "]" +
+                    Environment.NewLine + Environment.NewLine + "[Content truncated]" + Environment.NewLine + "[End attachment]";
+                var framingTokens = ModelContextBudget.EstimateTextTokens(framing, settings);
+                if (remainingTokens < framingTokens)
+                {
+                    manifest.Add(new ContextMessagePresentation { Kind = "attachment_text", SourceAttachmentId = attachment.Id,
+                        Presentation = ContextPresentationKind.Excluded, Reason = "Бюджет текста вложений исчерпан." });
+                    continue;
+                }
+                var selected = ModelContextBudget.TruncateText(extracted, remainingTokens - framingTokens, settings);
                 var selectedTokens = ModelContextBudget.EstimateTextTokens(selected, settings);
-                remainingTokens = Math.Max(0, remainingTokens - selectedTokens);
+                remainingTokens = Math.Max(0, remainingTokens - selectedTokens - framingTokens);
                 var truncated = attachment.TextTruncated ||
                     attachment.ExtractedCharCount > extracted.Length || selected.Length < extracted.Length;
                 var completenessKnown = attachment.ExtractedCharCount > 0 &&

@@ -12,36 +12,16 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## Image cutoff и бюджет текста вложений — 2026-10-26
+## Model request fallback: устаревший ReferenceEquals — 2026-10-26
 
-Owner: Core `LlmMessageBuilder` / `ModelContextBudget`; Office media preparation.
-Открытые дефекты подготовки model request, отдельно от уже исправленных UI captions.
-Воспроизведены без сети/COM через текущий compiled Harness assembly и временный
-console probe, без изменения production-кода:
-
-- `Build` вычитает `EstimateMessagesTokens(..., false, settings)`, где image уже
-  стоит 4096, затем `EstimatePdfImageTokens`, который повторно считает обычные
-  images. Для vision model с context=16384, output=1024 и image limit=1:
-  input budget=14336, первая оценка=4103, второй резерв=4096; из вложения в
-  100000 ASCII-символов выбрано 24548. Лишний резерв уменьшает доступный текстовый
-  бюджет; это не доказательство двойной отправки или двойного фактического usage.
-- При двух images и limit=1 второе получает `Excluded` с причиной в manifest,
-  но model-visible текст остаётся `Compare attached images`: сообщение о пропуске
-  не добавляется. PDF page labels/selection также не объясняются модели самим
-  transport. Наличие media receipt/hydration не доказывает включение всех частей.
-- Если image в предыдущем сообщении исчерпал quota, следующий scanned PDF
-  (`PageCount=1`, `PageTextLengths=[0]`) при `SupportsImages=true` завершает build
-  ошибкой «selected model does not support visual PDF pages». Причина неверна:
-  исчерпан shared image limit, а renderer не вызывался.
-
-Следующий scope до окончательного media/model A/B: один request-local выбор частей
-для бюджета, wire и manifest; краткое model-visible описание исключённых вложений
-и выбранных PDF-страниц; различать quota, capability и отсутствие содержимого.
-Не убирать лимит вслепую и не добавлять другой durable store. Проверить несколько
-messages, image + PDF, exhausted quota, auxiliary analysis и text truncation.
-Existing `storage: mixed attachment manifest matches saved request` проходит и
-проверяет saved bytes/manifest, но не закрывает эти три дефекта. Добавлять только
-недостающие регрессии; реальный provider/Windows renderer здесь не проверялся.
+Owner: Harness ModelRequestPreparation fixture. Проверка
+`model request: snapshot surface budget and fallback` падает на `ReferenceEquals`
+для списка сообщений. `ModelRequestPreparation.ProjectMessages` всегда вызывает
+`ModelReferenceProjection.Project`, который создаёт новый массив и для json_object.
+Проверка и production path не менялись в media-cutoff исправлении; этот тест не
+вызывает `LlmMessageBuilder`. Заменить требование object identity проверкой
+сохранности полного fallback-содержимого и корректности E/R projection; проверить
+также оставшийся budget assertion. Не менять продукт ради возврата того же массива.
 
 ## Аннотации временного и исторического HTML-preview — 2026-10-26
 

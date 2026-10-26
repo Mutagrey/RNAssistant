@@ -336,6 +336,12 @@ inconsistent composition snapshots and check chart/message navigation without
 normalizing to admission or API usage. `INSPECTOR_SCREENSHOTS` saves
 browser captures. Next-request workspace estimates and native Windows/WebView2
 delivery, including controller lease liveness, remain open.
+`attachments: selected media budget` and `attachments: media cutoff and model notices`
+check one selected media reserve, actual audio bytes, text framing, cross-message
+image/PDF quota, native/analyzed exclusions and model-visible reasons/pages. Reuse
+both saved manifest checks above and `agent: hydrates artifact media only after read`
+for persisted wire parity and repair lifetime. They use host-neutral byte fixtures,
+not a real provider or Windows PDF renderer.
 The saved composition check also rejects duplicate message IDs, shifted or
 colliding receipt positions in both presentation and cost attribution; resource
 references/notices have a separate group without changing the total. The Web
