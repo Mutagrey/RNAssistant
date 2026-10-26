@@ -140,6 +140,7 @@ const root = path.resolve(__dirname, '../..');
       'project and plugin still read the same later draft');
 
     for (const destination of ['plugin', 'project']) {
+      await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running' && !RNAssistantProjectChats.isBusy());
       const message = 'Повтор после потери ответа: ' + destination;
       await page.evaluate(() => {
         const original = draftTest.original;
@@ -160,6 +161,7 @@ const root = path.resolve(__dirname, '../..');
       if (destination === 'plugin') await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
       else await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
       assert.equal(await page.locator('#chatInput').inputValue(), message, 'unacknowledged draft survives navigation');
+      await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running' && !RNAssistantProjectChats.isBusy());
       await page.locator('#chatInput').press('Enter');
       await page.waitForFunction(() => retryTest.requests.length === 2);
       const retried = await page.evaluate(() => retryTest.requests);

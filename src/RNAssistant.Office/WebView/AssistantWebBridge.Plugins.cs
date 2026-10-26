@@ -97,7 +97,7 @@ namespace RNAssistant.Office.WebView
 
         private void ReportWorkspaceProgress(string id, ProjectChatRequest request, WorkspaceRunEvent progress)
         {
-            if (_postMessageJson == null || progress == null ||
+            if (_disposed || _postMessageJson == null || progress == null ||
                 progress.ModelProgress == null && progress.Receipt == null) return;
             _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(new ProgressMessage
             {

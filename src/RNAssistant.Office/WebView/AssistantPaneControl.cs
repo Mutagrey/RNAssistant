@@ -39,7 +39,7 @@ namespace RNAssistant.Office.WebView
         {
             get { return Task.WhenAll(_bridge.RequestsDrained, _resourceRequestsDrained.Task,
                 TabularExecutor == null ? Task.CompletedTask : TabularExecutor.Drained,
-                _pluginHost == null ? Task.CompletedTask : _pluginHost.Drained); }
+                _pluginHost == null ? Task.CompletedTask : _pluginHost.Drained, _plugins.Drained); }
         }
         private IntPtr _lastExternalFocusWindow;
         public Action<string, string, bool> MailboxNavigationRequested

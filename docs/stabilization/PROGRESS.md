@@ -1,5 +1,28 @@
 # Stabilization progress
 
+## Submit workspace больше не ждёт окончания модели — 2026-10-27
+
+Owner: Application Workspace run lifetime / typed project-chat delivery.
+`submitProjectChat` возвращает durable receipt и первый kernel snapshot; дальнейшее
+выполнение принадлежит отслеживаемому Application worker с session/runtime leases.
+CLI ждёт terminal result того же worker. До admission отмена прерывает и ожидание
+lease; после admission потеря bridge не отменяет run. Stop остаётся exact run/cursor.
+Закрытие Application отменяет и дожидается workers; pane drain включает этот owner.
+Таймауты не увеличены, второй writer и отдельный durable store не добавлены.
+
+Проверки host-neutral: удержанный HTTP-ответ, ранний bridge response, duplicate,
+пересоздание bridge, отмена до/после admission, explicit Stop, shutdown и освобождение
+lease; existing history/source scope/edit — pass. Chromium с native envelopes
+проверяет отсутствие pending submit во время model wait и завершение через polling.
+Shared draft/navigation races с ранним admission в preview — pass. Отдельный
+`uncleanClaims` в progress suite воспроизводится и на прежнем preview; открыт в RISK_REGISTER.
+Harness build: 0 errors, 2 existing CA1416 warnings. Windows/Office/WebView2 и
+фактический pane shutdown на целевом host не квалифицированы.
+
+I26-09 исправлен для submit. Следующий срез S1b: `resolveProjectChat` после approval
+ещё ждёт terminal result; затем automatic receipt reconnect. I26-10 (steer/queue)
+остаётся открытым. Ввод во время активного run этим изменением не разрешён.
+
 ## Усилен finish в Conversation v8 — 2026-10-27
 
 Owner: Core ModelProtocol / AgentKernel, Application Workspace и shared RunViewState.

@@ -105,35 +105,130 @@ namespace RNAssistant.Harness
                         var pending = bridge.HandleMessageAsync(JsonConvert.SerializeObject(new { contractVersion = 2,
                             id = "receipt-submit", type = "submitProjectChat", bridgeToken = BridgeToken(bridge), payload = request }));
                         JObject[] receipts;
+                        JObject terminal;
                         try
                         {
                             AssertTrue(entered.Wait(5000), "model request starts");
-                            AssertTrue(!pending.IsCompleted, "terminal reply still waits for the model");
+                            AssertTrue(pending.Wait(5000), "submit returns while the model response is still held");
+                            terminal = JObject.Parse(pending.GetAwaiter().GetResult());
+                            AssertTrue((bool)terminal["ok"], "admission succeeds");
+                            AssertEqual("running", (string)terminal["payload"]["state"]["Status"], "admission includes the first durable kernel checkpoint");
+                            AssertTrue(!service.Conversations.RunsDrained.IsCompleted, "application owns the outstanding run");
+                            PluginFailure(() => { using (PluginStore.AcquireRuntimeUse(paths, exclusive: true)) { } },
+                                "plugins_busy");
                             receipts = wire.Select(JObject.Parse).Where(item => item["payload"]?["inputReceipt"] != null).ToArray();
                             AssertEqual(2, receipts.Length, "accepted and applied receipts cross the real bridge before the response");
                             AssertTrue(!(bool)receipts[0]["payload"]["inputReceipt"]["DeliveryRecorded"] &&
                                 (bool)receipts[1]["payload"]["inputReceipt"]["DeliveryRecorded"], "admission and history delivery are distinct");
                             AssertEqual("receipt-submit", (string)receipts[1]["id"], "receipt keeps the transport request identity");
                             AssertEqual(chat.SessionId, (string)receipts[1]["payload"]["inputReceipt"]["SessionId"], "receipt keeps session identity");
+                            var duplicate = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "submitProjectChat", request);
+                            AssertTrue((bool)duplicate["ok"] && JToken.DeepEquals(terminal["payload"]["inputReceipt"], duplicate["payload"]["inputReceipt"]),
+                                "retry while running returns the same receipt without another model request");
+                            bridge.Dispose();
+                            using (var reopened = new AssistantWebBridge(new AssistantController(paths), ignored => { }) { Plugins = service })
+                            {
+                                var observed = WorkspaceBridgeCall(reopened, BridgeToken(reopened), "getProjectChat", request);
+                                AssertEqual("running", (string)observed["payload"]["state"]["Status"], "WebView recreation does not cancel the admitted run");
+                            }
                         }
                         finally { release.Set(); }
-                        var terminal = JObject.Parse(pending.GetAwaiter().GetResult());
                         server.GetAwaiter().GetResult();
-                        AssertTrue((bool)terminal["ok"], "submission succeeds");
+                        service.Conversations.RunsDrained.GetAwaiter().GetResult();
                         AssertTrue(JToken.DeepEquals(receipts[1]["payload"]["inputReceipt"], terminal["payload"]["inputReceipt"]),
-                            "terminal response repeats the exact delivered receipt");
-                        var duplicate = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "submitProjectChat", request);
-                        AssertTrue((bool)duplicate["ok"] && JToken.DeepEquals(terminal["payload"]["inputReceipt"], duplicate["payload"]["inputReceipt"]),
-                            "retry returns the same receipt without a second model request");
+                            "admission response repeats the exact delivered receipt");
+                        AssertEqual("completed", service.ProjectChat(request).State.Status, "run completes after admission and bridge disposal");
                         AssertEqual(1, service.ProjectChat(request).Messages.Count(item => item.Role == "user"), "one persisted input");
                         var fixture = Environment.GetEnvironmentVariable("RNA_WORKSPACE_RECEIPT_FIXTURE");
                         if (!string.IsNullOrWhiteSpace(fixture))
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(fixture)));
                             File.WriteAllText(fixture, new JObject { ["accepted"] = receipts[0], ["applied"] = receipts[1],
-                                ["terminal"] = terminal }.ToString(Formatting.Indented));
+                                ["terminal"] = terminal,
+                                ["completed"] = JObject.FromObject(service.ProjectChat(request)) }.ToString(Formatting.Indented));
                         }
                     }
+                }
+            });
+        }
+
+        private static void PluginsAdmittedRunLifetime()
+        {
+            foreach (var closeOwner in new[] { false, true })
+            WithPluginPaths(paths =>
+            {
+                var probe = new TcpListener(IPAddress.Loopback, 0);
+                probe.Start(); var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                using (var entered = new ManualResetEventSlim())
+                using (var release = new ManualResetEventSlim())
+                using (var transport = new CancellationTokenSource())
+                using (var service = new PluginApplicationService(paths))
+                {
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                    var server = Task.Run(async () =>
+                    {
+                        var context = await listener.GetContextAsync().ConfigureAwait(false);
+                        using (var reader = new StreamReader(context.Request.InputStream))
+                            await reader.ReadToEndAsync().ConfigureAwait(false);
+                        entered.Set();
+                        if (!release.Wait(10000)) throw new TimeoutException("Lifetime test did not release the endpoint.");
+                        context.Response.Close();
+                    });
+                    try
+                    {
+                        var workspaceId = service.CreateProjectWorkspace(new ProjectConnectionRequest {
+                            RootPath = Path.Combine(paths.Root, "owned-run") }).SelectedWorkspaceId;
+                        var chat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                        var request = new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId,
+                            Input = new WorkspaceSubmitInputRequest { SessionId = chat.SessionId, RequestId = "owned-once",
+                                Message = "Keep running", Mode = ChatModes.Agent } };
+                        var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "test-model",
+                            StreamResponses = false, SmartChatTitles = false, AutoCompressContext = false };
+                        var leaseDirectory = Path.Combine(paths.WorkspaceDirectory, "run-leases");
+                        Directory.CreateDirectory(leaseDirectory);
+                        var leasePath = Path.Combine(leaseDirectory, TextPatternEngine.Sha256(chat.SessionId) + ".lck");
+                        using (var pendingTransport = new CancellationTokenSource())
+                        using (new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                        {
+                            var blocked = service.SubmitProjectChatAsync(request, settings, () => "", pendingTransport.Token);
+                            AssertTrue(!service.Conversations.RunsDrained.Wait(100), "admission waits for the occupied lease");
+                            pendingTransport.Cancel();
+                            AssertTrue(service.Conversations.RunsDrained.Wait(3000), "cancel before admission stops lease waiting promptly");
+                            var cancelledBeforeAdmission = false;
+                            try { blocked.GetAwaiter().GetResult(); }
+                            catch (OperationCanceledException) { cancelledBeforeAdmission = true; }
+                            AssertTrue(cancelledBeforeAdmission && new ChatStore(paths).Load(chat.SessionId).Messages.Count == 0,
+                                "cancel before admission records no input and starts no model");
+                        }
+                        var accepted = service.SubmitProjectChatAsync(request, settings, () => "", transport.Token).GetAwaiter().GetResult();
+                        AssertTrue(accepted.InputReceipt.DeliveryRecorded && entered.Wait(5000), "admission precedes the held model response");
+                        transport.Cancel();
+                        var worker = service.Conversations.RunsDrained;
+                        AssertTrue(!worker.Wait(200), "late transport cancellation does not stop an admitted run");
+                        if (closeOwner)
+                        {
+                            AssertTrue(service.CloseAsync().Wait(5000), "owner shutdown cancels and drains the run");
+                            AssertTrue(service.Drained.IsCompleted, "pane shutdown can await all application work");
+                        }
+                        else
+                        {
+                            var current = service.ProjectChat(request);
+                            var cancelled = service.ControlProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = workspaceId, SessionId = chat.SessionId,
+                                RunId = current.State.RunId, Cursor = current.State.Cursor }, true,
+                                settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
+                            AssertEqual(WorkspaceCancellationStatus.Requested, cancelled.CancelStatus.Value, "explicit Stop reaches the exact run owner");
+                            AssertTrue(worker.Wait(5000), "cancelled run drains");
+                        }
+                        var durable = new ChatStore(paths).Load(chat.SessionId);
+                        AssertEqual(RunLifecycle.Cancelled, durable.LastRun.KernelState.Summary.Lifecycle, "kernel stores terminal cancellation");
+                        AssertEqual(1, durable.Messages.Count(item => item.Role == "user"), "one accepted input survives cancellation");
+                        using (PluginStore.AcquireRuntimeUse(paths, exclusive: true)) { }
+                        var lease = Path.Combine(paths.WorkspaceDirectory, "run-leases", TextPatternEngine.Sha256(chat.SessionId) + ".lck");
+                        using (new FileStream(lease, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
+                    }
+                    finally { release.Set(); server.GetAwaiter().GetResult(); service.CloseAsync().GetAwaiter().GetResult(); }
                 }
             });
         }
@@ -195,6 +290,7 @@ namespace RNAssistant.Harness
                                 Input = new WorkspaceSubmitInputRequest { SessionId = source.SessionId,
                                     Message = "Edit the plugin", Mode = ChatModes.Agent }
                             }, settings, () => "test-key", CancellationToken.None, sourceProgress.Add).GetAwaiter().GetResult();
+                            service.Conversations.RunsDrained.GetAwaiter().GetResult();
                             AssertTrue(sourceReply.State.Office == null && office.Captures == 0 && office.Binds == 0,
                                 "plugin source run never captures or binds an Office document");
                             var sourcePreview = sourceProgress.Where(item => item.ModelProgress != null).ToArray();
@@ -218,6 +314,7 @@ namespace RNAssistant.Harness
                                             Message = "Inspect this project", Mode = ChatModes.Agent } });
                                 var reply = JObject.Parse(bridge.HandleMessageAsync(bridgeRequest).GetAwaiter().GetResult());
                                 AssertTrue((bool)reply["ok"], "project chat submits through the shared bridge");
+                                service.Conversations.RunsDrained.GetAwaiter().GetResult();
                                 var projectReply = service.ProjectChat(new ProjectChatRequest {
                                     WorkspaceId = workspaceId, SessionId = project.SessionId });
                                 AssertTrue(projectReply.State.Office != null && office.Captures == 1 && office.Binds == 1,
@@ -346,6 +443,7 @@ namespace RNAssistant.Harness
                                     ResourceDraftIds = new System.Collections.Generic.List<string> { draft.Id } }
                             }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
                             server.GetAwaiter().GetResult();
+                            service.Conversations.RunsDrained.GetAwaiter().GetResult();
                             service.SubmitProjectChatAsync(new ProjectChatRequest {
                                 WorkspaceId = plugin.SourceWorkspaceId, SessionId = sessionId,
                                 Input = new WorkspaceSubmitInputRequest { SessionId = sessionId, RequestId = "visual-once",
@@ -881,6 +979,7 @@ namespace RNAssistant.Harness
                                     SessionId = created.SessionId, RequestId = "edit-request", EditMessageId = first.Id,
                                     ExpectedRevision = revision, Message = "Исправленный запрос", Mode = ChatModes.Agent }
                             }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                            service.Conversations.RunsDrained.GetAwaiter().GetResult();
                             var after = service.Conversations.GetSession(workspace, created.SessionId);
                             var users = after.Messages.Where(message => message.Role == "user" && !message.ProtocolMessage).ToArray();
                             AssertEqual(1, users.Length, "edit replaces the selected user message and future history");

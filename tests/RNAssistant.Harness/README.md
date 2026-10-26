@@ -375,17 +375,26 @@ It also loses replies after acceptance and retries across project/plugin screens
 checking one request identity and one persisted user message.
 `plugins: input receipt crosses bridge before model response` holds the scripted
 model response while checking both receipts through the real Application/WebView
-bridge and retry idempotency. Set `RNA_WORKSPACE_RECEIPT_FIXTURE` to an output JSON
+bridge, early submit response, retry idempotency while still running, retained
+runtime lease and completion after bridge recreation. Set `RNA_WORKSPACE_RECEIPT_FIXTURE` to an output JSON
 path; `node tests/web/workspace-input-receipt.test.js <that-path>` consumes those
 actual envelopes in Chromium. It checks early draft clearing, exact input identity,
 repeated acknowledgements, a newer identical draft, background Office isolation,
 unconfirmed delivery and recovery from a lost progress event. This is host-neutral
 bridge/browser evidence, not real Windows/WebView2 qualification.
-`node tests/web/workspace-chat-races.test.js` delays running snapshots past the
-terminal response in both screens and switches plugin selection before an input
+`node tests/web/workspace-run-lifetime.test.js <that-path>` consumes the same native
+running/terminal snapshots: there is no pending submit timer during model wait,
+polling completes the run and retains a newer draft. The preview bridge also returns
+admission before its simulated run finishes.
+`plugins: admitted run cancellation and shutdown belong to application` checks
+cancellation before admission while waiting for a lease, detachment of transport
+cancellation after admission, exact Stop and owner shutdown. Both paths persist
+kernel cancellation, drain workers and release session/runtime leases.
+`node tests/web/workspace-chat-races.test.js` delays running snapshots past a
+terminal snapshot in both screens and switches plugin selection before an input
 reply arrives; completed chats must remain writable without stale busy state.
 It also opens a run started outside the panel and observes completion through
-read-only polling in both project and plugin views. Late create, cancel, delete
+state polling in both project and plugin views. Late create, cancel, delete
 and project-connection replies retain the newer chat selection.
 `node tests/web/preview-workspace-identity.test.js` checks that the preview bridge
 does not reuse a visible project ID after history deletion and reconnection.

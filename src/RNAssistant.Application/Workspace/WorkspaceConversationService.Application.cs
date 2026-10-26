@@ -52,7 +52,7 @@ namespace RNAssistant.Runtime
                     {
                         try
                         {
-                            using (var runtimeLease = _titleApplyLease?.Invoke())
+                            using (var runtimeLease = _runtimeUseLease?.Invoke())
                             using (AcquireSessionLease(sessionId))
                             {
                                 var current = _workspaces.LoadSession(_chats, workspace, sessionId);

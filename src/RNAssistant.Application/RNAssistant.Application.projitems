@@ -24,6 +24,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceRunPresentation.cs" Link="Application\Workspace\Contracts\WorkspaceRunPresentation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Application.cs" Link="Application\Workspace\WorkspaceConversationService.Application.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Control.cs" Link="Application\Workspace\WorkspaceConversationService.Control.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Lifetime.cs" Link="Application\Workspace\WorkspaceConversationService.Lifetime.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Presentation.cs" Link="Application\Workspace\WorkspaceConversationService.Presentation.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Resources.cs" Link="Application\Workspace\WorkspaceConversationService.Resources.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.cs" Link="Application\Workspace\WorkspaceConversationService.cs" />

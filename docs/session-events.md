@@ -677,9 +677,24 @@ the input. The request-scoped UI callback clears only the matching draft version
 after `DeliveryRecorded=true`, without waiting for model completion. Repeated
 receipts cannot clear a later draft; background receipts never alter the Office
 composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
-This fixes delivery acknowledgement, not run ownership: the current submit still
-awaits terminal completion, and queue/steer plus abandoned-run recovery remain
-separate application work.
+`submitProjectChat` returns that receipt and a canonical snapshot after input
+delivery and the first persisted kernel checkpoint, without awaiting the model.
+`WorkspaceConversationService` owns the tracked worker, execution cancellation and
+session/runtime-use leases until execution ends. Its terminal `SubmitInputAsync`
+API (used by CLI) awaits the same worker with caller cancellation still attached.
+UI request cancellation applies before durable admission, including lease waiting;
+after admission, losing/cancelling the bridge request cannot cancel the run.
+Explicit `cancelProjectChat` still addresses the exact run/cursor. Progress is an
+observer: a closed or throwing bridge cannot abort execution. The UI follows the
+canonical snapshot/progress independently of the completed submit request.
+
+Application shutdown refuses new workers, cancels existing workers and awaits
+their drain before releasing plugin results; the pane's drain includes this owner.
+Exceptions are observed, while outcomes and recovery remain in the canonical
+kernel/event path. No second run store or tool replay is introduced. Approval
+continuation (`resolveProjectChat`) still awaits completion under its bridge
+request; detaching that path, automatic receipt reconnect and queue/steer remain
+separate work. Project-chat abandoned-run recovery is described above.
 
 Office `submitChatInput` requires an operation ID and uses the same conflict check.
 Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup

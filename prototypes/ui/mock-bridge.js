@@ -769,16 +769,17 @@
               modelProgress: run.modelProgress } });
           }, 180 + index * 420);
         });
-        await new Promise(function (resolve) { setTimeout(resolve, 1800); });
-        if (projectRuns[submitting.Id] === run) {
-          var sourcePlugin = requireWorkspace(payload).pluginId;
-          projectMessages[submitting.Id].push({ Id: run.runId + "-answer", Role: "assistant", Content: sourcePlugin
-            ? "Изменение исходников смоделировано в preview. Файлы плагина не менялись."
-            : "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
-          if (sourcePlugin) pluginSourceRevision[sourcePlugin] = (pluginSourceRevision[sourcePlugin] || 0) + 1;
-          delete projectRuns[submitting.Id]; submitting.RunStatus = "completed";
-          projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
-        }
+        setTimeout(function () {
+          if (projectRuns[submitting.Id] === run) {
+            var sourcePlugin = requireWorkspace(payload).pluginId;
+            projectMessages[submitting.Id].push({ Id: run.runId + "-answer", Role: "assistant", Content: sourcePlugin
+              ? "Изменение исходников смоделировано в preview. Файлы плагина не менялись."
+              : "Проектный пример: план и файлы проекта можно обсудить здесь. Модель в preview не запускалась." });
+            if (sourcePlugin) pluginSourceRevision[sourcePlugin] = (pluginSourceRevision[sourcePlugin] || 0) + 1;
+            delete projectRuns[submitting.Id]; submitting.RunStatus = "completed";
+            projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
+          }
+        }, 1800);
       }
       return Object.assign(projectChatState(payload), { inputReceipt: accepted.receipt });
     }

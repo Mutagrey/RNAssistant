@@ -43,7 +43,7 @@ namespace RNAssistant.Runtime
         private readonly IWorkspaceOfficeCapabilities _officeCapabilities;
         private readonly CallableToolProfile _toolProfile;
         private readonly Func<WorkspaceDescriptor, bool> _isPluginSourceWorkspace;
-        private readonly Func<IDisposable> _titleApplyLease;
+        private readonly Func<IDisposable> _runtimeUseLease;
         private readonly CancellationTokenSource _titleLifetime = new CancellationTokenSource();
         private readonly ConcurrentDictionary<string, WorkspaceModelProgress> _liveModels =
             new ConcurrentDictionary<string, WorkspaceModelProgress>(StringComparer.Ordinal);
@@ -81,7 +81,7 @@ namespace RNAssistant.Runtime
         public WorkspaceConversationService(AppDataPaths paths, IWorkspaceWebVerifierFactory webHost = null,
             Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> extraTools = null,
             IWorkspaceOfficeCapabilities officeCapabilities = null,
-            Func<IDisposable> titleApplyLease = null,
+            Func<IDisposable> runtimeUseLease = null,
             Func<WorkspaceDescriptor, bool> isPluginSourceWorkspace = null,
             CallableToolProfile toolProfile = null)
         {
@@ -89,7 +89,7 @@ namespace RNAssistant.Runtime
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
             _isPluginSourceWorkspace = isPluginSourceWorkspace;
             _toolProfile = toolProfile ?? CallableToolProfile.AllDirect("workspace-direct");
-            _titleApplyLease = titleApplyLease;
+            _runtimeUseLease = runtimeUseLease;
             _chats = new ChatStore(paths);
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
@@ -99,7 +99,7 @@ namespace RNAssistant.Runtime
 
         public void Dispose()
         {
-            _titleLifetime.Cancel();
+            CloseAsync();
         }
 
         public ChatSession GetSession(WorkspaceDescriptor workspace, string sessionId)
@@ -449,7 +449,7 @@ namespace RNAssistant.Runtime
         { return IsPluginSource(workspace) || target == null || _officeCapabilities == null ? null :
             _officeCapabilities.ForTarget(target, session, settings, runId); }
 
-        public async Task<WorkspaceRunResult> SubmitInputAsync(WorkspaceDescriptor workspace,
+        private async Task<WorkspaceRunResult> ExecuteInputAsync(WorkspaceDescriptor workspace,
             WorkspaceSubmitInputRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
             string modelDigest = null)
@@ -472,7 +472,7 @@ namespace RNAssistant.Runtime
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
                 : _workspaces.LoadSession(_chats, workspace, sessionId);
             if (session == null) throw new InvalidOperationException("Workspace session was not found.");
-            using (AcquireSessionLease(session.Id))
+            using (AcquireSessionLease(session.Id, cancellationToken: cancellationToken))
             {
                 // Another process may have finished after the initial lookup.
                 if (!string.IsNullOrWhiteSpace(sessionId))
@@ -563,6 +563,7 @@ namespace RNAssistant.Runtime
                     AcceptedRunId = runId, RequestFingerprint = fingerprint,
                     Attachments = userMessage.Attachments };
                 var inputs = new ConversationInputJournal(new ChatEventStoreAdapter(_chats));
+                cancellationToken.ThrowIfCancellationRequested();
                 var accepted = inputs.Append(session, new ConversationInputEvent { Input = input });
                 var receipt = Receipt(accepted, input, false);
                 progress?.Invoke(new WorkspaceRunEvent("InputAccepted", null, null, receipt.AcceptedCursor, receipt));
@@ -904,7 +905,8 @@ namespace RNAssistant.Runtime
                 reducer.Reduce(evidence, frozen).State == EvidenceState.Current);
         }
 
-        private IDisposable AcquireSessionLease(string sessionId, bool wait = true)
+        private IDisposable AcquireSessionLease(string sessionId, bool wait = true,
+            CancellationToken cancellationToken = default(CancellationToken))
         {
             var directory = Path.Combine(_paths.WorkspaceDirectory, "run-leases");
             StorageFileSystem.EnsureRegularDirectory(directory);
@@ -913,7 +915,7 @@ namespace RNAssistant.Runtime
                 throw new IOException("Workspace run lease cannot be a link.");
             try
             {
-                return wait ? StorageFileSystem.AcquireWriteLock(path)
+                return wait ? StorageFileSystem.AcquireWriteLock(path, cancellationToken)
                     : new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
             }
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }

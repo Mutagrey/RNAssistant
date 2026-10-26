@@ -53,6 +53,8 @@ const root = path.resolve(__dirname, '../..');
       await page.evaluate(() => {
         const original = send;
         window.snapshotRace = {release:null, delivered:false};
+        window.readRaceState = () => original('getProjectChat', {
+          workspaceId:RNAssistantProjectChats.workspaceId(), sessionId:RNAssistantProjectChats.snapshot().sessionId });
         window.send = async function (type, payload) {
           const result = await original(type, payload);
           if (result && result.state && result.sessionId) {
@@ -70,6 +72,15 @@ const root = path.resolve(__dirname, '../..');
       await page.waitForFunction(() => !!snapshotRace.release);
       await page.waitForFunction(() => !document.querySelector('#chatInput').value &&
         !document.querySelector('#projectChatNew').disabled);
+      await page.evaluate(async () => {
+        for (let attempt = 0; attempt < 100; attempt++) {
+          if ((await readRaceState()).state.status === 'completed') return;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        throw Error('Preview run did not complete');
+      });
+      await page.evaluate(() => RNAssistantProjectChats.open(
+        RNAssistantProjectChats.workspaceId(), RNAssistantProjectChats.snapshot().sessionId));
       await page.evaluate(async () => {
         snapshotRace.release();
         await new Promise(resolve => setTimeout(resolve, 0));
@@ -130,6 +141,7 @@ const root = path.resolve(__dirname, '../..');
       selectionRace.release();
       await new Promise(resolve => setTimeout(resolve, 0));
     });
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running' && !RNAssistantProjectChats.isBusy());
     await page.locator('#chatInput').fill('Новый запрос после возврата');
     assert.equal(await page.locator('#projectChatNew').isEnabled(), true,
       'reopening the plugin must not retain the previous view busy flag');
@@ -348,6 +360,7 @@ const root = path.resolve(__dirname, '../..');
         return result;
       };
     });
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running');
     await page.locator('#projectChatWorkspaceMenu summary').click();
     await page.locator('#projectChatConnect').click();
     await page.locator('#projectChatConnectionPath').fill('/tmp/rna-connected-race');
@@ -364,6 +377,7 @@ const root = path.resolve(__dirname, '../..');
       'the connection must not replace a chat used while it was pending');
     assert.ok(await page.locator('#projectChatTree').getByText('rna-connected-race', {exact:true}).count());
     await page.waitForFunction(() => !RNAssistantProjectChats.isBusy());
+    await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running');
     await page.evaluate(() => {
       const original = window.sendBeforeSelectionRace;
       window.createDuringChat = {release:null, sessionId:null};
@@ -520,6 +534,7 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     await page.locator('#chatInput').fill('Обновить список после ответа');
+    await page.waitForFunction(() => !document.querySelector('#sendButton').disabled);
     await page.locator('#chatInput').press('Enter');
     await page.waitForFunction(() => !!staleRunCatalog.release);
     await page.locator('#projectChatNew').click();
@@ -545,6 +560,7 @@ const root = path.resolve(__dirname, '../..');
       };
     });
     await page.locator('#chatInput').fill('Обновить заголовок после ответа');
+    await page.waitForFunction(() => !document.querySelector('#sendButton').disabled);
     await page.locator('#chatInput').press('Enter');
     await page.waitForFunction(() => !!staleTitleCatalog.release);
     page.once('dialog', dialog => dialog.accept('Свежее название'));

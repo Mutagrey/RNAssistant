@@ -933,10 +933,10 @@ namespace RNAssistant.Application
                 throw new PluginException("project_chat_invalid", "The submitted chat identity changed.");
             if (Conversations.GetSession(workspace, request.SessionId) == null)
                 throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
-            WorkspaceRunResult result;
+            RNAssistant.Runtime.Contracts.WorkspaceInputReceipt receipt;
             try
             {
-                result = await Conversations.SubmitInputAsync(workspace, request.Input, settings, key,
+                receipt = await Conversations.AdmitInputAsync(workspace, request.Input, settings, key,
                     progress: progress, cancellationToken: token).ConfigureAwait(false);
             }
             catch (WorkspaceSessionLeaseUnavailableException)
@@ -945,7 +945,7 @@ namespace RNAssistant.Application
                     "This chat is running or its storage lease is unavailable. Refresh the chat before submitting again.");
             }
             var snapshot = ProjectChat(request);
-            snapshot.InputReceipt = result.Receipt;
+            snapshot.InputReceipt = receipt;
             return snapshot;
             }
         }
@@ -1053,13 +1053,14 @@ namespace RNAssistant.Application
                 var instances = _instances.Values.ToArray(); _instances.Clear();
                 foreach (var instance in instances) instance.Dispose();
                 foreach (var data in _data.Values) data.Dispose();
-                Conversations.Dispose();
-                _results.Dispose();
-                _closing = CloseInstancesAsync(instances); return _closing;
+                _closing = CloseInstancesAsync(instances, Conversations.CloseAsync()); return _closing;
             }
         }
-        private async Task CloseInstancesAsync(PluginInstance[] instances)
+        public Task Drained { get { lock (_sync) return _closing ?? Conversations.RunsDrained; } }
+        private async Task CloseInstancesAsync(PluginInstance[] instances, Task runs)
         {
+            await runs.ConfigureAwait(false);
+            _results.Dispose();
             if (instances.Length == 0) { _results.Clear(); return; }
             using (PluginStore.AcquireRuntimeUse(_paths))
             {

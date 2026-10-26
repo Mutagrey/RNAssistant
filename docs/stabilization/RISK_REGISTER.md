@@ -36,8 +36,24 @@ event, оба receipt проходят реальный bridge; terminal respons
 UI принимает только совпавший `DeliveryRecorded=true`, не сам факт transport success.
 Проверены задержанный model response, duplicate submit, новые/фоновые drafts и
 неподтверждённая доставка; fixtures browser получены из реального Application/bridge.
-I26-09/10 остаются открытыми: receipt не отделяет lifetime запуска и не подключает
-steer/queue. Windows/WebView2 по-прежнему требуют отдельного экранного evidence.
+I26-10 (steer/queue) остаётся открытым. Windows/WebView2 по-прежнему требуют
+отдельного экранного evidence.
+
+I26-09 / submit исправлен 2026-10-27: bridge response заканчивается после input
+delivery и первого kernel checkpoint, Application worker сохраняет run и leases.
+Удержанный HTTP-ответ подтверждает ранний ответ, duplicate без нового запроса,
+продолжение после потери bridge и отдельный explicit Stop. Shutdown дожидается
+worker, включая отмену ожидания lease до admission. Chromium проверяет реальные
+envelopes: model wait больше не держит submit timer; terminal приходит через polling.
+Открыты continuation после approval (`resolveProjectChat` по-прежнему долгий request),
+automatic receipt reconnect и Windows pane shutdown. Таймаут модели не менялся.
+
+Открытая соседняя проверка 2026-10-27: `workspace-chat-progress.test.js` падает на
+`uncleanClaims` при статическом рендере до submit-сценариев. Тот же отказ воспроизведён
+с исходным mock bridge из `82ef3ab7` и неизменённым production Web JS; это не эффект
+нового admission/lifetime. Owner — shared RunViewState presentation/fixtures;
+проверить соответствие fixture новому finish outcome и количество outcome-блоков.
+В исправление lifetime этот дефект не включён, полный progress suite не объявлен pass.
 
 I26-02 исправлен 2026-10-27: ProjectChat activation/polling использует неблокирующий
 session lease, повторную загрузку exact run/cursor и существующую interruption recovery.
