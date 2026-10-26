@@ -18,6 +18,39 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void WorkspaceFindDefaultKeepsDirectories()
+        {
+            WithTempPaths(paths => {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "find-default"));
+                Directory.CreateDirectory(Path.Combine(workspace.RootPath, "src"));
+                Directory.CreateDirectory(Path.Combine(workspace.RootPath, ".git"));
+                File.WriteAllText(Path.Combine(workspace.RootPath, "src", "invoice.ts"), "needle");
+                File.WriteAllText(Path.Combine(workspace.RootPath, ".git", "hidden.txt"), "hidden");
+                var ports = typeof(RNAssistant.Runtime.WorkspaceConversationService).GetNestedType("WorkspacePorts",
+                    System.Reflection.BindingFlags.NonPublic);
+                var schema = (string)ports.GetMethod("ResourceSchema",
+                    System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                    .Invoke(null, new object[] { true, true, false, 2000 });
+                var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
+                var handler = new RNAssistant.Runtime.WorkspaceResourceHandler(provider, null, () => null,
+                    new Dictionary<string, ResourceEvidence>(), true, null, 2000);
+                var fixture = new ToolRuntimeFixture(RuntimeRegistration("common.resources_find", schema: schema));
+                fixture.Handler.Run = handler.ExecuteAsync;
+                Func<string, string[]> find = arguments => {
+                    var record = fixture.Runtime.ExecuteAsync(fixture.Context(arguments), CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "find succeeds through actual runtime argument normalization");
+                    return JObject.Parse(record.Result.DataJson)["items"].Select(item => (string)item["target"]).ToArray();
+                };
+                AssertEqual("src", string.Join(",", find("{}")), "omitted selectors browse directories, excluding hidden paths");
+                AssertEqual("src", string.Join(",", find("{\"type\":\"file\",\"recursive\":null,\"includeGlobs\":null,\"excludeGlobs\":null}")),
+                    "strict optional nulls preserve ordinary directory browsing");
+                AssertEqual(0, find("{\"recursive\":false}").Length, "explicit false still selects immediate files only");
+                AssertEqual("src/invoice.ts", string.Join(",", find("{\"recursive\":true}")), "explicit recursion finds nested files only");
+                AssertEqual("src/invoice.ts", string.Join(",", find("{\"directory\":\"src\",\"includeGlobs\":[\"**/*.ts\"]}")),
+                    "explicit glob still selects files without injected recursion");
+            });
+        }
+
         private static void TextSearchWorkspaceAndContinuation()
         {
             WithTempPaths(paths => {

@@ -10,7 +10,7 @@ exact-build gate.
 
 ## Workspace directory discovery loses directories — 2026-10-26
 
-Open; owner: Core resource schema / Application WorkspaceResourceHandler.
+Fixed host-neutral; owner: Core resource schema / Application WorkspaceResourceHandler.
 The [paired profile pilot](../audits/tool-profile-comparison.md) reproduced empty
 `resources_find(type=file)` results at a root containing visible directories.
 The schema's recursive=false default is injected by ToolRuntime before dispatch;
@@ -18,10 +18,14 @@ WorkspaceResourceHandler treats presence of recursive as an explicit file-only
 selector and bypasses ordinary directory browsing. This contradicts Resource Fabric's
 default browsing contract, affects broad and compact profiles, and hides the route
 into nested source files. Provider-only tests bypass default normalization and miss it.
-Fix must preserve omitted/null versus explicit recursive/glob selectors, verify
-runtime dispatch and hidden-path exclusions, and keep search depth model-controlled.
-Separate description issue: a complete nonrecursive text search proves absence only
-at the selected depth, not across all workspace descendants. No data loss observed.
+The workspace find schema now removes that injected default; omitted/null selectors
+browse directories, while explicit false/true/globs retain file-only semantics.
+A new test through actual schema normalization and ToolRuntime fails before and
+passes after the change, including hidden-path exclusions. Search depth remains
+model-controlled; descriptions now limit absence to selected directory/depth/filters.
+All six text-search checks and the workspace discovery/admission/restart test pass.
+The cloud pilot is repeated separately after the change; baseline evidence is retained.
+No data loss observed; no Office/COM execution path or production profile changed.
 
 ## CLI Core.Net8 draft-store build blocker — 2026-10-26
 
@@ -86,6 +90,12 @@ Admission now uses the same snapshot tool selection as request dispatch. Positiv
 The local real-model follow-up performs one verified source write without compaction,
 but full task acceptance fails at the iteration limit due to repeated non-ID finish
 evidence. That model/protocol adherence gap remains open; the guard is unchanged.
+The [paired workspace pilot](../audits/tool-profile-comparison.md) reproduces it in
+both local edit profiles. Local copy additionally chooses attachment discovery in
+broad, or files.create instead of requested files.copy in compact. These observed
+model/tool-guidance gaps block a justified default-profile reduction; they are not
+unknown effects or evidence that either profile is generally safer. Local pairs
+were not repeated after the directory fix. Owners: model protocol/tool guidance evaluation.
 Windows/Office and broad task/model qualification remain separate open evidence.
 
 ## Text exploration performance and qualification — 2026-10-25

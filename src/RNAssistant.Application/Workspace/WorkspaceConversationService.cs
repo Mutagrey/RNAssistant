@@ -953,7 +953,7 @@ namespace RNAssistant.Runtime
                 var maximumFileReadCharacters = Math.Min(WorkspaceFileService.MaximumWindowTextCharacters,
                     ModelContextBudget.ApproximateTextCharacterCapacity(
                         ModelContextBudget.InputBudgetTokens(_settings), _settings));
-                Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Find workspace files (default type=file, up to 200; optional recursive/includeGlobs/excludeGlobs select nested files) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Find workspace files, up to 200; optional recursive/includeGlobs/excludeGlobs select nested files. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
+                Register(registry, entries, "common.resources_find", (_mode.AllowsSkills ? "Browse workspace files and directories (default type=file, up to 200; explicit recursive/glob selectors return files only; recursive=true includes descendants) or enabled skills (type=skill, up to 50), or workspace Plans (type=plan, up to 50 from at most 100 heads). For workspace root omit directory or use null, never / or .; directory applies only to files. Narrow the query when incomplete." : "Browse workspace files and directories, up to 200; explicit recursive/glob selectors return files only; recursive=true includes descendants. For workspace root omit directory or use null, never / or .; narrow the query when incomplete.") +
                     " Use type=attachment to find accepted visual selections in this chat." +
                     (office == null ? string.Empty : " Use type=office to discover resources in this run's exact Office document."),
                     ResourceSchema(true, _mode.AllowsSkills, office != null, maximumFileReadCharacters), false,
@@ -1236,7 +1236,14 @@ namespace RNAssistant.Runtime
                 if (find)
                 {
                     properties["query"]["description"] = skill ? "Optional skill search text." : "Optional file-name search text within this directory.";
-                    if (!skill) ResourceModelSearchSchema.AddPathFilters(properties);
+                    if (!skill)
+                    {
+                        ResourceModelSearchSchema.AddPathFilters(properties);
+                        // Presence selects file-only discovery in WorkspaceResourceHandler.
+                        // Do not let runtime defaults turn ordinary directory browsing into that route.
+                        ((JObject)properties["recursive"]).Property("default").Remove();
+                        properties["recursive"]["description"] = "True includes nested files; false selects immediate files only. Omit recursive and both glob selectors to browse files and directories.";
+                    }
                     if (!skill) properties["directory"]["description"] = "Workspace-relative directory. Omit or use null/empty for workspace root; never /, ., .. or an absolute path.";
                 }
                 else

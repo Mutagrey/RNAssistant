@@ -111,8 +111,9 @@ Office retains its existing exact skill/reference source reads through ResourceG
 The [paired live pilot](audits/tool-profile-comparison.md) exercises broad and compact
 profiles on identical synthetic workspaces with Gemma cloud/local. Compact discovery
 and exact admission work, but task/protocol failures prevent a default-change claim.
-The broad default remains. Repair the recorded directory-browsing defect and expand
-the task corpus before changing defaults. Adding resources_search/questions_ask to the Office core or
+The directory-browsing default defect is now repaired and the repeated cloud pairs
+pass 4/4; baseline local completion/operation-selection failures remain open. The
+broad default remains until the task corpus and model evidence are sufficient. Adding resources_search/questions_ask to the Office core or
 narrowing workspace is not part of this cutover. Measure task completion, discovery
 calls, request size and selection errors; no partial skills or keyword-based routing.
 

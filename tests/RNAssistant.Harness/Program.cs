@@ -52,6 +52,7 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("text search: default directory browse through runtime", WorkspaceFindDefaultKeepsDirectories),
                 Test("text search: workspace exact continuation", TextSearchWorkspaceAndContinuation),
                 Test("text search: regex and coverage", TextSearchRegexAndCoverage),
                 Test("text search: schemas and presentation", TextSearchSchemasAndPresentation),

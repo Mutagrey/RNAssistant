@@ -8,7 +8,7 @@ namespace RNAssistant.Core.Services
 {
     public static class ResourceModelSearchSchema
     {
-        public const string Description = "Read-only literal or line-oriented .NET regex search. Select one target or a scope. Results contain bounded snippets and 1-based UTF-16 line/column coordinates; no language parser is required. Only scanComplete and sourceComplete together establish absence. Continue with the returned semantic continuation and identical arguments; changed sources or lost continuation state require a fresh search. Search is not a complete source read or patch authorization.";
+        public const string Description = "Read-only literal or line-oriented .NET regex search. Select one target or a scope. Results contain bounded snippets and 1-based UTF-16 line/column coordinates; no language parser is required. Workspace scope searches only the selected directory (root when omitted), unless recursive=true includes descendants. Only scanComplete and sourceComplete together establish absence within the selected target, depth and filters. Continue with the returned semantic continuation and identical arguments; changed sources or lost continuation state require a fresh search. Search is not a complete source read or patch authorization.";
 
         public static string Create(bool workspace, bool office)
         {

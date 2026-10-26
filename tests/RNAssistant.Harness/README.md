@@ -35,6 +35,11 @@ must stop request construction; a larger context and restart cannot turn a rejec
 admission into authority. Carryover starts with complete evidence under a larger
 prior result budget. Run `tool pack:` for all 11 focused checks.
 
+`text search: default directory browse through runtime` reproduces schema-default
+routing through ToolRuntime and the actual workspace schema/handler. Omitted and
+strict-null selectors retain visible directories; explicit false/true/globs retain
+file-only semantics and hidden paths remain excluded. It failed before the fix.
+
 `text search:` checks closed workspace/Office schemas, language-independent literal/regex
 matching, Unicode/CRLF coordinates, recursive globs, hidden paths, cancellation,
 exact/stale/lost continuation, cumulative coverage and totals, pathological regex,

@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Directory discovery default repaired — 2026-10-26
+
+Owner: Application workspace schema / Core search descriptions. Remove injected
+recursive=false from find: omitted/null selectors again browse directories; explicit
+recursive/glob selectors retain file-only semantics. Descriptions scope absence to
+the requested depth/filters. Regression fails on baseline and passes after the fix;
+all six text-search checks plus workspace admission/restart pass. Repeated cloud
+profile pairs now pass 4/4, with exact file acceptance and protocol completion.
+[Baseline and repeat evidence](../audits/tool-profile-comparison.md) remain separate.
+Broad production defaults remain; local model finish/operation-selection gaps and
+Windows qualification are still open. No version bump.
+
 ## Paired tool-profile pilot — 2026-10-26
 
 Owner: Core/Application tool composition; Harness diagnostics. The [live pilot](../audits/tool-profile-comparison.md)

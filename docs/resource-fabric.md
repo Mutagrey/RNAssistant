@@ -54,8 +54,12 @@ is not constant-memory COM qualification. Continuation revalidation can reread
 prior sources and is not an incremental index. CAS retention remains source-owned.
 
 `common.resources_find` keeps its default directory browsing. Its workspace file
-branch additionally accepts recursive/glob selectors for bounded nested file-only
-metadata discovery. Protected paths and links are excluded by the existing file
+branch additionally accepts recursive/glob selectors for bounded file-only metadata
+discovery. An omitted/null recursive selector must remain absent through runtime
+normalization: injecting false would incorrectly switch directory browsing to
+file-only discovery. Explicit false returns immediate files only; true includes
+descendants. Search keeps its existing false default; descriptions explicitly limit
+absence claims to the selected directory, depth and filters. Protected paths and links are excluded by the existing file
 owner; cancelled/inaccessible/truncated work never proves absence. The new path
 returns at most 200 matches and instructs narrowing when incomplete; directory
 browser paging remains independent. Model-facing pagination is provided for
