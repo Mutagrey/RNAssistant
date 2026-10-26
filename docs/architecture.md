@@ -38,6 +38,11 @@ this does not merge COM and filesystem mutation owners. See the
 [remaining preparation differences audit](audits/office-workspace-preparation-audit.md)
 for callable-surface, history, authority and lifecycle boundaries.
 
+Core.Net8 excludes the Windows DPAPI `ProtectedSecretStore`, `SettingsService`
+and `ProtectedChatDraftStore` sources. The draft store belongs to Office WebView
+input persistence and has no Runtime/CLI consumer; Framework Core continues to
+include it. This build boundary does not change encryption or existing draft files.
+
 Workspace and plugin services share `src/RNAssistant.Application`, imported into
 Office Framework 4.8 and CLI Runtime. `Workspace/WorkspaceConversationService`
 reuses the same coordinator/kernel, ToolRuntime, file authority and chat stores.

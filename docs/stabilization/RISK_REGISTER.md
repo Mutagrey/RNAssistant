@@ -10,8 +10,8 @@ exact-build gate.
 
 ## CLI Core.Net8 draft-store build blocker — 2026-10-26
 
-Open build gap; owner: Core project composition / local draft persistence.
-`dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore` fails with
+Fixed host-neutral; owner: Core project composition / local draft persistence.
+`dotnet build src/RNAssistant.Cli/RNAssistant.Cli.csproj --no-restore` previously failed with
 CS0103 at ProtectedChatDraftStore.cs:23: Core.Net8 includes this Windows DPAPI-default
 type but explicitly excludes ProtectedSecretStore. The draft type was introduced
 by `ae52ab50`; neither file nor its Net8 inclusion changed in the discovery cutover.
@@ -21,9 +21,13 @@ includes its injected-codec path and cannot establish this separate assembly bou
 For discovery boundary verification only, a temporary BeforeTargets=CoreCompile
 target excluded Storage/ProtectedChatDraftStore.cs from RNAssistant.Core.Net8;
 the separate Core/Runtime/CLI build then passed with zero warnings/errors. This is
-diagnostic evidence, not a production fix or a successful normal CLI build. Resolve
-the unused Windows-only inclusion separately; do not add plaintext secret/draft
-fallbacks or change Office DPAPI behavior. No repository override was retained.
+diagnostic evidence only. The production Core.Net8 project now explicitly excludes
+ProtectedChatDraftStore alongside ProtectedSecretStore and SettingsService.
+The ordinary CLI build passes with zero warnings/errors, without custom targets or
+output overrides; CLI --help exits successfully. Framework inclusion, draft data,
+DPAPI behavior and the injected-codec Harness path are unchanged. No plaintext
+fallback or new persistence implementation was added. Windows qualification remains
+separate; the Net8 build gap is closed.
 
 ## Direct admission overflow fixtures — 2026-10-26
 

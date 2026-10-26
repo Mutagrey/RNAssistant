@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Normal CLI build restored — 2026-10-26
+
+Owner: Core.Net8 project composition. Exclude the unused Office UI
+ProtectedChatDraftStore together with its already-excluded DPAPI dependency.
+The normal CLI build now passes with zero warnings/errors and CLI --help succeeds;
+no temporary targets/output overrides, Harness rebuild or Office validation were used.
+Framework inclusion and stored drafts are unchanged. The
+[Net8 build gap](RISK_REGISTER.md#cli-core-net8-draft-store-build-blocker--2026-10-26)
+is closed. Next: compare compact explicit tool profiles against the current broad
+workspace profile before changing defaults. Product version unchanged.
+
 ## Shared discovery/admission reaches workspace — 2026-10-26
 
 Owners: Core capability catalog / CallableToolSet / ToolPackAdmissionJournal;

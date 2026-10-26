@@ -9,6 +9,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Storage/ProtectedSecretStore.cs" />
+    <!-- Office UI drafts use Windows DPAPI; Runtime/CLI has no consumer. -->
+    <Compile Remove="Storage/ProtectedChatDraftStore.cs" />
     <Compile Remove="Storage/SettingsService.cs" />
     <Reference Include="Newtonsoft.Json" HintPath="../../packages/Newtonsoft.Json.13.0.3/lib/net6.0/Newtonsoft.Json.dll" />
     <Reference Include="YamlDotNet" HintPath="../../packages/YamlDotNet.18.1.0/lib/net8.0/YamlDotNet.dll" />
