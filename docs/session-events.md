@@ -95,6 +95,15 @@ Every `SessionEvent` contains `SchemaVersion`, `SessionId`, contiguous `Sequence
   existing `OriginalPayload` references remain outside the provider body. No new
   body store is introduced. Missing provenance in older events means unknown,
   not inferred full delivery.
+  Attribution requires a unique source message ID and a unique matching final
+  message index; duplicate IDs, conflicting positions or excluded entries cannot
+  supply completeness, original-payload bindings or evidence links for a sent
+  message. Presentation and composition use the same matching rule.
+  `RequestComposition` records disjoint baseline text/media estimates for final
+  messages plus response-format options. `ResourceReferences` covers working-set,
+  repeated-read and resource-state notices separately from `Resources` content.
+  These are whole-message estimates, not calibrated admission, measured API usage
+  or a token split of mixed message bodies. Diagnostics remain outside wire JSON.
 - `llm.response` records the raw non-stream response body or the normalized complete streaming result.
 - `assistant.chunk` records ordered provider SSE data frames in bounded JSON-array batches (up to roughly 64 KiB or one second while frames arrive). The event stores first frame index, count, completion marker, and a CAS payload. Batches enter one bounded ordered queue per session (up to 16 pending writes), so the SSE reader normally does not wait for `Flush(true)`; saturation applies backpressure instead of allowing unbounded memory growth.
 - `llm.failure` records endpoint/status/failure metadata and any bounded provider error body.

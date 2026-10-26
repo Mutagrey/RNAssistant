@@ -10,7 +10,7 @@ namespace RNAssistant.Core.Llm
     public enum LlmRequestCompositionGroup
     {
         Unattributed, InstructionsAndCatalog, Conversation, ToolActivity, Resources,
-        MessagesWithAttachments, ResponseFormat
+        MessagesWithAttachments, ResponseFormat, ResourceReferences
     }
 
     public sealed class LlmRequestCompositionItem
@@ -38,20 +38,11 @@ namespace RNAssistant.Core.Llm
             var visible = messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)).ToList();
             if (build.Messages.Count != visible.Count || build.MessageBaseTokenEstimates.Count != visible.Count ||
                 build.MessageParts.Count != visible.Count || build.MessageBaseTokenEstimates.Any(cost => cost < 0)) return null;
-            var sourceCounts = visible.Where(m => !string.IsNullOrEmpty(m.Id)).GroupBy(m => m.Id, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
-            var sources = (receipt?.Messages ?? new List<ContextMessagePresentation>())
-                .Where(m => m != null && m.MessageIndex.HasValue && !string.IsNullOrEmpty(m.SourceMessageId))
-                .GroupBy(m => m.SourceMessageId, StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.Ordinal);
+            var sources = LlmContextMessageAttribution.Match(visible, receipt);
             var result = new LlmRequestComposition { HasMedia = build.HasAudio || build.HasImages };
             for (var index = 0; index < visible.Count; index++)
             {
-                var message = visible[index];
-                List<ContextMessagePresentation> candidates;
-                var source = !string.IsNullOrEmpty(message.Id) && sourceCounts[message.Id] == 1 && sources.TryGetValue(message.Id, out candidates) &&
-                    candidates.Count == 1 && candidates[0].MessageIndex == index && candidates[0].Presentation != ContextPresentationKind.Excluded
-                    ? candidates[0] : null;
+                var source = sources[index];
                 var group = Classify(source?.Kind);
                 if (build.MessageParts[index].Any(part => part != null && !string.IsNullOrEmpty(part.SourceAttachmentId) &&
                     part.Presentation != ContextPresentationKind.Excluded)) group = LlmRequestCompositionGroup.MessagesWithAttachments;
@@ -73,11 +64,40 @@ namespace RNAssistant.Core.Llm
                 case "dialogue": case "assistant-update": return LlmRequestCompositionGroup.Conversation;
                 case "tool-interaction": case "terminal-mutation": case "archived-operation":
                 case "completed-operation": case "historical-diagnostic": return LlmRequestCompositionGroup.ToolActivity;
-                case "resource-evidence": case "current-source": case "resource-change":
+                case "resource-evidence": case "current-source": return LlmRequestCompositionGroup.Resources;
+                case "resource-change":
                 case "observation-notice": case "repeated-read": case "working-set":
-                case "context-unavailable": return LlmRequestCompositionGroup.Resources;
+                case "context-unavailable": return LlmRequestCompositionGroup.ResourceReferences;
                 default: return LlmRequestCompositionGroup.Unattributed;
             }
+        }
+    }
+
+    // Both saved presentation and cost attribution require one exact source at
+    // one final wire position. An ambiguous receipt must never claim delivery.
+    internal static class LlmContextMessageAttribution
+    {
+        internal static ContextMessagePresentation[] Match(IList<ChatMessage> visible, ContextReceipt receipt)
+        {
+            var sourceCounts = visible.Where(m => !string.IsNullOrEmpty(m.Id)).GroupBy(m => m.Id, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            var entries = (receipt?.Messages ?? new List<ContextMessagePresentation>())
+                .Where(m => m != null && m.MessageIndex.HasValue).ToArray();
+            var sources = entries.Where(m => !string.IsNullOrEmpty(m.SourceMessageId))
+                .GroupBy(m => m.SourceMessageId, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+            var positions = entries.GroupBy(m => m.MessageIndex.Value).ToDictionary(group => group.Key, group => group.Count());
+            var result = new ContextMessagePresentation[visible.Count];
+            for (var index = 0; index < visible.Count; index++)
+            {
+                var id = visible[index].Id;
+                ContextMessagePresentation[] candidates;
+                if (!string.IsNullOrEmpty(id) && sourceCounts[id] == 1 && sources.TryGetValue(id, out candidates) &&
+                    candidates.Length == 1 && candidates[0].MessageIndex == index && positions[index] == 1 &&
+                    candidates[0].Presentation != ContextPresentationKind.Excluded)
+                    result[index] = candidates[0];
+            }
+            return result;
         }
     }
 }

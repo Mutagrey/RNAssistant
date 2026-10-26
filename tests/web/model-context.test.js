@@ -23,11 +23,11 @@ class Node {
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
 function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }
-function fixture(withAliases = false, pdf = false) {
+function fixture(withAliases = false, pdf = false, requestOverride = null) {
   const nodes = new Map(), mounts = [], calls = [], closes = [], timers = new Map(), leases = new Map(); let timer = 0;
   const verification = { availability: "Verified", partsAvailability: "Verified", hold: null };
   const get = id => { if (!nodes.has(id)) nodes.set(id, new Node()); return nodes.get(id); };
-  const requestText = '{"model":"test","messages":[{"role":"system","content":"rules"},{"role":"user","content":"' + "語😀".repeat(110000) + '"}],"seed":9007199254740993123456789}';
+  const requestText = requestOverride || '{"model":"test","messages":[{"role":"system","content":"rules"},{"role":"user","content":"' + "語😀".repeat(110000) + '"}],"seed":9007199254740993123456789}';
   const events = [{ eventId: "r1", sequence: 3, createdUtc: "2026-10-02T10:00:00Z", type: "llm.request", hasPayload: true, trace: { RequestId: "one", Model: "test", Streaming: true } }];
   let revision = 3, hold = null, leaseCount = 0, responseText = '{"Content":"# Answer"}';
   const c = vm.createContext({ AbortController, TextDecoder, TextEncoder, Uint8Array, Blob, URL, Response,
@@ -395,6 +395,43 @@ function fixture(withAliases = false, pdf = false) {
     cost.c.RNAssistantModelContext.close();
   }
   console.log("PASS model context: saved composition conservation, schema and message scope");
+
+  const groupedRequest = Array.from({ length: 112 }, (_, index) => ({ role: index % 2 ? "assistant" : "user", content: "Message " + index }));
+  const grouped = fixture(false, false, JSON.stringify({ messages: groupedRequest }));
+  grouped.events[0].trace.RequestComposition = { Version: 1, Method: "base_text_media_v1", HasMedia: false, TotalEstimatedTokens: 1120,
+    Items: groupedRequest.map((_, index) => ({ MessageIndex: index, Group: index < 111 ? "Conversation" : "ResourceReferences", EstimatedTokens: 10 })) };
+  grouped.c.RNAssistantModelContext.open(); await flush();
+  const groups = descendants(grouped.get("modelContextBody"));
+  const groupedHistory = groups.find(node => node.dataset.compositionGroup === "Conversation");
+  const references = groups.find(node => node.dataset.compositionGroup === "ResourceReferences");
+  assert.ok(groupedHistory && references, "resource references have their own section");
+  assert.equal(descendants(groupedHistory).filter(node => node.dataset.messageIndex !== undefined).length, 0, "closed groups create no message views");
+  groupedHistory.open = true; await groupedHistory.fire("toggle");
+  assert.equal(descendants(groupedHistory).filter(node => node.dataset.messageIndex !== undefined).length, 50);
+  await descendants(groupedHistory).find(node => node.textContent === "Показать ещё").fire("click");
+  await descendants(groupedHistory).find(node => node.textContent === "Показать ещё").fire("click");
+  const rendered = descendants(groupedHistory).filter(node => node.dataset.messageIndex !== undefined);
+  assert.deepEqual(rendered.map(node => Number(node.dataset.messageIndex)), Array.from({ length: 111 }, (_, index) => index));
+  rendered[100].open = true; await rendered[100].fire("toggle");
+  assert.ok(grouped.mounts.some(mount => mount.options.text === "Message 100"), "a later history page opens the exact message body");
+  const groupedBody = grouped.get("modelContextBody");
+  groupedBody.querySelectorAll = selector => descendants(groupedBody).filter(node => node.tag === "details" &&
+    (selector === "details[data-composition-count]" ? node.dataset.compositionCount !== undefined :
+      selector === "details[data-context-source][open]" && node.dataset.contextSource !== undefined && node.open));
+  let layoutControl = descendants(groupedBody).find(node => node.className === "model-context-message-layout");
+  layoutControl.value = "wire"; await layoutControl.fire("change"); await flush();
+  assert.ok(descendants(groupedBody).some(node => node.dataset.messageIndex === "100" && node.open),
+    "send-order layout restores an open message beyond the first page");
+  layoutControl = descendants(groupedBody).find(node => node.className === "model-context-message-layout");
+  layoutControl.value = "groups"; await layoutControl.fire("change"); await flush();
+  const restoredHistory = descendants(groupedBody).find(node => node.dataset.compositionGroup === "Conversation");
+  assert.equal(restoredHistory.open, true, "switching back opens the expanded message's group");
+  await restoredHistory.fire("toggle");
+  assert.ok(descendants(restoredHistory).some(node => node.dataset.messageIndex === "100" && node.open),
+    "switching back restores the matching history page");
+  assert.equal(grouped.calls.filter(call => call.type === "getModelContextPayload").length, 1, "group pages reuse one immutable payload");
+  grouped.c.RNAssistantModelContext.close();
+  console.log("PASS model context: lazy history groups, message paging and separate resource references");
 
   const pdfRead = fixture(true, true);
   pdfRead.c.RNAssistantModelContext.open(); await flush();

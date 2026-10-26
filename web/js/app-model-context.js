@@ -345,15 +345,16 @@
     if (!(entry.EvidenceLinks || []).length && !(entry.Parts || []).length && !entry.Reason)
       source.appendChild(el("p", "Сохранена только отметка представления; подробности источников отсутствуют.", "model-context-note"));
   }
-  function requestComposition(c, parent, composition, messageCount, reveal, saved) {
+  function requestComposition(c, parent, composition, messageCount, reveal, saved, renderMessage, grouped) {
     if (c.mode !== "actual") return;
     var groups = [
       { id: "InstructionsAndCatalog", title: "Инструкции и каталог", color: "color-0" },
-      { id: "Conversation", title: "Диалог", color: "color-1" },
+      { id: "Conversation", title: "История сообщений", color: "color-1" },
       { id: "ToolActivity", title: "Вызовы и результаты", color: "color-2" },
+      { id: "ResourceReferences", title: "Ссылки и состояние ресурсов", color: "is-reference" },
       { id: "Resources", title: "Контекст ресурсов", color: "color-3" },
-      { id: "MessagesWithAttachments", title: "Сообщения с вложениями", color: "color-3" },
-      { id: "ResponseFormat", title: "Формат и обвязка", color: "color-4" },
+      { id: "MessagesWithAttachments", title: "Сообщения с вложениями", color: "is-attachment" },
+      { id: "ResponseFormat", title: "Формат ответа", color: "color-4" },
       { id: "Unattributed", title: "Не распределено", color: "is-unattributed" }
     ];
     var indices = new Set(), optionsCount = 0, sum = 0;
@@ -376,7 +377,12 @@
     var chart = el("div", undefined, "chat-inspector-composition-chart model-context-composition-chart");
     chart.setAttribute("role", "group"); chart.setAttribute("aria-label", "Доли базовой оценки сохранённого запроса"); section.appendChild(chart);
     var outer = sourceDisclosure(section, "Состав по разделам", "≈ " + sum.toLocaleString("ru-RU") + " ток. · базовая оценка", "composition", saved);
-    outer.appendChild(el("p", "Оценка без калибровки; это не расход API. Сообщения учитываются целиком, включая служебные поля." +
+    outer.classList.add("model-context-composition-total");
+    if (!saved || grouped && saved.grouped !== grouped && saved.expanded.length) outer.open = true;
+    var explanation = sourceDisclosure(outer, "Как посчитано", "", "composition/method", saved);
+    explanation.appendChild(el("p", "Базовая оценка токенов, без калибровки и резервов. Расход API показывается отдельно. " +
+      "Каждое сообщение учтено один раз и целиком, включая служебные поля. Тела результатов могут входить в раздел вызовов. " +
+      "Ссылки сами по себе не означают, что содержимое ресурса отправлено." +
       (composition.HasMedia ? " Медиа оценено приближённо." : ""), "model-context-note"));
     var version = c.viewVersion;
     groups.forEach(function (group) {
@@ -385,8 +391,16 @@
       var tokens = items.reduce(function (total, item) { return total + item.EstimatedTokens; }, 0);
       var caption = "≈ " + tokens.toLocaleString("ru-RU") + " ток. · " + (sum ? tokens * 100 / sum : 0).toLocaleString("ru-RU", { maximumFractionDigits: 1 }) + "%";
       var key = "composition/" + group.id, detail = sourceDisclosure(outer, group.title, caption, key, saved), count = 0;
+      var restoreCount = saved && saved.compositionPages && saved.compositionPages[key] || 0;
+      if (grouped && saved && saved.grouped !== grouped) items.forEach(function (item, index) {
+        if (saved.expanded.indexOf(item.MessageIndex) >= 0) { detail.open = true; restoreCount = Math.max(restoreCount, index + 1); }
+      });
+      detail.classList.add("model-context-composition-group");
+      detail.dataset.compositionGroup = group.id;
       var dot = el("i", undefined, "chat-inspector-composition-dot chat-inspector-composition-color " + group.color);
       dot.setAttribute("aria-hidden", "true"); detail.children[0].insertBefore(dot, detail.children[0].children[0]);
+      var size = el("span", group.id === "ResponseFormat" ? "Параметры запроса" : "Сообщений: " + items.length, "model-context-composition-count");
+      detail.children[0].children[1].appendChild(size);
       detail.dataset.compositionCount = "0";
       if (group.id === "InstructionsAndCatalog") detail.appendChild(el("p", "Инструкции, навыки и каталог в общем сообщении пока не разделены на доли.", "model-context-note"));
       if (group.id === "Unattributed") detail.appendChild(el("p", "Размер учтён, но сохранённых данных недостаточно для однозначного раздела.", "model-context-note"));
@@ -395,6 +409,10 @@
         if (!live(c) || c.viewVersion !== version || !detail.isConnected) return;
         more.remove();
         items.slice(count, count + 50).forEach(function (item) {
+          if (grouped && item.MessageIndex != null) {
+            renderMessage(item.MessageIndex, detail, item.EstimatedTokens);
+            return;
+          }
           var control = button((item.MessageIndex == null ? "Параметры запроса" : "Сообщение " + (item.MessageIndex + 1)) +
             " · ≈ " + item.EstimatedTokens.toLocaleString("ru-RU") + " ток.", function () {
             if (live(c) && c.viewVersion === version && control.isConnected) reveal(item.MessageIndex);
@@ -407,7 +425,7 @@
       detail.addEventListener("toggle", function () {
         if (!detail.open || count) return;
         page();
-        while (count && saved && saved.compositionPages && count < saved.compositionPages[key] && count < items.length) page();
+        while (count && count < restoreCount && count < items.length) page();
       });
       if (tokens > 0) {
         var segment = button("", function () {
@@ -419,6 +437,7 @@
       }
     });
     if (!sum) chart.remove();
+    return composition;
   }
   function messages(c, text, entries, composition) {
     var root = $("modelContextBody"), fields;
@@ -432,6 +451,7 @@
       var at = byIndex.get(entry.MessageIndex) || []; at.push(entry); byIndex.set(entry.MessageIndex, at);
     });
     var mode = c.mode, source = mode === "preview" ? c.previewVersion : c.selected, rows = [];
+    var grouped = mode === "actual" && c.messageLayout !== "wire", costs = new Map();
     var saved = c.messageViews && c.messageViews[mode];
     if (saved && saved.source !== source) saved = null;
     c.captureMessages = function () {
@@ -440,7 +460,7 @@
       root.querySelectorAll("details[data-composition-count]").forEach(function (row) {
         compositionPages[row.dataset.contextSource] = Number(row.dataset.compositionCount);
       });
-      c.messageViews[mode] = { source: source, count: count, scroll: root.scrollTop,
+      c.messageViews[mode] = { source: source, grouped: grouped, count: count, scroll: root.scrollTop,
         expanded: rows.filter(function (row) { return row.open; }).map(function (row) { return Number(row.dataset.messageIndex); }),
         sources: Array.from(root.querySelectorAll("details[data-context-source][open]")).map(function (row) { return row.dataset.contextSource; }),
         omissionCount: omissionCount, compositionPages: compositionPages };
@@ -451,7 +471,13 @@
     function page() {
       more.remove();
       list.slice(count, count + 50).forEach(function (message, offset) {
-        var index = count + offset, parts = members(message.raw), role = decoded(field(parts, "role")) || "message";
+        var index = count + offset;
+        renderMessage(index, listRoot, costs.get(index));
+      });
+      count += 50; if (count < list.length) listRoot.appendChild(more);
+    }
+    function renderMessage(index, parent, tokens) {
+        var message = list[index], parts = members(message.raw), role = decoded(field(parts, "role")) || "message";
         var candidates = byIndex.get(index) || [], entry = candidates.length === 1 && candidates[0].Presentation !== "Excluded" ? candidates[0] : null;
         var content = field(parts, "content"), contentValue = decoded(content);
         var detail = el("details", undefined, "model-context-message is-message"), summary = el("summary");
@@ -460,7 +486,8 @@
         summary.appendChild(el("span", String(index + 1), "model-context-message-number"));
         var heading = el("span"), label = el("span", undefined, "model-context-message-label");
         label.appendChild(el("span", roles[role] || role, "model-context-message-title"));
-        label.appendChild(el("span", message.raw.length.toLocaleString("ru-RU") + " симв. JSON", "model-context-message-size"));
+        label.appendChild(el("span", Number.isSafeInteger(tokens) ? "≈ " + tokens.toLocaleString("ru-RU") + " ток." :
+          message.raw.length.toLocaleString("ru-RU") + " симв. JSON", "model-context-message-size"));
         summary.title = message.raw.length.toLocaleString("ru-RU") + " символов в JSON сообщения";
         heading.appendChild(label);
         var excerptValue = contentValue;
@@ -476,7 +503,7 @@
           var badge = el("span", note(entry), "model-context-badge"); badge.dataset.kind = entry.Presentation;
           meta.appendChild(badge); heading.appendChild(meta);
         }
-        summary.appendChild(heading); detail.appendChild(summary); listRoot.appendChild(detail);
+        summary.appendChild(heading); detail.appendChild(summary); parent.appendChild(detail);
         var body = el("div", undefined, "model-context-message-body"); detail.appendChild(body);
         var loaded = false;
         detail.addEventListener("toggle", function () {
@@ -492,6 +519,8 @@
           metadata.appendChild(el("p", "Роль: " + role + " · " +
             (entry && entry.Presentation && entry.Presentation !== "Unknown" ? note(entry) : "полнота исходных источников не сохранена")));
           metadata.appendChild(el("p", "Размер сообщения в JSON: " + message.raw.length.toLocaleString("ru-RU") + " символов."));
+          if (Number.isSafeInteger(tokens)) metadata.appendChild(el("p", "Базовая оценка сообщения: ≈ " +
+            tokens.toLocaleString("ru-RU") + " токенов. Учтено один раз в составе запроса."));
           if (entry && entry.ToolCallId) metadata.appendChild(el("p", "Операция: " +
             (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
           if (Number.isSafeInteger(entry && entry.EstimatedWireMessageTokens) && entry.EstimatedWireMessageTokens >= 0)
@@ -510,19 +539,18 @@
           }
         });
         if (saved && saved.expanded.indexOf(index) >= 0) detail.open = true;
-      });
-      count += 50; if (count < list.length) listRoot.appendChild(more);
     }
     var overview = el("div", undefined, "model-context-overview"), heading = el("div");
     heading.appendChild(el("h3", "Состав запроса"));
-    heading.appendChild(el("p", list.length + " сообщений · исходный порядок", "model-context-note"));
+    var orderNote = el("p", list.length + " сообщений · исходный порядок", "model-context-note");
+    heading.appendChild(orderNote);
     overview.appendChild(heading);
     var collapse = button("Свернуть", function () {
       listRoot.querySelectorAll("details[open]").forEach(function (detail) { detail.open = false; });
     });
     collapse.title = "Свернуть все сообщения"; collapse.classList.add("model-context-collapse");
     overview.appendChild(collapse); listRoot.appendChild(overview);
-    requestComposition(c, listRoot, composition, list.length, function (index) {
+    var checkedComposition = requestComposition(c, listRoot, composition, list.length, function (index) {
       var selected;
       if (index == null) selected = settings;
       else {
@@ -532,7 +560,20 @@
       if (!selected) return;
       selected.open = true; selected.children[0].focus();
       selected.scrollIntoView({ block: "start" });
-    }, saved);
+    }, saved, renderMessage, grouped);
+    grouped = grouped && !!checkedComposition;
+    if (checkedComposition) {
+      checkedComposition.Items.forEach(function (item) { if (item.MessageIndex != null) costs.set(item.MessageIndex, item.EstimatedTokens); });
+      orderNote.textContent = list.length + " сообщений · " + (grouped ? "раскройте раздел и сообщение" : "исходный порядок");
+      var layout = el("select", undefined, "model-context-message-layout");
+      layout.setAttribute("aria-label", "Группировка контекста");
+      [["groups", "По разделам"], ["wire", "Порядок отправки"]].forEach(function (item) {
+        var option = el("option", item[1]); option.value = item[0]; layout.appendChild(option);
+      });
+      layout.value = grouped ? "groups" : "wire";
+      layout.addEventListener("change", function () { c.messageLayout = layout.value; render(c); });
+      overview.insertBefore(layout, collapse);
+    }
     var omitted = [];
     (entries || []).filter(Boolean).forEach(function (entry, entryIndex) {
       if (entry.Presentation === "Excluded") omitted.push({ entry: entry, index: entryIndex });
@@ -578,14 +619,17 @@
       var at = byIndex.get(index); return !at || at.length !== 1 || at[0].Presentation === "Excluded";
     }).length;
     if (unattributed) listRoot.appendChild(el("p", "Нет однозначных сведений об источниках: " + unattributed + " из " + list.length + " сообщений.", "model-context-note"));
-    page(); while (saved && count < saved.count && count < list.length) page();
+    if (!grouped) {
+      var restoreCount = saved ? saved.expanded.reduce(function (end, index) { return Math.max(end, index + 1); }, saved.count) : 0;
+      page(); while (count < restoreCount && count < list.length) page();
+    }
     var parameters = fields.filter(function (part) { return part.key !== "messages"; });
     if (parameters.length) {
       var settings = el("details", undefined, "model-context-meta");
       settings.appendChild(el("summary", "Параметры запроса · " + parameters.length)); root.appendChild(settings);
       parameters.forEach(function (part) { lazy(c, settings, "Параметр запроса: " + part.key, function () { return part.raw; }, true); });
     }
-    if (saved) {
+    if (saved && saved.grouped === grouped) {
       var viewVersion = c.viewVersion;
       setTimeout(function () { if (live(c) && c.viewVersion === viewVersion) root.scrollTop = saved.scroll; }, 0);
     }

@@ -43,7 +43,9 @@
 .model-context-body h3 { font-size: 13px; margin: 16px 0 8px; }
 .model-context-note { font-size: 12px; line-height: 1.55; color: var(--ink-muted); }
 .model-context-note:first-child { margin-top: 0; }
-.model-context-overview { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 12px; }
+.model-context-overview { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 18px 0 12px; }
+.model-context-overview > div { flex: 1 1 180px; }
+.model-context-message-layout { max-width: 100%; font-size: 12px; }
 .model-context-body .model-context-overview h3 { margin: 0 0 3px; font-size: 15px; font-weight: 600; }
 .model-context-overview .model-context-note { margin: 0; font-size: var(--text-xs); }
 .model-context-dialog .model-context-collapse { flex: none; border: 0; padding: 4px 0 4px 8px; color: var(--ink-muted); background: transparent; font-size: var(--text-xs); }
@@ -91,11 +93,29 @@
 .model-context-omissions { margin: 0 0 8px; }
 .model-context-omissions > summary > small { color: var(--warning); }
 .model-context-composition { margin-bottom: 8px; }
-.model-context-composition-chart { margin: 0 0 4px; height: 12px; }
+.model-context-composition-chart { margin: 0 0 8px; height: 12px; }
 .model-context-composition-chart > button { flex: 0 1 0; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 0; cursor: pointer; }
 .model-context-composition-chart > button:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .model-context-composition .is-unattributed { background: var(--line-strong); }
+.model-context-composition .is-reference { background: color-mix(in srgb, #3a9a91 78%, var(--surface)); }
+.model-context-composition .is-attachment { background: color-mix(in srgb, #b57595 78%, var(--surface)); }
 .model-context-composition .chat-inspector-composition-dot { flex: 0 0 8px; }
+.model-context-composition-total > summary { display: grid; grid-template-columns: minmax(0, 1fr) 12px; gap: 4px 8px; padding-block: 8px; }
+.model-context-composition-total > summary > span:first-child { font-weight: 600; color: var(--ink); }
+.model-context-composition-total > summary > small { grid-column: 1; font-size: 12px; }
+.model-context-composition-total > summary > .model-context-source-arrow { grid-column: 2; grid-row: 1 / 3; }
+.model-context-composition-total > .model-context-source { margin-left: 0; padding-left: 0; border-left: 0; }
+.model-context-composition-total > .model-context-composition-group { margin-block: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.model-context-composition-group > summary { display: grid; grid-template-columns: 8px minmax(0, 1fr) 12px; gap: 3px 9px; padding: 10px 12px; background: var(--surface-subtle); }
+.model-context-composition-group > summary > i { grid-row: 1; align-self: start; margin-top: 5px; }
+.model-context-composition-group > summary > span:not(.model-context-source-arrow) { min-width: 0; color: var(--ink); font-weight: 500; }
+.model-context-composition-group > summary > small { grid-column: 2; font-variant-numeric: tabular-nums; }
+.model-context-composition-group > summary > .model-context-source-arrow { grid-column: 3; grid-row: 1 / 3; }
+.model-context-composition-count { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--ink-muted); }
+.model-context-composition-group > .model-context-message { margin-inline: 12px; }
+.model-context-composition-group > .model-context-message:last-child { border-bottom: 0; }
+.model-context-composition-group > .model-context-message[open] > summary { color: var(--ink); }
+.model-context-composition-group > .model-context-note { margin: 10px 12px; }
 .model-context-composition-entry { display: block; max-width: calc(100% - 8px); text-align: left; font-size: var(--text-xs); white-space: normal; }
 .model-context-response { padding-top: 18px; }
 .model-context-response + .model-context-response { margin-top: 20px; border-top: 1px solid var(--line); }
@@ -135,9 +155,6 @@
 }
 @container request (min-width: 420px) {
   .model-context-message.is-message > .model-context-message-body { margin-left: 10px; padding-left: 20px; }
-}
-@container request (max-width: 379px) {
-  .model-context-message-size { display: none; }
 }
 @container request (max-width: 270px) {
   .model-context-head { flex-wrap: wrap; }

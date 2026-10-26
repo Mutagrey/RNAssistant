@@ -651,15 +651,17 @@ namespace RNAssistant.Core.Llm
             JArray serializedMessages = null, AppSettings settings = null)
         {
             var entries = new List<ContextMessagePresentation>();
-            var visibleCount = messages.Count(m => m != null && !m.ExcludeFromModelContext &&
-                !string.IsNullOrWhiteSpace(m.Role));
+            var visible = messages.Where(m => m != null && !m.ExcludeFromModelContext &&
+                !string.IsNullOrWhiteSpace(m.Role)).ToList();
+            var visibleCount = visible.Count;
+            var sources = LlmContextMessageAttribution.Match(visible, receipt);
             var alignedParts = wireParts != null && wireParts.Count == visibleCount;
             var alignedWire = serializedMessages != null && serializedMessages.Count == visibleCount;
-            foreach (var message in messages.Where(m => m != null && !m.ExcludeFromModelContext && !string.IsNullOrWhiteSpace(m.Role)))
+            foreach (var message in visible)
             {
-                var source = receipt?.Messages?.FirstOrDefault(m => m != null && m.SourceMessageId == message.Id && m.MessageIndex.HasValue);
+                var source = sources[entries.Count];
                 var entry = source == null ? new ContextMessagePresentation { SourceMessageId = message.Id,
-                    Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет сведений сборщика для этого сообщения." }
+                    Role = message.Role, Presentation = ContextPresentationKind.Unknown, Reason = "Нет однозначных сведений сборщика для этого сообщения." }
                     : JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(source));
                 entry.MessageIndex = entries.Count;
                 entry.EstimatedWireMessageTokens = null;
@@ -682,8 +684,7 @@ namespace RNAssistant.Core.Llm
                             Reason = "Текст и медиа выбраны transport; точные переданные части доступны в JSON запроса." });
                     entry.Presentation = ContextPresentationKind.Unknown;
                 }
-                if (alignedWire && source != null && source.MessageIndex == entries.Count &&
-                    receipt.Messages.Count(item => item != null && item.SourceMessageId == message.Id && item.MessageIndex.HasValue) == 1 &&
+                if (alignedWire && source != null &&
                     changedContent != null && (changedContent.Length == 0 || changedContent.Length == visibleCount) &&
                     (entry.Presentation == ContextPresentationKind.Full ||
                      entry.Presentation == ContextPresentationKind.Fragment) &&

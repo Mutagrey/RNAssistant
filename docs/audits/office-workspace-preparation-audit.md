@@ -1,10 +1,53 @@
 # Office / workspace: аудит оставшихся различий подготовки контекста
 
-Дата: 2026-10-26. Baseline: `f1d86260`. Owner: Core context/skills/protocol,
-Application workspace, Office orchestration. Статический аудит исходников;
-production-код не менялся, новые модельные/Windows прогоны не выполнялись.
+Первичный срез: 2026-10-26, baseline `f1d86260`. Owner: Core context/skills/protocol,
+Application workspace, Office orchestration. Это был статический аудит исходников;
+production-код тогда не менялся, новые модельные/Windows прогоны не выполнялись.
 Результаты девяти проверок предыдущего cutover относятся к общему request builder,
 а не доказывают полную эквивалентность Office и workspace.
+
+## Повторная проверка контекста и диагностики — 2026-10-26
+
+Owner: Core LLM diagnostics / web Model Context Inspector. Этот срез уточняет
+историческую таблицу ниже после объединения профилей и discovery/admission.
+
+| Этап | Текущий общий путь | Различия входов |
+|---|---|---|
+| CLI / проект / plugin source | WorkspaceConversationService | CLI — клиент того же runtime, отдельного compiler нет |
+| Office / workspace | ModelContextCompiler + ContextWorkingSet + ContextCompactionRuntime | Office notes и document authority; workspace filesystem authority и AcceptedFacts |
+| Tools и skills | CallableToolProfile, CallableToolSet, admission journal, SkillTaskService | Минимальный Office bootstrap и широкий workspace profile остаются разной policy |
+| Подготовка запроса | ModelRequestPreparation → ModelProtocolClient | Доменные инструкции и schema projection adapters |
+| Материализация и сохранение | LlmMessageBuilder → LlmClient → trace/CAS → HTTP | Одни сериализованные UTF-8 bytes сохраняются до отправки и используются transport |
+| Просмотр фактического запроса | ModelContextInspectorService + app-model-context.js | Exact chat/workspace/event scope; CLI не имеет отдельного Web UI |
+
+Подтверждённый дефект: DescribeWireMessages выбирал первый receipt по ID даже при
+дубликате или несовпадении wire index и мог показывать Full с чужой привязкой.
+Регрессия до исправления падает: expected Unknown, got Full. Теперь presentation
+и оценка состава требуют одного ID и одного совпадающего индекса; неоднозначные
+источники не дают полноту, оригинал или evidence. Provider body не меняется.
+
+Фактический Inspector по умолчанию раскрывает раздел → сообщение → содержимое,
+показывает доли, оценку токенов и количество сообщений. Ссылки/уведомления ресурсов
+выделены отдельно; история сгруппирована по исходным сообщениям. Есть переключение
+в порядок отправки, сохранение раскрытий и страницы по 50 без повторного чтения CAS.
+Смешанные сообщения считаются целиком, базовая оценка не выдаётся за API usage.
+
+Проверено host-neutral: 12 `model context:` (одна fixture исправлена на полный
+snapshot вместо несогласованного подмножества), 14 `context continuity:`,
+workspace history в object/strict режимах, trace-before-dispatch, mixed attachment
+manifest, frozen evidence и однократная материализация retained reads — 32 проверки.
+Web: model-context, model-context-layout и workspace-inspector; Chromium,
+светлая/тёмная темы, узкая панель, история, раскрытия, переключение порядка,
+точный scope и повторное использование payload. Полный Harness не запускался.
+
+Отдельно найдено [расхождение Office-предпросмотра](../stabilization/RISK_REGISTER.md#office-next-request-preview-diverges-from-active-preparation--2026-10-26):
+он не проходит тот же selected-skill surface и strict projection. Это открытый
+риск оценки следующего запроса; сохранённый фактический запрос от него не зависит.
+Полная parity исторических role projections, реальные модели и Windows/Office/
+WebView2 не квалифицированы. Потеря данных или двойная отправка в выбранных
+проверках не воспроизведены.
+
+Ниже сохранён исходный статический срез `f1d86260`; его «следующий cutover» исторический.
 
 ## Вывод
 

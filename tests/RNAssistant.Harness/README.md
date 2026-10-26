@@ -301,6 +301,13 @@ inconsistent composition snapshots and check chart/message navigation without
 normalizing to admission or API usage. `INSPECTOR_SCREENSHOTS` saves
 browser captures. Next-request workspace estimates and native Windows/WebView2
 delivery, including controller lease liveness, remain open.
+The saved composition check also rejects duplicate message IDs, shifted or
+colliding receipt positions in both presentation and cost attribution; resource
+references/notices have a separate group without changing the total. The Web
+checks exercise the default section → message → body hierarchy, exact send-order
+switching, lazy pages of 50, nested expansion restoration and no extra payload
+reads. The Office next-request preview still has the separate
+[skill/strict-projection gap](../../docs/stabilization/RISK_REGISTER.md#office-next-request-preview-diverges-from-active-preparation--2026-10-26).
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin
 view and composer, one session draft and preferences across both screens, appended file reference, failed retry
 identity, double submit and late acknowledgement with identical later text.

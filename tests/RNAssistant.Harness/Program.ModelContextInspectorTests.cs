@@ -34,6 +34,7 @@ namespace RNAssistant.Harness
             };
             var receipt = new ContextReceipt { Messages = messages.Take(6).Select((message, index) =>
                 new ContextMessagePresentation { SourceMessageId = message.Id, MessageIndex = index,
+                    Presentation = ContextPresentationKind.Full,
                     Kind = new[] { "system-invariant", "dialogue", "current-source", "future-kind", "tool-interaction", "tool-interaction" }[index] }).ToList() };
             var options = new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonSchema,
                 ResponseSchemaName = "reply", ResponseSchemaJson = "{\"type\":\"object\"}" };
@@ -53,12 +54,37 @@ namespace RNAssistant.Harness
             AssertEqual(LlmRequestCompositionGroup.Unattributed, composition.Items[3].Group, "unknown kinds never use role or text heuristics");
             AssertEqual(LlmRequestCompositionGroup.ToolActivity, composition.Items[4].Group, "native tool call stays in operation group");
             AssertEqual(LlmRequestCompositionGroup.ToolActivity, composition.Items[5].Group, "native result stays in operation group");
+            var attributed = LlmClient.DescribeWireMessages(messages, receipt);
+            AssertEqual(ContextPresentationKind.Full, attributed[0].Presentation, "unique source retains its presentation");
+            foreach (var kind in new[] { "working-set", "resource-change", "observation-notice", "repeated-read", "context-unavailable" })
+            {
+                receipt.Messages[2].Kind = kind;
+                var references = LlmRequestCompositionBuilder.Describe(build, messages, receipt, options);
+                AssertEqual(LlmRequestCompositionGroup.ResourceReferences, references.Items[2].Group,
+                    "references and notices must be distinct from source bodies: " + kind);
+                AssertEqual(composition.TotalEstimatedTokens, references.TotalEstimatedTokens, "categorization cannot change request cost");
+            }
+            receipt.Messages[2].Kind = "current-source";
             receipt.Messages.Add(receipt.Messages[0]);
             receipt.Messages[1].MessageIndex = 4;
+            var ambiguous = LlmClient.DescribeWireMessages(messages, receipt);
+            AssertEqual(ContextPresentationKind.Unknown, ambiguous[0].Presentation, "duplicate source must not claim full delivery");
+            AssertEqual(ContextPresentationKind.Unknown, ambiguous[1].Presentation, "misaligned source must not claim full delivery");
+            AssertEqual(ContextPresentationKind.Unknown, ambiguous[4].Presentation, "colliding wire positions must not choose a source");
+            AssertTrue(ambiguous[0].Kind == null && ambiguous[1].Kind == null,
+                "ambiguous metadata cannot supply a source category");
             var uncertain = LlmRequestCompositionBuilder.Describe(build, messages, receipt, options);
             AssertEqual(LlmRequestCompositionGroup.Unattributed, uncertain.Items[0].Group, "duplicate source metadata is not selected");
             AssertEqual(LlmRequestCompositionGroup.Unattributed, uncertain.Items[1].Group, "misaligned metadata is not selected");
+            AssertEqual(LlmRequestCompositionGroup.Unattributed, uncertain.Items[4].Group, "colliding wire positions are not attributed");
             AssertEqual(composition.TotalEstimatedTokens, uncertain.TotalEstimatedTokens, "unknown attribution does not remove request cost");
+            receipt.Messages.RemoveAt(receipt.Messages.Count - 1);
+            receipt.Messages[1].MessageIndex = 1;
+            messages[1].Id = messages[0].Id;
+            var duplicateIds = LlmClient.DescribeWireMessages(messages, receipt);
+            AssertTrue(duplicateIds.Take(2).All(item => item.Presentation == ContextPresentationKind.Unknown),
+                "duplicate message IDs cannot reuse one source receipt");
+            messages[1].Id = "user";
             build.MessageBaseTokenEstimates.RemoveAt(0);
             AssertTrue(LlmRequestCompositionBuilder.Describe(build, messages, receipt, options) == null,
                 "misaligned cost capture produces no fabricated composition");
@@ -1102,14 +1128,15 @@ namespace RNAssistant.Harness
                     !wire.Contains("\"ExclusionKind\"") && !wire.Contains("\"ReadMetadata\"") &&
                     !wire.Contains("\"descriptorAtRead\"") && !wire.Contains("fixture:extractor-v1"),
                     "typed diagnostics do not enter provider messages");
-                var changed = LlmClient.DescribeWireMessages(new[] { snapshot.Messages.First(m => m.Id == fragment.Id) },
-                    snapshot.Receipt, new[] { true });
-                AssertTrue(!changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
+                var changed = LlmClient.DescribeWireMessages(snapshot.Messages.ToList(),
+                    snapshot.Receipt, snapshot.Messages.Select(message => message.Id == fragment.Id).ToArray());
+                var changedEntry = changed.Single(e => e.MessageIndex.HasValue && e.SourceMessageId == fragment.Id);
+                AssertTrue(!changedEntry.EvidenceLinks.Single().BodyIncludedInMessage.HasValue,
                     "later wire projection invalidates body-delivery proof but keeps source link");
-                AssertTrue(scope.Equals(changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().ScopeId) &&
-                    changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single().ObservationComplete == true,
+                AssertTrue(scope.Equals(changedEntry.EvidenceLinks.Single().ScopeId) &&
+                    changedEntry.EvidenceLinks.Single().ObservationComplete == true,
                     "wire attribution retains scope and observation coverage when body delivery becomes unknown");
-                var changedLink = changed.Single(e => e.MessageIndex.HasValue).EvidenceLinks.Single();
+                var changedLink = changedEntry.EvidenceLinks.Single();
                 AssertTrue(changedLink.ReadMetadata.SelectionComplete == true && changedLink.ReadMetadata.SourceComplete == false,
                     "transport changes delivery proof without rewriting observation completeness");
                 var chats = new ChatStore(paths);

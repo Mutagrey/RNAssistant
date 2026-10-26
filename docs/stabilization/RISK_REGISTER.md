@@ -8,6 +8,23 @@ retired or deferred is not an active P0/P1 implementation defect merely because
 that original severity remains in the table. Release qualification is a separate
 exact-build gate.
 
+## Office next-request preview diverges from active preparation — 2026-10-26
+
+Open; owner: Office PromptContextInspectorService / ModelContextPreview.
+The context audit found a concrete preparation difference in source: preview
+selects CallableToolPack.Tools and directly calls the compiler without
+SkillTaskService.Compile/skillSurface, while ConversationModelSession includes
+selected skill instructions and dependent tools. Preview also does not apply the
+shared strict-message projection before estimating/serializing its raw request.
+Therefore its catalogue, schemas and size are not an exact forecast even with
+unchanged host state; the direction of the total error is not established.
+
+Saved-request diagnostics use final LlmMessageBuilder output and are independent
+of this gap. Next: a paired selected-skill/strict preview versus active-request
+fixture, then reuse the existing preparation owners without a second compiler.
+This audit changes saved attribution and presentation, not preview composition.
+Real-model and Windows/Office/WebView2 parity remain unverified.
+
 ## Workspace directory discovery loses directories — 2026-10-26
 
 Fixed host-neutral; owner: Core resource schema / Application WorkspaceResourceHandler.
