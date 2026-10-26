@@ -35,11 +35,14 @@
   function create(options) {
     var frame = options.frame, inspector = options.inspector;
     var context = options.context || {
-      mount: document.getElementById("chatBrowserFrameMount"),
-      browser: document.getElementById("chatBrowser"),
+      mount: document.getElementById("htmlWorkspacePreview"),
+      browser: document.getElementById("htmlWorkspacePreview"),
       button: document.getElementById("inspectHtmlWorkspaceButton"),
       statusNode: document.getElementById("htmlWorkspaceInspectStatus"),
-      isOpen: function () { return this.browser.contains(frame) && this.browser.getAttribute("aria-hidden") === "false"; },
+      isOpen: function () {
+        return !!this.source() && !frame.classList.contains("hidden") &&
+          frame.getBoundingClientRect().width > 0 && frame.getBoundingClientRect().height > 0;
+      },
       source: function () {
         var matches = (state.artifacts || []).filter(function (artifact) {
           return (artifact.Id || artifact.id) === state.activeHtmlArtifactId &&
@@ -55,7 +58,10 @@
       updated: function () { if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts(); },
       remove: function (item) { removeDraftAttachment(item); },
       reserve: function () { return window.RNAssistantChatDrafts.reserveOfficeAnnotationNumber(state.activeChatId); },
-      openSource: function () { return window.RNAssistantChatBrowser.openCurrent(); },
+      openSource: function () {
+        return document.getElementById("tab-artifacts").classList.contains("active") && this.isOpen() ||
+          window.RNAssistantChatBrowser.openCurrent();
+      },
       status: function (message) { setAttachmentStatus(state.activeChatId, message, "warning"); }
     };
     var mount = context.mount, browser = context.browser;
@@ -242,7 +248,9 @@
           event.preventDefault(); event.stopPropagation(); closeEditor(false);
           context.button.focus({ preventScroll: true });
         }
-        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(); }
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+          event.preventDefault(); finish();
+        }
       });
       placeEditor(); textarea.focus();
     }
@@ -297,8 +305,14 @@
       sync(); inspector.reveal(attachmentId(item)); openSent(item);
     }
     function renderMarkers() {
-      layer.querySelectorAll(".visual-annotation-marker").forEach(function (node) { node.remove(); });
-      if (!browserOpen()) return;
+      var existing = Object.create(null), visible = Object.create(null);
+      layer.querySelectorAll(".visual-annotation-marker").forEach(function (node) {
+        existing[node.dataset.annotationId] = node;
+      });
+      if (!browserOpen() || context.button.getAttribute("aria-pressed") !== "true") {
+        Object.keys(existing).forEach(function (id) { existing[id].remove(); });
+        return;
+      }
       var overlaps = Object.create(null);
       var entries = drafts().filter(currentSource).map(function (item) { return { item: item, sent: false }; })
         .concat(visibleSent().map(function (item) { return { item: item, sent: true }; }));
@@ -307,17 +321,26 @@
         var position = point((locations[attachmentId(item)] || {}).rect);
         if (!position) return;
         var data = annotation(item), number = Number(data.annotationNumber || data.AnnotationNumber);
-        var marker = document.createElement("button"); marker.type = "button";
+        var id = (entry.sent ? "sent:" : "draft:") + attachmentId(item);
+        var marker = existing[id] || document.createElement("button");
+        marker.type = "button";
+        marker.dataset.annotationId = id;
         marker.className = "visual-annotation-marker"; marker.textContent = String(number);
         marker.classList.toggle("is-sent", entry.sent);
         marker.setAttribute("aria-label", (entry.sent ? "Просмотреть отправленную аннотацию " : "Изменить аннотацию ") + number);
         var key = Math.round(position.x / 16) + ":" + Math.round(position.y / 16);
         var offset = overlaps[key] || 0; overlaps[key] = offset + 1;
-        marker.style.left = Math.max(8, Math.min(mount.clientWidth - 30, position.x + position.width - 13 + offset * 25)) + "px";
-        marker.style.top = Math.max(55, Math.min(mount.clientHeight - 30, position.y - 11)) + "px";
-        marker.addEventListener("click", function () { if (entry.sent) showSent(item); else edit(item); });
-        layer.appendChild(marker);
+        var left = position.x - 30 - offset * 25;
+        var right = position.x + position.width + 4 + offset * 25;
+        var x = Math.max(8, Math.min(mount.clientWidth - 30, left >= 8 ? left : right)) + "px";
+        var y = Math.max(55, Math.min(mount.clientHeight - 30, position.y - 11)) + "px";
+        if (marker.style.left !== x) marker.style.left = x;
+        if (marker.style.top !== y) marker.style.top = y;
+        marker.onclick = function () { if (entry.sent) showSent(item); else edit(item); };
+        if (!marker.parentElement) layer.appendChild(marker);
+        visible[id] = true;
       });
+      Object.keys(existing).forEach(function (id) { if (!visible[id]) existing[id].remove(); });
       placeEditor();
       placeSent();
     }
@@ -386,13 +409,14 @@
     function onKeyDown(event) {
       if (event.key === "Escape" && sentPopup) { event.preventDefault(); closeSent(); return; }
       if (event.key !== "Escape" || editor || !browserOpen() ||
-          !browser.contains(document.activeElement) ||
+          !browser.contains(document.activeElement) && context.button !== document.activeElement ||
           context.button.getAttribute("aria-pressed") !== "true") return;
       event.preventDefault(); inspector.deactivate();
     }
     document.addEventListener("keydown", onKeyDown);
     return {
       onSelection: function (record, reason) {
+        renderMarkers();
         if (!browserOpen()) return;
         if (!record) {
           if (editor && (reason === "reset" || reason === "load")) editor.record.generation = inspector.generation();

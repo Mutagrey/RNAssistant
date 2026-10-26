@@ -246,11 +246,16 @@
     el('Preview').hidden=!previewOpen;
     if(ownsChat())window.RNAssistantChatInspector.syncSwitcher();
   }
-  function pluginWidthBounds(){
+  function pluginAvailableWidth(){
     var layout=document.getElementById('projectChatLayout'),nav=layout.querySelector('.chat-sidebar');
-    if(!layout.clientWidth)return {min:320,max:780};
     var navWidth=window.RNAssistantShellLayout.isNavigationOpen()?nav.getBoundingClientRect().width:0;
-    return {min:320,max:Math.max(320,Math.min(780,layout.clientWidth-navWidth-360))};
+    return Math.max(0,layout.clientWidth-navWidth);
+  }
+  function pluginSurfaceOverlay(){return pluginAvailableWidth()<681;}
+  function pluginWidthBounds(){
+    var width=pluginAvailableWidth();
+    if(!width)return {min:320,max:780};
+    return {min:320,max:Math.max(320,Math.min(780,width-360))};
   }
   function setPluginWidth(value,persist){
     var bounds=pluginWidthBounds();pluginWidth=Math.max(bounds.min,Math.min(bounds.max,value));
@@ -262,13 +267,15 @@
   function refreshPanelLayout(){
     var diagnostics=ownsChat()&&window.RNAssistantChatInspector.isOpen();
     var visible=ownsChat()&&previewOpen&&!diagnostics;
+    var layout=document.getElementById('projectChatLayout'),overlay=pluginSurfaceOverlay();
+    layout.classList.toggle('plugin-surface-overlay',overlay);
     if(!visible&&pluginInspector)pluginInspector.deactivate();
     el('PreviewMount').hidden=!visible;
     el('SurfaceSplitter').hidden=!visible;
     el('Workbench').hidden=!visible;
-    document.getElementById('projectChatLayout').classList.toggle('plugin-surface-open',visible);
+    layout.classList.toggle('plugin-surface-open',visible);
     var toggle=document.getElementById('workspaceInspectorToggle');
-    var target=visible&&window.innerWidth<=1100?el('PreviewMount').querySelector('.preview-surface-panel-head'):
+    var target=visible&&overlay?el('PreviewMount').querySelector('.preview-surface-panel-head'):
       document.querySelector('#workspaceChatView .workspace-chat-head');
     if(toggle.parentElement!==target){var focused=document.activeElement===toggle;target.appendChild(toggle);
       if(focused)toggle.focus({preventScroll:true});}
@@ -292,6 +299,7 @@
   async function select(id,sessionId){
     var item=items.find(function(value){return value.pluginId===id;});
     if(!item||busy)return;
+    var wasPluginOwner=ownsChat();
     var route=++selectionSerial;
     try{
       await send('getPluginChat',{pluginId:id});
@@ -300,7 +308,7 @@
       if(route!==selectionSerial||window.RNAssistantProjectChats.workspaceId()!==item.sourceWorkspaceId||
           !document.getElementById('tab-chat').classList.contains('active'))return;
       if(selected&&selected.pluginId===id){
-        if(!sessionId)previewOpen=true;
+        if(!sessionId||!wasPluginOwner)previewOpen=true;
         updateSurface(false);window.RNAssistantChatInspector.setOpen(false);
         if(previewOpen&&(!view||!sourceStamp))await checkAndPreview();
         else await pollSource();
@@ -444,7 +452,7 @@
   function bind(){
     window.RNAssistantSplitter.bind(el('SurfaceSplitter'),{direction:-1,getValue:function(){return pluginWidth;},
       setValue:setPluginWidth,bounds:pluginWidthBounds,defaultValue:function(){return 520;},
-      enabled:function(){return ownsChat()&&previewOpen&&window.innerWidth>1100;},
+      enabled:function(){return ownsChat()&&previewOpen&&!pluginSurfaceOverlay();},
       collapse:function(){setPreviewOpen(false);}});
     window.addEventListener('resize',function(){if(ownsChat())refreshPanelLayout();});
     previewSurface=window.RNAssistantPreviewSurface.attach(el('PreviewMount'),{

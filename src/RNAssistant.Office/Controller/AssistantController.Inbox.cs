@@ -113,6 +113,7 @@ namespace RNAssistant.Office
                     var text = request.Answers == null ? request.Text ?? string.Empty :
                         UserQuestionAnswers.Accept(session, request.Answers, _toolExecutor.Payloads);
                     var drafts = _chatResourceIngestion.LoadDrafts(session, request.ResourceDraftIds);
+                    text = VisualAnnotationSourceWorkflow.UserText(text, drafts);
                     if (string.IsNullOrWhiteSpace(text) && drafts.Count == 0)
                         throw new ArgumentException("Сообщение не может быть пустым.");
                     if (drafts.Any(a => a.Status == "error")) throw new InvalidOperationException("Вложение не готово.");

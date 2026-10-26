@@ -189,6 +189,16 @@ fs.mkdirSync(captures, {recursive:true});
     const split=page.locator('#pluginSurfaceSplitter'), before=Number(await split.getAttribute('aria-valuenow'));
     await split.press('ArrowLeft');
     assert.ok(Number(await split.getAttribute('aria-valuenow'))>before,'the right preview width can be changed');
+    await page.setViewportSize({width:1080,height:900});
+    await page.waitForFunction(()=>!document.querySelector('#projectChatLayout').classList.contains('plugin-surface-overlay'));
+    assert.equal(await split.isVisible(),true,'the preview divider stays available when chat and preview both fit');
+    const dragStart=Number(await split.getAttribute('aria-valuenow')), dragBox=await split.boundingBox();
+    await page.mouse.move(dragBox.x+dragBox.width/2,dragBox.y+dragBox.height/2);
+    await page.mouse.down();
+    await page.mouse.move(dragBox.x+dragBox.width/2+40,dragBox.y+dragBox.height/2,{steps:4});
+    await page.mouse.up();
+    await page.waitForFunction(value=>Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuenow'))<value,dragStart);
+    await page.setViewportSize({width:1360,height:900});
     await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(false));
     assert.equal(await split.isVisible(),true,'preview divider remains usable with the project tree collapsed');
     await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(true));
@@ -225,8 +235,10 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,'another project hides the plugin preview');
     assert.equal(await page.locator('.section-rail [data-section="chat"]').getAttribute('aria-current'),'page',
       'the ordinary project restores the workspace rail selection');
-    await page.locator('[data-plugin-id="data-templates"]').click();
+    await page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+secondSession+'"] .navigation-tree-label').click();
     await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
+    assert.equal(await page.locator('#pluginWorkbench').isVisible(),true,
+      'opening a plugin source chat from Projects restores its HTML preview without the plugin icon');
     assert.equal(await page.locator('#projectChatTree').isVisible(),true);
     await page.setViewportSize({width:390,height:844});
     await page.waitForFunction(()=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width===innerWidth);

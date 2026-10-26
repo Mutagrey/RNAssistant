@@ -333,9 +333,10 @@ namespace RNAssistant.Core.Services
                     string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase);
             }
-            return !string.IsNullOrWhiteSpace(message.Content) &&
-                (string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
-                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase));
+            var user = string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase);
+            return (user || string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase)) &&
+                (!string.IsNullOrWhiteSpace(message.Content) ||
+                 user && message.Attachments != null && message.Attachments.Any(item => item != null));
         }
 
         private static List<ResourceRef> CollectCheckpointResourceRefs(

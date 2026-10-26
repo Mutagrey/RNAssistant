@@ -235,7 +235,7 @@ function render(item, actions) {
   assert.equal(uploadedHtml.querySelector(".rn-text-viewer-content").textContent, hostileHtml);
   assert.equal(uploadedHtml.querySelector("script"), null, "uploaded source never becomes DOM");
   assert.match(uploadedHtml.textContent, /инертен/);
-  button(uploadedHtml, "Импортировать в HTML workspace").click();
+  button(uploadedHtml, "Импортировать и открыть для аннотаций").click();
   assert.equal(imported.length, 1);
   assert.equal(imported[0].sourceResourceUri, htmlUri);
   assert.equal(imported[0].targetPath, "landing.html");
@@ -264,7 +264,7 @@ function render(item, actions) {
     assert.equal(context.RNAssistantHtmlWorkspaceArtifacts.isUploadedHtmlArtifact(authoredHtml), false);
     assert.equal(authored.querySelector(".rn-text-viewer-content").textContent, hostileHtml);
     assert.equal(authored.querySelector("script"), null, "authored HTML source never executes");
-    assert.equal(button(authored, "Импортировать в HTML workspace"), undefined);
+    assert.equal(button(authored, "Импортировать и открыть для аннотаций"), undefined);
   }
   console.log("PASS artifact detail: authored HTML loads inert source without upload actions");
 

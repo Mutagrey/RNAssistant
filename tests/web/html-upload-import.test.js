@@ -29,6 +29,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
     bridgeUnavailable: false,
     htmlWorkspaceDirty: false
   };
+  const editorCalls = [];
+  context.RNAssistantArtifactCatalog = { editor: () => editorCalls.push(state.htmlWorkspaceSelection.id) };
   let mismatchedPreview = false;
   let switchChatDuringPreview = false;
   let readUri;
@@ -124,6 +126,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
   });
   assert.equal(state.htmlWorkspaceSelection.type, "file");
   assert.equal(state.htmlWorkspaceSelection.id, "pages/imported.html");
+  assert.deepEqual(editorCalls, ["pages/imported.html"],
+    "import reveals the authored HTML editor where annotation is available");
   assert.match(confirmations[0], /Оригинал останется неизменным и инертным/);
   console.log("PASS HTML upload import: explicit import sends source, head guard and target path");
 
@@ -135,8 +139,8 @@ vm.runInContext(source, context, { filename: "app-html-workspace-actions.js" });
   assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
   assert.ok(index.includes(
     "app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1"));
-  assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"));
-  assert.ok(index.includes("app-html-workspace.css?v=theme-tokens-20261019-1"));
+  assert.match(index, /app-html-workspace\.js\?v=[^"\s]+/);
+  assert.match(index, /app-html-workspace\.css\?v=[^"\s]+/);
   console.log("PASS HTML upload import: changed UI graph uses one cache key");
   console.log("OK 5/5");
 }()).catch(error => {

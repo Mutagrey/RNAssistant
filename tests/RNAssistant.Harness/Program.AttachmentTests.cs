@@ -201,6 +201,18 @@ namespace RNAssistant.Harness
                 AssertEqual("Make the button green", annotation.Comment,
                     "the user's comment is in the immutable model-readable selection body");
                 AssertEqual(2, annotation.AnnotationNumber, "the UI number belongs to the same body");
+                request.Comment = "";
+                request.AnnotationNumber = 3;
+                var elementOnly = ingestion.StageHtmlVisualSelection(session, request);
+                AssertEqual("", HtmlVisualSelectionPolicy.ReadAnnotation(new AttachmentStore(paths).ReadBytes(elementOnly)).Comment,
+                    "an element-only annotation keeps its intentionally empty comment");
+                var elementOnlyDrafts = ingestion.LoadDrafts(session, new[] { elementOnly.Id });
+                AssertEqual(VisualAnnotationSourceWorkflow.ElementOnlyTask,
+                    VisualAnnotationSourceWorkflow.UserText("", elementOnlyDrafts),
+                    "attachment-only submission has an explicit visible task");
+                AssertTrue(ContextCompactionRuntime.IsReplayMessage(new ChatMessage { Role = "user", Content = "",
+                    Attachments = elementOnlyDrafts.ToList() }),
+                    "an accepted attachment-only turn remains in replay");
                 request.Comment = new string('x', 2049);
                 RuntimeThrows<InvalidOperationException>(() => ingestion.StageHtmlVisualSelection(session, request));
                 request.Comment = null;

@@ -456,7 +456,7 @@
     var importButton = document.createElement("button");
     importButton.type = "button";
     importButton.className = "accent-soft";
-    importButton.textContent = "Импортировать в HTML workspace";
+    importButton.textContent = "Импортировать и открыть для аннотаций";
     importButton.disabled = !uri || typeof actions.importUploadedHtml !== "function" || !!state.bridgeUnavailable;
     importButton.addEventListener("click", function () {
       if (typeof actions.importUploadedHtml === "function") {

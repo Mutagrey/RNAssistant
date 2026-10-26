@@ -180,9 +180,10 @@
     window.RNAssistantNavigationTree.render(root, nodes, {
       label: "Проекты и чаты", emptyText: projects().length ? "Ничего не найдено." : "Подключите папку проекта, чтобы видеть её чаты.",
       onSelect: function (item) {
-        if (pluginSource === item.workspaceId) {
-          window.RNAssistantPlugins.select(window.RNAssistantPlugins.selectedId(), item.sessionId);
-        } else window.RNAssistantProjectChats.open(item.workspaceId, item.sessionId);
+        var entry = projects().find(function (project) { return project.workspaceId === item.workspaceId; });
+        if (entry && entry.pluginId && window.RNAssistantPlugins)
+          window.RNAssistantPlugins.select(entry.pluginId, item.sessionId);
+        else window.RNAssistantProjectChats.open(item.workspaceId, item.sessionId);
       },
       onToggle: function (item, isExpanded) { expanded[item.workspaceId] = isExpanded; }
     });

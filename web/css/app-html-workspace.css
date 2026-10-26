@@ -275,6 +275,7 @@
 }
 
 .html-workspace-preview {
+  position: relative;
   display: grid;
   height: 100%;
   min-height: 0;

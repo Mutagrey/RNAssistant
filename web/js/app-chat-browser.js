@@ -78,18 +78,26 @@
     if (returnFocus) el("toggleChatInspectorButton").focus({ preventScroll: true });
     return true;
   }
+  function reloadAfterFrameMove(isCurrent) {
+    el("htmlWorkspacePreviewFrame").addEventListener("load", function () {
+      if (isCurrent()) previewOwner().reload();
+    }, { once: true });
+  }
   function restoreHome() {
     var root = el("htmlWorkspacePreview"), editor = el("htmlWorkspaceEditor");
     root.classList.remove("preview-side-panel");
-    if (root.parentElement === el("chatBrowserFrameMount")) editor.insertBefore(root, el("htmlWorkspaceEdit"));
+    if (root.parentElement === el("chatBrowserFrameMount")) {
+      reloadAfterFrameMove(function () { return !owner && root.parentElement === editor; });
+      editor.insertBefore(root, el("htmlWorkspaceEdit"));
+    }
     var toolbar = editor.querySelector(".html-workspace-toolbar");
     var status = el("htmlWorkspaceInspectStatus");
     ["inspectHtmlWorkspaceButton", "attachHtmlWorkspaceSelectionButton"].forEach(function (id) {
       toolbar.insertBefore(el(id), el("openHtmlWorkspaceRightButton"));
     });
-    el("attachHtmlWorkspaceSelectionButton").hidden = false;
+    el("attachHtmlWorkspaceSelectionButton").hidden = true;
     toolbar.insertBefore(status, toolbar.querySelector(".resource-editor-actions"));
-    el("inspectHtmlWorkspaceButton").dataset.browserControl = "false";
+    el("inspectHtmlWorkspaceButton").dataset.browserControl = "true";
     previewOwner().refreshInspectorControl();
     el("chatBrowserExpand").hidden = true;
     el("chatBrowserMenu").hidden = true;
@@ -123,12 +131,14 @@
     if (!binding) return false;
     if (owner && !sameBinding(binding)) release();
     var reused = !!owner;
-    if (!reused) { owner = binding; mount(); }
+    if (!reused) {
+      reloadAfterFrameMove(function () { return owner === binding; });
+      owner = binding; mount();
+    }
     if (window.RNAssistantProjectChats && window.RNAssistantProjectChats.scope() !== "office")
       window.RNAssistantProjectChats.setScope("office");
     switchTab("chat");
     setOpen(true);
-    if (!reused) previewOwner().reload();
     if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
     return true;
   }

@@ -223,7 +223,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.frameLocator('#pluginPreviewMount iframe').locator('h1').click();
     await page.locator('#pluginPreviewFrameHost .visual-annotation-editor textarea').fill('Fix the heading');
     await page.screenshot({path:path.join(captures,'plugin-annotation-editor.png'),animations:'disabled'});
-    await page.locator('#pluginPreviewFrameHost .visual-annotation-editor button.primary').click();
+    await page.locator('#pluginPreviewFrameHost .visual-annotation-editor textarea').press('Enter');
     await page.locator('#pluginAnnotationDrafts .visual-annotation-list').waitFor();
     assert.equal(visualRequest.selection.tag,'h1','the shared inspector captures the plugin DOM target');
     assert.equal(visualRequest.annotationNumber,1,'plugin annotations use the shared numbered draft');
@@ -234,6 +234,8 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginPreviewFrameHost .visual-annotation-marker.is-sent').waitFor();
     await page.screenshot({path:path.join(captures,'plugin-annotation-sent.png'),animations:'disabled'});
     await page.locator('#pluginPreviewMount .chat-browser-annotate').click();
+    assert.equal(await page.locator('#pluginPreviewFrameHost .visual-annotation-marker').count(),0,
+      'plugin annotation numbers disappear when mode is off');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v1'}).waitFor();
     const refreshPreview=async()=>{const previous=await page.locator('#pluginPreviewMount iframe').getAttribute('src');

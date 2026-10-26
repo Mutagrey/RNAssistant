@@ -1,9 +1,23 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using RNAssistant.Core.Models;
+
 namespace RNAssistant.Core.Services
 {
     // Shared model instructions. Preview DOM is evidence, not a source locator or
     // mutation authority; each host supplies its own existing source tools.
     public static class VisualAnnotationSourceWorkflow
     {
+        public const string ElementOnlyTask = "Проверь прикреплённую аннотацию HTML-элемента. Если в ней нет конкретного запроса, опиши элемент и уточни задачу.";
+
+        public static string UserText(string text, IEnumerable<ChatAttachment> attachments)
+        {
+            if (!string.IsNullOrWhiteSpace(text)) return text;
+            return attachments != null && attachments.Any(item => item?.VisualSelectionSource?.IsExact == true)
+                ? ElementOnlyTask : text ?? string.Empty;
+        }
+
         public const string Common = @"
 
 ## Editing from a visual annotation

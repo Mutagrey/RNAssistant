@@ -329,6 +329,7 @@
         if (!options.applyWorkspaceResponse(response, chatId)) return false;
         state.htmlWorkspaceSelection = { type: "file", id: importedPath.toLowerCase() };
         state.htmlWorkspaceMode = "preview";
+        if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
         if (options.render) options.render();
         options.log("HTML импортирован: " + importedPath);
         return true;

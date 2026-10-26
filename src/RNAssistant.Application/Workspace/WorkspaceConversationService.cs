@@ -342,6 +342,7 @@ namespace RNAssistant.Runtime
                 var attachmentStore = new AttachmentStore(_paths);
                 var drafts = LoadVisualSelectionDrafts(workspace, session,
                     request.ResourceDraftIds ?? new List<string>(), attachmentStore);
+                message = VisualAnnotationSourceWorkflow.UserText(message, drafts);
                 InterruptAbandonedRun(session);
 
                 if (reasoningEnabled.HasValue) session.ReasoningEnabled = reasoningEnabled.Value;
