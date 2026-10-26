@@ -519,6 +519,10 @@ namespace RNAssistant.Harness
                     descriptor.ViewCapabilities.Single(item => item.View == "render-page").MaxPayloadBytes.Value, "PDF page bound");
                 AssertEqual(ArtifactPdfViewerService.MaximumThumbnailImageBytes,
                     descriptor.ViewCapabilities.Single(item => item.View == "page-thumbnail").MaxPayloadBytes.Value, "PDF thumbnail bound");
+                AssertEqual("RESOURCE_VIEW_INVALID", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = exact, Representation = ResourceRepresentations.RenderPage,
+                        ViewPath = "2" })).ErrorCode,
+                    "a page outside the exact PDF refuses before rendering or retained lookup");
                 AssertTrue(!descriptor.Representations.Contains("image"), "PDF original is not an image view");
                 var found = gateway.Find(session, string.Empty, "all");
                 var pdfCandidate = found.Items.First(item => item.Representations.Contains("render-page"));
@@ -573,6 +577,22 @@ namespace RNAssistant.Harness
                 AssertTrue(legacyPage.Coverage.Kind == ResourceCoverageKinds.PageRange &&
                     legacyPage.Coverage.Start == 1 && legacyPage.Coverage.End == 2,
                     "matching legacy page metadata stays readable with exact read coverage");
+                var countArtifact = new ChatArtifact { Kind = ChatArtifactKinds.Attachment, MimeType = "application/pdf",
+                    SourceMessageId = message.Id, ContentSha256 = source.Sha256, ContentByteLength = source.ByteLength,
+                    MetadataJson = "{\"attachmentId\":\"binary-source\"}" };
+                session.Artifacts.Add(countArtifact);
+                var countExact = ChatResourceUri.CreateArtifactRevision(session, countArtifact);
+                store.RegisterRevision(scope, new ResourceRevisionMetadata(countExact, source.Sha256));
+                var wrongCount = new ResourceBinaryView { Payload = jpeg, Width = 1, Height = 1,
+                    PageIndex = 1, PageCount = 3 };
+                var wrongCountMetadata = PayloadRef.FromBlob(payloads.StoreText(
+                    Newtonsoft.Json.JsonConvert.SerializeObject(wrongCount), "application/json"));
+                store.RegisterView(scope, new ResourceRevisionView(countExact, "binary:render-page:1", jpeg.Sha256,
+                    wrongCountMetadata, ResourceCoverage.Whole(), new[] { jpeg }));
+                AssertEqual("RESOURCE_SNAPSHOT_UNAVAILABLE", RuntimeThrows<ResourceRequestException>(() => gateway.Read(session,
+                    new ResourceReadRequest { Reference = countExact, Representation = ResourceRepresentations.RenderPage,
+                        ViewPath = "1" })).ErrorCode,
+                    "retained page count must equal the exact attachment extent");
                 AssertEqual(0, reads, "discovery and rejected retained views do not render or hydrate source bytes");
             });
         }

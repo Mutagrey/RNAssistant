@@ -1,5 +1,14 @@
 # Stabilization progress
 
+## Exact PDF page-view extent — 2026-10-26
+
+Owner: Office resource Gateway. PDF render and thumbnail selectors now reject pages
+outside the exact attachment's known extent before rendering or retained lookup.
+Fresh and retained page metadata must report that same page count and selected index;
+a mismatched retained record fails without source hydration or recapture. The focused
+host-neutral binary Harness check passes, including out-of-bounds and mismatched
+retained metadata cases. Windows/Office/WebView2 rendering evidence remains open.
+
 ## Directory discovery default repaired — 2026-10-26
 
 Owner: Application workspace schema / Core search descriptions. Remove injected

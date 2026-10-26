@@ -35,6 +35,15 @@ namespace RNAssistant.Office.Services
             var capability = descriptor.ViewCapabilities.SingleOrDefault(item => item.View == request.Representation);
             if (capability?.MaxPayloadBytes == null)
                 throw new ResourceRequestException("The resource does not offer this binary view.", "RESOURCE_VIEW_UNAVAILABLE", false);
+            var pdfAttachment = paged ? ChatArtifactResourceProvider.FindExactAttachment(
+                session, ResolveArtifact(session, exact.Uri)) : null;
+            if (paged && (pdfAttachment == null || pdfAttachment.PageCount <= 0 ||
+                pdfAttachment.PageCount > ArtifactPdfViewerService.MaximumPages))
+                throw new ResourceRequestException("The exact PDF page extent is unavailable.",
+                    "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
+            if (paged && page >= pdfAttachment.PageCount)
+                throw new ResourceRequestException("The selected page is outside the exact PDF.",
+                    "RESOURCE_VIEW_INVALID", false);
             descriptor.Metadata["sourceContentSha256"] = descriptor.ContentSha256;
             // A new renderer profile must not reuse or overwrite an older immutable preview.
             var retainedView = request.Representation == ResourceRepresentations.Thumbnail
@@ -86,7 +95,7 @@ namespace RNAssistant.Office.Services
                     var image = _mediaViews.ReadImage(session, exact.Uri);
                     bytes = image.Bytes; mimeType = image.MimeType;
                 }
-                if (paged && (binary.PageIndex != page || !binary.PageCount.HasValue || binary.PageCount.Value <= page))
+                if (paged && (binary.PageIndex != page || binary.PageCount != pdfAttachment.PageCount))
                     throw new ResourceRequestException("The PDF renderer returned a different page.",
                         "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
                 binary.Payload = PayloadRef.FromBlob(_authority.Payloads.StoreBytes(bytes, mimeType));
@@ -97,7 +106,7 @@ namespace RNAssistant.Office.Services
                 revisions.RegisterView(scope, new ResourceRevisionView(exact, view, binary.Payload.Sha256,
                     metadata, coverage, new[] { binary.Payload }));
             }
-            if (paged && (binary.PageIndex != page || !binary.PageCount.HasValue || binary.PageCount.Value <= page))
+            if (paged && (binary.PageIndex != page || binary.PageCount != pdfAttachment.PageCount))
                 throw new ResourceRequestException("The retained PDF page metadata does not match the selected page.",
                     "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
             var expectedMime = raw ? "application/octet-stream" : request.Representation == ResourceRepresentations.Image
