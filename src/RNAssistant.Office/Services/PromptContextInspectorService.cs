@@ -321,6 +321,16 @@ namespace RNAssistant.Office.Services
                 previewSession,
                 settings,
                 capabilityCatalog);
+            var wireEnvelope = hasStandaloneInstruction ? messages[0].Content : current?.Content;
+            const string runtimeMarker = "\n\nRUNTIME_CONTEXT:\n";
+            var runtimeStart = wireEnvelope == null ? -1 : wireEnvelope.IndexOf(runtimeMarker, StringComparison.Ordinal);
+            if (runtimeStart >= 0)
+            {
+                runtimeStart += runtimeMarker.Length;
+                var runtimeEnd = wireEnvelope.IndexOf("\n\nUSER_REQUEST:\n", runtimeStart, StringComparison.Ordinal);
+                if (runtimeEnd < 0) runtimeEnd = wireEnvelope.Length;
+                runtimeJson = wireEnvelope.Substring(runtimeStart, runtimeEnd - runtimeStart);
+            }
             instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
 
             var embeddedInstructionTokens = hasStandaloneInstruction || current == null

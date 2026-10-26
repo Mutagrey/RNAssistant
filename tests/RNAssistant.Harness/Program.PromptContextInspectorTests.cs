@@ -169,6 +169,9 @@ namespace RNAssistant.Harness
                     "selected skill instructions enter the previewed request");
                 AssertTrue(!wireMessages[0].Content.Contains("\"parameters\""),
                     "strict preview removes duplicated tool parameters from the prompt");
+                AssertTrue(result.Sections.Single(section => section.Id == "tools").Items
+                    .All(item => !(item.Preview ?? "").Contains("\"parameters\"")),
+                    "tool section shows the projected prompt instead of removed parameters");
                 AssertContains((string)raw["requestOptions"]["responseSchemaJson"], dependency.Id,
                     "strict response schema exposes the selected dependency");
                 AssertEqual(ModelContextBudget.EstimateRequestTokens(wireMessages, options, settings),
