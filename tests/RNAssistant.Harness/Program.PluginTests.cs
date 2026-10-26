@@ -944,6 +944,90 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void PluginsProjectChatRecoversAbandonedRun()
+        {
+            foreach (var possibleEffect in new[] { false, true })
+            WithPluginPaths(paths =>
+            {
+                using (var service = new PluginApplicationService(paths))
+                using (var bridge = new AssistantWebBridge(new AssistantController(paths), ignored => { }) { Plugins = service })
+                {
+                    var root = Path.Combine(paths.Root, "recovery-project");
+                    var workspaceId = service.CreateProjectWorkspace(new ProjectConnectionRequest { RootPath = root }).SelectedWorkspaceId;
+                    var chat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                    var request = new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId };
+                    var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
+                    var session = service.Conversations.GetSession(workspace, chat.SessionId);
+                    var runId = Guid.NewGuid().ToString("N");
+                    var call = new ToolCall("unfinished-write", "files.replace_text", "{\"relativePath\":\"keep.txt\"}");
+                    var policy = new ToolPolicySnapshot(call.Name, "fixture", true, true);
+                    var user = new ChatMessage { Role = "user", RunId = runId, Content = "Change the file" };
+                    session.Messages.Add(user);
+                    session.LastRun = new ChatRunRecord { RunId = runId, TurnId = runId, Status = "running",
+                        StartedUtc = DateTime.UtcNow, ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion,
+                        KernelState = new AgentRunState(new RunSummary(runId, runId, RunLifecycle.Running,
+                            new ToolCounts(readOk: 1), 2, 1, "", null, null), new AgentRunLimits(10, 10),
+                            possibleEffect ? new ToolExecutionContext(call, policy, runId, runId,
+                                "unfinished-step", DateTime.UtcNow, true, 9) : null) };
+                    var store = new ChatStore(paths);
+                    store.Commit(session, ConversationCommit.UserInput(user));
+                    File.WriteAllText(Path.Combine(root, "keep.txt"), "unchanged");
+                    var revision = session.Revision;
+                    var leaseDirectory = Path.Combine(paths.WorkspaceDirectory, "run-leases");
+                    Directory.CreateDirectory(leaseDirectory);
+                    var leasePath = Path.Combine(leaseDirectory, TextPatternEngine.Sha256(session.Id) + ".lck");
+                    JObject owned;
+                    using (new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                    {
+                        var timer = System.Diagnostics.Stopwatch.StartNew();
+                        owned = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "getProjectChat", request);
+                        AssertTrue(timer.ElapsedMilliseconds < 3000, "chat read does not wait for the ten-second run lease retry");
+                        AssertTrue((bool)owned["ok"], "an occupied lease does not fail chat loading");
+                        var running = owned["payload"]["state"].ToObject<WorkspaceSessionSnapshot>();
+                        AssertEqual("running", running.Status, "missing IPC never interrupts a leased run");
+                        AssertTrue(running.ModelProgressUnavailable, "owner preview is intentionally unavailable");
+                        AssertEqual(revision, running.Revision, "owned history is not changed");
+                    }
+                    AssertEqual("running", service.Conversations.ReadState(workspace, session.Id).Status,
+                        "plain inspection stays read-only; recovery belongs to chat activation");
+                    var envelope = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "getProjectChat", request);
+                    AssertTrue((bool)envelope["ok"], "recovery crosses the actual project-chat bridge");
+                    var recovered = envelope["payload"].ToObject<ProjectChatStateDto>();
+                    AssertEqual("interrupted", recovered.State.Status, "opening the chat recovers a run without an owner");
+                    AssertTrue(!recovered.State.ModelProgressUnavailable, "stopped run no longer polls an absent owner");
+                    AssertEqual(possibleEffect, recovered.State.InterruptedEffectPossible, "possible effect remains explicit");
+                    var durable = service.Conversations.GetSession(workspace, session.Id);
+                    AssertEqual(RunLifecycle.Failed, durable.LastRun.KernelState.Summary.Lifecycle, "kernel records interrupted outcome");
+                    AssertEqual("runtime_interrupted", durable.LastRun.KernelState.Summary.Reason, "durable reason");
+                    AssertEqual(possibleEffect ? 1 : 0, durable.LastRun.KernelState.Summary.ToolCounts.WriteUnknown, "unconfirmed write is unknown");
+                    AssertEqual(1, durable.LastRun.KernelState.Summary.ToolCounts.ReadOk, "completed reads survive recovery");
+                    AssertEqual("unchanged", File.ReadAllText(Path.Combine(root, "keep.txt")), "recovery never replays the write");
+                    AssertEqual(user.Id, recovered.Messages.First().Id, "accepted user message is retained");
+                    AssertEqual(recovered.State.Revision, service.ProjectChat(request).State.Revision, "repeated reads do not append another interruption");
+                    var fork = service.ForkProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId,
+                        SessionId = session.Id, MessageId = user.Id });
+                    AssertEqual(user.Id, fork.Messages.Single().Id, "recovered chat permits fork at the exact prefix");
+                    if (!possibleEffect)
+                    {
+                        var fixture = Environment.GetEnvironmentVariable("RNA_WORKSPACE_RECOVERY_FIXTURE");
+                        if (!string.IsNullOrWhiteSpace(fixture))
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(fixture)));
+                            File.WriteAllText(fixture, new JObject { ["owned"] = owned, ["recovered"] = envelope }.ToString(Formatting.Indented));
+                        }
+                    }
+                    durable.LastRun.Status = "awaitingconfirmation";
+                    durable.LastRun.KernelState = new AgentRunState(new RunSummary(runId, runId, RunLifecycle.AwaitingConfirmation,
+                        new ToolCounts(), 1, 0, "Confirm the edit", null,
+                        new PendingConfirmation("pending-recovery", call, policy, "pending-step", 1)), new AgentRunLimits(10, 10));
+                    store.Commit(durable, new ConversationCommit());
+                    var pending = service.ProjectChat(request);
+                    AssertEqual("pending-recovery", pending.PendingId, "a pending approval keeps its explicit resolution route");
+                    AssertEqual(durable.Revision, pending.State.Revision, "pending approval is not an abandoned run");
+                }
+            });
+        }
+
         private static void PluginsProjectChatBusyLeaseIsTyped()
         {
             WithPluginPaths(paths =>

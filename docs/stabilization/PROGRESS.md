@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Исправлено восстановление workspace run без владельца — 2026-10-27
+
+Owner: Application Workspace run control / ProjectChat activation. I26-02 исправлен:
+открытие и polling чата пытаются получить session lease без ожидания, перечитывают
+exact run/cursor и применяют существующее восстановление `interrupted`. Занятый или
+недоступный lease сохраняет run; IPC timeout не считается доказательством остановки.
+Pending approval сохраняется; неизвестный эффект записи не replay и не success.
+Snapshot и сообщения возвращаются из одной восстановленной session; ввод и fork
+разблокируются по её canonical state, без нового UI lifecycle.
+
+Проверки: новый Application/bridge regression красный до исправления, зелёный после;
+held lease без IPC, repeated recovery, pending approval, unknown write, сохранённая
+история и fork. Existing busy-lease/input-recovery checks — pass. Chromium с native
+bridge envelopes подтвердил polling → interrupted, сохранение draft, Send и fork.
+Host-neutral Harness build: 0 errors, 2 existing CA1416 warnings в PDF viewer.
+Windows/Office/WebView2 evidence остаётся открытым; VSTO validation не выполнялось.
+Следующий срез S1b — независимый lifetime длинного submit (I26-09), затем steer/queue
+(I26-10). Чат с живым владельцем и долгим запросом этим исправлением не разблокируется.
+
 ## Исправлена доставка workspace input receipt — 2026-10-27
 
 Owner: Application input delivery / typed WebView bridge / shared workspace composer.

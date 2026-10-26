@@ -36,8 +36,16 @@ event, оба receipt проходят реальный bridge; terminal respons
 UI принимает только совпавший `DeliveryRecorded=true`, не сам факт transport success.
 Проверены задержанный model response, duplicate submit, новые/фоновые drafts и
 неподтверждённая доставка; fixtures browser получены из реального Application/bridge.
-I26-02/09/10 остаются открытыми: этот срез не меняет ownership запуска и не подключает
+I26-09/10 остаются открытыми: receipt не отделяет lifetime запуска и не подключает
 steer/queue. Windows/WebView2 по-прежнему требуют отдельного экранного evidence.
+
+I26-02 исправлен 2026-10-27: ProjectChat activation/polling использует неблокирующий
+session lease, повторную загрузку exact run/cursor и существующую interruption recovery.
+Held lease без IPC не меняет историю; после освобождения lease run становится
+`interrupted`, ввод и fork доступны. Pending approval сохраняется, possible write
+остаётся unknown без replay. Native Application/bridge regression был красным до
+правки; Chromium проверяет реальные bridge envelopes. Plain CLI inspect не мутирует
+run. Независимый lifetime submit и подтверждение на Windows этим не закрыты.
 
 I26-04 исправлен после аудита: Workspace `PromptToolCatalog` переведён на существующий
 `ForPrompt`; внутренний descriptor и runtime gate не менялись. Расширенный

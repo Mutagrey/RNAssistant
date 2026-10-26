@@ -298,6 +298,16 @@ model request, including after restart, while preserving the durable result.
 boundary between durable user-message persistence and the `applied` input event:
 resume records the missing transition once, while a missing message and duplicate
 lookup never replay input or start the model.
+`plugins: project chat recovers abandoned run under lease` checks the real
+Application/bridge read path: a held lease without IPC cannot change a running
+session or wait for the ten-second acquisition retry; after release, recovery
+preserves history, marks a possible write unknown without replay, unlocks fork
+and is idempotent. Pending approvals and plain inspection are not auto-resumed.
+Set `RNA_WORKSPACE_RECOVERY_FIXTURE=/tmp/rna-workspace-recovery/bridge.json` on that
+Harness invocation, then run
+`node tests/web/workspace-run-recovery.test.js /tmp/rna-workspace-recovery/bridge.json`
+to check the same bridge envelopes in Chromium: polling recovery unlocks input
+and fork while retaining the draft. This does not qualify Windows/WebView2.
 `node tests/web/plugins.test.js` checks creation/automatic check/preview/apply/reopen/disable,
 immediate SVG drawing, reusable rail hover menus and remove/restore,
 source chat presentation, actual Chromium Worker and native-protocol XLSX extraction

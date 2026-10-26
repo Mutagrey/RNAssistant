@@ -107,6 +107,32 @@ namespace RNAssistant.Runtime
             return _workspaces.LoadSession(_chats, workspace, sessionId);
         }
 
+        // Chat activation may reconcile a stopped owner; plain inspection stays read-only.
+        internal ChatSession RefreshSession(WorkspaceDescriptor workspace, string sessionId)
+        {
+            var observed = GetSession(workspace, sessionId);
+            if (observed == null || observed.FormatVersion != ChatSession.CurrentFormatVersion ||
+                !NeedsRunInterruption(observed.LastRun)) return observed;
+
+            IDisposable lease;
+            try { lease = AcquireSessionLease(sessionId, wait: false); }
+            catch (WorkspaceSessionLeaseUnavailableException) { return observed; }
+            using (lease)
+            {
+                // Missing IPC is not proof of abandonment. The exclusive run lease
+                // and a fresh canonical cursor fence this recovery from a live/new run.
+                var current = GetSession(workspace, sessionId);
+                if (current != null && current.FormatVersion == ChatSession.CurrentFormatVersion &&
+                    current.LastRun?.RunId == observed.LastRun.RunId &&
+                    ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed))
+                {
+                    InterruptAbandonedRun(current);
+                    ReconcileAcceptedInputDelivery(current);
+                }
+                return current;
+            }
+        }
+
         public ChatSession PrepareResume(WorkspaceDescriptor workspace, string sessionId)
         {
             if (workspace == null || string.IsNullOrWhiteSpace(sessionId))
@@ -877,25 +903,33 @@ namespace RNAssistant.Runtime
                 reducer.Reduce(evidence, frozen).State == EvidenceState.Current);
         }
 
-        private IDisposable AcquireSessionLease(string sessionId)
+        private IDisposable AcquireSessionLease(string sessionId, bool wait = true)
         {
             var directory = Path.Combine(_paths.WorkspaceDirectory, "run-leases");
             StorageFileSystem.EnsureRegularDirectory(directory);
             var path = Path.Combine(directory, TextPatternEngine.Sha256(sessionId) + ".lck");
             if (File.Exists(path) && StorageFileSystem.IsReparsePoint(path))
                 throw new IOException("Workspace run lease cannot be a link.");
-            try { return StorageFileSystem.AcquireWriteLock(path); }
+            try
+            {
+                return wait ? StorageFileSystem.AcquireWriteLock(path)
+                    : new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            }
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
+        }
+
+        private static bool NeedsRunInterruption(ChatRunRecord run)
+        {
+            if (run == null || string.IsNullOrWhiteSpace(run.RunId)) return false;
+            var lifecycle = run.KernelState?.Summary?.Lifecycle;
+            return lifecycle.HasValue ? lifecycle.Value == RunLifecycle.Running :
+                string.IsNullOrWhiteSpace(run.Status) || run.Status == "running" || run.Status == "cancelling";
         }
 
         private void InterruptAbandonedRun(ChatSession session)
         {
             var run = session.LastRun;
-            if (run == null || string.IsNullOrWhiteSpace(run.RunId)) return;
-            var lifecycle = run.KernelState?.Summary?.Lifecycle;
-            if (lifecycle.HasValue ? lifecycle.Value != RunLifecycle.Running :
-                !string.IsNullOrWhiteSpace(run.Status) && run.Status != "running" &&
-                run.Status != "cancelling") return;
+            if (!NeedsRunInterruption(run)) return;
             var active = run.KernelState?.InFlightTool;
             ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages
                 .Where(item => item != null && item.RunId == run.RunId).ToArray());
@@ -912,8 +946,8 @@ namespace RNAssistant.Runtime
             }
             run.InterruptedEffectPossible = active?.Policy.MayHaveSideEffects == true;
             var message = run.InterruptedEffectPossible
-                ? "Previous CLI process stopped with a possible file effect; inspect current files and reconcile an unresolved attempt before a new edit. No call was replayed."
-                : "Previous CLI process stopped before a terminal run result. No call was replayed; submit explicit new input to continue.";
+                ? "Previous run stopped with a possible effect; inspect the affected resource and reconcile an unresolved attempt before a new edit. No call was replayed."
+                : "Previous run stopped before a terminal result. No call was replayed; submit explicit new input to continue.";
             if (run.KernelState != null) run.KernelState = run.KernelState.Interrupt(false, message);
             run.Status = "interrupted";
             run.Phase = "interrupted";

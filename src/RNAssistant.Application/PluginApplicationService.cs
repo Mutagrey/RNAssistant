@@ -808,7 +808,7 @@ namespace RNAssistant.Application
             if (request == null || string.IsNullOrWhiteSpace(request.SessionId))
                 throw new PluginException("project_chat_invalid", "A project chat is required.");
             var workspace = RequireProjectWorkspace(request.WorkspaceId);
-            var session = Conversations.GetSession(workspace, request.SessionId);
+            var session = Conversations.RefreshSession(workspace, request.SessionId);
             if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
             var snapshot = Conversations.ReadState(workspace, session);
             var messages = PresentWorkspaceWindow(workspace, session, session.Messages.Count);

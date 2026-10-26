@@ -281,6 +281,17 @@ The project-chat submit/approval boundary reports an unavailable session run
 lease as typed `project_chat_busy`. It does not accept input while another
 process owns that chat; the UI can refresh its state before another submission.
 
+Opening or polling a project/plugin source chat reconciles an abandoned run through
+`WorkspaceConversationService.RefreshSession`. It attempts the session lease once,
+without the submission lock's retry wait, then reloads and checks the exact run ID
+and event cursor before applying the existing interruption/input-delivery recovery.
+A held or unavailable lease leaves the run untouched; missing IPC alone never proves
+abandonment. The returned snapshot and history come from the same recovered session,
+so input and history actions can unlock from its canonical terminal state.
+Pending approvals retain their explicit resolution route. Plain `GetSession` and
+`ReadState` inspection remain read-only. No model/tool execution is resumed by opening
+a chat; an in-flight write remains unknown and is never replayed.
+
 For the independent workspace CLI, plain `resume` takes the session's cross-process
 lease, reloads the canonical chat, and marks an abandoned `running` run interrupted.
 An in-flight file mutation is recorded as a possible effect; its original call is
