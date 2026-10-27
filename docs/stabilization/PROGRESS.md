@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Резервация разговора принадлежит Application — 2026-10-27
+
+Office history/admission/recovery и Workspace run/history используют общий
+`ConversationLeaseService.Reserve` с прежними путями файловых блокировок.
+Короткая глобальная координация Office перенесена из `ChatRunRegistry` в
+Application; registry больше не хранит отдельные reservations и не создаёт
+для них `running` snapshot. Workspace по-прежнему использует только точную
+блокировку разговора. Run snapshot/cancel Office пока остаются в registry,
+поэтому S1c не закрыт.
+
+Host-neutral Harness build и точечные проверки конкурирующих владельцев,
+Office maintenance, Workspace reservation, project-chat admission/recovery — pass.
+Office controller partials Harness не собирает; Windows/Office/WebView2 evidence
+остаётся открытым. От пользователя доступны только фотографии экрана.
+
 ## Навигация чатов отделяет live owner от сохранённого running — 2026-10-27
 
 Owner: shared Web conversation status projection. Деревья Office и Workspace

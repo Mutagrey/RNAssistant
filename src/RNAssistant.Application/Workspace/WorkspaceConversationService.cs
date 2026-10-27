@@ -936,7 +936,7 @@ namespace RNAssistant.Runtime
         private IDisposable AcquireSessionLease(string sessionId, bool wait = true,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            try { return _conversationLeases.Acquire(sessionId, wait, cancellationToken); }
+            try { return _conversationLeases.Reserve(sessionId, wait, cancellationToken); }
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
         }
 

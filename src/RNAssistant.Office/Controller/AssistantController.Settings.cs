@@ -84,7 +84,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: addressed settings controls are required.");
             try
             {
-                using (_chatRuns.ReserveMaintenance())
+                using (_conversationLeases.AcquireMaintenance())
                 {
                     EnsureNoActiveRuns();
                     WithReservedSession(LoadAddressedSession(request.ChatId), session =>

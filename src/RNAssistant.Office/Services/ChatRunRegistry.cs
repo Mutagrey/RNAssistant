@@ -12,7 +12,6 @@ namespace RNAssistant.Office.Services
     internal sealed class ChatRunLease : IDisposable
     {
         private readonly ChatRunRegistry _registry;
-        private readonly IDisposable _reservation;
         private int _completed;
 
         internal ChatRunLease(ChatRunRegistry registry, string chatId, string runId)
@@ -22,13 +21,6 @@ namespace RNAssistant.Office.Services
             RunId = runId;
         }
 
-        internal ChatRunLease(ChatRunRegistry registry, IDisposable reservation, string chatId)
-        {
-            _registry = registry;
-            _reservation = reservation;
-            ChatId = chatId;
-        }
-
         public string ChatId { get; private set; }
         public string RunId { get; private set; }
 
@@ -36,8 +28,7 @@ namespace RNAssistant.Office.Services
         {
             if (Interlocked.Exchange(ref _completed, 1) == 0)
             {
-                if (RunId == null) _registry.CompleteReservation(ChatId, _reservation);
-                else _registry.Complete(ChatId, RunId);
+                _registry.Complete(ChatId, RunId);
             }
         }
     }
@@ -60,16 +51,11 @@ namespace RNAssistant.Office.Services
         private readonly object _sync = new object();
         private readonly Dictionary<string, ChatRunSnapshot> _runs =
             new Dictionary<string, ChatRunSnapshot>(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _reservations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private readonly string _lockDirectory;
         private readonly ConversationLeaseService _leases;
-        private readonly ThreadLocal<CoordinationLockState> _coordinationState =
-            new ThreadLocal<CoordinationLockState>();
 
-        public ChatRunRegistry(AppDataPaths paths = null)
+        public ChatRunRegistry(AppDataPaths paths = null, ConversationLeaseService leases = null)
         {
-            _lockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
-            _leases = ConversationLeaseService.ForOffice(paths);
+            _leases = leases ?? ConversationLeaseService.ForOffice(paths);
         }
 
         public ChatRunLease Start(string chatId, string runId, ChatSession session, CancellationTokenSource cancellation = null)
@@ -78,12 +64,12 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Chat and run ids are required.");
             }
-            using (AcquireCoordinationLock())
+            using (_leases.AcquireMaintenance())
             {
                 lock (_sync)
                 {
                     ChatRunSnapshot existing;
-                    if (_runs.TryGetValue(chatId, out existing) || _reservations.Contains(chatId))
+                    if (_runs.TryGetValue(chatId, out existing))
                     {
                         throw new InvalidOperationException("В этом чате уже выполняется запрос.");
                     }
@@ -197,38 +183,12 @@ namespace RNAssistant.Office.Services
             return _leases.AnyHeld("run_*.lck");
         }
 
-        // A history edit or short admission reservation must not masquerade as
-        // an active kernel invocation in chat state.
-        public ChatRunLease Reserve(string chatId)
-        {
-            using (AcquireCoordinationLock())
-            {
-                lock (_sync)
-                {
-                    if (_runs.ContainsKey(chatId) || _reservations.Contains(chatId))
-                        throw new InvalidOperationException("В этом чате уже выполняется запрос.");
-                    var reservation = AcquireRunLock(chatId);
-                    try
-                    {
-                        _reservations.Add(chatId);
-                        return new ChatRunLease(this, reservation, chatId);
-                    }
-                    catch { reservation?.Dispose(); throw; }
-                }
-            }
-        }
-
-        public IDisposable ReserveMaintenance()
-        {
-            return AcquireCoordinationLock();
-        }
-
         public bool IsExternallyRunning(string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return false;
             lock (_sync)
             {
-                if (_runs.ContainsKey(chatId) || _reservations.Contains(chatId)) return true;
+                if (_runs.ContainsKey(chatId)) return true;
             }
             return _leases.IsHeld(chatId);
         }
@@ -258,15 +218,6 @@ namespace RNAssistant.Office.Services
                     if (run.Cancellation != null) run.Cancellation.Dispose();
                     if (run.RunLock != null) run.RunLock.Dispose();
                 }
-            }
-        }
-
-        internal void CompleteReservation(string chatId, IDisposable reservation)
-        {
-            lock (_sync)
-            {
-                _reservations.Remove(chatId);
-                reservation?.Dispose();
             }
         }
 
@@ -303,10 +254,9 @@ namespace RNAssistant.Office.Services
 
         private IDisposable AcquireRunLock(string chatId)
         {
-            if (string.IsNullOrWhiteSpace(_lockDirectory)) return null;
             try
             {
-                return _leases.Acquire(chatId);
+                return _leases.Reserve(chatId);
             }
             catch (IOException)
             {
@@ -315,82 +265,6 @@ namespace RNAssistant.Office.Services
             catch (UnauthorizedAccessException)
             {
                 throw new InvalidOperationException("Не удалось получить блокировку чата.");
-            }
-        }
-
-        private IDisposable AcquireCoordinationLock()
-        {
-            if (string.IsNullOrWhiteSpace(_lockDirectory)) return null;
-            var current = _coordinationState.Value;
-            if (current != null)
-            {
-                current.Depth += 1;
-                return new CoordinationLockLease(this, current);
-            }
-
-            Directory.CreateDirectory(_lockDirectory);
-            var path = Path.Combine(_lockDirectory, "run-registry.lck");
-            var deadline = DateTime.UtcNow.AddSeconds(10);
-            while (true)
-            {
-                try
-                {
-                    var state = new CoordinationLockState
-                    {
-                        Depth = 1,
-                        Stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)
-                    };
-                    _coordinationState.Value = state;
-                    return new CoordinationLockLease(this, state);
-                }
-                catch (IOException)
-                {
-                    if (DateTime.UtcNow >= deadline)
-                    {
-                        throw new InvalidOperationException("Не удалось начать операцию: другое окно RNAssistant обновляет состояние запусков.");
-                    }
-                    Thread.Sleep(25);
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    throw new InvalidOperationException("Не удалось получить системную блокировку RNAssistant.", ex);
-                }
-            }
-        }
-
-        private void ReleaseCoordinationLock(CoordinationLockState state)
-        {
-            if (state == null || state.Depth <= 0) return;
-            state.Depth -= 1;
-            if (state.Depth > 0) return;
-            if (ReferenceEquals(_coordinationState.Value, state)) _coordinationState.Value = null;
-            state.Stream.Dispose();
-        }
-
-        private sealed class CoordinationLockState
-        {
-            public int Depth { get; set; }
-            public FileStream Stream { get; set; }
-        }
-
-        private sealed class CoordinationLockLease : IDisposable
-        {
-            private readonly ChatRunRegistry _registry;
-            private readonly CoordinationLockState _state;
-            private int _disposed;
-
-            public CoordinationLockLease(ChatRunRegistry registry, CoordinationLockState state)
-            {
-                _registry = registry;
-                _state = state;
-            }
-
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                {
-                    _registry.ReleaseCoordinationLock(_state);
-                }
             }
         }
 

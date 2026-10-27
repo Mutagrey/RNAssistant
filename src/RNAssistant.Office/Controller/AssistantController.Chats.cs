@@ -406,7 +406,7 @@ namespace RNAssistant.Office
         public ChatStateResponse CreateChat(string title)
         {
             EnsureStartupRecovery();
-            using (_chatRuns.ReserveMaintenance())
+            using (_conversationLeases.AcquireMaintenance())
             {
                 var session = _chatSessions.CreateChat(title);
                 return ChatState(session);
@@ -416,7 +416,7 @@ namespace RNAssistant.Office
         public ChatStateResponse CreatePersistentChat(string title)
         {
             EnsureStartupRecovery();
-            using (_chatRuns.ReserveMaintenance())
+            using (_conversationLeases.AcquireMaintenance())
             {
                 var bound = _adapter as IOfficeDocumentSessionProvider;
                 if (bound != null)
@@ -437,7 +437,7 @@ namespace RNAssistant.Office
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
             EnsureStartupRecovery();
-            using (_chatRuns.ReserveMaintenance())
+            using (_conversationLeases.AcquireMaintenance())
             {
                 var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
                 return ChatState(session);
@@ -616,7 +616,7 @@ namespace RNAssistant.Office
             {
                 throw new InvalidOperationException("Документ не указан.");
             }
-            using (_chatRuns.ReserveMaintenance())
+            using (_conversationLeases.AcquireMaintenance())
             {
                 // Deletion is rare and destructive. A short global coordination window is safer
                 // than racing a newly created chat that was not present during enumeration.
@@ -653,9 +653,13 @@ namespace RNAssistant.Office
             return _chatSessions.LoadAddressedSession(requestedSessionId);
         }
 
-        private ChatRunLease ReserveChatOperation(ChatSession session)
+        private IDisposable ReserveChatOperation(ChatSession session)
         {
-            return _chatRuns.Reserve(session.Id);
+            try { return _conversationLeases.Reserve(session.Id); }
+            catch (System.IO.IOException)
+            { throw new InvalidOperationException("В этом чате уже выполняется запрос в другом окне RNAssistant."); }
+            catch (UnauthorizedAccessException)
+            { throw new InvalidOperationException("Не удалось получить блокировку чата."); }
         }
 
         private ChatSession ReloadReservedSession(ChatSession session)

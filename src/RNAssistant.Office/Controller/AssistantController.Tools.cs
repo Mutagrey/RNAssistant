@@ -67,7 +67,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             try
             {
-                using (_chatRuns.ReserveMaintenance())
+                using (_conversationLeases.AcquireMaintenance())
                 {
                     EnsureNoActiveRuns();
                     var session = LoadAddressedSession(payload.ChatId);
@@ -122,7 +122,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             try
             {
-                using (_chatRuns.ReserveMaintenance())
+                using (_conversationLeases.AcquireMaintenance())
                 {
                     EnsureNoActiveRuns();
                     var session = LoadAddressedSession(payload.ChatId);
@@ -174,7 +174,7 @@ namespace RNAssistant.Office
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             try
             {
-                using (_chatRuns.ReserveMaintenance())
+                using (_conversationLeases.AcquireMaintenance())
                 {
                     EnsureNoActiveRuns();
                     var session = LoadAddressedSession(payload.ChatId);
@@ -195,7 +195,7 @@ namespace RNAssistant.Office
         public SkillReferenceResponse DeleteSkillReference(
             SkillReferencePayload payload)
         {
-            using (_chatRuns.ReserveMaintenance())
+            using (_conversationLeases.AcquireMaintenance())
             {
                 EnsureNoActiveRuns();
                 ValidateSkillReferencePayload(payload);

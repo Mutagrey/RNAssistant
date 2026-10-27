@@ -30,6 +30,7 @@ namespace RNAssistant.Office
         private readonly ArtifactWorkingSetService _artifactWorkingSet;
         private readonly IConversationStore _conversationStore;
         private readonly IEventStore _eventStore;
+        private readonly ConversationLeaseService _conversationLeases;
         private readonly ModelTracePersistenceService _modelTracePersistence;
         private readonly AttachmentStore _attachmentStore;
         private readonly ChatResourceIngestionService _chatResourceIngestion;
@@ -126,13 +127,14 @@ namespace RNAssistant.Office
             _officeContextCapture = new OfficeContextCaptureService(_adapter, _toolExecutor.DocumentRuntime,
                 _toolExecutor.ResourceAuthority, _toolExecutor.Payloads);
             _skillCatalog = new SkillCatalogService(_adapter.HostName, _toolExecutor.CapturePublishedSkills);
-            _chatRuns = new ChatRunRegistry(_paths);
+            _conversationLeases = ConversationLeaseService.ForOffice(_paths);
+            _chatRuns = new ChatRunRegistry(_paths, _conversationLeases);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
                 _chatStore,
                 _vbaJournalStore,
                 () => _settingsService.LoadStorageProtector(),
-                _chatRuns.ReserveMaintenance,
+                _conversationLeases.AcquireMaintenance,
                 EnsureNoActiveRuns);
             _trajectoryQuery = new EventStreamTrajectoryQuery();
             _trajectoryExportService = new TrajectoryExportService(
@@ -145,8 +147,8 @@ namespace RNAssistant.Office
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
             _chatSessions.RunOwnershipProvider = _chatRuns.IsExternallyRunning;
-            _chatSessions.RunRecoveryLeaseProvider = session => _chatRuns.Reserve(session.Id);
-            _chatSessions.MaintenanceLeaseProvider = _chatRuns.ReserveMaintenance;
+            _chatSessions.RunRecoveryLeaseProvider = session => ReserveChatOperation(session);
+            _chatSessions.MaintenanceLeaseProvider = _conversationLeases.AcquireMaintenance;
             _startupRecovery = new Lazy<bool>(() =>
             {
                 var recoveryTimer = Stopwatch.StartNew();

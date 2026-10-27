@@ -1,4 +1,5 @@
 using RNAssistant.Core.Tools;
+using RNAssistant.Application.Conversations;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -357,8 +358,10 @@ namespace RNAssistant.Harness
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
-                var registry = new ChatRunRegistry(paths);
-                var secondRegistry = new ChatRunRegistry(paths);
+                var owner = ConversationLeaseService.ForOffice(paths);
+                var secondOwner = ConversationLeaseService.ForOffice(paths);
+                var registry = new ChatRunRegistry(paths, owner);
+                var secondRegistry = new ChatRunRegistry(paths, secondOwner);
                 var session = new ChatSession { Title = "Before run" };
                 var lease = registry.Start("chat-1", "run-1", session);
                 session.Title = "Mutated live object";
@@ -399,13 +402,29 @@ namespace RNAssistant.Harness
                 AssertTrue(!secondRegistry.IsExternallyRunning("chat-1"), "cross-registry lock is released");
                 AssertTrue(!secondRegistry.HasExternalRuns(), "maintenance sees no run after release");
 
-                using (registry.ReserveMaintenance())
-                using (registry.ReserveMaintenance())
+                using (owner.AcquireMaintenance())
+                using (owner.AcquireMaintenance())
                 {
                     AssertTrue(!registry.HasRuns(), "maintenance lock is reentrant for composed operations");
                 }
 
-                using (secondRegistry.Reserve("chat-1"))
+                using (var reservationAttempted = new ManualResetEventSlim())
+                {
+                    Task reservation;
+                    using (owner.AcquireMaintenance())
+                    {
+                        reservation = Task.Run(() =>
+                        {
+                            reservationAttempted.Set();
+                            using (secondOwner.Reserve("chat-3")) { }
+                        });
+                        AssertTrue(reservationAttempted.Wait(5000), "second owner attempts a reservation");
+                        AssertTrue(!reservation.Wait(100), "Office maintenance excludes a new reservation");
+                    }
+                    AssertTrue(reservation.Wait(5000), "reservation proceeds after Office maintenance");
+                }
+
+                using (secondOwner.Reserve("chat-1"))
                 {
                     AssertTrue(!secondRegistry.IsRunning("chat-1"), "history reservation is not a model run");
                     AssertTrue(secondRegistry.Get("chat-1") == null, "history reservation has no running snapshot");
@@ -416,6 +435,18 @@ namespace RNAssistant.Harness
                     AssertTrue(rejected, "history reservation excludes a run in the same registry");
                 }
                 AssertTrue(!registry.IsExternallyRunning("chat-1"), "history lease released");
+
+                var workspaceOwner = ConversationLeaseService.ForWorkspace(paths);
+                var secondWorkspaceOwner = ConversationLeaseService.ForWorkspace(paths);
+                using (workspaceOwner.Reserve("workspace-chat"))
+                {
+                    AssertTrue(secondWorkspaceOwner.IsHeld("workspace-chat"),
+                        "workspace reservation uses the same exact-owner contract");
+                    using (secondWorkspaceOwner.Reserve("another-chat"))
+                        AssertTrue(secondWorkspaceOwner.IsHeld("workspace-chat"),
+                            "another workspace chat remains independent");
+                }
+                AssertTrue(!secondWorkspaceOwner.IsHeld("workspace-chat"), "workspace reservation releases its owner");
             });
         }
 

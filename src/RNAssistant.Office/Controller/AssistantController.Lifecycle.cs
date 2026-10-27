@@ -10,7 +10,7 @@ namespace RNAssistant.Office
     {
         public InitResponse ClearRuntimeData()
         {
-            using (_chatRuns.ReserveMaintenance())
+            using (_conversationLeases.AcquireMaintenance())
             {
                 EnsureNoActiveRuns();
                 _resourceData.CloseTransfers();

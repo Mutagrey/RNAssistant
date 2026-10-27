@@ -298,7 +298,7 @@ namespace RNAssistant.Office
                 try
                 {
                     ChatStateResponse state;
-                    using (_chatRuns.ReserveMaintenance())
+                    using (_conversationLeases.AcquireMaintenance())
                     {
                         lock (_syncRoot)
                         {

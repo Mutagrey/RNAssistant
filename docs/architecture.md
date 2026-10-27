@@ -78,8 +78,10 @@ static WebView UI
 ### Whole-conversation Application boundary (planned, 2026-10-27)
 
 The current dependency sketch describes the implemented Office path; a shared
-kernel and chat DOM do not yet mean shared conversation orchestration. The target
-is one Application conversation owner consumed by Office and Workspace/CLI: input
+kernel and chat DOM do not yet mean shared conversation orchestration. Exact
+conversation reservation and Office maintenance coordination now belong to the
+Application lease service for both consumers; active-run ownership remains split.
+The target is one Application conversation owner consumed by Office and Workspace/CLI: input
 admission, queue/steer, invocation ownership/cancellation/drain, recovery and UI
 subscriptions. Environment adapters own document binding, resource preparation and
 tool/model/store port composition. They must not retain independent schedulers
