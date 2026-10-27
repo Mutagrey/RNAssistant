@@ -450,6 +450,15 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
   return details;
 }
 
+function runNoticeIncludesModelResults(runViewState) {
+  if (!runViewState || runViewState.lifecycle !== "completed" ||
+      !Array.isArray(runViewState.modelResults) || !runViewState.modelResults.length) return false;
+  return ["partial", "unable_to_complete"].indexOf(runViewState.modelOutcome) >= 0 ||
+    runViewState.executionHealth !== "clean" && runViewState.modelResults.some(function (item) {
+      return item.assessment !== "satisfied";
+    });
+}
+
 function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
   var health = runViewState ? runViewState.executionHealth : "unknown";
   var uncertain = health === "unknown";
@@ -491,9 +500,10 @@ function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
     text.textContent = "В ходе работы были неудачные попытки: " + runViewState.failedCalls + ".";
   }
   copy.appendChild(text);
-  if (modelConcern && modelResults.length) {
+  if (runNoticeIncludesModelResults(runViewState)) {
     var details = document.createElement("details");
     details.className = "agent-model-results";
+    details.open = modelResults.some(function (item) { return item.assessment !== "satisfied"; });
     var heading = document.createElement("summary");
     heading.textContent = "Итоги и ссылки на результаты";
     details.appendChild(heading);

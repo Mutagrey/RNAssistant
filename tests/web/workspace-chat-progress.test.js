@@ -105,6 +105,7 @@ const { chromium } = require('playwright');
       const uncleanClaims = !!uncleanFinish &&
         uncleanFinish.querySelectorAll('.message-outcome').length === 1 &&
         uncleanFinish.querySelectorAll('.agent-model-results').length === 1 &&
+        uncleanFinish.querySelector('.agent-model-results').open &&
         uncleanFinish.textContent.includes('call-2');
       list.remove();
       const newer = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test', messages: [],

@@ -77,12 +77,13 @@ ack/clear сохраняются вместе. Native bridge/Harness и Chromium
 до/после progress. Открыты Windows DPAPI/WebView2 abrupt-close и pane shutdown.
 Таймаут модели не менялся.
 
-Открытая соседняя проверка 2026-10-27: `workspace-chat-progress.test.js` падает на
-`uncleanClaims` при статическом рендере до submit-сценариев. Тот же отказ воспроизведён
-с исходным mock bridge из `82ef3ab7` и неизменённым production Web JS; это не эффект
-нового admission/lifetime. Owner — shared RunViewState presentation/fixtures;
-проверить соответствие fixture новому finish outcome и количество outcome-блоков.
-В исправление lifetime этот дефект не включён, полный progress suite не объявлен pass.
+Соседнее отображение исправлено 2026-10-27: `workspace-chat-progress.test.js`
+падал на `uncleanClaims` до submit-сценариев. При неполном `ModelResults` и
+отсутствующем `ModelOutcome` `app-messages.js` подавлял отдельные оценки как уже
+показанные в предупреждении, но `app-agent.js` добавлял их туда только при
+глобальном partial/unable outcome. Итоговые оценки исчезали. Оба пути теперь
+используют одно условие размещения; общий outcome из assessments не выводится.
+`workspace-chat-progress.test.js` и `run-view-state.test.js` прошли локально.
 
 I26-02 исправлен 2026-10-27: ProjectChat activation/polling использует неблокирующий
 session lease, повторную загрузку exact run/cursor и существующую interruption recovery.

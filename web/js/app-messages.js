@@ -623,7 +623,8 @@ function renderMessageArticle(message, index, options) {
 function appendWorkspaceRunOutcome(node, message, runView) {
   runView = runView || window.RNAssistantRunViewState.fromMessage(message);
   if (runView && ["completed", "failed", "cancelled"].indexOf(runView.lifecycle) >= 0 &&
-      (runView.lifecycle !== "completed" || runView.executionHealth !== "clean")) {
+      (runView.lifecycle !== "completed" || runView.executionHealth !== "clean" ||
+        ["partial", "unable_to_complete"].indexOf(runView.modelOutcome) >= 0)) {
     appendAgentRunViewState(node, runView, messageRunId(message), false);
   }
 }
@@ -641,10 +642,7 @@ function appendAcceptedResponseDetails(node, message, runView) {
     }
     node.appendChild(step);
   }
-  var claimsInRunNotice = runView && runView.lifecycle === "completed" &&
-    runView.executionHealth !== "clean" && runView.modelResults.some(function (item) {
-      return item.assessment !== "satisfied";
-    });
+  var claimsInRunNotice = runNoticeIncludesModelResults(runView);
   if (message.Results && message.Results.length && !claimsInRunNotice)
     node.appendChild(renderModelResults(message.Results));
 }
