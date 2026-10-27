@@ -34,7 +34,11 @@ namespace RNAssistant.Office
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
             var sessionId = session.Id;
-            runId = string.IsNullOrWhiteSpace(runId) ? Guid.NewGuid().ToString("N") : runId;
+            var originalRunId = session.LastRun?.KernelState?.Summary?.RunId;
+            if (string.IsNullOrWhiteSpace(originalRunId) || session.LastRun.RunId != originalRunId ||
+                runId != null && runId != originalRunId)
+                throw new InvalidOperationException("Pending confirmation belongs to another run.");
+            runId = originalRunId;
             CancellationTokenSource runCancellation;
             var runLease = StartControllerRun(
                 session, runId, cancellationToken, out runCancellation);
@@ -44,12 +48,14 @@ namespace RNAssistant.Office
             try
             {
                 session = ReloadReservedSession(session);
-                _inbox.Bind(session);
                 pending = FindPendingAgentTool(session, pendingId);
-                if (pending == null)
+                if (pending == null || session.LastRun?.RunId != runId ||
+                    session.LastRun.KernelState?.Summary?.RunId != runId ||
+                    session.LastRun.KernelState.Summary.PendingConfirmation?.PendingId != pendingId)
                 {
                     throw new InvalidOperationException("Pending tool was not found or was already resolved.");
                 }
+                _inbox.Bind(session);
                 ConversationRunPolicy.ForAcceptedRun(session);
                 ConversationProtocolContext.EnsureCanContinue(session, pending.Command, _toolExecutor.Payloads);
                 var settings = ResolveChatSettings(session);

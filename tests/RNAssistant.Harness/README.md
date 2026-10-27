@@ -1275,10 +1275,12 @@ Workspace against the same terminal/abandoned kernel states and rejects recovery
 from a stale observed cursor. It uses host-neutral stores, not a real Office host.
 
 Run the focused `inbox:` filter for cancellation isolation, stale responses, batch
-closure, final/approval races, durable FIFO editing, recovery and Stop behavior.
+closure, final/approval races, exact run/pending steer admission, durable FIFO
+editing, recovery and Stop behavior.
 `dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --inbox-test`
 checks first-chat intake, two controllers sharing one data root, actual controller execution and materialized model context
-without Office. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
+without Office. `--confirmation-input-test` checks Office confirmation in the
+original kernel run, including pending steer. Run `node tests/web/chat-inbox.test.js` for UI acknowledgement,
 idempotent retry, consumed-before-ack receipts, draft preservation, chat isolation
 and queue controls. `node tests/web/chat-run-completion.test.js` checks chat-list
 spinners after fast completion, background pushes and idle polling, including

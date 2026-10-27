@@ -22,6 +22,8 @@ namespace RNAssistant.Office.Contracts
         public string OperationId { get; set; }
         public string Text { get; set; }
         public InputDelivery Delivery { get; set; }
+        public string SteerRunId { get; set; }
+        public string SteerPendingId { get; set; }
         public List<string> ResourceDraftIds { get; set; }
         public UserQuestionAnswerCommand Answers { get; set; }
     }

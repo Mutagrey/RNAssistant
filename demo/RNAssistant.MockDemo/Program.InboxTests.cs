@@ -17,7 +17,7 @@ namespace RNAssistant.MockDemo
         private static async Task<ChatStateResponse> SubmitAndWaitAsync(AssistantController controller, string text, string chatId)
         {
             controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId,
-                OperationId = Guid.NewGuid().ToString("N"), Text = text, Delivery = InputDelivery.Steer }, null, null);
+                OperationId = Guid.NewGuid().ToString("N"), Text = text, Delivery = InputDelivery.Queue }, null, null);
             await controller.InboxWorkersDrained.ConfigureAwait(false);
             return controller.GetChatState(chatId);
         }
@@ -183,11 +183,11 @@ namespace RNAssistant.MockDemo
                             throw new InvalidOperationException("steer did not interrupt transport");
                         }
                         if (messages.Any(m => (m.Content ?? "").Contains("steer-marker"))) sawSteer = true;
-                        return new LlmCompletionResult { Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" };
+                        return new LlmCompletionResult { Content = "{\"action\":\"finish\",\"reason\":\"The request is answered.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Done\"}" };
                     });
                 var init = controller.Initialize(); var chatId = init.ActiveChatId;
                 controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "initial-marker",
-                    Text = "initial-marker", Delivery = InputDelivery.Steer }, null, null);
+                    Text = "initial-marker", Delivery = InputDelivery.Queue }, null, null);
                 var run = controller.InboxWorkersDrained;
                 if (await Task.WhenAny(started.Task, Task.Delay(10000)) != started.Task)
                     throw new Exception("initial run never reached model");
@@ -203,6 +203,7 @@ namespace RNAssistant.MockDemo
                     Text = "queued-marker", Delivery = InputDelivery.Queue }, null, null);
                 controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "steer-marker",
                     Text = "steer-marker", Delivery = InputDelivery.Steer,
+                    SteerRunId = new ChatStore(AppDataPaths.CreateForRoot(root)).Load(chatId).LastRun.RunId,
                     ResourceDraftIds = new System.Collections.Generic.List<string> { attachment.Resource.Id, selection.Resource.Id } }, null, null);
                 if (await Task.WhenAny(run, Task.Delay(10000)) != run) throw new Exception("steered run stalled");
                 await run;
@@ -261,11 +262,11 @@ namespace RNAssistant.MockDemo
                         var hasQueue = messages.Any(m => (m.Content ?? "").Contains("cross-queue"));
                         if (call == 2) { sawSteerInOwnerTurn = hasSteer; sawQueueInOwnerTurn = hasQueue; }
                         if (call == 3) sawQueueInNextTurn = hasQueue;
-                        return new LlmCompletionResult { Content = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}" };
+                        return new LlmCompletionResult { Content = "{\"action\":\"finish\",\"reason\":\"The request is answered.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Done\"}" };
                     });
                 var chatId = owner.Initialize().ActiveChatId;
                 owner.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "cross-initial",
-                    Text = "cross-initial", Delivery = InputDelivery.Steer }, null, null);
+                    Text = "cross-initial", Delivery = InputDelivery.Queue }, null, null);
                 var ownerRun = owner.InboxWorkersDrained;
                 if (await Task.WhenAny(started.Task, Task.Delay(5000)) != started.Task)
                     throw new Exception("Owner's model request did not start.");
@@ -275,7 +276,8 @@ namespace RNAssistant.MockDemo
                 sender.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "cross-queued",
                     Text = "cross-queue", Delivery = InputDelivery.Queue }, null, null);
                 sender.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "cross-steered",
-                    Text = "cross-steer", Delivery = InputDelivery.Steer }, null, null);
+                    Text = "cross-steer", Delivery = InputDelivery.Steer,
+                    SteerRunId = new ChatStore(paths).Load(chatId).LastRun.RunId }, null, null);
                 if (sender.GetChatInbox(chatId).Items.Count != 2 || owner.GetChatInbox(chatId).Items.Count != 2)
                     throw new Exception("Controllers did not project the same pending inputs.");
                 if (await Task.WhenAny(cancelled.Task, Task.Delay(5000)) != cancelled.Task)

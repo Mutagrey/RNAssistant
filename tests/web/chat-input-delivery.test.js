@@ -72,6 +72,10 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       if (delivery === "Queue") await page.locator("#chatInput").press("Enter");
       else await page.locator("#sendButton").click();
       await page.waitForFunction(() => !!window.acknowledge);
+      const submitted = await page.evaluate(() => window.submitted);
+      assert.equal(submitted.delivery, delivery);
+      assert.equal(submitted.steerRunId || null, delivery === "Steer" ? "run" : null,
+        "only an exact active run accepts immediate steer");
       const receiptBeforeAck = await page.evaluate(() => {
         const bubble = document.querySelector(".inbox-message").getBoundingClientRect();
         const viewport = $("messages").getBoundingClientRect();

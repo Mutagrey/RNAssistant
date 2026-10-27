@@ -17,6 +17,8 @@ namespace RNAssistant.Core.Models
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string AcceptedRunId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string PendingId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string RequestFingerprint { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string AnswerRunId { get; set; }

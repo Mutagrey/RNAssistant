@@ -42,6 +42,7 @@ context.renderChatSessions = () => {};
   transport = () => Promise.reject(new Error("lost acknowledgement"));
   await context.submitInboxMessage("keep me", context.state.draftAttachments, "a", "Steer");
   const id = calls[0].payload.operationId;
+  assert.equal(calls[0].payload.delivery, "Queue", "missing exact run target becomes an explicit queued task");
   assert.equal(context.$("chatInput").value, "keep me", "failed intake preserves text");
   assert.equal(context.state.draftAttachments.length, 1, "failed intake preserves files");
   transport = () => Promise.resolve({ chatId: "a", revision: 2, items: [], running: true,

@@ -160,7 +160,10 @@ function renderSendControls() {
 
   if (sendButton) {
     sendButton.classList.remove("hidden");
-    sendButton.title = isPreparingAttachments ? "Подготовка вложения" : (isEditing ? "Отправить заново" : (isSending ? (runningMessageDelivery() === "Queue" ? "В очередь" : "Отправить сразу") : (awaitingReply ? "Отправить ответ" : "Отправить")));
+    sendButton.title = isPreparingAttachments ? "Подготовка вложения" : (isEditing ? "Отправить заново" : (isSending ?
+      (runningMessageDelivery() === "Queue" || typeof exactOfficeSteerTarget !== "function" ||
+        !exactOfficeSteerTarget(state.activeChatId).runId ? "В очередь" : "Отправить сразу") :
+      (awaitingReply ? "Отправить ответ" : "Отправить")));
     sendButton.setAttribute("aria-label", sendButton.title);
   }
   if (stopButton) {

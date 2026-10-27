@@ -247,25 +247,26 @@ namespace RNAssistant.Application.Conversations
         internal SessionEvent Submit(ChatSession session, ConversationInput input)
         {
             var box = Get(session);
-            lock (box.Sync)
-            {
-                if (input == null || string.IsNullOrWhiteSpace(input.Id) ||
-                    string.IsNullOrEmpty(input.OperationId) || string.IsNullOrEmpty(input.RequestFingerprint))
-                    throw new ArgumentException("Input requires an ID, operation ID and request fingerprint.");
-                var accepted = box.Inputs.FirstOrDefault(i => i.OperationId == input.OperationId);
-                if (accepted != null)
-                { ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint); return null; }
-                if (box.Inputs.Any(i => i.Id == input.Id))
-                    throw new ArgumentException("An input ID already belongs to another operation.");
-                if (input.QuestionSetId != null && (box.Running || box.Inputs.Any(i => IsPending(i) ||
-                    i.Status != ConversationInputStatus.Removed && i.AnswerRunId == input.AnswerRunId && i.QuestionSetId == input.QuestionSetId)))
-                    throw new InvalidOperationException("The questions already have accepted input or the conversation has moved on.");
-                input.Revision = 1;
-                var fact = Write(box, input);
-                if (input.Delivery == InputDelivery.Steer) box.ExplicitSteers.Add(input.Id);
-                if (input.Delivery == InputDelivery.Steer && box.Accepting) box.Interrupt.Cancel();
-                return fact;
-            }
+            lock (box.Sync) return SubmitLocked(box, input);
+        }
+        private SessionEvent SubmitLocked(Inbox box, ConversationInput input)
+        {
+            if (input == null || string.IsNullOrWhiteSpace(input.Id) ||
+                string.IsNullOrEmpty(input.OperationId) || string.IsNullOrEmpty(input.RequestFingerprint))
+                throw new ArgumentException("Input requires an ID, operation ID and request fingerprint.");
+            var accepted = box.Inputs.FirstOrDefault(i => i.OperationId == input.OperationId);
+            if (accepted != null)
+            { ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint); return null; }
+            if (box.Inputs.Any(i => i.Id == input.Id))
+                throw new ArgumentException("An input ID already belongs to another operation.");
+            if (input.QuestionSetId != null && (box.Running || box.Inputs.Any(i => IsPending(i) ||
+                i.Status != ConversationInputStatus.Removed && i.AnswerRunId == input.AnswerRunId && i.QuestionSetId == input.QuestionSetId)))
+                throw new InvalidOperationException("The questions already have accepted input or the conversation has moved on.");
+            input.Revision = 1;
+            var fact = Write(box, input);
+            if (input.Delivery == InputDelivery.Steer) box.ExplicitSteers.Add(input.Id);
+            if (input.Delivery == InputDelivery.Steer && box.Accepting) box.Interrupt.Cancel();
+            return fact;
         }
         internal void SubmitToRun(ChatSession session, string runId, ConversationInput input)
         {
@@ -273,10 +274,26 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync)
             {
                 if (input.AcceptedRunId != runId || input.Delivery != InputDelivery.Steer ||
+                    input.PendingId != null ||
                     !box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId ||
                     box.Session.LastRun.KernelState?.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running)
                     throw new InvalidOperationException("Запуск уже завершает работу. Обновите чат и отправьте сообщение снова.");
-                Submit(session, input);
+                SubmitLocked(box, input);
+            }
+        }
+
+        internal void SubmitToPending(ChatSession session, string runId, string pendingId,
+            ConversationInput input)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (input.AcceptedRunId != runId || input.PendingId != pendingId ||
+                    input.Delivery != InputDelivery.Steer || box.Running || box.Worker ||
+                    box.Session.LastRun?.RunId != runId ||
+                    PendingConfirmationId(box.Session) != pendingId)
+                    throw new InvalidOperationException("Ожидавшее действие уже изменилось. Обновите чат перед уточнением.");
+                SubmitLocked(box, input);
             }
         }
 
@@ -456,20 +473,21 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
-                if (box.Worker || box.Running || !box.Inputs.Any(i => i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
-                    (!box.Paused || box.ExplicitSteers.Contains(i.Id)))) return false;
+                if (box.Worker || box.Running || !HasRunnableLocked(box, session)) return false;
                 box.Worker = true;
                 box.ViewRevision++;
                 return true;
             }
         }
-        internal ConversationInput TakeNext(ChatSession session, bool awaiting)
+        internal ConversationInput TakeNext(ChatSession session)
         {
             var box = Get(session);
             lock (box.Sync)
             {
-                var next = box.Inputs.FirstOrDefault(i => i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
-                    i.Delivery == InputDelivery.Steer && (!box.Paused || box.ExplicitSteers.Contains(i.Id))) ?? (awaiting || box.Paused ? null : box.Inputs.FirstOrDefault(i =>
+                var awaiting = PendingConfirmationId(session) != null;
+                var next = box.Inputs.FirstOrDefault(i => i.Status == ConversationInputStatus.Pending &&
+                    i.Delivery == InputDelivery.Steer && CanSchedule(session, i, awaiting) &&
+                    (!box.Paused || box.ExplicitSteers.Contains(i.Id))) ?? (awaiting || box.Paused ? null : box.Inputs.FirstOrDefault(i =>
                         i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending));
                 if (next == null) return null;
                 // A waiting approval is resumed through the same kernel continuation.
@@ -486,11 +504,29 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync)
                 if (box.Paused && !box.ExplicitSteers.Contains(inputId)) throw new OperationCanceledException("Очередь приостановлена.");
         }
-        internal bool HasRunnable(ChatSession session, bool awaiting)
+        internal bool HasRunnable(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return box.Inputs.Any(i => i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
-                (!awaiting || i.Delivery == InputDelivery.Steer) && (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
+            lock (box.Sync) return HasRunnableLocked(box, session);
+        }
+        private static bool HasRunnableLocked(Inbox box, ChatSession session)
+        {
+            var awaiting = PendingConfirmationId(session) != null;
+            return box.Inputs.Any(i => i.Status == ConversationInputStatus.Pending &&
+                CanSchedule(session, i, awaiting) && (!awaiting || i.Delivery == InputDelivery.Steer) &&
+                (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
+        }
+        private static bool CanSchedule(ChatSession session, ConversationInput input, bool awaiting)
+        {
+            return input.AcceptedRunId == null || awaiting && input.Delivery == InputDelivery.Steer &&
+                input.AcceptedRunId == session.LastRun?.RunId &&
+                (input.PendingId == null || input.PendingId == PendingConfirmationId(session));
+        }
+        internal static string PendingConfirmationId(ChatSession session)
+        {
+            var summary = session?.LastRun?.KernelState?.Summary;
+            return summary?.Lifecycle == RNAssistant.Core.Agent.RunLifecycle.AwaitingConfirmation
+                ? summary.PendingConfirmation?.PendingId : null;
         }
         internal void EndWorker(ChatSession session)
         {

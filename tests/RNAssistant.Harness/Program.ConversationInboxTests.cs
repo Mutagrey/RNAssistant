@@ -142,7 +142,7 @@ namespace RNAssistant.Harness
                 AssertEqual("first", events.ReadPayload(session, accepted), "immutable text body is CAS-backed");
                 AssertTrue(accepted.Data["Input"]["Text"].Type == Newtonsoft.Json.Linq.JTokenType.Null, "body is not duplicated in metadata");
                 inbox.Update(session, new ConversationInputUpdate { InputId = "b", ExpectedRevision = 1, Text = "edited" }, "edit");
-                AssertEqual("a", inbox.TakeNext(session, false).Id, "FIFO claim");
+                AssertEqual("a", inbox.TakeNext(session).Id, "FIFO claim");
                 var delivered = new ChatMessage { Id = "a", Role = "user", Content = "first" };
                 session.Messages.Add(delivered);
                 store.Commit(session, ConversationCommit.UserInput(delivered));
@@ -168,7 +168,7 @@ namespace RNAssistant.Harness
                 AssertEqual("edited", recovered.FindOperation(session, "b", InboxInput("b", "second", InputDelivery.Queue).RequestFingerprint).Text,
                     "replay retains the original request fingerprint across edits");
                 recovered.Resume(session);
-                AssertEqual("edited", recovered.TakeNext(session, false).Text, "edit survives replay");
+                AssertEqual("edited", recovered.TakeNext(session).Text, "edit survives replay");
                 var shadow = InboxInput("shadow", "second", InputDelivery.Queue);
                 shadow.OperationId = "b";
                 shadow.RequestFingerprint = InboxInput("b", "second", InputDelivery.Queue).RequestFingerprint;
@@ -185,7 +185,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(FakeOfficeAdapter.ForHost("Excel")); store.Save(session);
                 var inbox = new ConversationInboxService(events);
                 inbox.Submit(session, InboxInput("missing", "retained", InputDelivery.Queue));
-                var claimed = inbox.TakeNext(session, false);
+                var claimed = inbox.TakeNext(session);
                 var premature = false;
                 try { inbox.Applied(session, claimed.Id); }
                 catch (InvalidOperationException) { premature = true; }
@@ -236,7 +236,7 @@ namespace RNAssistant.Harness
                     AssertTrue(restarted.Snapshot(session).Paused, "restart replays queue paused");
                     AssertTrue(!restarted.TryStartWorker(session), "restart cannot dispatch without explicit resume");
                     restarted.Resume(session);
-                    AssertEqual("retained", restarted.TakeNext(session, false).Text, "explicit resume retains FIFO input");
+                    AssertEqual("retained", restarted.TakeNext(session).Text, "explicit resume retains FIFO input");
                 }
                 finally { ConversationInboxService.ReleaseShared(paths.Root, restarted); }
             });
@@ -256,7 +256,7 @@ namespace RNAssistant.Harness
                     InboxInput("office", "Saved Office input", InputDelivery.Queue).RequestFingerprint);
                 AssertEqual(1L, officeAccepted.Initial.Revision,
                     "Office live lookup retains the first accepted revision");
-                var claimed = inbox.TakeNext(session, false);
+                var claimed = inbox.TakeNext(session);
                 var message = new ChatMessage { Id = claimed.Id, Role = "user", Content = claimed.Text };
                 session.Messages.Add(message);
                 store.Commit(session, ConversationCommit.UserInput(message));
@@ -373,9 +373,77 @@ namespace RNAssistant.Harness
                 inbox.End(session, false, false);
                 AssertTrue(!inbox.TryStartWorker(session), "stop does not restart queued work");
                 inbox.Submit(session, InboxInput("b", "new explicit request", InputDelivery.Steer, "doc-1"));
-                AssertEqual("b", inbox.TakeNext(session, false).Id, "new request may run while old queue stays paused");
+                AssertEqual("b", inbox.TakeNext(session).Id, "new request may run while old queue stays paused");
                 AssertEqual("doc-1", inbox.Find(session, "a").DocumentRuntimeKey, "original target retained");
                 AssertTrue(inbox.Snapshot(session).Paused, "old queue remains paused");
+            });
+        }
+
+        private static void InboxSteerRequiresExactLiveTarget()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                session.LastRun = new ChatRunRecord { RunId = "run-1", TurnId = "turn-1", Status = "running",
+                    KernelState = new AgentRunState(new RunSummary("run-1", "turn-1", RunLifecycle.Running,
+                        new ToolCounts(), 1, 0, "", null, null), new AgentRunLimits(4, 4)) };
+                store.Save(session);
+                var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
+                inbox.Bind(session);
+                var steer = InboxInput("steer", "change active run", InputDelivery.Steer);
+                steer.AcceptedRunId = "run-1";
+                steer.RequestFingerprint = ConversationInputJournal.Fingerprint(new { steer.Text, steer.AcceptedRunId });
+                inbox.SubmitToRun(session, "run-1", steer);
+                AssertTrue(inbox.InterruptToken(session).IsCancellationRequested,
+                    "accepted exact steer interrupts the active model request");
+                session.LastRun.Status = "completed";
+                session.LastRun.KernelState = new AgentRunState(new RunSummary("run-1", "turn-1",
+                    RunLifecycle.Completed, new ToolCounts(), 1, 0, "Done", null, null), new AgentRunLimits(4, 4));
+                inbox.End(session, true, false);
+                AssertTrue(!inbox.TryStartWorker(session), "an undelivered exact steer never becomes a new turn");
+                AssertTrue(inbox.TakeNext(session) == null, "late exact steer remains retained for inspection");
+                var late = InboxInput("late", "too late", InputDelivery.Steer);
+                late.AcceptedRunId = "run-1";
+                var refused = false;
+                try { inbox.SubmitToRun(session, "run-1", late); }
+                catch (InvalidOperationException) { refused = true; }
+                AssertTrue(refused, "admission refuses a completed run");
+                inbox.Submit(session, InboxInput("queue", "new task", InputDelivery.Queue));
+                AssertTrue(inbox.TryStartWorker(session), "an explicit queue item may start a new turn");
+                AssertEqual("queue", inbox.TakeNext(session).Id, "stale steer does not block FIFO queue");
+                inbox.EndWorker(session);
+            });
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                var call = new ToolCall("call-1", "test.write", "{}");
+                var policy = new ToolPolicySnapshot(call.Name, "policy-1", true, true);
+                var pending = new PendingConfirmation("pending-1", call, policy, "step-1", 1);
+                session.LastRun = new ChatRunRecord { RunId = "run-2", TurnId = "turn-2", Status = "awaitingconfirmation",
+                    KernelState = new AgentRunState(new RunSummary("run-2", "turn-2", RunLifecycle.AwaitingConfirmation,
+                        new ToolCounts(), 1, 1, "Confirm", null, pending), new AgentRunLimits(4, 4)) };
+                store.Save(session);
+                var events = new ChatEventStoreAdapter(store);
+                var inbox = new ConversationInboxService(events);
+                var steer = InboxInput("pending-steer", "another approach", InputDelivery.Steer);
+                steer.AcceptedRunId = "run-2"; steer.PendingId = "pending-1";
+                steer.RequestFingerprint = ConversationInputJournal.Fingerprint(new { steer.Text, steer.AcceptedRunId, steer.PendingId });
+                inbox.SubmitToPending(session, "run-2", "pending-1", steer);
+                AssertTrue(inbox.TryStartWorker(session), "exact pending steer resumes the waiting continuation");
+                AssertEqual("pending-steer", inbox.TakeNext(session).Id, "only the matching pending target is selected");
+                inbox.EndWorker(session);
+                var changed = new PendingConfirmation("pending-2", call, policy, "step-2", 1);
+                session.LastRun.KernelState = new AgentRunState(new RunSummary("run-2", "turn-2", RunLifecycle.AwaitingConfirmation,
+                    new ToolCounts(), 1, 1, "Confirm", null, changed), new AgentRunLimits(4, 4));
+                AssertTrue(!inbox.TryStartWorker(session), "changed pending ID cannot consume the old steer");
+                var stale = InboxInput("stale-pending", "stale", InputDelivery.Steer);
+                stale.AcceptedRunId = "run-2"; stale.PendingId = "pending-1";
+                var refused = false;
+                try { inbox.SubmitToPending(session, "run-2", "pending-1", stale); }
+                catch (InvalidOperationException) { refused = true; }
+                AssertTrue(refused, "admission refuses a changed confirmation");
             });
         }
 

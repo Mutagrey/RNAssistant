@@ -105,10 +105,17 @@ namespace RNAssistant.Office
                 string.IsNullOrWhiteSpace(request.OperationId) || request.OperationId.Length > 128 ||
                 !Enum.IsDefined(typeof(InputDelivery), request.Delivery))
                 throw new ArgumentException("An explicit chat, operation id and delivery mode are required.");
-            if (request.Answers != null && (request.Text != null || (request.ResourceDraftIds?.Count ?? 0) > 0 || request.Delivery != InputDelivery.Steer))
+            if (request.Answers != null && (request.Text != null || (request.ResourceDraftIds?.Count ?? 0) > 0 ||
+                request.Delivery != InputDelivery.Steer || request.SteerRunId != null || request.SteerPendingId != null))
                 throw new ArgumentException("Typed answers require their own input without text or attachments.");
+            if (request.SteerRunId != null && (string.IsNullOrWhiteSpace(request.SteerRunId) || request.SteerRunId.Length > 128) ||
+                request.SteerPendingId != null && (string.IsNullOrWhiteSpace(request.SteerPendingId) || request.SteerPendingId.Length > 128) ||
+                request.SteerPendingId != null && request.SteerRunId == null ||
+                request.Answers == null && (request.Delivery == InputDelivery.Steer) != (request.SteerRunId != null))
+                throw new ArgumentException("Steer requires an exact active run; queue input has no run target.");
             var fingerprint = ConversationInputJournal.Fingerprint(new SubmitChatInputPayload {
                 Text = request.Text, Delivery = request.Delivery, Answers = request.Answers,
+                SteerRunId = request.SteerRunId, SteerPendingId = request.SteerPendingId,
                 ResourceDraftIds = request.ResourceDraftIds ?? new List<string>() });
             var session = LoadInboxSession(request.ChatId);
             ConversationRunPolicy.RequireCurrentSession(session);
@@ -127,13 +134,19 @@ namespace RNAssistant.Office
                     if (drafts.Any(a => a.Status == "error")) throw new InvalidOperationException("Вложение не готово.");
                     var message = new ChatMessage { Attachments = new List<ChatAttachment>(drafts) };
                     _attachmentStore.CommitToCas(message);
-                    _inbox.Submit(session, new ConversationInput
+                    var input = new ConversationInput
                     {
                         Id = Guid.NewGuid().ToString("N"), OperationId = request.OperationId, RequestFingerprint = fingerprint,
-                        Text = text, Delivery = request.Delivery, AnswerRunId = request.Answers?.RunId,
+                        Text = text, Delivery = request.Delivery, AcceptedRunId = request.SteerRunId,
+                        PendingId = request.SteerPendingId, AnswerRunId = request.Answers?.RunId,
                         QuestionSetId = request.Answers?.QuestionSetId, CreatedUtc = DateTime.UtcNow, Attachments = message.Attachments,
                         DocumentRuntimeKey = CaptureExpectedRuntimeDocumentKey(session)
-                    });
+                    };
+                    if (request.SteerPendingId != null)
+                        _inbox.SubmitToPending(session, request.SteerRunId, request.SteerPendingId, input);
+                    else if (request.SteerRunId != null)
+                        _inbox.SubmitToRun(session, request.SteerRunId, input);
+                    else _inbox.Submit(session, input);
                     _chatResourceIngestion.DeleteDrafts(message);
                 }
                 StartInboxWorker(session, progress, changed);
@@ -176,15 +189,15 @@ namespace RNAssistant.Office
                     {
                         session = LoadAddressedSession(session.Id);
                         ConversationRunPolicy.RequireCurrentSession(session);
-                        var item = _inbox.TakeNext(session, HasPendingAgentConfirmation(session));
+                        var item = _inbox.TakeNext(session);
                         if (item == null) break;
                         if (!string.IsNullOrEmpty(item.DocumentRuntimeKey) &&
                             item.DocumentRuntimeKey != CaptureExpectedRuntimeDocumentKey(session))
                             throw new InvalidOperationException("Исходная сессия документа недоступна. Очередь приостановлена.");
-                        if (HasPendingAgentConfirmation(session))
+                        if (ConversationInboxService.PendingConfirmationId(session) != null)
                         {
                             var pending = session.LastRun.KernelState.Summary.PendingConfirmation;
-                            var resumedRunId = Guid.NewGuid().ToString("N");
+                            var resumedRunId = session.LastRun.RunId;
                             await ConfirmAgentToolAsync(pending.PendingId, session.Id,
                                 (phase, text, activity) => { if (progress != null) progress(resumedRunId, phase, text, activity); },
                                 token, resumedRunId, changed, true).ConfigureAwait(false);
@@ -221,7 +234,7 @@ namespace RNAssistant.Office
                     try
                     {
                         _inbox.EndWorker(session);
-                        if (!token.IsCancellationRequested && _inbox.HasRunnable(session, HasPendingAgentConfirmation(session)))
+                        if (!token.IsCancellationRequested && _inbox.HasRunnable(session))
                             StartInboxWorker(session, progress, changed);
                         if (changed != null && !token.IsCancellationRequested) changed(GetChatState(session.Id));
                     }

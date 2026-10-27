@@ -69,7 +69,21 @@ namespace RNAssistant.MockDemo
                 else if (!request.Any(message => message.AttachmentAnalysis?.Content?.Contains(expectedAnalysis) == true) ||
                     persisted?.AttachmentAnalysis?.Content?.Contains(expectedAnalysis) != true)
                     throw new Exception(role + "/" + routing + ": analysis missing from request or durable input at request " + primaryCalls);
-                return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
+                var response = responses.Dequeue();
+                if (response == "fixture-finish")
+                {
+                    var refs = RNAssistant.Core.ModelProtocol.ModelReferenceProjection.Delivered(request.ToArray());
+                    // The superseded pending write is not evidence of a completed mutation.
+                    response = RNAssistant.Core.ModelProtocol.ModelProtocolWire.WriteAcceptedDecision("finish", "Report the observed outcome.",
+                        steer ? "The pending write was superseded." : "Done",
+                        results: refs.Count == 0 ? new RNAssistant.Core.ModelProtocol.ConversationResultClaim[0] :
+                            new[] { new RNAssistant.Core.ModelProtocol.ConversationResultClaim("Requested change", new[] { steer ? refs.First() : refs.Last() },
+                                steer ? RNAssistant.Core.ModelProtocol.ConversationAssessment.Unverified :
+                                    RNAssistant.Core.ModelProtocol.ConversationAssessment.Satisfied) },
+                        outcome: steer ? RNAssistant.Core.ModelProtocol.ConversationOutcome.UnableToComplete :
+                            RNAssistant.Core.ModelProtocol.ConversationOutcome.Completed);
+                }
+                return Task.FromResult(new LlmCompletionResult { Content = response });
             };
             AssistantController controller = null;
             try
@@ -85,18 +99,20 @@ namespace RNAssistant.MockDemo
                     return draft.Id;
                 };
                 Func<string, object, string> tool = (name, arguments) => JsonConvert.SerializeObject(new
-                    { message = "", action = "tool", tool_calls = new[] { new { name, arguments } } });
-                const string done = "{\"message\":\"Done\",\"action\":\"done\",\"tool_calls\":[]}";
+                    { message = "", action = "execute", reason = "Perform the checked step.", tool_calls = new[] { new { name, arguments } } });
+                const string done = "fixture-finish";
                 responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
                 responses.Enqueue(tool("excel.add_sheet", new { name = "ImageSheet1" }));
                 controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "image-a",
                     Text = "Use this image to create a sheet", ResourceDraftIds = new List<string> { stage("first.png") },
-                    Delivery = InputDelivery.Steer }, null, null);
+                    Delivery = InputDelivery.Queue }, null, null);
                 await controller.InboxWorkersDrained.ConfigureAwait(false);
                 var initial = store.Load(chatId);
                 var pending = initial.LastRun.KernelState?.Summary.PendingConfirmation;
                 if (pending == null || primaryCalls != 2) throw new Exception("Fixture did not reach approval: " +
                     role + "/" + routing + ", requests=" + primaryCalls + ", " + initial.LastRun.Status + ": " + initial.LastRun.CurrentAction);
+                if (controller.GetChatState(chatId).RunViewState?.RunId != initial.LastRun.RunId)
+                    throw new Exception("Pending UI state lost the original run ID.");
                 var firstUserId = ConversationInputMessage.Latest(initial).Id;
 
                 if (steer)
@@ -104,7 +120,8 @@ namespace RNAssistant.MockDemo
                     responses.Enqueue(done);
                     controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "image-b",
                         Text = "Use the replacement image; do not create a sheet", ResourceDraftIds = new List<string> { stage("second.png") },
-                        Delivery = InputDelivery.Steer }, null, null);
+                        Delivery = InputDelivery.Steer, SteerRunId = initial.LastRun.RunId,
+                        SteerPendingId = pending.PendingId }, null, null);
                     await controller.InboxWorkersDrained.ConfigureAwait(false);
                     var latest = ConversationInputMessage.Latest(store.Load(chatId));
                     if (helperCalls != 2 || latest.Id == firstUserId || latest.AttachmentAnalysis?.Content?.Contains(expectedAnalysis) != true ||
@@ -113,6 +130,14 @@ namespace RNAssistant.MockDemo
                 }
                 else
                 {
+                    if (role == ToolResultRoles.User && routing == "helper")
+                    {
+                        var staleRunRefused = false;
+                        try { await controller.ConfirmAgentToolAsync(pending.PendingId, chatId, runId: "another-run"); }
+                        catch (InvalidOperationException) { staleRunRefused = true; }
+                        if (!staleRunRefused || adapter.HasSheet("ImageSheet1"))
+                            throw new Exception("Stale confirmation run ID was accepted.");
+                    }
                     if (routing == "changed-helper")
                     {
                         var controls = controller.GetSettings();
@@ -135,10 +160,16 @@ namespace RNAssistant.MockDemo
                     var expectedHelpers = routing == "native" ? 0 : routing == "changed-helper" ? 2 : 1;
                     if (helperCalls != expectedHelpers || primaryCalls != 4 || !adapter.HasSheet("ImageSheet1") || !adapter.HasSheet("ImageSheet2") ||
                         adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet") != 2)
-                        throw new Exception(role + "/" + routing + ": repeated helper or mutation, or lost continuation.");
+                        throw new Exception(role + "/" + routing + ": repeated helper or mutation, or lost continuation: helper=" +
+                            helperCalls + ", primary=" + primaryCalls + ", sheets=" + adapter.HasSheet("ImageSheet1") + "/" +
+                            adapter.HasSheet("ImageSheet2") + ", writes=" + adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet") +
+                            ", status=" + store.Load(chatId).LastRun.Status + ", action=" + store.Load(chatId).LastRun.CurrentAction);
                 }
-                if (store.Load(chatId).LastRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Completed)
-                    throw new Exception("Confirmation input scenario did not complete.");
+                var finalRun = store.Load(chatId).LastRun;
+                if (finalRun.KernelState.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Completed)
+                    throw new Exception("Confirmation input scenario did not complete: " + role + "/" + routing +
+                        ", steer=" + steer + ", lifecycle=" + finalRun.KernelState.Summary.Lifecycle +
+                        ", reason=" + finalRun.KernelState.Summary.Reason + ", action=" + finalRun.CurrentAction);
             }
             finally
             {

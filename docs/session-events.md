@@ -643,6 +643,14 @@ pauses retained input independently of the last saved pause flag. Replay rejects
 one operation ID assigned to multiple inputs or changes to an
 input's immutable request fingerprint, run/question IDs or runtime target across
 transitions; neither Office nor workspace may acknowledge that history as accepted.
+An Office immediate steer is admitted through the shared Application inbox only
+for the exact running kernel run. A steer while a tool confirmation is pending
+also stores the exact pending ID. The inbox refuses a stale run/pending target;
+an already accepted but unconsumed exact steer remains visible and cannot become
+a new turn after that target ends. Only an explicit Queue input enters FIFO.
+Office confirmation resumes the original kernel run ID, including when a steer
+supersedes the pending tool; live progress uses that same ID. These checks use
+the existing input event and kernel summary, without a second lifecycle store.
 Missing CAS input bodies fail explicitly. Old event streams need no backfill;
 absence of input events means an empty queue.
 
@@ -757,7 +765,8 @@ cancellation. Queue/steer remains separate work. Project-chat abandoned-run
 recovery is described above.
 
 Office `submitChatInput` requires an operation ID and uses the same conflict check.
-Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup
+Its fingerprint covers text or typed answers, draft IDs, delivery mode and exact
+steer run/pending target. Lookup
 precedes draft loading, so a retry works after drafts were consumed; a matching
 receipt never restarts the worker. Queue edits preserve the original fingerprint.
 Receipts without a fingerprint are explicitly unavailable for retry. `sendChat`

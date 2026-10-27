@@ -78,9 +78,23 @@ async function submitChatInput() {
     return;
   }
 
-  var delivery = currentActiveSend() || (typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity())
-    ? runningMessageDelivery() : "Steer";
-  await submitInboxMessage(text, attachments, targetChatId, delivery);
+  var pendingApproval = typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity();
+  var target = exactOfficeSteerTarget(targetChatId);
+  var delivery = currentActiveSend() || pendingApproval ? runningMessageDelivery() : "Queue";
+  if (delivery === "Steer" && !target.runId) delivery = "Queue";
+  await submitInboxMessage(text, attachments, targetChatId, delivery, null,
+    delivery === "Steer" ? target.runId : null,
+    delivery === "Steer" ? target.pendingId : null);
+}
+
+function exactOfficeSteerTarget(chatId) {
+  var view = chatId === state.activeChatId ? state.activeRunViewState : null;
+  if (view && view.lifecycle === "awaiting_confirmation" && view.pendingConfirmation)
+    return { runId: view.runId, pendingId: view.pendingConfirmation.pendingId };
+  if (view && view.lifecycle === "running") return { runId: view.runId, pendingId: null };
+  var live = state.chatRuns && state.chatRuns[chatId];
+  return live && live.runId && chatInbox(chatId).running
+    ? { runId: live.runId, pendingId: null } : { runId: null, pendingId: null };
 }
 
 function stopActiveSend() {

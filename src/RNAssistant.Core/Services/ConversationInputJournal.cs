@@ -95,6 +95,7 @@ namespace RNAssistant.Core.Services
                     if (prior.OperationId != input.OperationId ||
                         prior.RequestFingerprint != input.RequestFingerprint ||
                         prior.AcceptedRunId != input.AcceptedRunId ||
+                        prior.PendingId != input.PendingId ||
                         prior.AnswerRunId != input.AnswerRunId ||
                         prior.QuestionSetId != input.QuestionSetId ||
                         prior.DocumentRuntimeKey != input.DocumentRuntimeKey)

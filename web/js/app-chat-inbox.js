@@ -92,8 +92,10 @@ function inboxOperationId() {
   return "input-" + (window.crypto && window.crypto.randomUUID ? window.crypto.randomUUID() :
     Date.now().toString(36) + "-" + Math.random().toString(36).slice(2));
 }
-async function submitInboxMessage(text, attachments, chatId, delivery, answers) {
+async function submitInboxMessage(text, attachments, chatId, delivery, answers, steerRunId, steerPendingId) {
   if (isPendingChatSubmit(chatId)) return;
+  if (delivery === "Steer" && !answers && !steerRunId) delivery = "Queue";
+  if (delivery !== "Steer" || answers) { steerRunId = null; steerPendingId = null; }
   if (!answers && readOfficeDraft(chatId) && readOfficeDraft(chatId).pendingVisualAnnotation) {
     setAttachmentStatus(chatId, "Завершите или удалите незавершённую аннотацию перед отправкой.", "warning");
     return false;
@@ -102,14 +104,16 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
   setPendingChatSubmit(chatId, true);
   renderSendControls();
   // Retain the identity across uncertain transport retries, including accepted-but-unacknowledged sends.
-  var fingerprint = JSON.stringify([chatId, text, attachments.map(attachmentId), delivery, answers || null]);
+  var fingerprint = JSON.stringify([chatId, text, attachments.map(attachmentId), delivery,
+    answers || null, steerRunId || null, steerPendingId || null]);
   var echoes = chatInputEchoes(chatId);
   state.inboxSubmissions = state.inboxSubmissions || {};
   var pending = state.inboxSubmissions[chatId];
   if (!pending || pending.fingerprint !== fingerprint) pending = echoes.find(function (item) { return item.fingerprint === fingerprint; });
   if (!pending) {
     pending = { fingerprint: fingerprint, OperationId: inboxOperationId(), Text: text,
-      Attachments: attachments.slice(), Delivery: delivery, Answers: answers };
+      Attachments: attachments.slice(), Delivery: delivery, Answers: answers,
+      SteerRunId: steerRunId || null, SteerPendingId: steerPendingId || null };
     echoes.push(pending);
   }
   state.inboxSubmissions[chatId] = pending;
@@ -119,7 +123,8 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers) 
   try {
     if (!answers) await window.RNAssistantChatDrafts.flushOffice(chatId);
     var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
-      text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery, answers: answers });
+      text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery,
+      steerRunId: steerRunId, steerPendingId: steerPendingId, answers: answers });
     pending.localStatus = "syncing";
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];
@@ -229,6 +234,8 @@ function pendingInputStatus(item, box) {
   if (item.localStatus === "submitting") return "Отправка…";
   if (item.localStatus === "unconfirmed") return "Отправка не подтверждена";
   if (!(box.items || []).some(function (pending) { return pending.Id === item.Id; })) return "Обновление истории…";
+  if (item.Delivery === "Steer" && item.AcceptedRunId && !box.running)
+    return "Не доставлено в исходный запуск";
   if (box.paused && !box.running) return "В очереди · приостановлено";
   if (item.Status === "Delivering") return "Передаю агенту…";
   if (item.Delivery === "Steer" && box.running) return box.phase === "executing" ? "Применится после текущего действия" : "Ожидает применения";
@@ -267,7 +274,8 @@ function renderPendingInput(item, chatId, editing) {
     var actions = document.createElement("div"); actions.className = "inbox-actions";
     var queued = (chatInbox(chatId).items || []).some(function (pending) { return pending.Id === item.Id; });
     if (item.localStatus === "unconfirmed") actions.appendChild(inboxButton("Повторить отправку", function () {
-      submitInboxMessage(item.Text, item.Attachments || [], chatId, item.Delivery, item.Answers);
+      submitInboxMessage(item.Text, item.Attachments || [], chatId, item.Delivery, item.Answers,
+        item.SteerRunId || item.AcceptedRunId, item.SteerPendingId || item.PendingId);
     }));
     if (queued && item.Status === "Pending") {
       if (item.Delivery !== "Steer") actions.appendChild(inboxButton("Отправить сейчас", function () { changeInboxItem("steerChatInput", item); }));

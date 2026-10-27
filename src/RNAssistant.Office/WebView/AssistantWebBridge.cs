@@ -681,7 +681,9 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.ConfirmAgentTool:
                         var confirmAgentTool = Payload<PendingAgentToolPayload>(payload);
-                        var confirmRunId = Guid.NewGuid().ToString("N");
+                        var confirmRunId = _controller.GetChatState(confirmAgentTool.ChatId).RunViewState?.RunId;
+                        if (string.IsNullOrWhiteSpace(confirmRunId))
+                            throw new InvalidOperationException("Pending confirmation run is unavailable.");
                         responsePayload = await Task.Run(() => _controller.ConfirmAgentToolAsync(
                                 confirmAgentTool.PendingId,
                                 confirmAgentTool.ChatId,

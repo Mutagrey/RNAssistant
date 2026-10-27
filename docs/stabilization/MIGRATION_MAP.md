@@ -53,6 +53,11 @@ Office читает live inbox, Workspace — canonical journal при reconnect
 старые status-only/Workspace `NeedsRunInterruption` проверки удалены. Доменный
 read-back и формирование diagnostic остаются в своих адаптерах. Захват lease,
 применение recovery и общий scheduler ещё не объединены в одного владельца.
+Оба live steer теперь проходят `ConversationInboxService.SubmitToRun` с exact
+kernel run ID. Office pending-confirmation steer проверяет ещё и pending ID;
+поздний bound steer остаётся в журнале, но не запускает новый ход. Office
+подтверждение продолжает исходный run ID. `StartInboxWorker` и Workspace
+`RunOperation` всё ещё отдельные, поэтому строка общего scheduler ниже открыта.
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
 |---|---|---|

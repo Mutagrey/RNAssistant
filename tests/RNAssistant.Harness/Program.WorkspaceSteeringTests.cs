@@ -219,7 +219,7 @@ namespace RNAssistant.Harness
                     {
                         var inbox = new ConversationInboxService(events);
                         inbox.Resume(recovered);
-                        AssertTrue(!inbox.TryStartWorker(recovered) && inbox.TakeNext(recovered, false) == null,
+                        AssertTrue(!inbox.TryStartWorker(recovered) && inbox.TakeNext(recovered) == null,
                             "exact-run input cannot become a queued new task");
                         recovered.LastRun = new ChatRunRecord { RunId = "another-run" };
                         inbox.Bind(recovered);

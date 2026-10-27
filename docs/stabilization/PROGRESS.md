@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Точный адрес steer и подтверждение в исходном run — 2026-10-27
+
+Office active steer переключён на общий Application `ConversationInboxService.SubmitToRun`,
+который уже использует Workspace; steer ожидающего подтверждения адресуется ещё и
+по pending ID. Поздний принятый steer остаётся видимым, но не превращается в новую
+задачу. Обычная отправка без работающего run идёт в явную Queue. Приём больше не
+входит повторно в service под lock очереди. Office confirmation, включая
+supersede, продолжает исходный kernel run ID; bridge progress показывает тот же ID.
+
+Host-neutral Harness проверил точные и устаревшие run/pending targets и FIFO;
+MockDemo — Office controller intake, подтверждения/steer и сохранение эффектов;
+Chromium — точный UI submit до квитанции. Общий FIFO/run scheduler и единый Web
+conversation controller остаются открытыми S1c. Windows/Office/WebView2 не
+квалифицированы; с Windows доступны только фотографии экрана.
+
 ## Office и Workspace сверяют recovery с kernel и exact cursor — 2026-10-27
 
 Оба пути восстановления используют `ConversationRecoveryService` в Application:

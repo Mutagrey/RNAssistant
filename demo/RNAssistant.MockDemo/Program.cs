@@ -198,7 +198,7 @@ namespace RNAssistant.MockDemo
                     {
                         chatId = chatId,
                         text = "persist failed turn",
-                        operationId = "failure-input", delivery = "Steer",
+                        operationId = "failure-input", delivery = "Queue",
                         resourceDraftIds = new[] { draft.Resource.Id }
                     }
                 });
