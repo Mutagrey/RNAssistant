@@ -3,11 +3,12 @@
 ## Устаревший fixture mixed recovery — 2026-10-27
 
 Host-neutral `chat sessions: interrupted mixed exchanges preserve completed context`
-падает при подготовке `store.Save(session)`, до вызова run owner: fixture вручную
-создаёт accepted tool call без canonical `ExecutionReference`, который теперь
+и `chat sessions: saved run boundary preserves protocol` падают при подготовке
+`store.Save(session)`, до вызова recovery: оба fixture вручную
+создают accepted tool call без canonical `ExecutionReference`, который теперь
 обязателен в `ChatStore.ModelReferences`. Это пробел проверки recovery, не evidence
-регрессии текущего Application run owner. Owner: Harness fixture / Core session
-events; обновить fixture через нормальный accepted-call commit и повторить тест
+регрессии общего guard. Owner: Harness fixture / Core session
+events; обновить fixtures через нормальный accepted-call commit и повторить тесты
 отдельным изменением. Windows evidence к этому выводу не относится.
 
 ## Разбор десяти фотографий: чат, протокол и достоверность — 2026-10-26

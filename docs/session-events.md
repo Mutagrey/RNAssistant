@@ -278,6 +278,13 @@ and repeated recovery is inert. These are minimal summary/recovery adaptations; 
 persistence/UI matrix remains Phase 9. [Phase 3B2 evidence](stabilization/PHASE_3B2_KERNEL_CUTOVER.md)
 covers actual event replay, pending/cancelled confirmation, stale CAS and faults.
 
+Application `ConversationRecoveryService` supplies the same recovery decision and
+exact run/cursor fence to Office and Workspace after their conversation lease is
+acquired. A saved `running` label cannot override a terminal or awaiting kernel
+lifecycle. If canonical cursor or run changed since observation, that observation
+does not authorize interruption. Domain mutation evidence and diagnostic writes
+remain with the respective adapter; neither path retries a tool.
+
 ### Workspace run control
 
 The project-chat submit/approval boundary reports an unavailable session run

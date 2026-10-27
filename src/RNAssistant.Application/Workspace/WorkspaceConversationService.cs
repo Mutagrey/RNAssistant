@@ -119,7 +119,7 @@ namespace RNAssistant.Runtime
         {
             var observed = GetSession(workspace, sessionId);
             if (observed == null || observed.FormatVersion != ChatSession.CurrentFormatVersion ||
-                !NeedsRunInterruption(observed.LastRun)) return observed;
+                !ConversationRecoveryService.NeedsInterruption(observed.LastRun)) return observed;
 
             IDisposable lease;
             try { lease = AcquireSessionLease(sessionId, wait: false); }
@@ -133,7 +133,7 @@ namespace RNAssistant.Runtime
                     current.LastRun?.RunId == observed.LastRun.RunId &&
                     ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed))
                 {
-                    InterruptAbandonedRun(current);
+                    current = ConversationRecoveryService.ReconcileFenced(observed, current, InterruptAbandonedRun);
                     _conversationInbox.ReconcileAcceptedDelivery(current);
                 }
                 return current;
@@ -150,7 +150,7 @@ namespace RNAssistant.Runtime
                 if (session == null) throw new InvalidOperationException("Workspace session was not found.");
                 if (session.FormatVersion == ChatSession.CurrentFormatVersion)
                 {
-                    InterruptAbandonedRun(session);
+                    session = ConversationRecoveryService.ReconcileFenced(session, session, InterruptAbandonedRun);
                     _conversationInbox.ReconcileAcceptedDelivery(session);
                 }
                 return session;
@@ -514,7 +514,7 @@ namespace RNAssistant.Runtime
                 var drafts = LoadVisualSelectionDrafts(workspace, session,
                     request.ResourceDraftIds ?? new List<string>(), attachmentStore);
                 message = VisualAnnotationSourceWorkflow.UserText(message, drafts);
-                InterruptAbandonedRun(session);
+                session = ConversationRecoveryService.ReconcileFenced(session, session, InterruptAbandonedRun);
 
                 string[] editedPreviousIds = null;
                 var selectedSkills = SkillTaskService.CopySelections(session.LastRun);
@@ -931,18 +931,9 @@ namespace RNAssistant.Runtime
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
         }
 
-        private static bool NeedsRunInterruption(ChatRunRecord run)
-        {
-            if (run == null || string.IsNullOrWhiteSpace(run.RunId)) return false;
-            var lifecycle = run.KernelState?.Summary?.Lifecycle;
-            return lifecycle.HasValue ? lifecycle.Value == RunLifecycle.Running :
-                string.IsNullOrWhiteSpace(run.Status) || run.Status == "running" || run.Status == "cancelling";
-        }
-
-        private void InterruptAbandonedRun(ChatSession session)
+        private ChatSession InterruptAbandonedRun(ChatSession session)
         {
             var run = session.LastRun;
-            if (!NeedsRunInterruption(run)) return;
             var active = run.KernelState?.InFlightTool;
             ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages
                 .Where(item => item != null && item.RunId == run.RunId).ToArray());
@@ -972,6 +963,7 @@ namespace RNAssistant.Runtime
             }
             session.Messages.Add(new ChatMessage { Role = "assistant", RunId = run.RunId, Content = message });
             _chats.Commit(session, new ConversationCommit(session.Messages.Where(item => item.RunId == run.RunId)));
+            return session;
         }
 
         private IReadOnlyList<AgentMessage> RestoreAcceptedHistory(ChatSession session, bool currentRunOnly = false)

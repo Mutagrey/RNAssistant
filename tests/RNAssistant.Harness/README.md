@@ -1270,6 +1270,10 @@ This is host-neutral evidence, not Windows/Office qualification.
 
 ## Incoming messages / steer
 
+`chat sessions: shared recovery respects kernel and cursor` checks Office and
+Workspace against the same terminal/abandoned kernel states and rejects recovery
+from a stale observed cursor. It uses host-neutral stores, not a real Office host.
+
 Run the focused `inbox:` filter for cancellation isolation, stale responses, batch
 closure, final/approval races, durable FIFO editing, recovery and Stop behavior.
 `dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --inbox-test`

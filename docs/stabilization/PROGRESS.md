@@ -1,5 +1,23 @@
 # Stabilization progress
 
+## Office и Workspace сверяют recovery с kernel и exact cursor — 2026-10-27
+
+Оба пути восстановления используют `ConversationRecoveryService` в Application:
+после захвата своего conversation lease они повторно читают exact run/cursor и
+применяют доменный recovery только к той же сохранённой версии. Kernel lifecycle
+имеет приоритет над устаревшей строкой `running`: завершённый или ожидающий
+подтверждения run больше не получает ложный `interrupted`. Office сохраняет свою
+проверку mutation journal и диагностическую проекцию, Workspace — file/acceptance
+evidence. Старые отдельные решения `NeedsRunInterruption` и Office status-only
+проверка удалены; общий scheduler/FIFO и UI owner остаются открытыми S1c.
+
+Парный host-neutral Harness сценарий проверил terminal и abandoned run в обоих
+окружениях, а также отказ recovery при смене курсора. Workspace resume/steer и
+plugin abandoned-run проверки прошли. Два старых Office fixture с accepted tool
+calls всё ещё не запускают recovery из-за отсутствующего execution reference в
+ручной исходной истории; пробел отмечен в RISK_REGISTER. Windows/Office/WebView2
+не проверены, доступны только фотографии экрана.
+
 ## Workspace UI submit больше не ждёт занятый run — 2026-10-27
 
 Ранний `submitProjectChat` теперь пытается занять exact conversation lease без

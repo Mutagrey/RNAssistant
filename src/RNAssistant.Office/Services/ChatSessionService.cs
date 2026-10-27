@@ -97,12 +97,12 @@ namespace RNAssistant.Office.Services
             if (session == null) return null;
             if (session.FormatVersion != ChatSession.CurrentFormatVersion) return session;
             var run = session.LastRun;
-            if ((run == null || !IsUnfinishedRun(run.Status)) && !refreshActiveProjection) return session;
+            if (!ConversationRecoveryService.NeedsInterruption(run) && !refreshActiveProjection) return session;
             if (RunOwnershipProvider != null)
             {
                 if (RunOwnershipProvider(session.Id)) return session;
             }
-            else if (run != null && IsUnfinishedRun(run.Status) &&
+            else if (ConversationRecoveryService.NeedsInterruption(run) &&
                 skipSameRuntimeWithoutOwnershipProvider &&
                 string.Equals(run.RuntimeId, runtimeId, StringComparison.Ordinal))
             {
@@ -130,59 +130,9 @@ namespace RNAssistant.Office.Services
                 }
 
                 // Ownership may have changed between the initial load and lease acquisition.
-                session = ReloadCanonical(session);
-                run = session == null ? null : session.LastRun;
-                if (run != null && IsUnfinishedRun(run.Status))
-                {
-                    var storedOpenToolExecution =
-                        _conversations.PrepareInterruptedRunRecovery(session, run.RunId);
-                    var effectMayBeUnknown = run.KernelState == null
-                        ? storedOpenToolExecution
-                        : run.KernelState.InFlightTool != null;
-                    MarkInterruptedActivities(session, run, effectMayBeUnknown);
-                    // A terminal effect can precede its optional result projection.
-                    // Suppress open exchanges only; completed evidence remains usable.
-                    ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages
-                        .Where(message => BelongsToRun(message, run)).ToArray());
-                    run.Status = "interrupted";
-                    run.Phase = "interrupted";
-                    run.CurrentAction = effectMayBeUnknown
-                        ? "Предыдущий процесс завершился во время выполнения действия."
-                        : "Предыдущий процесс завершился после сохранённой границы.";
-                    if (run.KernelState != null)
-                        run.KernelState = run.KernelState.Interrupt(false, run.CurrentAction);
-                    session.Messages.Add(new ChatMessage
-                    {
-                        Role = "assistant",
-                        RunId = run.RunId,
-                        Content = effectMayBeUnknown
-                            ? "Предыдущий запуск был прерван. Результат выполнявшегося действия неизвестен; проверьте документ перед ручным повтором."
-                            : "Предыдущий запуск был прерван после сохранённой границы. Сохранённые результаты оставлены в истории; автоматическое продолжение не выполнялось.",
-                        Activity = new ChatActivity
-                        {
-                            RunId = run.RunId,
-                            Kind = "diagnostic",
-                            Title = "Запуск прерван",
-                            Status = "failed",
-                            ExecutionStatus = effectMayBeUnknown ? "interrupted_unknown" : "interrupted",
-                            Retryable = false,
-                            ResultMessage = effectMayBeUnknown
-                                ? "Процесс завершился до сохранения окончательного результата. Автоматический повтор отключён."
-                                : "Запуск завершился до финального ответа. Сохранённые результаты не повторялись автоматически."
-                        }
-                    });
-                    try
-                    {
-                        RunViewStateProjector.StampCurrentRun(session);
-                        _conversations.Commit(session, new ConversationCommit(session.Messages.Where(message => BelongsToRun(message, run))));
-                    }
-                    catch (ChatConcurrencyException)
-                    {
-                        // Another writer updated this chat. Do not retry this append;
-                        // use its latest canonical projection instead.
-                        session = ReloadCanonical(session);
-                    }
-                }
+                var observed = session;
+                session = ConversationRecoveryService.ReconcileFenced(observed,
+                    ReloadCanonical(observed), InterruptOfficeRun);
                 // Keep cache replacement inside the recovery lease so a new run
                 // cannot race a stale or unpersisted projection into active state.
                 if (refreshActiveProjection && session != null) NotifySaved(session);
@@ -191,6 +141,60 @@ namespace RNAssistant.Office.Services
             finally
             {
                 if (recoveryLease != null) recoveryLease.Dispose();
+            }
+        }
+
+        private ChatSession InterruptOfficeRun(ChatSession session)
+        {
+            var run = session.LastRun;
+            var storedOpenToolExecution =
+                _conversations.PrepareInterruptedRunRecovery(session, run.RunId);
+            var effectMayBeUnknown = run.KernelState == null
+                ? storedOpenToolExecution
+                : run.KernelState.InFlightTool != null;
+            MarkInterruptedActivities(session, run, effectMayBeUnknown);
+            // A terminal effect can precede its optional result projection.
+            // Suppress open exchanges only; completed evidence remains usable.
+            ToolProtocolMessages.ExcludeUnmatchedToolCalls(session.Messages
+                .Where(message => BelongsToRun(message, run)).ToArray());
+            run.Status = "interrupted";
+            run.Phase = "interrupted";
+            run.CurrentAction = effectMayBeUnknown
+                ? "Предыдущий процесс завершился во время выполнения действия."
+                : "Предыдущий процесс завершился после сохранённой границы.";
+            if (run.KernelState != null)
+                run.KernelState = run.KernelState.Interrupt(false, run.CurrentAction);
+            session.Messages.Add(new ChatMessage
+            {
+                Role = "assistant",
+                RunId = run.RunId,
+                Content = effectMayBeUnknown
+                    ? "Предыдущий запуск был прерван. Результат выполнявшегося действия неизвестен; проверьте документ перед ручным повтором."
+                    : "Предыдущий запуск был прерван после сохранённой границы. Сохранённые результаты оставлены в истории; автоматическое продолжение не выполнялось.",
+                Activity = new ChatActivity
+                {
+                    RunId = run.RunId,
+                    Kind = "diagnostic",
+                    Title = "Запуск прерван",
+                    Status = "failed",
+                    ExecutionStatus = effectMayBeUnknown ? "interrupted_unknown" : "interrupted",
+                    Retryable = false,
+                    ResultMessage = effectMayBeUnknown
+                        ? "Процесс завершился до сохранения окончательного результата. Автоматический повтор отключён."
+                        : "Запуск завершился до финального ответа. Сохранённые результаты не повторялись автоматически."
+                }
+            });
+            try
+            {
+                RunViewStateProjector.StampCurrentRun(session);
+                _conversations.Commit(session, new ConversationCommit(session.Messages.Where(message => BelongsToRun(message, run))));
+                return session;
+            }
+            catch (ChatConcurrencyException)
+            {
+                // Another writer updated this chat. Do not retry this append;
+                // use its latest canonical projection instead.
+                return ReloadCanonical(session);
             }
         }
 

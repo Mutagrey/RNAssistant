@@ -5,6 +5,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationInboxContracts.cs" Link="Application\Conversations\ConversationInboxContracts.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationLeaseService.cs" Link="Application\Conversations\ConversationLeaseService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationRunOwner.cs" Link="Application\Conversations\ConversationRunOwner.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationRecoveryService.cs" Link="Application\Conversations\ConversationRecoveryService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationWorkService.cs" Link="Application\Conversations\ConversationWorkService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationRunInputChannel.cs" Link="Application\Conversations\ConversationRunInputChannel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginResultStore.cs" Link="Application\PluginResultStore.cs" />

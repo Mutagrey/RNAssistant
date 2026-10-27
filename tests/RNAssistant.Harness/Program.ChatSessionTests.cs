@@ -2235,6 +2235,80 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SharedRecoveryRespectsKernelAndCursor()
+        {
+            WithTempPaths(paths =>
+            {
+                var chats = new ChatStore(paths);
+                var adapter = new FakeOfficeAdapter();
+                var office = chats.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Office recovery");
+                office.LastRun = new ChatRunRecord {
+                    RunId = "office-terminal", RuntimeId = "old-runtime", Status = "running",
+                    KernelState = new AgentRunState(new RunSummary("office-terminal", "office-terminal",
+                        RunLifecycle.Completed, new ToolCounts(), 1, 0, "done", null, null),
+                        new AgentRunLimits(4, 4))
+                };
+                chats.Save(office);
+                new ChatSessionService(adapter, ConversationStore(chats)).ReconcileInterruptedRuns("new-runtime");
+                var savedOffice = chats.Load(office.Id);
+                AssertEqual(RunLifecycle.Completed, savedOffice.LastRun.KernelState.Summary.Lifecycle,
+                    "Office recovery does not turn a terminal kernel run into failure");
+                AssertTrue(!savedOffice.Messages.Any(message => message.Activity?.Kind == "diagnostic"),
+                    "Office recovery adds no false interruption");
+
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "shared-recovery"));
+                using (var service = new WorkspaceConversationService(paths))
+                {
+                    var project = service.CreateSession(workspace, "Workspace recovery");
+                    project.LastRun = new ChatRunRecord {
+                        RunId = "workspace-terminal", Status = "running",
+                        KernelState = new AgentRunState(new RunSummary("workspace-terminal", "workspace-terminal",
+                            RunLifecycle.Completed, new ToolCounts(), 1, 0, "done", null, null),
+                            new AgentRunLimits(4, 4))
+                    };
+                    chats.Save(project);
+                    var savedProject = service.PrepareResume(workspace, project.Id);
+                    AssertEqual(RunLifecycle.Completed, savedProject.LastRun.KernelState.Summary.Lifecycle,
+                        "Workspace recovery keeps the same terminal kernel outcome");
+                    AssertTrue(!savedProject.Messages.Any(message => message.RunId == "workspace-terminal"),
+                        "Workspace recovery adds no false interruption");
+                }
+
+                var race = chats.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Cursor race");
+                race.LastRun = new ChatRunRecord { RunId = "race-run", Status = "running",
+                    KernelState = new AgentRunState(new RunSummary("race-run", "race-run",
+                        RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null),
+                        new AgentRunLimits(4, 4)) };
+                chats.Save(race);
+                var observed = chats.Load(race.Id);
+                var advanced = chats.Load(race.Id);
+                var later = new ChatMessage { Id = Guid.NewGuid().ToString("N"), Role = "user", Content = "Later input" };
+                advanced.Messages.Add(later);
+                chats.Commit(advanced, ConversationCommit.UserInput(later));
+                var called = false;
+                ConversationRecoveryService.ReconcileFenced(observed, chats.Load(race.Id), current =>
+                { called = true; return current; });
+                AssertTrue(!called, "a changed canonical cursor cannot be recovered from a stale observation");
+                new ChatSessionService(adapter, ConversationStore(chats)).ReconcileInterruptedRuns("new-runtime");
+                var recoveredOffice = chats.Load(race.Id);
+                AssertEqual(RunLifecycle.Failed, recoveredOffice.LastRun.KernelState.Summary.Lifecycle,
+                    "Office recovers the latest running kernel state under its lease");
+
+                using (var service = new WorkspaceConversationService(paths))
+                {
+                    var project = service.CreateSession(workspace, "Running workspace recovery");
+                    project.LastRun = new ChatRunRecord { RunId = "workspace-running", Status = "running",
+                        KernelState = new AgentRunState(new RunSummary("workspace-running", "workspace-running",
+                            RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null),
+                            new AgentRunLimits(4, 4)) };
+                    chats.Save(project);
+                    var recoveredProject = service.PrepareResume(workspace, project.Id);
+                    AssertEqual(RunLifecycle.Failed, recoveredProject.LastRun.KernelState.Summary.Lifecycle,
+                        "Workspace applies the same interrupted kernel transition");
+                }
+            });
+        }
+
         private static void InterruptedRunPreservesCompletedExchanges()
         {
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
