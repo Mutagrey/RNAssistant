@@ -735,10 +735,14 @@ namespace RNAssistant.Harness
                     ToolCallId = "call-1", ToolName = "common.resources_read",
                     ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                     ToolResultRole = ToolResultRoles.User,
+                    PromptTokens = 12345, CompletionTokens = 678, TotalTokens = 13023,
                     AcceptedCallOrigin = new AcceptedToolCallOrigin("step-1", "attempt-1", 0) };
                 var presented = PluginApplicationService.PresentWorkspaceMessage(wire);
                 AssertEqual("Читаю исходник", presented.Content, "source chat presents the model message, not protocol JSON");
                 AssertEqual(wire.Id, presented.Id, "workspace uses the shared message identity");
+                AssertTrue(presented.PromptTokens == 12345 && presented.CompletionTokens == 678 &&
+                    presented.TotalTokens == 13023,
+                    "project and plugin chats retain accepted provider usage in the shared feed");
                 AssertTrue(!JsonConvert.SerializeObject(presented).Contains("README.md"),
                     "workspace browser view never exposes accepted call arguments");
                 wire.ToolCallId = null;

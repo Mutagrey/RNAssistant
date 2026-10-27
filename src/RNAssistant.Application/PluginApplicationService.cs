@@ -670,6 +670,8 @@ namespace RNAssistant.Application
                 return new ChatMessageViewDto { Id = message.Id, Role = "assistant", RunId = message.RunId,
                     StepId = message.AcceptedCallOrigin?.StepId,
                     CreatedUtc = message.CreatedUtc, Content = accepted.Response.Message,
+                    PromptTokens = message.PromptTokens, CompletionTokens = message.CompletionTokens,
+                    TotalTokens = message.TotalTokens,
                     Activity = accepted.Response.Action == ConversationResponse.FinishAction ? null : new ChatActivity
                     {
                         Kind = "step", RunId = message.RunId, StepId = message.AcceptedCallOrigin?.StepId,

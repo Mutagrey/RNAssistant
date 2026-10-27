@@ -203,25 +203,62 @@ function resumeOfficeTranscript() {
   }
 }
 
+function validChatTokenCount(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function chatTokenNumber(value) {
+  return value.toLocaleString("ru-RU").replace(/\u00a0/g, "\u202f");
+}
+
 function messageUsageText(message) {
-  var total = messageTotalTokens(message);
-  var prompt = messagePromptTokens(message);
-  var completion = messageCompletionTokens(message);
+  var total = validChatTokenCount(messageTotalTokens(message));
+  var prompt = validChatTokenCount(messagePromptTokens(message));
+  var completion = validChatTokenCount(messageCompletionTokens(message));
   if (total === null && prompt === null && completion === null) {
     return "";
   }
 
   var parts = [];
-  if (total !== null && total !== undefined) {
-    parts.push(total + " токенов");
+  if (total !== null) {
+    parts.push(chatTokenNumber(total) + " токенов");
   }
-  if (prompt !== null && prompt !== undefined) {
-    parts.push("вход " + prompt);
+  if (prompt !== null) {
+    parts.push("вход " + chatTokenNumber(prompt));
   }
-  if (completion !== null && completion !== undefined) {
-    parts.push("ответ " + completion);
+  if (completion !== null) {
+    parts.push("ответ " + chatTokenNumber(completion));
   }
   return parts.join(" · ");
+}
+
+function chatRunTokenUsage(messages, startIndex, endIndex) {
+  var runId = messageRunId(messages[startIndex]);
+  var first = startIndex;
+  while (runId && first > 0 && messageProtocolMessage(messages[first - 1]) &&
+      messageRunId(messages[first - 1]) === runId) first -= 1;
+
+  var protocol = [], visible = [];
+  for (var index = first; index < endIndex; index += 1) {
+    var message = messages[index];
+    if (messageRole(message) !== "assistant" || runId && messageRunId(message) !== runId) continue;
+    var values = [messagePromptTokens(message), messageCompletionTokens(message), messageTotalTokens(message)];
+    if (!values.some(function (value) { return validChatTokenCount(value) !== null; })) continue;
+    (messageProtocolMessage(message) ? protocol : visible).push(message);
+  }
+  // A terminal runtime projection may repeat the final accepted response's
+  // usage. The accepted protocol records count each provider answer once.
+  var source = protocol.length ? protocol : visible;
+  if (!source.length) return null;
+  var usage = { PromptTokens: null, CompletionTokens: null, TotalTokens: null };
+  [["PromptTokens", messagePromptTokens], ["CompletionTokens", messageCompletionTokens],
+    ["TotalTokens", messageTotalTokens]].forEach(function (field) {
+    source.forEach(function (message) {
+      var value = validChatTokenCount(field[1](message));
+      if (value !== null) usage[field[0]] = (usage[field[0]] || 0) + value;
+    });
+  });
+  return usage;
 }
 
 function applyPromptSuggestion(text) {
@@ -336,7 +373,7 @@ function appendMessageFooter(node, message, index, activity, options) {
   var meta = document.createElement("div");
   meta.className = "message-footer-meta";
 
-  var usage = messageUsageText(message);
+  var usage = messageUsageText(options.usage || message);
   if (usage || message.Failed) {
     var usageNode = document.createElement("span");
     usageNode.className = "message-usage";
@@ -375,7 +412,7 @@ function appendMessageFooter(node, message, index, activity, options) {
     copyChatMessage(activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
   }));
-  appendMessageInspectorAction(actions, message, activity);
+  if (!activity) appendMessageInspectorAction(actions, message);
   var canFork = options.workspace
     ? window.RNAssistantWorkspaceChat.canMessageAction("fork", message, index)
     : !historyActionsBlocked;
@@ -412,16 +449,15 @@ function appendMessageFooter(node, message, index, activity, options) {
   node.appendChild(footer);
 }
 
-function appendMessageInspectorAction(parent, message, activity) {
+function appendMessageInspectorAction(parent, message) {
   if (!window.RNAssistantChatInspector || typeof window.RNAssistantChatInspector.openActivity !== "function" ||
-      (!activity && messageRole(message) !== "assistant")) return;
+      messageRole(message) !== "assistant") return;
   var target = window.RNAssistantChatInspector.target();
-  var runId = messageRunId(message) || (activity && activityValue(activity, "RunId", "runId", ""));
+  var runId = messageRunId(message);
   if ((!target.chatId && (!target.workspaceId || !target.sessionId)) || !runId) return;
-  var stepId = activity ? activityStepId(activity) : "";
-  var button = smallIconButton(stepId ? "Открыть шаг" : "Открыть ход работы", "clock", function (event) {
+  var button = smallIconButton("Открыть ход работы", "clock", function (event) {
     event.preventDefault(); event.stopPropagation();
-    window.RNAssistantChatInspector.openActivity(Object.assign({}, target, { runId: runId, stepId: stepId }), button);
+    window.RNAssistantChatInspector.openActivity(Object.assign({}, target, { runId: runId }), button);
   });
   button.classList.add("message-inspect-action");
   parent.appendChild(button);
@@ -831,6 +867,7 @@ function agentRunUnitSignature(run) {
   return JSON.stringify({
     live: !!run.live,
     continued: !!run.continued,
+    usage: run.usage || null,
     items: (run.items || []).map(function (item) {
       return { index: item.index, signature: messageUnitSignature(item.message) };
     }),
@@ -852,8 +889,8 @@ function appendSavedRunUnit(units, run, workspace, actionsSignature, key, update
       refreshMessageFooter(node, function (target) {
         if (!run.items.length && run.finalMessage)
           appendMessageFooter(target, run.finalMessage.message, run.finalMessage.index, null,
-            workspace ? { workspace: true } : null);
-        else appendAgentRunFooter(target, run.items, run.finalMessage, workspace);
+            { workspace: workspace, usage: run.usage });
+        else appendAgentRunFooter(target, run.items, run.finalMessage, workspace, run.usage);
       });
     }, update);
 }
@@ -882,6 +919,7 @@ function forEachChatDisplayEntry(messages, visible, onRun, onMessage) {
     if (messageProtocolMessage(message) || visible && !visible(message)) continue;
     if (canCollectAgentRunAt(index, messages)) {
       var run = collectAgentRun(index, messages);
+      run.usage = chatRunTokenUsage(messages, index, run.nextIndex);
       run.continued = !run.finalMessage &&
         lastRunIndexes[agentRunId(run.items, run.finalMessage)] >= run.nextIndex;
       onRun(run, index);

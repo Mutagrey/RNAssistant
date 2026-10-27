@@ -172,21 +172,26 @@ const { chromium } = require("playwright");
       appendAgentRunFooter(grouped, [{ message: oldMessage, index: 0 }], { message: oldFinal, index: 1 });
       document.getElementById("messages").appendChild(grouped);
     });
-    const source = page.locator("#inspector-source .agent-activity-row .message-inspect-action");
+    assert.equal(await page.locator("#inspector-source .message-inspect-action").count(), 0,
+      "a standalone tool row has no work-history button");
+    const source = page.locator("#inspector-run-source .message-footer .message-inspect-action");
     const actionLayout = await source.evaluate(button => {
-      const row = button.closest(".agent-activity-row"), mark = row.querySelector(".agent-activity-mark svg");
-      const glyph = button.querySelector("svg"), text = row.querySelector(".agent-activity-name");
+      const row = button.closest(".message-actions"), glyph = button.querySelector("svg");
+      const copy = row.firstElementChild;
       const box = node => node.getBoundingClientRect();
       const center = node => box(node).top + box(node).height / 2;
-      return { height: box(row).height, mark: box(mark).width, glyph: box(glyph).width,
-        offset: Math.abs(center(mark) - center(glyph)), textOffset: Math.abs(center(text) - center(glyph)) };
+      return { glyph: box(glyph).width, copyOffset: Math.abs(center(copy) - center(button)),
+        order: row.children[1] === button, height: box(row).height };
     });
-    assert.equal(actionLayout.mark, 13, "action icons keep their compact size");
-    assert.equal(actionLayout.glyph, 13, "the step link matches the compact action icon");
-    assert.ok(actionLayout.offset <= 1 && actionLayout.textOffset <= 2, "icons align with the action text");
-    assert.ok(actionLayout.height <= 30, "the step link does not enlarge a compact action row");
+    assert.equal(actionLayout.glyph, 13, "the work-history icon keeps its compact size");
+    assert.ok(actionLayout.copyOffset <= 1 && actionLayout.order && actionLayout.height <= 30,
+      "one work-history button sits beside copy in the run footer");
     await source.click();
     assert.equal(await page.locator(".chat-inspector-step").count(), 1, "the selected older run never uses the latest run's steps");
+    assert.equal(await page.locator(".chat-inspector-step.is-selected").count(), 0,
+      "the footer opens the run without selecting a tool call");
+    await page.evaluate(() => RNAssistantChatInspector.openActivity({ chatId: "preview-chat", runId: "older-run", stepId: "step-2" },
+      document.querySelector("#inspector-run-source .message-inspect-action")));
     assert.equal(await page.locator(".chat-inspector-step.is-selected details").evaluate(n => n.open), true);
     assert.equal(await page.locator(".chat-inspector-step.is-selected summary").first().getAttribute("aria-current"), "step");
     assert.match(await page.locator("#chatInspectorBody").textContent(), /Источник из предыдущего запуска/);
@@ -231,15 +236,17 @@ const { chromium } = require("playwright");
         return { message: { Id: "grouped-message-" + index, Role: "assistant",
           RunId: "grouped-run", Activity: activity }, activity, index };
       });
-      const article = renderAgentRunArticle({ items, live: true });
+      const article = renderAgentRunArticle({ items, live: false });
       article.id = "grouped-step-probe";
       document.getElementById("messages").appendChild(article);
     });
     assert.equal(await page.locator("#grouped-step-probe .agent-activity-row").count(), 6);
     assert.equal(await page.locator("#grouped-step-probe .agent-activity-row .message-inspect-action").count(), 0,
       "individual calls have no duplicate step buttons");
-    assert.equal(await page.locator("#grouped-step-probe .agent-model-step > .agent-step-actions .message-inspect-action").count(), 1,
-      "six calls expose one step button after the group");
+    assert.equal(await page.locator("#grouped-step-probe .agent-step-actions .message-inspect-action").count(), 0,
+      "the step body has no second work-history button");
+    assert.equal(await page.locator("#grouped-step-probe > .message-footer .message-inspect-action").count(), 1,
+      "six calls expose one work-history button beside copy and fork");
     assert.deepEqual(errors, []);
     console.log("PASS chat inspector: composition, cancellation, exact step/call routes, message entry, pinned run, missing/stale refusal, focus, light/dark and narrow layout");
   } finally { if (browser) await browser.close(); server.kill(); }

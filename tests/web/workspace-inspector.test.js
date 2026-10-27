@@ -42,13 +42,18 @@ const { chromium } = require("playwright");
         if (!["getProjectChat", "getPluginChat"].includes(type)) return result;
         const run = id => ({ RunId: id, TurnId: "turn", Lifecycle: "completed", ExecutionHealth: "clean",
           SuccessfulReads: 2, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0, FailedCalls: 0, UnknownEffects: 0 });
-        const step = (runId, id, text) => ({ Id: id, Role: "assistant", RunId: runId, Activity: {
+        const step = (runId, id, text) => ({ Id: id, Role: "assistant", RunId: runId,
+          PromptTokens: id === "one" ? 5000 : id === "two" ? 6000 : null,
+          CompletionTokens: id === "one" ? 200 : id === "two" ? 250 : null,
+          TotalTokens: id === "one" ? 5200 : id === "two" ? 6250 : null,
+          Activity: {
           RunId: runId, StepId: id, Kind: "tool", Title: text, StepMessage: text, Status: "completed",
           ToolId: "common.resources_read", ToolCallId: "call-" + id, ResultMessage: "Содержимое получено" } });
         result.messages = [step("old-run", "old", "Предыдущий запуск"),
           { Id: "old-final", Role: "assistant", RunId: "old-run", Content: "Старая сводка", RunViewState: run("old-run") },
           step("current-run", "one", "Проверка исходников"), step("current-run", "two", "Чтение отчёта"),
-          { Id: "final", Role: "assistant", RunId: "current-run", Content: "Проверка завершена", RunViewState: run("current-run") }];
+          { Id: "final", Role: "assistant", RunId: "current-run", Content: "Проверка завершена",
+            PromptTokens: 8000, CompletionTokens: 400, TotalTokens: 8400, RunViewState: run("current-run") }];
         result.state.runId = "current-run"; result.state.runViewState = run("current-run");
         result.state.contextUsage = { MessageId: "final", RunId: "current-run", PromptTokens: 8000,
           CompletionTokens: 400, TotalTokens: 8400, ContextWindowTokens: 32000 };
@@ -82,6 +87,8 @@ const { chromium } = require("playwright");
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       await page.screenshot({ path: path.join(process.env.INSPECTOR_SCREENSHOTS, name + ".png"), animations: "disabled" });
     };
+    const footerButton = index => page.locator('#messages .agent-run > .message-footer .message-inspect-action').nth(index);
+    const reportStep = () => page.locator('.chat-inspector-step').filter({ hasText: "Чтение отчёта" });
     await page.locator("#chatInput").fill("Черновик Office");
     await page.locator("#toggleChatInspectorButton").click();
     await page.evaluate(() => { RNAssistantModelContext.open(); RNAssistantChatInspector.setRequestLayout("focus"); });
@@ -143,16 +150,24 @@ const { chromium } = require("playwright");
     assert.match(await abilitiesBody.textContent(), /API не сообщил/);
     assert.equal(await page.locator(".chat-inspector-composition-chart").count(), 0, "unknown usage does not become zero or reuse Office tokens");
     await view("activity");
-    await page.locator('#messages [aria-label="Открыть шаг"]').first().click();
-    assert.match(await page.locator(".chat-inspector-step.is-selected").textContent(), /Предыдущий запуск/);
+    assert.equal(await page.locator('#messages .agent-activity-row .message-inspect-action').count(), 0,
+      "project calls do not each carry a work-history button");
+    assert.equal(await page.locator('#messages .agent-run > .message-footer .message-inspect-action').count(), 2,
+      "each project response has one work-history button in its footer");
+    assert.equal(await page.locator('#messages .agent-run').last().locator('.message-usage').textContent(),
+      "19\u202f850 токенов · вход 19\u202f000 · ответ 850",
+      "project feed sums saved accepted answers with grouped digits");
+    await footerButton(0).click();
+    assert.match(await page.locator(".chat-inspector-step").textContent(), /Предыдущий запуск/);
     assert.equal(await page.locator(".chat-inspector-step").count(), 1);
     await page.locator("#chatInspector").press("Escape");
-    assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Открыть шаг");
-    await page.locator('#messages [aria-label="Открыть шаг"]').nth(2).click();
-    assert.match(await page.locator(".chat-inspector-step.is-selected").textContent(), /Чтение отчёта/);
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Открыть ход работы");
+    await footerButton(1).click();
+    await reportStep().locator('.chat-inspector-step-detail > summary').click();
+    assert.match(await reportStep().textContent(), /Чтение отчёта/);
     await page.evaluate(() => { window.oldInspectorTarget = RNAssistantChatInspector.target(); });
     await capture("project-activity");
-    const openRequest = page.locator('.chat-inspector-step.is-selected').getByRole("button", { name: "Запрос / ответ модели", exact: true });
+    const openRequest = reportStep().getByRole("button", { name: "Запрос / ответ модели", exact: true });
     await openRequest.click();
     await page.locator("#modelContextBody .is-message").first().waitFor();
     assert.ok((await page.locator("#chatInspector").boundingBox()).width >= 280,
@@ -181,7 +196,7 @@ const { chromium } = require("playwright");
     await page.evaluate(() => { releaseWorkspaceModel(); holdWorkspaceModel = null; });
     assert.equal(await page.locator("#modelContextDialog").isHidden(), true, "switching sessions closes a pending read");
     await page.evaluate(() => RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review"));
-    await page.locator('#messages [aria-label="Открыть шаг"]').nth(2).click();
+    await footerButton(1).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await capture("project-activity-narrow");
     assert.ok(await page.locator("#closeChatInspectorButton").isVisible());
@@ -200,6 +215,13 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Контекст");
     await page.evaluate(() => RNAssistantPlugins.select("data-templates"));
     await page.locator("#pluginPreviewMount iframe").waitFor();
+    assert.equal(await page.locator('#messages .agent-activity-row .message-inspect-action').count(), 0,
+      "plugin calls use the same clean transcript rows");
+    assert.equal(await page.locator('#messages .agent-run > .message-footer .message-inspect-action').count(), 2,
+      "plugin responses use the shared run-footer control");
+    assert.equal(await page.locator('#messages .agent-run').last().locator('.message-usage').textContent(),
+      "19\u202f850 токенов · вход 19\u202f000 · ответ 850",
+      "plugin feed uses the same saved usage and formatting");
     await page.evaluate(() => { window.previewFrame = document.querySelector("#pluginPreviewMount iframe"); window.previewDocument = previewFrame.contentDocument; });
     await page.locator("#chatInput").fill("Черновик плагина");
     await view("abilities");
@@ -216,8 +238,9 @@ const { chromium } = require("playwright");
     assert.equal(await page.evaluate(() => document.querySelector("#projectChatLayout > #chatInspector") === inspectorNode), true);
     assert.equal(await page.locator(".chat-inspector-step").count(), 2);
     assert.equal(await page.locator("#pluginPreviewMount").isHidden(), true);
-    await page.locator('#messages [aria-label="Открыть шаг"]').nth(2).click();
-    assert.match(await page.locator(".chat-inspector-step.is-selected").textContent(), /Чтение отчёта/);
+    await footerButton(1).click();
+    await reportStep().locator('.chat-inspector-step-detail > summary').click();
+    assert.match(await reportStep().textContent(), /Чтение отчёта/);
     await capture("plugin-activity");
     await openRequest.click();
     await page.locator("#modelContextBody .is-message").first().waitFor();
@@ -253,8 +276,8 @@ const { chromium } = require("playwright");
     const pluginTarget = await page.evaluate(() => RNAssistantChatInspector.target());
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(target => RNAssistantProjectChats.open(target.workspaceId, target.sessionId), pluginTarget);
-    await page.locator('#messages [aria-label="Открыть шаг"]').nth(2).click();
-    assert.match(await page.locator(".chat-inspector-step.is-selected").textContent(), /Чтение отчёта/,
+    await footerButton(1).click();
+    assert.match(await reportStep().textContent(), /Чтение отчёта/,
       "the same session gets current owner routes when moved between plugin and project");
     assert.equal(await page.locator("#chatInput").inputValue(), "Черновик плагина");
     assert.equal(await page.evaluate(target => RNAssistantChatInspector.openActivity({ ...target, runId: "current-run", stepId: "two" }), pluginTarget), false);

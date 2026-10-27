@@ -70,14 +70,36 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const run = renderAgentRunArticle({ items: [item], finalMessage: { message: final, index: 1 }, live: false });
       run.id = "full-run";
       document.querySelector("main").appendChild(run);
+      const usageMessages = [
+        { Id: "usage-protocol-1", Role: "assistant", ProtocolMessage: true, RunId: "usage-run",
+          PromptTokens: 12345, CompletionTokens: 678, TotalTokens: 13023 },
+        { Id: "usage-step", Role: "assistant", RunId: "usage-run",
+          Activity: { Kind: "step", RunId: "usage-run", StepId: "usage-step", StepMessage: "Читаю данные", Status: "completed" } },
+        { Id: "usage-protocol-2", Role: "assistant", ProtocolMessage: true, RunId: "usage-run",
+          PromptTokens: 15678, CompletionTokens: 901, TotalTokens: 16579 },
+        { Id: "usage-final", Role: "assistant", RunId: "usage-run", Content: "Готово",
+          PromptTokens: 15678, CompletionTokens: 901, TotalTokens: 16579, RunViewState: {
+            RunId: "usage-run", TurnId: "usage-run", Lifecycle: "completed", ExecutionHealth: "clean" } }
+      ];
+      forEachChatDisplayEntry(usageMessages, null, projected => {
+        const article = renderAgentRunArticle(projected); article.id = "usage-run";
+        document.querySelector("main").appendChild(article);
+      }, () => {});
       for (const role of ["assistant", "user"]) {
         const node = document.createElement("article"); node.className = "message " + role; node.id = "footer-" + role;
-        appendMessageFooter(node, { Role: role, Content: "Сообщение", Local: true, TotalTokens: 100 }, 0, null);
+        appendMessageFooter(node, { Role: role, Content: "Сообщение", Local: true, TotalTokens: 1234567 }, 0, null);
         document.querySelector("main").appendChild(node);
       }
     });
     for (const width of [740, 360]) {
       await page.setViewportSize({ width, height: 920 });
+      assert.equal(await page.locator("#usage-run .message-usage").textContent(),
+        "29\u202f602 токенов · вход 28\u202f023 · ответ 1\u202f579",
+        "the run footer sums accepted provider answers once and groups digits");
+      assert.equal(await page.locator("#footer-assistant .message-usage").textContent(),
+        "1\u202f234\u202f567 токенов", "a standalone answer uses the same number format");
+      assert.ok(await page.locator("#usage-run").evaluate(node => node.scrollWidth <= node.clientWidth + 1),
+        "usage stays readable without horizontal overflow");
       const bounds = await page.locator("#actions .agent-activity-row").evaluateAll(rows => rows.map(row => ({
         width: row.clientWidth, scroll: row.scrollWidth, text: row.innerText,
         targetOverflow: getComputedStyle(row.querySelector(".agent-activity-object")).textOverflow,

@@ -43,6 +43,11 @@ namespace RNAssistant.Core.Models
                 RunId = message.RunId,
                 StepId = message.Activity?.StepId
             };
+            // The browser needs provider usage for the shared run footer, but
+            // never receives the accepted protocol body or execution evidence.
+            view.PromptTokens = message.PromptTokens;
+            view.CompletionTokens = message.CompletionTokens;
+            view.TotalTokens = message.TotalTokens;
             if (message.ProtocolMessage) return view;
             view.Content = message.Content;
             view.ExcludeFromModelContext = message.ExcludeFromModelContext;
@@ -50,9 +55,6 @@ namespace RNAssistant.Core.Models
             view.Attachments = message.Attachments == null || message.Attachments.Count == 0
                 ? null : message.Attachments.Select(ChatAttachmentViewDto.From).ToList();
             view.Activity = ChatActivityViewProjector.From(message.Activity);
-            view.PromptTokens = message.PromptTokens;
-            view.CompletionTokens = message.CompletionTokens;
-            view.TotalTokens = message.TotalTokens;
             view.ReasoningContent = message.ReasoningContent;
             view.ReasoningTokens = message.ReasoningTokens;
             view.ReasoningTruncated = message.ReasoningTruncated;

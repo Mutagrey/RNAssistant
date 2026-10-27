@@ -35,8 +35,14 @@ namespace RNAssistant.Harness
             AssertEqual("Model says everything succeeded.", view.Narrative, "narrative is preserved as data");
 
             var accepted = new ChatMessage { Role = "assistant", RunId = "run-view", ProtocolMessage = true,
-                ResponseProtocolVersion = 8, Content = "accepted response" };
+                ResponseProtocolVersion = 8, Content = "accepted response",
+                PromptTokens = 12345, CompletionTokens = 678, TotalTokens = 13023 };
             session.Messages.Add(accepted);
+            var browserUsage = ChatMessageViewDto.From(accepted);
+            AssertTrue(browserUsage.Content == null && browserUsage.Activity == null &&
+                browserUsage.PromptTokens == 12345 && browserUsage.CompletionTokens == 678 &&
+                browserUsage.TotalTokens == 13023,
+                "browser receives accepted usage without protocol body or execution evidence");
             RunViewStateProjector.StampCurrentRun(session);
             AssertTrue(accepted.RunViewState == null && session.Messages[2].RunViewState != null,
                 "Office stamps its visible activity instead of the protocol envelope");
