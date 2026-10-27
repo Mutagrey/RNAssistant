@@ -134,7 +134,7 @@ namespace RNAssistant.Runtime
                     ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed))
                 {
                     InterruptAbandonedRun(current);
-                    ReconcileAcceptedInputDelivery(current);
+                    _conversationInbox.ReconcileAcceptedDelivery(current);
                 }
                 return current;
             }
@@ -151,28 +151,9 @@ namespace RNAssistant.Runtime
                 if (session.FormatVersion == ChatSession.CurrentFormatVersion)
                 {
                     InterruptAbandonedRun(session);
-                    ReconcileAcceptedInputDelivery(session);
+                    _conversationInbox.ReconcileAcceptedDelivery(session);
                 }
                 return session;
-            }
-        }
-
-        private void ReconcileAcceptedInputDelivery(ChatSession session)
-        {
-            var journal = new ConversationInputJournal(new ChatEventStoreAdapter(_chats));
-            var latest = journal.Read(session).Where(record => record.Change.Input != null)
-                .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal)
-                .Select(group => group.Last().Change.Input);
-            foreach (var input in latest)
-            {
-                if (input.Status != ConversationInputStatus.Delivering) continue;
-                if ((input.Delivery == InputDelivery.Steer ? input.Revision < 2 : input.Revision != 1) || string.IsNullOrWhiteSpace(input.AcceptedRunId) ||
-                    string.IsNullOrWhiteSpace(input.RequestFingerprint))
-                    throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
-                if (!ConversationInputJournal.HasPersistedUserMessage(session, input)) continue;
-                input.Status = ConversationInputStatus.Applied;
-                input.Revision++;
-                journal.Append(session, new ConversationInputEvent { Input = input });
             }
         }
 

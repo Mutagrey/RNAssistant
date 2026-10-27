@@ -236,6 +236,58 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void InboxRecoveryReconcilesBothConsumers()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                store.Save(session);
+                var events = new ChatEventStoreAdapter(store);
+                var inbox = new ConversationInboxService(events);
+                inbox.Submit(session, InboxInput("office", "Saved Office input", InputDelivery.Queue));
+                var claimed = inbox.TakeNext(session, false);
+                var message = new ChatMessage { Id = claimed.Id, Role = "user", Content = claimed.Text };
+                session.Messages.Add(message);
+                store.Commit(session, ConversationCommit.UserInput(message));
+                inbox.Resume(session);
+                AssertEqual(ConversationInputStatus.Applied, inbox.Find(session, claimed.Id).Status,
+                    "Office explicit resume projects the persisted input as applied");
+                AssertEqual(ConversationInputStatus.Applied,
+                    new ConversationInboxService(events).Find(session, claimed.Id).Status,
+                    "Office recovery writes one durable applied receipt");
+            });
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var workspace = new WorkspaceStore(paths).Open(System.IO.Path.Combine(paths.Root, "receipt-recovery"));
+                var session = new WorkspaceStore(paths).CreateSession(store, workspace, "Recovered input");
+                var events = new ChatEventStoreAdapter(store);
+                var inbox = new ConversationInboxService(events);
+                AssertEqual(0, inbox.Snapshot(session).Items.Count, "Workspace inbox projection is already loaded");
+                var input = InboxInput("workspace", "Saved Workspace input", InputDelivery.Queue);
+                input.AcceptedRunId = "accepted-run";
+                input.Status = ConversationInputStatus.Delivering;
+                input.Revision = 1;
+                var journal = new ConversationInputJournal(events);
+                journal.Append(session, new ConversationInputEvent { Input = input });
+                var message = new ChatMessage { Id = input.Id, RunId = input.AcceptedRunId,
+                    Role = "user", Content = input.Text };
+                session.Messages.Add(message);
+                store.Commit(session, ConversationCommit.UserInput(message));
+                inbox.ReconcileAcceptedDelivery(session);
+                AssertEqual(ConversationInputStatus.Applied, inbox.FindOperation(session, input.OperationId).Status,
+                    "Workspace recovery updates the already loaded receipt projection");
+                AssertTrue(!inbox.Snapshot(session).Paused,
+                    "Workspace recovery clears the restart pause only after all claims are proven delivered");
+                AssertEqual(ConversationInputStatus.Applied,
+                    new ConversationInboxService(events).FindOperation(session, input.OperationId).Status,
+                    "Workspace recovery persists the applied receipt");
+                inbox.ReconcileAcceptedDelivery(session);
+                AssertEqual(2, journal.Read(session).Count, "repeated recovery does not duplicate the transition");
+            });
+        }
+
         private static void InboxScopeSeparatesIdenticalChatIds()
         {
             WithTempPaths(paths =>

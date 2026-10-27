@@ -639,6 +639,13 @@ transitions; neither Office nor workspace may acknowledge that history as accept
 Missing CAS input bodies fail explicitly. Old event streams need no backfill;
 absence of input events means an empty queue.
 
+Application `ConversationInboxService` owns persisted-delivery reconciliation for
+both consumers and updates its live projection with the same appended event. Before
+recovery it incorporates newer canonical input events into an already loaded
+projection. Workspace activation/explicit resume keeps a missing user message in
+`delivering`; Office explicit inbox resume returns that missing input to `pending`.
+Neither path replays a run or a tool.
+
 ### Application input receipts and event reconnect
 
 Core `ConversationInputJournal` owns the existing input event/CAS serialization,

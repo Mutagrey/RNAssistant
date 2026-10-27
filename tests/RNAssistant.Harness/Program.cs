@@ -207,6 +207,7 @@ namespace RNAssistant.Harness
                 Test("inbox: steer wins final race", InboxSteerWinsFinalRace),
                 Test("inbox: steer invalidates pending confirmation", InboxSteerSupersedesConfirmation),
                 Test("inbox: durable FIFO edit and recovery", InboxDurabilityAndQueue),
+                Test("inbox: recovery reconciles Office and Workspace receipts", InboxRecoveryReconcilesBothConsumers),
                 Test("inbox: shared controllers release and recover paused", InboxSharedLifetimeAndRecovery),
                 Test("inbox: equal chat ids remain scoped", InboxScopeSeparatesIdenticalChatIds),
                 Test("inbox: failed pause append stops scheduling", InboxFailedPauseStillStopsScheduling),

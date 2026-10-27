@@ -83,11 +83,18 @@ namespace RNAssistant.Application.Conversations
 
         internal Inbox Get(ChatSession session)
         {
+            bool created;
+            return Get(session, out created);
+        }
+
+        private Inbox Get(ChatSession session, out bool created)
+        {
             var key = ScopeKey(session);
             Inbox box;
             lock (_sync)
             {
-                if (!_inboxes.TryGetValue(key, out box))
+                created = !_inboxes.TryGetValue(key, out box);
+                if (created)
                 {
                     box = new Inbox { Session = session };
                     foreach (var record in new ConversationInputJournal(_events).Read(session))
@@ -250,18 +257,73 @@ namespace RNAssistant.Application.Conversations
         }
         internal void Resume(ChatSession session)
         {
-            var box = Get(session);
+            bool created;
+            var box = Get(session, out created);
             lock (box.Sync)
             {
+                if (!box.Running && !box.Worker)
+                {
+                    if (!created) RefreshForRecovery(box);
+                    ReconcilePersistedDelivery(box, false);
+                }
                 foreach (var item in box.Inputs.Where(i => !box.Running && !box.Worker && i.Status == ConversationInputStatus.Delivering).ToArray())
                 {
                     var copy = Clone(item);
-                    copy.Status = ConversationInputJournal.HasPersistedUserMessage(box.Session, item)
-                        ? ConversationInputStatus.Applied : ConversationInputStatus.Pending;
+                    copy.Status = ConversationInputStatus.Pending;
                     copy.Revision++;
                     Write(box, copy);
                 }
                 Write(box, null, false, null);
+            }
+        }
+        // Recovery owns both the durable transition and the live receipt projection.
+        // The caller has already fenced the conversation with its exact run lease.
+        internal void ReconcileAcceptedDelivery(ChatSession session)
+        {
+            bool created;
+            var box = Get(session, out created);
+            lock (box.Sync)
+            {
+                if (box.Running || box.Worker)
+                    throw new InvalidOperationException("Accepted input cannot be reconciled while its run is active.");
+                if (!created) RefreshForRecovery(box);
+                ReconcilePersistedDelivery(box, true);
+            }
+        }
+        private void RefreshForRecovery(Inbox box)
+        {
+            foreach (var record in new ConversationInputJournal(_events).Read(box.Session))
+            {
+                if (record.Event.Sequence <= box.Revision) continue;
+                Apply(box, record.Change);
+                box.Revision = record.Event.Sequence;
+                box.ViewRevision++;
+            }
+            // A recovered claim is never a license to dispatch another run.
+            if (box.Inputs.Any(IsPending))
+            {
+                box.Paused = true;
+                box.PauseReason = "После перезапуска";
+            }
+        }
+        private void ReconcilePersistedDelivery(Inbox box, bool requireAcceptedRun)
+        {
+            var delivering = box.Inputs.Where(item => item.Status == ConversationInputStatus.Delivering).ToArray();
+            if (requireAcceptedRun && delivering.Any(item =>
+                (item.Delivery == InputDelivery.Steer ? item.Revision < 2 : item.Revision != 1) ||
+                string.IsNullOrWhiteSpace(item.AcceptedRunId) || string.IsNullOrWhiteSpace(item.RequestFingerprint)))
+                throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
+            var persisted = delivering.Where(item =>
+                ConversationInputJournal.HasPersistedUserMessage(box.Session, item)).ToArray();
+            var clearRecoveryPause = requireAcceptedRun && persisted.Length > 0 &&
+                persisted.Length == delivering.Length && !box.Inputs.Any(item => item.Status == ConversationInputStatus.Pending) &&
+                box.PauseReason == "После перезапуска";
+            for (var index = 0; index < persisted.Length; index++)
+            {
+                var copy = Clone(persisted[index]);
+                copy.Status = ConversationInputStatus.Applied;
+                copy.Revision++;
+                Write(box, copy, clearRecoveryPause && index == persisted.Length - 1 ? (bool?)false : null);
             }
         }
         internal bool HasSteer(ChatSession session)

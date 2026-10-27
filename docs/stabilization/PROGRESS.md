@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Восстановление input receipt использует общий inbox — 2026-10-27
+
+Office explicit resume и Workspace activation/resume теперь сверяют `Delivering`
+с сохранённым user message в `ConversationInboxService`. Workspace больше не
+дописывает `Applied` напрямую в журнал мимо live-проекции; уже загруженный inbox
+догоняет canonical events перед восстановлением. Без сообщения Workspace оставляет
+receipt неподтверждённым, Office явным resume возвращает ввод в очередь. Новый
+event/store не добавлен, run и tools автоматически не повторяются.
+
+Host-neutral Harness: общая проверка Office/Workspace receipt и существующие
+Office FIFO, Workspace resume/steer recovery — pass. S1c остаётся открытым:
+общий FIFO/run worker, полное run recovery и UI-controller ещё раздельны.
+Office controller delivery и Windows/Office/WebView2 не квалифицированы; с
+Windows-машины доступны только фотографии экрана.
+
 ## Live run и Stop используют общего Application owner — 2026-10-27
 
 Office `ChatRunRegistry` удалён. `ConversationRunOwner` владеет live handle,
