@@ -1,5 +1,12 @@
 # Stabilization risk register
 
+## Устаревший Web-fixture завершения чата — 2026-10-27
+
+`node tests/web/chat-run-completion.test.js` останавливается до проверок: fixture
+вызывает удалённый `renderChatTreeRow`, которого нет в текущем Web UI. Это не
+evidence сбоя нового адресного observer. Owner: Web chat tests; заменить fixture
+текущей проекцией navigation tree и затем повторить сценарии завершения.
+
 ## Устаревший fixture mixed recovery — 2026-10-27
 
 Host-neutral `chat sessions: interrupted mixed exchanges preserve completed context`

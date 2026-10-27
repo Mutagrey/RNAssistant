@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Адресный Web-опрос Office и Workspace — 2026-10-27
+
+Office inbox и Workspace run теперь читаются через один Web observer с ключом
+чата и поколением навигации. Глобальный Office `inboxPolling` и отдельный
+Workspace timer удалены: медленное чтение старой беседы не блокирует новую,
+а поздний ответ прежнего посещения не откатывает состояние при возврате.
+Office сохраняет выбор очереди/квитанций, Workspace — свой domain snapshot;
+observer не добавляет store и не управляет kernel lifecycle.
+
+Точечный Web-тест проверил A → B → A с зависшим первым чтением; browser
+сценарии Office delivery и Workspace session/catalog races прошли. Общий
+pending/projection controller и Workspace FIFO остаются открытыми S1c.
+Windows/Office/WebView2 не квалифицированы; доступны только фото.
+
 ## Ответы Workspace требуют квитанцию ввода — 2026-10-27
 
 Ответы на вопросы Workspace теперь используют тот же Web submit/receipt gate,

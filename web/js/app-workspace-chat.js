@@ -208,42 +208,25 @@
     return current;
   }
   function createRunObserver(read, changed, failed) {
-    var target = null, selected = null, timer = null, inFlight = null, refreshAfter = false;
-    async function tick(current) {
-      if (target !== current) return;
-      timer = null; inFlight = current;
-      try {
-        var snapshot = await read(current);
-        if (target === current) changed(snapshot);
-      } catch (error) { if (target === current) failed(error); }
-      if (inFlight === current) inFlight = null;
-      if (target === current) {
-        timer = setTimeout(function () { tick(current); }, refreshAfter ? 0 : 1200);
-        refreshAfter = false;
-      }
-    }
-    function refresh() {
-      if (!target) return;
-      if (inFlight === target) { refreshAfter = true; return; }
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(function () { tick(target); }, 0);
-    }
+    var target = null, selected = null, generation = 0;
+    var observer = window.RNAssistantConversationObserver.create({
+      current: function () { return target ? { workspaceId: target.workspaceId,
+        sessionId: target.sessionId, generation: generation } : null; },
+      read: read, changed: changed, failed: failed, autoStart: true
+    });
     return { select: function (snapshot, pending) {
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
       var observe = workspaceId && sessionId && (pending || field(field(snapshot, "state"), "status") === "running");
       selected = snapshot;
       if (observe && target && target.workspaceId === workspaceId && target.sessionId === sessionId) return;
-      if (timer) clearTimeout(timer);
-      timer = null; target = null; refreshAfter = false;
-      if (!observe) return;
-      var current = target = { workspaceId: workspaceId, sessionId: sessionId };
-      timer = setTimeout(function () { tick(current); }, 1200);
+      if (target || observe) ++generation;
+      target = observe ? { workspaceId: workspaceId, sessionId: sessionId } : null;
     }, acceptProgress: function (payload) {
       if (!target || target.workspaceId !== field(payload, "workspaceId") ||
           target.sessionId !== field(payload, "sessionId")) return;
       var preview = field(payload, "modelProgress"), state = field(selected, "state");
       if (!preview || !state || field(state, "status") !== "running" ||
-          field(state, "runId") !== field(preview, "runId")) { refresh(); return; }
+          field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
       var existing = field(state, "modelProgress");
       if (existing && field(existing, "sequence") >= field(preview, "sequence")) return;
       state.modelProgress = preview;

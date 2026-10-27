@@ -32,6 +32,7 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-state.js", "utf8"), context);
 // Inbox-specific VM keeps protected storage outside this test; the browser reload
 // check covers the real composer/bridge draft persistence path.
 context.window.RNAssistantChatDrafts.flushOffice = async () => {};
+vm.runInContext(fs.readFileSync("web/js/app-conversation-observer.js", "utf8"), context);
 vm.runInContext(fs.readFileSync("web/js/app-conversation-input.js", "utf8"), context);
 vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
 context.renderChatSessions = () => {};
@@ -236,5 +237,27 @@ context.renderChatSessions = () => {};
   context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 7, items: [], acceptedInput: {
     Id: "stale-ack", OperationId: staleOperation, Revision: 3, Status: "Applied" } });
   assert.equal(context.pendingChatInputs().length, 0, "settled old acknowledgement cannot recreate a rendered echo");
-  console.log("PASS chat inbox: ack/retry, stale receipts, local/remote removal, history ordering, queue controls");
+
+  const polled = [];
+  let releaseOldPoll;
+  transport = (type, payload) => {
+    assert.equal(type, "getChatInbox");
+    polled.push(payload.chatId);
+    if (payload.chatId === "slow-a" && polled.filter(id => id === "slow-a").length === 1)
+      return new Promise(resolve => { releaseOldPoll = resolve; });
+    return Promise.resolve({ chatId: payload.chatId, epoch: "new", revision: 9, items: [], running: false });
+  };
+  context.state.activeChatId = "slow-a"; context.state.chatNavigationVersion = 10;
+  const oldPoll = context.pollChatInbox();
+  await new Promise(resolve => setImmediate(resolve));
+  context.state.activeChatId = "slow-b"; context.state.chatNavigationVersion++;
+  await context.pollChatInbox();
+  assert.equal(context.chatInbox("slow-b").revision, 9, "a slow old chat cannot block the newly selected chat");
+  context.state.activeChatId = "slow-a"; context.state.chatNavigationVersion++;
+  await context.pollChatInbox();
+  assert.deepEqual(polled, ["slow-a", "slow-b", "slow-a"], "a later visit gets its own read");
+  releaseOldPoll({ chatId: "slow-a", epoch: "old", revision: 3, items: [], running: true });
+  await oldPoll;
+  assert.equal(context.chatInbox("slow-a").revision, 9, "the previous visit cannot downgrade a newer snapshot");
+  console.log("PASS chat inbox: ack/retry, stale receipts, addressed polling, history ordering, queue controls");
 })().catch(error => { console.error(error); process.exitCode = 1; });

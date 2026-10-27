@@ -189,26 +189,43 @@ function inboxButton(label, action) {
 function renderChatInbox(options) {
   if (typeof renderMessages === "function") renderMessages(options);
 }
-async function pollChatInbox() {
-  if (!state.activeChatId || state.bridgeUnavailable || state.inboxPolling || state.chatNavigationPending) return;
-  var chatId = state.activeChatId;
-  state.inboxPolling = true;
-  try {
-    var previous = chatInbox(chatId);
-    // Prioritize missing echoes so a large pending queue cannot starve terminal receipts.
-    var queuedIds = new Set((previous.items || []).map(function (item) { return item.Id; }));
-    var echoes = chatInputEchoes(chatId).filter(function (item) { return item.OperationId; });
-    var operationIds = echoes.filter(function (item) { return !queuedIds.has(item.Id); })
-      .concat(echoes.filter(function (item) { return queuedIds.has(item.Id); }))
-      .map(function (item) { return item.OperationId; }).slice(0, 128);
-    var inbox = await send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds });
-    applyChatInbox(inbox);
-    var current = chatInbox(chatId);
-    if (current.epoch !== previous.epoch || current.running !== previous.running ||
-        current.phase !== previous.phase || chatInboxNeedsHistory(chatId)) refreshInboxChat(chatId);
-  } catch (_) { /* The normal bridge banner reports disconnection; keep the saved projection. */ }
-  finally { state.inboxPolling = false; }
+var chatInboxObserver = null;
+function officeInboxObserver() {
+  if (chatInboxObserver) return chatInboxObserver;
+  chatInboxObserver = window.RNAssistantConversationObserver.create({
+    current: function () {
+      if (!state.activeChatId || state.bridgeUnavailable || state.chatNavigationPending ||
+          window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return null;
+      return { chatId: state.activeChatId, generation: state.chatNavigationVersion || 0 };
+    },
+    shouldPoll: function (target) {
+      var box = chatInbox(target.chatId);
+      return document.visibilityState !== "hidden" && (!state.chatInboxes || !state.chatInboxes[target.chatId] ||
+        box.running || (box.items || []).length || pendingChatInputs().length || currentActiveSend());
+    },
+    read: function (target) {
+      var chatId = target.chatId, previous = chatInbox(chatId);
+      // Prioritize missing echoes so a large pending queue cannot starve terminal receipts.
+      var queuedIds = new Set((previous.items || []).map(function (item) { return item.Id; }));
+      var echoes = chatInputEchoes(chatId).filter(function (item) { return item.OperationId; });
+      var operationIds = echoes.filter(function (item) { return !queuedIds.has(item.Id); })
+        .concat(echoes.filter(function (item) { return queuedIds.has(item.Id); }))
+        .map(function (item) { return item.OperationId; }).slice(0, 128);
+      return send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds })
+        .then(function (inbox) { return { inbox: inbox, previous: previous }; });
+    },
+    changed: function (result, target) {
+      if (!result || !result.inbox || result.inbox.chatId !== target.chatId) return;
+      applyChatInbox(result.inbox);
+      var current = chatInbox(target.chatId), previous = result.previous;
+      if (current.epoch !== previous.epoch || current.running !== previous.running ||
+          current.phase !== previous.phase || chatInboxNeedsHistory(target.chatId)) refreshInboxChat(target.chatId);
+    },
+    failed: function () { /* The normal bridge banner reports disconnection; keep the saved projection. */ }
+  });
+  return chatInboxObserver;
 }
+function pollChatInbox() { return officeInboxObserver().readNow(); }
 function chatInboxNeedsHistory(chatId) {
   return chatInputEchoes(chatId).some(function (item) {
     return item.Status === "Applied" && (chatId !== state.activeChatId || !(state.messages || []).some(function (message) {
@@ -224,9 +241,7 @@ function initChatInbox() {
       if (!itemMenu.contains(event.target)) itemMenu.open = false;
     });
   });
-  window.setInterval(function () {
-    if (document.visibilityState !== "hidden" && (!state.chatInboxes || !state.chatInboxes[state.activeChatId] || chatInbox().running || (chatInbox().items || []).length || pendingChatInputs().length || currentActiveSend())) pollChatInbox();
-  }, 1200);
+  officeInboxObserver().start();
 }
 
 function pendingChatInputs() {
