@@ -14,10 +14,9 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private readonly ConversationWorkService _inboxWork = new ConversationWorkService();
-        public Task InboxWorkersDrained { get { return _inboxWork.Drained; } }
-        public void StopInboxWorkers() { _inboxWork.CloseAsync(); }
-        private bool HasInboxWorkers { get { return _inboxWork.HasWorkers; } }
+        public Task InboxWorkersDrained { get { return _conversationApplication.Drained; } }
+        public void StopInboxWorkers() { _conversationApplication.CloseAsync(); }
+        private bool HasInboxWorkers { get { return _conversationApplication.HasWorkers; } }
 
         private void EndInboxRun(ChatSession session, ConversationRunHandle lease, ref RunCausalTrace trace)
         {
@@ -149,7 +148,7 @@ namespace RNAssistant.Office
                     else _inbox.Submit(session, input);
                     _chatResourceIngestion.DeleteDrafts(message);
                 }
-                StartInboxWorker(session, progress, changed);
+                StartConversationQueue(session, progress, changed);
             }
             var response = InboxResponse(_inbox.Snapshot(session));
             response.AcceptedInput = _inbox.FindOperation(session, request.OperationId, fingerprint);
@@ -163,7 +162,7 @@ namespace RNAssistant.Office
             ConversationRunPolicy.RequireCurrentSession(session);
             var updated = _inbox.Update(session, new ConversationInputUpdate { InputId = request.InputId,
                 ExpectedRevision = request.ExpectedRevision, Text = request.Text }, action);
-            StartInboxWorker(session, progress, changed);
+            StartConversationQueue(session, progress, changed);
             return InboxResponse(_inbox.Snapshot(session, new[] { updated.OperationId }));
         }
         public ChatInboxResponse ResumeChatInbox(string chatId,
@@ -172,76 +171,72 @@ namespace RNAssistant.Office
             var session = LoadInboxSession(chatId);
             ConversationRunPolicy.RequireCurrentSession(session);
             _inbox.Resume(session);
-            StartInboxWorker(session, progress, changed);
+            StartConversationQueue(session, progress, changed);
             return InboxResponse(_inbox.Snapshot(session));
         }
-        private void StartInboxWorker(ChatSession session,
+        private void StartConversationQueue(ChatSession session,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
-            if (session.FormatVersion != ChatSession.CurrentFormatVersion) return;
-            if (_inboxWork.IsClosing || _lifetimeCancellation.IsCancellationRequested || _activeRuns.Get(session.Id) != null || !_inbox.TryStartWorker(session)) return;
-            // Owned by the controller lifetime, not by an intake bridge request or selected page.
-            try { _inboxWork.Start(async token =>
+            _conversationApplication.StartQueue(session, new OfficeQueuePort(this, progress, changed));
+        }
+
+        private sealed class OfficeQueuePort : IConversationQueuePort
+        {
+            private readonly AssistantController _owner;
+            private readonly Action<string, string, string, ChatActivity> _progress;
+            private readonly Action<ChatStateResponse> _changed;
+
+            internal OfficeQueuePort(AssistantController owner,
+                Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
+            { _owner = owner; _progress = progress; _changed = changed; }
+
+            public bool IsClosing { get { return _owner._lifetimeCancellation.IsCancellationRequested; } }
+
+            public ChatSession Reload(string chatId)
             {
-                try
-                {
-                    while (!token.IsCancellationRequested && !_lifetimeCancellation.IsCancellationRequested)
+                var session = _owner.LoadAddressedSession(chatId);
+                ConversationRunPolicy.RequireCurrentSession(session);
+                return session;
+            }
+
+            public void ValidateBinding(ChatSession session, ConversationInput input)
+            {
+                if (!string.IsNullOrEmpty(input.DocumentRuntimeKey) &&
+                    input.DocumentRuntimeKey != _owner.CaptureExpectedRuntimeDocumentKey(session))
+                    throw new InvalidOperationException("Исходная сессия документа недоступна. Очередь приостановлена.");
+            }
+
+            public Task ContinuePendingAsync(ChatSession session, string pendingId, System.Threading.CancellationToken token)
+            {
+                var runId = session.LastRun.RunId;
+                return _owner.ConfirmAgentToolAsync(pendingId, session.Id,
+                    (phase, text, activity) => _progress?.Invoke(runId, phase, text, activity),
+                    token, runId, _changed, true);
+            }
+
+            public Task StartTurnAsync(ChatSession session, ConversationInput item, System.Threading.CancellationToken token)
+            {
+                var runId = Guid.NewGuid().ToString("N");
+                var input = new ChatTurnInput { Text = item.Text, Attachments = item.Attachments,
+                    AppendUserMessage = true, CommitUserAttachments = true, InputId = item.Id };
+                // Revalidate under the same run lease as the user append.
+                Func<ChatSession, ChatTurnInput> prepare = item.QuestionSetId == null ? null :
+                    new Func<ChatSession, ChatTurnInput>(current =>
                     {
-                        session = LoadAddressedSession(session.Id);
-                        ConversationRunPolicy.RequireCurrentSession(session);
-                        var item = _inbox.TakeNext(session);
-                        if (item == null) break;
-                        if (!string.IsNullOrEmpty(item.DocumentRuntimeKey) &&
-                            item.DocumentRuntimeKey != CaptureExpectedRuntimeDocumentKey(session))
-                            throw new InvalidOperationException("Исходная сессия документа недоступна. Очередь приостановлена.");
-                        if (ConversationInboxService.PendingConfirmationId(session) != null)
-                        {
-                            var pending = session.LastRun.KernelState.Summary.PendingConfirmation;
-                            var resumedRunId = session.LastRun.RunId;
-                            await ConfirmAgentToolAsync(pending.PendingId, session.Id,
-                                (phase, text, activity) => { if (progress != null) progress(resumedRunId, phase, text, activity); },
-                                token, resumedRunId, changed, true).ConfigureAwait(false);
-                            continue;
-                        }
-                        var runId = Guid.NewGuid().ToString("N");
-                        var input = new ChatTurnInput
-                        {
-                            Text = item.Text, Attachments = item.Attachments, AppendUserMessage = true,
-                            CommitUserAttachments = true, InputId = item.Id
-                        };
-                        // Revalidate after reservation/reload, in the same lease as
-                        // the user append. A queued answer cannot follow a mode/history edit.
-                        Func<ChatSession, ChatTurnInput> prepare = item.QuestionSetId == null ? null : new Func<ChatSession, ChatTurnInput>(current =>
-                        {
-                            var questions = UserQuestionAnswers.Pending(current, _toolExecutor.Payloads);
-                            if (questions == null || questions.RunId != item.AnswerRunId || questions.QuestionSet.QuestionSetId != item.QuestionSetId)
-                                throw new InvalidOperationException("The accepted answer belongs to an earlier question run. Inspect the paused input.");
-                            return input;
-                        });
-                        await ExecuteChatTurnAsync(session, _settingsService.Load(), input, prepare,
-                            (phase, text, activity) => { if (progress != null) progress(runId, phase, text, activity); },
-                            changed, token, runId).ConfigureAwait(false);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    try { _inbox.Pause(session, ex.Message); }
-                    catch (Exception storageError) { Diagnostics.RuntimeLog.Error("Queue pause could not be persisted: " + storageError.Message); }
-                    Diagnostics.RuntimeLog.Error("Conversation queue paused: " + ex.Message);
-                }
-                finally
-                {
-                    try
-                    {
-                        _inbox.EndWorker(session);
-                        if (!token.IsCancellationRequested && _inbox.HasRunnable(session))
-                            StartInboxWorker(session, progress, changed);
-                        if (changed != null && !token.IsCancellationRequested) changed(GetChatState(session.Id));
-                    }
-                    catch (Exception error) { Diagnostics.RuntimeLog.Error("Queue projection failed: " + error.Message); }
-                }
-            }); }
-            catch (ObjectDisposedException) { _inbox.EndWorker(session); }
+                        var questions = UserQuestionAnswers.Pending(current, _owner._toolExecutor.Payloads);
+                        if (questions == null || questions.RunId != item.AnswerRunId ||
+                            questions.QuestionSet.QuestionSetId != item.QuestionSetId)
+                            throw new InvalidOperationException("The accepted answer belongs to an earlier question run. Inspect the paused input.");
+                        return input;
+                    });
+                return _owner.ExecuteChatTurnAsync(session, _owner._settingsService.Load(), input, prepare,
+                    (phase, text, activity) => _progress?.Invoke(runId, phase, text, activity),
+                    _changed, token, runId);
+            }
+
+            public void Changed(ChatSession session) { _changed?.Invoke(_owner.GetChatState(session.Id)); }
+            public void Failed(Exception error)
+            { Diagnostics.RuntimeLog.Error("Conversation queue paused: " + error.Message); }
         }
     }
 }

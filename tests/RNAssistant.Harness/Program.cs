@@ -213,6 +213,7 @@ namespace RNAssistant.Harness
                 Test("inbox: failed pause append stops scheduling", InboxFailedPauseStillStopsScheduling),
                 Test("inbox: stop freezes queue and retains target", InboxStopAndDocumentIsolation),
                 Test("inbox: exact steer and pending target stay pinned", InboxSteerRequiresExactLiveTarget),
+                Test("conversation: application queue owns FIFO and drain", ConversationApplicationOwnsQueue),
                 Test("conversation: application shutdown drains continuation", ConversationWorkShutdownDrainsContinuation),
                 Test("kernel: read ok", () => KernelAggregatesOutcome("read", ToolExecutionOutcome.Ok, ExecutionHealth.Clean, "1,0,0,0,0")),
                 Test("kernel: read error", () => KernelAggregatesOutcome("read", ToolExecutionOutcome.Error, ExecutionHealth.Errors, "0,1,0,0,0")),

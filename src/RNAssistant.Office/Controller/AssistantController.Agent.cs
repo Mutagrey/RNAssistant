@@ -184,7 +184,7 @@ namespace RNAssistant.Office
             finally
             {
                 EndInboxRun(session, runLease, ref causalTrace);
-                StartInboxWorker(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
+                StartConversationQueue(session, (nextRun, phase, message, activity) => { if (progress != null) progress(phase, message, activity); }, chatStateChanged);
             }
             return response;
         }

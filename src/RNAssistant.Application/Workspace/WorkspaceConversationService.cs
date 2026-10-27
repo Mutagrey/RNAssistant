@@ -37,6 +37,7 @@ namespace RNAssistant.Runtime
         private readonly ConversationLeaseService _conversationLeases;
         private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _conversationInbox;
+        private readonly ConversationApplicationService _conversationApplication;
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
@@ -98,6 +99,7 @@ namespace RNAssistant.Runtime
             _runtimeUseLease = runtimeUseLease;
             _chats = new ChatStore(paths);
             _conversationInbox = new ConversationInboxService(new ChatEventStoreAdapter(_chats));
+            _conversationApplication = new ConversationApplicationService(_conversationInbox, _activeRuns);
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
             _payloads = new ChatBlobStore(paths);

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Общий Application executor для Office и Workspace — 2026-10-27
+
+`ConversationApplicationService` теперь владеет отслеживаемыми задачами обоих
+потребителей. Office FIFO выбирается и дренируется в Application; контроллер
+оставляет только document binding, подготовку хода и подтверждения. Workspace
+submit/approval использует общую admission/receipt/completion lifetime; прежний
+`StartRun`/`RunOperation` удалён, CLI continue тоже проходит этот owner.
+
+Host-neutral Harness проверил FIFO/drain, ранний receipt, Workspace approval,
+shutdown, busy lease и steer; Office MockDemo — queue drain и подтверждение.
+Workspace direct submit пока не использует общий FIFO, общий Web controller и
+единая UI-проекция остаются открытыми S1c. Причина Windows-фризов не установлена;
+Office/WebView2 там не проверены, доступны только фото экрана.
+
 ## Повтор exact steer после закрытия target — 2026-10-27
 
 Общий Application inbox теперь сначала сверяет operation ID и неизменный

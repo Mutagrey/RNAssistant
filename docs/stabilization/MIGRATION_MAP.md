@@ -34,7 +34,13 @@ clone adapter; общая UI-проекция остаётся открытой.
 доставляет Stop этому owner, а прежний локальный run token из pipe удалён.
 Короткая глобальная Office coordination тоже
 принадлежит Application; Workspace использует только точную резервацию.
-Это ещё не общий FIFO/run worker. Office lease всё ещё лежит в
+`ConversationApplicationService` теперь управляет tracked work обоих consumers:
+Office FIFO выбирается и дренируется в Application через узкий document port;
+Workspace submit/approval используют тот же owner для admission receipt,
+completion, отмены и drain. Старые Office `StartInboxWorker` и Workspace
+`StartRun`/`RunOperation` удалены. Workspace пока запускает обычный ввод напрямую
+после exact lease, а не через общий FIFO; общего полного scheduler ещё нет.
+Office lease всё ещё лежит в
 `locks/run_*.lck`, Workspace — в `workspaces/run-leases/*.lck`.
 Обычный Workspace submit также записывает intake/Applied через общий inbox; прямой
 append этого пути удалён. Live inbox адресуется по host/workspace/document/chat,
@@ -56,8 +62,8 @@ read-back и формирование diagnostic остаются в своих 
 Оба live steer теперь проходят `ConversationInboxService.SubmitToRun` с exact
 kernel run ID. Office pending-confirmation steer проверяет ещё и pending ID;
 поздний bound steer остаётся в журнале, но не запускает новый ход. Office
-подтверждение продолжает исходный run ID. `StartInboxWorker` и Workspace
-`RunOperation` всё ещё отдельные, поэтому строка общего scheduler ниже открыта.
+подтверждение продолжает исходный run ID. Общий owner tracked work не объединил
+Workspace FIFO admission и domain preparation; эта часть S1c остаётся открытой.
 Повтор exact steer теперь разрешается в общем inbox до проверки live target;
 Workspace убрал внешний lock вокруг общего admission и чтения квитанции.
 Закрытие kernel input использует уже захваченную проекцию inbox. Это не
@@ -65,8 +71,8 @@ Workspace убрал внешний lock вокруг общего admission и 
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
 |---|---|---|
-| Office `AssistantController.Inbox.StartInboxWorker`, controller `StartControllerRun`/`CancelChatRun` façade, send/confirmation и controller disposal | Exact document binding, ресурсная подготовка, host runtime use lease, domain model/tool/store ports | Application владеет admission, FIFO, run task/drain для Office и Workspace. Удалить старый scheduler/facade workflow после переключения; live handle/cancel уже переключены |
-| Workspace `.Lifetime.cs` (`StartRun`, `RunOperation`), orchestration в `ExecuteInputAsync`/`ExecutePendingAsync` и `.Control.cs` (`ContinueAsync` включительно); bridge + CLI | Workspace association/root, settings/tool/resource profile, file authority; CLI ждёт completion общей задачи | Тот же Application owner обслуживает обе поверхности. Удалить отдельные workers/receipt rules, оставив тонкий DTO/CLI adapter и domain port composition; run reservation/cancel уже переключены |
+| Office `AssistantController.StartControllerRun`/`CancelChatRun` façade, send/confirmation и controller disposal | Exact document binding, ресурсная подготовка, host runtime use lease, domain model/tool/store ports | Office FIFO уже выбирает Application; удалить оставшийся controller run workflow после переключения полной общей admission и UI projection |
+| Workspace orchestration в `ExecuteInputAsync`/`ExecutePendingAsync` и `.Control.cs` (`ContinueOwnedAsync`); bridge + CLI | Workspace association/root, settings/tool/resource profile, file authority; CLI ждёт completion общей задачи | Tracked operation уже принадлежит Application; переключить direct submit на общий FIFO/admission и оставить только domain port composition |
 | Office `ConversationKernelAdapter.Input.cs` и незавершённый Workspace `.Input.cs`; input channel обоих kernels | Подготовка Office-вложений/ресурсов, применение подготовленного ввода к domain model session | Общие admission/consume/append/applied/interrupt через существующий journal и `IRunInputChannel`. Удалить отдельные channel algorithms; перенос одного inbox helper не закрывает строку |
 | `ChatSessionService.ReconcileInterruptedRuns` и Workspace `RefreshSession`/`PrepareResume`/`InterruptAbandonedRun`; activation/reopen | Сведения domain mutation journals и read-back, exact target availability | Общий owner ещё должен забрать захват lease и сохранение recovery transition. Kernel-lifecycle decision и exact run/cursor guard уже общие; повторного tool dispatch нет. Receipt reconciliation уже переключена на общий inbox |
 | Workspace `WorkspaceRunControl` preview/input/cross-process client | Локальный current-user transport и его ACL, техническая доставка/таймаут | Перенаправить preview/input на typed команды/snapshot общего owner; отдельный run token и Stop owner удалены, transport остаётся |

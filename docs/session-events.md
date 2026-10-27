@@ -738,8 +738,10 @@ No automatic resubmit occurs. Background receipts never replace the selected
 chat or Office draft; resolved inputs are no longer queried.
 `submitProjectChat` returns that receipt and a canonical snapshot after input
 delivery and the first persisted kernel checkpoint, without awaiting the model.
-`WorkspaceConversationService` owns the tracked worker, execution cancellation and
-session/runtime-use leases until execution ends. Its terminal `SubmitInputAsync`
+Application `ConversationApplicationService` tracks the worker and its admission,
+receipt, completion and cancellation lifetime for Workspace and Office. Workspace
+still owns its exact session/runtime-use leases and domain preparation until execution
+ends. Its terminal `SubmitInputAsync`
 API (used by CLI) awaits the same worker with caller cancellation still attached.
 UI request cancellation applies before durable admission;
 after admission, losing/cancelling the bridge request cannot cancel the run.
@@ -755,6 +757,13 @@ Application shutdown refuses new workers, cancels existing workers and awaits
 their drain before releasing plugin results; the pane's drain includes this owner.
 Exceptions are observed, while outcomes and recovery remain in the canonical
 kernel/event path. No second run store or tool replay is introduced.
+
+The same Application owner selects and drains Office FIFO input from the shared
+inbox. Its Office port reloads the bound document, validates its runtime key and
+prepares a new turn or exact pending confirmation; it does not select the next
+input. Workspace submit and confirmation use the same tracked operation lifetime,
+but their input still enters a direct run under the exact workspace lease. Workspace
+FIFO admission and the common Web conversation controller remain separate work.
 
 Approval continuation (`resolveProjectChat`) uses the same tracked Application
 owner. It returns a canonical snapshot after the kernel's first persisted resume

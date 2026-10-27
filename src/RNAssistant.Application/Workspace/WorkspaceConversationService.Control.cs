@@ -35,7 +35,7 @@ namespace RNAssistant.Runtime
             CancellationToken cancellationToken = default(CancellationToken), string modelDigest = null)
         {
             ValidateControl(request);
-            return _runWork.ExecuteAsync(token => ContinueOwnedAsync(workspace, request, settings,
+            return _conversationApplication.ExecuteAsync(token => ContinueOwnedAsync(workspace, request, settings,
                 apiKeyProvider, progress, token, modelDigest), cancellationToken);
         }
 

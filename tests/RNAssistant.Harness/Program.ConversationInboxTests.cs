@@ -487,5 +487,60 @@ namespace RNAssistant.Harness
             catch (ObjectDisposedException) { rejected = true; }
             AssertTrue(rejected, "closed owner rejects another continuation");
         }
+
+        private sealed class ConversationQueueFake : IConversationQueuePort
+        {
+            internal readonly List<string> Seen = new List<string>();
+            internal readonly TaskCompletionSource<bool> Completed =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal readonly ConversationInboxService Inbox;
+            internal readonly ChatStore Store;
+            internal ConversationQueueFake(ConversationInboxService inbox, ChatStore store)
+            { Inbox = inbox; Store = store; }
+            public bool IsClosing { get { return false; } }
+            public ChatSession Reload(string chatId) { return Store.Load(chatId); }
+            public void ValidateBinding(ChatSession session, ConversationInput input) { }
+            public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
+            { throw new InvalidOperationException("No pending confirmation in the queue fixture."); }
+            public Task StartTurnAsync(ChatSession session, ConversationInput input, CancellationToken token)
+            {
+                Seen.Add(input.Id);
+                // Domain execution reloads under its run lease after the claim.
+                session = Store.Load(session.Id);
+                Inbox.Bind(session);
+                var message = new ChatMessage { Id = input.Id, Role = "user", Content = input.Text };
+                session.Messages.Add(message);
+                Store.Commit(session, ConversationCommit.UserInput(message));
+                Inbox.Applied(session, input.Id);
+                Inbox.End(session, completed: true, awaiting: false);
+                return Task.FromResult(0);
+            }
+            public void Changed(ChatSession session) { Completed.TrySetResult(true); }
+            public void Failed(Exception error) { Completed.TrySetException(error); }
+        }
+
+        private static void ConversationApplicationOwnsQueue()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                store.Save(session);
+                var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
+                var runs = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths));
+                var application = new ConversationApplicationService(inbox, runs);
+                var port = new ConversationQueueFake(inbox, store);
+                inbox.Submit(session, InboxInput("first", "one", InputDelivery.Queue));
+                inbox.Submit(session, InboxInput("second", "two", InputDelivery.Queue));
+                application.StartQueue(session, port);
+                AssertTrue(port.Completed.Task.Wait(3000) && application.Drained.Wait(3000),
+                    "one Application worker drains accepted FIFO input");
+                AssertEqual("first,second", string.Join(",", port.Seen), "the owner selects FIFO order");
+                AssertEqual(2, store.Load(session.Id).Messages.Count(message => message.Role == "user"),
+                    "each input has one persisted user message");
+                AssertTrue(!inbox.Snapshot(session).Running, "worker is no longer presented as an active run");
+                AssertTrue(application.CloseAsync().Wait(3000), "shutdown drains the owner");
+            });
+        }
     }
 }

@@ -67,6 +67,7 @@ namespace RNAssistant.Office
         private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
         private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _inbox;
+        private readonly ConversationApplicationService _conversationApplication;
         private readonly HtmlNetworkService _htmlNetwork;
         private readonly CancellationTokenSource _lifetimeCancellation;
         private int _disposed;
@@ -129,6 +130,7 @@ namespace RNAssistant.Office
             _skillCatalog = new SkillCatalogService(_adapter.HostName, _toolExecutor.CapturePublishedSkills);
             _conversationLeases = ConversationLeaseService.ForOffice(_paths);
             _activeRuns = new ConversationRunOwner(_conversationLeases, ChatCloneService.CloneSessionSnapshot);
+            _conversationApplication = new ConversationApplicationService(_inbox, _activeRuns);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
                 _chatStore,
