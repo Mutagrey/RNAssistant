@@ -22,7 +22,8 @@ canonical schema projection; actual HTTP catalog и search/read dispatch про�
 только после подтверждённой записи user message. Application ownership длительных
 submit/approval и восстановление недоступного владельца также исправлены.
 Receipt reconnect после reload/потери ответа также реализован host-neutral.
-Следующий приоритет — S1c: уточнение/очередь для активного workspace run. Самостоятельные подписи
+Следующий приоритет — S1c: общий Application-владелец разговора с переключением
+Office и Workspace вместе (пересмотр границы от 2026-10-27 ниже). Самостоятельные подписи
 о результате не заменяют исправление выполнения, доставки или проверки эффекта.
 
 Принято с пользователем: Windows evidence — только фотографии экрана; не просить
@@ -37,9 +38,13 @@ Receipt reconnect после reload/потери ответа также реа�
 ### Целевая граница
 
 Сохранить существующие AgentKernel/ConversationRunCoordinator, ModelContextCompiler,
-ToolRuntime, append-only events/CAS и общий ChatView. Разница Office/workspace/plugin —
-authority источника, capabilities и delivery adapters. Статусы, composer, группировка
-шагов, usage, история и message actions принадлежат общему presentation contract.
+ToolRuntime, append-only events/CAS. Общим становится весь чат: Application-владелец
+приёма, очереди, уточнений, lifetime задач, восстановления и подписок UI, а также
+единые conversation controller/view. Office/workspace/plugin — потребители этого
+владельца; различаются document binding, ресурсы, инструменты и их capabilities.
+Kernel единолично определяет lifecycle/outcomes; Application не вводит второй loop
+или автомат состояний run. Статусы, composer, группировка шагов, usage, история и
+message actions принадлежат общему presentation contract.
 Не нужен второй kernel, store, provider cache или универсальный Office layer.
 
 Путь одного запроса должен проверяться целиком:
@@ -59,7 +64,7 @@ run/step/attempt IDs, cursor и generation выбора. Они не попад�
 | S0 / выполнен частично / delivery + diagnostics | I26-01…10, 5 UI-проб, 2 HTTP-траектории сохранены. Для Windows сделать читаемый экран: версия DLL/web, endpoint/model/format, стадия и длительность ожидания, код и причина ошибки, подтверждённый эффект. Использовать существующие trajectory/CAS, без второго diagnostic store. | По фото можно различить приём ввода, подготовку, API, tool и terminal outcome. Подробные request/response исследуются в собственных локальных воспроизведениях; их передачу от пользователя не запрашивать. Независимые исправления не ждут Windows evidence. |
 | S1a / P0 / Core outcome + Application/Web | Разделить model claim, завершение run и подтверждённые изменения в общей сводке. Подключать существующий typed acceptance там, где заданы проверяемые file/operation criteria. Удалить отображение `satisfied`/clean finish как доказательства эффекта. | Scripted «создал» после read-only остаётся model claim; UI явно показывает фактические 0 изменений. Заданный критерий существования/bytes не проходит. Реальный create+read-back проходит; noop, unknown и ошибка различимы. Прямой информационный ответ без writes остаётся допустимым; никакого regex по словам «готово». |
 | S1b / host-neutral реализован / input delivery + Workspace run control | Receipt, точная версия draft, lease-guarded recovery, независимый lifetime submit/approval и automatic receipt reconnect исправлены; clear-only-on-terminal удалён. Открыт Windows DPAPI/WebView2 abrupt-close/pane shutdown evidence. | Сообщение принято один раз; потеря reply, reload, иной чат и новый одинаковый draft не теряют ввод и не дублируют run. Read-only receipt lookup снимает pending submit timer; unknown/DeliveryRecorded=false не подтверждают доставку. Проверены ранние submit/approval responses, продолжение после потери bridge, duplicate approval без replay, exact Stop, отмена и drain при shutdown; IPC timeout не считается остановкой, recovery перечитывает run/cursor под lease без replay. |
-| S1c / P1 / Application active-run/input delivery | Подключить workspace к существующему `IRunInputChannel` и input journal. Общий composer показывает допустимые send/queue/steer действия по capabilities и текущему run. Удалить blanket запрет ввода после подключения producer и consumer. | Уточнение принимается ровно один раз и доставляется нужному run; очередь переживает reload, не запускает второго writer и не меняет другой чат. Несовместимые действия имеют явную причину. |
+| S1c / ближайший / Application conversation orchestration + shared Web controller | Общий приём ввода и владелец активного запуска; переключить Office и Workspace/CLI одновременно. Удалить раздельные scheduler/lifetime/intake/recovery и правила receipt/composer для этого пути. Конкретные границы и удаления — ниже. | Одна поведенческая матрица для двух адаптеров; durable receipt, однократная доставка, FIFO, steer, approval/question, Stop/reload/recovery и отсутствие второго writer. Сам перенос inbox-класса не закрывает срез. |
 | S2 / P1 / ModelProtocol + resource/tool owners | Обход `ForPrompt` удалён, actual HTTP read/find/search schemas проверены. Остаётся полный read→patch цикл и strict provider admission. | Валидные target/query, scope/query, line/character/procedure/PDF selections проходят; несовместимые selectors и stale/ambiguous anchors отвергаются до effect. После read→patch exact diff и read-back совпадают; без десяти одинаковых repair. Invalid schema не маскируется fallback, rejected/truncated calls не исполняются. |
 | S3 / P1 / shared Web chat + typed delivery | Один run/status/composer projection для всех owners. Принятый шаг сохраняется и затем компактно сворачивается; provisional имеет явный статус попытки. Общий footer: время, actions, API usage; общий route fork/edit/journal. Удалить отдельную workspace строку «Агент работает…» после переключения consumers. | Одна матрица Office/project/plugin: load, accepted input, preparation, model wait/stream, tool, approval, question, cancel, failure, recovery, completed; narrow/wide, reload, переключения. Поздний A→B ответ не меняет B. Принятый текст не исчезает. Fork создаёт новый chat с нужной границей истории, исходник не меняется. |
 | S4 / P1 / delivery + Storage + context owners | Разделить progress repaint, state/cursor refresh и message paging. Удалить полный project tree/transcript render на токен и full-session load ради очередной страницы. Начать с существующих SQLite window/event feed и lazy CAS; затем исправлять только измеренные preparation hotspots. | 30 пустых progress events не перестраивают дерево; update затрагивает stream leaf. Warm/cold switch и first request измерены на одинаковых short/long fixtures; counters показывают bounded page/delta. Before/after p50/p95, allocations, hydrated bytes и UI long tasks сохранены. Состояние и data integrity совпадают после restart. |
@@ -74,9 +79,81 @@ S1a, S1b и S1c — отдельные изменения; каждый посл
 Целевой submit возвращает durable receipt до завершения run; lifetime/cancel/dispose
 и session lease принадлежат application run owner. CLI ожидает terminal result через
 того же owner. Не заменять await на fire-and-forget и не привязывать выполнение
-к существованию DOM выбранного чата. Workspace использует существующий input journal
-и kernel input port; переиспользуемую intake-логику Office inbox перенести в Application,
-оставив Office DTO mapping в адаптере. Не создавать второй concurrent writer.
+к существованию DOM выбранного чата. Оба окружения используют один Application
+intake/scheduler и kernel input port; адаптеры не сохраняют свои workers за общей
+фасадной функцией. Не создавать второй concurrent writer.
+
+### S1c: общий владелец разговора — 2026-10-27
+
+Основание — [проверка фактических путей](../audits/office-workspace-preparation-audit.md#прикладное-управление-разговором--2026-10-27).
+Незавершённый Workspace steer и перенос inbox сохранены в рабочем дереве, но не
+приняты за объединение. Owner среза — Application conversation orchestration;
+Office/Workspace domain owners предоставляют узкие адаптеры, Web — общий consumer.
+
+**Инвариант среза:** одна команда ввода в любой оболочке проходит одинаковые admission,
+доставку и управление выполнением; у разговора ровно один writer и один источник
+состояния. Scope — существующий send/queue/steer, typed answers и approval,
+явный CLI continue, Stop, reconnect и восстановление этого пути. Поведение
+истории/fork, переработка каталогов,
+provider policy, COM и общий performance rewrite сюда не входят.
+
+1. В `RNAssistant.Application/Conversations` собрать общий owner (рабочее имя
+   `ConversationApplicationService`) из существующих journal/inbox/lease правил.
+   Он создаётся на local runtime scope, явно передаётся обоим окружениям и владеет
+   admission, FIFO, tracked tasks, cancel/drain и reconnect. Разделённые внутренние
+   классы допустимы; второго registry или store быть не должно. Общий typed command
+   содержит conversation address, operation ID, delivery intent, exact run/approval
+   reference и подготовленное содержимое. Domain adapter разрешает и закрепляет
+   документ/workspace, готовит ресурсы и model/tool/store ports; не запускает свой
+   worker и не решает, когда продолжить очередь.
+2. Переключить **оба** submit и approval/question entry points, а также существующий
+   CLI `ContinueAsync`, на owner. Общий
+   input channel принимает steer только в exact run и доставляет на безопасной
+   границе kernel. Durable receipt различает сохранённый ввод и применённый ввод;
+   одна запись user message подтверждает delivery. Поздний exact-run steer не
+   превращается молча в новую задачу. Явная Queue остаётся отдельным FIFO input.
+   UI получает receipt до окончания модели; CLI ожидает completion той же задачи.
+   Отсоединение UI снимает подписку, shutdown отменяет и дожидается задач; потерю
+   bound document обрабатывает адаптер через общий owner. Conversation lease и
+   короткий DocumentAccessGate имеют разные назначения.
+3. Общий recovery перечитывает exact run/cursor после захвата того же conversation
+   lease. Нет IPC/ответа — не доказательство смерти владельца. Lifecycle transition
+   остаётся в Core/kernel; Application не пишет собственный terminal status.
+   Доменные mutation journals дают evidence, possible effect остаётся unknown,
+   не replay. Принятый, но не доставленный ввод сохраняется; после аварии очередь
+   приостановлена до явного resume. Receipt lookup ничего не отправляет заново.
+4. Один Application snapshot: существующий `RunViewState`, inbox/receipts,
+   capabilities, canonical cursor; один журнал событий на conversation, существующий
+   CAS. Один Web conversation controller обрабатывает submit/steer/queue, pending
+   request, draft revision, Stop и reconnect для Office/project/plugin. Оболочки
+   передают address и привязку, сохраняют деревья/выбор ресурсов. UI не синтезирует
+   running из loading/pending и не принимает события другого address/generation.
+5. В том же переключении удалить `StartInboxWorker`, controller-owned run start/cancel
+   и orchestration-часть `ChatRunRegistry`; Workspace `StartRun`/`RunOperation` и
+   отдельные правила input/recovery; раздельные UI submit/receipt/poll ветки этого
+   пути. `ConversationRunService`/Workspace composition сохраняют только необходимую
+   подготовку ports. Named pipe может остаться transport к общему owner, без своего
+   admission и lifecycle. Callers history/edit/fork/delete и maintenance переключить
+   на общую резервацию без ложного `running`; их предметное поведение здесь не
+   переписывать. После этого удалить прежний registry/lease mechanism полностью.
+   Точная карта удаления — [MIGRATION_MAP](MIGRATION_MAP.md#общий-владелец-разговора--2026-10-27).
+
+**Приёмка:** один набор сценариев параметризован Office и Workspace adapter, с
+одинаковыми ожидаемыми chat events и snapshot. Проверить: duplicate/conflict и
+потерянный receipt; steer во время model/tool/закрытия input; FIFO и явный resume;
+question/approval и повторное подтверждение; explicit continue без нового run/бюджета;
+Stop/reload/shutdown; target switch; служебная резервация без статуса работы;
+два конкурирующих владельца; A→B→A и новый одинаковый draft. Проверяется фактический
+следующий model request (input ровно один раз), отсутствие повторного effect и
+сохранность unapplied input. Chromium получает реальные native DTO для обеих
+поверхностей и выполняет одну матрицу composer/reconnect. Нужен coverage реальных
+entry points: существующий Harness с shim не заменяет проверку controller delivery.
+Windows/Office/WebView2 остаются открытым evidence, доступным только по фото.
+
+Срез закрывается после переключения обоих consumers и удаления прежних владельцев.
+Одинаковые DTO поверх старых workers, перемещение классов и отдельно зелёный
+Workspace steer недостаточны. S3 затем подключает остальные history/actions и
+rendering к этому владельцу; он не строит вторую систему управления чатами.
 
 ### UI и токены: критерии, а не новая декоративная перепись
 

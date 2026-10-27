@@ -1,4 +1,64 @@
-# Office / workspace: аудит оставшихся различий подготовки контекста
+# Office / workspace: аудит границы общего чата и подготовки контекста
+
+## Прикладное управление разговором — 2026-10-27
+
+Owner: Application conversation orchestration. Проверены текущие исходники, включая
+незавершённый S1c; это пересмотр границы и плана, не завершённое объединение.
+Общие kernel, журнал, compiler и DOM уже существуют, но общего владельца разговора
+нет. Перенос `ConversationInboxService` в Application оставляет два scheduler,
+два владельца выполнения и два UI-контроллера. Продолжать отдельный Workspace inbox
+как конечную архитектуру нельзя. Следующий срез задан в
+[BACKLOG](../stabilization/BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27).
+
+| Операция | Office: текущий владелец | Workspace: текущий владелец | Решение |
+|---|---|---|---|
+| Приём, dedup, очередь | `AssistantController.Inbox.cs`: `SubmitChatInput`, `StartInboxWorker`, update/resume; общий inbox пока только helper | `WorkspaceConversationService.Application.cs` и `.Lifetime.cs`: receipt/admission; новый `.Input.cs`: отдельный steer | Один Application admission и scheduler; оба окружения передают подготовленные доменные входы |
+| Lifetime, cancel, lease | `AssistantController.ChatExecution.cs`: `StartControllerRun`, `CancelChatRun`; `ChatRunRegistry`; controller disposal | `.Lifetime.cs`: `StartRun`, `RunOperation`, `CloseAsync`; `.Control.cs`, `WorkspaceRunControl`, `AcquireSessionLease` | Один Application owner задачи/отмены/drain и один механизм conversation lease; IPC только доставляет команды владельцу |
+| Уточнение и доставка в kernel | `ConversationKernelAdapter.Input.cs`: consume, append user, applied, interrupt вместе с обработкой Office-вложений | Незавершённый `WorkspaceConversationService.Input.cs`: собственный channel, append, applied, interrupt | Общий `IRunInputChannel` consumer и правила доставки; анализ вложений остаётся доменной подготовкой |
+| Approval / question | `AssistantController.Agent.cs`, `ConversationRunService`, Office inbox | `ExecutePendingAsync`, `AdmitPendingAsync`, typed answers в workspace submit | Те же команды Application и тот же kernel; guard конкретного target остаётся у адаптера |
+| Recovery | `ChatSessionService.ReconcileInterruptedRuns` с отдельными ownership/recovery callbacks | `RefreshSession`, `PrepareResume`, `InterruptAbandonedRun`, receipt reconciliation | Одна проверка владельца под lease и точного cursor; доменные owners предоставляют сведения о незавершённых effects |
+| Резервации вне model run | `ReserveChatOperation` вызывает `ChatRunRegistry.Start`; maintenance/history и domain callers читают тот же registry | History/edit/delete используют `AcquireSessionLease`; `ContinueAsync` самостоятельно держит lease и вызывает coordinator | Общая резервация не создаёт running; CLI continuation также входит через общего владельца |
+| Подключение UI | `app-chat.js` → `app-chat-inbox.js`, Office pending/receipt/poll | `app-project-chats.js`: `pendingChatRequests`, `runChat`, receipt reconnect, polling | Один conversation controller, composer и snapshot; дерево проектов, выбор документа и источников остаются оболочками |
+
+Файлы Office выше находятся в `src/RNAssistant.Office/Controller` и `Services`,
+Workspace — в `src/RNAssistant.Application/Workspace`, UI — в `web/js`.
+Это конкретные дубли правил, а не вывод по размеру классов. Например, Office lease
+создаётся в `locks/run_*.lck`, Workspace — в `workspaces/run-leases/*.lck` относительно
+своих настроенных корней. `app-workspace-chat.js.registerActions` переиспользует
+DOM, но направляет ввод в разные прикладные пути. Оба recovery-пути отдельно
+вызывают `KernelState.Interrupt` и записывают status/phase; эти решения также
+нельзя оставлять двум окружениям после смены владельца.
+Дополнительно `ReserveChatOperation` создаёт `running/starting` snapshot даже для
+служебной резервации. Это подтверждённое смешение ownership и выполнения в коде,
+а не доказательство причины каждого статуса на фото; общая проекция должна их разделять.
+
+Необходимые различия: exact Office document session, COM/STA и DocumentAccessGate,
+VBA prepared/read-back evidence; workspace association/root, filesystem authority
+и file read-back; наборы ресурсов/tools/skills и подготовка их model/tool/store
+ports. Workspace с привязанным Office target использует тот же bound adapter.
+Разная привязка не обосновывает разные send/queue/steer/reconnect или ленту чата.
+
+Цель — один явно внедряемый Application owner в local runtime scope, вне lifetime
+WebView/controller. Его ключ включает canonical storage scope и chat ID; UI mode
+не создаёт второго владельца. Он допускает ввод, планирует вызов kernel, держит
+conversation lease, отменяет и дожидается задач. Kernel по-прежнему единолично
+определяет lifecycle/outcomes, включая переход при доказанном прерывании;
+Application передаёт факт потери владельца, не вычисляет terminal из timeout/CTS.
+DocumentAccessGate защищает только host access, не ожидание модели/пользователя.
+
+Один canonical event stream на разговор и существующий CAS хранят входы и факты
+run. Общий Application snapshot составляет `RunViewState` с inbox/receipt и
+доступными командами; это восстанавливаемая проекция, не второй durable store.
+Потеря связи, pending submit и загрузка истории не становятся состоянием kernel.
+Доменный адаптер не получает callback «выполни старый workflow целиком»: его
+контракт ограничен привязкой, подготовкой ресурсов и существующими kernel ports.
+
+Незавершённые steer-изменения сохранены как материал для общего пути и проверок.
+Их локальные проверки не доказывают parity Office/Workspace: Harness не собирает
+все реальные partials `AssistantController`. Windows/Office/WebView2 остаются
+открытым evidence; от пользователя доступны только фотографии.
+
+## Исходный аудит — 2026-10-26
 
 Первичный срез: 2026-10-26, baseline `f1d86260`. Owner: Core context/skills/protocol,
 Application workspace, Office orchestration. Это был статический аудит исходников;

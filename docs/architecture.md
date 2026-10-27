@@ -75,6 +75,25 @@ static WebView UI
 - `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only. Host document identity is owned by `RNAssistant.OfficeHosts/Identity/DocumentIdentity.cs`, while the dynamic COM/VBE backend is owned by `RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; host-neutral Office code cannot consume either helper.
 - `web` is static HTML/CSS/JS with no build pipeline.
 
+### Whole-conversation Application boundary (planned, 2026-10-27)
+
+The current dependency sketch describes the implemented Office path; a shared
+kernel and chat DOM do not yet mean shared conversation orchestration. The target
+is one Application conversation owner consumed by Office and Workspace/CLI: input
+admission, queue/steer, invocation ownership/cancellation/drain, recovery and UI
+subscriptions. Environment adapters own document binding, resource preparation and
+tool/model/store port composition. They must not retain independent schedulers
+behind a common façade. `AgentKernel` remains the sole lifecycle/outcome authority.
+
+The owner lives in the local runtime scope, independent of a selected view or bridge
+request. One canonical conversation event stream/CAS feeds one reconstructible
+snapshot based on `RunViewState`, inbox receipts and capabilities. One Web controller
+consumes that contract in both environments. No additional durable projection,
+run loop or generic Office abstraction is introduced. This is not implemented by
+the current inbox source move; the next bounded cutover, both consumers, removals
+and shared behavioral checks are specified in
+[S1c](stabilization/BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27).
+
 ## Deferred host and local automation boundaries
 
 One RNAssistant window already creates and selects document chats across Excel,

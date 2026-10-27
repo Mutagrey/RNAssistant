@@ -19,6 +19,29 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 проверкой resource-consumer cleanup (2026-09-07). Порядок задаёт
 [Resource MASTER](resource-cutover/MASTER.md), владельцев — [Resource Fabric](../resource-fabric.md).
 
+## Общий владелец разговора — 2026-10-27
+
+Активная карта для [S1c](BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27),
+не заявление о завершённом переносе. Общий owner — Application conversation
+orchestration; оба окружения переключаются в одном поведенческом срезе.
+
+| Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
+|---|---|---|
+| Office `AssistantController.Inbox.StartInboxWorker`, `StartControllerRun`/`CancelChatRun`, `ChatRunRegistry`; send/confirmation и controller disposal | Exact document binding, ресурсная подготовка, host runtime use lease, domain model/tool/store ports | Application владеет admission, FIFO, run task/cancel/drain и conversation lease для Office и Workspace. Удалить старые worker/registry и зависимости; façade не оборачивает старый workflow |
+| Workspace `.Lifetime.cs` (`StartRun`, `RunOperation`), `AcquireSessionLease`, orchestration в `ExecuteInputAsync`/`ExecutePendingAsync` и `.Control.cs` (`ContinueAsync` включительно); bridge + CLI | Workspace association/root, settings/tool/resource profile, file authority; CLI ждёт completion общей задачи | Тот же Application owner обслуживает обе поверхности. Удалить отдельные workers/lease rules, оставив тонкий DTO/CLI adapter и domain port composition |
+| Office `ReserveChatOperation`/maintenance/ownership callbacks, Workspace history/edit/fork/delete lease callers | Предметное поведение history и domain operations пока сохраняется | Переключить на общую Application reservation, не создающую kernel run или `running` snapshot; удалить оставшиеся зависимости от старых registry/lease без второго lock namespace |
+| Office `ConversationKernelAdapter.Input.cs` и незавершённый Workspace `.Input.cs`; input channel обоих kernels | Подготовка Office-вложений/ресурсов, применение подготовленного ввода к domain model session | Общие admission/consume/append/applied/interrupt через существующий journal и `IRunInputChannel`. Удалить отдельные channel algorithms; перенос одного inbox helper не закрывает строку |
+| `ChatSessionService.ReconcileInterruptedRuns` и Workspace `RefreshSession`/`PrepareResume`/`InterruptAbandonedRun`; activation/reopen | Сведения domain mutation journals и read-back, exact target availability | Общий owner проверяет lease/run/cursor, обращается к Core recovery transition и сохраняет один набор фактов. Удалить дубли решений о завершении; unknown не replay |
+| Workspace `WorkspaceRunControl` preview/input/stop; cross-process client | Локальный current-user transport и его ACL, техническая доставка/таймаут | Перенаправить на typed команды/snapshot общего owner; удалить Workspace admission/cancel/projection rules. Сам transport не обязан исчезать |
+| `app-chat-inbox.js` и chat-части `app-project-chats.js`: pending requests, receipt, polling; action dispatch в `app-chat.js`/`app-workspace-chat.js` | Навигация, дерево проектов, Office target/resource selection | Один Web conversation controller/composer использует общий snapshot/commands. Удалить заменённые submit/receipt/poll ветки обоих consumers; scope+generation и draft revision остаются общими guards |
+
+Новый контракт typed, source module подключается через существующий `.projitems`.
+Run lifecycle/outcomes остаются у kernel; live handle Application не второй статусный
+store. Один canonical event stream/CAS на разговор, без dual-write и переписывания
+истории. При переключении не оставлять старого активного writer рядом с новым:
+остановить и дождаться старых задач до смены composition; lease namespace не меняется
+при активном владельце. Не удалять пользовательские чаты или mutation evidence.
+
 ## Historical structural `records` view — 2026-10-21
 
 | Temporary seam | Owner / current consumers | Removal gate |

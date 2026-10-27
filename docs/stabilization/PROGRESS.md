@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Общий чат: пересмотр границы объединения — 2026-10-27
+
+Текущий приоритет — [S1c: общий владелец разговора](BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27),
+owner: Application conversation orchestration + shared Web controller. По
+[аудиту исходников](../audits/office-workspace-preparation-audit.md#прикладное-управление-разговором--2026-10-27)
+общий kernel/DOM пока скрывает раздельные admission, workers, leases, recovery и
+UI receipt/composer. Цель — общий чат целиком; Office и Workspace предоставляют
+document binding, resources/tools и domain preparation, а не свои chat workflows.
+Kernel сохраняет единоличное владение lifecycle/outcomes; журнал и проекция общие.
+
+Ближайший срез переключает оба потребителя для send/queue/steer, запуска/approval,
+Stop и reconnect/recovery с удалением прежних владельцев. Поведение проверяется
+одной матрицей с двумя адаптерами. History/fork и оставшееся presentation идут
+следующим срезом через тот же owner. [Карта временных путей](MIGRATION_MAP.md#общий-владелец-разговора--2026-10-27)
+задаёт условия удаления; тотальной переписи и нового durable store нет.
+
+Текущие незавершённые изменения Workspace steer/inbox сохранены, но не являются
+реализованным объединением и не закрывают S1c. Настоящий срез — аудит и коррекция
+плана; общая Application orchestration ещё не реализована. Независимая гонка
+чтения ChatStore исправлена отдельно (`f2dbaa79`, ниже). Windows/Office/WebView2
+остаются открытым evidence; от пользователя доступны только фотографии.
+
 ## Загрузка чата синхронизирована с записью — 2026-10-27
 
 Owner: Core ChatStore. Воспроизведена гонка при уточнении активного workspace run:

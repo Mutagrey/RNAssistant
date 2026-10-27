@@ -30,7 +30,9 @@ direct cutover объясняют порядок уже выполненной �
 это не повторный общий cutover и не закрытая Windows/Office qualification.
 
 [Аудит оставшихся различий Office/workspace](audits/office-workspace-preparation-audit.md)
-фиксирует общие компоненты, разные профили tools и следующий cutover.
+разделяет доменные различия и дубли управления разговором; задаёт границу общего
+Application-владельца и срез с переключением обоих потребителей. Исторический аудит
+подготовки контекста и профилей tools сохранён ниже в том же документе.
 
 [Аудит коротких ссылок модели](audits/model-reference-contract-review.md)
 разделяет runtime IDs, finish references, semantic targets и Inspector aliases;
