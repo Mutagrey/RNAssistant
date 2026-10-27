@@ -1,5 +1,11 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)Workspace\WorkspaceConversationService.Input.cs" Link="Application\Workspace\WorkspaceConversationService.Input.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationInboxService.cs" Link="Application\Conversations\ConversationInboxService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationInboxContracts.cs" Link="Application\Conversations\ConversationInboxContracts.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationLeaseService.cs" Link="Application\Conversations\ConversationLeaseService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationWorkService.cs" Link="Application\Conversations\ConversationWorkService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Conversations\ConversationRunInputChannel.cs" Link="Application\Conversations\ConversationRunInputChannel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginResultStore.cs" Link="Application\PluginResultStore.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)PluginTools.cs" Link="Application\PluginTools.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Workspace\Contracts\WorkspaceToolContribution.cs" Link="Application\Workspace\Contracts\WorkspaceToolContribution.cs" />

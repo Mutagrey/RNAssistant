@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Общая граница владения запуском и уточнением — 2026-10-27
+
+Owner: Application conversation orchestration. Office и Workspace переведены на
+один `ConversationLeaseService` с прежними путями файловых блокировок; общий
+`ConversationWorkService` отслеживает и завершает фоновые inbox/run задачи.
+Явное продолжение Workspace также проходит через этого владельца: отмена
+вызывающего и shutdown связаны с одной задачей, ожидание lease прерываемо.
+Служебная резервация Office больше не создаёт `running` snapshot, сохраняя
+исключение второго writer. Оба kernel input ports используют общий
+`ConversationRunInputChannel`: запись user message остаётся доменной, а перевод
+receipt в Applied допускается только после сохранения этой записи.
+
+Это реализованная часть S1c, не завершённое объединение чата. Приём нового ввода,
+FIFO scheduler, управление active run/approval, recovery и UI-подключение ещё
+разделены; старый registry Office остаётся для них. Временные владельцы и
+условия удаления перечислены в [MIGRATION_MAP](MIGRATION_MAP.md#общий-владелец-разговора--2026-10-27).
+Host-neutral Harness build и точечные chat lease, workspace steer/recovery,
+plugin admission/shutdown/approval и остановка explicit continuation — pass.
+Реальные Office controller partials Harness не
+собирает; Windows/Office/WebView2 остаются открытым evidence. Пользователь может
+предоставить только фотографии экрана.
+
 ## Общий чат: пересмотр границы объединения — 2026-10-27
 
 Текущий приоритет — [S1c: общий владелец разговора](BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27),

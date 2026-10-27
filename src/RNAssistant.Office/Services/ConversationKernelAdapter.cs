@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -56,6 +57,7 @@ namespace RNAssistant.Office.Services
         private string _text;
         private bool _steered;
         private readonly ConversationInboxService _inbox;
+        private readonly ConversationRunInputChannel _runInput;
         private readonly ChatResourceIngestionService _ingestion;
         private readonly ChatSession _session;
         private readonly Action<string, string, ChatActivity> _progress;
@@ -103,6 +105,9 @@ namespace RNAssistant.Office.Services
             _inbox = inbox;
             _ingestion = ingestion;
             _session = session;
+            if (inbox != null)
+                _runInput = new ConversationRunInputChannel(inbox, session, ApplySteeredInputAsync,
+                    () => _progress?.Invoke("streaming", "", null));
             _progress = progress;
             _registrar = _policy.AllowsConfirmation ? registrar : null;
             _runCancellation = cancellationToken;

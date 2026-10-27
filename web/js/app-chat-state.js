@@ -118,7 +118,7 @@ function persistentDraft(key) {
     ResourceDraftIds: saved ? (saved.attachments || []).map(officeDraftAttachmentId) : [],
     NextAnnotationNumber: saved ? saved.nextAnnotationNumber || 1 : 1,
     PendingVisualAnnotation: saved ? saved.pendingVisualAnnotation || null : null,
-    PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message,
+    PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message, SteerRunId: pending.SteerRunId || null,
       MatchesDraftVersion: !!saved && saved.version === entry.draftVersion,
       ResourceDraftIds: pending.ResourceDraftIds || [], Mode: pending.Mode, Reasoning: pending.ReasoningEnabled,
       EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision } : null };
@@ -196,7 +196,7 @@ async function hydrateChatDrafts() {
       if (pending) workspacePendingInputs[key] = {
         draftVersion: pending.MatchesDraftVersion === true ? chatDraftStore()[key].version : null,
         input: { sessionId: item.SessionId, requestId: pending.RequestId,
-        message: pending.Message, ResourceDraftIds: pending.ResourceDraftIds || [],
+        message: pending.Message, SteerRunId: pending.SteerRunId || null, ResourceDraftIds: pending.ResourceDraftIds || [],
         Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning,
         EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision == null ? null : pending.ExpectedRevision } };
       if (view.attachmentError) log(view.attachmentError, "warning");
@@ -272,13 +272,14 @@ function prepareWorkspaceInput(target, text, options) {
   var key = workspaceDraftKey(target), entry = workspacePendingInputs[key], pending = entry && entry.input;
   var ids = options.EditMessageId ? [] : ((readWorkspaceDraft(target) || {}).attachments || []).map(officeDraftAttachmentId);
   if (!pending || pending.message !== text || pending.Mode !== options.Mode ||
+      (pending.SteerRunId || null) !== (options.SteerRunId || null) ||
       pending.ReasoningEnabled !== options.ReasoningEnabled ||
       (pending.EditMessageId || null) !== (options.EditMessageId || null) ||
       (pending.ExpectedRevision == null ? null : pending.ExpectedRevision) !==
         (options.ExpectedRevision == null ? null : options.ExpectedRevision) ||
       JSON.stringify(pending.ResourceDraftIds || []) !== JSON.stringify(ids))
     pending = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
-      message: text, ResourceDraftIds: ids, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled,
+      message: text, SteerRunId: options.SteerRunId || null, ResourceDraftIds: ids, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled,
       EditMessageId: options.EditMessageId || null, ExpectedRevision: options.ExpectedRevision === undefined ? null : options.ExpectedRevision };
   workspacePendingInputs[key] = { input: pending,
     draftVersion: options.EditMessageId ? null : (readWorkspaceDraft(target) || {}).version };

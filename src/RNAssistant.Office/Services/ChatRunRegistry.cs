@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Storage;
 
@@ -11,6 +12,7 @@ namespace RNAssistant.Office.Services
     internal sealed class ChatRunLease : IDisposable
     {
         private readonly ChatRunRegistry _registry;
+        private readonly IDisposable _reservation;
         private int _completed;
 
         internal ChatRunLease(ChatRunRegistry registry, string chatId, string runId)
@@ -20,6 +22,13 @@ namespace RNAssistant.Office.Services
             RunId = runId;
         }
 
+        internal ChatRunLease(ChatRunRegistry registry, IDisposable reservation, string chatId)
+        {
+            _registry = registry;
+            _reservation = reservation;
+            ChatId = chatId;
+        }
+
         public string ChatId { get; private set; }
         public string RunId { get; private set; }
 
@@ -27,7 +36,8 @@ namespace RNAssistant.Office.Services
         {
             if (Interlocked.Exchange(ref _completed, 1) == 0)
             {
-                _registry.Complete(ChatId, RunId);
+                if (RunId == null) _registry.CompleteReservation(ChatId, _reservation);
+                else _registry.Complete(ChatId, RunId);
             }
         }
     }
@@ -42,7 +52,7 @@ namespace RNAssistant.Office.Services
         public DateTime StartedUtc { get; set; }
         public ChatSession Session { get; set; }
         internal CancellationTokenSource Cancellation { get; set; }
-        internal FileStream RunLock { get; set; }
+        internal IDisposable RunLock { get; set; }
     }
 
     internal sealed class ChatRunRegistry
@@ -50,13 +60,16 @@ namespace RNAssistant.Office.Services
         private readonly object _sync = new object();
         private readonly Dictionary<string, ChatRunSnapshot> _runs =
             new Dictionary<string, ChatRunSnapshot>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _reservations = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private readonly string _lockDirectory;
+        private readonly ConversationLeaseService _leases;
         private readonly ThreadLocal<CoordinationLockState> _coordinationState =
             new ThreadLocal<CoordinationLockState>();
 
         public ChatRunRegistry(AppDataPaths paths = null)
         {
             _lockDirectory = paths == null ? null : Path.Combine(paths.Root, "locks");
+            _leases = ConversationLeaseService.ForOffice(paths);
         }
 
         public ChatRunLease Start(string chatId, string runId, ChatSession session, CancellationTokenSource cancellation = null)
@@ -70,7 +83,7 @@ namespace RNAssistant.Office.Services
                 lock (_sync)
                 {
                     ChatRunSnapshot existing;
-                    if (_runs.TryGetValue(chatId, out existing))
+                    if (_runs.TryGetValue(chatId, out existing) || _reservations.Contains(chatId))
                     {
                         throw new InvalidOperationException("В этом чате уже выполняется запрос.");
                     }
@@ -181,39 +194,28 @@ namespace RNAssistant.Office.Services
 
         public bool HasExternalRuns()
         {
-            if (string.IsNullOrWhiteSpace(_lockDirectory) || !Directory.Exists(_lockDirectory)) return false;
-            string[] paths;
-            try
-            {
-                paths = Directory.GetFiles(_lockDirectory, "run_*.lck");
-            }
-            catch (IOException)
-            {
-                return true;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return true;
-            }
+            return _leases.AnyHeld("run_*.lck");
+        }
 
-            foreach (var path in paths)
+        // A history edit or short admission reservation must not masquerade as
+        // an active kernel invocation in chat state.
+        public ChatRunLease Reserve(string chatId)
+        {
+            using (AcquireCoordinationLock())
             {
-                try
+                lock (_sync)
                 {
-                    using (new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
+                    if (_runs.ContainsKey(chatId) || _reservations.Contains(chatId))
+                        throw new InvalidOperationException("В этом чате уже выполняется запрос.");
+                    var reservation = AcquireRunLock(chatId);
+                    try
                     {
+                        _reservations.Add(chatId);
+                        return new ChatRunLease(this, reservation, chatId);
                     }
-                }
-                catch (IOException)
-                {
-                    return true;
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    return true;
+                    catch { reservation?.Dispose(); throw; }
                 }
             }
-            return false;
         }
 
         public IDisposable ReserveMaintenance()
@@ -226,24 +228,9 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(chatId)) return false;
             lock (_sync)
             {
-                if (_runs.ContainsKey(chatId)) return true;
+                if (_runs.ContainsKey(chatId) || _reservations.Contains(chatId)) return true;
             }
-            if (string.IsNullOrWhiteSpace(_lockDirectory)) return false;
-            try
-            {
-                using (OpenRunLock(chatId))
-                {
-                    return false;
-                }
-            }
-            catch (IOException)
-            {
-                return true;
-            }
-            catch (UnauthorizedAccessException)
-            {
-                return true;
-            }
+            return _leases.IsHeld(chatId);
         }
 
         public IReadOnlyList<ChatSession> Sessions()
@@ -271,6 +258,15 @@ namespace RNAssistant.Office.Services
                     if (run.Cancellation != null) run.Cancellation.Dispose();
                     if (run.RunLock != null) run.RunLock.Dispose();
                 }
+            }
+        }
+
+        internal void CompleteReservation(string chatId, IDisposable reservation)
+        {
+            lock (_sync)
+            {
+                _reservations.Remove(chatId);
+                reservation?.Dispose();
             }
         }
 
@@ -305,12 +301,12 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private FileStream AcquireRunLock(string chatId)
+        private IDisposable AcquireRunLock(string chatId)
         {
             if (string.IsNullOrWhiteSpace(_lockDirectory)) return null;
             try
             {
-                return OpenRunLock(chatId);
+                return _leases.Acquire(chatId);
             }
             catch (IOException)
             {
@@ -320,13 +316,6 @@ namespace RNAssistant.Office.Services
             {
                 throw new InvalidOperationException("Не удалось получить блокировку чата.");
             }
-        }
-
-        private FileStream OpenRunLock(string chatId)
-        {
-            Directory.CreateDirectory(_lockDirectory);
-            var path = Path.Combine(_lockDirectory, "run_" + AppDataPaths.SafeFileName(chatId) + ".lck");
-            return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
         }
 
         private IDisposable AcquireCoordinationLock()

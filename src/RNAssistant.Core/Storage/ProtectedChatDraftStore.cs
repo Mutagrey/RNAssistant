@@ -117,6 +117,8 @@ namespace RNAssistant.Core.Storage
                 (pending.Mode != "agent" && pending.Mode != "plan") ||
                 pending.ResourceDraftIds == null || pending.ResourceDraftIds.Count > 10 ||
                 pending.ResourceDraftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
+                (pending.SteerRunId != null && (string.IsNullOrWhiteSpace(pending.SteerRunId) ||
+                    pending.SteerRunId.Length > 128 || pending.EditMessageId != null || pending.ResourceDraftIds.Count > 0)) ||
                 (pending.EditMessageId != null && (string.IsNullOrWhiteSpace(pending.EditMessageId) ||
                     pending.EditMessageId.Length > 128 || !pending.ExpectedRevision.HasValue ||
                     pending.ResourceDraftIds.Count > 0)) ||
@@ -185,6 +187,7 @@ namespace RNAssistant.Core.Storage
     public sealed class PendingChatInput
     {
         public string RequestId { get; set; }
+        public string SteerRunId { get; set; }
         // This relation is saved atomically with the current draft. Text equality
         // alone cannot distinguish a later identical draft after WebView restart.
         public bool MatchesDraftVersion { get; set; }

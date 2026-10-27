@@ -10,6 +10,8 @@ namespace RNAssistant.Runtime.Contracts
     {
         public string SessionId { get; set; }
         public string RequestId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string SteerRunId { get; set; }
         public string Message { get; set; }
         public string EditMessageId { get; set; }
         public long? ExpectedRevision { get; set; }
@@ -33,6 +35,9 @@ namespace RNAssistant.Runtime.Contracts
         public string AcceptedCursor { get; set; }
         // Delivery is user-message persistence, never run completion or effect.
         public bool DeliveryRecorded { get; set; }
+        // Durable intake for an exact active run; delivery may still be pending.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Steering { get; set; }
     }
 
     public sealed class WorkspaceSessionSnapshot
@@ -52,6 +57,8 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("runViewState", NullValueHandling = NullValueHandling.Ignore)]
         public RunViewState RunViewState { get; set; }
         public string RunId { get; set; }
+        [JsonProperty("canSteer")] public bool CanSteer { get; set; }
+        [JsonProperty("pendingInputs")] public IReadOnlyList<WorkspacePendingInput> PendingInputs { get; set; }
         public int? IterationsUsed { get; set; }
         public int? ToolStepsUsed { get; set; }
         public AgentRunLimits Limits { get; set; }
@@ -72,6 +79,13 @@ namespace RNAssistant.Runtime.Contracts
         [JsonProperty("modelProgress", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceModelProgress ModelProgress { get; set; }
         [JsonProperty("modelProgressUnavailable", DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool ModelProgressUnavailable { get; set; }
+    }
+
+    public sealed class WorkspacePendingInput
+    {
+        public string Id { get; set; }
+        public string RunId { get; set; }
+        public string Text { get; set; }
     }
 
     public sealed class WorkspaceContextUsage

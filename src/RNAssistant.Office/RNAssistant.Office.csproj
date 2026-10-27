@@ -63,7 +63,6 @@
     <Compile Include="Services\ConversationKernelAdapter.Input.cs" />
     <Compile Include="Controller\AssistantController.Inbox.cs" />
     <Compile Include="Contracts\BridgeDtos.Inbox.cs" />
-    <Compile Include="Services\ConversationInboxService.cs" />
     <Compile Include="Contracts\ArtifactLibraryDtos.cs" />
     <Compile Include="Contracts\ArtifactWorkingSetDtos.cs" />
     <Compile Include="Services\ArtifactCatalogService.cs" />

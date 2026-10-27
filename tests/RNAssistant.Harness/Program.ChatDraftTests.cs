@@ -74,6 +74,13 @@ namespace RNAssistant.Harness
                     "unfinished plugin annotation survives protected draft reopen");
                 AssertEqual("plugin-selection-a", reopened.Single(item => item.WorkspaceId == "project-a").PendingInput.ResourceDraftIds.Single(),
                     "uncertain workspace input keeps the exact visual draft identity");
+                workspace.PendingInput = new PendingChatInput { RequestId = "steer-request", Message = "clarification",
+                    SteerRunId = "exact-run", Mode = "agent" };
+                store.Save(workspace);
+                AssertEqual("exact-run", store.Load().Single(item => item.WorkspaceId == "project-a").PendingInput.SteerRunId,
+                    "uncertain steer retains its exact run after reopen");
+                workspace.PendingInput.SteerRunId = " ";
+                RuntimeThrows<InvalidDataException>(() => store.Save(workspace));
                 workspace.PendingInput = new PendingChatInput { RequestId = "edit-request", Message = "revised",
                     EditMessageId = "user-message", ExpectedRevision = 7, Mode = "plan" };
                 store.Save(workspace);

@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -144,10 +145,7 @@ namespace RNAssistant.Office
             _chatSessions.RunStateProvider = _chatRuns.Get;
             _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
             _chatSessions.RunOwnershipProvider = _chatRuns.IsExternallyRunning;
-            _chatSessions.RunRecoveryLeaseProvider = session => _chatRuns.Start(
-                session.Id,
-                "recover_" + Guid.NewGuid().ToString("N"),
-                session);
+            _chatSessions.RunRecoveryLeaseProvider = session => _chatRuns.Reserve(session.Id);
             _chatSessions.MaintenanceLeaseProvider = _chatRuns.ReserveMaintenance;
             _startupRecovery = new Lazy<bool>(() =>
             {

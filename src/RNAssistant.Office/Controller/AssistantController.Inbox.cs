@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Persistence;
 using System;
 using System.Collections.Generic;
@@ -13,12 +14,10 @@ namespace RNAssistant.Office
 {
     public sealed partial class AssistantController
     {
-        private readonly object _inboxWorkersSync = new object();
-        private readonly HashSet<Task> _inboxWorkers = new HashSet<Task>();
-        private readonly System.Threading.CancellationTokenSource _inboxCancellation = new System.Threading.CancellationTokenSource();
-        public Task InboxWorkersDrained { get { lock (_inboxWorkersSync) return Task.WhenAll(_inboxWorkers.ToArray()); } }
-        public void StopInboxWorkers() { _inboxCancellation.Cancel(); }
-        private bool HasInboxWorkers { get { lock (_inboxWorkersSync) return _inboxWorkers.Count != 0; } }
+        private readonly ConversationWorkService _inboxWork = new ConversationWorkService();
+        public Task InboxWorkersDrained { get { return _inboxWork.Drained; } }
+        public void StopInboxWorkers() { _inboxWork.CloseAsync(); }
+        private bool HasInboxWorkers { get { return _inboxWork.HasWorkers; } }
 
         private void EndInboxRun(ChatSession session, ChatRunLease lease, ref RunCausalTrace trace)
         {
@@ -31,9 +30,18 @@ namespace RNAssistant.Office
             finally { ReleaseControllerRun(lease, ref trace); }
         }
 
+        private static ChatInboxResponse InboxResponse(ConversationInboxSnapshot snapshot)
+        {
+            return new ChatInboxResponse { ChatId = snapshot.ChatId, Epoch = snapshot.Epoch,
+                Revision = snapshot.Revision, Items = snapshot.Items, Paused = snapshot.Paused,
+                PauseReason = snapshot.PauseReason, Phase = snapshot.Phase, Running = snapshot.Running,
+                Receipts = snapshot.Receipts.Select(item => new ChatInputReceipt { Id = item.Id,
+                    OperationId = item.OperationId, Revision = item.Revision, Status = item.Status }).ToList() };
+        }
+
         public ChatInboxResponse GetChatInbox(string chatId, IReadOnlyList<string> receiptOperationIds = null)
         { if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("An explicit chat is required.");
-            return _inbox.Snapshot(LoadAddressedSession(chatId), receiptOperationIds); }
+            return InboxResponse(_inbox.Snapshot(LoadAddressedSession(chatId), receiptOperationIds)); }
 
         private ChatSession LoadInboxSession(string chatId)
         {
@@ -60,7 +68,7 @@ namespace RNAssistant.Office
                 var run = _chatRuns.Get(chatId);
                 if (run != null) _chatRuns.Cancel(chatId, run.RunId);
             }
-            return _inbox.Snapshot(session);
+            return InboxResponse(_inbox.Snapshot(session));
         }
 
         public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId)
@@ -130,7 +138,7 @@ namespace RNAssistant.Office
                 }
                 StartInboxWorker(session, progress, changed);
             }
-            var response = _inbox.Snapshot(session);
+            var response = InboxResponse(_inbox.Snapshot(session));
             response.AcceptedInput = _inbox.FindOperation(session, request.OperationId, fingerprint);
             return response;
         }
@@ -140,9 +148,10 @@ namespace RNAssistant.Office
         {
             var session = LoadInboxSession(request.ChatId);
             ConversationRunPolicy.RequireCurrentSession(session);
-            var updated = _inbox.Update(session, request, action);
+            var updated = _inbox.Update(session, new ConversationInputUpdate { InputId = request.InputId,
+                ExpectedRevision = request.ExpectedRevision, Text = request.Text }, action);
             StartInboxWorker(session, progress, changed);
-            return _inbox.Snapshot(session, new[] { updated.OperationId });
+            return InboxResponse(_inbox.Snapshot(session, new[] { updated.OperationId }));
         }
         public ChatInboxResponse ResumeChatInbox(string chatId,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
@@ -151,21 +160,19 @@ namespace RNAssistant.Office
             ConversationRunPolicy.RequireCurrentSession(session);
             _inbox.Resume(session);
             StartInboxWorker(session, progress, changed);
-            return _inbox.Snapshot(session);
+            return InboxResponse(_inbox.Snapshot(session));
         }
         private void StartInboxWorker(ChatSession session,
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
             if (session.FormatVersion != ChatSession.CurrentFormatVersion) return;
-            if (_inboxCancellation.IsCancellationRequested || _lifetimeCancellation.IsCancellationRequested || _chatRuns.Get(session.Id) != null || !_inbox.TryStartWorker(session)) return;
+            if (_inboxWork.IsClosing || _lifetimeCancellation.IsCancellationRequested || _chatRuns.Get(session.Id) != null || !_inbox.TryStartWorker(session)) return;
             // Owned by the controller lifetime, not by an intake bridge request or selected page.
-            var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            lock (_inboxWorkersSync) _inboxWorkers.Add(done.Task);
-            Task.Run(async () =>
+            try { _inboxWork.Start(async token =>
             {
                 try
                 {
-                    while (!_inboxCancellation.IsCancellationRequested && !_lifetimeCancellation.IsCancellationRequested)
+                    while (!token.IsCancellationRequested && !_lifetimeCancellation.IsCancellationRequested)
                     {
                         session = LoadAddressedSession(session.Id);
                         ConversationRunPolicy.RequireCurrentSession(session);
@@ -180,7 +187,7 @@ namespace RNAssistant.Office
                             var resumedRunId = Guid.NewGuid().ToString("N");
                             await ConfirmAgentToolAsync(pending.PendingId, session.Id,
                                 (phase, text, activity) => { if (progress != null) progress(resumedRunId, phase, text, activity); },
-                                _inboxCancellation.Token, resumedRunId, changed, true).ConfigureAwait(false);
+                                token, resumedRunId, changed, true).ConfigureAwait(false);
                             continue;
                         }
                         var runId = Guid.NewGuid().ToString("N");
@@ -200,7 +207,7 @@ namespace RNAssistant.Office
                         });
                         await ExecuteChatTurnAsync(session, _settingsService.Load(), input, prepare,
                             (phase, text, activity) => { if (progress != null) progress(runId, phase, text, activity); },
-                            changed, _inboxCancellation.Token, runId).ConfigureAwait(false);
+                            changed, token, runId).ConfigureAwait(false);
                     }
                 }
                 catch (Exception ex)
@@ -214,18 +221,14 @@ namespace RNAssistant.Office
                     try
                     {
                         _inbox.EndWorker(session);
-                        if (!_inboxCancellation.IsCancellationRequested && _inbox.HasRunnable(session, HasPendingAgentConfirmation(session)))
+                        if (!token.IsCancellationRequested && _inbox.HasRunnable(session, HasPendingAgentConfirmation(session)))
                             StartInboxWorker(session, progress, changed);
-                        if (changed != null && !_inboxCancellation.IsCancellationRequested) changed(GetChatState(session.Id));
+                        if (changed != null && !token.IsCancellationRequested) changed(GetChatState(session.Id));
                     }
                     catch (Exception error) { Diagnostics.RuntimeLog.Error("Queue projection failed: " + error.Message); }
-                    finally
-                    {
-                        done.TrySetResult(true);
-                        lock (_inboxWorkersSync) _inboxWorkers.Remove(done.Task);
-                    }
                 }
-            });
+            }); }
+            catch (ObjectDisposedException) { _inbox.EndWorker(session); }
         }
     }
 }

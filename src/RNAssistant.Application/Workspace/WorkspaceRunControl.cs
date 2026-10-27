@@ -14,9 +14,22 @@ namespace RNAssistant.Runtime
     {
         public bool ReachedOwner { get; private set; }
         public WorkspaceModelProgress Progress { get; private set; }
+        public bool CanSteer { get; private set; }
 
-        public WorkspaceRunPreviewRead(bool reachedOwner, WorkspaceModelProgress progress)
-        { ReachedOwner = reachedOwner; Progress = progress; }
+        public WorkspaceRunPreviewRead(bool reachedOwner, WorkspaceModelProgress progress, bool canSteer = false)
+        { ReachedOwner = reachedOwner; Progress = progress; CanSteer = canSteer; }
+    }
+
+    internal sealed class WorkspaceRunPreview
+    {
+        public WorkspaceModelProgress Progress { get; set; }
+        public bool CanSteer { get; set; }
+    }
+
+    internal sealed class WorkspaceInputAdmission
+    {
+        public WorkspaceInputReceipt Receipt { get; set; }
+        public string Error { get; set; }
     }
 
     // Transient local signal to the process that owns the session lease. Only
@@ -24,18 +37,20 @@ namespace RNAssistant.Runtime
     internal sealed class WorkspaceRunControl : IDisposable
     {
         private const int PreviewMaximumBytes = 512 * 1024;
+        private const int InputMaximumBytes = 1024 * 1024;
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private readonly CancellationTokenSource _run;
         private readonly Task _listener;
         public CancellationToken Token { get { return _run.Token; } }
 
         public WorkspaceRunControl(string scope, string sessionId, string runId, Func<string, bool> matches,
-            Func<WorkspaceModelProgress> preview, CancellationToken cancellationToken)
+            Func<WorkspaceModelProgress> preview, CancellationToken cancellationToken,
+            Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input = null, Func<bool> acceptsInput = null)
         {
             _run = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var name = Name(scope, sessionId, runId);
             var pipe = Server(name); // Bind before returning the application owner.
-            _listener = ListenAsync(name, pipe, matches, preview);
+            _listener = ListenAsync(name, pipe, matches, preview, input, acceptsInput);
         }
 
         private static string Name(string scope, string sessionId, string runId)
@@ -110,9 +125,9 @@ namespace RNAssistant.Runtime
                     var bytes = new byte[count];
                     if (!await ReadExactlyAsync(pipe, bytes, deadline.Token).ConfigureAwait(false))
                         return new WorkspaceRunPreviewRead(false, null);
-                    var result = JsonConvert.DeserializeObject<WorkspaceModelProgress>(Encoding.UTF8.GetString(bytes));
-                    return result?.RunId == runId && result.Sequence > 0 ?
-                        new WorkspaceRunPreviewRead(true, result) : new WorkspaceRunPreviewRead(false, null);
+                    var result = JsonConvert.DeserializeObject<WorkspaceRunPreview>(Encoding.UTF8.GetString(bytes));
+                    return result != null && (result.Progress == null || result.Progress.RunId == runId && result.Progress.Sequence > 0) ?
+                        new WorkspaceRunPreviewRead(true, result.Progress, result.CanSteer) : new WorkspaceRunPreviewRead(false, null);
                 }
                 catch (OperationCanceledException) { return new WorkspaceRunPreviewRead(false, null); }
                 catch (IOException) { return new WorkspaceRunPreviewRead(false, null); }
@@ -122,7 +137,8 @@ namespace RNAssistant.Runtime
         }
 
         private async Task ListenAsync(string name, NamedPipeServerStream first, Func<string, bool> matches,
-            Func<WorkspaceModelProgress> preview)
+            Func<WorkspaceModelProgress> preview, Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input,
+            Func<bool> acceptsInput)
         {
             var pipe = first;
             while (true)
@@ -147,14 +163,28 @@ namespace RNAssistant.Runtime
                                 Encoding.ASCII.GetString(bytes, 0, length) : null;
                             if (request == "preview")
                             {
-                                var value = preview?.Invoke();
-                                var content = value == null ? new byte[0] :
-                                    Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value));
+                                var value = new WorkspaceRunPreview { Progress = preview?.Invoke(), CanSteer = acceptsInput?.Invoke() == true };
+                                var content = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value));
                                 if (content.Length > PreviewMaximumBytes) content = new byte[0];
                                 var size = BitConverter.GetBytes(content.Length);
                                 await pipe.WriteAsync(size, 0, size.Length, deadline.Token).ConfigureAwait(false);
                                 if (content.Length > 0)
                                     await pipe.WriteAsync(content, 0, content.Length, deadline.Token).ConfigureAwait(false);
+                            }
+                            else if (request == "input")
+                            {
+                                var content = await ReadFrameAsync(pipe, InputMaximumBytes, deadline.Token).ConfigureAwait(false);
+                                var response = new WorkspaceInputAdmission();
+                                try
+                                {
+                                    var command = JsonConvert.DeserializeObject<WorkspaceSubmitInputRequest>(Encoding.UTF8.GetString(content));
+                                    if (input == null) throw new InvalidOperationException("Этот запуск пока не принимает уточнения.");
+                                    deadline.Token.ThrowIfCancellationRequested();
+                                    response.Receipt = input(command);
+                                }
+                                catch (Exception error) when (error is ArgumentException || error is InvalidOperationException || error is JsonException)
+                                { response.Error = error.Message; }
+                                await WriteFrameAsync(pipe, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response)), deadline.Token).ConfigureAwait(false);
                             }
                             else
                             {
@@ -171,6 +201,55 @@ namespace RNAssistant.Runtime
                 }
                 if (_lifetime.IsCancellationRequested) return;
                 pipe = Server(name);
+            }
+        }
+
+        private static async Task<byte[]> ReadFrameAsync(Stream pipe, int maximum, CancellationToken token)
+        {
+            var length = new byte[4];
+            if (!await ReadExactlyAsync(pipe, length, token).ConfigureAwait(false)) throw new IOException("Incomplete input frame.");
+            var count = BitConverter.ToInt32(length, 0);
+            if (count <= 0 || count > maximum) throw new IOException("Invalid input frame size.");
+            var bytes = new byte[count];
+            if (!await ReadExactlyAsync(pipe, bytes, token).ConfigureAwait(false)) throw new IOException("Incomplete input frame.");
+            return bytes;
+        }
+
+        private static async Task WriteFrameAsync(Stream pipe, byte[] bytes, CancellationToken token)
+        {
+            var size = BitConverter.GetBytes(bytes.Length);
+            await pipe.WriteAsync(size, 0, size.Length, token).ConfigureAwait(false);
+            await pipe.WriteAsync(bytes, 0, bytes.Length, token).ConfigureAwait(false);
+        }
+
+        public static async Task<WorkspaceInputReceipt> SendInputAsync(string scope, WorkspaceSubmitInputRequest request,
+            CancellationToken cancellationToken)
+        {
+            var content = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(request));
+            if (content.Length > InputMaximumBytes) throw new ArgumentException("Уточнение слишком большое.");
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            using (var pipe = new NamedPipeClientStream(".", Name(scope, request.SessionId, request.SteerRunId), PipeDirection.InOut, ClientOptions))
+            {
+                deadline.CancelAfter(2000);
+                try
+                {
+                    await pipe.ConnectAsync(deadline.Token).ConfigureAwait(false);
+                    RequireCurrentUser(pipe);
+                    var command = Encoding.ASCII.GetBytes("input\n");
+                    await pipe.WriteAsync(command, 0, command.Length, deadline.Token).ConfigureAwait(false);
+                    await WriteFrameAsync(pipe, content, deadline.Token).ConfigureAwait(false);
+                    var bytes = await ReadFrameAsync(pipe, InputMaximumBytes, deadline.Token).ConfigureAwait(false);
+                    var response = JsonConvert.DeserializeObject<WorkspaceInputAdmission>(Encoding.UTF8.GetString(bytes));
+                    if (response?.Error != null) throw new InvalidOperationException(response.Error);
+                    var receipt = response?.Receipt;
+                    if (receipt == null || receipt.SessionId != request.SessionId || receipt.RunId != request.SteerRunId ||
+                        receipt.RequestId != request.RequestId || !receipt.Steering || string.IsNullOrWhiteSpace(receipt.InputId) ||
+                        string.IsNullOrWhiteSpace(receipt.AcceptedCursor) || receipt.AcceptedSequence < 1)
+                        throw new IOException("Input admission receipt is missing or belongs to another request.");
+                    return receipt;
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                { throw new IOException("Приём уточнения не подтверждён. Черновик сохранён; обновление чата проверит доставку."); }
             }
         }
 

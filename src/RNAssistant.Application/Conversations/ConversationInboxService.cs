@@ -7,9 +7,8 @@ using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
-using RNAssistant.Office.Contracts;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Application.Conversations
 {
     // Owns intake and its durable transitions. Never edits the run's message list.
     // ChatStore serializes appends and advances the SAME live session's storage cursor.
@@ -127,20 +126,20 @@ namespace RNAssistant.Office.Services
                 if (!completed && !awaiting) PauseLocked(box, "Работа остановлена или завершилась с ошибкой");
             }
         }
-        internal ChatInboxResponse Snapshot(ChatSession session, IReadOnlyList<string> receiptOperationIds = null)
+        internal ConversationInboxSnapshot Snapshot(ChatSession session, IReadOnlyList<string> receiptOperationIds = null)
         {
             if (receiptOperationIds != null && (receiptOperationIds.Count > 128 ||
                 receiptOperationIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128)))
                 throw new ArgumentException("Receipt lookup requires at most 128 operation IDs of 1–128 characters.");
             var requested = new HashSet<string>(receiptOperationIds ?? new string[0], StringComparer.Ordinal);
             var box = Get(session);
-            lock (box.Sync) return new ChatInboxResponse
+            lock (box.Sync) return new ConversationInboxSnapshot
             {
                 ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
                 Paused = box.Paused, PauseReason = box.PauseReason,
                 Items = box.Inputs.Where(IsPending).Select(Clone).ToList(),
-                Receipts = requested.Count == 0 ? new List<ChatInputReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
-                    .Select(input => new ChatInputReceipt { Id = input.Id, OperationId = input.OperationId,
+                Receipts = requested.Count == 0 ? new List<ConversationInboxReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
+                    .Select(input => new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
                         Revision = input.Revision, Status = input.Status }).ToList()
             };
         }
@@ -178,7 +177,20 @@ namespace RNAssistant.Office.Services
                 if (input.Delivery == InputDelivery.Steer && box.Accepting) box.Interrupt.Cancel();
             }
         }
-        internal ConversationInput Update(ChatSession session, UpdateChatInputPayload request, string action)
+        internal void SubmitToRun(ChatSession session, string runId, ConversationInput input)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (input.AcceptedRunId != runId || input.Delivery != InputDelivery.Steer ||
+                    !box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId ||
+                    box.Session.LastRun.KernelState?.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running)
+                    throw new InvalidOperationException("Запуск уже завершает работу. Обновите чат и отправьте сообщение снова.");
+                Submit(session, input);
+            }
+        }
+
+        internal ConversationInput Update(ChatSession session, ConversationInputUpdate request, string action)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -244,7 +256,7 @@ namespace RNAssistant.Office.Services
         internal bool HasSteer(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return box.Accepting && box.Inputs.Any(i => i.Status == ConversationInputStatus.Pending && i.Delivery == InputDelivery.Steer &&
+            lock (box.Sync) return box.Accepting && box.Inputs.Any(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending && i.Delivery == InputDelivery.Steer &&
                 (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
         }
         internal CancellationToken InterruptToken(ChatSession session)
@@ -267,7 +279,7 @@ namespace RNAssistant.Office.Services
             var box = Get(session);
             lock (box.Sync)
             {
-                var pending = box.Accepting ? box.Inputs.Where(i => i.Status == ConversationInputStatus.Pending &&
+                var pending = box.Accepting ? box.Inputs.Where(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending &&
                     i.Delivery == InputDelivery.Steer && (!box.Paused || box.ExplicitSteers.Contains(i.Id))).Select(Clone).ToList() : new List<ConversationInput>();
                 foreach (var input in pending)
                 {
@@ -299,7 +311,7 @@ namespace RNAssistant.Office.Services
             var box = Get(session);
             lock (box.Sync)
             {
-                if (box.Worker || box.Running || !box.Inputs.Any(i => i.Status == ConversationInputStatus.Pending &&
+                if (box.Worker || box.Running || !box.Inputs.Any(i => i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
                     (!box.Paused || box.ExplicitSteers.Contains(i.Id)))) return false;
                 box.Worker = true;
                 box.ViewRevision++;
@@ -311,9 +323,9 @@ namespace RNAssistant.Office.Services
             var box = Get(session);
             lock (box.Sync)
             {
-                var next = box.Inputs.FirstOrDefault(i => i.Status == ConversationInputStatus.Pending &&
+                var next = box.Inputs.FirstOrDefault(i => i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
                     i.Delivery == InputDelivery.Steer && (!box.Paused || box.ExplicitSteers.Contains(i.Id))) ?? (awaiting || box.Paused ? null : box.Inputs.FirstOrDefault(i =>
-                        i.Status == ConversationInputStatus.Pending));
+                        i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending));
                 if (next == null) return null;
                 // A waiting approval is resumed through the same kernel continuation.
                 // Its steer remains pending for that continuation to consume.
@@ -332,7 +344,7 @@ namespace RNAssistant.Office.Services
         internal bool HasRunnable(ChatSession session, bool awaiting)
         {
             var box = Get(session);
-            lock (box.Sync) return box.Inputs.Any(i => i.Status == ConversationInputStatus.Pending &&
+            lock (box.Sync) return box.Inputs.Any(i => i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
                 (!awaiting || i.Delivery == InputDelivery.Steer) && (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
         }
         internal void EndWorker(ChatSession session)
@@ -358,6 +370,9 @@ namespace RNAssistant.Office.Services
             }
             box.Paused = change.Paused; box.PauseReason = change.PauseReason;
         }
+        private static bool AppliesToRun(Inbox box, ConversationInput input)
+        { return input.AcceptedRunId == null || input.AcceptedRunId == box.Session.LastRun?.RunId; }
+
         private static bool IsPending(ConversationInput input)
         { return input.Status == ConversationInputStatus.Pending || input.Status == ConversationInputStatus.Delivering; }
         private static ConversationInput Clone(ConversationInput input)

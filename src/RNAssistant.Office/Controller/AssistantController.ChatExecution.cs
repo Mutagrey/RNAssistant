@@ -687,7 +687,7 @@ namespace RNAssistant.Office
             var artifactPresentation = ArtifactLibraryProjectionService.ProjectState(session, bridgeMessages);
             var response = new SendChatResponse
             {
-                Inbox = _inbox.Snapshot(session),
+                Inbox = InboxResponse(_inbox.Snapshot(session)),
                 MessageStartIndex = messageStartIndex,
                 MessageTotalCount = session == null || session.Messages == null ? 0 : session.Messages.Count,
                 SessionRevision = session == null ? 0 : session.Revision,

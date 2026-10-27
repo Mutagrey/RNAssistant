@@ -655,8 +655,7 @@ namespace RNAssistant.Office
 
         private ChatRunLease ReserveChatOperation(ChatSession session)
         {
-            var sessionId = session.Id;
-            return _chatRuns.Start(sessionId, Guid.NewGuid().ToString("N"), session);
+            return _chatRuns.Reserve(session.Id);
         }
 
         private ChatSession ReloadReservedSession(ChatSession session)
@@ -745,7 +744,7 @@ namespace RNAssistant.Office
             var usageMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs;
             var htmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session);
             var htmlMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs;
-            response.Inbox = _inbox.Snapshot(session);
+            response.Inbox = InboxResponse(_inbox.Snapshot(session));
             response.MessageStartIndex = messageStartIndex;
             response.MessageTotalCount = session.Messages.Count;
             response.SessionRevision = session == null ? 0 : session.Revision;
@@ -783,7 +782,7 @@ namespace RNAssistant.Office
             return new ChatStateResponse
             {
                 DetailDeferred = true,
-                Inbox = _inbox.Snapshot(session),
+                Inbox = InboxResponse(_inbox.Snapshot(session)),
                 ActiveChatId = session.Id,
                 SessionRevision = session.Revision,
                 MessageTotalCount = session.Messages == null ? 0 : session.Messages.Count,

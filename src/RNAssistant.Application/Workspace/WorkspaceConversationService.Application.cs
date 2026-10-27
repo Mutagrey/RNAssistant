@@ -99,6 +99,7 @@ namespace RNAssistant.Runtime
                 Office = IsPluginSource(workspace) || session.LastRun?.OfficeTarget == null ? null : new WorkspaceOfficeContext {
                     Host = session.LastRun.OfficeTarget.Host,
                     DocumentTitle = session.LastRun.OfficeTarget.DocumentTitle },
+                CanSteer = preview.CanSteer, PendingInputs = ReadPendingInputs(session),
                 RunId = session.LastRun?.RunId, IterationsUsed = session.LastRun?.KernelState?.Summary.IterationsUsed,
                 ContextCheckpointId = ContextCompactionRuntime.ActiveCheckpoint(session)?.Id,
                 ToolStepsUsed = session.LastRun?.KernelState?.Summary.ToolStepsUsed, Limits = session.LastRun?.KernelState?.Limits,
@@ -202,7 +203,8 @@ namespace RNAssistant.Runtime
         private static WorkspaceInputReceipt Receipt(SessionEvent fact, ConversationInput input, bool delivered)
         { return new WorkspaceInputReceipt { SessionId = fact.SessionId, RequestId = input.OperationId,
             InputId = input.Id, RunId = input.AcceptedRunId, AcceptedSequence = fact.Sequence,
-            AcceptedCursor = ConversationEventFeed.Cursor(fact), DeliveryRecorded = delivered }; }
+            AcceptedCursor = ConversationEventFeed.Cursor(fact), DeliveryRecorded = delivered,
+            Steering = input.Delivery == InputDelivery.Steer }; }
 
         private static void ValidateInput(WorkspaceSubmitInputRequest request)
         {
@@ -210,6 +212,12 @@ namespace RNAssistant.Runtime
             if (request.RequestId != null && (string.IsNullOrWhiteSpace(request.RequestId) || request.RequestId.Length > 128 ||
                 string.IsNullOrWhiteSpace(request.SessionId)))
                 throw new ArgumentException("A request ID must be 1–128 characters and requires an existing --session (use session create first).");
+            if (request.SteerRunId != null && (string.IsNullOrWhiteSpace(request.SteerRunId) || request.SteerRunId.Length > 128 ||
+                string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.Message) ||
+                request.Message.Length > 128 * 1024 || request.EditMessageId != null || request.Answers != null ||
+                request.Acceptance != null || request.MutationPolicy.HasValue || request.AutoConfirmToolActions.HasValue ||
+                (request.ResourceDraftIds?.Count ?? 0) > 0))
+                throw new ArgumentException("Уточнение требует текущий запуск и текст без смены политики, вложений или редактирования истории.");
             var draftIds = request.ResourceDraftIds ?? new System.Collections.Generic.List<string>();
             if (draftIds.Count > AttachmentStore.MaxFilesPerMessage ||
                 draftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
@@ -236,7 +244,7 @@ namespace RNAssistant.Runtime
         {
             // Transport identity is bound to submitted intent. Environment/model
             // settings are execution configuration; a duplicate never reapplies them.
-            var canonical = new WorkspaceSubmitInputRequest { Message = request.Message,
+            var canonical = new WorkspaceSubmitInputRequest { Message = request.Message, SteerRunId = request.SteerRunId,
                 EditMessageId = request.EditMessageId, ExpectedRevision = request.ExpectedRevision,
                 ResourceDraftIds = request.ResourceDraftIds?.Count > 0 ? request.ResourceDraftIds : null,
                 Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), MutationPolicy = request.MutationPolicy,

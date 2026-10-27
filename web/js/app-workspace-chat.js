@@ -270,7 +270,7 @@
     var messages = chat.messages || [];
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && canMessageAction("fork", actionMessage, 0);
-    var signature = JSON.stringify([chat.messages || [], live, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
+    var signature = JSON.stringify([chat.messages || [], live, field(snapshot, "pendingInputs"), field(snapshot, "status"), start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
     if (!changed && list._chatSignature === signature) return;
     var scroll = list.scrollTop, height = list.scrollHeight;
     var oldStart = changed ? null : Number(list.dataset.startIndex);
@@ -325,6 +325,25 @@
         paintLiveModelOutput(node.querySelector(".agent-stream-step"), liveProgress);
       });
     }
+    (field(snapshot, "pendingInputs") || []).forEach(function (pending) {
+      var waiting = field(snapshot, "status") === "running" && pending.RunId === field(snapshot, "runId");
+      appendMessageUnit(units, "input:" + pending.Id, JSON.stringify([pending, waiting]), function () {
+        var article = document.createElement("article"); article.className = "message user pending inbox-message";
+        article.dataset.inputId = pending.Id;
+        var status = document.createElement("div"); status.className = "inbox-item-status";
+        status.textContent = pending.RunId === field(snapshot, "runId") ? "Уточнение сохранено, но ещё не применено" :
+          "Уточнение из предыдущего запуска не применено";
+        var body = document.createElement("div"); body.className = "markdown inbox-pending-text"; body.textContent = pending.Text;
+        article.append(status, body);
+        if (!waiting) {
+          var restore = document.createElement("button"); restore.type = "button"; restore.textContent = "Вставить в ввод";
+          restore.onclick = function () { if (sharedComposer) sharedComposer.append({
+            workspaceId: field(field(chat, "project"), "workspaceId"), sessionId: field(chat, "sessionId") }, pending.Text); };
+          article.appendChild(restore);
+        }
+        return article;
+      });
+    });
     list._workspaceEntries = reconcileMessageUnits(list, units, false, list._workspaceEntries || Object.create(null));
     list.scrollTop = !changed && Number.isSafeInteger(oldStart) && start < oldStart
       ? scroll + list.scrollHeight - height : following ? list.scrollHeight : scroll;
@@ -348,6 +367,13 @@
       !!receipt.InputId && !!receipt.RunId && !!receipt.AcceptedCursor &&
       Number.isSafeInteger(receipt.AcceptedSequence) && receipt.AcceptedSequence > 0 &&
       receipt.DeliveryRecorded === true;
+  }
+  function acceptedInputReceipt(receipt, sessionId, requestId, steerRunId) {
+    if (steerRunId && (!receipt || receipt.RunId !== steerRunId || receipt.Steering !== true)) return false;
+    return deliveredInputReceipt(receipt, sessionId, requestId) || !!steerRunId && !!receipt &&
+      receipt.SessionId === sessionId && receipt.RequestId === requestId && receipt.RunId === steerRunId &&
+      receipt.Steering === true && !!receipt.InputId && !!receipt.AcceptedCursor &&
+      Number.isSafeInteger(receipt.AcceptedSequence) && receipt.AcceptedSequence > 0;
   }
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
@@ -443,8 +469,10 @@
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
       options: function () { return { Mode: mode, ReasoningEnabled: reasoning }; },
-      prepareInput: function (target, text, edit) {
-        return draftStore.prepareWorkspaceInput(target, text, Object.assign({}, this.options(), edit ?
+      prepareInput: function (target, text, edit, activeRun) {
+        var options = activeRun ? { SteerRunId: field(activeRun, "runId"), Mode: field(activeRun, "mode"),
+          ReasoningEnabled: !!field(field(activeRun, "modelConfiguration"), "reasoningEnabled") } : this.options();
+        return draftStore.prepareWorkspaceInput(target, text, Object.assign({}, options, edit ?
           { EditMessageId: edit.messageId, ExpectedRevision: edit.revision } : {}));
       },
       draftVersion: function () {
@@ -505,7 +533,7 @@
     canMessageAction: canMessageAction, messageAction: messageAction,
     startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
     currentMessageEdit: currentMessageEdit,
-    deliveredInputReceipt: deliveredInputReceipt,
+    deliveredInputReceipt: deliveredInputReceipt, acceptedInputReceipt: acceptedInputReceipt,
     composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
     snapshot: function () { return dispatch("snapshot"); },

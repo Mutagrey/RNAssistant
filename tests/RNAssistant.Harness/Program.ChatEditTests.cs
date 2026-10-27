@@ -405,11 +405,17 @@ namespace RNAssistant.Harness
                     AssertTrue(!registry.HasRuns(), "maintenance lock is reentrant for composed operations");
                 }
 
-                using (secondRegistry.Start("chat-1", "history-edit", session))
+                using (secondRegistry.Reserve("chat-1"))
                 {
-                    AssertTrue(secondRegistry.IsRunning("chat-1"), "chat can be reserved after release");
+                    AssertTrue(!secondRegistry.IsRunning("chat-1"), "history reservation is not a model run");
+                    AssertTrue(secondRegistry.Get("chat-1") == null, "history reservation has no running snapshot");
+                    AssertTrue(registry.IsExternallyRunning("chat-1"), "history reservation still excludes another writer");
+                    var rejected = false;
+                    try { secondRegistry.Start("chat-1", "competing-run", session); }
+                    catch (InvalidOperationException) { rejected = true; }
+                    AssertTrue(rejected, "history reservation excludes a run in the same registry");
                 }
-                AssertTrue(!secondRegistry.IsRunning("chat-1"), "history lease released");
+                AssertTrue(!registry.IsExternallyRunning("chat-1"), "history lease released");
             });
         }
 

@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
 using RNAssistant.Runtime.Contracts;
 
@@ -10,38 +9,14 @@ namespace RNAssistant.Runtime
 {
     public sealed partial class WorkspaceConversationService
     {
-        private readonly object _runsSync = new object();
-        private readonly HashSet<Task> _runWorkers = new HashSet<Task>();
-        private readonly CancellationTokenSource _runLifetime = new CancellationTokenSource();
-        private Task _runsClosing;
+        private readonly ConversationWorkService _runWork = new ConversationWorkService();
 
-        public Task RunsDrained { get { lock (_runsSync) return Task.WhenAll(_runWorkers.ToArray()); } }
+        public Task RunsDrained { get { return _runWork.Drained; } }
 
         public Task CloseAsync()
         {
-            lock (_runsSync)
-            {
-                if (_runsClosing != null) return _runsClosing;
-                var workers = _runWorkers.ToArray();
-                if (workers.Length == 0)
-                {
-                    _runsClosing = Task.CompletedTask;
-                    _titleLifetime.Cancel();
-                    _runLifetime.Cancel();
-                    _runLifetime.Dispose();
-                    return _runsClosing;
-                }
-                _runsClosing = Task.Run(async () =>
-                {
-                    try { _titleLifetime.Cancel(); _runLifetime.Cancel(); }
-                    finally
-                    {
-                        await Task.WhenAll(workers).ConfigureAwait(false);
-                        _runLifetime.Dispose();
-                    }
-                });
-                return _runsClosing;
-            }
+            _titleLifetime.Cancel();
+            return _runWork.CloseAsync();
         }
 
         public Task<WorkspaceRunResult> SubmitInputAsync(WorkspaceDescriptor workspace,
@@ -59,6 +34,7 @@ namespace RNAssistant.Runtime
             WorkspaceSubmitInputRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken)
         {
+            if (request?.SteerRunId != null) return SteerInputAsync(workspace, request, cancellationToken);
             return StartInput(workspace, request, settings, apiKeyProvider, progress, cancellationToken,
                 null, detachAfterAcceptance: true).Receipt.Task;
         }
@@ -103,14 +79,9 @@ namespace RNAssistant.Runtime
         private RunOperation StartRun(Func<RunOperation, Task<WorkspaceRunResult>> execute,
             Action<WorkspaceRunEvent> progress, CancellationToken callerToken, bool detachAfterAcceptance)
         {
-            RunOperation operation;
-            lock (_runsSync)
-            {
-                if (_runsClosing != null) throw new ObjectDisposedException(nameof(WorkspaceConversationService));
-                operation = new RunOperation(_runLifetime.Token, callerToken, detachAfterAcceptance, progress);
-                _runWorkers.Add(operation.Drained.Task);
-            }
-            Task.Run(async () =>
+            if (_runWork.IsClosing) throw new ObjectDisposedException(nameof(WorkspaceConversationService));
+            var operation = new RunOperation(_runWork.Token, callerToken, detachAfterAcceptance, progress);
+            try { _runWork.Start(async token =>
             {
                 try
                 {
@@ -144,13 +115,9 @@ namespace RNAssistant.Runtime
                 finally
                 {
                     operation.Dispose();
-                    lock (_runsSync)
-                    {
-                        _runWorkers.Remove(operation.Drained.Task);
-                        operation.Drained.TrySetResult(true);
-                    }
                 }
-            });
+            }); }
+            catch { operation.Dispose(); throw; }
             return operation;
         }
 
@@ -162,8 +129,6 @@ namespace RNAssistant.Runtime
                 new TaskCompletionSource<WorkspaceInputReceipt>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource<WorkspaceRunResult> Completion =
                 new TaskCompletionSource<WorkspaceRunResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-            internal readonly TaskCompletionSource<bool> Drained =
-                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             private readonly object _sync = new object();
             private readonly CancellationTokenSource _cancellation;
             private readonly CancellationTokenRegistration _caller;

@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -33,6 +34,7 @@ namespace RNAssistant.Runtime
     public sealed partial class WorkspaceConversationService : IDisposable
     {
         private readonly AppDataPaths _paths;
+        private readonly ConversationLeaseService _conversationLeases;
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
@@ -70,7 +72,7 @@ namespace RNAssistant.Runtime
         {
             var local = LocalModelProgress(session);
             if (local != null || session.LastRun?.Status != "running" || string.IsNullOrWhiteSpace(session.LastRun.RunId))
-                return new WorkspaceRunPreviewRead(true, local);
+                return new WorkspaceRunPreviewRead(true, local, CanSteer(session));
             return WorkspaceRunControl.ReadPreviewAsync(_paths.WorkspaceDirectory, session.Id,
                 session.LastRun.RunId).GetAwaiter().GetResult();
         }
@@ -86,6 +88,7 @@ namespace RNAssistant.Runtime
             CallableToolProfile toolProfile = null)
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
+            _conversationLeases = ConversationLeaseService.ForWorkspace(paths);
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
             _isPluginSourceWorkspace = isPluginSourceWorkspace;
             _toolProfile = toolProfile ?? CallableToolProfile.AllDirect("workspace-direct");
@@ -159,7 +162,7 @@ namespace RNAssistant.Runtime
             foreach (var input in latest)
             {
                 if (input.Status != ConversationInputStatus.Delivering) continue;
-                if (input.Revision != 1 || string.IsNullOrWhiteSpace(input.AcceptedRunId) ||
+                if ((input.Delivery == InputDelivery.Steer ? input.Revision < 2 : input.Revision != 1) || string.IsNullOrWhiteSpace(input.AcceptedRunId) ||
                     string.IsNullOrWhiteSpace(input.RequestFingerprint))
                     throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
                 if (!ConversationInputJournal.HasPersistedUserMessage(session, input)) continue;
@@ -456,6 +459,7 @@ namespace RNAssistant.Runtime
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
             ValidateInput(request);
+            if (request.SteerRunId != null) throw new ArgumentException("Use SteerInputAsync for active-run intake.");
             var duplicate = FindAcceptedInput(workspace, request);
             if (duplicate != null) return WorkspaceRunResult.AlreadyAccepted(duplicate);
             var fingerprint = InputFingerprint(request);
@@ -610,12 +614,13 @@ namespace RNAssistant.Runtime
                 progress?.Invoke(new WorkspaceRunEvent("InputApplied", null, null,
                     ConversationEventFeed.Cursor(session), receipt));
 
-                using (var control = OpenRunControl(session, cancellationToken))
+                using (var inputChannel = new WorkspaceInputChannel(this, session))
+                using (var control = OpenRunControl(session, cancellationToken, inputChannel))
                 {
                     var result = await ConversationRunCoordinator.RunAsync(
                         new AgentRunRequest(runId, runId, message,
                             new AgentRunLimits(Math.Max(1, settings.MaxAgentIterations), Math.Max(1, settings.MaxAgentToolSteps), settings.MaxConsecutiveReflections), previous),
-                        ports, ports.Tools, ports, control.Token).ConfigureAwait(false);
+                        ports, ports.Tools, ports, control.Token, input: inputChannel).ConfigureAwait(false);
                     if (acceptedContract.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptedContract);
@@ -693,12 +698,13 @@ namespace RNAssistant.Runtime
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
-                using (var control = OpenRunControl(session, cancellationToken))
+                using (var inputChannel = approve ? new WorkspaceInputChannel(this, session) : null)
+                using (var control = OpenRunControl(session, cancellationToken, inputChannel))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingId, continuation, ports, ports.Tools, ports, control.Token,
-                        rejectPending: !approve).ConfigureAwait(false);
+                        rejectPending: !approve, input: inputChannel).ConfigureAwait(false);
                     if (acceptance.Requested)
                     {
                         AssessAcceptance(workspace, session, result.Summary, acceptance);
@@ -923,16 +929,7 @@ namespace RNAssistant.Runtime
         private IDisposable AcquireSessionLease(string sessionId, bool wait = true,
             CancellationToken cancellationToken = default(CancellationToken))
         {
-            var directory = Path.Combine(_paths.WorkspaceDirectory, "run-leases");
-            StorageFileSystem.EnsureRegularDirectory(directory);
-            var path = Path.Combine(directory, TextPatternEngine.Sha256(sessionId) + ".lck");
-            if (File.Exists(path) && StorageFileSystem.IsReparsePoint(path))
-                throw new IOException("Workspace run lease cannot be a link.");
-            try
-            {
-                return wait ? StorageFileSystem.AcquireWriteLock(path, cancellationToken)
-                    : new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-            }
+            try { return _conversationLeases.Acquire(sessionId, wait, cancellationToken); }
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
         }
 

@@ -32,7 +32,7 @@
     var snapshot = await send("getProjectChat", query);
     if (pending && snapshot && snapshot.sessionId === target.sessionId &&
         snapshot.project && snapshot.project.workspaceId === target.workspaceId &&
-        window.RNAssistantWorkspaceChat.deliveredInputReceipt(snapshot.inputReceipt, target.sessionId, pending.input.requestId)) {
+        window.RNAssistantWorkspaceChat.acceptedInputReceipt(snapshot.inputReceipt, target.sessionId, pending.input.requestId, pending.input.SteerRunId)) {
       if (pending.input.EditMessageId) drafts.acknowledgeWorkspaceInput(target, pending.input);
       else if (composer) composer.accepted(target, pending.input.message, pending.draftVersion, pending.input);
       // The original admission reply may never arrive. The durable receipt is
@@ -236,7 +236,13 @@
     var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
     el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
       !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
-      !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || field(runState(), "status", "Status") === "running";
+      !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || field(runState(), "status", "Status") === "running" &&
+        (!field(runState(), "canSteer", "CanSteer") || hasAttachments);
+    var steering = field(runState(), "status", "Status") === "running" && field(runState(), "canSteer", "CanSteer");
+    el("Input").placeholder = steering ? "Уточните текущую задачу…" :
+      window.RNAssistantWorkspaceChat.owner() === "plugin" ? "Опишите изменение плагина" : "Спросите о проекте…";
+    el("Send").title = steering ? (hasAttachments ? "Уточнение доступно без новых вложений" : "Уточнить текущую задачу") : "Отправить";
+    el("Send").setAttribute("aria-label", el("Send").title);
   }
   function render() {
     runObserver.select(ownsView() && project() && project().available ? active : null, chatBusy());
@@ -609,11 +615,12 @@
         var pid = projectId(), sid = currentId();
         var target = { workspaceId: pid, sessionId: sid }, edit = window.RNAssistantWorkspaceChat.currentMessageEdit();
         var draftVersion = edit ? null : composer.draftVersion();
-        var request = composer.prepareInput(target, text, edit);
+        var request = composer.prepareInput(target, text, edit,
+          field(runState(), "status", "Status") === "running" ? runState() : null);
         var acknowledged = false;
         function acceptReceipt(receipt) {
           if (acknowledged) return true;
-          if (!window.RNAssistantWorkspaceChat.deliveredInputReceipt(receipt, sid, request.requestId)) return false;
+          if (!window.RNAssistantWorkspaceChat.acceptedInputReceipt(receipt, sid, request.requestId, request.SteerRunId)) return false;
           if (edit) composer.acceptedEdit(target, request);
           else composer.accepted(target, text, draftVersion, request);
           acknowledged = true;

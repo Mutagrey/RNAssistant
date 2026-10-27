@@ -29,12 +29,20 @@ namespace RNAssistant.Runtime
             return receipt;
         }
 
-        public async Task<WorkspaceRunResult> ContinueAsync(WorkspaceDescriptor workspace, WorkspaceRunControlRequest request,
+        public Task<WorkspaceRunResult> ContinueAsync(WorkspaceDescriptor workspace, WorkspaceRunControlRequest request,
             AppSettings settings, Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress = null,
             CancellationToken cancellationToken = default(CancellationToken), string modelDigest = null)
         {
             ValidateControl(request);
-            using (AcquireSessionLease(request.SessionId))
+            return _runWork.ExecuteAsync(token => ContinueOwnedAsync(workspace, request, settings,
+                apiKeyProvider, progress, token, modelDigest), cancellationToken);
+        }
+
+        private async Task<WorkspaceRunResult> ContinueOwnedAsync(WorkspaceDescriptor workspace,
+            WorkspaceRunControlRequest request, AppSettings settings, Func<string> apiKeyProvider,
+            Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken, string modelDigest)
+        {
+            using (AcquireSessionLease(request.SessionId, cancellationToken: cancellationToken))
             {
                 var session = GetSession(workspace, request.SessionId);
                 if (session?.LastRun?.RunId != request.RunId || ConversationEventFeed.Cursor(session) != request.Cursor)
@@ -76,14 +84,15 @@ namespace RNAssistant.Runtime
             }
         }
 
-        private WorkspaceRunControl OpenRunControl(ChatSession session, CancellationToken cancellationToken)
+        private WorkspaceRunControl OpenRunControl(ChatSession session, CancellationToken cancellationToken, WorkspaceInputChannel input = null)
         {
             var initialRevision = session.Revision;
             return new WorkspaceRunControl(_paths.WorkspaceDirectory, session.Id, session.LastRun.RunId,
                 cursor => session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Running &&
                     session.Revision > initialRevision && ConversationEventFeed.Cursor(session) == cursor,
                 () => LocalModelProgress(session),
-                cancellationToken);
+                cancellationToken, input == null ? null : new Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt>(input.Submit),
+                () => input != null && input.Accepting);
         }
 
         private static void ValidateControl(WorkspaceRunControlRequest request)

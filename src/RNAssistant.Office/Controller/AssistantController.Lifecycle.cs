@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using System;
 using System.Threading;
 using RNAssistant.Office.Contracts;

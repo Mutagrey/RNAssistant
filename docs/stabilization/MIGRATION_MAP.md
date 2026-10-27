@@ -24,6 +24,12 @@ gates; active tool compatibility adapter отсутствует. Windows/Office 
 Активная карта для [S1c](BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27),
 не заявление о завершённом переносе. Общий owner — Application conversation
 orchestration; оба окружения переключаются в одном поведенческом срезе.
+Уже общие `ConversationLeaseService`, `ConversationWorkService` и
+`ConversationRunInputChannel` в Application используются обоими окружениями;
+старые per-environment lock acquisition, worker tracking и input-consume loops
+удалены. Следующие строки обозначают оставшуюся orchestration, а не повторную
+реализацию этих трёх частей. Office lease всё ещё лежит в `locks/run_*.lck`,
+Workspace — в `workspaces/run-leases/*.lck`.
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
 |---|---|---|

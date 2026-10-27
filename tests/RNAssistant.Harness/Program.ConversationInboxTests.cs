@@ -1,3 +1,4 @@
+using RNAssistant.Application.Conversations;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -134,17 +135,17 @@ namespace RNAssistant.Harness
                 var accepted = events.Read(session, SessionEventReadMode.RequireComplete).First(e => e.Type == SessionEventTypes.ConversationInputChanged);
                 AssertEqual("first", events.ReadPayload(session, accepted), "immutable text body is CAS-backed");
                 AssertTrue(accepted.Data["Input"]["Text"].Type == Newtonsoft.Json.Linq.JTokenType.Null, "body is not duplicated in metadata");
-                inbox.Update(session, new UpdateChatInputPayload { InputId = "b", ExpectedRevision = 1, Text = "edited" }, "edit");
+                inbox.Update(session, new ConversationInputUpdate { InputId = "b", ExpectedRevision = 1, Text = "edited" }, "edit");
                 AssertEqual("a", inbox.TakeNext(session, false).Id, "FIFO claim");
                 var delivered = new ChatMessage { Id = "a", Role = "user", Content = "first" };
                 session.Messages.Add(delivered);
                 store.Commit(session, ConversationCommit.UserInput(delivered));
                 inbox.Applied(session, "a");
                 inbox.Submit(session, InboxInput("removed", "discard", InputDelivery.Queue));
-                var removed = inbox.Update(session, new UpdateChatInputPayload { InputId = "removed", ExpectedRevision = 1 }, "remove");
+                var removed = inbox.Update(session, new ConversationInputUpdate { InputId = "removed", ExpectedRevision = 1 }, "remove");
                 AssertEqual(ConversationInputStatus.Removed, removed.Status, "removal returns its receipt identity");
                 AssertEqual(removed.Revision, inbox.Update(session,
-                    new UpdateChatInputPayload { InputId = "removed", ExpectedRevision = 1 }, "remove").Revision, "removal retry is idempotent");
+                    new ConversationInputUpdate { InputId = "removed", ExpectedRevision = 1 }, "remove").Revision, "removal retry is idempotent");
                 AssertEqual(0, inbox.Snapshot(session).Receipts.Count, "normal snapshots do not replay terminal history");
                 var recovered = new ConversationInboxService(events);
                 var receipts = recovered.Snapshot(session, new[] { "a", "removed", "unknown", "a" }).Receipts;
@@ -280,6 +281,29 @@ namespace RNAssistant.Harness
                 AssertEqual("doc-1", inbox.Find(session, "a").DocumentRuntimeKey, "original target retained");
                 AssertTrue(inbox.Snapshot(session).Paused, "old queue remains paused");
             });
+        }
+
+        private static void ConversationWorkShutdownDrainsContinuation()
+        {
+            var owner = new ConversationWorkService();
+            var entered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var continuation = owner.ExecuteAsync(async token =>
+            {
+                entered.TrySetResult(true);
+                await Task.Delay(Timeout.Infinite, token);
+                return "unexpected";
+            }, CancellationToken.None);
+            AssertTrue(entered.Task.Wait(3000), "continuation entered application ownership");
+            var closing = owner.CloseAsync();
+            var cancelled = false;
+            try { continuation.GetAwaiter().GetResult(); }
+            catch (OperationCanceledException) { cancelled = true; }
+            AssertTrue(cancelled, "shutdown cancels a terminal-waiting continuation");
+            AssertTrue(closing.Wait(3000) && owner.Drained.IsCompleted, "shutdown drains the tracked continuation");
+            var rejected = false;
+            try { owner.ExecuteAsync(token => Task.FromResult(1), CancellationToken.None); }
+            catch (ObjectDisposedException) { rejected = true; }
+            AssertTrue(rejected, "closed owner rejects another continuation");
         }
     }
 }
