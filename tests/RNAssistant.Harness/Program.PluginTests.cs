@@ -191,11 +191,13 @@ namespace RNAssistant.Harness
                         var leaseDirectory = Path.Combine(paths.WorkspaceDirectory, "run-leases");
                         Directory.CreateDirectory(leaseDirectory);
                         var leasePath = Path.Combine(leaseDirectory, TextPatternEngine.Sha256(chat.SessionId) + ".lck");
+                        var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
                         using (var pendingTransport = new CancellationTokenSource())
                         using (new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
                         {
-                            var blocked = service.SubmitProjectChatAsync(request, settings, () => "", pendingTransport.Token);
-                            AssertTrue(!service.Conversations.RunsDrained.Wait(100), "admission waits for the occupied lease");
+                            var blocked = service.Conversations.SubmitInputAsync(workspace, request.Input,
+                                settings, () => "", cancellationToken: pendingTransport.Token);
+                            AssertTrue(!service.Conversations.RunsDrained.Wait(100), "CLI admission waits for the occupied lease");
                             pendingTransport.Cancel();
                             AssertTrue(service.Conversations.RunsDrained.Wait(3000), "cancel before admission stops lease waiting promptly");
                             var cancelledBeforeAdmission = false;
@@ -1148,14 +1150,15 @@ namespace RNAssistant.Harness
                         TextPatternEngine.Sha256(chat.SessionId) + ".lck");
                     using (new FileStream(leasePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None))
                     {
-                        PluginFailure(() => service.SubmitProjectChatAsync(new ProjectChatRequest {
-                            WorkspaceId = item.SourceWorkspaceId, SessionId = chat.SessionId,
-                            Input = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest {
-                                SessionId = chat.SessionId, RequestId = Guid.NewGuid().ToString("N"),
-                                Message = "Check the project" } },
-                            new AppSettings { BaseUrl = "http://localhost", Model = "test" },
-                            () => string.Empty, CancellationToken.None).GetAwaiter().GetResult(),
-                            "project_chat_busy");
+                        using (var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2)))
+                            PluginFailure(() => service.SubmitProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = item.SourceWorkspaceId, SessionId = chat.SessionId,
+                                Input = new RNAssistant.Runtime.Contracts.WorkspaceSubmitInputRequest {
+                                    SessionId = chat.SessionId, RequestId = Guid.NewGuid().ToString("N"),
+                                    Message = "Check the project" } },
+                                new AppSettings { BaseUrl = "http://localhost", Model = "test" },
+                                () => string.Empty, deadline.Token).GetAwaiter().GetResult(),
+                                "project_chat_busy");
                     }
                     var workspace = new WorkspaceStore(paths).OpenConnected(item.SourceWorkspaceId);
                     AssertEqual(0, service.Conversations.GetSession(workspace, chat.SessionId).Messages.Count,

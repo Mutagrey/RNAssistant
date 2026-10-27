@@ -45,7 +45,8 @@ namespace RNAssistant.Runtime
         {
             settings = settings?.Clone();
             return StartRun(operation => ExecuteInputAsync(workspace, request, settings, apiKeyProvider,
-                operation.Report, operation.Token, modelDigest), progress, callerToken, detachAfterAcceptance);
+                operation.Report, operation.Token, modelDigest, waitForLease: !detachAfterAcceptance),
+                progress, callerToken, detachAfterAcceptance);
         }
 
         public Task<WorkspaceRunResult> ResolvePendingAsync(WorkspaceDescriptor workspace,

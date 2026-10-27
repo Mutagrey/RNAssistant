@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Workspace UI submit больше не ждёт занятый run — 2026-10-27
+
+Ранний `submitProjectChat` теперь пытается занять exact conversation lease без
+ожидания и быстро возвращает typed `project_chat_busy`, сохраняя черновик. Ранее
+его worker ждал освобождения lease до окончания другого запуска, из-за чего UI
+мог зависнуть на отправке. Повтор уже принятого operation ID по-прежнему сначала
+получает read-only receipt. CLI `SubmitInputAsync` сохраняет прерываемое ожидание;
+approval UI уже использовал немедленный busy.
+
+Host-neutral Harness: busy submit с коротким deadline и проверка CLI wait/cancel,
+admitted run/shutdown — pass. Это локальная коррекция admission через общий
+`ConversationRunOwner`; общий FIFO/run scheduler и UI-controller ещё открыты S1c.
+Windows/Office/WebView2 остаются непроверенными; от Windows доступны только фото.
+
 ## Квитанция принятого ввода проецируется в Application — 2026-10-27
 
 Office duplicate submit и Workspace duplicate/reconnect теперь проходят одну

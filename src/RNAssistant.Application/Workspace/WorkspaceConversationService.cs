@@ -440,7 +440,7 @@ namespace RNAssistant.Runtime
         private async Task<WorkspaceRunResult> ExecuteInputAsync(WorkspaceDescriptor workspace,
             WorkspaceSubmitInputRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress = null, CancellationToken cancellationToken = default(CancellationToken),
-            string modelDigest = null)
+            string modelDigest = null, bool waitForLease = true)
         {
             if (workspace == null) throw new ArgumentNullException(nameof(workspace));
             ValidateInput(request);
@@ -461,7 +461,8 @@ namespace RNAssistant.Runtime
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
                 : _workspaces.LoadSession(_chats, workspace, sessionId);
             if (session == null) throw new InvalidOperationException("Workspace session was not found.");
-            using (var runReservation = ReserveRun(session.Id, cancellationToken: cancellationToken))
+            using (var runReservation = ReserveRun(session.Id, wait: waitForLease,
+                cancellationToken: cancellationToken))
             {
                 // Another process may have finished after the initial lookup.
                 if (!string.IsNullOrWhiteSpace(sessionId))

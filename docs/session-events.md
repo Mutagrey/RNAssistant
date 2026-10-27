@@ -720,8 +720,12 @@ delivery and the first persisted kernel checkpoint, without awaiting the model.
 `WorkspaceConversationService` owns the tracked worker, execution cancellation and
 session/runtime-use leases until execution ends. Its terminal `SubmitInputAsync`
 API (used by CLI) awaits the same worker with caller cancellation still attached.
-UI request cancellation applies before durable admission, including lease waiting;
+UI request cancellation applies before durable admission;
 after admission, losing/cancelling the bridge request cannot cancel the run.
+For UI input, an occupied exact run lease returns typed `project_chat_busy`
+without waiting or writing an input. CLI `SubmitInputAsync` retains cancellable
+lease waiting; an already accepted operation ID is looked up before either path
+tries to acquire the lease.
 Explicit `cancelProjectChat` still addresses the exact run/cursor. Progress is an
 observer: a closed or throwing bridge cannot abort execution. The UI follows the
 canonical snapshot/progress independently of the completed submit request.
