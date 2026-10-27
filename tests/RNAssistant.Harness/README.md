@@ -1275,8 +1275,9 @@ Workspace against the same terminal/abandoned kernel states and rejects recovery
 from a stale observed cursor. It uses host-neutral stores, not a real Office host.
 
 Run the focused `inbox:` filter for cancellation isolation, stale responses, batch
-closure, final/approval races, exact run/pending steer admission, durable FIFO
-editing, recovery and Stop behavior.
+closure, final/approval races, exact run/pending steer admission and duplicate
+receipt after target close, durable FIFO editing, recovery and Stop behavior.
+`workspace: steer uses active run owner` also checks the bridge retry after completion.
 `dotnet run --project demo/RNAssistant.MockDemo/RNAssistant.MockDemo.csproj -- --inbox-test`
 checks first-chat intake, two controllers sharing one data root, actual controller execution and materialized model context
 without Office. `--confirmation-input-test` checks Office confirmation in the

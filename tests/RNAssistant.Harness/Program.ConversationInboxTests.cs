@@ -397,12 +397,24 @@ namespace RNAssistant.Harness
                 inbox.SubmitToRun(session, "run-1", steer);
                 AssertTrue(inbox.InterruptToken(session).IsCancellationRequested,
                     "accepted exact steer interrupts the active model request");
+                AssertTrue(!inbox.TryClose(session), "accepted steer keeps the kernel input boundary open");
                 session.LastRun.Status = "completed";
                 session.LastRun.KernelState = new AgentRunState(new RunSummary("run-1", "turn-1",
                     RunLifecycle.Completed, new ToolCounts(), 1, 0, "Done", null, null), new AgentRunLimits(4, 4));
                 inbox.End(session, true, false);
                 AssertTrue(!inbox.TryStartWorker(session), "an undelivered exact steer never becomes a new turn");
                 AssertTrue(inbox.TakeNext(session) == null, "late exact steer remains retained for inspection");
+                var retry = InboxInput("retry", steer.Text, InputDelivery.Steer);
+                retry.OperationId = steer.OperationId; retry.AcceptedRunId = "run-1";
+                retry.RequestFingerprint = steer.RequestFingerprint;
+                inbox.SubmitToRun(session, "run-1", retry);
+                AssertEqual("steer", inbox.Snapshot(session).Items.Single().Id,
+                    "lost acknowledgement returns the original exact steer after run completion");
+                retry.RequestFingerprint = "different";
+                var conflict = false;
+                try { inbox.SubmitToRun(session, "run-1", retry); }
+                catch (ArgumentException) { conflict = true; }
+                AssertTrue(conflict, "same operation cannot change content after the target closes");
                 var late = InboxInput("late", "too late", InputDelivery.Steer);
                 late.AcceptedRunId = "run-1";
                 var refused = false;
@@ -438,6 +450,12 @@ namespace RNAssistant.Harness
                 session.LastRun.KernelState = new AgentRunState(new RunSummary("run-2", "turn-2", RunLifecycle.AwaitingConfirmation,
                     new ToolCounts(), 1, 1, "Confirm", null, changed), new AgentRunLimits(4, 4));
                 AssertTrue(!inbox.TryStartWorker(session), "changed pending ID cannot consume the old steer");
+                var retry = InboxInput("pending-retry", steer.Text, InputDelivery.Steer);
+                retry.OperationId = steer.OperationId; retry.AcceptedRunId = "run-2";
+                retry.PendingId = "pending-1"; retry.RequestFingerprint = steer.RequestFingerprint;
+                inbox.SubmitToPending(session, "run-2", "pending-1", retry);
+                AssertEqual("pending-steer", inbox.Snapshot(session).Items.Single().Id,
+                    "lost acknowledgement returns the original steer after pending ID changes");
                 var stale = InboxInput("stale-pending", "stale", InputDelivery.Steer);
                 stale.AcceptedRunId = "run-2"; stale.PendingId = "pending-1";
                 var refused = false;

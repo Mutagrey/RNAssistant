@@ -1,5 +1,20 @@
 # Stabilization progress
 
+## Повтор exact steer после закрытия target — 2026-10-27
+
+Общий Application inbox теперь сначала сверяет operation ID и неизменный
+fingerprint, затем допускает новый steer только к live run/pending. Повтор уже
+принятого ввода возвращает прежнюю квитанцию даже после завершения target;
+изменённый повтор остаётся конфликтом. Workspace убрал внешний lock вокруг
+shared admission и чтения canonical receipt; закрытие input channel у обоих
+потребителей использует уже захваченную проекцию inbox без повторного lookup.
+
+Host-neutral Harness проверил поздний повтор, конфликт и точный pending target;
+Workspace bridge steer и Office MockDemo inbox прошли. Это устраняет лишнее
+удержание lock при чтении, но не доказывает причину Windows-фризов. Общий
+FIFO/run scheduler и Web controller остаются открытыми S1c; Windows/Office/
+WebView2 не квалифицированы, доступны только фото экрана.
+
 ## Точный адрес steer и подтверждение в исходном run — 2026-10-27
 
 Office active steer переключён на общий Application `ConversationInboxService.SubmitToRun`,

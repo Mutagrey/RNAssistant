@@ -150,6 +150,10 @@ namespace RNAssistant.Harness
                             AssertTrue(receiptAfter.DeliveryRecorded, "reconnect sees applied receipt without replay");
                             finish.Set(); AssertTrue(run.Wait(5000) && owner.RunsDrained.Wait(5000), "steered run completes");
                             AssertEqual(RunLifecycle.Completed, run.Result.Summary.Lifecycle, "kernel owns completed outcome");
+                            var lateRetry = WorkspaceBridgeCall(bridge, BridgeToken(bridge), "submitProjectChat", request);
+                            AssertTrue((bool)lateRetry["ok"] &&
+                                (string)lateRetry["payload"]["inputReceipt"]["InputId"] == receipt.InputId,
+                                "duplicate steer after completion returns the original receipt without a new run");
                             if (scenario == "tool") fixtures["completed"] = JObject.FromObject(application.ProjectChat(request));
                         }
                         AssertTrue(server.Wait(5000), "scripted provider drains");

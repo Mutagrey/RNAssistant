@@ -76,22 +76,18 @@ namespace RNAssistant.Runtime
                 ValidateInput(request);
                 if (request.SessionId != _session.Id || request.SteerRunId != RunId)
                     throw new InvalidOperationException("Уточнение адресовано другому запуску.");
-                var box = _inbox.Get(_session);
-                lock (box.Sync)
-                {
-                    var fingerprint = InputFingerprint(request);
-                    var existing = _inbox.FindOperation(_session, request.RequestId, fingerprint);
-                    if (existing != null) return _owner.FindAcceptedInput(_session, request.RequestId, fingerprint);
-                    if (request.Mode != null && ChatModes.Require(request.Mode) != _session.Mode ||
-                        request.ReasoningEnabled.HasValue && request.ReasoningEnabled != _session.ReasoningEnabled)
-                        throw new InvalidOperationException("Уточнение не меняет режим текущего запуска.");
-                    _inbox.SubmitToRun(_session, RunId, new ConversationInput {
-                        Id = Guid.NewGuid().ToString("N"), OperationId = request.RequestId,
-                        AcceptedRunId = RunId, RequestFingerprint = fingerprint,
-                        Text = request.Message, Delivery = InputDelivery.Steer, Status = ConversationInputStatus.Pending,
-                        CreatedUtc = DateTime.UtcNow, DocumentRuntimeKey = _session.WorkspaceId });
-                    return _owner.FindAcceptedInput(_session, request.RequestId, fingerprint);
-                }
+                var fingerprint = InputFingerprint(request);
+                var existing = _inbox.FindOperation(_session, request.RequestId, fingerprint);
+                if (existing != null) return _owner.FindAcceptedInput(_session, request.RequestId, fingerprint);
+                if (request.Mode != null && ChatModes.Require(request.Mode) != _session.Mode ||
+                    request.ReasoningEnabled.HasValue && request.ReasoningEnabled != _session.ReasoningEnabled)
+                    throw new InvalidOperationException("Уточнение не меняет режим текущего запуска.");
+                _inbox.SubmitToRun(_session, RunId, new ConversationInput {
+                    Id = Guid.NewGuid().ToString("N"), OperationId = request.RequestId,
+                    AcceptedRunId = RunId, RequestFingerprint = fingerprint,
+                    Text = request.Message, Delivery = InputDelivery.Steer, Status = ConversationInputStatus.Pending,
+                    CreatedUtc = DateTime.UtcNow, DocumentRuntimeKey = _session.WorkspaceId });
+                return _owner.FindAcceptedInput(_session, request.RequestId, fingerprint);
             }
 
             public CancellationToken InterruptToken { get { return _channel.InterruptToken; } }

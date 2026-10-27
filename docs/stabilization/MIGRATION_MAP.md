@@ -58,6 +58,10 @@ kernel run ID. Office pending-confirmation steer проверяет ещё и pe
 поздний bound steer остаётся в журнале, но не запускает новый ход. Office
 подтверждение продолжает исходный run ID. `StartInboxWorker` и Workspace
 `RunOperation` всё ещё отдельные, поэтому строка общего scheduler ниже открыта.
+Повтор exact steer теперь разрешается в общем inbox до проверки live target;
+Workspace убрал внешний lock вокруг общего admission и чтения квитанции.
+Закрытие kernel input использует уже захваченную проекцию inbox. Это не
+переключение Workspace на общий FIFO scheduler.
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
 |---|---|---|

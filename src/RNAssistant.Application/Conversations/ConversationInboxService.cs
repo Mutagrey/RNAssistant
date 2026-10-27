@@ -273,9 +273,12 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
-                if (input.AcceptedRunId != runId || input.Delivery != InputDelivery.Steer ||
-                    input.PendingId != null ||
-                    !box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId ||
+                if (input == null || string.IsNullOrWhiteSpace(runId) || input.AcceptedRunId != runId ||
+                    input.Delivery != InputDelivery.Steer ||
+                    input.PendingId != null)
+                    throw new ArgumentException("Steer requires its exact run target.", nameof(input));
+                if (AlreadyAcceptedForTarget(box, input, runId, null)) return;
+                if (!box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId ||
                     box.Session.LastRun.KernelState?.Summary.Lifecycle != RNAssistant.Core.Agent.RunLifecycle.Running)
                     throw new InvalidOperationException("Запуск уже завершает работу. Обновите чат и отправьте сообщение снова.");
                 SubmitLocked(box, input);
@@ -288,13 +291,29 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
-                if (input.AcceptedRunId != runId || input.PendingId != pendingId ||
-                    input.Delivery != InputDelivery.Steer || box.Running || box.Worker ||
+                if (input == null || string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(pendingId) ||
+                    input.AcceptedRunId != runId || input.PendingId != pendingId ||
+                    input.Delivery != InputDelivery.Steer)
+                    throw new ArgumentException("Steer requires its exact pending target.", nameof(input));
+                if (AlreadyAcceptedForTarget(box, input, runId, pendingId)) return;
+                if (box.Running || box.Worker ||
                     box.Session.LastRun?.RunId != runId ||
                     PendingConfirmationId(box.Session) != pendingId)
                     throw new InvalidOperationException("Ожидавшее действие уже изменилось. Обновите чат перед уточнением.");
                 SubmitLocked(box, input);
             }
+        }
+
+        private static bool AlreadyAcceptedForTarget(Inbox box, ConversationInput input,
+            string runId, string pendingId)
+        {
+            var accepted = box.Inputs.FirstOrDefault(i => i.OperationId == input.OperationId);
+            if (accepted == null) return false;
+            ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint);
+            if (accepted.AcceptedRunId != runId || accepted.PendingId != pendingId ||
+                accepted.Delivery != InputDelivery.Steer)
+                throw new InvalidOperationException("The accepted input belongs to another target.");
+            return true;
         }
 
         internal ConversationInput Update(ChatSession session, ConversationInputUpdate request, string action)
@@ -418,7 +437,11 @@ namespace RNAssistant.Application.Conversations
         internal bool HasSteer(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return box.Accepting && box.Inputs.Any(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending && i.Delivery == InputDelivery.Steer &&
+            lock (box.Sync) return HasSteerLocked(box);
+        }
+        private static bool HasSteerLocked(Inbox box)
+        {
+            return box.Accepting && box.Inputs.Any(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending && i.Delivery == InputDelivery.Steer &&
                 (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
         }
         internal CancellationToken InterruptToken(ChatSession session)
@@ -431,7 +454,7 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
-                if (HasSteer(session)) return false;
+                if (HasSteerLocked(box)) return false;
                 box.Accepting = false;
                 return true;
             }

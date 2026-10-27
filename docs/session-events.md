@@ -648,6 +648,12 @@ for the exact running kernel run. A steer while a tool confirmation is pending
 also stores the exact pending ID. The inbox refuses a stale run/pending target;
 an already accepted but unconsumed exact steer remains visible and cannot become
 a new turn after that target ends. Only an explicit Queue input enters FIFO.
+The inbox checks an exact steer operation ID and immutable fingerprint before
+checking whether its run or pending confirmation is still live. An identical
+retry therefore returns the original receipt after the target closes; a changed
+request remains a conflict. Workspace no longer holds the inbox lock around its
+own canonical receipt read or shared admission. The kernel input-close decision
+uses the same locked inbox projection without re-entering its public lookup.
 Office confirmation resumes the original kernel run ID, including when a steer
 supersedes the pending tool; live progress uses that same ID. These checks use
 the existing input event and kernel summary, without a second lifecycle store.
