@@ -717,6 +717,10 @@ durable revision/status and, for steer, the exact run ID; a successful bridge re
 alone cannot clear its draft. Workspace requires the exact session/request and
 durable input cursor/sequence: ordinary input waits for `DeliveryRecorded`, while
 exact-run steer may acknowledge its persisted admission before delivery.
+Workspace typed question answers use the same submit/receipt path as text input;
+the question card closes only after a matching durable receipt. Its retry keeps
+the question form's request ID. A response for another project/session is rejected
+before it can replace the selected chat snapshot.
 The separate CurrentUser-DPAPI file stores unsent input and staged
 resource IDs, not chat events, resource bodies or a second durable input journal.
 Abrupt-close timing and Windows DPAPI/WebView2 behavior still require target-host

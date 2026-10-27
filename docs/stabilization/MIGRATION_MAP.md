@@ -79,9 +79,9 @@ Workspace убрал внешний lock вокруг общего admission и 
 | `app-chat-inbox.js` и chat-части `app-project-chats.js`: pending requests, polling; action dispatch в `app-chat.js`/`app-workspace-chat.js` | Навигация, дерево проектов, Office target/resource selection | Общий `app-conversation-input.js` уже проверяет квитанцию обоих submit и заменил Workspace-local validator. Дальше один Web conversation controller/composer использует общий snapshot/commands; удалить раздельные pending/submit/poll ветки, сохранить scope+generation и draft revision guards |
 
 Общий `app-conversation-state.js` задаёт индикатор подтверждённого владельца
-для деревьев Office и Workspace. Общий input gate покрывает только flush/dispatch/
-receipt; раздельные pending, polling и остальной Web controller из строки выше
-ещё подлежат замене.
+для деревьев Office и Workspace. Общий input gate покрывает flush/dispatch/
+receipt текста и typed answers; раздельные pending, polling и остальной Web
+controller из строки выше ещё подлежат замене.
 
 Новый контракт typed, source module подключается через существующий `.projitems`.
 Run lifecycle/outcomes остаются у kernel; live handle Application не второй статусный

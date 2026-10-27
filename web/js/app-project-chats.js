@@ -268,9 +268,10 @@
     el("FileStatus").textContent = fileNotice ? fileNotice.message : "";
     el("FileStatus").classList.toggle("is-error", !!(fileNotice && fileNotice.error));
     el("FileStatus").hidden = !fileNotice || !fileNotice.message;
+    var questionTarget = { workspaceId: projectId(), sessionId: currentId() };
     window.RNAssistantWorkspaceChat.renderWorkspaceControls(active, function (answers, requestId) {
-      return runChat(function (pid, sid) { return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-        input: { sessionId: sid, requestId: requestId, answers: answers } }); }, true);
+      return submitProjectInput(questionTarget, { sessionId: questionTarget.sessionId,
+        requestId: requestId, answers: answers }, null, null, true);
     });
     el("Stop").disabled = cancelBusy();
     var messages = el("Messages");
@@ -475,6 +476,29 @@
       if (reportFailure) throw error; return false; }
     finally { pendingChatRequests.delete(requestKey); render(); }
   }
+  function submitProjectInput(target, input, flush, accepted, reportFailure) {
+    if (!target || target.workspaceId !== projectId() || target.sessionId !== currentId()) {
+      var stale = new Error("Выбран другой чат. Откройте исходную беседу перед повтором.");
+      return reportFailure ? Promise.reject(stale) : Promise.resolve(false);
+    }
+    var gate = window.RNAssistantConversationInput.create("workspace", target,
+      input.requestId, input.SteerRunId, accepted);
+    return runChat(function (pid, sid) {
+      return gate.submit(flush || function () { return Promise.resolve(); },
+        function (acceptReceipt) {
+          return send("submitProjectChat", { workspaceId: pid, sessionId: sid, input: input },
+            function (progress) {
+              if (progress.workspaceId === pid && progress.sessionId === sid)
+                acceptReceipt(progress.inputReceipt);
+            }).then(function (result) {
+              if (!result || result.sessionId !== sid || !result.project ||
+                  result.project.workspaceId !== pid)
+                throw new Error("Ответ получен для другого чата. Обновите беседу перед повтором.");
+              return result;
+            });
+        }, function (result) { return result.inputReceipt; });
+    }, reportFailure);
+  }
   function setScope(next, target) {
     scope = next; ++serial;
     if (next === "projects") window.RNAssistantWorkspaceChat.mount("project", el("Layout"));
@@ -625,18 +649,11 @@
         var draftVersion = edit ? null : composer.draftVersion();
         var request = composer.prepareInput(target, text, edit,
           field(runState(), "status", "Status") === "running" ? runState() : null);
-        var gate = window.RNAssistantConversationInput.create("workspace", target,
-          request.requestId, request.SteerRunId, function () {
+        submitProjectInput(target, request,
+          function () { return window.RNAssistantChatDrafts.flushWorkspace(target); }, function () {
             if (edit) composer.acceptedEdit(target, request);
             else composer.accepted(target, text, draftVersion, request);
           });
-        runChat(function () { return gate.submit(
-          function () { return window.RNAssistantChatDrafts.flushWorkspace(target); },
-          function (acceptReceipt) { return send("submitProjectChat", { workspaceId: pid,
-            sessionId: sid, input: request }, function (progress) {
-              if (progress.workspaceId === pid && progress.sessionId === sid) acceptReceipt(progress.inputReceipt);
-            }); },
-          function (result) { return result && result.inputReceipt; }); });
       },
       escape: function (event) {
         if (window.RNAssistantWorkspaceChat.currentMessageEdit()) {

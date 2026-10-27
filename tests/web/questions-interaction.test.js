@@ -32,14 +32,25 @@ const root = path.resolve(__dirname, "../..");
             options: [{ id: "steps", label: "Шаги", description: "План действий" }, { id: "risks", label: "Риски", description: "Что требует внимания" }] }
         ] } };
       window.send = async function (type, payload) {
+        let answerInput = null, omitReceipt = false, wrongChat = false;
         if (type === "submitProjectChat" && payload.input.answers) {
           questionTest.calls.push(payload);
           if (questionTest.failNext) { questionTest.failNext = false; throw new Error("Проверка: соединение прервано"); }
           if (questionTest.holdSubmit) await new Promise(resolve => { questionTest.releaseSubmit = resolve; });
-          questionTest.pending = !!questionTest.keepPending;
+          answerInput = payload.input;
+          omitReceipt = !!questionTest.omitReceiptOnce;
+          questionTest.omitReceiptOnce = false;
+          wrongChat = !!questionTest.wrongChatOnce;
+          questionTest.wrongChatOnce = false;
+          questionTest.pending = omitReceipt || !!questionTest.keepPending;
           type = "getProjectChat";
         }
         const result = await original(type, payload);
+        if (answerInput && !omitReceipt) result.inputReceipt = { SessionId: payload.sessionId,
+          RequestId: answerInput.requestId, InputId: "answer-" + answerInput.requestId,
+          RunId: "run-answer-" + answerInput.requestId, AcceptedCursor: "cursor-answer",
+          AcceptedSequence: 1, DeliveryRecorded: true };
+        if (answerInput && wrongChat) result.project.workspaceId = "wrong-workspace";
         if ((type === "getProjectChat" || type === "getPluginChat") && result.project && questionTest.pending)
           result.state.userInput = { runId: "run-" + questionTest.generation, questionSet: questionTest.set };
         return result;
@@ -133,6 +144,38 @@ const root = path.resolve(__dirname, "../..");
     await page.waitForFunction(() => questionTest.calls.length === 5);
     assert.equal(await page.evaluate(() => questionTest.calls[4].workspaceId), "preview-plugin-workspace");
     assert.ok((await page.evaluate(() => questionTest.calls[4].input.answers.answers)).every(a => a.skipped && !a.optionIds.length && !a.freeText));
+
+    await page.evaluate(async () => {
+      RNAssistantProjectChats.setScope("projects");
+      questionTest.pending = true; questionTest.generation++; questionTest.omitReceiptOnce = true;
+      await RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review");
+    });
+    await form.waitFor();
+    await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
+    await form.getByText("Доставка сообщения не подтверждена. Черновик сохранён.", { exact: true }).waitFor();
+    assert.equal(await form.isVisible(), true, "a successful transport reply without receipt keeps question answers");
+    await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
+    await page.waitForFunction(() => questionTest.calls.length === 7);
+    const answerRetry = await page.evaluate(() => questionTest.calls.slice(-2));
+    assert.equal(answerRetry[0].input.requestId, answerRetry[1].input.requestId,
+      "missing answer receipt retries with the same operation ID");
+    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
+
+    await page.evaluate(async () => {
+      questionTest.pending = true; questionTest.generation++; questionTest.wrongChatOnce = true;
+      await RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review");
+    });
+    await form.waitFor();
+    await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
+    await form.getByText("Ответ получен для другого чата. Обновите беседу перед повтором.", { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().sessionId), "preview-project-review",
+      "wrong-chat response cannot replace the selected conversation");
+    await form.getByRole("button", { name: "Пропустить всё", exact: true }).click();
+    await page.waitForFunction(() => questionTest.calls.length === 9);
+    const addressedRetry = await page.evaluate(() => questionTest.calls.slice(-2));
+    assert.equal(addressedRetry[0].input.requestId, addressedRetry[1].input.requestId,
+      "wrong-chat response preserves the answer operation ID");
+    await page.locator("#workspaceChatQuestions").waitFor({ state: "hidden" });
 
     // Use the actual Office transcript and inbox, including the render during intake.
     await page.evaluate(() => RNAssistantProjectChats.setScope("office"));
