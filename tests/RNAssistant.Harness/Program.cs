@@ -502,6 +502,7 @@ namespace RNAssistant.Harness
                 Test("documents: saved identity uses full path or legacy id", SavedDocumentIdentityUsesFullPathOrLegacyId),
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
+                Test("storage: session read waits for document writer", SessionReadUsesDocumentBoundary),
                 Test("storage: sqlite projection pages messages", SqliteProjectionPagesMessages),
                 Test("storage: sqlite page preserves tombstone context", SqlitePagePreservesTombstoneContext),
                 Test("storage: sqlite metadata commit avoids full diff", SqliteMetadataCommitAvoidsFullDiff),

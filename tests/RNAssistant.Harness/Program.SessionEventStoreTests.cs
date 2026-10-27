@@ -721,6 +721,29 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SessionReadUsesDocumentBoundary()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "active-writer", "Active.docx", "Active");
+                var other = writer.Create("Word", "other-document", "Other.docx", "Other");
+                var gate = typeof(ChatStore).GetMethod("AcquireDocumentLock", BindingFlags.Instance | BindingFlags.NonPublic);
+                Task<ChatSession> read;
+                using (var started = new ManualResetEventSlim())
+                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey }))
+                {
+                    read = Task.Run(() => { started.Set(); return new ChatStore(paths).Load(chat.Host, chat.DocumentKey, chat.Id); });
+                    AssertTrue(started.Wait(3000), "reader starts while the document append boundary is held");
+                    AssertTrue(!read.Wait(150), "full projection cannot race the current document writer");
+                    var separate = Task.Run(() => new ChatStore(paths).Load(other.Host, other.DocumentKey, other.Id));
+                    AssertTrue(separate.Wait(3000) && separate.Result != null, "other documents are not blocked");
+                }
+                AssertTrue(read.Wait(3000) && read.Result != null, "chat remains available after the append boundary releases");
+                AssertEqual(chat.Revision, read.Result.Revision, "read uses a complete durable revision");
+            });
+        }
+
         private static void SqliteProjectionPagesMessages()
         {
             WithTempPaths(paths =>

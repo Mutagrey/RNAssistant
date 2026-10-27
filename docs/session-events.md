@@ -39,7 +39,10 @@ Within one process, up to 16 recently used canonical projection roots are also c
 
 Writes to separate documents may proceed concurrently under their existing ordered
 cross-process document locks. A shared reader/writer gate excludes CAS reachability
-scans from writes without serializing ordinary writes across documents. Slow
+scans from writes without serializing ordinary writes across documents. Full-session
+reads use the same document lock as message pages and appends, including projection
+indexing and cursor capture. They cannot index a changing log or turn an ordinary
+concurrent append into a missing chat. The lock is released before model/user waits. Slow
 projection reads, trace appends and saves report stage timings without chat content. An
 indexed cold read still materializes all messages needed by an active conversation;
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.

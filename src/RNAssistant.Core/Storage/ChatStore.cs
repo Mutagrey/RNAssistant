@@ -1122,12 +1122,19 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
-                EventLogReadResult ignored;
-                var session = ReadProjectedSession(path, hydrateActiveArtifacts, true, out ignored);
-                if (session == null) return null;
-                NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
-                CaptureStorageState(session, path);
-                return session;
+                // Full-session projection must use the same short persistence
+                // boundary as pages and appends. A concurrent append is not a
+                // missing chat, nor permission to index a changing JSONL prefix.
+                using (AcquirePersistenceRead())
+                using (AcquireDocumentPathLock(path))
+                {
+                    EventLogReadResult ignored;
+                    var session = ReadProjectedSession(path, hydrateActiveArtifacts, true, out ignored);
+                    if (session == null) return null;
+                    NormalizeSession(session, session.Host, session.DocumentKey, session.DocumentTitle);
+                    CaptureStorageState(session, path);
+                    return session;
+                }
             }
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }

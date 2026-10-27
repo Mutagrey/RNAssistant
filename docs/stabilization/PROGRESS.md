@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Загрузка чата синхронизирована с записью — 2026-10-27
+
+Owner: Core ChatStore. Воспроизведена гонка при уточнении активного workspace run:
+`MaterializeSqliteProjection` обнаруживал изменение JSONL, а `LoadSession` возвращал
+null; bridge сообщал «чат не найден». Полное чтение теперь использует существующую
+блокировку документа, как страницы истории и append. Чужие документы и ожидание
+модели её не удерживают; второй store и retry loop не добавлены.
+
+Targeted host-neutral проверки: чтение ждёт занятую границу записи, другой документ
+остаётся доступен, SQLite message page — pass. Сценарий workspace steer проходит
+через реальный bridge; сам S1c ещё в работе. Windows/Office/WebView2 и общая
+производительность загрузки остаются открытыми.
+
 ## Нулевая глубина исключает reflection из запроса — 2026-10-27
 
 Owner: Core ModelProtocol / AgentKernel; Office и Workspace request preparation.
