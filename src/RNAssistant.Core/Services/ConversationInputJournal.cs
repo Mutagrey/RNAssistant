@@ -27,10 +27,13 @@ namespace RNAssistant.Core.Services
                 throw new ArgumentException("request_id_conflict: this request ID already belongs to different input; use the original request or a new ID.");
         }
 
-        public IReadOnlyList<ConversationInputRecord> Read(ChatSession session, bool includeText = true)
+        public IReadOnlyList<ConversationInputRecord> Read(ChatSession session, bool includeText = true,
+            long? upToSequence = null)
         {
+            if (upToSequence < 0) throw new ArgumentOutOfRangeException(nameof(upToSequence));
             var records = _events.Read(session, SessionEventReadMode.RequireComplete)
-                .Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged).Select(fact =>
+                .Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged &&
+                    (!upToSequence.HasValue || fact.Sequence <= upToSequence.Value)).Select(fact =>
                 {
                     var change = fact.Data.ToObject<ConversationInputEvent>();
                     if (change == null) throw new InvalidOperationException("Invalid conversation input event.");

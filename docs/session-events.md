@@ -727,9 +727,11 @@ receipts cannot clear a later draft; background receipts never alter the Office
 composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
 On open/navigation and ordinary run polling, `getProjectChat.receiptRequestId`
 asks for the one unresolved input. The typed `inputReceipt` is read from the
-existing input journal in that scoped session, with no draft/body loading, model
-call, input reconciliation or replay added by the lookup. Unknown IDs omit the
-receipt; admission without a persisted applied transition remains
+existing input journal through the session's exact event revision. A read-only
+observer never combines a newer `Applied` event with an older message snapshot;
+the next refreshed snapshot observes the later transition. The lookup loads no
+drafts or bodies, calls no model and does not reconcile or replay input. Unknown
+IDs omit the receipt; admission without a persisted applied transition remains
 `DeliveryRecorded=false`. This query observes identity; submit still validates
 the full request fingerprint. An exact delivered receipt also settles a matching
 outstanding submit in the UI and removes its transport timer, even if progress

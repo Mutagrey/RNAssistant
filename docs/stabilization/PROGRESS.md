@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Квитанция и pending snapshot читают один event prefix — 2026-10-27
+
+Workspace read-only receipt и список ожидающего ввода теперь ограничены ревизией
+загруженной сессии. Ранее конкурентный `Applied` мог попасть в чтение журнала
+после загрузки сообщений и вызвать ложную ошибку «Applied input has no persisted
+user message». Старая проекция видит прежнее `Delivering`; обновлённая — `Applied`.
+
+Host-neutral Harness воспроизвёл пересечение двух ревизий и проверил оба чтения;
+Workspace steer и bridge receipt/reconnect прошли. Это не общая атомарная UI-проекция
+S1c и не Windows/Office/WebView2 qualification; от Windows доступны только фото.
+
 ## Общий Application executor для Office и Workspace — 2026-10-27
 
 `ConversationApplicationService` теперь владеет отслеживаемыми задачами обоих

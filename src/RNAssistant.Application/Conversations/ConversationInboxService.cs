@@ -173,7 +173,7 @@ namespace RNAssistant.Application.Conversations
         // it never treats a persisted message as still waiting for delivery.
         internal IReadOnlyList<ConversationInput> ReadUndelivered(ChatSession session, InputDelivery? delivery = null)
         {
-            var latest = new ConversationInputJournal(_events).Read(session, false)
+            var latest = new ConversationInputJournal(_events).Read(session, false, session.Revision)
                 .Where(record => record.Change.Input != null)
                 .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal)
                 .Select(group => group.Last()).ToArray();
@@ -229,7 +229,9 @@ namespace RNAssistant.Application.Conversations
         internal AcceptedInput ReadAccepted(ChatSession session, string operationId,
             string fingerprint = null, bool requireRunId = false)
         {
-            var records = new ConversationInputJournal(_events).Read(session, false)
+            // Read-only receipts must use the same event prefix as the supplied
+            // message projection. Another worker may append Applied after it loaded.
+            var records = new ConversationInputJournal(_events).Read(session, false, session.Revision)
                 .Where(record => record.Change.Input?.OperationId == operationId).ToArray();
             return records.Length == 0 ? null : ProjectAccepted(records[0].Event,
                 records[0].Change.Input, records[records.Length - 1].Change.Input, fingerprint, requireRunId);

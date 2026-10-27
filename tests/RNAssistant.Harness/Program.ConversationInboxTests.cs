@@ -289,11 +289,18 @@ namespace RNAssistant.Harness
                     "Workspace snapshot reads the pending body from canonical events");
                 var message = new ChatMessage { Id = input.Id, RunId = input.AcceptedRunId,
                     Role = "user", Content = input.Text };
+                var beforeDelivery = store.Load(session.Id);
                 session.Messages.Add(message);
                 store.Commit(session, ConversationCommit.UserInput(message));
                 AssertEqual(0, inbox.ReadUndelivered(session, InputDelivery.Queue).Count,
                     "Workspace snapshot hides a message already persisted before the receipt transition");
                 inbox.ReconcileAcceptedDelivery(session);
+                AssertEqual(ConversationInputStatus.Delivering,
+                    inbox.ReadAccepted(beforeDelivery, input.OperationId,
+                        input.RequestFingerprint, requireRunId: true).Current.Status,
+                    "a stale message snapshot cannot observe a newer Applied event");
+                AssertEqual(1, inbox.ReadUndelivered(beforeDelivery, InputDelivery.Queue).Count,
+                    "pending input remains visible in its own event prefix");
                 var workspaceAccepted = inbox.ReadAccepted(session, input.OperationId,
                     input.RequestFingerprint, requireRunId: true);
                 AssertEqual(1L, workspaceAccepted.Initial.Revision,
