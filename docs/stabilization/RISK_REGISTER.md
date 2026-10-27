@@ -51,7 +51,13 @@ Continuation после approval также исправлен 2026-10-27: `reso
 bridge recreation, pre/post-admission cancel, Stop, shutdown и terminal API.
 Offline denial не вызывает инструмент/модель. Chromium с native envelopes проверяет
 исчезновение pending approval, завершённый bridge request и polling с сохранением draft.
-Открыты automatic receipt reconnect и Windows pane shutdown. Таймаут модели не менялся.
+Automatic receipt reconnect исправлен 2026-10-27: scoped `getProjectChat` читает
+receipt существующего журнала; open/polling снимают pending submit timer без
+повторного запроса модели. Protected draft хранит связь с отправленной версией,
+ack/clear сохраняются вместе. Native bridge/Harness и Chromium проверяют reload,
+новый одинаковый текст, edit/Office isolation, unknown/unapplied и потерянный reply
+до/после progress. Открыты Windows DPAPI/WebView2 abrupt-close и pane shutdown.
+Таймаут модели не менялся.
 
 Открытая соседняя проверка 2026-10-27: `workspace-chat-progress.test.js` падает на
 `uncleanClaims` при статическом рендере до submit-сценариев. Тот же отказ воспроизведён

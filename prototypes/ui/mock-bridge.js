@@ -636,7 +636,11 @@
       }
       return projectCatalog(connected.workspaceId);
     }
-    if (type === "getProjectChat") return projectChatState(payload);
+    if (type === "getProjectChat") {
+      var observed = projectChatState(payload), receiptInput = payload.receiptRequestId && projectRequests[payload.receiptRequestId];
+      if (receiptInput && receiptInput.sessionId === payload.sessionId) observed.inputReceipt = clone(receiptInput.receipt);
+      return observed;
+    }
     if (type === "beginProjectChatFileUpload") {
       requireProjectChat(payload);
       if (!payload.fileName || payload.byteLength < 1 || payload.byteLength > 20 * 1024 * 1024)

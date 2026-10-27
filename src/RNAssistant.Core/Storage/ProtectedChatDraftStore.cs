@@ -185,6 +185,9 @@ namespace RNAssistant.Core.Storage
     public sealed class PendingChatInput
     {
         public string RequestId { get; set; }
+        // This relation is saved atomically with the current draft. Text equality
+        // alone cannot distinguish a later identical draft after WebView restart.
+        public bool MatchesDraftVersion { get; set; }
         public string Message { get; set; }
         public string EditMessageId { get; set; }
         public long? ExpectedRevision { get; set; }

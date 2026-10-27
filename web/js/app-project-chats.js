@@ -5,7 +5,7 @@
   var pendingChatRequests = new Set(), pendingCancels = new Set();
   var composer = null, uploadingFiles = false, uploadTarget = null;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
-    function (target) { return send("getProjectChat", target); },
+    readProjectChat,
     function (snapshot) { active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot); notice(statusText()); render(); },
     function (error) { notice(error.detail || error.message, true); });
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect", connectionRequest = null;
@@ -15,6 +15,37 @@
   }
   function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project" ||
     window.RNAssistantWorkspaceChat.owner() === "plugin"; }
+  async function readProjectChat(target) {
+    var drafts = window.RNAssistantChatDrafts, pending = drafts.pendingWorkspaceInput(target);
+    if (!pending) {
+      // Progress may already have acknowledged/cleared the draft while the
+      // admission reply itself was lost. The transport still owns its identity.
+      Object.keys(state.pending).some(function (id) {
+        var waiting = state.pending[id], payload = waiting.payload || {};
+        if (waiting.type !== "submitProjectChat" || payload.workspaceId !== target.workspaceId ||
+            payload.sessionId !== target.sessionId || !payload.input) return false;
+        pending = { input: payload.input, draftVersion: null }; return true;
+      });
+    }
+    var query = { workspaceId: target.workspaceId, sessionId: target.sessionId };
+    if (pending) query.receiptRequestId = pending.input.requestId;
+    var snapshot = await send("getProjectChat", query);
+    if (pending && snapshot && snapshot.sessionId === target.sessionId &&
+        snapshot.project && snapshot.project.workspaceId === target.workspaceId &&
+        window.RNAssistantWorkspaceChat.deliveredInputReceipt(snapshot.inputReceipt, target.sessionId, pending.input.requestId)) {
+      if (pending.input.EditMessageId) drafts.acknowledgeWorkspaceInput(target, pending.input);
+      else if (composer) composer.accepted(target, pending.input.message, pending.draftVersion, pending.input);
+      // The original admission reply may never arrive. The durable receipt is
+      // enough to settle that exact submit, including its transport idle timer.
+      Object.keys(state.pending).forEach(function (id) {
+        var waiting = state.pending[id], payload = waiting.payload || {};
+        if (waiting.type === "submitProjectChat" && payload.workspaceId === target.workspaceId &&
+            payload.sessionId === target.sessionId && payload.input &&
+            payload.input.requestId === pending.input.requestId) takeBridgePending(id).resolve(snapshot);
+      });
+    }
+    return snapshot;
+  }
   function node(tag, className, text) {
     var result = document.createElement(tag);
     result.className = className || "";
@@ -308,7 +339,7 @@
     if (currentId() !== sessionId) { active = null; render(); }
     notice("Загружаю чат…");
     try {
-      var result = await send("getProjectChat", { workspaceId: pid, sessionId: sessionId });
+      var result = await readProjectChat({ workspaceId: pid, sessionId: sessionId });
       if (version === serial && projectId() === pid) {
         active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId); notice(statusText()); render();
       }
@@ -419,7 +450,7 @@
       } catch (_) { /* The chat result remains available. */ }
       if (stopTitleWatch) stopTitleWatch();
       stopTitleWatch = window.RNAssistantWorkspaceChat.watchTitle(result,
-        function () { return send("getProjectChat", { workspaceId: pid, sessionId: sid }); },
+        function () { return readProjectChat({ workspaceId: pid, sessionId: sid }); },
         async function (latest) { if (projectId() !== pid || currentId() !== sid) return;
           active = window.RNAssistantWorkspaceChat.latestSnapshot(active, latest); render();
           try { if (await refreshCatalog(function () { return projectId() === pid && currentId() === sid; })) render(); }
@@ -582,10 +613,7 @@
         var acknowledged = false;
         function acceptReceipt(receipt) {
           if (acknowledged) return true;
-          if (!receipt || receipt.SessionId !== sid || receipt.RequestId !== request.requestId ||
-              !receipt.InputId || !receipt.RunId || !receipt.AcceptedCursor ||
-              !Number.isSafeInteger(receipt.AcceptedSequence) || receipt.AcceptedSequence < 1 ||
-              receipt.DeliveryRecorded !== true) return false;
+          if (!window.RNAssistantWorkspaceChat.deliveredInputReceipt(receipt, sid, request.requestId)) return false;
           if (edit) composer.acceptedEdit(target, request);
           else composer.accepted(target, text, draftVersion, request);
           acknowledged = true;

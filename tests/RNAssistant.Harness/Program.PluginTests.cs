@@ -128,8 +128,11 @@ namespace RNAssistant.Harness
                             bridge.Dispose();
                             using (var reopened = new AssistantWebBridge(new AssistantController(paths), ignored => { }) { Plugins = service })
                             {
-                                var observed = WorkspaceBridgeCall(reopened, BridgeToken(reopened), "getProjectChat", request);
+                                var observed = WorkspaceBridgeCall(reopened, BridgeToken(reopened), "getProjectChat", new ProjectChatRequest {
+                                    WorkspaceId = request.WorkspaceId, SessionId = request.SessionId, ReceiptRequestId = request.Input.RequestId });
                                 AssertEqual("running", (string)observed["payload"]["state"]["Status"], "WebView recreation does not cancel the admitted run");
+                                AssertTrue(JToken.DeepEquals(terminal["payload"]["inputReceipt"], observed["payload"]["inputReceipt"]),
+                                    "recreated bridge reads the original receipt while the run holds the session lease");
                             }
                         }
                         finally { release.Set(); }

@@ -343,6 +343,12 @@
       runId: field(input, "runId"), submit: submitQuestions
     });
   }
+  function deliveredInputReceipt(receipt, sessionId, requestId) {
+    return !!receipt && receipt.SessionId === sessionId && receipt.RequestId === requestId &&
+      !!receipt.InputId && !!receipt.RunId && !!receipt.AcceptedCursor &&
+      Number.isSafeInteger(receipt.AcceptedSequence) && receipt.AcceptedSequence > 0 &&
+      receipt.DeliveryRecorded === true;
+  }
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
     var input = form.querySelector("textarea");
@@ -461,11 +467,12 @@
           mode: saved.mode, reasoning: saved.reasoning });
       },
       accepted: function (target, text, version, request) {
-        draftStore.acknowledgeWorkspaceInput(target, request);
         var previous = draftStore.readWorkspace(target);
-        var cleared = draftStore.acceptWorkspace(target, text, version);
+        var cleared = draftStore.acceptWorkspaceInput(target, request, text, version);
         if (cleared && activeOwner !== "office" && sameTarget(current, target) && loaded === previous) {
-          input.value = ""; loaded = cleared; update();
+          if (currentMessageEdit()) workspaceMessageEdit.draft = "";
+          else input.value = "";
+          loaded = cleared; update();
         }
       },
       acceptedEdit: function (target, request) {
@@ -498,6 +505,7 @@
     canMessageAction: canMessageAction, messageAction: messageAction,
     startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
     currentMessageEdit: currentMessageEdit,
+    deliveredInputReceipt: deliveredInputReceipt,
     composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
     snapshot: function () { return dispatch("snapshot"); },

@@ -112,13 +112,14 @@ function persistentDraft(key) {
         Text: officePending.Text, ResourceDraftIds: officePending.Attachments.map(officeDraftAttachmentId),
         Delivery: officePending.Delivery } : null };
   }
-  var pair = JSON.parse(key.slice(10)), pending = workspacePendingInputs[key];
+  var pair = JSON.parse(key.slice(10)), entry = workspacePendingInputs[key], pending = entry && entry.input;
   return { Owner: "workspace", WorkspaceId: pair[0], SessionId: pair[1],
     Text: saved ? saved.text : "", Mode: saved ? saved.mode : "agent", Reasoning: saved ? saved.reasoning : false,
     ResourceDraftIds: saved ? (saved.attachments || []).map(officeDraftAttachmentId) : [],
     NextAnnotationNumber: saved ? saved.nextAnnotationNumber || 1 : 1,
     PendingVisualAnnotation: saved ? saved.pendingVisualAnnotation || null : null,
     PendingInput: pending ? { RequestId: pending.requestId, Message: pending.message,
+      MatchesDraftVersion: !!saved && saved.version === entry.draftVersion,
       ResourceDraftIds: pending.ResourceDraftIds || [], Mode: pending.Mode, Reasoning: pending.ReasoningEnabled,
       EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision } : null };
 }
@@ -192,10 +193,12 @@ async function hydrateChatDrafts() {
         }), nextAnnotationNumber: item.NextAnnotationNumber || 1,
         pendingVisualAnnotation: item.PendingVisualAnnotation || null, version: ++chatDraftVersion };
       var pending = item.PendingInput;
-      if (pending) workspacePendingInputs[key] = { sessionId: item.SessionId, requestId: pending.RequestId,
+      if (pending) workspacePendingInputs[key] = {
+        draftVersion: pending.MatchesDraftVersion === true ? chatDraftStore()[key].version : null,
+        input: { sessionId: item.SessionId, requestId: pending.RequestId,
         message: pending.Message, ResourceDraftIds: pending.ResourceDraftIds || [],
         Mode: pending.Mode, ReasoningEnabled: !!pending.Reasoning,
-        EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision == null ? null : pending.ExpectedRevision };
+        EditMessageId: pending.EditMessageId || null, ExpectedRevision: pending.ExpectedRevision == null ? null : pending.ExpectedRevision } };
       if (view.attachmentError) log(view.attachmentError, "warning");
     }
   });
@@ -266,7 +269,7 @@ function forgetWorkspaceDraft(target) {
   if (key) { delete chatDraftStore()[key]; delete workspacePendingInputs[key]; persistDraft(key).catch(function () {}); }
 }
 function prepareWorkspaceInput(target, text, options) {
-  var key = workspaceDraftKey(target), pending = workspacePendingInputs[key];
+  var key = workspaceDraftKey(target), entry = workspacePendingInputs[key], pending = entry && entry.input;
   var ids = options.EditMessageId ? [] : ((readWorkspaceDraft(target) || {}).attachments || []).map(officeDraftAttachmentId);
   if (!pending || pending.message !== text || pending.Mode !== options.Mode ||
       pending.ReasoningEnabled !== options.ReasoningEnabled ||
@@ -274,20 +277,37 @@ function prepareWorkspaceInput(target, text, options) {
       (pending.ExpectedRevision == null ? null : pending.ExpectedRevision) !==
         (options.ExpectedRevision == null ? null : options.ExpectedRevision) ||
       JSON.stringify(pending.ResourceDraftIds || []) !== JSON.stringify(ids))
-    pending = workspacePendingInputs[key] = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
+    pending = { sessionId: target.sessionId, requestId: crypto.randomUUID(),
       message: text, ResourceDraftIds: ids, Mode: options.Mode, ReasoningEnabled: options.ReasoningEnabled,
       EditMessageId: options.EditMessageId || null, ExpectedRevision: options.ExpectedRevision === undefined ? null : options.ExpectedRevision };
+  workspacePendingInputs[key] = { input: pending,
+    draftVersion: options.EditMessageId ? null : (readWorkspaceDraft(target) || {}).version };
   persistDraft(key).catch(function () {});
   return pending;
 }
 function acknowledgeWorkspaceInput(target, input) {
   var key = workspaceDraftKey(target);
-  if (workspacePendingInputs[key] === input) { delete workspacePendingInputs[key]; persistDraft(key).catch(function () {}); }
+  if (workspacePendingInputs[key] && workspacePendingInputs[key].input === input) {
+    delete workspacePendingInputs[key]; persistDraft(key).catch(function () {});
+  }
 }
+function acceptWorkspaceInput(target, input, text, version) {
+  var key = workspaceDraftKey(target), entry = workspacePendingInputs[key];
+  var matched = entry && entry.input === input;
+  if (matched) delete workspacePendingInputs[key];
+  // Persist acknowledgement and clearing together. A crash between two saves
+  // must not leave the submitted text without its retry/receipt identity.
+  var cleared = acceptWorkspaceDraft(target, text, version);
+  if (!cleared && matched) persistDraft(key).catch(function () {});
+  return cleared;
+}
+function pendingWorkspaceInput(target) { return workspacePendingInputs[workspaceDraftKey(target)] || null; }
 window.RNAssistantChatDrafts = { readWorkspace: readWorkspaceDraft, saveWorkspace: saveWorkspaceDraft,
   updateWorkspace: updateWorkspaceDraft, reserveWorkspaceAnnotationNumber: reserveWorkspaceAnnotationNumber,
   acceptWorkspace: acceptWorkspaceDraft, forgetWorkspace: forgetWorkspaceDraft,
   prepareWorkspaceInput: prepareWorkspaceInput, acknowledgeWorkspaceInput: acknowledgeWorkspaceInput,
+  acceptWorkspaceInput: acceptWorkspaceInput,
+  pendingWorkspaceInput: pendingWorkspaceInput,
   flushWorkspace: flushWorkspaceDraft, flushOffice: flushOfficeDraft,
   flushAll: flushAllChatDrafts, hydrate: hydrateChatDrafts, hydrationFailed: failChatDraftHydration,
   reset: resetChatDrafts };

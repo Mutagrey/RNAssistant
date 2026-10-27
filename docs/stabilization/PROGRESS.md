@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## Workspace восстанавливает receipt после потери ответа/reload — 2026-10-27
+
+Owner: Application input delivery / shared workspace draft and composer.
+`getProjectChat` по сохранённому request ID возвращает receipt из существующего
+журнала конкретного чата. Open/navigation/polling подтверждают уже доставленное
+сообщение без повторного submit или запуска модели. Найденный receipt завершает
+зависшее ожидание submit и снимает его timer, в том числе после раннего progress.
+Protected draft сохраняет связь с отправленной версией; новый одинаковый текст,
+base draft редактируемого сообщения и composer Office не стираются. Ack и очистка
+сохраняются одним снимком. Неизвестный/чужой receipt и DeliveryRecorded=false
+ничего не подтверждают. Отсутствие связи версии сохраняет текст.
+
+Targeted host-neutral Harness: read-only lookup после reopen, isolation и bounded
+ID, admission/applied, чтение при занятом run lease, protected draft roundtrip — pass.
+Chromium с native envelopes: reload, новый одинаковый draft, неизвестное/чужое
+подтверждение, background Office, edit draft, полностью потерянный reply и потеря
+reply после progress — pass. Existing receipt/shared draft/reload checks — pass.
+Первый параллельный browser-прогон дал startup timeout; отдельная startup-проба
+и последовательные прогоны прошли. Причина не установлена; ускорение загрузки
+этим срезом не заявляется.
+Windows DPAPI/Office/WebView2 и abrupt-close evidence остаются открытыми.
+
+S1b реализован host-neutral. Следующий срез — S1c/I26-10: уточнение и очередь для
+активного workspace run через существующие input journal/kernel input port.
+Это изменение пока не разрешает отправлять второй ввод в активный run.
+
 ## Approval workspace больше не ждёт окончания модели — 2026-10-27
 
 Owner: Application Workspace run lifetime / typed project-chat delivery.

@@ -36,6 +36,7 @@ namespace RNAssistant.Harness
                         ReplacingDraftId = "plugin-selection-a" },
                     PendingInput = new PendingChatInput {
                         RequestId = "request-a", Message = "later answer", Mode = "plan", Reasoning = true,
+                        MatchesDraftVersion = true,
                         ResourceDraftIds = new List<string> { "plugin-selection-a" } } };
                 store.Save(office);
                 store.Save(workspace);
@@ -61,6 +62,12 @@ namespace RNAssistant.Harness
                 office.PendingVisualAnnotation.Number = 2;
                 AssertTrue(reopened.Single(item => item.WorkspaceId == "project-a").PendingInput.RequestId == "request-a",
                     "workspace retry identity survives reopen");
+                AssertTrue(reopened.Single(item => item.WorkspaceId == "project-a").PendingInput.MatchesDraftVersion,
+                    "the exact submitted draft relation survives protected storage");
+                workspace.PendingInput.MatchesDraftVersion = false;
+                store.Save(workspace);
+                AssertTrue(!store.Load().Single(item => item.WorkspaceId == "project-a").PendingInput.MatchesDraftVersion,
+                    "a newer identical draft is distinct from the submitted version");
                 AssertEqual("plugin-selection-a", reopened.Single(item => item.WorkspaceId == "project-a").ResourceDraftIds.Single(),
                     "workspace visual attachment survives protected draft reopen");
                 AssertEqual("Adjust heading", reopened.Single(item => item.WorkspaceId == "project-a").PendingVisualAnnotation.Comment,

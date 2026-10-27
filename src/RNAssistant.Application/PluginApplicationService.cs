@@ -813,6 +813,8 @@ namespace RNAssistant.Application
             var snapshot = Conversations.ReadState(workspace, session);
             var messages = PresentWorkspaceWindow(workspace, session, session.Messages.Count);
             return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
+                InputReceipt = request.ReceiptRequestId == null ? null :
+                    Conversations.ReadInputReceipt(session, request.ReceiptRequestId),
                 State = snapshot,
                 PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
                 PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,

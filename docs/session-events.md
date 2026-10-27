@@ -663,7 +663,12 @@ text/mode/thinking uses that identity, including when acceptance succeeded but
 the bridge reply was lost. Office inbox retries retain their operation ID too.
 Both UI send paths await a protected draft save before dispatch. Acknowledgement
 removes only the matching pending input; draft clearing separately checks its
-version. The separate CurrentUser-DPAPI file stores unsent input and staged
+version. `PendingChatInput.MatchesDraftVersion` records that relation in the same
+protected draft snapshot. Rehydration uses the saved relation, never text equality,
+to bind the receipt to the restored version. A missing/false relation preserves
+the text, including a newer identical draft. Receipt acknowledgement and clearing
+are saved together; an edit receipt does not erase the base composer draft.
+The separate CurrentUser-DPAPI file stores unsent input and staged
 resource IDs, not chat events, resource bodies or a second durable input journal.
 Abrupt-close timing and Windows DPAPI/WebView2 behavior still require target-host
 evidence.
@@ -677,6 +682,17 @@ the input. The request-scoped UI callback clears only the matching draft version
 after `DeliveryRecorded=true`, without waiting for model completion. Repeated
 receipts cannot clear a later draft; background receipts never alter the Office
 composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
+On open/navigation and ordinary run polling, `getProjectChat.receiptRequestId`
+asks for the one unresolved input. The typed `inputReceipt` is read from the
+existing input journal in that scoped session, with no draft/body loading, model
+call, input reconciliation or replay added by the lookup. Unknown IDs omit the
+receipt; admission without a persisted applied transition remains
+`DeliveryRecorded=false`. This query observes identity; submit still validates
+the full request fingerprint. An exact delivered receipt also settles a matching
+outstanding submit in the UI and removes its transport timer, even if progress
+already cleared the draft but the reply was lost. It does not cancel the run.
+No automatic resubmit occurs. Background receipts never replace the selected
+chat or Office draft; resolved inputs are no longer queried.
 `submitProjectChat` returns that receipt and a canonical snapshot after input
 delivery and the first persisted kernel checkpoint, without awaiting the model.
 `WorkspaceConversationService` owns the tracked worker, execution cancellation and
@@ -704,8 +720,8 @@ success receipt. Rejection also uses this owner and records kernel cancellation
 without tool/model dispatch. Bridge cancellation before admission is respected;
 after admission, only run Stop/application shutdown cancels UI-owned continuation.
 Terminal `ResolvePendingAsync` (CLI) awaits the same worker and retains caller
-cancellation. Automatic input receipt reconnect and queue/steer remain separate
-work. Project-chat abandoned-run recovery is described above.
+cancellation. Queue/steer remains separate work. Project-chat abandoned-run
+recovery is described above.
 
 Office `submitChatInput` requires an operation ID and uses the same conflict check.
 Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup

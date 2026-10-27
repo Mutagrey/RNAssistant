@@ -160,13 +160,9 @@ const root = path.resolve(__dirname, '../..');
         !document.querySelector('#projectChatNew').disabled);
       if (destination === 'plugin') await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
       else await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
-      assert.equal(await page.locator('#chatInput').inputValue(), message, 'unacknowledged draft survives navigation');
-      await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running' && !RNAssistantProjectChats.isBusy());
-      await page.locator('#chatInput').press('Enter');
-      await page.waitForFunction(() => retryTest.requests.length === 2);
+      await page.waitForFunction(() => !document.querySelector('#chatInput').value);
       const retried = await page.evaluate(() => retryTest.requests);
-      assert.equal(retried[0].input.requestId, retried[1].input.requestId,
-        'cross-surface retry preserves accepted input identity: ' + destination);
+      assert.equal(retried.length, 1, 'cross-surface reconnect reads the receipt without resubmission: ' + destination);
       const count = await page.evaluate(async ({workspaceId, sessionId, message}) => {
         const snapshot = await draftTest.original('getProjectChat', {workspaceId, sessionId});
         return snapshot.messages.filter(item => item.Role === 'user' && item.Content === message).length;
@@ -183,6 +179,6 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatModelMenu').getByText('Настройки модели').count(), 0,
       'the shared picker restores Office model choices when its owner changes');
     assert.deepEqual(errors, [], 'no browser errors');
-    console.log('PASS workspace shared draft: project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface accepted-input retry');
+    console.log('PASS workspace shared draft: project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface receipt reconnect');
   } finally { await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

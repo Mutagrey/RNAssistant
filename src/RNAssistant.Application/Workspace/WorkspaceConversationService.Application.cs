@@ -176,6 +176,15 @@ namespace RNAssistant.Runtime
             return FindAcceptedInput(session, request.RequestId, InputFingerprint(request));
         }
 
+        internal WorkspaceInputReceipt ReadInputReceipt(ChatSession session, string requestId)
+        {
+            if (string.IsNullOrWhiteSpace(requestId) || requestId.Length > 128)
+                throw new ArgumentException("A receipt request ID must be 1–128 characters.", nameof(requestId));
+            // Read-only lookup in the already scoped session. Unlike submit,
+            // observing a receipt never accepts/replays an intent or loads drafts.
+            return FindAcceptedInput(session, requestId, null);
+        }
+
         private WorkspaceInputReceipt FindAcceptedInput(ChatSession session, string requestId, string fingerprint)
         {
             var records = new ConversationInputJournal(new ChatEventStoreAdapter(_chats)).Read(session, false)
@@ -186,7 +195,7 @@ namespace RNAssistant.Runtime
             if (input.Revision != 1 || string.IsNullOrEmpty(input.AcceptedRunId) ||
                 string.IsNullOrEmpty(input.RequestFingerprint))
                 throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
-            ConversationInputJournal.RequireSameRequest(input, fingerprint);
+            if (fingerprint != null) ConversationInputJournal.RequireSameRequest(input, fingerprint);
             return Receipt(first.Event, input, records[records.Length - 1].Change.Input.Status == ConversationInputStatus.Applied);
         }
 

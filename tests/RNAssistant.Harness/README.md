@@ -371,8 +371,8 @@ reads. The Office next-request preview still has the separate
 `node tests/web/workspace-shared-draft.test.js` checks one mounted project/plugin
 view and composer, one session draft and preferences across both screens, appended file reference, failed retry
 identity, double submit and late acknowledgement with identical later text.
-It also loses replies after acceptance and retries across project/plugin screens,
-checking one request identity and one persisted user message.
+It also loses replies after acceptance and reconnects across project/plugin screens,
+checking receipt recovery without resubmission and one persisted user message.
 `plugins: input receipt crosses bridge before model response` holds the scripted
 model response while checking both receipts through the real Application/WebView
 bridge, early submit response, retry idempotency while still running, retained
@@ -398,6 +398,16 @@ terminal API cancellation through the same worker. Set `RNA_WORKSPACE_APPROVAL_F
 to an output JSON path; `node tests/web/workspace-approval-lifetime.test.js <that-path>`
 uses those native snapshots to check consumed approval, no pending resolve timer,
 polling completion and draft retention. These do not qualify Windows/Office shutdown.
+`plugins: input receipt reconnect is read-only and scoped` checks journal receipt
+lookup after Application/bridge reopen, unapplied/unknown IDs, exact chat isolation,
+bounded ID and unchanged event revision. The existing held-model receipt test also
+reads the receipt while execution owns the session lease. Set
+`RNA_WORKSPACE_RECONNECT_FIXTURE` to an output JSON path;
+`node tests/web/workspace-receipt-reconnect.test.js <that-path>` uses those envelopes
+to check reload, a newer identical draft, edit/Office isolation, atomic ack/clear,
+unknown/foreign/unapplied receipt, no resubmit and removal of a lost submit's timer
+both before and after progress acknowledgement. Protected draft tests retain the
+submitted-version relation. Actual DPAPI/WebView2 abrupt-close remains unqualified.
 `node tests/web/workspace-chat-races.test.js` delays running snapshots past a
 terminal snapshot in both screens and switches plugin selection before an input
 reply arrives; completed chats must remain writable without stale busy state.

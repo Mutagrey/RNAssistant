@@ -171,6 +171,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("messageId")] public string MessageId { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
+        [JsonProperty("receiptRequestId")] public string ReceiptRequestId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
         [JsonProperty("pendingId")] public string PendingId { get; set; }
