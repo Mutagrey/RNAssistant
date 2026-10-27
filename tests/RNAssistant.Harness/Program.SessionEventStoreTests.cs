@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -412,7 +413,7 @@ namespace RNAssistant.Harness
                 var paths = FixturePaths.Value;
                 var store = new ChatStore(paths);
                 var session = NewSession(adapter);
-                var registry = new ChatRunRegistry(paths);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
                 var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
                 var runLease = registry.Start(session.Id, "controller-start", session);
                 var responses = new Queue<string>(new[]
@@ -484,7 +485,7 @@ namespace RNAssistant.Harness
                 var pending = AssertKernelReplay(session);
                 var pendingId = pending.LastRun.KernelState.Summary.PendingConfirmation.PendingId;
                 var command = PendingCommand(pending);
-                var registry = new ChatRunRegistry(paths);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
                 var recovery = CreateTargetedRunRecovery(adapter, paths, registry);
                 var runLease = registry.Start(pending.Id, "controller-confirmation", pending);
                 Action injectConcurrentCommit = () =>
@@ -541,10 +542,10 @@ namespace RNAssistant.Harness
         private static ChatSessionService CreateTargetedRunRecovery(
             FakeOfficeAdapter adapter,
             AppDataPaths paths,
-            ChatRunRegistry registry)
+            ConversationRunOwner registry)
         {
             var recovery = new ChatSessionService(adapter, ConversationStore(new ChatStore(paths)));
-            recovery.RunOwnershipProvider = registry.IsExternallyRunning;
+            recovery.RunOwnershipProvider = registry.IsConversationReserved;
             recovery.RunRecoveryLeaseProvider = session => registry.Start(
                 session.Id,
                 "recover_" + Guid.NewGuid().ToString("N"),

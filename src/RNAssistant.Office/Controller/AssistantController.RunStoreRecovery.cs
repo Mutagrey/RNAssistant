@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
 using RNAssistant.Office.Diagnostics;
 using RNAssistant.Office.Services;
@@ -8,7 +9,7 @@ namespace RNAssistant.Office
     public sealed partial class AssistantController
     {
         private void RecoverAfterRunStoreFailure(
-            ChatRunLease runLease,
+            ConversationRunHandle runLease,
             ChatSession failedProjection,
             string sessionId,
             ref RunCausalTrace causalTrace)

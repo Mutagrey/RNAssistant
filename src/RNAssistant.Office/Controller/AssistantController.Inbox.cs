@@ -19,7 +19,7 @@ namespace RNAssistant.Office
         public void StopInboxWorkers() { _inboxWork.CloseAsync(); }
         private bool HasInboxWorkers { get { return _inboxWork.HasWorkers; } }
 
-        private void EndInboxRun(ChatSession session, ChatRunLease lease, ref RunCausalTrace trace)
+        private void EndInboxRun(ChatSession session, ConversationRunHandle lease, ref RunCausalTrace trace)
         {
             try
             {
@@ -65,8 +65,8 @@ namespace RNAssistant.Office
             try { _inbox.Pause(session, "Остановлено пользователем"); }
             finally
             {
-                var run = _chatRuns.Get(chatId);
-                if (run != null) _chatRuns.Cancel(chatId, run.RunId);
+                var run = _activeRuns.Get(chatId);
+                if (run != null) _activeRuns.Cancel(chatId, run.RunId);
             }
             return InboxResponse(_inbox.Snapshot(session));
         }
@@ -166,7 +166,7 @@ namespace RNAssistant.Office
             Action<string, string, string, ChatActivity> progress, Action<ChatStateResponse> changed)
         {
             if (session.FormatVersion != ChatSession.CurrentFormatVersion) return;
-            if (_inboxWork.IsClosing || _lifetimeCancellation.IsCancellationRequested || _chatRuns.Get(session.Id) != null || !_inbox.TryStartWorker(session)) return;
+            if (_inboxWork.IsClosing || _lifetimeCancellation.IsCancellationRequested || _activeRuns.Get(session.Id) != null || !_inbox.TryStartWorker(session)) return;
             // Owned by the controller lifetime, not by an intake bridge request or selected page.
             try { _inboxWork.Start(async token =>
             {

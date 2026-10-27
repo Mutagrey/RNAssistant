@@ -14,23 +14,26 @@ namespace RNAssistant.Application.Conversations
         private readonly string _directory;
         private readonly Func<string, string> _fileName;
         private readonly string _coordinationFile;
+        private readonly string _leasePattern;
         private readonly ThreadLocal<CoordinationLockState> _coordinationState =
             new ThreadLocal<CoordinationLockState>();
 
-        private ConversationLeaseService(string directory, Func<string, string> fileName, string coordinationFile)
-        { _directory = directory; _fileName = fileName; _coordinationFile = coordinationFile; }
+        private ConversationLeaseService(string directory, Func<string, string> fileName,
+            string coordinationFile, string leasePattern)
+        { _directory = directory; _fileName = fileName; _coordinationFile = coordinationFile;
+            _leasePattern = leasePattern; }
 
         internal static ConversationLeaseService ForOffice(AppDataPaths paths)
         {
             return new ConversationLeaseService(paths == null ? null : Path.Combine(paths.Root, "locks"),
-                id => "run_" + AppDataPaths.SafeFileName(id) + ".lck", "run-registry.lck");
+                id => "run_" + AppDataPaths.SafeFileName(id) + ".lck", "run-registry.lck", "run_*.lck");
         }
 
         internal static ConversationLeaseService ForWorkspace(AppDataPaths paths)
         {
             if (paths == null) throw new ArgumentNullException(nameof(paths));
             return new ConversationLeaseService(Path.Combine(paths.WorkspaceDirectory, "run-leases"),
-                id => TextPatternEngine.Sha256(id) + ".lck", null);
+                id => TextPatternEngine.Sha256(id) + ".lck", null, "*.lck");
         }
 
         // Short coordination excludes a concurrent Office-wide maintenance
@@ -131,11 +134,11 @@ namespace RNAssistant.Application.Conversations
             catch (UnauthorizedAccessException) { return true; }
         }
 
-        internal bool AnyHeld(string pattern)
+        internal bool AnyHeld()
         {
             if (_directory == null || !Directory.Exists(_directory)) return false;
             string[] paths;
-            try { paths = Directory.GetFiles(_directory, pattern); }
+            try { paths = Directory.GetFiles(_directory, _leasePattern); }
             catch (IOException) { return true; }
             catch (UnauthorizedAccessException) { return true; }
             foreach (var path in paths)

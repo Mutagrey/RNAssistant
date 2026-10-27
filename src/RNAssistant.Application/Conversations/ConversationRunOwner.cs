@@ -3,37 +3,78 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
-using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
-using RNAssistant.Core.Storage;
 
-namespace RNAssistant.Office.Services
+namespace RNAssistant.Application.Conversations
 {
-    internal sealed class ChatRunLease : IDisposable
+    internal sealed class ConversationRunReservation : IDisposable
     {
-        private readonly ChatRunRegistry _registry;
+        private readonly ConversationRunOwner _owner;
+        private readonly IDisposable _lease;
+        private readonly object _sync = new object();
+        private ConversationRunHandle _active;
+        private bool _disposed;
+
+        internal ConversationRunReservation(ConversationRunOwner owner, string chatId, IDisposable lease)
+        { _owner = owner; ChatId = chatId; _lease = lease; }
+
+        internal string ChatId { get; private set; }
+        internal ConversationRunOwner Owner { get { return _owner; } }
+
+        internal ConversationRunHandle Activate(string runId, CancellationToken cancellationToken)
+        {
+            lock (_sync)
+            {
+                if (_disposed || _active != null)
+                    throw new InvalidOperationException("This conversation reservation is no longer available.");
+                _active = _owner.AttachReserved(this, runId, cancellationToken);
+                return _active;
+            }
+        }
+
+        public void Dispose()
+        {
+            ConversationRunHandle active;
+            lock (_sync)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                active = _active;
+            }
+            try { active?.Dispose(); }
+            finally { _lease?.Dispose(); }
+        }
+    }
+
+    internal sealed class ConversationRunHandle : IDisposable
+    {
+        private readonly ConversationRunOwner _owner;
         private int _completed;
 
-        internal ChatRunLease(ChatRunRegistry registry, string chatId, string runId)
+        internal ConversationRunHandle(ConversationRunOwner owner, string chatId, string runId, CancellationToken token)
         {
-            _registry = registry;
+            _owner = owner;
             ChatId = chatId;
             RunId = runId;
+            Token = token;
         }
 
         public string ChatId { get; private set; }
         public string RunId { get; private set; }
+        public CancellationToken Token { get; private set; }
+        public bool IsActive { get { return _owner.IsRunActive(ChatId, RunId); } }
+        public bool Cancel() { return _owner.Cancel(ChatId, RunId); }
 
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _completed, 1) == 0)
             {
-                _registry.Complete(ChatId, RunId);
+                _owner.Complete(ChatId, RunId);
             }
         }
     }
 
-    internal sealed class ChatRunSnapshot
+    internal sealed class ConversationActiveSnapshot
     {
         public string ChatId { get; set; }
         public string RunId { get; set; }
@@ -46,49 +87,80 @@ namespace RNAssistant.Office.Services
         internal IDisposable RunLock { get; set; }
     }
 
-    internal sealed class ChatRunRegistry
+    // Local live ownership and cancellation. Durable lifecycle/outcomes remain
+    // exclusively in the conversation journal and AgentKernel.
+    internal sealed class ConversationRunOwner
     {
         private readonly object _sync = new object();
-        private readonly Dictionary<string, ChatRunSnapshot> _runs =
-            new Dictionary<string, ChatRunSnapshot>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, ConversationActiveSnapshot> _runs =
+            new Dictionary<string, ConversationActiveSnapshot>(StringComparer.OrdinalIgnoreCase);
         private readonly ConversationLeaseService _leases;
+        private readonly Func<ChatSession, ChatSession> _snapshot;
 
-        public ChatRunRegistry(AppDataPaths paths = null, ConversationLeaseService leases = null)
+        public ConversationRunOwner(ConversationLeaseService leases, Func<ChatSession, ChatSession> snapshot = null)
         {
-            _leases = leases ?? ConversationLeaseService.ForOffice(paths);
+            _leases = leases ?? throw new ArgumentNullException(nameof(leases));
+            _snapshot = snapshot;
         }
 
-        public ChatRunLease Start(string chatId, string runId, ChatSession session, CancellationTokenSource cancellation = null)
+        public ConversationRunHandle Start(string chatId, string runId, ChatSession session,
+            CancellationTokenSource cancellation = null)
+        { return Open(chatId, runId, session, cancellation, acquireLease: true); }
+
+        // Reserve before domain preparation. The same handle keeps the exact
+        // lease through kernel execution and read-back.
+        public ConversationRunReservation Reserve(string chatId, bool wait = true,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            return new ConversationRunReservation(this, chatId,
+                _leases.Reserve(chatId, wait, cancellationToken));
+        }
+
+        internal ConversationRunHandle AttachReserved(ConversationRunReservation reservation, string runId,
+            CancellationToken cancellationToken)
+        {
+            if (reservation == null || !ReferenceEquals(reservation.Owner, this))
+                throw new InvalidOperationException("The run reservation belongs to another owner.");
+            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            try { return Open(reservation.ChatId, runId, null, cancellation, acquireLease: false); }
+            catch { cancellation.Dispose(); throw; }
+        }
+
+        private ConversationRunHandle Open(string chatId, string runId, ChatSession session,
+            CancellationTokenSource cancellation, bool acquireLease)
         {
             if (string.IsNullOrWhiteSpace(chatId) || string.IsNullOrWhiteSpace(runId))
             {
                 throw new InvalidOperationException("Chat and run ids are required.");
             }
+            if (session != null && _snapshot == null)
+                throw new InvalidOperationException("A session snapshot adapter is required for this run.");
             using (_leases.AcquireMaintenance())
             {
                 lock (_sync)
                 {
-                    ChatRunSnapshot existing;
+                    ConversationActiveSnapshot existing;
                     if (_runs.TryGetValue(chatId, out existing))
                     {
                         throw new InvalidOperationException("В этом чате уже выполняется запрос.");
                     }
-                    var runLock = AcquireRunLock(chatId);
+                    var runLock = acquireLease ? AcquireRunLock(chatId) : null;
                     try
                     {
-                        var run = new ChatRunSnapshot
+                        var run = new ConversationActiveSnapshot
                         {
                             ChatId = chatId,
                             RunId = runId,
                             Status = "running",
                             Phase = "starting",
                             StartedUtc = DateTime.UtcNow,
-                            Session = ChatCloneService.CloneSessionSnapshot(session),
+                            Session = session == null ? null : _snapshot(session),
                             Cancellation = cancellation,
                             RunLock = runLock
                         };
                         _runs[chatId] = run;
-                        return new ChatRunLease(this, chatId, runId);
+                        return new ConversationRunHandle(this, chatId, runId,
+                            cancellation == null ? CancellationToken.None : cancellation.Token);
                     }
                     catch
                     {
@@ -103,7 +175,7 @@ namespace RNAssistant.Office.Services
         {
             lock (_sync)
             {
-                ChatRunSnapshot run;
+                ConversationActiveSnapshot run;
                 if (_runs.TryGetValue(chatId ?? string.Empty, out run) &&
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -115,10 +187,11 @@ namespace RNAssistant.Office.Services
 
         public void UpdateSessionSnapshot(string chatId, string runId, ChatSession session)
         {
-            var snapshot = ChatCloneService.CloneSessionSnapshot(session);
+            if (_snapshot == null) throw new InvalidOperationException("A session snapshot adapter is required.");
+            var snapshot = _snapshot(session);
             lock (_sync)
             {
-                ChatRunSnapshot run;
+                ConversationActiveSnapshot run;
                 if (_runs.TryGetValue(chatId ?? string.Empty, out run) &&
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -132,7 +205,7 @@ namespace RNAssistant.Office.Services
             CancellationTokenSource cancellation;
             lock (_sync)
             {
-                ChatRunSnapshot run;
+                ConversationActiveSnapshot run;
                 if (!_runs.TryGetValue(chatId ?? string.Empty, out run) ||
                     !string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -153,18 +226,23 @@ namespace RNAssistant.Office.Services
             {
                 return false;
             }
+            catch (AggregateException)
+            {
+                // The token is already signalled; a failing observer cannot
+                // turn an accepted Stop into an unhandled transport failure.
+            }
             return cancellation != null;
         }
 
-        public ChatRunSnapshot Get(string chatId)
+        public ConversationActiveSnapshot Get(string chatId)
         {
-            ChatRunSnapshot snapshot;
+            ConversationActiveSnapshot snapshot;
             lock (_sync)
             {
-                ChatRunSnapshot run;
+                ConversationActiveSnapshot run;
                 snapshot = _runs.TryGetValue(chatId ?? string.Empty, out run) ? ShallowClone(run) : null;
             }
-            if (snapshot != null) snapshot.Session = ChatCloneService.CloneSessionSnapshot(snapshot.Session);
+            if (snapshot?.Session != null) snapshot.Session = _snapshot(snapshot.Session);
             return snapshot;
         }
 
@@ -173,17 +251,22 @@ namespace RNAssistant.Office.Services
             lock (_sync) return _runs.ContainsKey(chatId ?? string.Empty);
         }
 
+        internal bool IsRunActive(string chatId, string runId)
+        {
+            lock (_sync)
+            {
+                ConversationActiveSnapshot run;
+                return _runs.TryGetValue(chatId ?? string.Empty, out run) &&
+                    string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
         public bool HasRuns()
         {
             lock (_sync) return _runs.Count > 0;
         }
 
-        public bool HasExternalRuns()
-        {
-            return _leases.AnyHeld("run_*.lck");
-        }
-
-        public bool IsExternallyRunning(string chatId)
+        public bool IsConversationReserved(string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return false;
             lock (_sync)
@@ -210,7 +293,7 @@ namespace RNAssistant.Office.Services
         {
             lock (_sync)
             {
-                ChatRunSnapshot run;
+                ConversationActiveSnapshot run;
                 if (_runs.TryGetValue(chatId ?? string.Empty, out run) &&
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -268,9 +351,9 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private static ChatRunSnapshot ShallowClone(ChatRunSnapshot source)
+        private static ConversationActiveSnapshot ShallowClone(ConversationActiveSnapshot source)
         {
-            return source == null ? null : new ChatRunSnapshot
+            return source == null ? null : new ConversationActiveSnapshot
             {
                 ChatId = source.ChatId,
                 RunId = source.RunId,

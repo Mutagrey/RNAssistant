@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
@@ -32,7 +33,7 @@ namespace RNAssistant.Office.Services
         private string _aliasReconciledDocumentPath;
         private bool _aliasReconciliationPending;
         private long _lastSlowHeaderLogTicks;
-        internal Func<string, ChatRunSnapshot> RunStateProvider { get; set; }
+        internal Func<string, ConversationActiveSnapshot> RunStateProvider { get; set; }
         internal Func<IReadOnlyList<ChatSession>> RunSessionsProvider { get; set; }
         internal Func<string, bool> RunOwnershipProvider { get; set; }
         internal Func<ChatSession, IDisposable> RunRecoveryLeaseProvider { get; set; }

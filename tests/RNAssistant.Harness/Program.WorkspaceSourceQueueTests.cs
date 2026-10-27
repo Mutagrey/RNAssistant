@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -97,7 +98,7 @@ namespace RNAssistant.Harness
                         ExpectSourceQueueError("source_queue_active", () => app.PrepareSources(SourceQueueRequest(state, new List<string> { "part-00.csv" })));
                         AssertEqual(WorkspaceSourceQueueState.Pausing, SourceCommand(app, queue.QueueId, WorkspaceSourceCommand.Pause).State,
                             "pause lets the current file settle");
-                        AssertTrue(new ChatRunRegistry(paths).HasExternalRuns(), "existing maintenance gate sees background storage work");
+                        AssertTrue(ConversationLeaseService.ForOffice(paths).AnyHeld(), "existing maintenance gate sees background storage work");
                     }
                     finally { release.Set(); }
                     queue = WaitSourceQueue(app, queue.QueueId, item => item.State == WorkspaceSourceQueueState.Paused && item.Running == 0);
@@ -181,7 +182,7 @@ namespace RNAssistant.Harness
                         queue = WaitSourceQueue(app, queue.QueueId, item => item.State == WorkspaceSourceQueueState.Finished);
                         AssertEqual(2, queue.Cancelled, "cancel waiting/current/pending without acquiring the reader");
                     }
-                    AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "settled work releases maintenance activity");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "settled work releases maintenance activity");
                 }
             });
         }
@@ -280,7 +281,7 @@ namespace RNAssistant.Harness
                     }
                     finally { release.Set(); }
                     AssertTrue(bridge.RequestsDrained.Wait(5000), "closing cancels and drains background work");
-                    AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "close releases storage activity");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "close releases storage activity");
                 }
             });
         }

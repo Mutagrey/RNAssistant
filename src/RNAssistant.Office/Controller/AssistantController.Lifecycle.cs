@@ -35,7 +35,7 @@ namespace RNAssistant.Office
             // Keep per-chat locks until each cancelled run actually leaves its lease. A COM/tool
             // call may not observe cancellation immediately, so releasing here would allow overlap.
             StopInboxWorkers();
-            _chatRuns.CancelAll();
+            _activeRuns.CancelAll();
             _resourceData.Dispose();
             lock (_syncRoot)
             {

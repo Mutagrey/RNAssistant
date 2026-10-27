@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
@@ -19,11 +20,11 @@ namespace RNAssistant.Office
     {
         public bool CancelChatRun(string chatId, string runId)
         {
-            var active = _chatRuns.Get(chatId);
+            var active = _activeRuns.Get(chatId);
             if (active == null || !string.Equals(active.RunId, runId, StringComparison.Ordinal)) return false;
             var cancelled = false;
             try { _inbox.Pause(LoadAddressedSession(chatId), "Остановлено пользователем"); }
-            finally { cancelled = _chatRuns.Cancel(chatId, runId); }
+            finally { cancelled = _activeRuns.Cancel(chatId, runId); }
             return cancelled;
         }
 
@@ -64,10 +65,10 @@ namespace RNAssistant.Office
             }
             if (session.LastRun == null || session.LastRun.KernelState == null)
                 SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex));
-            _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
+            _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
 
-        private ChatRunLease StartControllerRun(
+        private ConversationRunHandle StartControllerRun(
             ChatSession session,
             string runId,
             CancellationToken cancellationToken,
@@ -76,7 +77,7 @@ namespace RNAssistant.Office
             runCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             try
             {
-                return _chatRuns.Start(session.Id, runId, session, runCancellation);
+                return _activeRuns.Start(session.Id, runId, session, runCancellation);
             }
             catch
             {
@@ -86,7 +87,7 @@ namespace RNAssistant.Office
         }
 
         private static void ReleaseControllerRun(
-            ChatRunLease runLease,
+            ConversationRunHandle runLease,
             ref RunCausalTrace causalTrace)
         {
             try
@@ -109,7 +110,7 @@ namespace RNAssistant.Office
         {
             return (phase, message, activity) =>
             {
-                _chatRuns.Update(session.Id, runId, phase, message);
+                _activeRuns.Update(session.Id, runId, phase, message);
                 if (session.LastRun != null && string.Equals(
                     session.LastRun.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
@@ -167,7 +168,7 @@ namespace RNAssistant.Office
             SaveSessionChanges(session, session.Messages.Skip(firstMessageIndex)
                 .Concat(updatedMessages ?? new ChatMessage[0]).Where(message => message != null));
             RunCausalTrace.Summary(session);
-            _chatRuns.UpdateSessionSnapshot(session.Id, runId, session);
+            _activeRuns.UpdateSessionSnapshot(session.Id, runId, session);
         }
 
         private static void CloseRunningActivities(ChatSession session, int firstMessageIndex, bool cancelled)
@@ -495,7 +496,7 @@ namespace RNAssistant.Office
                         _attachmentStore.DeleteMessage(removedMessage);
                     }
                     input.MessagesToDeleteAfterSave = null;
-                    _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                    _activeRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     if (turnTimer.ElapsedMilliseconds >= 500)
                         RuntimeLog.Info("Chat turn preparation timing: total=" +
                             turnTimer.ElapsedMilliseconds + "ms, initialSave=" + initialSaveMs +
@@ -522,7 +523,7 @@ namespace RNAssistant.Office
                         {
                             // Keep the original preparation failure. Draft files remain available.
                         }
-                        _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                        _activeRuns.UpdateSessionSnapshot(sessionId, runId, session);
                     }
                     throw;
                 }

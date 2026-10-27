@@ -92,7 +92,7 @@ namespace RNAssistant.Office
                 {
                     Status = "running"
                 });
-                _chatRuns.UpdateSessionSnapshot(sessionId, runId, session);
+                _activeRuns.UpdateSessionSnapshot(sessionId, runId, session);
 
                 var firstRunMessageIndex = session.Messages == null ? 0 : session.Messages.Count;
                 var runProgress = CreateControllerRunProgress(

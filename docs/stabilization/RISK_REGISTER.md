@@ -1,5 +1,15 @@
 # Stabilization risk register
 
+## Устаревший fixture mixed recovery — 2026-10-27
+
+Host-neutral `chat sessions: interrupted mixed exchanges preserve completed context`
+падает при подготовке `store.Save(session)`, до вызова run owner: fixture вручную
+создаёт accepted tool call без canonical `ExecutionReference`, который теперь
+обязателен в `ChatStore.ModelReferences`. Это пробел проверки recovery, не evidence
+регрессии текущего Application run owner. Owner: Harness fixture / Core session
+events; обновить fixture через нормальный accepted-call commit и повторить тест
+отдельным изменением. Windows evidence к этому выводу не относится.
+
 ## Разбор десяти фотографий: чат, протокол и достоверность — 2026-10-26
 
 Owner: Application conversation delivery; совместно Core ModelProtocol/Storage и

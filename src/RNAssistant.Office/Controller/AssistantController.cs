@@ -65,7 +65,7 @@ namespace RNAssistant.Office
         private readonly LlmCompletionDelegate _llmCompletion;
         private readonly object _syncRoot;
         private readonly Dictionary<string, PendingAgentTool> _pendingAgentTools;
-        private readonly ChatRunRegistry _chatRuns;
+        private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _inbox;
         private readonly HtmlNetworkService _htmlNetwork;
         private readonly CancellationTokenSource _lifetimeCancellation;
@@ -128,7 +128,7 @@ namespace RNAssistant.Office
                 _toolExecutor.ResourceAuthority, _toolExecutor.Payloads);
             _skillCatalog = new SkillCatalogService(_adapter.HostName, _toolExecutor.CapturePublishedSkills);
             _conversationLeases = ConversationLeaseService.ForOffice(_paths);
-            _chatRuns = new ChatRunRegistry(_paths, _conversationLeases);
+            _activeRuns = new ConversationRunOwner(_conversationLeases, ChatCloneService.CloneSessionSnapshot);
             _casMaintenanceService = new CasMaintenanceService(
                 _paths,
                 _chatStore,
@@ -144,9 +144,9 @@ namespace RNAssistant.Office
             _chatSessions = new ChatSessionService(_adapter, _conversationStore, _vbaJournalStore,
                 _documentAuthorityRegistry);
             _lifetimeCancellation = new CancellationTokenSource();
-            _chatSessions.RunStateProvider = _chatRuns.Get;
-            _chatSessions.RunSessionsProvider = _chatRuns.Sessions;
-            _chatSessions.RunOwnershipProvider = _chatRuns.IsExternallyRunning;
+            _chatSessions.RunStateProvider = _activeRuns.Get;
+            _chatSessions.RunSessionsProvider = _activeRuns.Sessions;
+            _chatSessions.RunOwnershipProvider = _activeRuns.IsConversationReserved;
             _chatSessions.RunRecoveryLeaseProvider = session => ReserveChatOperation(session);
             _chatSessions.MaintenanceLeaseProvider = _conversationLeases.AcquireMaintenance;
             _startupRecovery = new Lazy<bool>(() =>

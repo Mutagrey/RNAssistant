@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Live run и Stop используют общего Application owner — 2026-10-27
+
+Office `ChatRunRegistry` удалён. `ConversationRunOwner` владеет live handle,
+точной резервацией запуска и токеном отмены для Office и Workspace. Workspace
+передаёт owner резервацию до подготовки run; его named pipe остаётся локальным
+transport и направляет exact Stop к этому owner. Kernel и журнал по-прежнему
+единолично определяют lifecycle/outcome. Вызов Stop не создаёт terminal success.
+
+Host-neutral Harness build и точечные проверки Office lease/снимка,
+Workspace Stop, busy admission, abandoned recovery и bridge Stop — pass.
+Office controller partials Harness не собирает. Отдельные Office FIFO worker,
+Workspace `RunOperation`, recovery и UI-подключение остаются открытыми S1c;
+Windows/Office/WebView2 evidence доступно только по фотографиям экрана.
+
 ## Резервация разговора принадлежит Application — 2026-10-27
 
 Office history/admission/recovery и Workspace run/history используют общий
@@ -7,8 +21,8 @@ Office history/admission/recovery и Workspace run/history используют 
 Короткая глобальная координация Office перенесена из `ChatRunRegistry` в
 Application; registry больше не хранит отдельные reservations и не создаёт
 для них `running` snapshot. Workspace по-прежнему использует только точную
-блокировку разговора. Run snapshot/cancel Office пока остаются в registry,
-поэтому S1c не закрыт.
+блокировку разговора. Последующий перенос live snapshot/cancel описан выше;
+S1c не закрыт.
 
 Host-neutral Harness build и точечные проверки конкурирующих владельцев,
 Office maintenance, Workspace reservation, project-chat admission/recovery — pass.

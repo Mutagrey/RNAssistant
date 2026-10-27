@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -81,7 +82,7 @@ namespace RNAssistant.Harness
                         if (command == "result" && channel != null)
                             messages.Add(WriteTabularHostResult(channel, sink));
                         if (command == "status") Console.WriteLine(JsonConvert.SerializeObject(new {
-                            closed = session.IsClosed, activeStorage = new ChatRunRegistry(paths).HasExternalRuns(),
+                            closed = session.IsClosed, activeStorage = ConversationLeaseService.ForOffice(paths).AnyHeld(),
                             reads = Interlocked.Read(ref reads), bytes = Interlocked.Read(ref bytes) }));
                     }
                 }
@@ -96,7 +97,7 @@ namespace RNAssistant.Harness
                     await Task.WhenAll(requests);
                     await app.CloseAsync();
                 }
-                Console.WriteLine(JsonConvert.SerializeObject(new { stopped = true, activeStorage = new ChatRunRegistry(paths).HasExternalRuns() }));
+                Console.WriteLine(JsonConvert.SerializeObject(new { stopped = true, activeStorage = ConversationLeaseService.ForOffice(paths).AnyHeld() }));
             }
         }
 

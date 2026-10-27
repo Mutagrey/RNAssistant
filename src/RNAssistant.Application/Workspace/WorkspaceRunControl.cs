@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Tools;
 using RNAssistant.Runtime.Contracts;
 
@@ -39,15 +40,15 @@ namespace RNAssistant.Runtime
         private const int PreviewMaximumBytes = 512 * 1024;
         private const int InputMaximumBytes = 1024 * 1024;
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
-        private readonly CancellationTokenSource _run;
+        private readonly ConversationRunHandle _run;
         private readonly Task _listener;
         public CancellationToken Token { get { return _run.Token; } }
 
         public WorkspaceRunControl(string scope, string sessionId, string runId, Func<string, bool> matches,
-            Func<WorkspaceModelProgress> preview, CancellationToken cancellationToken,
+            Func<WorkspaceModelProgress> preview, ConversationRunHandle run,
             Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input = null, Func<bool> acceptsInput = null)
         {
-            _run = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _run = run ?? throw new ArgumentNullException(nameof(run));
             var name = Name(scope, sessionId, runId);
             var pipe = Server(name); // Bind before returning the application owner.
             _listener = ListenAsync(name, pipe, matches, preview, input, acceptsInput);
@@ -188,7 +189,7 @@ namespace RNAssistant.Runtime
                             }
                             else
                             {
-                                var accepted = request != null && matches(request);
+                                var accepted = request != null && _run.IsActive && matches(request);
                                 try
                                 { await pipe.WriteAsync(new[] { accepted ? (byte)1 : (byte)2 }, 0, 1, deadline.Token).ConfigureAwait(false); }
                                 finally { if (accepted) _run.Cancel(); }

@@ -318,7 +318,7 @@ namespace RNAssistant.Office
                         manualSnapshot, cancellationToken));
             }
 
-            if (_chatRuns.IsExternallyRunning(session.Id))
+            if (_activeRuns.IsConversationReserved(session.Id))
             {
                 return ToolRunResult.Error(
                     "A mutating library tool cannot run while this chat is active. Read-only tools can still be tested; stop the chat before testing document or local-state mutations.",

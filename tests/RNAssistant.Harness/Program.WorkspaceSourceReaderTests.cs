@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -105,7 +106,7 @@ namespace RNAssistant.Harness
                     {
                         AssertEqual("source.bin", reader.Label, "source label without authority locator");
                         AssertEqual((long)length, reader.ByteLength, "exact retained length");
-                        AssertTrue(new ChatRunRegistry(paths).HasExternalRuns(), "open source holds maintenance activity after queue finishes");
+                        AssertTrue(ConversationLeaseService.ForOffice(paths).AnyHeld(), "open source holds maintenance activity after queue finishes");
                         ExpectSourceQueueError("source_queue_active", app.Reset);
                         ExpectSourceQueueError("source_queue_active", () => app.SaveTabularProjectSources(new SaveTabularProjectSourcesRequest {
                             BindingId = state.Workspace.BindingId, ProjectRevision = state.Revision,
@@ -131,7 +132,7 @@ namespace RNAssistant.Harness
                         cancellation.Cancel();
                         AssertTrue(reader.IsClosed, "caller cancellation revokes access synchronously");
                         reader.Drained.GetAwaiter().GetResult();
-                        AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "cancellation releases maintenance after drain");
+                        AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "cancellation releases maintenance after drain");
                         app.EnsureNoSourceWork();
                     }
                     finally { reader.CloseAsync().GetAwaiter().GetResult(); }
@@ -139,7 +140,7 @@ namespace RNAssistant.Harness
                     try { app.OpenPreparedSourceAsync(queue.QueueId, queue.Items[0].Id).GetAwaiter().GetResult(); throw new Exception("Expected project drift refusal"); }
                     catch (TabularProjectException error) { AssertEqual("project_changed", error.Code, "source open checks exact selected manifest"); }
                     app.EnsureNoSourceWork();
-                    AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "failed open drains owners");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "failed open drains owners");
                 }
             });
         }
@@ -162,7 +163,7 @@ namespace RNAssistant.Harness
                         ExpectSourceQueueError("source_read_pending", () => reader.ReadRangeAsync(0, 1));
                         cancellation.Cancel();
                         AssertTrue(reader.IsClosed && !reader.Drained.IsCompleted, "revoked now; handles held until in-flight I/O settles");
-                        AssertTrue(new ChatRunRegistry(paths).HasExternalRuns(), "maintenance remains excluded while read is draining");
+                        AssertTrue(ConversationLeaseService.ForOffice(paths).AnyHeld(), "maintenance remains excluded while read is draining");
                         try { reader.ReadRangeAsync(0, 1); throw new Exception("Expected closed source"); }
                         catch (ObjectDisposedException) { }
                     }
@@ -171,7 +172,7 @@ namespace RNAssistant.Harness
                     catch (OperationCanceledException) { }
                     reader.CloseAsync().GetAwaiter().GetResult();
                     AssertTrue(source.WasDisposed, "native stream closed after late read");
-                    AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "drained read releases maintenance");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "drained read releases maintenance");
                     using (RuntimeStorageActivity.AcquireSourceReader(paths, CancellationToken.None)) { }
                 }
 
@@ -181,7 +182,7 @@ namespace RNAssistant.Harness
                     var opened = false;
                     var reader = new WorkspaceSourceReader(32, "waiting.bin");
                     var opening = reader.OpenAsync(paths, token => { opened = true; return new MemoryStream(new byte[32]); }, cancellation.Token);
-                    AssertTrue(SpinWait.SpinUntil(() => new ChatRunRegistry(paths).HasExternalRuns(), 5000), "waiting reader participates in maintenance");
+                    AssertTrue(SpinWait.SpinUntil(() => ConversationLeaseService.ForOffice(paths).AnyHeld(), 5000), "waiting reader participates in maintenance");
                     cancellation.Cancel();
                     try { opening.GetAwaiter().GetResult(); throw new Exception("Expected cancelled admission"); }
                     catch (OperationCanceledException) { }
@@ -213,7 +214,7 @@ namespace RNAssistant.Harness
                     {
                         AssertTrue(entered.Wait(5000), "source open reaches verification off application lock");
                         ExpectSourceQueueError("source_queue_active", app.Reset);
-                        AssertTrue(new ChatRunRegistry(paths).HasExternalRuns(), "pending open holds storage activity");
+                        AssertTrue(ConversationLeaseService.ForOffice(paths).AnyHeld(), "pending open holds storage activity");
                         if (close)
                         {
                             drained = app.CloseAsync();
@@ -227,7 +228,7 @@ namespace RNAssistant.Harness
                     catch (TabularProjectException error)
                     { AssertTrue(!close, "project drift is distinct from cancellation"); AssertEqual("project_changed", error.Code, "project checked again after verification"); }
                     (drained ?? app.CloseAsync()).GetAwaiter().GetResult();
-                    AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "failed/cancelled open drains all owners");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "failed/cancelled open drains all owners");
                     using (RuntimeStorageActivity.AcquireSourceReader(paths, CancellationToken.None)) { }
                 }
             });

@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -2206,10 +2207,10 @@ namespace RNAssistant.Harness
                 AssertTrue(store.HasOpenToolExecution(session, "old-run"),
                     "startup fixture has a durable execution boundary, independent of UI labels");
 
-                var registry = new ChatRunRegistry(paths);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
                 var service = new ChatSessionService(adapter, ConversationStore(store))
                 {
-                    RunOwnershipProvider = registry.IsExternallyRunning,
+                    RunOwnershipProvider = registry.IsConversationReserved,
                     RunRecoveryLeaseProvider = value => registry.Start(value.Id, "recovery", value)
                 };
                 service.ReconcileInterruptedRuns("new-runtime");
@@ -2309,10 +2310,10 @@ namespace RNAssistant.Harness
                 session.Messages.Add(resultMessage);
                 store.Save(session);
 
-                var registry = new ChatRunRegistry(paths);
+                var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(paths), ChatCloneService.CloneSessionSnapshot);
                 var service = new ChatSessionService(adapter, ConversationStore(store))
                 {
-                    RunOwnershipProvider = registry.IsExternallyRunning,
+                    RunOwnershipProvider = registry.IsConversationReserved,
                     RunRecoveryLeaseProvider = value => registry.Start(value.Id, "recovery", value)
                 };
                 service.ReconcileInterruptedRuns("new-runtime");

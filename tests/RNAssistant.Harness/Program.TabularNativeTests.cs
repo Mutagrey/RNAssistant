@@ -1,4 +1,5 @@
 using System;
+using RNAssistant.Application.Conversations;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
@@ -116,7 +117,7 @@ namespace RNAssistant.Harness
                         }
                         AssertNativeStatus(session, 409, "GET", prefix + "source?sequence=1&offset=0&count=1");
                         ExpectSourceQueueError("source_queue_active", app.Reset);
-                        AssertTrue(new ChatRunRegistry(paths).HasExternalRuns(), "resource scope holds maintenance activity");
+                        AssertTrue(ConversationLeaseService.ForOffice(paths).AnyHeld(), "resource scope holds maintenance activity");
                         AssertNativeStatus(session, 204, "DELETE", prefix + "source");
                         AssertTrue(session.ClientCloseConfirmed && !session.WasRevoked && session.SourceDrained.IsCompleted,
                             "ordinary browser cleanup is distinct from native revocation");
@@ -124,7 +125,7 @@ namespace RNAssistant.Harness
                         AssertNativeStatus(session, 410, "GET", session.EntryUri);
                         AssertNativeStatus(session, 204, "DELETE", prefix + "source");
                         app.Reset();
-                        AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "native close confirms I/O drain");
+                        AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "native close confirms I/O drain");
                     }
                     finally { session.CloseAsync().GetAwaiter().GetResult(); }
                 }
@@ -152,7 +153,7 @@ namespace RNAssistant.Harness
                     }
                     finally { session.CloseAsync().GetAwaiter().GetResult(); }
                     app.EnsureNoSourceWork();
-                    AssertTrue(!new ChatRunRegistry(paths).HasExternalRuns(), "abandoned realm cannot retain the source forever");
+                    AssertTrue(!ConversationLeaseService.ForOffice(paths).AnyHeld(), "abandoned realm cannot retain the source forever");
                 }
             });
         }

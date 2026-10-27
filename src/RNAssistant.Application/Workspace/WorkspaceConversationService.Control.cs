@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using RNAssistant.Application.Conversations;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -42,7 +43,7 @@ namespace RNAssistant.Runtime
             WorkspaceRunControlRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken, string modelDigest)
         {
-            using (AcquireSessionLease(request.SessionId, cancellationToken: cancellationToken))
+            using (var runReservation = ReserveRun(request.SessionId, cancellationToken: cancellationToken))
             {
                 var session = GetSession(workspace, request.SessionId);
                 if (session?.LastRun?.RunId != request.RunId || ConversationEventFeed.Cursor(session) != request.Cursor)
@@ -67,7 +68,7 @@ namespace RNAssistant.Runtime
                 acceptance.Error = null;
                 session.LastRun.Phase = null;
                 session.LastRun.CurrentAction = null;
-                using (var control = OpenRunControl(session, cancellationToken))
+                using (var control = OpenRunControl(session, runReservation, cancellationToken))
                 {
                     var result = await ConversationRunCoordinator.ContinueAsync(continuation,
                         ports, ports.Tools, ports, control.Token).ConfigureAwait(false);
@@ -84,15 +85,21 @@ namespace RNAssistant.Runtime
             }
         }
 
-        private WorkspaceRunControl OpenRunControl(ChatSession session, CancellationToken cancellationToken, WorkspaceInputChannel input = null)
+        private WorkspaceRunControl OpenRunControl(ChatSession session, ConversationRunReservation reservation,
+            CancellationToken cancellationToken, WorkspaceInputChannel input = null)
         {
             var initialRevision = session.Revision;
-            return new WorkspaceRunControl(_paths.WorkspaceDirectory, session.Id, session.LastRun.RunId,
-                cursor => session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Running &&
-                    session.Revision > initialRevision && ConversationEventFeed.Cursor(session) == cursor,
-                () => LocalModelProgress(session),
-                cancellationToken, input == null ? null : new Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt>(input.Submit),
-                () => input != null && input.Accepting);
+            var run = reservation.Activate(session.LastRun.RunId, cancellationToken);
+            try
+            {
+                return new WorkspaceRunControl(_paths.WorkspaceDirectory, session.Id, session.LastRun.RunId,
+                    cursor => session.LastRun.KernelState?.Summary.Lifecycle == RunLifecycle.Running &&
+                        session.Revision > initialRevision && ConversationEventFeed.Cursor(session) == cursor,
+                    () => LocalModelProgress(session), run,
+                    input == null ? null : new Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt>(input.Submit),
+                    () => input != null && input.Accepting);
+            }
+            catch { run.Dispose(); throw; }
         }
 
         private static void ValidateControl(WorkspaceRunControlRequest request)

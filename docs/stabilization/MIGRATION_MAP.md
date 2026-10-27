@@ -27,11 +27,14 @@ orchestration; оба окружения переключаются в одно�
 Уже общие `ConversationLeaseService`, `ConversationWorkService` и
 `ConversationRunInputChannel` в Application используются обоими окружениями;
 старые per-environment lock acquisition, worker tracking и input-consume loops
-удалены. Office `Reserve`/`ReserveMaintenance` и отдельные `_reservations` в
-`ChatRunRegistry` удалены: история, admission и recovery Office, как и операции
-Workspace, используют Application reservation. Короткая глобальная Office
-coordination тоже принадлежит Application; Workspace использует только точную
-резервацию. Это не общий owner запуска. Office lease всё ещё лежит в
+удалены. Office `ChatRunRegistry` удалён: live handle, exact cancellation и
+резервация запуска принадлежат `ConversationRunOwner` в Application у обоих
+потребителей. Временный Office session snapshot хранится там через Office
+clone adapter; общая UI-проекция остаётся открытой. Workspace named pipe
+доставляет Stop этому owner, а прежний локальный run token из pipe удалён.
+Короткая глобальная Office coordination тоже
+принадлежит Application; Workspace использует только точную резервацию.
+Это ещё не общий FIFO/run worker. Office lease всё ещё лежит в
 `locks/run_*.lck`, Workspace — в `workspaces/run-leases/*.lck`.
 Обычный Workspace submit также записывает intake/Applied через общий inbox; прямой
 append этого пути удалён. Live inbox адресуется по host/workspace/document/chat,
@@ -39,11 +42,11 @@ append этого пути удалён. Live inbox адресуется по ho
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
 |---|---|---|
-| Office `AssistantController.Inbox.StartInboxWorker`, `StartControllerRun`/`CancelChatRun`, `ChatRunRegistry`; send/confirmation и controller disposal | Exact document binding, ресурсная подготовка, host runtime use lease, domain model/tool/store ports | Application владеет admission, FIFO, run task/cancel/drain и conversation lease для Office и Workspace. Удалить старые worker/registry и зависимости; façade не оборачивает старый workflow |
-| Workspace `.Lifetime.cs` (`StartRun`, `RunOperation`), `AcquireSessionLease`, orchestration в `ExecuteInputAsync`/`ExecutePendingAsync` и `.Control.cs` (`ContinueAsync` включительно); bridge + CLI | Workspace association/root, settings/tool/resource profile, file authority; CLI ждёт completion общей задачи | Тот же Application owner обслуживает обе поверхности. Удалить отдельные workers/lease rules, оставив тонкий DTO/CLI adapter и domain port composition |
+| Office `AssistantController.Inbox.StartInboxWorker`, controller `StartControllerRun`/`CancelChatRun` façade, send/confirmation и controller disposal | Exact document binding, ресурсная подготовка, host runtime use lease, domain model/tool/store ports | Application владеет admission, FIFO, run task/drain для Office и Workspace. Удалить старый scheduler/facade workflow после переключения; live handle/cancel уже переключены |
+| Workspace `.Lifetime.cs` (`StartRun`, `RunOperation`), orchestration в `ExecuteInputAsync`/`ExecutePendingAsync` и `.Control.cs` (`ContinueAsync` включительно); bridge + CLI | Workspace association/root, settings/tool/resource profile, file authority; CLI ждёт completion общей задачи | Тот же Application owner обслуживает обе поверхности. Удалить отдельные workers/receipt rules, оставив тонкий DTO/CLI adapter и domain port composition; run reservation/cancel уже переключены |
 | Office `ConversationKernelAdapter.Input.cs` и незавершённый Workspace `.Input.cs`; input channel обоих kernels | Подготовка Office-вложений/ресурсов, применение подготовленного ввода к domain model session | Общие admission/consume/append/applied/interrupt через существующий journal и `IRunInputChannel`. Удалить отдельные channel algorithms; перенос одного inbox helper не закрывает строку |
 | `ChatSessionService.ReconcileInterruptedRuns` и Workspace `RefreshSession`/`PrepareResume`/`InterruptAbandonedRun`; activation/reopen | Сведения domain mutation journals и read-back, exact target availability | Общий owner проверяет lease/run/cursor, обращается к Core recovery transition и сохраняет один набор фактов. Удалить дубли решений о завершении; unknown не replay |
-| Workspace `WorkspaceRunControl` preview/input/stop; cross-process client | Локальный current-user transport и его ACL, техническая доставка/таймаут | Перенаправить на typed команды/snapshot общего owner; удалить Workspace admission/cancel/projection rules. Сам transport не обязан исчезать |
+| Workspace `WorkspaceRunControl` preview/input/cross-process client | Локальный current-user transport и его ACL, техническая доставка/таймаут | Перенаправить preview/input на typed команды/snapshot общего owner; отдельный run token и Stop owner удалены, transport остаётся |
 | `app-chat-inbox.js` и chat-части `app-project-chats.js`: pending requests, receipt, polling; action dispatch в `app-chat.js`/`app-workspace-chat.js` | Навигация, дерево проектов, Office target/resource selection | Один Web conversation controller/composer использует общий snapshot/commands. Удалить заменённые submit/receipt/poll ветки обоих consumers; scope+generation и draft revision остаются общими guards |
 
 Общий `app-conversation-state.js` уже задаёт индикатор подтверждённого владельца

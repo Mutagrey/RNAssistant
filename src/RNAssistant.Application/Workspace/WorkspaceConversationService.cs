@@ -35,6 +35,7 @@ namespace RNAssistant.Runtime
     {
         private readonly AppDataPaths _paths;
         private readonly ConversationLeaseService _conversationLeases;
+        private readonly ConversationRunOwner _activeRuns;
         private readonly ConversationInboxService _conversationInbox;
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
@@ -90,6 +91,7 @@ namespace RNAssistant.Runtime
         {
             _paths = paths ?? throw new ArgumentNullException(nameof(paths));
             _conversationLeases = ConversationLeaseService.ForWorkspace(paths);
+            _activeRuns = new ConversationRunOwner(_conversationLeases);
             _webHost = webHost; _extraTools = extraTools; _officeCapabilities = officeCapabilities;
             _isPluginSourceWorkspace = isPluginSourceWorkspace;
             _toolProfile = toolProfile ?? CallableToolProfile.AllDirect("workspace-direct");
@@ -478,7 +480,7 @@ namespace RNAssistant.Runtime
                 ? _workspaces.CreateSession(_chats, workspace, "Workspace chat")
                 : _workspaces.LoadSession(_chats, workspace, sessionId);
             if (session == null) throw new InvalidOperationException("Workspace session was not found.");
-            using (AcquireSessionLease(session.Id, cancellationToken: cancellationToken))
+            using (var runReservation = ReserveRun(session.Id, cancellationToken: cancellationToken))
             {
                 // Another process may have finished after the initial lookup.
                 if (!string.IsNullOrWhiteSpace(sessionId))
@@ -622,7 +624,7 @@ namespace RNAssistant.Runtime
                     ConversationEventFeed.Cursor(session), receipt));
 
                 using (var inputChannel = new WorkspaceInputChannel(this, session))
-                using (var control = OpenRunControl(session, cancellationToken, inputChannel))
+                using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
                 {
                     var result = await ConversationRunCoordinator.RunAsync(
                         new AgentRunRequest(runId, runId, message,
@@ -652,7 +654,7 @@ namespace RNAssistant.Runtime
                 string.IsNullOrWhiteSpace(settings.Model)))
                 throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
             if (approve) ValidateMessageRoles(settings);
-            using (AcquireSessionLease(sessionId, wait: waitForLease, cancellationToken: cancellationToken))
+            using (var runReservation = ReserveRun(sessionId, wait: waitForLease, cancellationToken: cancellationToken))
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (approve) ConversationRunPolicy.ForAcceptedRun(session);
@@ -706,7 +708,7 @@ namespace RNAssistant.Runtime
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                 using (var inputChannel = approve ? new WorkspaceInputChannel(this, session) : null)
-                using (var control = OpenRunControl(session, cancellationToken, inputChannel))
+                using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
@@ -937,6 +939,13 @@ namespace RNAssistant.Runtime
             CancellationToken cancellationToken = default(CancellationToken))
         {
             try { return _conversationLeases.Reserve(sessionId, wait, cancellationToken); }
+            catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
+        }
+
+        private ConversationRunReservation ReserveRun(string sessionId, bool wait = true,
+            CancellationToken cancellationToken = default(CancellationToken))
+        {
+            try { return _activeRuns.Reserve(sessionId, wait, cancellationToken); }
             catch (IOException ex) { throw new WorkspaceSessionLeaseUnavailableException(ex); }
         }
 

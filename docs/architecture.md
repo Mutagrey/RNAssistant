@@ -80,9 +80,10 @@ static WebView UI
 The current dependency sketch describes the implemented Office path; a shared
 kernel and chat DOM do not yet mean shared conversation orchestration. Exact
 conversation reservation and Office maintenance coordination now belong to the
-Application lease service for both consumers; active-run ownership remains split.
-The target is one Application conversation owner consumed by Office and Workspace/CLI: input
-admission, queue/steer, invocation ownership/cancellation/drain, recovery and UI
+Application lease service for both consumers. The shared Application run owner
+also holds live handles and exact Stop cancellation; scheduling remains split.
+The target is one Application conversation owner consumed by Office and
+Workspace/CLI: input admission, queue/steer, invocation ownership/cancellation/drain, recovery and UI
 subscriptions. Environment adapters own document binding, resource preparation and
 tool/model/store port composition. They must not retain independent schedulers
 behind a common façade. `AgentKernel` remains the sole lifecycle/outcome authority.
@@ -91,9 +92,9 @@ The owner lives in the local runtime scope, independent of a selected view or br
 request. One canonical conversation event stream/CAS feeds one reconstructible
 snapshot based on `RunViewState`, inbox receipts and capabilities. One Web controller
 consumes that contract in both environments. No additional durable projection,
-run loop or generic Office abstraction is introduced. This is not implemented by
-the current inbox source move; the next bounded cutover, both consumers, removals
-and shared behavioral checks are specified in
+run loop or generic Office abstraction is introduced. The shared lease, inbox and
+live owner cover only part of this boundary; the remaining scheduler, recovery
+and UI cutover and shared behavioral checks are specified in
 [S1c](stabilization/BACKLOG.md#s1c-общий-владелец-разговора--2026-10-27).
 
 ## Deferred host and local automation boundaries

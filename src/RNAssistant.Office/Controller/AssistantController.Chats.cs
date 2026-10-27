@@ -376,7 +376,7 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new ArgumentException("A chat id is required.", nameof(chatId));
-            if (!_chatRuns.IsRunning(chatId) && !_inbox.HasActiveWork(chatId))
+            if (!_activeRuns.IsRunning(chatId) && !_inbox.HasActiveWork(chatId))
             {
                 var window = _conversationStore.ReadMessageWindow(chatId, beforeIndex, ChatMessageWindowViewDto.PageSize);
                 if (window != null)
@@ -679,7 +679,7 @@ namespace RNAssistant.Office
 
         private void EnsureNoActiveRuns()
         {
-            if (HasInboxWorkers || _chatRuns.HasRuns() || _chatRuns.HasExternalRuns())
+            if (HasInboxWorkers || _activeRuns.HasRuns() || _conversationLeases.AnyHeld())
             {
                 throw new InvalidOperationException("Сначала остановите выполняющиеся запросы во всех окнах RNAssistant.");
             }
@@ -687,7 +687,7 @@ namespace RNAssistant.Office
 
         public void EnsureHostSwitchReady()
         {
-            if (HasInboxWorkers || _chatRuns.HasRuns())
+            if (HasInboxWorkers || _activeRuns.HasRuns())
                 throw new InvalidOperationException("Сначала остановите выполняющийся запрос в этой панели RN Assistant.");
         }
 

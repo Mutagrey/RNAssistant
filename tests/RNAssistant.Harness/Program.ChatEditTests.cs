@@ -360,15 +360,15 @@ namespace RNAssistant.Harness
             {
                 var owner = ConversationLeaseService.ForOffice(paths);
                 var secondOwner = ConversationLeaseService.ForOffice(paths);
-                var registry = new ChatRunRegistry(paths, owner);
-                var secondRegistry = new ChatRunRegistry(paths, secondOwner);
+                var registry = new ConversationRunOwner(owner, ChatCloneService.CloneSessionSnapshot);
+                var secondRegistry = new ConversationRunOwner(secondOwner, ChatCloneService.CloneSessionSnapshot);
                 var session = new ChatSession { Title = "Before run" };
                 var lease = registry.Start("chat-1", "run-1", session);
                 session.Title = "Mutated live object";
 
                 AssertTrue(registry.IsRunning("chat-1"), "run registered");
-                AssertTrue(secondRegistry.IsExternallyRunning("chat-1"), "cross-registry lock is visible");
-                AssertTrue(secondRegistry.HasExternalRuns(), "maintenance detects a run in another registry");
+                AssertTrue(secondRegistry.IsConversationReserved("chat-1"), "cross-registry lock is visible");
+                AssertTrue(secondOwner.AnyHeld(), "maintenance detects a run in another registry");
                 AssertEqual("Before run", registry.Get("chat-1").Session.Title, "run snapshot is immutable");
                 var exposedSnapshot = registry.Get("chat-1");
                 exposedSnapshot.Session.Title = "Mutated returned snapshot";
@@ -399,8 +399,8 @@ namespace RNAssistant.Harness
                 lease.Dispose();
                 lease.Dispose();
                 AssertTrue(!registry.IsRunning("chat-1"), "idempotent lease release removes run");
-                AssertTrue(!secondRegistry.IsExternallyRunning("chat-1"), "cross-registry lock is released");
-                AssertTrue(!secondRegistry.HasExternalRuns(), "maintenance sees no run after release");
+                AssertTrue(!secondRegistry.IsConversationReserved("chat-1"), "cross-registry lock is released");
+                AssertTrue(!secondOwner.AnyHeld(), "maintenance sees no run after release");
 
                 using (owner.AcquireMaintenance())
                 using (owner.AcquireMaintenance())
@@ -428,13 +428,13 @@ namespace RNAssistant.Harness
                 {
                     AssertTrue(!secondRegistry.IsRunning("chat-1"), "history reservation is not a model run");
                     AssertTrue(secondRegistry.Get("chat-1") == null, "history reservation has no running snapshot");
-                    AssertTrue(registry.IsExternallyRunning("chat-1"), "history reservation still excludes another writer");
+                    AssertTrue(registry.IsConversationReserved("chat-1"), "history reservation still excludes another writer");
                     var rejected = false;
                     try { secondRegistry.Start("chat-1", "competing-run", session); }
                     catch (InvalidOperationException) { rejected = true; }
                     AssertTrue(rejected, "history reservation excludes a run in the same registry");
                 }
-                AssertTrue(!registry.IsExternallyRunning("chat-1"), "history lease released");
+                AssertTrue(!registry.IsConversationReserved("chat-1"), "history lease released");
 
                 var workspaceOwner = ConversationLeaseService.ForWorkspace(paths);
                 var secondWorkspaceOwner = ConversationLeaseService.ForWorkspace(paths);
@@ -447,12 +447,33 @@ namespace RNAssistant.Harness
                             "another workspace chat remains independent");
                 }
                 AssertTrue(!secondWorkspaceOwner.IsHeld("workspace-chat"), "workspace reservation releases its owner");
+
+                var workspaceRuns = new ConversationRunOwner(workspaceOwner);
+                using (var reservation = workspaceRuns.Reserve("workspace-chat"))
+                {
+                    AssertTrue(workspaceRuns.IsConversationReserved("workspace-chat"),
+                        "application reservation owns the lease before model preparation");
+                    AssertTrue(!workspaceRuns.IsRunning("workspace-chat"),
+                        "preparation reservation is not a model run");
+                    using (var active = reservation.Activate("workspace-run", CancellationToken.None))
+                    {
+                        AssertTrue(active.IsActive, "workspace run is registered under the shared owner");
+                        AssertTrue(secondWorkspaceOwner.IsHeld("workspace-chat"),
+                            "another process cannot acquire the active workspace conversation");
+                        AssertTrue(!workspaceRuns.Cancel("workspace-chat", "stale-run"), "stale Stop cannot cancel another run");
+                        AssertTrue(!active.Token.IsCancellationRequested, "stale Stop leaves the active run alone");
+                        AssertTrue(active.Cancel(), "exact Stop reaches the shared owner");
+                        AssertTrue(active.Token.IsCancellationRequested, "exact Stop cancels the kernel token");
+                    }
+                }
+                AssertTrue(!workspaceRuns.IsRunning("workspace-chat"), "workspace live owner releases after the run");
+                AssertTrue(!workspaceRuns.IsConversationReserved("workspace-chat"), "workspace lease releases after the run");
             });
         }
 
         private static void ConfirmedToolRunLeaseRejectsDuplicateAndSupportsCancellation()
         {
-            var registry = new ChatRunRegistry();
+            var registry = new ConversationRunOwner(ConversationLeaseService.ForOffice(null), ChatCloneService.CloneSessionSnapshot);
             var session = new ChatSession();
             var cancellation = new CancellationTokenSource();
             var executions = 0;
