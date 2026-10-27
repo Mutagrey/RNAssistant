@@ -645,6 +645,12 @@ recovery it incorporates newer canonical input events into an already loaded
 projection. Workspace activation/explicit resume keeps a missing user message in
 `delivering`; Office explicit inbox resume returns that missing input to `pending`.
 Neither path replays a run or a tool.
+Office pending snapshots and Workspace pending-steer snapshots use the same
+Application undelivered-input selector. A claimed input with a persisted user
+message is absent from both pending lists even before its `applied` event is
+recorded; the receipt remains unconfirmed until that event exists. Workspace
+inspection reads canonical input events without reconciling or replaying them,
+and loads text bodies only for visible pending inputs.
 
 ### Application input receipts and event reconnect
 

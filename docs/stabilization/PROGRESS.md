@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Ожидающий ввод проецируется одинаково — 2026-10-27
+
+Office inbox snapshot и Workspace pending-steer snapshot используют одно правило
+`ConversationInboxService`: сохранённый user message больше не показывается как
+недоставленный `Delivering`. Workspace больше не собирает этот список отдельным
+LINQ-проходом по журналу. Его read-only запрос по-прежнему читает canonical events
+и загружает тела только для видимых элементов; обычный Office poll без claim не
+сканирует историю сообщений.
+
+Host-neutral Harness: Office/Workspace projection и существующие inbox FIFO,
+Workspace active steer/recovery — pass. S1c остаётся открытым: общий scheduler,
+receipt lookup, полный recovery и UI-controller ещё раздельны. Windows/Office/
+WebView2 не проверены; с Windows-машины доступны только фотографии экрана.
+
 ## Восстановление input receipt использует общий inbox — 2026-10-27
 
 Office explicit resume и Workspace activation/resume теперь сверяют `Delivering`

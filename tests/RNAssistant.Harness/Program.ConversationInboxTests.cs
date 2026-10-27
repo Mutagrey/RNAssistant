@@ -250,6 +250,8 @@ namespace RNAssistant.Harness
                 var message = new ChatMessage { Id = claimed.Id, Role = "user", Content = claimed.Text };
                 session.Messages.Add(message);
                 store.Commit(session, ConversationCommit.UserInput(message));
+                AssertEqual(0, inbox.Snapshot(session).Items.Count,
+                    "Office snapshot does not show a persisted message as undelivered");
                 inbox.Resume(session);
                 AssertEqual(ConversationInputStatus.Applied, inbox.Find(session, claimed.Id).Status,
                     "Office explicit resume projects the persisted input as applied");
@@ -271,10 +273,14 @@ namespace RNAssistant.Harness
                 input.Revision = 1;
                 var journal = new ConversationInputJournal(events);
                 journal.Append(session, new ConversationInputEvent { Input = input });
+                AssertEqual(input.Text, inbox.ReadUndelivered(session, InputDelivery.Queue).Single().Text,
+                    "Workspace snapshot reads the pending body from canonical events");
                 var message = new ChatMessage { Id = input.Id, RunId = input.AcceptedRunId,
                     Role = "user", Content = input.Text };
                 session.Messages.Add(message);
                 store.Commit(session, ConversationCommit.UserInput(message));
+                AssertEqual(0, inbox.ReadUndelivered(session, InputDelivery.Queue).Count,
+                    "Workspace snapshot hides a message already persisted before the receipt transition");
                 inbox.ReconcileAcceptedDelivery(session);
                 AssertEqual(ConversationInputStatus.Applied, inbox.FindOperation(session, input.OperationId).Status,
                     "Workspace recovery updates the already loaded receipt projection");

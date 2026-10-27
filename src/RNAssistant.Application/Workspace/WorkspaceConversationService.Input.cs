@@ -45,15 +45,9 @@ namespace RNAssistant.Runtime
 
         private IReadOnlyList<WorkspacePendingInput> ReadPendingInputs(ChatSession session)
         {
-            var events = new ChatEventStoreAdapter(_chats);
-            return new ConversationInputJournal(events).Read(session, false)
-                .Where(record => record.Change.Input != null).GroupBy(record => record.Change.Input.Id)
-                .Select(group => group.Last()).Where(record => record.Change.Input.Delivery == InputDelivery.Steer &&
-                    (record.Change.Input.Status == ConversationInputStatus.Pending || record.Change.Input.Status == ConversationInputStatus.Delivering) &&
-                    !ConversationInputJournal.HasPersistedUserMessage(session, record.Change.Input))
-                .Select(record => new WorkspacePendingInput { Id = record.Change.Input.Id,
-                    RunId = record.Change.Input.AcceptedRunId, Text = events.ReadPayload(session, record.Event) ??
-                        throw new InvalidOperationException("Conversation input body is missing.") }).ToArray();
+            return _conversationInbox.ReadUndelivered(session, InputDelivery.Steer)
+                .Select(input => new WorkspacePendingInput { Id = input.Id,
+                    RunId = input.AcceptedRunId, Text = input.Text }).ToArray();
         }
 
         private sealed class WorkspaceInputChannel : IRunInputChannel, IDisposable

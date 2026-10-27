@@ -42,6 +42,8 @@ append этого пути удалён. Live inbox адресуется по ho
 Workspace activation/resume тоже переводит доказанную доставку через этот inbox:
 он обновляет журнал и уже загруженную проекцию; отдельный Workspace writer receipt
 удалён. Office explicit resume использует ту же сверку сохранённого user message.
+Workspace pending-steer snapshot теперь использует общий inbox selector, как Office
+pending snapshot; отдельный Workspace сбор списка из journal удалён.
 Остальное восстановление run/lease и FIFO ещё раздельно.
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |

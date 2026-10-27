@@ -154,11 +154,45 @@ namespace RNAssistant.Application.Conversations
             {
                 ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
                 Paused = box.Paused, PauseReason = box.PauseReason,
-                Items = box.Inputs.Where(IsPending).Select(Clone).ToList(),
+                Items = Undelivered(box.Session, box.Inputs, null).Select(Clone).ToList(),
                 Receipts = requested.Count == 0 ? new List<ConversationInboxReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
                     .Select(input => new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
                         Revision = input.Revision, Status = input.Status }).ToList()
             };
+        }
+        // Same read-only input projection for live Office snapshots and Workspace
+        // snapshots of a different process. Workspace reads canonical events here;
+        // it never treats a persisted message as still waiting for delivery.
+        internal IReadOnlyList<ConversationInput> ReadUndelivered(ChatSession session, InputDelivery? delivery = null)
+        {
+            var latest = new ConversationInputJournal(_events).Read(session, false)
+                .Where(record => record.Change.Input != null)
+                .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal)
+                .Select(group => group.Last()).ToArray();
+            var byId = latest.ToDictionary(record => record.Change.Input.Id, StringComparer.Ordinal);
+            return Undelivered(session, latest.Select(record => record.Change.Input), delivery)
+                .Select(input =>
+                {
+                    var record = byId[input.Id];
+                    var copy = Clone(input);
+                    copy.Text = _events.ReadPayload(session, record.Event) ??
+                        throw new InvalidOperationException("Conversation input body is missing.");
+                    return copy;
+                }).ToArray();
+        }
+
+        private static IEnumerable<ConversationInput> Undelivered(ChatSession session,
+            IEnumerable<ConversationInput> inputs, InputDelivery? delivery)
+        {
+            var candidates = inputs.Where(input => IsPending(input) &&
+                (!delivery.HasValue || input.Delivery == delivery.Value)).ToArray();
+            if (!candidates.Any(input => input.Status == ConversationInputStatus.Delivering)) return candidates;
+            // Only a claimed input can have a persisted user message. Ordinary
+            // pending snapshots avoid scanning a long transcript on every poll.
+            var messageIds = new HashSet<string>((session.Messages ?? new List<ChatMessage>())
+                .Where(message => message != null && message.Id != null).Select(message => message.Id), StringComparer.Ordinal);
+            return candidates.Where(input => input.Status == ConversationInputStatus.Pending ||
+                !messageIds.Contains(input.Id) || !ConversationInputJournal.HasPersistedUserMessage(session, input));
         }
         internal ConversationInput Find(ChatSession session, string id)
         {
