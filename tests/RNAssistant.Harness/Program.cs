@@ -289,6 +289,7 @@ namespace RNAssistant.Harness
                 Test("agent: supports selectable tool result roles", AgentSupportsSelectableToolResultRoles),
                 Test("agent: json schema fallback is request-local", AgentJsonSchemaFallbackIsRequestLocal),
                 Test("v8 recovery: configurable reflection depth and retained reasoning", V8RecoveryReflectionDepth),
+                Test("v8 recovery: disabled reflection schema repair and fallback", V8RecoveryDisabledReflectionWire),
                 Test("v8 recovery: finish outcome and nonblank answer survive repair and replay", V8RecoveryFinishOutcome),
                 Test("v8 recovery: accepted tool reasoning survives reopen", V8RecoveryExecuteReasoning),
                 Test("v8 recovery: strict schema transport and repair", V8RecoveryStrictTransport),

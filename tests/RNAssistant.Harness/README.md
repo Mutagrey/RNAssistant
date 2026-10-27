@@ -93,9 +93,12 @@ release and current source, applies one revision-guarded `files.patch`, reads th
 changed source and retains a checked candidate. Ambiguous anchors and stale reads
 refuse the write. It does not assert browser behavior.
 
-`v8 recovery:` checks configurable/frozen reflection depth (including correction and
-repeated over-limit refusal), required finish outcome/nonblank answer, contradiction
-repair and outcome replay, separate format retries,
+`v8 recovery:` checks configurable/frozen reflection depth (including positive-limit
+correction, settings save/reload and depth 0 in both response modes), disabled-action
+schema/instructions through repair and fallback, rejection without a correction
+request, and preservation of user text and previously accepted reflection history.
+It also covers required finish outcome/nonblank answer, contradiction repair and
+outcome replay, separate format retries,
 strict response transport, bounded output truncation, accepted reasoning after
 persisted reopen, and workspace live/saved presentation. Run
 `node tests/web/stream-render-cost.test.js`, `node tests/web/workspace-chat-v8.test.js`

@@ -14,7 +14,7 @@ namespace RNAssistant.Core.ModelProtocol
             @"\A(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\z",
             RegexOptions.CultureInvariant);
 
-        internal static ConversationResponseParseResult Read(string content, bool schemaTransport = false)
+        internal static ConversationResponseParseResult Read(string content, bool schemaTransport = false, bool reflectionEnabled = true)
         {
             var raw = (content ?? string.Empty).Trim(' ', '\t', '\r', '\n');
             if (!raw.StartsWith("{", StringComparison.Ordinal) || !raw.EndsWith("}", StringComparison.Ordinal))
@@ -53,13 +53,17 @@ namespace RNAssistant.Core.ModelProtocol
                 root = (JObject)root["response"];
             }
             var action = root["action"] != null && root["action"].Type == JTokenType.String ? (string)root["action"] : null;
+            if (!reflectionEnabled && action == ConversationResponse.ReflectionAction)
+                return Fail(ConversationResponseError.ReflectionDisabled,
+                    "Reflection is disabled for this run. Only execute and finish are available.");
             string specialized;
             switch (action)
             {
                 case ConversationResponse.ExecuteAction: specialized = "tool_calls"; break;
                 case ConversationResponse.ReflectionAction: specialized = "decision"; break;
                 case ConversationResponse.FinishAction: specialized = "results"; break;
-                default: return Fail(ConversationResponseError.InvalidAction, "action must be execute, reflection or finish.");
+                default: return Fail(ConversationResponseError.InvalidAction, reflectionEnabled
+                    ? "action must be execute, reflection or finish." : "action must be execute or finish.");
             }
             var unsupported = root.Properties().FirstOrDefault(property =>
                 property.Name != "action" && property.Name != "reason" && property.Name != "message" && property.Name != specialized &&

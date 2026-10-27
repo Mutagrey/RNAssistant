@@ -122,7 +122,8 @@ namespace RNAssistant.Office.Services
             try
             {
                 return await _modelSession.PrepareRequestAsync(request.StepId,
-                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog)),
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_catalog),
+                        reflectionEnabled: request.ReflectionLimit != 0),
                     cancellationToken, ModelProtocolWire.RuntimeFeedback(request)).ConfigureAwait(false);
             }
             finally { _pendingMessageUpdates.AddRange(_session.Messages.Skip(firstMessage)); }

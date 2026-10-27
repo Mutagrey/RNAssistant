@@ -221,7 +221,7 @@ namespace RNAssistant.Core.ModelProtocol
         EmptyExecuteCalls, TooManyCalls, InvalidToolCall, MissingDecision, MissingFinishResults,
         InvalidFinishResults, InvalidAssessment, DuplicateEvidence, InvalidContext,
         UnknownTool, SchemaNotLoaded, InvalidToolSchema, InvalidArguments, InvalidBatch,
-        EmptyFinishMessage, InvalidOutcome, ContradictoryOutcome
+        EmptyFinishMessage, InvalidOutcome, ContradictoryOutcome, ReflectionDisabled
     }
 
     public sealed class ConversationResponseParseResult
@@ -258,6 +258,7 @@ namespace RNAssistant.Core.ModelProtocol
                 case ConversationResponseError.EmptyFinishMessage: return "empty_finish_message";
                 case ConversationResponseError.InvalidOutcome: return "invalid_outcome";
                 case ConversationResponseError.ContradictoryOutcome: return "contradictory_outcome";
+                case ConversationResponseError.ReflectionDisabled: return "reflection_disabled";
                 case ConversationResponseError.EmptyExecuteCalls: return "empty_execute_calls";
                 case ConversationResponseError.TooManyCalls: return "too_many_calls";
                 case ConversationResponseError.InvalidToolCall: return "invalid_tool_call";

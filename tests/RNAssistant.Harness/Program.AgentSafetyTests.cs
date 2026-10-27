@@ -1017,7 +1017,7 @@ namespace RNAssistant.Harness
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
             AssertTrue(result.Failure == null, "explicit schema rejection during repair permits the one local fallback");
             AssertEqual("json_schema,json_schema,json_object", string.Join(",", formats), "fallback does not consume a protocol response attempt");
-            AssertEqual(prompts[1], JsonConvert.SerializeObject(ModelProtocolWire.ProjectSchemaGuidance(JsonConvert.DeserializeObject<ChatMessage[]>(prompts[2]))),
+            AssertEqual(prompts[1], JsonConvert.SerializeObject(ModelProtocolWire.ProjectGuidance(JsonConvert.DeserializeObject<ChatMessage[]>(prompts[2]))),
                 "fallback restores full format guidance on the same frozen repair prompt");
             AssertEqual("Accepted after fallback.", result.Response.Message, "the second protocol response can accept");
         }
@@ -1210,7 +1210,7 @@ namespace RNAssistant.Harness
                     new ChatMessage { Role = source[0].Role, Content = "Projected strict guidance." },
                     source[1]
                 };
-                var wire = ModelProtocolWire.ProjectSchemaGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages));
+                var wire = ModelProtocolWire.ProjectGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages));
                 var reserve = ModelContextBudget.ContinuationReserveTokens(request.Settings);
                 var budget = ModelContextBudget.InputBudgetTokens(request.Settings);
                 AssertTrue(ModelContextBudget.EstimateAdmittedRequestTokens(request.AcceptedMessages,

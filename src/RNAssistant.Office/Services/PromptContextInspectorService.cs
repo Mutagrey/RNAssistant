@@ -131,7 +131,8 @@ namespace RNAssistant.Office.Services
                 skillSnapshot, ResourceStateProvider.CaptureSchemas(resources), session.Revision);
             var capabilityCatalog = toolPack.CapabilityContext(enabledSkills, runnableTools);
             var preparation = new ModelRequestPreparation(settings, runnableTools,
-                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)),
+                new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog),
+                    reflectionEnabled: settings.MaxConsecutiveReflections > 0),
                 ConversationPromptComposer.ProjectJsonSchemaMessages);
             var options = preparation.Options;
             options.ReasoningEnabled = previewSession.ReasoningEnabled;

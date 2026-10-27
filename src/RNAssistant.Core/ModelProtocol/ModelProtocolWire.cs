@@ -28,11 +28,20 @@ namespace RNAssistant.Core.ModelProtocol
             "Outcome and result assessments are model claims; runtime checks evidence independently. " +
             "If indispensable user input is needed, choose execute with the available question tool. Continue feasible authorized work before finishing.";
 
+        private const string ReflectionInstruction =
+            "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. ";
+        private const string SchemaReflectionInstruction =
+            "Choose reflection only to settle uncertainty within the remaining allowance, then act on the decision. ";
+        private const string ReflectionExample =
+            "{\"action\":\"reflection\",\"reason\":\"Choose the approach.\",\"decision\":\"Read the exact procedure before patching.\",\"message\":\"\"}\n";
+        private const string DisabledReflectionInstruction =
+            "Only execute and finish are available. Reflection is disabled for this run. ";
+
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last. " +
             "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
             "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns IDs; E1 labels an operation/outcome, R1 a resource and R1@v2 an observed version. Resource labels are not evidence of execution or tool arguments. Historical calls may include runtime-added id E1, but new calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
-            "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. " +
+            ReflectionInstruction +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has summary, evidence (short execution references such as E1 from terminal results of this run), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             "Without accepted calls results may be empty. After accepted calls include results and at least one real terminal reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
             "execute forbids decision/results/outcome; reflection forbids tool_calls/results/outcome; finish forbids tool_calls/decision. No extra root fields. " +
@@ -41,14 +50,14 @@ namespace RNAssistant.Core.ModelProtocol
         public const string JsonObjectGuidance = ActionGuidance + "\n" +
             "Shape examples only (TOOL_NAME and FIELD are placeholders, not callable names or arguments):\n" +
             "{\"action\":\"execute\",\"reason\":\"Inspect the source.\",\"tool_calls\":[{\"name\":\"TOOL_NAME\",\"arguments\":{\"FIELD\":\"value\"}}],\"message\":\"I will inspect the source first.\"}\n" +
-            "{\"action\":\"reflection\",\"reason\":\"Choose the approach.\",\"decision\":\"Read the exact procedure before patching.\",\"message\":\"\"}\n" +
+            ReflectionExample +
             "{\"action\":\"finish\",\"reason\":\"The direct question is answered.\",\"outcome\":\"completed\",\"results\":[],\"message\":\"Answer to the user.\"}\n" +
             "After tool calls, include result claims citing real terminal IDs instead of empty results.";
 
         public const string SchemaGuidance =
             "Return the supplied json_schema exactly: the response property contains the conversation-response-v8 decision. " +
             "Choose execute when a useful authorized tool step remains; batch only independent local reads. " +
-            "Choose reflection only to settle uncertainty within the remaining allowance, then act on the decision. " +
+            SchemaReflectionInstruction +
             "Choose finish only to deliver the answer or honest outcomes now. After tool calls cite their short execution references (E1, E2) from terminal results of this run. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +
             "Runtime assigns call IDs; E1 labels an operation/outcome, R1@v2 an observed resource version, never a tool argument or finish evidence. Ask indispensable questions through the question tool. Follow the current REFLECTION_BUDGET. " +
@@ -63,6 +72,18 @@ namespace RNAssistant.Core.ModelProtocol
             "On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. " +
             "Use message=\"\" for routine execute/reflection continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. " +
             "For finish, give a nonblank final answer/result, concise explanation of the conclusion and any limitations; no questions to the user or offers to continue. Give decision reasons, not private reasoning or invented findings.";
+
+        public static string ResponseGuidance(bool schemaTransport, bool reflectionEnabled)
+        {
+            if (reflectionEnabled) return schemaTransport ? SchemaGuidance : JsonObjectGuidance;
+            // Transform only these owned constants, never arbitrary user/history text.
+            return schemaTransport ? SchemaGuidance.Replace(SchemaReflectionInstruction, DisabledReflectionInstruction) :
+                JsonObjectGuidance.Replace(ReflectionInstruction, DisabledReflectionInstruction)
+                    .Replace(ReflectionExample, string.Empty).Replace("reflection forbids tool_calls/results/outcome; ", string.Empty);
+        }
+
+        public static string MessageGuidanceFor(bool reflectionEnabled)
+        { return reflectionEnabled ? MessageGuidance : MessageGuidance.Replace("execute/reflection", "execute"); }
 
         public static ConversationResponseParseResult Parse(string content, IEnumerable<ToolCatalogEntry> callableTools,
             IEnumerable<ToolCatalogEntry> runnableCatalog, ModelProtocolCallContext context, bool schemaTransport = false)

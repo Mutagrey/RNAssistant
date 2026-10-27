@@ -64,6 +64,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.runNotice(failed).text, runView.failureReasonLabel("provider"),
     "all chat surfaces use the same terminal failure text");
   assert.match(runView.failureReasonLabel("reflection_limit"), /промежуточных решений/);
+  assert.match(runView.failureReasonLabel("ReflectionDisabled"), /Рефлексия отключена.*корректировка не запрашивалась/);
   assert.match(runView.failureReasonLabel("repeated_tool_no_progress"), /отклонённые действия/);
   assert.equal(runView.runNotice(runView.normalize(state("completed"))), null);
   assert.equal(runView.sessionRevision({ sessionRevision: 0 }), 0);

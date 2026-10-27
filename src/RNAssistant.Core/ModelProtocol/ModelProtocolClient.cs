@@ -66,7 +66,7 @@ namespace RNAssistant.Core.ModelProtocol
                         var strict = string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal);
                         wireMessages = strict && request.ProjectJsonSchemaMessages != null
                             ? request.ProjectJsonSchemaMessages(attemptMessages) : attemptMessages;
-                        if (strict) wireMessages = ModelProtocolWire.ProjectSchemaGuidance(wireMessages);
+                        wireMessages = ModelProtocolWire.ProjectGuidance(wireMessages, strict, request.CallContext.ReflectionEnabled);
                         if (request.ProjectReferences != null) wireMessages = request.ProjectReferences(wireMessages);
                         options.TraceMessageContentChanged = ChangedWireMessages(attemptMessages, wireMessages);
                         string budgetError;
@@ -149,6 +149,9 @@ namespace RNAssistant.Core.ModelProtocol
                     // repair instruction count total protocol responses, starting at one.
                     TraceRejected(options, completion, parsed.ErrorCode + ": " + lastError, attempt - 1, progress);
                     cancellationToken.ThrowIfCancellationRequested();
+                    if (parsed.ErrorKind == ConversationResponseError.ReflectionDisabled)
+                        return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ReflectionDisabled,
+                            "Рефлексия отключена для этого запуска, но модель вернула reflection. Ответ отклонён без запроса на корректировку."), contextUsage);
                 }
                 if (lastTruncated)
                     return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.OutputTruncated,

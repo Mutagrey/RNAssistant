@@ -65,7 +65,7 @@ No legacy outcome is inferred from text or results.
 writer and format repair. Default Agent, Chat, Plan, Office editable-prompt
 composition and Workspace/CLI use it. `json_schema` uses an explicit transport
 wrapper: `{"response": <v8 decision>}`. Its root is a closed object with the one
-required `response` property; the three-way `anyOf` lives inside that property.
+required `response` property; the union of currently available actions lives inside it.
 Strict parsing requires the wrapper and unwraps it exactly once. Accepted history
 keeps the inner v8 decision; raw traffic diagnostics keep the actual transport.
 `json_object` uses the unwrapped decision. A configured, explicit provider fallback
@@ -73,7 +73,7 @@ switches both parsing and prompt guidance to that unwrapped transport. Neither m
 bypasses local parser/evidence/kernel validation; duplicate evidence IDs are checked
 locally rather than through an unsupported `uniqueItems` keyword.
 
-JSON-object prompts include three short shape examples and exact argument schemas.
+JSON-object prompts include short shape examples for available actions and exact argument schemas.
 Strict prompts retain action/evidence/permission semantics without repeating the
 format examples or tool argument schemas. Argument descriptions stay in the supplied
 schema; schema types alone do not explain their meaning. Both full and projected
@@ -139,11 +139,21 @@ delivered excerpt. The label itself includes neither the range nor the text.
 Kernel accepts `execute` calls before dispatch and pins their runtime ID,
 step and model-attempt origin. Reflection is persisted as a no-call accepted
 decision. Settings → Agent → **Глубина рефлексии** (`MaxConsecutiveReflections`,
-CLI `--max-reflections`) accepts 0–20, default 2; 0 disables reflection acceptance.
-The value is frozen in the run limits, including restart/confirmation. Only accepted
-reflection decisions increment it. Terminal tool results and fresh user input reset
-it. `REFLECTION_BUDGET` tells the model the remaining allowance before every step;
-at zero it requests `execute` or an honest `finish`. An additional valid reflection
+CLI `--max-reflections`) accepts 0–20, default 2. With 0, `json_schema` excludes the
+`reflection` branch and `decision` field: only `execute` and `finish` remain (only
+`finish` if no tools are callable). Both transports remove reflection instructions
+and examples and explicitly state that it is disabled. This projection also applies
+to format repair, explicit `json_object` fallback and context budget/Inspector.
+`json_object` constrains JSON syntax, not action selection. If a provider nevertheless
+returns a reflection, the runtime fails with `ReflectionDisabled` immediately,
+without a correction request. Existing accepted reflection history is unchanged.
+Fresh input or tool results cannot enable reflection at 0; save a different setting
+before starting a new run to enable it again.
+The limit is frozen for the run, including restart/confirmation. With a positive
+limit, only accepted reflection decisions increment the consecutive counter;
+terminal tool results and fresh user input reset that counter. `REFLECTION_BUDGET`
+tells the model the remaining allowance before every step; at zero remaining it
+requests `execute` or an honest `finish`. An additional valid reflection
 is rejected with one semantic correction opportunity; another reflection then ends
 with `reflection_limit`. Format repair, provider retries and schema fallback do not
 spend this allowance or that semantic opportunity. The separate overall iteration

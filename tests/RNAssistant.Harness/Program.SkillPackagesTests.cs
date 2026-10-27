@@ -126,7 +126,7 @@ namespace RNAssistant.Harness
             var request = preparation.CreateRequest(snapshot, tools, notice => snapshot.Messages);
             AssertTrue(ReferenceEquals(request.Options, preparation.Options), "dispatch uses admitted schema options");
             AssertTrue(request.CallableTools.Any(tool => tool.Id == edit.Id), "selected skill is in the actual request");
-            var wire = ModelProtocolWire.ProjectSchemaGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages));
+            var wire = ModelProtocolWire.ProjectGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages));
             AssertEqual(ModelContextBudget.EstimateAdmittedRequestTokens(wire, request.Options, settings,
                 ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings), ModelContextBudget.ContinuationReserveTokens(settings)),
                 preparation.EstimateAdmittedTokens(snapshot.Messages), "admission counts the exact dispatched projection");

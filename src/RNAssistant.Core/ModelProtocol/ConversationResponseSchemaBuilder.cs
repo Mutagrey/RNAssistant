@@ -38,9 +38,10 @@ namespace RNAssistant.Core.ModelProtocol
                 var calls = reads.Count > 0 && singleCalls.Count > 0
                     ? new JObject { ["anyOf"] = new JArray(CallArray(singleCalls, 1), CallArray(reads, MaximumToolCalls)) }
                     : reads.Count > 0 ? CallArray(reads, MaximumToolCalls) : CallArray(singleCalls, 1);
-                branches.Add(Branch(ConversationResponse.ExecuteAction, "tool_calls", calls));
+                branches.Add(Branch(ConversationResponse.ExecuteAction, "tool_calls", calls, context.ReflectionEnabled));
             }
-            branches.Add(Branch(ConversationResponse.ReflectionAction, "decision", NonblankString()));
+            if (context.ReflectionEnabled)
+                branches.Add(Branch(ConversationResponse.ReflectionAction, "decision", NonblankString(), true));
             branches.Add(Branch(ConversationResponse.FinishAction, "results", new JObject
             {
                 ["type"] = "array",
@@ -58,7 +59,7 @@ namespace RNAssistant.Core.ModelProtocol
                         ["enum"] = new JArray("satisfied", "partially_satisfied", "unverified", "not_satisfied")
                     }
                 })
-            }));
+            }, context.ReflectionEnabled));
             // Structured Outputs requires an object root; the closed action union
             // lives inside an explicit transport envelope, never a permissive root.
             return ClosedObject(new JObject
@@ -67,7 +68,7 @@ namespace RNAssistant.Core.ModelProtocol
             }).ToString(Formatting.None);
         }
 
-        private static JObject Branch(string action, string field, JObject schema)
+        private static JObject Branch(string action, string field, JObject schema, bool reflectionEnabled)
         {
             var properties = new JObject
             {
@@ -80,7 +81,7 @@ namespace RNAssistant.Core.ModelProtocol
                     ["description"] = ModelProtocolWire.FinishGuidance };
             properties[field] = schema;
             var message = action == ConversationResponse.FinishAction ? NonblankString() : new JObject { ["type"] = "string" };
-            message["description"] = ModelProtocolWire.MessageGuidance;
+            message["description"] = ModelProtocolWire.MessageGuidanceFor(reflectionEnabled);
             properties["message"] = message;
             return ClosedObject(properties);
         }

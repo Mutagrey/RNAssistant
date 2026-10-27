@@ -373,7 +373,7 @@ namespace RNAssistant.Harness
                 "provenance follows the serialized strict, repair and fallback attempts");
             AssertEqual(ContextPresentationKind.Full, options.TraceContextReceipt.Messages[0].Presentation,
                 "wire attribution does not mutate the frozen compiler receipt");
-            AssertEqual(repairMessages[1], ModelProtocolWire.ProjectSchemaGuidance(new[] {
+            AssertEqual(repairMessages[1], ModelProtocolWire.ProjectGuidance(new[] {
                 new ChatMessage { Role = "user", ProtocolMessage = true, Content = repairMessages[2] } })[0].Content,
                 "fallback restores full format guidance on the same repair instruction");
             AssertContains(wirePrompts[0], "\"description\"", "strict prompt retains descriptions");
@@ -491,7 +491,7 @@ namespace RNAssistant.Harness
                                 ? ConversationPromptComposer.ProjectJsonSchemaMessages(compiled, callable,
                                     options.ResponseSchemaJson)
                                 : compiled;
-                            if (mode == AgentResponseModes.JsonSchema) wireMessages = ModelProtocolWire.ProjectSchemaGuidance(wireMessages);
+                            if (mode == AgentResponseModes.JsonSchema) wireMessages = ModelProtocolWire.ProjectGuidance(wireMessages);
                             var api = new LlmMessageBuilder().Build(wireMessages, settings, options);
                             var body = LlmClient.BuildRequestBody(settings, api.Messages, api.EstimatedPromptTokens,
                                 options);

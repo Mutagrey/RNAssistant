@@ -168,6 +168,9 @@ namespace RNAssistant.Core.Agent
                 }
                 if (response.Action == ConversationResponse.ReflectionAction)
                 {
+                    if (state.Limits.MaxConsecutiveReflections == 0)
+                        return await FinishAsync(state, RunLifecycle.Failed, "ReflectionDisabled",
+                            "Рефлексия отключена для этого запуска, но модель вернула reflection. Ответ отклонён без запроса на корректировку.").ConfigureAwait(false);
                     if (state.ReflectionFeedbackIssued)
                         return await FinishAsync(state, RunLifecycle.Failed, "reflection_limit",
                             "Reflection limit reached without a new tool result or user input.").ConfigureAwait(false);

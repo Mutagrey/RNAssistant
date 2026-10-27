@@ -359,7 +359,8 @@ namespace RNAssistant.Office.Services
             ModelProtocolCallContext callContext = null)
         {
             var preparation = new ModelRequestPreparation(_settings, tools,
-                callContext ?? new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog)),
+                callContext ?? new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(_runnableCatalog),
+                    reflectionEnabled: (_session.LastRun?.KernelState?.Limits.MaxConsecutiveReflections ?? _settings.MaxConsecutiveReflections) > 0),
                 ConversationPromptComposer.ProjectJsonSchemaMessages);
             preparation.Options.ReasoningEnabled = _session.ReasoningEnabled;
             preparation.Options.RunCache = _runCache;

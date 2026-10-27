@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Нулевая глубина исключает reflection из запроса — 2026-10-27
+
+Owner: Core ModelProtocol / AgentKernel; Office и Workspace request preparation.
+`MaxConsecutiveReflections=0` теперь удаляет reflection из strict schema, встроенных
+инструкций и примеров обоих transport modes, включая repair и явный fallback.
+Inspector и budget используют ту же проекцию. Значение берётся из frozen run limits;
+для изменения нужен новый запуск. При запрещённом action, даже без остальных полей,
+runtime возвращает `ReflectionDisabled` без запроса на корректировку. История ранее
+принятых решений и поведение положительного лимита сохраняются.
+
+Targeted checks: 9 v8 recovery, 17 model protocol, Inspector и schema/fallback,
+179 codec cases / 165 independent JSON Schema cases, CLI HTTP response-mode smoke
+с глубиной 0 и 7 UI projection checks — pass. Windows/Office/WebView2 и соблюдение
+схемы реальным провайдером остаются открытым evidence; `json_object` сам по себе
+не ограничивает набор действий модели.
+
 ## Workspace восстанавливает receipt после потери ответа/reload — 2026-10-27
 
 Owner: Application input delivery / shared workspace draft and composer.

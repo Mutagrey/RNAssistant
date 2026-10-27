@@ -8,11 +8,14 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ModelProtocolCallContext
     {
         public IReadOnlyList<string> SequentialBatchToolIds { get; private set; }
+        public bool ReflectionEnabled { get; private set; }
         public string Error { get; private set; }
         public bool IsComplete { get { return string.IsNullOrEmpty(Error); } }
 
-        public ModelProtocolCallContext(IEnumerable<string> sequentialBatchToolIds, string error = null)
+        public ModelProtocolCallContext(IEnumerable<string> sequentialBatchToolIds, string error = null,
+            bool reflectionEnabled = true)
         {
+            ReflectionEnabled = reflectionEnabled;
             Error = !string.IsNullOrWhiteSpace(error) ? error
                 : sequentialBatchToolIds == null ? "Model protocol sequential-batch context is incomplete." : null;
             SequentialBatchToolIds = sequentialBatchToolIds == null ? null : Snapshot(sequentialBatchToolIds);

@@ -90,13 +90,23 @@ def main():
                 assert result["reason"] == "model_finish" and result["action"] == "finish", result
                 assert requests[-1].get("response_format", {}).get("type") == mode, requests[-1]
                 assert requests[-1]["messages"][0]["role"] == role, requests[-1]
-                # json_object has no provider-side schema. Both modes receive
-                # the same canonical v8 guidance.
+                # Depth zero removes reflection from the actual wire contract.
                 prompt = requests[-1]["messages"][0]["content"]
                 assert "conversation-response-v8" in prompt and "Choose execute" in prompt \
-                    and "Choose reflection" in prompt and "Choose finish" in prompt \
+                    and "Choose reflection" not in prompt and "Choose finish" in prompt \
+                    and "Reflection is disabled for this run" in prompt \
+                    and '"action":"reflection"' not in prompt and "execute/reflection" not in prompt \
                     and "conversation-response-v7" not in prompt, \
                     "Initial model context lacks the canonical v8 envelope"
+                if mode == "json_schema":
+                    schema = requests[-1]["response_format"]["json_schema"]["schema"]
+                    Draft202012Validator.check_schema(schema)
+                    actions = {branch["properties"]["action"]["const"]
+                               for branch in schema["properties"]["response"]["anyOf"]}
+                    assert actions == {"execute", "finish"}, actions
+                    assert not Draft202012Validator(schema).is_valid({"response": {
+                        "action": "reflection", "reason": "Choose an approach.",
+                        "decision": "Inspect first.", "message": ""}})
                 inspect = cli("inspect", "--workspace", str(workspace),
                               "--session", result["SessionId"])
                 assert inspect.returncode == 0, inspect.stderr

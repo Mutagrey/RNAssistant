@@ -1911,7 +1911,7 @@ namespace RNAssistant.Harness
             // Match ModelProtocolClient's actual strict wire projection, not the
             // full accepted prompt retained for a possible json_object fallback.
             var messages = request.Options.ResponseFormat == LlmResponseFormats.JsonSchema
-                ? ModelProtocolWire.ProjectSchemaGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages))
+                ? ModelProtocolWire.ProjectGuidance(request.ProjectJsonSchemaMessages(request.AcceptedMessages))
                 : request.AcceptedMessages;
             var settings = request.Settings;
             var messageTokens = ModelContextBudget.EstimateMessagesTokens(messages, settings);

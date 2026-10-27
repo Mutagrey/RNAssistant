@@ -17,7 +17,7 @@ namespace RNAssistant.Core.ModelProtocol
                     (context == null ? "missing context" : context.Error));
             if (callableTools == null || runnableCatalog == null)
                 return ConversationResponseParseResult.Fail(ConversationResponseError.InvalidContext, "v8 parsing requires explicit callable/catalog and sequential-batch context.");
-            var parsed = ConversationResponseJson.Read(content, schemaTransport);
+            var parsed = ConversationResponseJson.Read(content, schemaTransport, context.ReflectionEnabled);
             if (!parsed.Success) return parsed;
 
             var knownTools = callableTools.Where(tool => tool != null && !string.IsNullOrWhiteSpace(tool.Id))

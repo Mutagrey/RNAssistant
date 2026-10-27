@@ -54,7 +54,8 @@ namespace RNAssistant.Core.ModelProtocol
         PromptBudgetExceeded,
         Provider,
         Cancelled,
-        Infrastructure
+        Infrastructure,
+        ReflectionDisabled
     }
 
     public sealed class ModelProtocolFailure

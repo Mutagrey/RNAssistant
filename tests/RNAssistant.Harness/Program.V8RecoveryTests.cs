@@ -74,21 +74,38 @@ namespace RNAssistant.Harness
         {
             AssertEqual(2, JsonConvert.DeserializeObject<AgentRunLimits>("{\"MaxIterations\":10,\"MaxToolSteps\":10}").MaxConsecutiveReflections,
                 "an older v8 checkpoint retains its previous depth");
+            foreach (var responseMode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
             foreach (var depth in new[] { 0, 1, 3 })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
-                var settings = new AppSettings { MaxConsecutiveReflections = depth, MaxAgentIterations = 10, SmartChatTitles = false };
+                var settings = new AppSettings { MaxConsecutiveReflections = depth, MaxAgentIterations = 10,
+                    SmartChatTitles = false, AgentResponseMode = responseMode };
                 AssertEqual(depth, settings.Clone().MaxConsecutiveReflections, "settings clone preserves zero/nondefault depth");
                 var controls = SettingsControlsDto.From(settings);
                 AssertEqual(depth, controls.ApplyTo(settings).MaxConsecutiveReflections, "UI settings roundtrip preserves depth");
+                var storage = new SettingsService(FixturePaths.Value);
+                storage.Save(controls.ApplyTo(settings));
+                settings = new SettingsService(FixturePaths.Value).Load();
+                AssertEqual(depth, settings.MaxConsecutiveReflections, "saved settings retain zero/nondefault depth after reopen");
+                AssertEqual(responseMode, settings.AgentResponseMode, "saved settings retain the selected response mode");
                 var script = new Queue<string>();
                 for (var index = 0; index < depth; index++) script.Enqueue(RecoveryReflection());
-                script.Enqueue("{\"action\":\"reflection\",\"decision\":\"invalid\",\"message\":\"\"}");
-                script.Enqueue(RecoveryReflection()); // One over-limit proposal receives semantic feedback.
-                script.Enqueue("{\"action\":\"finish\",\"outcome\":\"completed\",\"results\":[],\"message\":\"invalid\"}");
+                if (depth > 0)
+                {
+                    script.Enqueue("{\"action\":\"reflection\",\"decision\":\"invalid\",\"message\":\"\"}");
+                    script.Enqueue(RecoveryReflection()); // One over-limit proposal receives semantic feedback.
+                    script.Enqueue("{\"action\":\"finish\",\"outcome\":\"completed\",\"results\":[],\"message\":\"invalid\"}");
+                }
                 script.Enqueue(RecoveryFinish());
                 var requests = new List<string>(); var activities = new List<ChatActivity>();
                 var session = NewSession(adapter);
                 var service = CreateConversationRunService(adapter, executor, (config, messages, options, stream, token) => {
+                    AssertEqual(responseMode, options.ResponseFormat, "reflection setting applies to the selected wire format");
+                    if (depth == 0)
+                    {
+                        AssertDisabledReflectionGuidance(messages.First().Content);
+                        if (options.ResponseSchemaJson != null)
+                            AssertTrue(!options.ResponseSchemaJson.Contains("reflection"), "disabled action is absent from the actual schema");
+                    }
                     requests.Add(string.Join("\n", messages.Select(message => message.Content)));
                     return Task.FromResult(new LlmCompletionResult { Content = script.Dequeue(), ReasoningContent = "Saved reasoning.", ReasoningTokens = 7 });
                 });
@@ -96,11 +113,13 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToArray(),
                     (phase, text, activity) => { if (phase == "reflection") activities.Add(activity); }).GetAwaiter().GetResult();
                 AssertEqual("model_finish", result.RunViewState.Reason, "format repairs preserve the correction opportunity");
-                AssertEqual(depth + 2, session.LastRun.IterationsUsed, "inner format retries do not consume kernel iterations or reflection depth");
+                AssertEqual(depth == 0 ? 1 : depth + 2, session.LastRun.IterationsUsed, "inner format retries do not consume kernel iterations or reflection depth");
                 AssertEqual(depth, session.LastRun.KernelState.ConsecutiveReflections, "only accepted reflections count");
                 AssertEqual(depth, session.LastRun.KernelState.Limits.MaxConsecutiveReflections, "run freezes selected depth");
                 AssertContains(requests[depth], "0 remaining", "the request at the cap already asks execute/finish");
-                AssertContains(requests[depth + 3], "reflection_limit_feedback", "format repair preserves semantic correction");
+                if (depth == 0) AssertContains(requests[0], "Reflection is disabled for this run", "disabled reflection is explicit before the first attempt");
+                if (depth > 0) AssertContains(requests[depth + 3], "reflection_limit_feedback", "format repair preserves semantic correction");
+                else AssertEqual(1, requests.Count, "disabled reflection needs no correction round trip");
                 AssertEqual(depth, activities.Count, "one typed live step per accepted reflection");
                 AssertTrue(activities.All(activity => activity != null && !string.IsNullOrEmpty(activity.StepId) && activity.Status == "completed"),
                     "accepted reflections are terminal step activities, not generic thinking notices");
@@ -111,6 +130,7 @@ namespace RNAssistant.Harness
                     "accepted reflection reasoning survives reopen");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("invalid")), "rejected formats remain out of accepted history");
             });
+            foreach (var responseMode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var session = NewSession(adapter); var requests = new List<string>();
                 var service = CreateConversationRunService(adapter, executor, (config, messages, options, stream, token) => {
@@ -118,14 +138,88 @@ namespace RNAssistant.Harness
                     return Task.FromResult(new LlmCompletionResult { Content = RecoveryReflection() });
                 });
                 var result = service.ExecuteAsync(ChatModes.Agent, "Answer directly.", session, NewContext(adapter),
-                    new AppSettings { MaxConsecutiveReflections = 0, MaxAgentIterations = 5, SmartChatTitles = false },
+                    new AppSettings { MaxConsecutiveReflections = 0, MaxAgentIterations = 5, SmartChatTitles = false,
+                        AgentResponseMode = responseMode },
                     OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToArray(), null).GetAwaiter().GetResult();
-                AssertEqual("reflection_limit", result.RunViewState.Reason, "a second over-limit reflection stops the run explicitly");
-                AssertEqual(2, requests.Count, "one semantic correction, no silent loop");
-                AssertContains(requests[1], "reflection_limit_feedback", "model receives correction before terminal limit");
-                AssertContains(requests[1], "Choose execute or finish now", "correction states available actions");
+                AssertEqual("ReflectionDisabled", result.RunViewState.Reason, "disabled reflection fails explicitly");
+                AssertEqual(1, requests.Count, "disabled reflection never requests a correction");
+                AssertContains(requests[0], "Choose execute or finish now", "initial request states available actions");
                 AssertEqual(0, session.LastRun.KernelState.ConsecutiveReflections, "over-limit proposals were never accepted");
             });
+        }
+
+        private static void AssertDisabledReflectionGuidance(string instruction)
+        {
+            AssertContains(instruction, "Reflection is disabled for this run", "disabled action is explicit");
+            AssertTrue(!instruction.Contains("Choose reflection") && !instruction.Contains("\"action\":\"reflection\"") &&
+                !instruction.Contains("execute/reflection") && !instruction.Contains("reflection forbids"),
+                "instructions and examples never offer the disabled action");
+        }
+
+        private static async Task V8RecoveryDisabledReflectionWire()
+        {
+            var userRole = ModelProtocolWire.ProjectGuidance(new[] { new ChatMessage { Role = "user",
+                Content = AgentPromptDefaults.StructuredResponseContract + "\n\nRUNTIME_CONTEXT:\n{}\n\nUSER_REQUEST:\n" + ModelProtocolWire.JsonObjectGuidance } },
+                schemaTransport: false, reflectionEnabled: false)[0].Content;
+            AssertDisabledReflectionGuidance(userRole.Substring(0, userRole.IndexOf("\n\nRUNTIME_CONTEXT:\n", StringComparison.Ordinal)));
+            AssertTrue(userRole.EndsWith(ModelProtocolWire.JsonObjectGuidance, StringComparison.Ordinal), "user-role instruction projection preserves the request suffix");
+            foreach (var mode in new[] { "json_object", "json_schema", "fallback" })
+            {
+                var strict = mode != "json_object";
+                var request = NewProtocolRequest(2, strict);
+                request.CallContext = new ModelProtocolCallContext(new string[0], reflectionEnabled: false);
+                request.AcceptedMessages = new[] {
+                    new ChatMessage { Role = "system", Content = AgentPromptDefaults.StructuredResponseContract },
+                    new ChatMessage { Role = "user", Content = ModelProtocolWire.JsonObjectGuidance },
+                    new ChatMessage { Role = "assistant", ProtocolMessage = true, Content = RecoveryReflection() }
+                };
+                var preparation = new ModelRequestPreparation(request.Settings, request.CallableTools,
+                    request.CallContext, (messages, tools, schema) => messages);
+                request.Options = preparation.Options;
+                var projected = preparation.ProjectMessages(request.AcceptedMessages);
+                if (strict)
+                {
+                    var actions = JObject.Parse(request.Options.ResponseSchemaJson)["properties"]["response"]["anyOf"];
+                    AssertEqual("finish", string.Join(",", actions.Select(branch => (string)branch["properties"]["action"]["const"])),
+                        "without tools or reflection the strict schema permits only finish");
+                }
+                var calls = 0; var repairs = 0; string rejectedProposal = null;
+                var protocol = new ModelProtocolClient((settings, messages, options, progress, token) => {
+                    calls++;
+                    AssertDisabledReflectionGuidance(messages.First().Content);
+                    if (calls == 1) AssertEqual(projected[0].Content, messages.First().Content, "admission and dispatch use the same projected instructions");
+                    AssertTrue(messages.Any(message => message.Role == "user" && message.Content == ModelProtocolWire.JsonObjectGuidance),
+                        "user data is never rewritten by instruction projection");
+                    AssertTrue(messages.Any(message => message.Role == "assistant" && message.Content == RecoveryReflection()),
+                        "previously accepted reflection history is retained");
+                    var repair = messages.LastOrDefault(message => (message.Content ?? "").StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal));
+                    if (repair != null)
+                    {
+                        repairs++;
+                        AssertDisabledReflectionGuidance((string)JObject.Parse(repair.Content.Substring("FORMAT_REPAIR:\n".Length))["instruction"]);
+                    }
+                    if (mode == "fallback" && calls == 2)
+                        throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported during repair");
+                    var content = rejectedProposal ?? (calls == 1
+                        ? "{\"action\":\"finish\",\"reason\":\"Answer\",\"outcome\":\"completed\",\"results\":[],\"message\":\"\"}" : RecoveryFinish());
+                    return Task.FromResult(new LlmCompletionResult { Content = options.ResponseFormat == LlmResponseFormats.JsonSchema
+                        ? SchemaTransport(JObject.Parse(content)).ToString(Formatting.None) : content });
+                });
+                var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
+                AssertTrue(result.Response != null, "ordinary format repair still works with reflection disabled: " + mode);
+                AssertEqual(mode == "fallback" ? 3 : 2, calls, "bounded repair and explicit fallback");
+                AssertEqual(mode == "fallback" ? 2 : 1, repairs, "repair instructions retain disabled reflection across fallback");
+                foreach (var proposal in new[] { RecoveryReflection(), "{\"action\":\"reflection\"}" })
+                {
+                    rejectedProposal = proposal;
+                    var before = calls;
+                    result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
+                    AssertEqual(ModelProtocolFailureKind.ReflectionDisabled, result.Failure.Kind, "provider cannot re-enable disabled action even with missing fields");
+                    AssertEqual(before + 1, calls, "unexpected reflection produces no correction request");
+                }
+                AssertEqual("action must be execute or finish.", ModelProtocolWire.Parse("{\"action\":\"other\"}",
+                    request.CallableTools, request.RunnableCatalog, request.CallContext).Error, "invalid-action correction never offers disabled reflection");
+            }
         }
 
         private static void V8RecoveryExecuteReasoning()

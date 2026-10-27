@@ -135,6 +135,7 @@ namespace RNAssistant.Harness
 
         private static void PromptContextInspectorMatchesSelectedSkillStrictRequest()
         {
+            foreach (var depth in new[] { 0, 2 })
             WithTempPaths(paths =>
             {
                 var adapter = FakeOfficeAdapter.ForHost("Word");
@@ -149,7 +150,7 @@ namespace RNAssistant.Harness
                 var pack = ToolPackSnapshotFactory.Capture(ChatModes.Agent, adapter.HostName, runnableCatalog);
                 SkillTaskService.Select(session, skill.Id, publication, pack, "load-skill");
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
-                    ContextWindowOverrideTokens = 32768 };
+                    ContextWindowOverrideTokens = 32768, MaxConsecutiveReflections = depth };
 
                 var result = new PromptContextInspectorService(adapter, paths).Inspect(session,
                     NewContext(adapter), settings, catalog, new[] { skill }, new ChatAttachment[0],
@@ -161,7 +162,13 @@ namespace RNAssistant.Harness
                 }).ToArray();
                 var options = ModelProtocolWire.CreateRequestOptions(settings.AgentResponseMode,
                     runnableCatalog,
-                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog)));
+                    new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(runnableCatalog), reflectionEnabled: depth > 0));
+                if (depth == 0)
+                {
+                    AssertDisabledReflectionGuidance(wireMessages[0].Content);
+                    AssertTrue(!((string)raw["requestOptions"]["responseSchemaJson"]).Contains("reflection"),
+                        "Inspector uses the same disabled reflection schema as dispatch");
+                }
                 AssertTrue(result.ResourceContextReceipt.Arsenal.Tools.Any(item => item.Id == dependency.Id),
                     "selected skill dependency enters the compiled request arsenal: " +
                     Newtonsoft.Json.JsonConvert.SerializeObject(result.ResourceContextReceipt.Arsenal.Selected));
