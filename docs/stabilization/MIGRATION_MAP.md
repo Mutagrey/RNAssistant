@@ -30,6 +30,9 @@ orchestration; оба окружения переключаются в одно�
 удалены. Следующие строки обозначают оставшуюся orchestration, а не повторную
 реализацию этих трёх частей. Office lease всё ещё лежит в `locks/run_*.lck`,
 Workspace — в `workspaces/run-leases/*.lck`.
+Обычный Workspace submit также записывает intake/Applied через общий inbox; прямой
+append этого пути удалён. Live inbox адресуется по host/workspace/document/chat,
+поэтому совпавшие chat ID разных документов не разделяют состояние.
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |
 |---|---|---|

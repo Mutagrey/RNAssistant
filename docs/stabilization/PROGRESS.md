@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Обычный ввод Workspace переведён на общий inbox — 2026-10-27
+
+Owner: Application conversation intake. Создание run в Workspace теперь записывает
+ввод через тот же `ConversationInboxService`, что Office; после сохранения user
+message он переводит receipt в Applied через общий read-back guard. Активное
+уточнение использует тот же экземпляр inbox. Ключ live-проекции учитывает
+host/workspace/document и chat ID: одинаковые chat/operation ID в разных документах
+не смешивают ввод. Прямой Workspace append для обычного ввода удалён.
+
+Host-neutral Harness build, ранний bridge receipt, активное уточнение и проверка
+разных scope при одинаковом chat ID — pass. S1c остаётся открытым: FIFO scheduler,
+recovery и общий UI-контроллер ещё раздельны; Windows/Office/WebView2 не проверены.
+
 ## Общая граница владения запуском и уточнением — 2026-10-27
 
 Owner: Application conversation orchestration. Office и Workspace переведены на

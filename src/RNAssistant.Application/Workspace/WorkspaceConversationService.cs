@@ -35,6 +35,7 @@ namespace RNAssistant.Runtime
     {
         private readonly AppDataPaths _paths;
         private readonly ConversationLeaseService _conversationLeases;
+        private readonly ConversationInboxService _conversationInbox;
         private readonly ChatStore _chats;
         private readonly WorkspaceStore _workspaces;
         private readonly WorkspaceFileService _files;
@@ -94,6 +95,7 @@ namespace RNAssistant.Runtime
             _toolProfile = toolProfile ?? CallableToolProfile.AllDirect("workspace-direct");
             _runtimeUseLease = runtimeUseLease;
             _chats = new ChatStore(paths);
+            _conversationInbox = new ConversationInboxService(new ChatEventStoreAdapter(_chats));
             _workspaces = new WorkspaceStore(paths);
             _files = new WorkspaceFileService(paths);
             _payloads = new ChatBlobStore(paths);
@@ -566,9 +568,14 @@ namespace RNAssistant.Runtime
                     CreatedUtc = DateTime.UtcNow, DocumentRuntimeKey = workspace.WorkspaceId,
                     AcceptedRunId = runId, RequestFingerprint = fingerprint,
                     Attachments = userMessage.Attachments };
-                var inputs = new ConversationInputJournal(new ChatEventStoreAdapter(_chats));
                 cancellationToken.ThrowIfCancellationRequested();
-                var accepted = inputs.Append(session, new ConversationInputEvent { Input = input });
+                var accepted = _conversationInbox.Submit(session, input);
+                if (accepted == null)
+                {
+                    duplicate = FindAcceptedInput(session, input.OperationId, fingerprint);
+                    if (duplicate != null) return WorkspaceRunResult.AlreadyAccepted(duplicate);
+                    throw new InvalidOperationException("Accepted input has no durable receipt.");
+                }
                 var receipt = Receipt(accepted, input, false);
                 progress?.Invoke(new WorkspaceRunEvent("InputAccepted", null, null, receipt.AcceptedCursor, receipt));
                 session.LastRun = new ChatRunRecord
@@ -609,7 +616,7 @@ namespace RNAssistant.Runtime
                     ConversationCommit.RewriteHistory(editedPreviousIds, session.Messages));
                 if (drafts.Count > 0) attachmentStore.DeleteDrafts(userMessage);
                 input.Status = ConversationInputStatus.Applied; input.Revision++;
-                inputs.Append(session, new ConversationInputEvent { Input = input });
+                _conversationInbox.Applied(session, input.Id);
                 receipt = Receipt(accepted, input, true);
                 progress?.Invoke(new WorkspaceRunEvent("InputApplied", null, null,
                     ConversationEventFeed.Cursor(session), receipt));

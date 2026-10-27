@@ -235,6 +235,26 @@ namespace RNAssistant.Harness
                 finally { ConversationInboxService.ReleaseShared(paths.Root, restarted); }
             });
         }
+
+        private static void InboxScopeSeparatesIdenticalChatIds()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var excel = NewSession(FakeOfficeAdapter.ForHost("Excel"));
+                store.Save(excel);
+                var word = NewSession(FakeOfficeAdapter.ForHost("Word"));
+                word.Id = excel.Id;
+                store.Save(word);
+                var inbox = new ConversationInboxService(new ChatEventStoreAdapter(store));
+                inbox.Submit(excel, InboxInput("same", "Excel input", InputDelivery.Queue));
+                inbox.Submit(word, InboxInput("same", "Word input", InputDelivery.Queue));
+                AssertEqual("Excel input", inbox.Snapshot(excel).Items.Single().Text,
+                    "Excel input stays in its document scope");
+                AssertEqual("Word input", inbox.Snapshot(word).Items.Single().Text,
+                    "equal chat and operation IDs do not cross document scopes");
+            });
+        }
         private sealed class InboxFailingEvents : IEventStore
         {
             internal readonly IEventStore Inner;

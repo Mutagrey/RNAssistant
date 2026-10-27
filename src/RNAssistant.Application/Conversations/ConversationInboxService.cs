@@ -74,18 +74,20 @@ namespace RNAssistant.Application.Conversations
 
         internal bool HasActiveWork(string chatId)
         {
-            Inbox box;
-            lock (_sync)
-                if (!_inboxes.TryGetValue(chatId ?? string.Empty, out box)) return false;
-            lock (box.Sync) return box.Worker || box.Running;
+            List<Inbox> candidates;
+            lock (_sync) candidates = _inboxes.Values.Where(box => box.Session.Id == chatId).ToList();
+            foreach (var box in candidates)
+                lock (box.Sync) if (box.Worker || box.Running) return true;
+            return false;
         }
 
         internal Inbox Get(ChatSession session)
         {
+            var key = ScopeKey(session);
             Inbox box;
             lock (_sync)
             {
-                if (!_inboxes.TryGetValue(session.Id, out box))
+                if (!_inboxes.TryGetValue(key, out box))
                 {
                     box = new Inbox { Session = session };
                     foreach (var record in new ConversationInputJournal(_events).Read(session))
@@ -95,12 +97,20 @@ namespace RNAssistant.Application.Conversations
                         box.ViewRevision++;
                     }
                     if (box.Inputs.Any(IsPending)) { box.Paused = true; box.PauseReason = "После перезапуска"; }
-                    _inboxes.Add(session.Id, box);
+                    _inboxes.Add(key, box);
                 }
             }
             lock (box.Sync)
                 if (!box.Running && !box.Worker && session.Revision >= box.Session.Revision) box.Session = session;
             return box;
+        }
+
+        private static string ScopeKey(ChatSession session)
+        {
+            if (session == null || string.IsNullOrWhiteSpace(session.Id))
+                throw new ArgumentException("A scoped conversation is required.", nameof(session));
+            return (session.Host ?? string.Empty) + "\0" + (session.WorkspaceId ?? string.Empty) +
+                "\0" + (session.DocumentKey ?? string.Empty) + "\0" + session.Id;
         }
 
         internal void Bind(ChatSession session)
@@ -158,7 +168,7 @@ namespace RNAssistant.Application.Conversations
                 return Clone(accepted);
             }
         }
-        internal void Submit(ChatSession session, ConversationInput input)
+        internal SessionEvent Submit(ChatSession session, ConversationInput input)
         {
             var box = Get(session);
             lock (box.Sync)
@@ -167,14 +177,15 @@ namespace RNAssistant.Application.Conversations
                     throw new ArgumentException("Input requires an operation ID and request fingerprint.");
                 var accepted = box.Inputs.FirstOrDefault(i => i.Id == input.Id || i.OperationId == input.OperationId);
                 if (accepted != null)
-                { ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint); return; }
+                { ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint); return null; }
                 if (input.QuestionSetId != null && (box.Running || box.Inputs.Any(i => IsPending(i) ||
                     i.Status != ConversationInputStatus.Removed && i.AnswerRunId == input.AnswerRunId && i.QuestionSetId == input.QuestionSetId)))
                     throw new InvalidOperationException("The questions already have accepted input or the conversation has moved on.");
                 input.Revision = 1;
-                Write(box, input);
+                var fact = Write(box, input);
                 if (input.Delivery == InputDelivery.Steer) box.ExplicitSteers.Add(input.Id);
                 if (input.Delivery == InputDelivery.Steer && box.Accepting) box.Interrupt.Cancel();
+                return fact;
             }
         }
         internal void SubmitToRun(ChatSession session, string runId, ConversationInput input)
@@ -352,7 +363,7 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync) { box.Worker = false; box.ViewRevision++; }
         }
-        private void Write(Inbox box, ConversationInput input, bool? paused = null, string reason = null)
+        private SessionEvent Write(Inbox box, ConversationInput input, bool? paused = null, string reason = null)
         {
             var change = new ConversationInputEvent { Input = input, Paused = paused ?? box.Paused,
                 PauseReason = paused.HasValue ? reason : box.PauseReason };
@@ -360,6 +371,7 @@ namespace RNAssistant.Application.Conversations
             Apply(box, change);
             box.Revision = fact.Sequence;
             box.ViewRevision++;
+            return fact;
         }
         private static void Apply(Inbox box, ConversationInputEvent change)
         {

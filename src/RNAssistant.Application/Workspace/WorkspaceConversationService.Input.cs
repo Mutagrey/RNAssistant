@@ -67,7 +67,7 @@ namespace RNAssistant.Runtime
             internal WorkspaceInputChannel(WorkspaceConversationService owner, ChatSession session)
             {
                 _owner = owner; _session = session;
-                _inbox = new ConversationInboxService(new ChatEventStoreAdapter(owner._chats));
+                _inbox = owner._conversationInbox;
                 _channel = new ConversationRunInputChannel(_inbox, session, ApplyInputAsync,
                     () => _owner.SetModelProgress(_session.Id, null), ownsBinding: true);
                 if (!owner._inputChannels.TryAdd(session.Id, this))
