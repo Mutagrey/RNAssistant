@@ -119,12 +119,16 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
   state.inboxSubmissions[chatId] = pending;
   pending.localStatus = "submitting";
   var submittedDraft = !answers && state.activeChatId === chatId ? captureChatDraft(chatId) : readOfficeDraft(chatId);
+  var gate = window.RNAssistantConversationInput.create("office", { chatId: chatId },
+    pending.OperationId, steerRunId);
   if (state.activeChatId === chatId) renderChatInbox({ forceScroll: true });
   try {
-    if (!answers) await window.RNAssistantChatDrafts.flushOffice(chatId);
-    var inbox = await send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
-      text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery,
-      steerRunId: steerRunId, steerPendingId: steerPendingId, answers: answers });
+    var inbox = await gate.submit(
+      function () { return answers ? Promise.resolve() : window.RNAssistantChatDrafts.flushOffice(chatId); },
+      function () { return send("submitChatInput", { chatId: chatId, operationId: pending.OperationId,
+        text: text, resourceDraftIds: attachments.map(attachmentId), delivery: delivery,
+        steerRunId: steerRunId, steerPendingId: steerPendingId, answers: answers }); },
+      function (response) { return response; });
     pending.localStatus = "syncing";
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];

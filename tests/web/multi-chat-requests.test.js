@@ -31,6 +31,10 @@ context.send = (type, payload) => {
 };
 context.setChatInputText = () => {};
 context.clearSendError = () => {};
+context.readOfficeDraft = () => null;
+context.captureChatDraft = () => null;
+context.acceptOfficeDraft = () => null;
+context.window.RNAssistantChatDrafts = { flushOffice: async () => {} };
 context.logToolResults = () => {};
 context.renderSendControls = () => {};
 context.renderChatSessions = () => {};
@@ -42,12 +46,14 @@ context.log = () => {};
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-run.js"), "utf8"), context,
   { filename: "app-chat-run.js" });
 
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-conversation-input.js"), "utf8"), context);
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-inbox.js"), "utf8"), context);
 context.refreshInboxChat = chatId => refreshedChats.push(chatId);
 
 (async function () {
   const first = context.submitInboxMessage("Первый", [], "chat-a", "Steer");
   const second = context.submitInboxMessage("Второй", [], "chat-b", "Steer");
+  await new Promise(resolve => setImmediate(resolve));
 
   assert.deepEqual(requests.map(item => item.payload.chatId), ["chat-a", "chat-b"],
     "each intake keeps its captured chat id");

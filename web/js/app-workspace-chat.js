@@ -362,19 +362,6 @@
       runId: field(input, "runId"), submit: submitQuestions
     });
   }
-  function deliveredInputReceipt(receipt, sessionId, requestId) {
-    return !!receipt && receipt.SessionId === sessionId && receipt.RequestId === requestId &&
-      !!receipt.InputId && !!receipt.RunId && !!receipt.AcceptedCursor &&
-      Number.isSafeInteger(receipt.AcceptedSequence) && receipt.AcceptedSequence > 0 &&
-      receipt.DeliveryRecorded === true;
-  }
-  function acceptedInputReceipt(receipt, sessionId, requestId, steerRunId) {
-    if (steerRunId && (!receipt || receipt.RunId !== steerRunId || receipt.Steering !== true)) return false;
-    return deliveredInputReceipt(receipt, sessionId, requestId) || !!steerRunId && !!receipt &&
-      receipt.SessionId === sessionId && receipt.RequestId === requestId && receipt.RunId === steerRunId &&
-      receipt.Steering === true && !!receipt.InputId && !!receipt.AcceptedCursor &&
-      Number.isSafeInteger(receipt.AcceptedSequence) && receipt.AcceptedSequence > 0;
-  }
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
     var input = form.querySelector("textarea");
@@ -533,7 +520,6 @@
     canMessageAction: canMessageAction, messageAction: messageAction,
     startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
     currentMessageEdit: currentMessageEdit,
-    deliveredInputReceipt: deliveredInputReceipt, acceptedInputReceipt: acceptedInputReceipt,
     composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
     snapshot: function () { return dispatch("snapshot"); },

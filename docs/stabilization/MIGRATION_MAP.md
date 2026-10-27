@@ -76,11 +76,12 @@ Workspace убрал внешний lock вокруг общего admission и 
 | Office `ConversationKernelAdapter.Input.cs` и незавершённый Workspace `.Input.cs`; input channel обоих kernels | Подготовка Office-вложений/ресурсов, применение подготовленного ввода к domain model session | Общие admission/consume/append/applied/interrupt через существующий journal и `IRunInputChannel`. Удалить отдельные channel algorithms; перенос одного inbox helper не закрывает строку |
 | `ChatSessionService.ReconcileInterruptedRuns` и Workspace `RefreshSession`/`PrepareResume`/`InterruptAbandonedRun`; activation/reopen | Сведения domain mutation journals и read-back, exact target availability | Общий owner ещё должен забрать захват lease и сохранение recovery transition. Kernel-lifecycle decision и exact run/cursor guard уже общие; повторного tool dispatch нет. Receipt reconciliation уже переключена на общий inbox |
 | Workspace `WorkspaceRunControl` preview/input/cross-process client | Локальный current-user transport и его ACL, техническая доставка/таймаут | Перенаправить preview/input на typed команды/snapshot общего owner; отдельный run token и Stop owner удалены, transport остаётся |
-| `app-chat-inbox.js` и chat-части `app-project-chats.js`: pending requests, receipt, polling; action dispatch в `app-chat.js`/`app-workspace-chat.js` | Навигация, дерево проектов, Office target/resource selection | Один Web conversation controller/composer использует общий snapshot/commands. Удалить заменённые submit/receipt/poll ветки обоих consumers; scope+generation и draft revision остаются общими guards |
+| `app-chat-inbox.js` и chat-части `app-project-chats.js`: pending requests, polling; action dispatch в `app-chat.js`/`app-workspace-chat.js` | Навигация, дерево проектов, Office target/resource selection | Общий `app-conversation-input.js` уже проверяет квитанцию обоих submit и заменил Workspace-local validator. Дальше один Web conversation controller/composer использует общий snapshot/commands; удалить раздельные pending/submit/poll ветки, сохранить scope+generation и draft revision guards |
 
-Общий `app-conversation-state.js` уже задаёт индикатор подтверждённого владельца
-для деревьев Office и Workspace. Это только presentation: раздельные submit,
-receipt, polling и Application orchestration из строки выше ещё подлежат замене.
+Общий `app-conversation-state.js` задаёт индикатор подтверждённого владельца
+для деревьев Office и Workspace. Общий input gate покрывает только flush/dispatch/
+receipt; раздельные pending, polling и остальной Web controller из строки выше
+ещё подлежат замене.
 
 Новый контракт typed, source module подключается через существующий `.projitems`.
 Run lifecycle/outcomes остаются у kernel; live handle Application не второй статусный

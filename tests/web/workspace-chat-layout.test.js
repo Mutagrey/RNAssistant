@@ -158,6 +158,11 @@ fs.mkdirSync(captures, {recursive:true});
     await page.locator('#chatInput').press('Enter');
     await page.locator('#workspaceChatNotice').getByText('Проверка ошибки отправки').waitFor();
     assert.equal(await page.locator('#chatInput').inputValue(),'Черновик рабочего проекта','failed delivery preserves the draft');
+    await page.evaluate(() => { chatTest.fail = false; });
+    await page.locator('#chatInput').press('Enter');
+    await page.waitForFunction(() => document.querySelector('#chatInput').value === '');
+    assert.equal(await page.evaluate(() => chatTest.requests.length), 2,
+      'the same project composer retries once and clears only after its receipt');
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
     const pluginToggle=page.locator('#workspaceInspectorToggle');
     await page.waitForFunction(() => RNAssistantWorkspaceChat.owner()==='plugin' &&

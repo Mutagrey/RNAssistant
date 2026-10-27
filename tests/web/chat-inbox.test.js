@@ -32,6 +32,7 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-state.js", "utf8"), context);
 // Inbox-specific VM keeps protected storage outside this test; the browser reload
 // check covers the real composer/bridge draft persistence path.
 context.window.RNAssistantChatDrafts.flushOffice = async () => {};
+vm.runInContext(fs.readFileSync("web/js/app-conversation-input.js", "utf8"), context);
 vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
 context.renderChatSessions = () => {};
 (async () => {
@@ -45,10 +46,16 @@ context.renderChatSessions = () => {};
   assert.equal(calls[0].payload.delivery, "Queue", "missing exact run target becomes an explicit queued task");
   assert.equal(context.$("chatInput").value, "keep me", "failed intake preserves text");
   assert.equal(context.state.draftAttachments.length, 1, "failed intake preserves files");
+  transport = () => Promise.resolve({ chatId: "wrong-chat", revision: 2, items: [],
+    acceptedInput: { Id: "wrong", OperationId: id, Status: "Applied", Revision: 1 } });
+  assert.equal(await context.submitInboxMessage("keep me", context.state.draftAttachments, "a", "Steer"), false,
+    "a successful transport response from another chat cannot acknowledge input");
+  assert.equal(calls[1].payload.operationId, id, "uncertain receipt retains the retry identity");
+  assert.equal(context.$("chatInput").value, "keep me", "unmatched receipt preserves the draft");
   transport = () => Promise.resolve({ chatId: "a", revision: 2, items: [], running: true,
     acceptedInput: { Id: "accepted", OperationId: id, Text: "keep me", Status: "Applied", Revision: 1 } });
   await context.submitInboxMessage("keep me", context.state.draftAttachments, "a", "Steer");
-  assert.equal(calls[1].payload.operationId, id, "uncertain retry retains idempotency key");
+  assert.equal(calls[2].payload.operationId, id, "uncertain retry retains idempotency key");
   assert.equal(context.$("chatInput").value, "", "acknowledged input clears draft");
   assert.equal(context.pendingChatInputs().length, 1, "consumed-before-ack input keeps its echo until history arrives");
   assert.equal(context.pendingChatInputs()[0].Id, "accepted", "receipt supplies exact runtime identity");

@@ -711,6 +711,12 @@ protected draft snapshot. Rehydration uses the saved relation, never text equali
 to bind the receipt to the restored version. A missing/false relation preserves
 the text, including a newer identical draft. Receipt acknowledgement and clearing
 are saved together; an edit receipt does not erase the base composer draft.
+Both Web consumers now use `RNAssistantConversationInput` for this flush/dispatch/
+receipt gate. Office requires the response chat ID and accepted input operation ID,
+durable revision/status and, for steer, the exact run ID; a successful bridge reply
+alone cannot clear its draft. Workspace requires the exact session/request and
+durable input cursor/sequence: ordinary input waits for `DeliveryRecorded`, while
+exact-run steer may acknowledge its persisted admission before delivery.
 The separate CurrentUser-DPAPI file stores unsent input and staged
 resource IDs, not chat events, resource bodies or a second durable input journal.
 Abrupt-close timing and Windows DPAPI/WebView2 behavior still require target-host
@@ -722,7 +728,7 @@ The typed WebView progress payload carries `inputReceipt` under the original
 transport request ID; `submitProjectChat` also returns that receipt, including
 duplicate submissions. A successful transport response alone does not acknowledge
 the input. The request-scoped UI callback clears only the matching draft version
-after `DeliveryRecorded=true`, without waiting for model completion. Repeated
+after the matching receipt is confirmed, without waiting for model completion. Repeated
 receipts cannot clear a later draft; background receipts never alter the Office
 composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
 On open/navigation and ordinary run polling, `getProjectChat.receiptRequestId`

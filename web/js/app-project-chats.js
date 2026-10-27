@@ -32,7 +32,8 @@
     var snapshot = await send("getProjectChat", query);
     if (pending && snapshot && snapshot.sessionId === target.sessionId &&
         snapshot.project && snapshot.project.workspaceId === target.workspaceId &&
-        window.RNAssistantWorkspaceChat.acceptedInputReceipt(snapshot.inputReceipt, target.sessionId, pending.input.requestId, pending.input.SteerRunId)) {
+        window.RNAssistantConversationInput.accepted("workspace", target, pending.input.requestId,
+          snapshot.inputReceipt, pending.input.SteerRunId)) {
       if (pending.input.EditMessageId) drafts.acknowledgeWorkspaceInput(target, pending.input);
       else if (composer) composer.accepted(target, pending.input.message, pending.draftVersion, pending.input);
       // The original admission reply may never arrive. The durable receipt is
@@ -624,24 +625,18 @@
         var draftVersion = edit ? null : composer.draftVersion();
         var request = composer.prepareInput(target, text, edit,
           field(runState(), "status", "Status") === "running" ? runState() : null);
-        var acknowledged = false;
-        function acceptReceipt(receipt) {
-          if (acknowledged) return true;
-          if (!window.RNAssistantWorkspaceChat.acceptedInputReceipt(receipt, sid, request.requestId, request.SteerRunId)) return false;
-          if (edit) composer.acceptedEdit(target, request);
-          else composer.accepted(target, text, draftVersion, request);
-          acknowledged = true;
-          return true;
-        }
-        runChat(async function () { await window.RNAssistantChatDrafts.flushWorkspace(target);
-          return send("submitProjectChat", { workspaceId: pid, sessionId: sid,
-          input: request }, function (progress) {
-            if (progress.workspaceId === pid && progress.sessionId === sid) acceptReceipt(progress.inputReceipt);
-          }).then(function (result) {
-          if (!acceptReceipt(result && result.inputReceipt))
-            throw new Error("Доставка сообщения не подтверждена. Черновик сохранён.");
-          return result;
-        }); });
+        var gate = window.RNAssistantConversationInput.create("workspace", target,
+          request.requestId, request.SteerRunId, function () {
+            if (edit) composer.acceptedEdit(target, request);
+            else composer.accepted(target, text, draftVersion, request);
+          });
+        runChat(function () { return gate.submit(
+          function () { return window.RNAssistantChatDrafts.flushWorkspace(target); },
+          function (acceptReceipt) { return send("submitProjectChat", { workspaceId: pid,
+            sessionId: sid, input: request }, function (progress) {
+              if (progress.workspaceId === pid && progress.sessionId === sid) acceptReceipt(progress.inputReceipt);
+            }); },
+          function (result) { return result && result.inputReceipt; }); });
       },
       escape: function (event) {
         if (window.RNAssistantWorkspaceChat.currentMessageEdit()) {

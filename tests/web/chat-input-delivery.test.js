@@ -34,7 +34,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js",
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js",
-      "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
+      "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-conversation-input.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(async () => {
       window.renderAgentPlanDock = window.renderChatSessions = window.bindAttachmentActions = () => {};
@@ -92,12 +92,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       });
       await page.evaluate(() => {
         const acceptedInput = { Id: "input", OperationId: submitted.operationId, Text: submitted.text,
-          Status: "Applied", Delivery: submitted.delivery, Revision: 2, Attachments: [] };
+          Status: "Applied", Delivery: submitted.delivery, AcceptedRunId: submitted.steerRunId,
+          Revision: 2, Attachments: [] };
         // Queue consumption is visible before the history page containing the user message.
         window.serverInbox = { ...serverInbox, revision: 2, items: [] };
         acknowledge({ ...serverInbox, acceptedInput });
       });
-      await page.waitForFunction(() => !isPendingChatSubmit("chat") && !state.inboxChatRefreshing.chat);
+      await page.waitForFunction(() => !isPendingChatSubmit("chat") && !(state.inboxChatRefreshing || {}).chat);
       assert.equal(await page.locator("#chatInput").inputValue(), "");
       assert.equal(await page.locator(".inbox-message").count(), 1, "history lag cannot make acknowledged text disappear");
       assert.ok(Math.abs(await page.locator("#messages").evaluate(el => el.scrollTop) - manualTop) < 2,
@@ -127,7 +128,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => {
       acknowledge({ chatId: "chat", epoch: "e", revision: 3, items: [], running: true,
         acceptedInput: { Id: "same-text", OperationId: submitted.operationId, Text: submitted.text,
-          Status: "Applied", Delivery: submitted.delivery, Revision: 3, Attachments: [] } });
+          Status: "Applied", Delivery: submitted.delivery, AcceptedRunId: submitted.steerRunId,
+          Revision: 3, Attachments: [] } });
     });
     await page.waitForFunction(() => !isPendingChatSubmit("chat"));
     assert.equal(await page.locator("#chatInput").inputValue(), "Тот же текст",
