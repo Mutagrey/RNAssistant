@@ -629,10 +629,10 @@ namespace RNAssistant.Runtime
             }
         }
 
-        public async Task<WorkspaceRunResult> ResolvePendingAsync(WorkspaceDescriptor workspace,
+        private async Task<WorkspaceRunResult> ExecutePendingAsync(WorkspaceDescriptor workspace,
             string sessionId, string pendingId, bool approve, AppSettings settings,
-            Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress = null,
-            CancellationToken cancellationToken = default(CancellationToken), string modelDigest = null)
+            Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress,
+            CancellationToken cancellationToken, string modelDigest, Action admitted, bool waitForLease)
         {
             if (workspace == null || string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(pendingId))
                 throw new ArgumentException("Workspace, session and pending confirmation are required.");
@@ -640,7 +640,7 @@ namespace RNAssistant.Runtime
                 string.IsNullOrWhiteSpace(settings.Model)))
                 throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
             if (approve) ValidateMessageRoles(settings);
-            using (AcquireSessionLease(sessionId))
+            using (AcquireSessionLease(sessionId, wait: waitForLease, cancellationToken: cancellationToken))
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (approve) ConversationRunPolicy.ForAcceptedRun(session);
@@ -674,13 +674,28 @@ namespace RNAssistant.Runtime
                 var history = RestoreAcceptedHistory(session, currentRunOnly: true);
                 var continuation = AgentRunContinuation.Restore(run, 0, history);
                 var acceptance = session.LastRun.WorkspaceAcceptance ?? new WorkspaceRunAcceptance();
+                var pendingCursor = ConversationEventFeed.Cursor(session);
+                Action<WorkspaceRunEvent> report = value =>
+                {
+                    // Resume's first persisted kernel checkpoint consumes this
+                    // pending confirmation before tool dispatch (or rejection).
+                    if (admitted != null && value.Summary?.RunId == run.Summary.RunId &&
+                        value.Summary.Lifecycle == RunLifecycle.Running &&
+                        value.Summary.PendingConfirmation == null && value.Cursor != pendingCursor)
+                    {
+                        admitted();
+                        admitted = null;
+                    }
+                    progress?.Invoke(value);
+                };
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session,
-                    settings ?? new AppSettings(), apiKeyProvider, progress, acceptance, approve, webHost: _webHost,
+                    settings ?? new AppSettings(), apiKeyProvider, report, acceptance, approve, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
                     pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
                 using (var control = OpenRunControl(session, cancellationToken))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var result = await ConversationRunCoordinator.ResumeAsync(session.LastRun.RunId,
                         pendingId, continuation, ports, ports.Tools, ports, control.Token,
                         rejectPending: !approve).ConfigureAwait(false);

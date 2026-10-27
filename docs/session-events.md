@@ -691,10 +691,21 @@ canonical snapshot/progress independently of the completed submit request.
 Application shutdown refuses new workers, cancels existing workers and awaits
 their drain before releasing plugin results; the pane's drain includes this owner.
 Exceptions are observed, while outcomes and recovery remain in the canonical
-kernel/event path. No second run store or tool replay is introduced. Approval
-continuation (`resolveProjectChat`) still awaits completion under its bridge
-request; detaching that path, automatic receipt reconnect and queue/steer remain
-separate work. Project-chat abandoned-run recovery is described above.
+kernel/event path. No second run store or tool replay is introduced.
+
+Approval continuation (`resolveProjectChat`) uses the same tracked Application
+owner. It returns a canonical snapshot after the kernel's first persisted resume
+checkpoint consumes the exact pending confirmation, before waiting for dispatch
+and the next model response. The UI admission path refuses an occupied session
+lease without waiting; under the acquired lease it reloads and validates the
+pending ID and accepted run configuration. A duplicate cannot dispatch the call
+again, including after restart; it gets a busy/stale error rather than an invented
+success receipt. Rejection also uses this owner and records kernel cancellation
+without tool/model dispatch. Bridge cancellation before admission is respected;
+after admission, only run Stop/application shutdown cancels UI-owned continuation.
+Terminal `ResolvePendingAsync` (CLI) awaits the same worker and retains caller
+cancellation. Automatic input receipt reconnect and queue/steer remain separate
+work. Project-chat abandoned-run recovery is described above.
 
 Office `submitChatInput` requires an operation ID and uses the same conflict check.
 Its fingerprint covers text or typed answers, draft IDs and delivery mode. Lookup

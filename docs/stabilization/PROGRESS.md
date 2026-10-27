@@ -1,5 +1,26 @@
 # Stabilization progress
 
+## Approval workspace больше не ждёт окончания модели — 2026-10-27
+
+Owner: Application Workspace run lifetime / typed project-chat delivery.
+`resolveProjectChat` использует тот же tracked worker, что submit. Ответ возвращается
+после первого сохранённого kernel checkpoint, потребляющего exact pending approval.
+Занятый session lease даёт busy без ожидания; повторное подтверждение, в том числе
+после restart, не повторяет effect. Bridge больше не владеет продолжением; terminal
+API CLI по-прежнему ждёт результат и учитывает явную отмену вызывающей стороны.
+Отказ сохраняет kernel cancellation без dispatch; Stop/shutdown используют общий owner.
+
+Targeted Harness: реальный file write + held HTTP, ранний native bridge response,
+duplicate, recreate bridge, cancel до/после admission, Stop, shutdown, offline denial
+и terminal API — pass. Existing submit receipt/lifetime checks — pass. Chromium с
+native envelopes: pending approval исчезает, нет pending request во время model wait,
+polling завершает run и сохраняет draft. Build: 0 errors, 2 existing CA1416 warnings.
+Windows/Office/WebView2 и реальное завершение pane остаются неквалифицированными.
+
+Следующий срез S1b — automatic receipt reconnect после потерянного подтверждения
+доставки ввода/reload. I26-10 (steer/queue) и ранее зафиксированный `uncleanClaims`
+остаются открытыми; этот commit их не закрывает.
+
 ## Submit workspace больше не ждёт окончания модели — 2026-10-27
 
 Owner: Application Workspace run lifetime / typed project-chat delivery.

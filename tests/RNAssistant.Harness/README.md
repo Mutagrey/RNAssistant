@@ -390,6 +390,14 @@ admission before its simulated run finishes.
 cancellation before admission while waiting for a lease, detachment of transport
 cancellation after admission, exact Stop and owner shutdown. Both paths persist
 kernel cancellation, drain workers and release session/runtime leases.
+`plugins: approval continuation belongs to application` creates a real pending file
+write, holds the post-approval model response and checks early bridge admission,
+busy/cancel before admission, duplicate refusal (including after restart), bridge
+recreation, late transport cancellation, exact Stop, shutdown, offline denial and
+terminal API cancellation through the same worker. Set `RNA_WORKSPACE_APPROVAL_FIXTURE`
+to an output JSON path; `node tests/web/workspace-approval-lifetime.test.js <that-path>`
+uses those native snapshots to check consumed approval, no pending resolve timer,
+polling completion and draft retention. These do not qualify Windows/Office shutdown.
 `node tests/web/workspace-chat-races.test.js` delays running snapshots past a
 terminal snapshot in both screens and switches plugin selection before an input
 reply arrives; completed chats must remain writable without stale busy state.

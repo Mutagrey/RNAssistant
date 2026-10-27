@@ -965,7 +965,7 @@ namespace RNAssistant.Application
             {
                 try
                 {
-                    await Conversations.ResolvePendingAsync(workspace, session.Id, request.PendingId, request.Approve,
+                    await Conversations.AdmitPendingAsync(workspace, session.Id, request.PendingId, request.Approve,
                         settings, key, progress: progress, cancellationToken: token,
                         modelDigest: session.LastRun?.ModelConfiguration?.Digest).ConfigureAwait(false);
                 }

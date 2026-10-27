@@ -45,8 +45,13 @@ delivery и первого kernel checkpoint, Application worker сохраня�
 продолжение после потери bridge и отдельный explicit Stop. Shutdown дожидается
 worker, включая отмену ожидания lease до admission. Chromium проверяет реальные
 envelopes: model wait больше не держит submit timer; terminal приходит через polling.
-Открыты continuation после approval (`resolveProjectChat` по-прежнему долгий request),
-automatic receipt reconnect и Windows pane shutdown. Таймаут модели не менялся.
+Continuation после approval также исправлен 2026-10-27: `resolveProjectChat`
+возвращается после сохранённого kernel resume checkpoint; общий Application owner
+держит execution/leases. Held HTTP + real file write проверяют duplicate без replay,
+bridge recreation, pre/post-admission cancel, Stop, shutdown и terminal API.
+Offline denial не вызывает инструмент/модель. Chromium с native envelopes проверяет
+исчезновение pending approval, завершённый bridge request и polling с сохранением draft.
+Открыты automatic receipt reconnect и Windows pane shutdown. Таймаут модели не менялся.
 
 Открытая соседняя проверка 2026-10-27: `workspace-chat-progress.test.js` падает на
 `uncleanClaims` при статическом рендере до submit-сценариев. Тот же отказ воспроизведён

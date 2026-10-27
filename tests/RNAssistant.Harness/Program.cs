@@ -68,6 +68,7 @@ namespace RNAssistant.Harness
                 Test("plugins: source chat excludes Office", PluginsSourceChatExcludesOffice),
                 Test("plugins: input receipt crosses bridge before model response", PluginsInputReceiptBeforeModelResponse),
                 Test("plugins: admitted run cancellation and shutdown belong to application", PluginsAdmittedRunLifetime),
+                Test("plugins: approval continuation belongs to application", PluginsApprovalRunLifetime),
                 Test("plugins: project chat busy lease is typed", PluginsProjectChatBusyLeaseIsTyped),
                 Test("plugins: project chat recovers abandoned run under lease", PluginsProjectChatRecoversAbandonedRun),
                 Test("plugins: text-authored SVG icons stay scoped and safe", PluginsSvgIcon),

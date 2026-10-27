@@ -63,16 +63,51 @@ namespace RNAssistant.Runtime
                 null, detachAfterAcceptance: true).Receipt.Task;
         }
 
-        private InputOperation StartInput(WorkspaceDescriptor workspace, WorkspaceSubmitInputRequest request,
+        private RunOperation StartInput(WorkspaceDescriptor workspace, WorkspaceSubmitInputRequest request,
             AppSettings settings, Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress,
             CancellationToken callerToken, string modelDigest, bool detachAfterAcceptance)
         {
             settings = settings?.Clone();
-            InputOperation operation;
+            return StartRun(operation => ExecuteInputAsync(workspace, request, settings, apiKeyProvider,
+                operation.Report, operation.Token, modelDigest), progress, callerToken, detachAfterAcceptance);
+        }
+
+        public Task<WorkspaceRunResult> ResolvePendingAsync(WorkspaceDescriptor workspace,
+            string sessionId, string pendingId, bool approve, AppSettings settings,
+            Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress = null,
+            CancellationToken cancellationToken = default(CancellationToken), string modelDigest = null)
+        {
+            return StartPending(workspace, sessionId, pendingId, approve, settings, apiKeyProvider,
+                progress, cancellationToken, modelDigest, detachAfterAcceptance: false).Completion.Task;
+        }
+
+        internal Task AdmitPendingAsync(WorkspaceDescriptor workspace, string sessionId, string pendingId,
+            bool approve, AppSettings settings, Func<string> apiKeyProvider,
+            Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken, string modelDigest)
+        {
+            return StartPending(workspace, sessionId, pendingId, approve, settings, apiKeyProvider,
+                progress, cancellationToken, modelDigest, detachAfterAcceptance: true).Admission.Task;
+        }
+
+        private RunOperation StartPending(WorkspaceDescriptor workspace, string sessionId, string pendingId,
+            bool approve, AppSettings settings, Func<string> apiKeyProvider, Action<WorkspaceRunEvent> progress,
+            CancellationToken callerToken, string modelDigest, bool detachAfterAcceptance)
+        {
+            settings = settings?.Clone();
+            return StartRun(operation => ExecutePendingAsync(workspace, sessionId, pendingId, approve,
+                settings, apiKeyProvider, operation.Report, operation.Token, modelDigest,
+                operation.AcceptContinuation, waitForLease: !detachAfterAcceptance),
+                progress, callerToken, detachAfterAcceptance);
+        }
+
+        private RunOperation StartRun(Func<RunOperation, Task<WorkspaceRunResult>> execute,
+            Action<WorkspaceRunEvent> progress, CancellationToken callerToken, bool detachAfterAcceptance)
+        {
+            RunOperation operation;
             lock (_runsSync)
             {
                 if (_runsClosing != null) throw new ObjectDisposedException(nameof(WorkspaceConversationService));
-                operation = new InputOperation(_runLifetime.Token, callerToken, detachAfterAcceptance, progress);
+                operation = new RunOperation(_runLifetime.Token, callerToken, detachAfterAcceptance, progress);
                 _runWorkers.Add(operation.Drained.Task);
             }
             Task.Run(async () =>
@@ -82,26 +117,29 @@ namespace RNAssistant.Runtime
                     operation.Token.ThrowIfCancellationRequested();
                     using (var runtimeUse = _runtimeUseLease?.Invoke())
                     {
-                        var result = await ExecuteInputAsync(workspace, request, settings, apiKeyProvider,
-                            operation.Report, operation.Token, modelDigest).ConfigureAwait(false);
+                        var result = await execute(operation).ConfigureAwait(false);
                         operation.Receipt.TrySetResult(result.Receipt);
+                        operation.Admission.TrySetResult(true);
                         operation.Completion.TrySetResult(result);
                     }
                 }
                 catch (OperationCanceledException)
                 {
                     operation.Receipt.TrySetCanceled();
+                    operation.Admission.TrySetCanceled();
                     operation.Completion.TrySetCanceled();
                 }
                 catch (Exception error)
                 {
                     operation.Receipt.TrySetException(error);
+                    operation.Admission.TrySetException(error);
                     operation.Completion.TrySetException(error);
-                    // Either API may have returned already. Observe both tasks;
+                    // An admission API may have returned already. Observe all tasks;
                     // durable kernel state/recovery remains the run authority.
                     var receiptError = operation.Receipt.Task.Exception;
+                    var admissionError = operation.Admission.Task.Exception;
                     var completionError = operation.Completion.Task.Exception;
-                    System.Diagnostics.Trace.TraceError("Workspace input failed: {0}", error.Message);
+                    System.Diagnostics.Trace.TraceError("Workspace run failed: {0}", error.Message);
                 }
                 finally
                 {
@@ -116,8 +154,10 @@ namespace RNAssistant.Runtime
             return operation;
         }
 
-        private sealed class InputOperation : IDisposable
+        private sealed class RunOperation : IDisposable
         {
+            internal readonly TaskCompletionSource<bool> Admission =
+                new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource<WorkspaceInputReceipt> Receipt =
                 new TaskCompletionSource<WorkspaceInputReceipt>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly TaskCompletionSource<WorkspaceRunResult> Completion =
@@ -133,7 +173,7 @@ namespace RNAssistant.Runtime
             private bool _accepted;
             internal CancellationToken Token { get { return _cancellation.Token; } }
 
-            internal InputOperation(CancellationToken lifetime, CancellationToken caller, bool detachAfterAcceptance,
+            internal RunOperation(CancellationToken lifetime, CancellationToken caller, bool detachAfterAcceptance,
                 Action<WorkspaceRunEvent> progress)
             {
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
@@ -146,6 +186,12 @@ namespace RNAssistant.Runtime
                         _cancellation.Cancel();
                     }
                 });
+            }
+
+            internal void AcceptContinuation()
+            {
+                lock (_sync) _accepted = true;
+                Admission.TrySetResult(true);
             }
 
             internal void Report(WorkspaceRunEvent value)
