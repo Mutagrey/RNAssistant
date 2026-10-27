@@ -920,7 +920,10 @@ function chatTreeNode(chat) {
   var run = state.chatRuns[id] || state.activeSends[id];
   var persistedRun = chatSummaryRunViewState(chat);
   var hasActiveRun = !!run || !!(persistedRun && persistedRun.lifecycle === "running");
-  var loading = id === state.chatNavigationTargetId && !!state.chatNavigationPending;
+  var inbox = (state.chatInboxes || {})[id];
+  var presence = window.RNAssistantConversationState.status(
+    !!(inbox && inbox.running && !state.bridgeUnavailable),
+    !!(persistedRun && persistedRun.lifecycle === "running"), false);
   var warning = chatStorageWarningLevel(chat);
   var badgeLevel = chatCasMissingBlobCount(chat) || chatCasReferenceIssueCount(chat) ? "critical" : warning;
   var storageTooltip = badgeLevel !== "none" ? buildChatStorageTooltip(chat, badgeLevel) : "";
@@ -929,9 +932,9 @@ function chatTreeNode(chat) {
     selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable,
     tooltip: chatTitle(chat),
     badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,
-    status: hasActiveRun || loading ? "running" : "",
-    statusLabel: loading ? "Подготовка истории чата" : state.activeSends[id] && state.activeSends[id].canceling
-      ? "Запрос останавливается" : "Запрос выполняется",
+    status: presence.status,
+    statusLabel: presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
+      ? "Запрос останавливается" : presence.label,
     actions: [
       { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
         onClick: function () { renameChat(id); } },

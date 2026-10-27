@@ -50,6 +50,26 @@ const root = path.resolve(__dirname, '../..');
       assert.deepEqual(historyGuard, { running: [true, true, false],
         awaitingconfirmation: [true, true, false], completed: [false, false, false] },
       owner + ': selected snapshot guards its project history without locking unrelated projects');
+      const presence = await page.evaluate(() => {
+        const snapshot = RNAssistantProjectChats.snapshot();
+        const originalStatus = snapshot.state.status;
+        const originalUnavailable = snapshot.state.modelProgressUnavailable;
+        const row = () => document.querySelector('#projectChatTree [data-tree-key="project-chat:' +
+          RNAssistantProjectChats.workspaceId() + ':' + snapshot.sessionId + '"] .tree-status');
+        snapshot.state.status = 'running';
+        snapshot.state.modelProgressUnavailable = true;
+        RNAssistantProjectChats.refreshTree();
+        const unverified = row().getAttribute('aria-label');
+        snapshot.state.modelProgressUnavailable = false;
+        RNAssistantProjectChats.refreshTree();
+        const active = row().getAttribute('aria-label');
+        snapshot.state.status = originalStatus;
+        snapshot.state.modelProgressUnavailable = originalUnavailable;
+        RNAssistantProjectChats.refreshTree();
+        return [unverified, active];
+      });
+      assert.deepEqual(presence, ['Состояние запуска не подтверждено', 'Запрос выполняется'],
+        owner + ': saved running needs a reachable run owner for the active indicator');
       await page.evaluate(() => {
         const original = send;
         window.snapshotRace = {release:null, delivered:false};

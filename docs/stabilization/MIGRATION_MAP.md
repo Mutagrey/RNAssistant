@@ -44,6 +44,10 @@ append этого пути удалён. Live inbox адресуется по ho
 | Workspace `WorkspaceRunControl` preview/input/stop; cross-process client | Локальный current-user transport и его ACL, техническая доставка/таймаут | Перенаправить на typed команды/snapshot общего owner; удалить Workspace admission/cancel/projection rules. Сам transport не обязан исчезать |
 | `app-chat-inbox.js` и chat-части `app-project-chats.js`: pending requests, receipt, polling; action dispatch в `app-chat.js`/`app-workspace-chat.js` | Навигация, дерево проектов, Office target/resource selection | Один Web conversation controller/composer использует общий snapshot/commands. Удалить заменённые submit/receipt/poll ветки обоих consumers; scope+generation и draft revision остаются общими guards |
 
+Общий `app-conversation-state.js` уже задаёт индикатор подтверждённого владельца
+для деревьев Office и Workspace. Это только presentation: раздельные submit,
+receipt, polling и Application orchestration из строки выше ещё подлежат замене.
+
 Новый контракт typed, source module подключается через существующий `.projitems`.
 Run lifecycle/outcomes остаются у kernel; live handle Application не второй статусный
 store. Один canonical event stream/CAS на разговор, без dual-write и переписывания

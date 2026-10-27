@@ -153,7 +153,9 @@
     if (active.pendingId) return "Нужно подтвердить действие агента.";
     if (state.userInput) return "Нужен ваш ответ.";
     if (field(state, "interruptedEffectPossible", "InterruptedEffectPossible")) return "Возможное изменение требует проверки. Не повторяйте действие автоматически.";
-    if (field(state, "status", "Status") === "running") return "Агент работает…";
+    if (field(state, "status", "Status") === "running")
+      return window.RNAssistantConversationState.status(
+        !field(state, "modelProgressUnavailable"), true, false).label + "…";
     if (field(state, "status", "Status") === "interrupted") return "Выполнение прервано. Проверьте ход работы перед новым запросом.";
     return "";
   }
@@ -175,11 +177,16 @@
         return !needle || ownMatch || chat.Title.toLocaleLowerCase("ru").includes(needle);
       }).map(function (chat) {
         var runStatus = chatRunStatus(entry, chat);
+        var current = entry.workspaceId === projectId() && chat.Id === currentId() ? runState() : null;
+        var presence = window.RNAssistantConversationState.status(
+          runStatus === "running" && !!current && !field(current, "modelProgressUnavailable"),
+          runStatus === "running",
+          runStatus === "awaitingconfirmation");
         return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat",
           title: entry.workspaceId === projectId() && chat.Id === selected && runState()
             ? field(runState(), "title", "Title") || chat.Title : chat.Title,
           selected: entry.workspaceId === projectId() && chat.Id === selected,
-          status: runStatus === "running" ? "running" : runStatus === "awaitingconfirmation" ? "waiting" : "",
+          status: presence.status, statusLabel: presence.label,
           actions: (entry.pluginId ? [{ title: "Открыть чат в плагине", iconHtml: window.RNAssistantNavigationTree.icon("code"),
             disabled: !entry.available, onClick: function () { window.RNAssistantPlugins.select(entry.pluginId, chat.Id); } }] : []).concat([
             { title: "Переименовать чат «" + chat.Title + "»", iconHtml: window.RNAssistantNavigationTree.icon("edit"),

@@ -20,7 +20,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.addStyleTag({ content: read("css/" + file) });
     await page.evaluate(() => {
       window.$ = id => document.getElementById(id);
-      window.RNAssistantRunViewState = { fromChatSummary: () => null };
+      window.RNAssistantRunViewState = { fromChatSummary: chat => chat.RunViewState || null };
       window.officeHostChatUnavailableReason = () => "";
       window.state = {
         host: "Excel", activeChatId: "first", chats: [
@@ -44,7 +44,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.renameChat = () => {};
       window.deleteChat = () => {};
     });
-    for (const file of ["app-icons.js", "app-utils.js", "app-navigation-tree.js", "app-chat-state.js"])
+    for (const file of ["app-icons.js", "app-utils.js", "app-navigation-tree.js", "app-conversation-state.js", "app-chat-state.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => renderChatSessionList(state.chats));
 
@@ -103,6 +103,26 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => { state.chats[0].casMissingBlobCount = 1; renderChatSessionList(state.chats); });
     assert.match(await current.locator(".navigation-tree-badge").getAttribute("title"), /Отсутствуют CAS blobs/,
       "storage issues remain available on the warning badge");
+    await page.evaluate(() => {
+      state.chats[0].RunViewState = { lifecycle: "running" };
+      state.chatNavigationTargetId = "first"; state.chatNavigationPending = true;
+      renderChatSessionList(state.chats);
+    });
+    assert.equal(await current.locator(".tree-status").getAttribute("aria-label"), "Состояние запуска не подтверждено",
+      "history loading and a saved running checkpoint do not claim live execution");
+    assert.equal(await current.locator(".tree-run").count(), 0);
+    await page.evaluate(() => {
+      state.chatInboxes = { first: { running: true } };
+      renderChatSessionList(state.chats);
+    });
+    assert.equal(await current.locator(".tree-status").getAttribute("aria-label"), "Запрос выполняется",
+      "only the live inbox owner enables the running indicator");
+    await page.evaluate(() => {
+      delete state.chats[0].RunViewState; delete state.chatInboxes.first;
+      renderChatSessionList(state.chats);
+    });
+    assert.equal(await current.locator(".tree-status").count(), 0,
+      "navigation loading alone does not show an agent run");
     if (process.env.CHAT_TREE_SCREENSHOT) await page.screenshot({ path: process.env.CHAT_TREE_SCREENSHOT });
     assert.deepEqual(errors, []);
     console.log("PASS chat tree browser: visible selection, roving keyboard focus and single actions");

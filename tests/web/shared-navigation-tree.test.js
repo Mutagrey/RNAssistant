@@ -16,6 +16,15 @@ const { chromium } = require("playwright");
     await product.goto("file://" + path.resolve(__dirname, "../../web/index.html"));
     assert.equal(await demo.evaluate(() => typeof RNAssistantNavigationTree.render), "function");
     assert.equal(await product.evaluate(() => typeof RNAssistantNavigationTree.render), "function");
+    assert.deepEqual(await product.evaluate(() => [
+      RNAssistantConversationState.status(true, true, false),
+      RNAssistantConversationState.status(false, true, false),
+      RNAssistantConversationState.status(false, false, true)
+    ]), [
+      { status: "running", label: "Запрос выполняется" },
+      { status: "unknown", label: "Состояние запуска не подтверждено" },
+      { status: "waiting", label: "Требуется ответ" }
+    ], "saved running status alone does not claim a live owner");
 
     const demoRoutes = ["chat/main", "materials/all", "library/all", "vba/code", "projects/sources", "settings/connection"];
     for (const route of demoRoutes) {

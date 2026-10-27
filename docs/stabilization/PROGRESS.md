@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Навигация чатов отделяет live owner от сохранённого running — 2026-10-27
+
+Owner: shared Web conversation status projection. Деревья Office и Workspace
+используют одно правило индикатора: работа подтверждается live inbox/owner,
+сохранённый kernel checkpoint без ответа владельца показывается как неизвестное
+состояние, а загрузка истории не изображает запуск агента. В Workspace текст
+статуса также различает подтверждённую работу и недоступный owner. Kernel
+по-прежнему единственный источник lifecycle; этот срез не закрывает S1c и не
+заменяет общий Application owner. Локальный Chrome: shared navigation, дерево
+Office, Workspace/Plugin races — pass; JS-синтаксис — pass. Windows/WebView2
+остаются открытым evidence.
+
 ## Обычный ввод Workspace переведён на общий inbox — 2026-10-27
 
 Owner: Application conversation intake. Создание run в Workspace теперь записывает

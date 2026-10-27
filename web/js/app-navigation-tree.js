@@ -92,7 +92,7 @@
           row.appendChild(badge);
         }
         if (node.status) {
-          var status = element("span", "tree-status" + (node.status === "running" ? " tree-run" : node.status === "waiting" ? " tree-attention" : node.status === "unread" ? " tree-unread" : ""));
+          var status = element("span", "tree-status" + (node.status === "running" ? " tree-run" : node.status === "waiting" || node.status === "unknown" ? " tree-attention" : node.status === "unread" ? " tree-unread" : ""));
           status.setAttribute("role", "status");
           var statusLabel = node.statusLabel || ({ running: "Запрос выполняется", waiting: "Требуется ответ", unread: "Новый ответ" }[node.status] || node.status);
           status.setAttribute("aria-label", statusLabel);
