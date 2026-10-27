@@ -663,6 +663,12 @@ in that same event; no store or event type is added.
 The accepted revision precedes user-message persistence and kernel invocation;
 the `applied` revision follows durable persistence of that message with the input
 ID. Input metadata never enters model context.
+Application inbox projects the first accepted event and latest input through one
+identity/fingerprint check for Office and Workspace. Office's live owner reads its
+cached projection; cross-process Workspace reconnect reads the canonical journal.
+Both lookup paths are read-only and never infer delivery from a bridge reply.
+Admission also rejects reusing one input ID under a different operation ID; a
+matching request fingerprint alone cannot turn that collision into a duplicate.
 
 `SubmitInputAsync` returns the original accepted identity for the same session,
 request ID and submitted intent. The fingerprint includes text/typed answers,

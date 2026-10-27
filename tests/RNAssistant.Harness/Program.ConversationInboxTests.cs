@@ -130,6 +130,12 @@ namespace RNAssistant.Harness
                 try { inbox.Submit(session, InboxInput("a", "different", InputDelivery.Queue)); }
                 catch (ArgumentException) { conflict = true; }
                 AssertTrue(conflict, "reusing an operation with different content is a conflict");
+                var idCollision = InboxInput("a", "first", InputDelivery.Queue);
+                idCollision.OperationId = "another-operation";
+                var refusedCollision = false;
+                try { inbox.Submit(session, idCollision); }
+                catch (ArgumentException) { refusedCollision = true; }
+                AssertTrue(refusedCollision, "one input ID cannot be accepted under another operation");
                 inbox.Submit(session, InboxInput("b", "second", InputDelivery.Queue));
                 AssertEqual(2, inbox.Snapshot(session).Items.Count, "intake idempotency");
                 var accepted = events.Read(session, SessionEventReadMode.RequireComplete).First(e => e.Type == SessionEventTypes.ConversationInputChanged);
@@ -246,6 +252,10 @@ namespace RNAssistant.Harness
                 var events = new ChatEventStoreAdapter(store);
                 var inbox = new ConversationInboxService(events);
                 inbox.Submit(session, InboxInput("office", "Saved Office input", InputDelivery.Queue));
+                var officeAccepted = inbox.FindAccepted(session, "office",
+                    InboxInput("office", "Saved Office input", InputDelivery.Queue).RequestFingerprint);
+                AssertEqual(1L, officeAccepted.Initial.Revision,
+                    "Office live lookup retains the first accepted revision");
                 var claimed = inbox.TakeNext(session, false);
                 var message = new ChatMessage { Id = claimed.Id, Role = "user", Content = claimed.Text };
                 session.Messages.Add(message);
@@ -255,6 +265,8 @@ namespace RNAssistant.Harness
                 inbox.Resume(session);
                 AssertEqual(ConversationInputStatus.Applied, inbox.Find(session, claimed.Id).Status,
                     "Office explicit resume projects the persisted input as applied");
+                AssertEqual(officeAccepted.Event.Sequence, inbox.FindAccepted(session, "office").Event.Sequence,
+                    "Office live receipt keeps its original accepted event after delivery");
                 AssertEqual(ConversationInputStatus.Applied,
                     new ConversationInboxService(events).Find(session, claimed.Id).Status,
                     "Office recovery writes one durable applied receipt");
@@ -282,6 +294,12 @@ namespace RNAssistant.Harness
                 AssertEqual(0, inbox.ReadUndelivered(session, InputDelivery.Queue).Count,
                     "Workspace snapshot hides a message already persisted before the receipt transition");
                 inbox.ReconcileAcceptedDelivery(session);
+                var workspaceAccepted = inbox.ReadAccepted(session, input.OperationId,
+                    input.RequestFingerprint, requireRunId: true);
+                AssertEqual(1L, workspaceAccepted.Initial.Revision,
+                    "Workspace canonical lookup retains the first accepted revision");
+                AssertEqual(ConversationInputStatus.Applied, workspaceAccepted.Current.Status,
+                    "Workspace canonical lookup observes the current delivery state");
                 AssertEqual(ConversationInputStatus.Applied, inbox.FindOperation(session, input.OperationId).Status,
                     "Workspace recovery updates the already loaded receipt projection");
                 AssertTrue(!inbox.Snapshot(session).Paused,

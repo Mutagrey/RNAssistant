@@ -44,6 +44,9 @@ Workspace activation/resume тоже переводит доказанную д�
 удалён. Office explicit resume использует ту же сверку сохранённого user message.
 Workspace pending-steer snapshot теперь использует общий inbox selector, как Office
 pending snapshot; отдельный Workspace сбор списка из journal удалён.
+Поиск принятого operation ID тоже переключён на один Application projector:
+Office читает live inbox, Workspace — canonical journal при reconnect; проверка
+первого event/fingerprint/status общая, отдельный Workspace lookup удалён.
 Остальное восстановление run/lease и FIFO ещё раздельно.
 
 | Временный путь / текущие consumers | Что остаётся доменным | Условие удаления / owner |

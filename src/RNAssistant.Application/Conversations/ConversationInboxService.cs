@@ -14,6 +14,12 @@ namespace RNAssistant.Application.Conversations
     // ChatStore serializes appends and advances the SAME live session's storage cursor.
     internal sealed class ConversationInboxService
     {
+        internal sealed class AcceptedInput
+        {
+            internal SessionEvent Event;
+            internal ConversationInput Initial;
+            internal ConversationInput Current;
+        }
         private sealed class SharedInbox
         {
             internal ConversationInboxService Service;
@@ -60,6 +66,8 @@ namespace RNAssistant.Application.Conversations
             internal readonly object Sync = new object();
             internal readonly HashSet<string> ExplicitSteers = new HashSet<string>(StringComparer.Ordinal);
             internal readonly List<ConversationInput> Inputs = new List<ConversationInput>();
+            internal readonly Dictionary<string, AcceptedInput> Accepted =
+                new Dictionary<string, AcceptedInput>(StringComparer.Ordinal);
             internal ChatSession Session;
             internal CancellationTokenSource Interrupt = new CancellationTokenSource();
             internal bool Running, Accepting, Worker, Paused;
@@ -99,7 +107,7 @@ namespace RNAssistant.Application.Conversations
                     box = new Inbox { Session = session };
                     foreach (var record in new ConversationInputJournal(_events).Read(session))
                     {
-                        Apply(box, record.Change);
+                        Apply(box, record.Change, record.Event);
                         box.Revision = record.Event.Sequence;
                         box.ViewRevision++;
                     }
@@ -201,24 +209,54 @@ namespace RNAssistant.Application.Conversations
         }
         internal ConversationInput FindOperation(ChatSession session, string operationId, string fingerprint = null)
         {
+            return FindAccepted(session, operationId, fingerprint)?.Current;
+        }
+        // The live owner uses its projection; Office retries must not scan the
+        // complete event stream on every submit.
+        internal AcceptedInput FindAccepted(ChatSession session, string operationId, string fingerprint = null)
+        {
             var box = Get(session);
             lock (box.Sync)
             {
-                var accepted = box.Inputs.FirstOrDefault(i => i.OperationId == operationId);
-                if (accepted != null && fingerprint != null) ConversationInputJournal.RequireSameRequest(accepted, fingerprint);
-                return Clone(accepted);
+                AcceptedInput first;
+                if (!box.Accepted.TryGetValue(operationId, out first)) return null;
+                var current = box.Inputs.FirstOrDefault(item => item.OperationId == operationId);
+                return ProjectAccepted(first.Event, first.Initial, current, fingerprint, false);
             }
+        }
+        // Cross-process observers read the canonical stream. Receipt lookup is
+        // read-only and must never reconcile an input or start a worker.
+        internal AcceptedInput ReadAccepted(ChatSession session, string operationId,
+            string fingerprint = null, bool requireRunId = false)
+        {
+            var records = new ConversationInputJournal(_events).Read(session, false)
+                .Where(record => record.Change.Input?.OperationId == operationId).ToArray();
+            return records.Length == 0 ? null : ProjectAccepted(records[0].Event,
+                records[0].Change.Input, records[records.Length - 1].Change.Input, fingerprint, requireRunId);
+        }
+        private static AcceptedInput ProjectAccepted(SessionEvent fact, ConversationInput initial,
+            ConversationInput current, string fingerprint, bool requireRunId)
+        {
+            if (fact == null || initial == null || current == null || initial.Revision != 1 ||
+                string.IsNullOrEmpty(initial.RequestFingerprint) ||
+                requireRunId && string.IsNullOrEmpty(initial.AcceptedRunId))
+                throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
+            if (fingerprint != null) ConversationInputJournal.RequireSameRequest(initial, fingerprint);
+            return new AcceptedInput { Event = fact, Initial = AcceptanceIdentity(initial), Current = Clone(current) };
         }
         internal SessionEvent Submit(ChatSession session, ConversationInput input)
         {
             var box = Get(session);
             lock (box.Sync)
             {
-                if (string.IsNullOrEmpty(input.OperationId) || string.IsNullOrEmpty(input.RequestFingerprint))
-                    throw new ArgumentException("Input requires an operation ID and request fingerprint.");
-                var accepted = box.Inputs.FirstOrDefault(i => i.Id == input.Id || i.OperationId == input.OperationId);
+                if (input == null || string.IsNullOrWhiteSpace(input.Id) ||
+                    string.IsNullOrEmpty(input.OperationId) || string.IsNullOrEmpty(input.RequestFingerprint))
+                    throw new ArgumentException("Input requires an ID, operation ID and request fingerprint.");
+                var accepted = box.Inputs.FirstOrDefault(i => i.OperationId == input.OperationId);
                 if (accepted != null)
                 { ConversationInputJournal.RequireSameRequest(accepted, input.RequestFingerprint); return null; }
+                if (box.Inputs.Any(i => i.Id == input.Id))
+                    throw new ArgumentException("An input ID already belongs to another operation.");
                 if (input.QuestionSetId != null && (box.Running || box.Inputs.Any(i => IsPending(i) ||
                     i.Status != ConversationInputStatus.Removed && i.AnswerRunId == input.AnswerRunId && i.QuestionSetId == input.QuestionSetId)))
                     throw new InvalidOperationException("The questions already have accepted input or the conversation has moved on.");
@@ -329,7 +367,7 @@ namespace RNAssistant.Application.Conversations
             foreach (var record in new ConversationInputJournal(_events).Read(box.Session))
             {
                 if (record.Event.Sequence <= box.Revision) continue;
-                Apply(box, record.Change);
+                Apply(box, record.Change, record.Event);
                 box.Revision = record.Event.Sequence;
                 box.ViewRevision++;
             }
@@ -464,15 +502,18 @@ namespace RNAssistant.Application.Conversations
             var change = new ConversationInputEvent { Input = input, Paused = paused ?? box.Paused,
                 PauseReason = paused.HasValue ? reason : box.PauseReason };
             var fact = new ConversationInputJournal(_events).Append(box.Session, change);
-            Apply(box, change);
+            Apply(box, change, fact);
             box.Revision = fact.Sequence;
             box.ViewRevision++;
             return fact;
         }
-        private static void Apply(Inbox box, ConversationInputEvent change)
+        private static void Apply(Inbox box, ConversationInputEvent change, SessionEvent fact)
         {
             if (change.Input != null)
             {
+                if (!box.Accepted.ContainsKey(change.Input.OperationId))
+                    box.Accepted.Add(change.Input.OperationId, new AcceptedInput
+                    { Event = fact, Initial = AcceptanceIdentity(change.Input) });
                 var index = box.Inputs.FindIndex(i => i.Id == change.Input.Id);
                 if (index < 0) box.Inputs.Add(Clone(change.Input)); else box.Inputs[index] = Clone(change.Input);
             }
@@ -485,5 +526,11 @@ namespace RNAssistant.Application.Conversations
         { return input.Status == ConversationInputStatus.Pending || input.Status == ConversationInputStatus.Delivering; }
         private static ConversationInput Clone(ConversationInput input)
         { return input == null ? null : JsonConvert.DeserializeObject<ConversationInput>(JsonConvert.SerializeObject(input)); }
+        private static ConversationInput AcceptanceIdentity(ConversationInput input)
+        {
+            var copy = Clone(input);
+            if (copy != null) { copy.Text = null; copy.Attachments = new List<ChatAttachment>(); }
+            return copy;
+        }
     }
 }

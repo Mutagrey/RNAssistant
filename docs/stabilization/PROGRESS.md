@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Квитанция принятого ввода проецируется в Application — 2026-10-27
+
+Office duplicate submit и Workspace duplicate/reconnect теперь проходят одну
+проверку первого принятого event, immutable fingerprint и текущего input status в
+`ConversationInboxService`. Office использует live-проекцию без полного чтения
+истории на каждый submit; Workspace читает canonical journal для подключения из
+другого процесса. Его отдельная реализация поиска квитанции удалена. Lookup
+остаётся read-only: не запускает run и не отмечает доставку.
+
+Host-neutral Harness: парные live/canonical receipt, Office FIFO и Workspace
+resume/bridge reconnect — pass. S1c остаётся открытым: общий scheduler,
+run recovery и UI-controller ещё раздельны. Windows/Office/WebView2 не проверены;
+с Windows-машины доступны только фотографии экрана.
+
 ## Ожидающий ввод проецируется одинаково — 2026-10-27
 
 Office inbox snapshot и Workspace pending-steer snapshot используют одно правило

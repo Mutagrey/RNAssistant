@@ -188,16 +188,9 @@ namespace RNAssistant.Runtime
 
         private WorkspaceInputReceipt FindAcceptedInput(ChatSession session, string requestId, string fingerprint)
         {
-            var records = new ConversationInputJournal(new ChatEventStoreAdapter(_chats)).Read(session, false)
-                .Where(item => item.Change.Input?.OperationId == requestId).ToArray();
-            if (records.Length == 0) return null;
-            var first = records[0];
-            var input = first.Change.Input;
-            if (input.Revision != 1 || string.IsNullOrEmpty(input.AcceptedRunId) ||
-                string.IsNullOrEmpty(input.RequestFingerprint))
-                throw new InvalidOperationException("The accepted input receipt is unavailable; inspect the session without replaying input.");
-            if (fingerprint != null) ConversationInputJournal.RequireSameRequest(input, fingerprint);
-            return Receipt(first.Event, input, records[records.Length - 1].Change.Input.Status == ConversationInputStatus.Applied);
+            var accepted = _conversationInbox.ReadAccepted(session, requestId, fingerprint, requireRunId: true);
+            return accepted == null ? null : Receipt(accepted.Event, accepted.Initial,
+                accepted.Current.Status == ConversationInputStatus.Applied);
         }
 
         private static WorkspaceInputReceipt Receipt(SessionEvent fact, ConversationInput input, bool delivered)
