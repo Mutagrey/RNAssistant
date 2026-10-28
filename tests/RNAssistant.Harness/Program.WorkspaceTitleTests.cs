@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -330,17 +331,24 @@ namespace RNAssistant.Harness
                     {
                         var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "titles"));
                         var session = service.CreateSession(workspace, "Новый чат");
+                        var titleNotices = new ConcurrentQueue<WorkspaceRunEvent>();
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port,
                             Model = "test-model", StreamResponses = false, AutoCompressContext = false };
                         var run = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                             SessionId = session.Id, Message = "Создай краткий отчёт о продажах", Mode = ChatModes.Agent
-                        }, settings, () => "test-key").GetAwaiter().GetResult();
+                        }, settings, () => "test-key", progress: value => titleNotices.Enqueue(value))
+                            .GetAwaiter().GetResult();
                         AssertEqual(RunLifecycle.Completed, run.Summary.Lifecycle, "workspace model run completes");
-                        AssertEqual("Краткий отчёт о продажах", service.ReadState(workspace, session.Id).Title,
-                            "first accepted message assigns a readable draft title");
+                        AssertTrue(new[] { "Краткий отчёт о продажах", "Продажи за октябрь" }
+                            .Contains(service.ReadState(workspace, session.Id).Title),
+                            "accepted message assigns a draft or its already committed smart title");
                         AssertTrue(SpinWait.SpinUntil(() =>
                             service.ReadState(workspace, session.Id).Title == "Продажи за октябрь", 10000),
                             "smart title replaces only the auto title");
+                        AssertTrue(SpinWait.SpinUntil(() => titleNotices.Any(value =>
+                            value.Kind == "TitleChanged" && !string.IsNullOrWhiteSpace(value.Cursor) &&
+                            value.Summary?.RunId == run.Summary.RunId), 3000),
+                            "durable smart title publishes one scoped run/cursor notice");
                         AssertTrue(SpinWait.SpinUntil(() =>
                             !service.ReadState(workspace, session.Id).TitleGenerationPending, 3000),
                             "title generation reaches a terminal state");

@@ -777,6 +777,11 @@ run without a connected push source is reconciled every 10 seconds, and a
 silent/lost source is checked after 30 seconds without push. An idle chat has no
 observer timer. A recreated pane can therefore recover terminal state without
 resubmitting input or relying on the old bridge request.
+The selected idle chat keeps its address for saved change notices without starting
+a timer. Smart title generation runs after terminal; its committed title publishes
+the same scoped cursor notice, which refreshes that chat and its catalog. The old
+two-second full-chat title watcher is removed. A manually renamed or deselected
+chat cannot receive an obsolete generated title in the visible projection.
 
 Application shutdown refuses new workers, cancels existing workers and awaits
 their drain before releasing plugin results; the pane's drain includes this owner.

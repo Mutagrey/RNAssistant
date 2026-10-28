@@ -17,7 +17,8 @@ namespace RNAssistant.Runtime
     public sealed partial class WorkspaceConversationService
     {
         private void StartTitleGeneration(WorkspaceDescriptor workspace, ChatSession session,
-            AppSettings settings, Func<string> apiKeyProvider, RunSummary summary)
+            AppSettings settings, Func<string> apiKeyProvider, RunSummary summary,
+            Action<WorkspaceRunEvent> progress)
         {
             var draft = session?.LastRun?.ProvisionalTitle;
             if (settings?.SmartChatTitles != true || summary?.Lifecycle != RunLifecycle.Completed ||
@@ -59,6 +60,8 @@ namespace RNAssistant.Runtime
                                 if (!ChatTitleBuilder.CanReplaceAutoTitle(current, draft)) return;
                                 if (string.Equals(current.Title, title, StringComparison.Ordinal)) return;
                                 _chats.SetTitle(current, title);
+                                progress?.Invoke(new WorkspaceRunEvent("TitleChanged", summary, null,
+                                    ConversationEventFeed.Cursor(current)));
                                 return;
                             }
                         }

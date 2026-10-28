@@ -78,7 +78,7 @@ namespace RNAssistant.Runtime
                         session.LastRun.WorkspaceAcceptance = acceptance;
                         _chats.Commit(session, new ConversationCommit());
                     }
-                    StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary);
+                    StartTitleGeneration(workspace, session, settings, apiKeyProvider, result.Summary, progress);
                     return new WorkspaceRunResult(session.Id, result.Summary, acceptance, GetPendingQuestions(session),
                         cursor: ConversationEventFeed.Cursor(session), presentation: Presentation(workspace, session));
                 }

@@ -291,8 +291,9 @@ Office target capture in an ordinary project chat.
 at the probe boundary and invalid encoding at the end of the file; readable text
 is admitted without a source-size cutoff and every upload preserves exact bytes.
 `workspace: first message names the chat` checks an accepted workspace turn against
-a controlled local model endpoint: immediate shared draft title, later smart title,
-durable project header and manual rename priority.
+a controlled local model endpoint: shared draft or already committed smart title,
+later smart title with a scoped cursor notice, durable project header and manual
+rename priority.
 `workspace: accepted call history survives a new turn` checks a two-call read
 batch, exact runtime/model-attempt origins after restart, the next model turn,
 legacy narration display and explicit refusal of an origin-less old record.
@@ -388,7 +389,8 @@ bridge/browser evidence, not real Windows/WebView2 qualification.
 `node tests/web/workspace-run-lifetime.test.js <that-path>` consumes the same native
 running/terminal snapshots: there is no pending submit timer during model wait,
 the terminal change notice completes the run without a 1.2-second full-chat poll
-and retains a newer draft. The preview bridge also returns
+and retains a newer draft. A later title notice refreshes the idle chat once
+without the removed two-second title watcher. The preview bridge also returns
 admission before its simulated run finishes.
 `plugins: admitted run cancellation and shutdown belong to application` checks
 cancellation before admission while waiting for a lease, detachment of transport

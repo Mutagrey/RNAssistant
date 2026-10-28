@@ -1,12 +1,24 @@
 (function () {
   "use strict";
   var scope = "office", catalog = null, catalogRevision = 0, active = null, catalogBusy = false,
-    creatingSessionId = null, serial = 0, stopTitleWatch = null;
+    creatingSessionId = null, serial = 0;
   var pendingCancels = new Set();
   var composer = null, uploadingFiles = false, uploadTarget = null;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
     readProjectChat,
-    function (snapshot) { active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot); notice(statusText()); render(); },
+    function (snapshot) {
+      var previousTitle = active && active.state && field(active.state, "title", "Title");
+      active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot);
+      notice(statusText()); render();
+      var nextTitle = active && active.state && field(active.state, "title", "Title");
+      if (previousTitle && nextTitle && previousTitle !== nextTitle &&
+          field(active.state, "status", "Status") !== "running") {
+        var pid = projectId(), sid = currentId();
+        refreshCatalog(function () { return projectId() === pid && currentId() === sid; })
+          .then(function (refreshed) { if (refreshed && projectId() === pid && currentId() === sid) render(); })
+          .catch(function () { /* The current chat already shows the durable title. */ });
+      }
+    },
     function (error) { notice(error.detail || error.message, true); },
     function (snapshot) {
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot);
@@ -359,7 +371,6 @@
   }
   async function open(workspaceId, sessionId) {
     if (!workspaceId || !sessionId) return;
-    if (stopTitleWatch) { stopTitleWatch(); stopTitleWatch = null; }
     if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; render(); }
     if (!project() || !project().available) return;
     var version = ++serial, pid = projectId();
@@ -477,14 +488,6 @@
     render();
     try { var result = await action(pid, sid); if (selected()) {
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
-      if (stopTitleWatch) stopTitleWatch();
-      stopTitleWatch = window.RNAssistantWorkspaceChat.watchTitle(result,
-        function () { return readProjectChat({ workspaceId: pid, sessionId: sid }); },
-        async function (latest) { if (!selected()) return;
-          active = window.RNAssistantWorkspaceChat.latestSnapshot(active, latest); render();
-          try { if (await refreshCatalog(selected) && selected()) render(); }
-          catch (_) { /* The refreshed title is still shown in the open chat. */ }
-        });
       // Catalog refresh is presentation work; an accepted input must release
       // the composer even if this separate read is slow or never returns.
       refreshCatalog(selected).then(function (refreshed) { if (refreshed && selected()) render(); })

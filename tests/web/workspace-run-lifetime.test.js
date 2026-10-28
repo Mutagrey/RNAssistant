@@ -33,7 +33,8 @@ assert.equal(fixture.completed.state.Status, 'completed');
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(data => {
-      window.lifetimeRequest = null; window.lifetimeCompleted = false; window.lifetimePolls = 0;
+      window.lifetimeRequest = null; window.lifetimeCompleted = false;
+      window.lifetimeTitle = false; window.lifetimePolls = 0;
       const original = chrome.webview.postMessage;
       function snapshot() {
         const native = lifetimeCompleted ? data.completed : data.terminal.payload;
@@ -41,6 +42,11 @@ assert.equal(fixture.completed.state.Status, 'completed');
           value === native.sessionId ? lifetimeRequest.payload.sessionId :
           value === native.project.workspaceId ? lifetimeRequest.payload.workspaceId : value);
         if (result.inputReceipt) result.inputReceipt.RequestId = lifetimeRequest.payload.input.requestId;
+        if (lifetimeTitle) {
+          result.state.Title = 'Название после завершения';
+          result.state.Revision = (result.state.Revision || result.state.revision || 0) + 1;
+          result.state.Cursor = 'title-notification';
+        }
         return result;
       }
       chrome.webview.postMessage = request => {
@@ -82,7 +88,24 @@ assert.equal(fixture.completed.state.Status, 'completed');
     await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.Status === 'completed');
     assert.equal(await page.locator('#chatInput').inputValue(), 'Новый черновик', 'terminal notification leaves a newer draft alone');
     assert.equal(await page.locator('#sendButton').isEnabled(), true, 'terminal state unlocks submission');
+    const readsBeforeTitle = await page.evaluate(() => lifetimePolls);
+    await page.evaluate(() => {
+      lifetimeTitle = true;
+      const current = RNAssistantProjectChats.snapshot();
+      lifetimeDeliver({type:'progress', id:lifetimeRequest.id, payload:{
+        workspaceId:lifetimeRequest.payload.workspaceId,
+        sessionId:lifetimeRequest.payload.sessionId,
+        runId:current.state.RunId || current.state.runId,
+        phase:'session_changed', cursor:'title-notification'
+      }});
+    });
+    await page.locator('#projectChatTitle').getByText('Название после завершения').waitFor();
+    assert.equal(await page.evaluate(() => lifetimePolls), readsBeforeTitle + 1,
+      'durable title notice refreshes the selected idle chat once');
+    await page.waitForTimeout(2200);
+    assert.equal(await page.evaluate(() => lifetimePolls), readsBeforeTitle + 1,
+      'idle title update leaves no full-chat title polling timer');
     assert.deepEqual(errors, []);
-    console.log('PASS workspace run lifetime: native admission, push completion without full polling and draft retention');
+    console.log('PASS workspace run lifetime: native admission, push completion/title without full polling and draft retention');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => {console.error(error); process.exitCode = 1;});
