@@ -258,6 +258,10 @@ function groupAgentRunUpdates(steps) {
 
 function appendAgentActionStage(parent, actions, stats) {
   if (!actions.length) return;
+  if (actions.length === 1) {
+    appendAgentRunProcess(parent, actions, stats);
+    return;
+  }
   var details = document.createElement("details");
   var active = !!stats.current && actions.some(function (item) { return activityContains(item.activity, stats.current) && activityPresentationState(item.activity) === "running"; });
   var issues = actions.filter(function (item) { return ["failed", "warning", "unknown", "partial", "cancelled"].indexOf(activityPresentationState(item.activity)) >= 0; });

@@ -120,17 +120,15 @@
 .agent-model-step {
   display: grid; gap: 8px; min-width: 0;
 }
-.agent-model-step + .agent-model-step,
-.agent-model-step + .agent-run-overview {
-  max-width: 100%; margin-bottom: 16px; padding-bottom: 9px; border-bottom: 1px solid var(--line);
-}
-
 .agent-run-actions.has-actions {
   padding: 0; border: 0;
 }
 
 .agent-run-wrap > .agent-final-step { margin-top: 6px; }
 .agent-run-wrap > .agent-final-step:first-child { margin-top: 0; }
+.agent-run-wrap > :not(.agent-final-step) + .agent-final-step {
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
+}
 
 .agent-step-message {
   color: var(--text);

@@ -70,6 +70,15 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const run = renderAgentRunArticle({ items: [item], finalMessage: { message: final, index: 1 }, live: false });
       run.id = "full-run";
       document.querySelector("main").appendChild(run);
+      const action = (id, step) => ({ activity: { Kind: "tool", RunId: "r-layout", StepId: step,
+        StepMessage: step, ToolCallId: id, ToolId: "common.resources_read", Status: "completed", Subtitle: id,
+        Display: { action: "Чтение", operation: "Read" } }, message: { Id: id, RunId: "r-layout" } });
+      const single = renderAgentRunArticle({ live: true, items: [action("only", "one")] });
+      single.id = "single-action-run"; document.querySelector("main").appendChild(single);
+      const grouped = renderAgentRunArticle({ live: true, items: [action("first", "same"), action("second", "same")] });
+      grouped.id = "grouped-actions-run"; document.querySelector("main").appendChild(grouped);
+      const steps = renderAgentRunArticle({ live: true, items: [action("step-one", "one"), action("step-two", "two")] });
+      steps.id = "separate-steps-run"; document.querySelector("main").appendChild(steps);
       const usageMessages = [
         { Id: "usage-protocol-1", Role: "assistant", ProtocolMessage: true, RunId: "usage-run",
           PromptTokens: 12345, CompletionTokens: 678, TotalTokens: 13023 },
@@ -93,6 +102,18 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     for (const width of [740, 360]) {
       await page.setViewportSize({ width, height: 920 });
+      assert.equal(await page.locator("#single-action-run .agent-action-stage").count(), 0,
+        "one action is a direct row at width " + width);
+      assert.equal(await page.locator("#single-action-run .agent-activity-row").count(), 1);
+      assert.equal(await page.locator("#grouped-actions-run .agent-action-stage").count(), 1,
+        "two adjacent actions share a disclosure at width " + width);
+      assert.equal(await page.locator("#grouped-actions-run .agent-activity-row").count(), 2);
+      assert.equal(await page.locator("#separate-steps-run .agent-model-step").count(), 2);
+      assert.equal(await page.locator("#separate-steps-run .agent-model-step").evaluateAll(nodes =>
+        nodes.map(node => getComputedStyle(node).borderBottomWidth).join(",")), "0px,0px",
+        "ordinary steps have no separators");
+      assert.equal(await page.locator("#full-run .agent-final-step").evaluate(node => getComputedStyle(node).borderTopWidth), "1px",
+        "the separator appears only before the final answer");
       assert.equal(await page.locator("#usage-run .message-usage").textContent(),
         "29\u202f602 токенов · вход 28\u202f023 · ответ 1\u202f579",
         "the run footer sums accepted provider answers once and groups digits");
@@ -141,7 +162,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       });
       assert.ok(layout.assistantLeft < 1 && layout.plainAssistantLeft < 1 && layout.userRight < 1 && layout.metaAfter);
       assert.ok(layout.copyFirst && !layout.overflow);
-      assert.ok(layout.gap >= 0 && layout.gap <= 8 && layout.divider === "0px");
+      assert.ok(layout.gap >= 8 && layout.gap <= 12 && layout.divider === "0px",
+        "the final answer owns the only separator and its spacing");
     }
     // Exercise the shipped Markdown renderer, not an identity-string mock.
     await page.evaluate(() => {
@@ -299,10 +321,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#sparse-run .kind-tool:visible").count(), 6, "refresh preserves explicit expansion");
       assert.ok(await page.locator("#sparse-run").evaluate(node => node.scrollWidth <= node.clientWidth + 1), "group fits narrow chat");
     }
-    assert.equal(await page.locator("#sparse-run .agent-status-shimmer").evaluate(node => getComputedStyle(node).animationName), "agent-text-shimmer");
+    assert.equal(await page.locator("#sparse-run .agent-status-shimmer").count(), 0,
+      "a single active action uses its own row instead of an animated group label");
     assert.equal(await page.locator("#sparse-run .agent-work-spinner").evaluate(node => getComputedStyle(node).animationName), "agent-work-spin");
     await page.emulateMedia({ reducedMotion: "reduce" });
-    for (const selector of [".agent-status-shimmer", ".agent-work-spinner"]) {
+    for (const selector of [".agent-work-spinner"]) {
       assert.equal(await page.locator("#sparse-run " + selector).evaluate(node => getComputedStyle(node).animationName), "none");
     }
     await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -351,9 +374,10 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const refreshed = page.locator("#disclosure-refresh");
     await refreshed.locator(".agent-run-overview > summary").click();
     await refreshed.locator(".agent-run-history-content").waitFor({ state: "visible" });
-    await refreshed.locator(".agent-completed-actions > summary").first().click();
+    assert.equal(await refreshed.locator(".agent-completed-actions").count(), 0,
+      "one action per step has no nested action group");
     const actionSummary = refreshed.locator(".agent-activity-toggle > summary").first();
-    for (const summary of [refreshed.locator('.agent-completed-actions > summary').first(), actionSummary]) {
+    for (const summary of [actionSummary]) {
       assert.ok(await summary.evaluate(node => {
         const caret = node.querySelector('.agent-run-history-caret, .agent-activity-caret');
         return caret && node.getBoundingClientRect().right - caret.getBoundingClientRect().right >= 7;
@@ -363,7 +387,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await actionSummary.focus();
     await page.evaluate(() => refreshDisclosureFixture("after"));
     assert.equal(await refreshed.locator(".agent-run-overview").evaluate(node => node.open), true);
-    assert.equal(await refreshed.locator(".agent-completed-actions").first().evaluate(node => node.open), true);
     assert.equal(await refreshed.locator(".agent-activity-toggle").first().evaluate(node => node.open), true);
     assert.equal(await refreshed.locator(".agent-activity-toggle > summary").first().evaluate(node => document.activeElement === node), true,
       "stream refresh restores focused action without scrolling");
