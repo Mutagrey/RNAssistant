@@ -2,9 +2,11 @@
 
 ## Workspace: сохранённые шаги доставляются событием — 2026-10-28
 
-До `d76dd00b` Workspace держал асинхронный submit до terminal и опрашивал чат
-только в его рамках. После раннего admission UI продолжал полный `getProjectChat`
-каждые 1,2 с, хотя Application уже публиковал события сохранённых kernel facts;
+Первый Workspace UI опрашивал чат только в рамках submit. В `d670b7a6` появился
+общий наблюдатель для повторно открытых running чатов; submit тогда ещё ожидал
+terminal. После `d76dd00b` submit стал возвращать ранний admission, и наблюдатель
+стал основным способом увидеть terminal локального run: полный `getProjectChat`
+выполнялся каждые 1,2 с, хотя Application уже публиковал сохранённые kernel facts;
 bridge отбрасывал их, оставляя только preview и receipt. Теперь typed bridge
 передаёт exact workspace/session/run/cursor как сигнал перечитать каноническое
 состояние. Активный локально наблюдаемый run обновляется по этому сигналу;
