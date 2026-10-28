@@ -208,11 +208,12 @@
     return current;
   }
   function createRunObserver(read, changed, failed, progressChanged) {
-    var target = null, selected = null, generation = 0;
+    var target = null, selected = null, generation = 0, lastPushAt = 0;
     var observer = window.RNAssistantConversationObserver.create({
       current: function () { return target ? { workspaceId: target.workspaceId,
         sessionId: target.sessionId, generation: generation } : null; },
-      read: read, changed: changed, failed: failed, autoStart: true
+      read: read, changed: changed, failed: failed, interval: 10000,
+      shouldPoll: function () { return !lastPushAt || Date.now() - lastPushAt >= 30000; }
     });
     return { select: function (snapshot, pending) {
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
@@ -221,10 +222,19 @@
       if (observe && target && target.workspaceId === workspaceId && target.sessionId === sessionId) return;
       if (target || observe) ++generation;
       target = observe ? { workspaceId: workspaceId, sessionId: sessionId } : null;
+      lastPushAt = 0;
+      if (target) observer.start(); else observer.stop();
     }, acceptProgress: function (payload) {
       if (!target || target.workspaceId !== field(payload, "workspaceId") ||
           target.sessionId !== field(payload, "sessionId")) return;
       var preview = field(payload, "modelProgress"), state = field(selected, "state");
+      if (field(state, "status") === "running" && field(state, "runId") && field(payload, "runId") &&
+          field(state, "runId") !== field(payload, "runId")) return;
+      lastPushAt = Date.now();
+      if (field(payload, "phase") === "session_changed") {
+        if (field(payload, "cursor") !== field(state, "cursor")) observer.refresh();
+        return;
+      }
       if (!preview || !state || field(state, "status") !== "running" ||
           field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
       var existing = field(state, "modelProgress");

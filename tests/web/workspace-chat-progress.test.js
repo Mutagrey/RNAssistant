@@ -196,6 +196,9 @@ const { chromium } = require('playwright');
       assert.equal(delivered.scope, true, owner + ': event has exact workspace scope');
       assert.equal(delivered.unchanged, true, owner + ': stale and foreign events do not replace preview');
       await page.waitForFunction(() => !document.querySelector('#messages .agent-stream-step'));
+      assert.equal(await page.evaluate(() => window.__workspaceProgress.some(event =>
+        event.phase === 'session_changed' && event.cursor)), true,
+        owner + ': terminal state arrived as an exact session change notification');
       await page.waitForFunction(() => {
         const snapshot = RNAssistantProjectChats.snapshot();
         return snapshot && (snapshot.state.status || snapshot.state.Status) !== 'running';

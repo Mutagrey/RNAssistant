@@ -739,7 +739,7 @@ the input. The request-scoped UI callback clears only the matching draft version
 after the matching receipt is confirmed, without waiting for model completion. Repeated
 receipts cannot clear a later draft; background receipts never alter the Office
 composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
-On open/navigation and ordinary run polling, `getProjectChat.receiptRequestId`
+On open/navigation and recovery reconciliation, `getProjectChat.receiptRequestId`
 asks for the one unresolved input. The typed `inputReceipt` is read from the
 existing input journal through the session's exact event revision. A read-only
 observer never combines a newer `Applied` event with an older message snapshot;
@@ -768,6 +768,15 @@ tries to acquire the lease.
 Explicit `cancelProjectChat` still addresses the exact run/cursor. Progress is an
 observer: a closed or throwing bridge cannot abort execution. The UI follows the
 canonical snapshot/progress independently of the completed submit request.
+After each persisted kernel fact, the Workspace bridge forwards an exact
+workspace/session/run/cursor change notice. It carries no inferred lifecycle:
+the UI reads the canonical snapshot once and the kernel projection decides whether
+the run is still active. Model preview remains a separate leaf update. A locally
+observed run no longer loads its full chat every 1.2 seconds; an opened
+run without a connected push source is reconciled every 10 seconds, and a
+silent/lost source is checked after 30 seconds without push. An idle chat has no
+observer timer. A recreated pane can therefore recover terminal state without
+resubmitting input or relying on the old bridge request.
 
 Application shutdown refuses new workers, cancels existing workers and awaits
 their drain before releasing plugin results; the pane's drain includes this owner.

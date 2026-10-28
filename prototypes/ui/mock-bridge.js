@@ -782,6 +782,9 @@
             if (sourcePlugin) pluginSourceRevision[sourcePlugin] = (pluginSourceRevision[sourcePlugin] || 0) + 1;
             delete projectRuns[submitting.Id]; submitting.RunStatus = "completed";
             projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
+            emit({ type: "progress", id: requestId, payload: { workspaceId: payload.workspaceId,
+              sessionId: submitting.Id, runId: run.runId, phase: "session_changed",
+              cursor: "preview-project-terminal-" + projectRevisions[submitting.Id] } });
           }
         }, 1800);
       }

@@ -61,15 +61,28 @@ assert.equal(fixture.completed.state.Status, 'completed');
     assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().state.Status), 'running');
     assert.equal(await page.locator('#workspaceChatControl').isVisible(), false, 'consumed approval is removed');
     assert.equal(await page.locator('#chatInput').inputValue(), 'Следующая задача', 'approval never clears the draft');
-    assert.equal(await page.locator('#sendButton').isEnabled(), false, 'no second writer while continuation runs');
-    await page.waitForFunction(() => approvalPolls > 0);
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'the admitted continuation still accepts an exact-run clarification');
+    const readsAfterAdmission = await page.evaluate(() => approvalPolls);
+    await page.waitForTimeout(1500);
+    assert.equal(await page.evaluate(() => approvalPolls), readsAfterAdmission,
+      'approval continuation does not reread the entire chat every 1.2 seconds');
     assert.equal(await page.evaluate(() => Object.values(state.pending).filter(item => item.type === 'resolveProjectChat').length), 0,
       'approval has no pending bridge request during model wait');
-    await page.evaluate(() => { approvalCompleted = true; });
+    await page.evaluate(() => {
+      approvalCompleted = true;
+      const snapshot = RNAssistantProjectChats.snapshot();
+      approvalDeliver({type:'progress', id:approvalRequest.id, payload:{
+        workspaceId:approvalRequest.payload.workspaceId,
+        sessionId:approvalRequest.payload.sessionId,
+        runId:snapshot.state.RunId || snapshot.state.runId,
+        phase:'session_changed', cursor:'approval-terminal-notification'
+      }});
+    });
     await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.Status === 'completed');
     assert.equal(await page.locator('#sendButton').isEnabled(), true);
     assert.equal(await page.locator('#chatInput').inputValue(), 'Следующая задача');
     assert.deepEqual(errors, []);
-    console.log('PASS workspace approval lifetime: native admission, consumed pending, no request timer, polling and draft retention');
+    console.log('PASS workspace approval lifetime: native admission, push completion and draft retention');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => {console.error(error); process.exitCode = 1;});

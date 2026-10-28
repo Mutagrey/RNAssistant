@@ -61,15 +61,28 @@ assert.equal(fixture.completed.state.Status, 'completed');
     assert.equal(await page.locator('#chatInput').inputValue(), '', 'durable admission clears the submitted draft');
     assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().state.Status), 'running');
     await page.locator('#chatInput').fill('Новый черновик');
-    assert.equal(await page.locator('#sendButton').isEnabled(), false, 'early receipt does not start a second writer');
-    await page.waitForFunction(() => lifetimePolls > 0);
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'the current run still accepts an exact-run clarification');
+    const readsAfterAdmission = await page.evaluate(() => lifetimePolls);
+    await page.waitForTimeout(1500);
+    assert.equal(await page.evaluate(() => lifetimePolls), readsAfterAdmission,
+      'a locally observed run does not reread the entire chat every 1.2 seconds');
     assert.equal(await page.evaluate(() => Object.values(state.pending).filter(item => item.type === 'submitProjectChat').length), 0,
       'model wait has no outstanding submit request or its idle timeout');
-    await page.evaluate(() => { lifetimeCompleted = true; });
+    await page.evaluate(() => {
+      lifetimeCompleted = true;
+      const snapshot = RNAssistantProjectChats.snapshot();
+      lifetimeDeliver({type:'progress', id:lifetimeRequest.id, payload:{
+        workspaceId:lifetimeRequest.payload.workspaceId,
+        sessionId:lifetimeRequest.payload.sessionId,
+        runId:snapshot.state.RunId || snapshot.state.runId,
+        phase:'session_changed', cursor:'terminal-notification'
+      }});
+    });
     await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.Status === 'completed');
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Новый черновик', 'terminal polling leaves a newer draft alone');
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Новый черновик', 'terminal notification leaves a newer draft alone');
     assert.equal(await page.locator('#sendButton').isEnabled(), true, 'terminal state unlocks submission');
     assert.deepEqual(errors, []);
-    console.log('PASS workspace run lifetime: native admission, no pending submit during model wait, polling completion and draft retention');
+    console.log('PASS workspace run lifetime: native admission, push completion without full polling and draft retention');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => {console.error(error); process.exitCode = 1;});

@@ -387,7 +387,8 @@ unconfirmed delivery and recovery from a lost progress event. This is host-neutr
 bridge/browser evidence, not real Windows/WebView2 qualification.
 `node tests/web/workspace-run-lifetime.test.js <that-path>` consumes the same native
 running/terminal snapshots: there is no pending submit timer during model wait,
-polling completes the run and retains a newer draft. The preview bridge also returns
+the terminal change notice completes the run without a 1.2-second full-chat poll
+and retains a newer draft. The preview bridge also returns
 admission before its simulated run finishes.
 `plugins: admitted run cancellation and shutdown belong to application` checks
 cancellation before admission while waiting for a lease, detachment of transport
@@ -400,7 +401,7 @@ recreation, late transport cancellation, exact Stop, shutdown, offline denial an
 terminal API cancellation through the same worker. Set `RNA_WORKSPACE_APPROVAL_FIXTURE`
 to an output JSON path; `node tests/web/workspace-approval-lifetime.test.js <that-path>`
 uses those native snapshots to check consumed approval, no pending resolve timer,
-polling completion and draft retention. These do not qualify Windows/Office shutdown.
+terminal notification and draft retention. These do not qualify Windows/Office shutdown.
 `plugins: input receipt reconnect is read-only and scoped` checks journal receipt
 lookup after Application/bridge reopen, unapplied/unknown IDs, exact chat isolation,
 bounded ID and unchanged event revision. The existing held-model receipt test also

@@ -334,6 +334,13 @@ namespace RNAssistant.Harness
                                     (string)item["payload"]?["sessionId"] == project.SessionId &&
                                     (long)item["payload"]?["modelProgress"]?["Sequence"] > sourcePreview.Last().ModelProgress.Sequence),
                                     "project bridge delivers ordered model preview for the exact workspace/session");
+                                AssertTrue(progressMessages.Select(JObject.Parse).Any(item =>
+                                    (string)item["payload"]?["phase"] == "session_changed" &&
+                                    (string)item["payload"]?["workspaceId"] == workspaceId &&
+                                    (string)item["payload"]?["sessionId"] == project.SessionId &&
+                                    (string)item["payload"]?["runId"] == projectReply.State.RunId &&
+                                    (string)item["payload"]?["cursor"] == projectReply.State.Cursor),
+                                    "terminal kernel commit notifies the exact workspace chat after submit admission");
                             }
                         }
                         server.GetAwaiter().GetResult();
