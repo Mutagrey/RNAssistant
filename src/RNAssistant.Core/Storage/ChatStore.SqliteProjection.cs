@@ -598,6 +598,15 @@ namespace RNAssistant.Core.Storage
             return null;
         }
 
+        internal ConversationMessageWindow ReadMessageWindow(string host, string documentKey,
+            string chatId, int beforeIndex, int pageSize)
+        {
+            if (string.IsNullOrWhiteSpace(chatId)) return null;
+            if (pageSize <= 0 || pageSize > 100) throw new ArgumentOutOfRangeException(nameof(pageSize));
+            var path = GetSessionPath(host, documentKey, chatId);
+            return File.Exists(path) ? ReadMessageWindowAtPath(path, chatId, beforeIndex, pageSize) : null;
+        }
+
         private ConversationMessageWindow ReadMessageWindowAtPath(string path, string chatId,
             int beforeIndex, int pageSize)
         {

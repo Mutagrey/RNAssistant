@@ -116,6 +116,12 @@ namespace RNAssistant.Runtime
             return _workspaces.LoadSession(_chats, workspace, sessionId);
         }
 
+        public ConversationMessageWindow ReadMessageWindow(WorkspaceDescriptor workspace,
+            string sessionId, int beforeIndex, int pageSize)
+        {
+            return _workspaces.ReadMessageWindow(_chats, workspace, sessionId, beforeIndex, pageSize);
+        }
+
         // Chat activation may reconcile a stopped owner; plain inspection stays read-only.
         internal ChatSession RefreshSession(WorkspaceDescriptor workspace, string sessionId)
         {

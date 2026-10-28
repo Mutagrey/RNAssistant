@@ -48,6 +48,10 @@ indexed cold read still materializes all messages needed by an active conversati
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
+Workspace older-history reads use the same bounded SQLite window through the exact
+`WorkspaceId` partition and validate the session association before presentation.
+Opening and polling a Workspace chat still materialize the full session for run
+recovery and state; the page path does not change that lifetime boundary.
 
 Document relocation checks source existence and destination availability under both
 ordered document locks before appending the new binding. A missing persisted source

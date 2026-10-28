@@ -13,6 +13,7 @@ using RNAssistant.Application.Contracts;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Storage;
@@ -703,40 +704,55 @@ namespace RNAssistant.Application
         {
             try
             {
-                var attachments = new AttachmentStore(_paths);
                 return ChatMessageWindowProjector.Project<ChatMessageWindowViewDto>(session, beforeIndex,
-                    (owner, messages) => messages.Select(message => {
-                        var view = PresentWorkspaceMessage(message);
-                        if (view?.Attachments == null) return view;
-                        for (var index = 0; index < view.Attachments.Count; index++)
-                        {
-                            var item = message.Attachments[index];
-                            if (item?.VisualSelectionSource == null) continue;
-                            ResourceAddress address;
-                            ResourceRef source = null;
-                            string releaseId = null;
-                            if (item.VisualSelectionSource.IsExact &&
-                                ResourceUri.TryParse(item.VisualSelectionSource.Uri, out address) &&
-                                address.Provider == "plugin" && address.Segments.Count == 3 &&
-                                address.Segments[1] == "release" && item.VisualSelectionSource.Revision == "1")
-                            {
-                                try
-                                {
-                                    var release = _store.ReadRelease(new PluginReleaseIdentity(address.Segments[0], address.Segments[2]));
-                                    if (release.SourceWorkspaceId == workspace.WorkspaceId &&
-                                        _store.Get(address.Segments[0])?.SourceWorkspaceId == workspace.WorkspaceId)
-                                    { source = PluginStore.ReleaseRef(address.Segments[0], address.Segments[2]); releaseId = address.Segments[2]; }
-                                }
-                                catch (InvalidOperationException) { }
-                                catch (IOException) { }
-                            }
-                            ChatVisualAnnotationProjection.Apply(item, view.Attachments[index], attachments, source, releaseId, 1);
-                        }
-                        return view;
-                    }).ToArray());
+                    (owner, messages) => PresentWorkspaceMessages(workspace, messages));
             }
             catch (ArgumentOutOfRangeException)
             { throw new PluginException("project_chat_invalid", "The history cursor is outside this chat."); }
+        }
+
+        private ChatMessageWindowViewDto PresentWorkspaceWindow(WorkspaceDescriptor workspace, ConversationMessageWindow window)
+        {
+            return new ChatMessageWindowViewDto {
+                ChatId = window.Session.Id, SessionRevision = window.Session.Revision,
+                StartIndex = window.StartIndex, TotalCount = window.TotalCount,
+                Messages = PresentWorkspaceMessages(workspace, window.PageMessages)
+            };
+        }
+
+        private IReadOnlyList<ChatMessageViewDto> PresentWorkspaceMessages(WorkspaceDescriptor workspace,
+            IEnumerable<ChatMessage> messages)
+        {
+            var attachments = new AttachmentStore(_paths);
+            return messages.Select(message => {
+                var view = PresentWorkspaceMessage(message);
+                if (view?.Attachments == null) return view;
+                for (var index = 0; index < view.Attachments.Count; index++)
+                {
+                    var item = message.Attachments[index];
+                    if (item?.VisualSelectionSource == null) continue;
+                    ResourceAddress address;
+                    ResourceRef source = null;
+                    string releaseId = null;
+                    if (item.VisualSelectionSource.IsExact &&
+                        ResourceUri.TryParse(item.VisualSelectionSource.Uri, out address) &&
+                        address.Provider == "plugin" && address.Segments.Count == 3 &&
+                        address.Segments[1] == "release" && item.VisualSelectionSource.Revision == "1")
+                    {
+                        try
+                        {
+                            var release = _store.ReadRelease(new PluginReleaseIdentity(address.Segments[0], address.Segments[2]));
+                            if (release.SourceWorkspaceId == workspace.WorkspaceId &&
+                                _store.Get(address.Segments[0])?.SourceWorkspaceId == workspace.WorkspaceId)
+                            { source = PluginStore.ReleaseRef(address.Segments[0], address.Segments[2]); releaseId = address.Segments[2]; }
+                        }
+                        catch (InvalidOperationException) { }
+                        catch (IOException) { }
+                    }
+                    ChatVisualAnnotationProjection.Apply(item, view.Attachments[index], attachments, source, releaseId, 1);
+                }
+                return view;
+            }).ToArray();
         }
         private WorkspaceDescriptor RequireProjectWorkspace(string workspaceId)
         {
@@ -847,9 +863,13 @@ namespace RNAssistant.Application
                 if (request == null || string.IsNullOrWhiteSpace(request.SessionId))
                     throw new PluginException("project_chat_invalid", "A project chat is required.");
                 var workspace = RequireProjectWorkspace(request.WorkspaceId);
-                var session = Conversations.GetSession(workspace, request.SessionId);
-                if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
-                return PresentWorkspaceWindow(workspace, session, request.BeforeIndex);
+                ConversationMessageWindow window;
+                try { window = Conversations.ReadMessageWindow(workspace, request.SessionId,
+                    request.BeforeIndex, ChatMessageWindowViewDto.PageSize); }
+                catch (ArgumentOutOfRangeException)
+                { throw new PluginException("project_chat_invalid", "The history cursor is outside this chat."); }
+                if (window == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
+                return PresentWorkspaceWindow(workspace, window);
             }
         }
 

@@ -207,6 +207,18 @@ namespace RNAssistant.Core.Storage
             return session;
         }
 
+        public ConversationMessageWindow ReadMessageWindow(ChatStore chats, WorkspaceDescriptor workspace,
+            string sessionId, int beforeIndex, int pageSize)
+        {
+            if (chats == null) throw new ArgumentNullException(nameof(chats));
+            ValidateDescriptor(workspace);
+            var window = chats.ReadMessageWindow("Workspace", workspace.WorkspaceId,
+                sessionId, beforeIndex, pageSize);
+            if (window != null && window.Session.WorkspaceId != workspace.WorkspaceId)
+                throw new InvalidDataException("The session is not associated with this workspace.");
+            return window;
+        }
+
         public ChatSessionHeader[] ListSessions(ChatStore chats, WorkspaceDescriptor workspace)
         {
             if (chats == null) throw new ArgumentNullException(nameof(chats));
