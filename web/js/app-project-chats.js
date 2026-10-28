@@ -2,7 +2,7 @@
   "use strict";
   var scope = "office", catalog = null, catalogRevision = 0, active = null, catalogBusy = false,
     creatingSessionId = null, serial = 0, stopTitleWatch = null;
-  var pendingChatRequests = new Set(), pendingCancels = new Set();
+  var pendingCancels = new Set();
   var composer = null, uploadingFiles = false, uploadTarget = null;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
     readProjectChat,
@@ -69,7 +69,8 @@
   function projectId() { return selectedWorkspaceId; }
   function currentId() { return active && active.sessionId; }
   function chatRequestKey(workspaceId, sessionId) { return JSON.stringify([workspaceId, sessionId]); }
-  function chatBusy() { return !!active && pendingChatRequests.has(chatRequestKey(projectId(), currentId())); }
+  function chatBusy() { return !!active && window.RNAssistantConversationInput.isPending("workspace",
+    { workspaceId: projectId(), sessionId: currentId() }); }
   function cancelBusy() { return !!active && pendingCancels.has(chatRequestKey(projectId(), currentId())); }
   function selectedUploadBusy() { return !!active && uploadingFiles && !!uploadTarget &&
     uploadTarget.workspaceId === projectId() && uploadTarget.sessionId === currentId(); }
@@ -455,26 +456,32 @@
   }
   async function runChat(action, reportFailure) {
     if (!active || !project() || !project().available) return false;
-    var pid = projectId(), sid = currentId(), requestKey = chatRequestKey(pid, sid);
-    if (pendingChatRequests.has(requestKey)) return false;
+    var pid = projectId(), sid = currentId();
+    if (!pid || !sid) return false;
+    var releasePending = window.RNAssistantConversationInput.begin("workspace", { workspaceId: pid, sessionId: sid });
+    if (!releasePending) return false;
     if (catalogBusy && creatingSessionId !== sid) ++serial;
-    pendingChatRequests.add(requestKey); render();
-    try { var result = await action(pid, sid); if (projectId() === pid && currentId() === sid) {
+    var version = serial;
+    function selected() { return version === serial && projectId() === pid && currentId() === sid; }
+    render();
+    try { var result = await action(pid, sid); if (selected()) {
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
-      try { if (await refreshCatalog(function () { return projectId() === pid && currentId() === sid; })) render();
-      } catch (_) { /* The chat result remains available. */ }
       if (stopTitleWatch) stopTitleWatch();
       stopTitleWatch = window.RNAssistantWorkspaceChat.watchTitle(result,
         function () { return readProjectChat({ workspaceId: pid, sessionId: sid }); },
-        async function (latest) { if (projectId() !== pid || currentId() !== sid) return;
+        async function (latest) { if (!selected()) return;
           active = window.RNAssistantWorkspaceChat.latestSnapshot(active, latest); render();
-          try { if (await refreshCatalog(function () { return projectId() === pid && currentId() === sid; })) render(); }
+          try { if (await refreshCatalog(selected) && selected()) render(); }
           catch (_) { /* The refreshed title is still shown in the open chat. */ }
         });
+      // Catalog refresh is presentation work; an accepted input must release
+      // the composer even if this separate read is slow or never returns.
+      refreshCatalog(selected).then(function (refreshed) { if (refreshed && selected()) render(); })
+        .catch(function () { /* The accepted chat result remains available. */ });
     } return true; }
-    catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true);
+    catch (error) { if (selected()) notice(error.detail || error.message, true);
       if (reportFailure) throw error; return false; }
-    finally { pendingChatRequests.delete(requestKey); render(); }
+    finally { releasePending(); render(); }
   }
   function submitProjectInput(target, input, flush, accepted, reportFailure) {
     if (!target || target.workspaceId !== projectId() || target.sessionId !== currentId()) {

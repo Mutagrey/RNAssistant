@@ -1,6 +1,29 @@
 (function () {
   "use strict";
 
+  // One transient submit barrier for both shells. It is scoped to the exact
+  // conversation, and never represents durable delivery or a running model.
+  var pending = new Map();
+  function pendingKey(kind, target) {
+    if (kind === "office" && target && target.chatId)
+      return JSON.stringify([kind, target.chatId]);
+    if (kind === "workspace" && target && target.workspaceId && target.sessionId)
+      return JSON.stringify([kind, target.workspaceId, target.sessionId]);
+    throw new Error("Conversation submit requires an exact address.");
+  }
+  function isPending(kind, target) {
+    if (!target || kind === "office" && !target.chatId ||
+        kind === "workspace" && (!target.workspaceId || !target.sessionId)) return false;
+    return pending.has(pendingKey(kind, target));
+  }
+  function begin(kind, target) {
+    var key = pendingKey(kind, target);
+    if (pending.has(key)) return null;
+    var token = {};
+    pending.set(key, token);
+    return function () { if (pending.get(key) === token) pending.delete(key); };
+  }
+
   function accepted(kind, target, operationId, candidate, steerRunId) {
     if (!target || !operationId || !candidate) return false;
     var receipt = kind === "office" ? candidate.acceptedInput : candidate;
@@ -40,5 +63,6 @@
     };
   }
 
-  window.RNAssistantConversationInput = { accepted: accepted, create: create };
+  window.RNAssistantConversationInput = { accepted: accepted, create: create,
+    isPending: isPending, begin: begin };
 })();

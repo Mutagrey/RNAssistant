@@ -53,7 +53,7 @@ function createContext(stageFails) {
   };
   context.FileReader = class { constructor() { throw new Error("base64 ingestion must not return"); } };
 
-  for (const file of ["app-chat-state.js", "app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
+  for (const file of ["app-chat-state.js", "app-conversation-input.js", "app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
   context.submitInboxMessage = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
@@ -84,7 +84,7 @@ async function settle() {
     await settle();
 
     assert.equal(fixture.sent.length, 0, "model dispatch waits while the PDF draft is staging");
-    assert.equal(fixture.context.isPendingChatSubmit("chat-a"), true);
+    assert.equal(fixture.context.RNAssistantConversationInput.isPending("office", { chatId: "chat-a" }), true);
     fixture.finishStage();
     assert.equal(await ingestion, true);
     await submission;
@@ -116,21 +116,21 @@ async function settle() {
 
   {
     const fixture = createContext(false);
-    fixture.context.setPendingChatSubmit("chat-a", true);
+    fixture.context.RNAssistantConversationInput.begin("office", { chatId: "chat-a" });
     fixture.context.state.activeChatId = "chat-b";
     fixture.input.value = "Второй чат";
     await fixture.context.submitChatInput();
     assert.equal(fixture.sent.length, 1, "preparation in another chat does not block this chat");
     assert.equal(fixture.sent[0].chatId, "chat-b");
-    assert.equal(fixture.context.isPendingChatSubmit("chat-a"), true, "the first chat keeps its own barrier");
+    assert.equal(fixture.context.RNAssistantConversationInput.isPending("office", { chatId: "chat-a" }), true,
+      "the first chat keeps its own barrier");
     console.log("PASS attachment staging: submit barriers are isolated per chat");
   }
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-chat-state.js?v=office-draft-20261023-1"), "draft owner has the updated cache key");
-  assert.ok(index.includes("app-attachments.js?v=office-draft-20261023-1"), "attachment upload has the updated cache key");
-  assert.ok(index.includes("app-chat-composer.js?v=office-draft-20261023-1"), "composer has the updated cache key");
-  assert.ok(index.includes("app-chat-run.js?v="), "app-chat-run.js has a cache key");
+  assert.ok(index.includes("app-chat-state.js?v="), "draft owner has a cache key");
+  for (const file of ["app-conversation-input", "app-attachments", "app-chat-composer", "app-chat-run"])
+    assert.ok(index.includes(file + ".js?v=addressed-pending-20261027-1"), file + " has the updated cache key");
   console.log("PASS attachment staging: changed UI modules have current cache keys");
   console.log("OK 4/4");
 }()).catch(error => {

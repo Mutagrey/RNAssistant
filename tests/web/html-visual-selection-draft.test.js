@@ -18,7 +18,7 @@ const model = { prop(source, pascal, camel, fallback) {
     return source && source[camel] !== undefined ? source[camel] : source && source[pascal] !== undefined ? source[pascal] : fallback;
   }, artifactId: item => item.Id, artifactKind: item => item.Kind };
 const context = vm.createContext({ state, $: element, ATTACHMENT_MAX_FILES: 10,
-  log() {}, updateComposerInputState() {}, isPendingChatSubmit: () => false,
+  log() {}, updateComposerInputState() {},
   hasActiveMessageEdit: () => false,
   setAttachmentStatus() {},
   attachmentId: item => item.Id,
@@ -31,6 +31,7 @@ const context = vm.createContext({ state, $: element, ATTACHMENT_MAX_FILES: 10,
     return type === "stageHtmlVisualSelection" ? stageResponse() : Promise.resolve({}); },
   window: null });
 context.window = context;
+vm.runInContext(fs.readFileSync("web/js/app-conversation-input.js", "utf8"), context);
 context.addEventListener = () => {};
 context.RNAssistantHtmlWorkspaceModel = { create: () => model };
 context.RNAssistantHtmlWorkspaceSource = { create: () => ({ release() {} }) };

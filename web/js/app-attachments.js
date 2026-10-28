@@ -103,7 +103,8 @@ function attachmentIngestionBlockedReason() {
     return "Дождитесь загрузки чата, затем добавьте файлы ещё раз.";
   if (!state.activeChatId) return "Откройте или создайте чат, чтобы добавить файлы.";
   if (hasActiveMessageEdit()) return "Завершите редактирование сообщения, затем добавьте файлы.";
-  if (isPendingChatSubmit(state.activeChatId)) return "Дождитесь отправки сообщения, затем добавьте файлы.";
+  if (window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId }))
+    return "Дождитесь отправки сообщения, затем добавьте файлы.";
   return "";
 }
 
@@ -178,7 +179,7 @@ function ingestChatResourceFiles(files) {
 
 async function removeDraftAttachment(item) {
   var targetChatId = state.activeChatId;
-  if (!targetChatId || isPendingChatSubmit(targetChatId)) return;
+  if (!targetChatId || window.RNAssistantConversationInput.isPending("office", { chatId: targetChatId })) return;
   try {
     if (!item.unavailable)
       await send("discardChatResourceDraft", { chatId: targetChatId, id: attachmentId(item) });

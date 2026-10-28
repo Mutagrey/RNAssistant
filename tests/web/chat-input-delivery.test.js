@@ -19,7 +19,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.setContent(html);
     await page.evaluate(() => {
       window.state = { activeChatId: "chat", messages: [], chatRuns: {}, activeSends: {}, settings: {},
-        draftAttachments: [], chatProjectionRevisions: {}, pendingChatSubmits: {}, editingMessageIndex: -1,
+        draftAttachments: [], chatProjectionRevisions: {}, editingMessageIndex: -1,
         messageStartIndex: 0, messageTotalCount: 0, activeChatMode: "agent" };
       window.$ = id => document.getElementById(id);
       window.RNAssistantAgentApproval = { create: () => ({ pendingActivity: () => null, renderDock() {} }) };
@@ -98,7 +98,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         window.serverInbox = { ...serverInbox, revision: 2, items: [] };
         acknowledge({ ...serverInbox, acceptedInput });
       });
-      await page.waitForFunction(() => !isPendingChatSubmit("chat") && !(state.inboxChatRefreshing || {}).chat);
+      await page.waitForFunction(() => !RNAssistantConversationInput.isPending("office", { chatId: "chat" }) &&
+        !(state.inboxChatRefreshing || {}).chat);
       assert.equal(await page.locator("#chatInput").inputValue(), "");
       assert.equal(await page.locator(".inbox-message").count(), 1, "history lag cannot make acknowledged text disappear");
       assert.ok(Math.abs(await page.locator("#messages").evaluate(el => el.scrollTop) - manualTop) < 2,
@@ -131,7 +132,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           Status: "Applied", Delivery: submitted.delivery, AcceptedRunId: submitted.steerRunId,
           Revision: 3, Attachments: [] } });
     });
-    await page.waitForFunction(() => !isPendingChatSubmit("chat"));
+    await page.waitForFunction(() => !RNAssistantConversationInput.isPending("office", { chatId: "chat" }));
     assert.equal(await page.locator("#chatInput").inputValue(), "Тот же текст",
       "late acknowledgement keeps a later draft with identical text");
     assert.deepEqual(errors, []);

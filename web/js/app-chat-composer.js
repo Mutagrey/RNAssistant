@@ -35,7 +35,7 @@ function renderChatModePicker() {
   if (!button) return;
   var plan = state.activeChatMode === "plan";
   var disabled = !!state.chatReadOnly || !!state.chatNavigationPending || !!state.initializePromise ||
-    !!currentActiveSend() || isPendingChatSubmit(state.activeChatId) || hasActiveMessageEdit() ||
+    !!currentActiveSend() || window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId }) || hasActiveMessageEdit() ||
     state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
     state.chatDetailPending || state.chatDetailError || !state.activeChatId;
   button.classList.toggle("is-selected", plan);
@@ -126,7 +126,8 @@ function renderSendControls() {
   var activeSend = currentActiveSend();
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
-  var isPreparingAttachments = !isSending && isPendingChatSubmit(state.activeChatId);
+  var isPreparingAttachments = !isSending && !!state.activeChatId &&
+    window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId });
   var isCanceling = isSending && !!activeSend.canceling;
   var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
   var awaitingReply = !!state.activeChatId && !navigating && !detailUnavailable &&
@@ -252,7 +253,7 @@ function updateSendButtonAvailability(hasContent) {
   sendButton.disabled = state.chatReadOnly ||
     !!state.chatNavigationPending || !!state.initializePromise ||
     !!state.chatDetailPending || !!state.chatDetailError ||
-    isPendingChatSubmit(state.activeChatId) ||
+    !!state.activeChatId && window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId }) ||
     state.modelSaving ||
     state.modeSaving ||
     state.reasoningSaving ||

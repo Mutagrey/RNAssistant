@@ -240,7 +240,7 @@ const root = path.resolve(__dirname, "../..");
     await office.locator("textarea:visible").fill("<img src=x onerror=alert(1)> Свой ответ");
     await office.locator('button[type="submit"]').click();
     await page.waitForFunction(() => questionTest.officeCalls.length === 1);
-    await page.waitForFunction(() => !isPendingChatSubmit("preview-chat") &&
+    await page.waitForFunction(() => !RNAssistantConversationInput.isPending("office", { chatId: "preview-chat" }) &&
       chatInputEchoes("preview-chat").some(item => item.Id === "answer" && item.Status === "Applied"));
     assert.equal(await page.locator("#chatInput").inputValue(), "Черновик следующего сообщения");
     assert.deepEqual(await page.evaluate(() => questionTest.officeCalls[0].answers.answers), [

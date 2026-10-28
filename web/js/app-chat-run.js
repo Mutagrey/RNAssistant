@@ -1,18 +1,3 @@
-function pendingChatSubmitMap() {
-  state.pendingChatSubmits = state.pendingChatSubmits || {};
-  return state.pendingChatSubmits;
-}
-
-function isPendingChatSubmit(chatId) {
-  return !!(chatId && pendingChatSubmitMap()[chatId]);
-}
-
-function setPendingChatSubmit(chatId, pending) {
-  if (!chatId) return;
-  if (pending) pendingChatSubmitMap()[chatId] = true;
-  else delete pendingChatSubmitMap()[chatId];
-}
-
 async function refreshChatAfterSendFailure(chatId) {
   try {
     var response = state.activeChatId === chatId && typeof loadChatState === "function"
@@ -41,7 +26,7 @@ async function submitChatInput() {
   if (state.modelSaving || state.modeSaving || state.reasoningSaving) {
     return;
   }
-  if (isPendingChatSubmit(state.activeChatId)) {
+  if (window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId })) {
     return;
   }
 
@@ -56,7 +41,8 @@ async function submitChatInput() {
   }
 
   if (ingestion) {
-    setPendingChatSubmit(targetChatId, true);
+    var releaseIngestion = window.RNAssistantConversationInput.begin("office", { chatId: targetChatId });
+    if (!releaseIngestion) return;
     renderSendControls();
     var ingestionSucceeded = false;
     try {
@@ -64,7 +50,7 @@ async function submitChatInput() {
     } catch (error) {
       log(error.detail || error.message, "error");
     } finally {
-      setPendingChatSubmit(targetChatId, false);
+      releaseIngestion();
       renderSendControls();
     }
     if (!ingestionSucceeded || state.activeChatId !== targetChatId ||

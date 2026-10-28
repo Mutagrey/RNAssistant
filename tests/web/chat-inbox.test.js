@@ -15,13 +15,11 @@ const elements = new Map();
 const calls = [];
 let transport;
 const context = vm.createContext({
-  state: { activeChatId: "a", activeSends: {}, settings: {}, draftAttachments: [{ Id: "file" }], pendingChatSubmits: {} },
+  state: { activeChatId: "a", activeSends: {}, settings: {}, draftAttachments: [{ Id: "file" }] },
   document: { createElement: () => new Element() },
   $: id => { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); },
   attachmentId: a => a.Id,
   renderSendControls() {}, renderChatSessions() {}, endChatRunTracking() {}, clearSendError() {}, log() {},
-  setPendingChatSubmit(id, pending) { context.state.pendingChatSubmits[id] = pending; },
-  isPendingChatSubmit(id) { return !!context.state.pendingChatSubmits[id]; },
   setChatInputText(text) { context.$("chatInput").value = text; },
   clearDraftAttachments() { context.state.draftAttachments = []; },
   send(type, payload) { calls.push({type, payload}); return transport(type, payload); },

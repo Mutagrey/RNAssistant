@@ -24,7 +24,6 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
       window.state = { activeChatId: "chat-a", draftAttachments: [], chatDrafts: {}, messages: [] };
       window.chatDraftStore = () => state.chatDrafts;
       window.hasActiveMessageEdit = () => !!state.editing;
-      window.isPendingChatSubmit = () => !!state.submitting;
       window.updateComposerInputState = () => {};
       window.log = () => {};
       window.uploads = new Map();
@@ -58,7 +57,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
         return { ok: true, json: async () => ({ leaseId: id, nextOffset: upload.size }) };
       };
     });
-    for (const file of ["app-chat-state.js", "app-chat-composer.js", "app-resource-upload.js", "app-attachments.js"])
+    for (const file of ["app-conversation-input.js", "app-chat-state.js", "app-chat-composer.js", "app-resource-upload.js", "app-attachments.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       window.updateComposerInputState = () => {};

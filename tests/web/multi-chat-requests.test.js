@@ -58,7 +58,8 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
   assert.deepEqual(requests.map(item => item.payload.chatId), ["chat-a", "chat-b"],
     "each intake keeps its captured chat id");
   assert.notEqual(requests[0].payload.operationId, requests[1].payload.operationId);
-  assert.deepEqual(Object.keys(context.state.pendingChatSubmits).sort(), ["chat-a", "chat-b"],
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-a" }), true);
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-b" }), true,
     "both chats own independent intake requests");
 
   requests[0].resolve({ chatId: "chat-a", epoch: "a", revision: 1, items: [],
@@ -66,19 +67,25 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
   await first;
   assert.deepEqual(refreshedChats, ["chat-a"], "background receipt refreshes only its own chat");
   assert.equal(context.state.activeChatId, "chat-b");
-  assert.ok(context.state.pendingChatSubmits["chat-b"], "the second intake remains pending");
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-b" }), true,
+    "the second intake remains pending");
 
   requests[1].resolve({ chatId: "chat-b", epoch: "b", revision: 1, items: [],
     acceptedInput: { Id: "input-b", OperationId: requests[1].payload.operationId, Text: "Второй", Revision: 3, Status: "Applied" } });
   await second;
   assert.deepEqual(refreshedChats, ["chat-a", "chat-b"]);
-  assert.deepEqual(Object.keys(context.state.pendingChatSubmits), []);
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-a" }), false);
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-b" }), false);
   console.log("PASS multi-chat: input requests and receipts stay addressed per chat");
 
-  context.setPendingChatSubmit("chat-a", true);
-  assert.equal(context.isPendingChatSubmit("chat-a"), true);
-  assert.equal(context.isPendingChatSubmit("chat-b"), false);
-  console.log("PASS multi-chat: attachment submit barriers are per chat");
+  const release = context.RNAssistantConversationInput.begin("office", { chatId: "chat-a" });
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-a" }), true);
+  assert.equal(context.RNAssistantConversationInput.isPending("office", { chatId: "chat-b" }), false);
+  assert.equal(context.RNAssistantConversationInput.isPending("workspace",
+    { workspaceId: "workspace", sessionId: "chat-a" }), false,
+  "Office and Workspace requests cannot lock each other");
+  release();
+  console.log("PASS multi-chat: submit barriers are scoped by owner and address");
 
   const sendButton = {};
   context.$ = id => id === "sendButton" ? sendButton : null;
@@ -100,7 +107,7 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
   console.log("PASS multi-chat: composer pauses and resumes around navigation");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-chat-run.js?v=response-render-timing-20260928-1"));
+  assert.ok(index.includes("app-chat-run.js?v=addressed-pending-20261027-1"));
   console.log("OK 4/4");
 }()).catch(error => {
   console.error(error.stack || error);

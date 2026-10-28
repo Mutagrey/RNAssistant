@@ -115,7 +115,8 @@
     var chat = state.activeChatId, sourceId = state.activeHtmlArtifactId;
     var queue = state.chatResourceIngestions || (state.chatResourceIngestions = {});
     if (state.bridgeUnavailable || state.chatReadOnly || state.chatDetailPending ||
-        state.chatNavigationPending || queue[chat] || isPendingChatSubmit(chat) || hasActiveMessageEdit()) {
+        state.chatNavigationPending || queue[chat] ||
+        window.RNAssistantConversationInput.isPending("office", { chatId: chat }) || hasActiveMessageEdit()) {
       $("htmlWorkspaceInspectStatus").textContent = "Дождитесь завершения текущего действия с чатом.";
       return null;
     }

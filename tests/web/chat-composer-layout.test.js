@@ -26,13 +26,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         contextUsage: { lastPromptTokens: 118000, lastCompletionTokens: 500,
           lastTotalTokens: 118500, contextWindowTokens: 258000 } };
       window.currentActiveSend = () => state.sending ? {} : null;
-      window.isPendingChatSubmit = () => !!state.preparing;
       window.hasActiveMessageEdit = () => !!state.editing;
       window.runningMessageDelivery = () => "Steer";
       window.saveChatMode = mode => { state.activeChatMode = mode; renderSendControls(); };
       window.findEditingMessage = () => null;
     });
-    for (const file of ["app-icons.js", "app-run-view-state.js", "app-accent.js", "app-utils.js", "app-model-picker.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js", "app-diagnostics.js"])
+    for (const file of ["app-icons.js", "app-run-view-state.js", "app-accent.js", "app-utils.js", "app-model-picker.js", "app-conversation-input.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js", "app-diagnostics.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       RNAssistantAccents.apply("blue", false);
@@ -171,10 +170,17 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#addSelectionContextButton").isDisabled(), true);
     await page.evaluate(() => { state.sending = false; });
     for (const flag of ["preparing", "editing", "bridgeUnavailable", "chatNavigationPending"]) {
-      await page.evaluate(flag => { state[flag] = true; renderSendControls(); }, flag);
+      await page.evaluate(flag => {
+        if (flag === "preparing") window.releasePreparation = RNAssistantConversationInput.begin("office", { chatId: "chat" });
+        else state[flag] = true;
+        renderSendControls();
+      }, flag);
       assert.equal(await page.locator("#composerAddButton").getAttribute("aria-disabled"), "true", flag);
       assert.equal(await page.locator("#composerAddPicker").getAttribute("open"), null);
-      await page.evaluate(flag => { state[flag] = false; }, flag);
+      await page.evaluate(flag => {
+        if (flag === "preparing") window.releasePreparation();
+        else state[flag] = false;
+      }, flag);
     }
     await page.evaluate(() => { state.sending = false; state.foreign = false; renderSendControls(); });
     console.log("PASS composer: mode/actions close the menu, keyboard dismissal and runtime availability remain intact");

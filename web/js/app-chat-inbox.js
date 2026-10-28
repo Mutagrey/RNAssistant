@@ -93,7 +93,7 @@ function inboxOperationId() {
     Date.now().toString(36) + "-" + Math.random().toString(36).slice(2));
 }
 async function submitInboxMessage(text, attachments, chatId, delivery, answers, steerRunId, steerPendingId) {
-  if (isPendingChatSubmit(chatId)) return;
+  if (window.RNAssistantConversationInput.isPending("office", { chatId: chatId })) return false;
   if (delivery === "Steer" && !answers && !steerRunId) delivery = "Queue";
   if (delivery !== "Steer" || answers) { steerRunId = null; steerPendingId = null; }
   if (!answers && readOfficeDraft(chatId) && readOfficeDraft(chatId).pendingVisualAnnotation) {
@@ -101,7 +101,8 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
     return false;
   }
   attachments = (attachments || []).slice();
-  setPendingChatSubmit(chatId, true);
+  var releasePending = window.RNAssistantConversationInput.begin("office", { chatId: chatId });
+  if (!releasePending) return false;
   renderSendControls();
   // Retain the identity across uncertain transport retries, including accepted-but-unacknowledged sends.
   var fingerprint = JSON.stringify([chatId, text, attachments.map(attachmentId), delivery,
@@ -154,7 +155,7 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
     if (status && state.activeChatId === chatId) status.textContent = "Не удалось подтвердить отправку. Текст сохранён — повторите отправку.";
     return false;
   } finally {
-    setPendingChatSubmit(chatId, false);
+    releasePending();
     renderSendControls();
     if (state.activeChatId === chatId) renderChatInbox();
   }
