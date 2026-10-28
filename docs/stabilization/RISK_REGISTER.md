@@ -1,11 +1,14 @@
 # Stabilization risk register
 
-## Устаревший Web-fixture завершения чата — 2026-10-27
+## Устаревшее ожидание в Web completion guard — 2026-10-28
 
-`node tests/web/chat-run-completion.test.js` останавливается до проверок: fixture
-вызывает удалённый `renderChatTreeRow`, которого нет в текущем Web UI. Это не
-evidence сбоя нового адресного observer. Owner: Web chat tests; заменить fixture
-текущей проекцией navigation tree и затем повторить сценарии завершения.
+`node tests/web/completion-guard.test.js` падает до проверки группировки действий:
+fixture ожидает `data-run-interaction` для `model_blocked`/`model_needs_input`,
+а текущий renderer создаёт его только для `awaiting_user` с причиной
+`awaiting_user`. Это пробел проверки, не evidence ошибки нового оформления.
+Owner: Web ChatView tests; обновить fixture под действующий typed v8 outcome и
+после этого повторить весь сценарий. Отдельный браузерный
+`agent-activity-layout.test.js` проверил новое правило 1/2 действий и final.
 
 ## Устаревший fixture mixed recovery — 2026-10-27
 
