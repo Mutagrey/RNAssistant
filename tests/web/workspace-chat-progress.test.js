@@ -142,6 +142,29 @@ const { chromium } = require('playwright');
       await page.locator('#chatInput').fill('Проверка живого ответа');
       await page.locator('#chatInput').press('Enter');
       await page.waitForFunction(() => document.querySelector('#messages .agent-stream-step')?.textContent.includes('Готовлю ответ проекта'));
+      const repaint = await page.evaluate(() => {
+        const tree = RNAssistantNavigationTree.render, transcript = RNAssistantWorkspaceChat.renderMessages;
+        const leaf = document.querySelector('#messages .agent-stream-step');
+        const snapshot = RNAssistantProjectChats.snapshot();
+        const current = snapshot.state.modelProgress;
+        const sequence = current.Sequence || current.sequence || 0;
+        let treeCalls = 0, transcriptCalls = 0;
+        RNAssistantNavigationTree.render = function (...args) { treeCalls++; return tree.apply(this, args); };
+        RNAssistantWorkspaceChat.renderMessages = function (...args) { transcriptCalls++; return transcript.apply(this, args); };
+        try {
+          for (let index = 1; index <= 30; index++)
+            RNAssistantWorkspaceChat.acceptProgress({ workspaceId: snapshot.project.workspaceId,
+              sessionId: snapshot.sessionId, modelProgress: Object.assign({}, current,
+                { Sequence: sequence + index, Message: 'Живое обновление без перестройки ленты.' }) });
+          return { treeCalls, transcriptCalls, leafRetained: leaf === document.querySelector('#messages .agent-stream-step'),
+            textUpdated: leaf.textContent.includes('Живое обновление без перестройки ленты.') };
+        } finally {
+          RNAssistantNavigationTree.render = tree;
+          RNAssistantWorkspaceChat.renderMessages = transcript;
+        }
+      });
+      assert.deepEqual(repaint, { treeCalls: 0, transcriptCalls: 0, leafRetained: true, textUpdated: true },
+        owner + ': 30 progress updates paint only the live leaf');
       if (owner === 'project' && process.env.RNA_CHAT_STREAM_SCREENSHOT)
         await page.screenshot({ path: process.env.RNA_CHAT_STREAM_SCREENSHOT, animations: 'disabled' });
       const delivered = await page.evaluate(() => {

@@ -207,7 +207,7 @@
     current.messageStartIndex = page.startIndex;
     return current;
   }
-  function createRunObserver(read, changed, failed) {
+  function createRunObserver(read, changed, failed, progressChanged) {
     var target = null, selected = null, generation = 0;
     var observer = window.RNAssistantConversationObserver.create({
       current: function () { return target ? { workspaceId: target.workspaceId,
@@ -230,7 +230,8 @@
       var existing = field(state, "modelProgress");
       if (existing && field(existing, "sequence") >= field(preview, "sequence")) return;
       state.modelProgress = preview;
-      changed(selected);
+      if (progressChanged) progressChanged(selected);
+      else changed(selected);
     } };
   }
   function button(label, className, icon, action) {
@@ -328,8 +329,25 @@
       });
     });
     list._workspaceEntries = reconcileMessageUnits(list, units, false, list._workspaceEntries || Object.create(null));
+    list._workspaceLiveRunId = liveRunId || null;
     list.scrollTop = !changed && Number.isSafeInteger(oldStart) && start < oldStart
       ? scroll + list.scrollHeight - height : following ? list.scrollHeight : scroll;
+  }
+  function paintProgress(list, chat) {
+    var snapshot = field(chat, "state"), preview = field(snapshot, "modelProgress");
+    var runId = field(snapshot, "runId");
+    var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", field(chat, "sessionId") || ""]);
+    var entry = list && list._workspaceEntries && list._workspaceEntries["live:workspace-model"];
+    if (!entry || !entry.node || entry.node.parentNode !== list || list.dataset.session !== key ||
+        list._workspaceLiveRunId !== runId || field(snapshot, "status") !== "running" ||
+        field(preview, "runId") !== runId) return false;
+    var section = entry.node.querySelector(".agent-stream-step");
+    if (!section) return false;
+    var following = list.scrollHeight - list.scrollTop - list.clientHeight < 64;
+    paintLiveModelOutput(section, { content: field(preview, "message"), reasoning: field(preview, "reasoning"),
+      reasoningTruncated: field(preview, "reasoningTruncated"), retrying: field(preview, "retrying"), showStatus: true });
+    if (following) list.scrollTop = list.scrollHeight;
+    return true;
   }
   function renderWorkspaceControls(chat, submitQuestions) {
     if (activeOwner === "office") return;
@@ -508,6 +526,7 @@
     snapshot: function () { return dispatch("snapshot"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,
-    createRunObserver: createRunObserver, acceptProgress: function (payload) { dispatch("progress", payload); },
+    createRunObserver: createRunObserver, paintProgress: paintProgress,
+    acceptProgress: function (payload) { dispatch("progress", payload); },
     readOnly: readOnly, runNotice: runNotice };
 }());

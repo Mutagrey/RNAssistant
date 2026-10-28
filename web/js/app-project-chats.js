@@ -7,7 +7,11 @@
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
     readProjectChat,
     function (snapshot) { active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot); notice(statusText()); render(); },
-    function (error) { notice(error.detail || error.message, true); });
+    function (error) { notice(error.detail || error.message, true); },
+    function (snapshot) {
+      active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot);
+      if (!ownsView() || !window.RNAssistantWorkspaceChat.paintProgress(el("Messages"), active)) render();
+    });
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect", connectionRequest = null;
   var noticeText = "", noticeError = false, fileNotices = new Map();
   function el(id) {
