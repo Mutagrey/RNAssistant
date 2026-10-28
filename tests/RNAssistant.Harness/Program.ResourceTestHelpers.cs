@@ -87,7 +87,7 @@ namespace RNAssistant.Harness
             // Fixture reads represent accepted observations, not a runtime guard read.
             session.Messages.Add(new ChatMessage
             {
-                Role = "tool", ToolName = "common.resources_read",
+                Role = "tool", ToolName = "core.read",
                 Content = read.Result.Text,
                 ResourceEvidence = gateway.Evidence(session, read.Result).ToList()
             });

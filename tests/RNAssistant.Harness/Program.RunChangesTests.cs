@@ -193,7 +193,7 @@ namespace RNAssistant.Harness
                 var journal = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, journal, new SkillStore(paths));
                 var session = NewSession(adapter);
-                var completed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("common.vba_apply_patch",
+                var completed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("vba.module.patch",
                     "moduleName", "Module1", "patch", new JArray(new JObject { ["find"] = "\"old\"", ["text"] = "\"new\"" }))));
                 AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "normalized source was verified");
                 AssertEqual(ToolEffectEvidence.VerifiedChange, completed.Evidence.Effect, "actual content changed");

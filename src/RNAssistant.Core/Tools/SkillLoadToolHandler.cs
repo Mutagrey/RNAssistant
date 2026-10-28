@@ -17,7 +17,7 @@ namespace RNAssistant.Core.Tools
 
     public sealed class SkillLoadToolHandler : IReadOnlyToolHandler
     {
-        public const string ToolId = "common.skills_load";
+        public const string ToolId = "core.skills.load";
         public static ToolBinding Binding { get { return new ToolBinding("conversation.skill-load.v1"); } }
         private readonly ChatSession _session;
         private readonly Func<SkillCatalogSnapshot> _skills;

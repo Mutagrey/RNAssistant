@@ -65,7 +65,7 @@ namespace RNAssistant.Harness
                     AssertEqual(code, source, "sequential upload preserves exact Unicode, CRLF and final newline");
                     RuntimeThrows<ResourceRequestException>(() => editor.ReadUploadedSource(session, request, CancellationToken.None));
                     AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "consuming bytes cannot dispatch a mutation");
-                    var command = Command("common.vba_write_module", "moduleName", request.ModuleName, "code", source, "mode", "updateOnly");
+                    var command = Command("vba.module.write", "moduleName", request.ModuleName, "code", source, "mode", "updateOnly");
                     command.ExpectedContentSha256 = request.ExpectedCodeSha256;
                     AssertTrue(executor.ExecuteManual(command, tools, new AppSettings(), false, true, session).Success,
                         "uploaded code executes through the existing prepared/read-back mutation owner");
@@ -81,7 +81,7 @@ namespace RNAssistant.Harness
                     var create = UploadVbaSource(data, editor, session, Encoding.UTF8.GetBytes("Option Explicit\n"));
                     var createRequest = new VbaCreateModulePayload { ChatId = session.Id, ModuleName = "UploadedForm", ComponentType = "MSForm",
                         UploadLeaseId = create.UploadLeaseId, SourceSha256 = create.SourceSha256 };
-                    var createCommand = Command("common.vba_write_module", "moduleName", "UploadedForm", "componentType", "MSForm",
+                    var createCommand = Command("vba.module.write", "moduleName", "UploadedForm", "componentType", "MSForm",
                         "mode", "createOnly", "code", editor.ReadUploadedSource(session, createRequest, CancellationToken.None));
                     AssertTrue(executor.ExecuteManual(createCommand, tools, new AppSettings(), false, true, session).Success,
                         "CodeOnly UserForm create uses the same typed mutation owner");

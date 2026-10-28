@@ -50,8 +50,8 @@ const root = path.resolve(__dirname, '../..');
               { Id: 'reflection', Role: 'assistant', Content: '',
                 ReflectionDecision: 'Inspect the exact source first.' },
               { Id: 'activity', Role: 'assistant', Content: '', RunId: 'failed-run', Activity: {
-                RunId: 'failed-run', Kind: 'tool', Title: 'common.resources_read',
-                ToolId: 'common.resources_read', ToolCallId: 'call-1', Status: 'completed',
+                RunId: 'failed-run', Kind: 'tool', Title: 'core.read',
+                ToolId: 'core.read', ToolCallId: 'call-1', Status: 'completed',
                 ResultMessage: 'Source read.' } },
               { Id: 'finish', Role: 'assistant', Content: 'Chart remains unfinished.', Results: [
                 { Summary: 'Chart absent', Assessment: 'partially_satisfied', Evidence: ['call-1'] }
@@ -87,7 +87,7 @@ const root = path.resolve(__dirname, '../..');
       assert.equal(await notice.getAttribute('data-error'), 'true', owner + ': terminal failure is an alert');
       await page.locator('#messages .workspace-reflection-step').getByText('Inspect the exact source first.').waitFor();
       await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
-      assert.equal(await page.locator('#messages').getByText('common.resources_read').count() > 0, true,
+      assert.equal(await page.locator('#messages').getByText('core.read').count() > 0, true,
         owner + ': saved tool activity uses the common message renderer');
       await page.locator('#messages .agent-run-notice').getByText('Не удалось получить ответ от сервиса модели.', { exact: false }).waitFor();
       assert.equal((await page.locator('#messages').textContent()).includes('private v8 JSON'), false,
@@ -104,7 +104,7 @@ const root = path.resolve(__dirname, '../..');
         const runId = 'grouped-workspace-run';
         const activity = (id, stepId) => ({ Id: id, Role: 'assistant', RunId: runId, Content: '',
           Activity: { RunId: runId, StepId: stepId, Kind: 'tool', Title: 'Чтение',
-            ToolId: 'common.resources_read', ToolCallId: id, Status: 'completed', ResultMessage: id } });
+            ToolId: 'core.read', ToolCallId: id, Status: 'completed', ResultMessage: id } });
         RNAssistantWorkspaceChat.renderMessages(list, { sessionId: 'grouped-session',
           project: { workspaceId: 'grouped-workspace' }, messages: [activity('first', 'step-1'),
             activity('second', 'step-2'), { Id: 'final', Role: 'assistant', RunId: runId,

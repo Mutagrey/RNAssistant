@@ -39,7 +39,7 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(0, adapter.TotalBackendCallCount, "no nested tool executed");
                 AssertTrue(!ToolSafetyPolicy.Resolve(pipeline, new[] { pipeline }).Valid, "no nested safety traversal");
-                var direct = executor.ExecuteManual(Command("excel.add_sheet", "name", "Direct"), OfficeToolCatalog.ForHost(adapter.HostName).ToList(),
+                var direct = executor.ExecuteManual(Command("excel.sheet.add", "name", "Direct"), OfficeToolCatalog.ForHost(adapter.HostName).ToList(),
                     new AppSettings { AutoConfirmToolActions = true }, false, false,
                     NewSession(adapter));
                 AssertTrue(direct.Success && adapter.HasSheet("Direct"), "direct tools remain available");

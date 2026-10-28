@@ -20,11 +20,11 @@ def main():
     requests = []
     responses = [
         {"message": "Attempt a replacement before reading.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
-            {"name": "files.replace", "arguments": {"relativePath": "large.txt", "text": "UNSAFE_REPLACEMENT"}}]},
+            {"name": "core.write", "arguments": {'target': "large.txt", 'content': "UNSAFE_REPLACEMENT"}}]},
         {"message": "Read the source.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
-            {"name": "common.resources_read", "arguments": {"target": "large.txt"}}]},
+            {"name": "core.read", "arguments": {"target": "large.txt"}}]},
         {"message": "Attempt a replacement despite the omitted source.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
-            {"name": "files.replace", "arguments": {"relativePath": "large.txt", "text": "UNSAFE_REPLACEMENT"}}]},
+            {"name": "core.write", "arguments": {'target': "large.txt", 'content': "UNSAFE_REPLACEMENT"}}]},
         {"message": "The source cannot fit in context.", "finish_from_request": True, "assessment": "not_satisfied"},
     ]
 

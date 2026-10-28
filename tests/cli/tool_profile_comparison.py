@@ -26,11 +26,11 @@ def fetch(url):
         return json.load(response)
 
 def scripted_response(request, scenario, index):
-    edit = [('common.resources_read', {'target': 'src/reports/invoice.ts'}),
-            ('files.patch', {'relativePath': 'src/reports/invoice.ts', 'oldText': 'Old invoice', 'newText': 'Monthly invoice'})]
-    copy = [('common.resources_read', {'target': 'assets/templates/письмо.txt'}),
-            ('common.capabilities_read', {'id': 'files.copy'}),
-            ('files.copy', {'relativePath': 'assets/templates/письмо.txt', 'targetPath': 'exports/письмо-копия.txt'})]
+    edit = [('core.read', {'target': 'src/reports/invoice.ts'}),
+            ('core.patch', {"target": 'src/reports/invoice.ts', "hunks": [{"oldText": 'Old invoice', "newText": 'Monthly invoice'}]})]
+    copy = [('core.read', {'target': 'assets/templates/письмо.txt'}),
+            ('core.tools.read', {'id': 'resources.copy'}),
+            ('resources.copy', {'target': 'assets/templates/письмо.txt', 'destination': 'exports/письмо-копия.txt'})]
     steps = edit if scenario == 'edit' else copy
     if index <= len(steps):
         name, arguments = steps[index - 1]

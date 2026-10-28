@@ -29,7 +29,7 @@ namespace RNAssistant.Harness
                 throw new ArgumentNullException(nameof(markDispatchPossible));
             ExcelTableRequests.Add(new ToolInvocation
             {
-                ToolId = "excel.add_table",
+                ToolId = "excel.table.add",
                 Arguments = new Dictionary<string, object>
                 {
                     { "sheet", request.Sheet },

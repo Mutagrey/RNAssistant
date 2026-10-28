@@ -21,7 +21,7 @@ namespace RNAssistant.Office.Tools
             IDictionary<string, object> arguments,
             ToolExecutionContext execution,
             RNAssistant.Core.Models.ChatSession session,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, string verifiedSourceHash = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!VbaToolCatalog.Owns(toolId))
@@ -30,6 +30,7 @@ namespace RNAssistant.Office.Tools
                         "unknown_tool", false));
 
             var correlation = MutationCorrelation(execution, session);
+            if (correlation.ExpectedContentSha256 == null) correlation.ExpectedContentSha256 = verifiedSourceHash;
             var state = new VbaNativePreparedState
             {
                 Version = 2,
@@ -183,7 +184,7 @@ namespace RNAssistant.Office.Tools
             RNAssistant.Core.Models.ChatSession session,
             string preparedStateJson,
             Action markDispatchPossible,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, string verifiedSourceHash = null)
         {
             VbaNativePreparedState state;
             try
@@ -242,6 +243,7 @@ namespace RNAssistant.Office.Tools
             using (_dispatchBoundary.Bind(markDispatchPossible))
             {
                 var correlation = MutationCorrelation(execution, session);
+            if (correlation.ExpectedContentSha256 == null) correlation.ExpectedContentSha256 = verifiedSourceHash;
                 return MutationOutcome(ExecutePreparedMutation(
                     toolId, arguments, state, correlation,
                     false, cancellationToken), correlation, state.ModuleName, toolId);

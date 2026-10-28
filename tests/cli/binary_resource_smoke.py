@@ -69,7 +69,7 @@ def views(s):
     # UI/raw inspection cannot authorize a model overwrite of a text file.
     s.json("open", "--path", "index.html", "--view", "raw")
     original = (s.workspace / "index.html").read_bytes()
-    s.responses.extend([call("common.resources_find"), call("files.replace", relativePath="index.html", text="overwrite"), DONE])
+    s.responses.extend([call("core.find"), call("core.write", target="index.html", content="overwrite"), DONE])
     s.cli("run", "--message", "Replace index.html.", "--max-iterations", "4", "--max-tool-steps", "3", "--jsonl")
     assert "source_observation_required" in json.dumps(s.requests) and (s.workspace / "index.html").read_bytes() == original
     assert "model text reading is unavailable" in json.dumps(s.requests)
@@ -105,9 +105,9 @@ def browser(s):
 
 def acceptance(s, changed, late=False):
     setup(s)
-    s.responses.extend([call("common.skills_load", id="workspace.web_verify_repair"),
+    s.responses.extend([call("core.skills.load", id="skills.workspace.web.verify.repair"),
                         call("web.verify", entryPath="index.html"),
-                        call("common.resources_read", target="index.html"), DONE])
+                        call("core.read", target="index.html"), DONE])
     def before_response():
         if len(s.requests) == (4 if late else 3) and changed:
             (s.workspace / "picture.png").write_bytes(png(bytes([0, 255, 0])))

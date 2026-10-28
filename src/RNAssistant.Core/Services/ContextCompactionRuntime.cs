@@ -485,7 +485,7 @@ namespace RNAssistant.Core.Services
                 var toolResult = ToolResultHistoryReader.TryRead(projected, out sourceWire, out sourceError);
                 // Callable availability is regenerated from the current catalog;
                 // it must not become a stale natural-language claim.
-                if (message.ToolName == "common.capabilities_search" || toolResult &&
+                if (message.ToolName == "core.tools.search" || toolResult &&
                     (string)(sourceWire.Data as JObject)?["kind"] == "tool-schema") continue;
                 var operation = message.CompletedOperation != null || toolResult && message.ResourceEffect != null;
                 var sourceRole = toolResult || operation ? "tool" : projected.Role;

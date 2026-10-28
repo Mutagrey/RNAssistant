@@ -59,19 +59,19 @@ def check(root):
 
     try:
         denied_tools = cli("env", "--mutation-policy", "deny")["capabilities"]
-        assert "files.create" not in denied_tools and "web.verify" not in denied_tools
-        assert "common.plan_doc_save" in denied_tools
+        assert "core.write" not in denied_tools and "web.verify" not in denied_tools
+        assert "plan.document.save" in denied_tools
         responses.append(DONE)
         direct = run()
         assert len(requests) == 1 and direct["reason"] == "model_finish", direct
         print("PASS unified CLI: one request, no tools")
 
-        responses.extend([call("common.resources_read", target="source.txt"), DONE])
+        responses.extend([call("core.read", target="source.txt"), DONE])
         read = run("--mutation-policy", "deny")
         assert read["ToolCounts"]["ReadOk"] == 1, read
         print("PASS unified CLI: Deny allows actual reads")
 
-        responses.extend([call("files.create", relativePath="new.txt", text="approved"), DONE])
+        responses.extend([call("core.write", target="new.txt", content="approved"), DONE])
         waiting = run(code=3)
         assert not (workspace / "new.txt").exists()
         assert len(responses) == 1, "approval wait must stop model generation"
@@ -80,15 +80,15 @@ def check(root):
         assert (workspace / "new.txt").read_text() == "approved" and approved["reason"] == "model_finish", approved
         print("PASS unified CLI: create waits, restart inspection, explicit approval")
 
-        responses.extend([call("files.create", relativePath="automatic.txt", text="first"),
-                          call("common.resources_read", target="automatic.txt"),
-                          call("files.patch", relativePath="automatic.txt", oldText="first", newText="second"), DONE])
+        responses.extend([call("core.write", target="automatic.txt", content="first"),
+                          call("core.read", target="automatic.txt"),
+                          call("core.patch", target="automatic.txt", hunks=[{"oldText": "first", "newText": "second"}]), DONE])
         automatic = run("--auto-confirm", "on")
         assert (workspace / "automatic.txt").read_text() == "second"
         assert automatic["ToolCounts"]["WriteOk"] == 2, automatic
         assert cli("inspect", "--session", automatic["SessionId"])["ConversationPolicy"]["AutoConfirmToolActions"] is True
-        responses.extend([call("files.create", relativePath="manual-next.txt", text="manual"),
-                          call("files.create", relativePath="manual-second.txt", text="manual"), DONE])
+        responses.extend([call("core.write", target="manual-next.txt", content="manual"),
+                          call("core.write", target="manual-second.txt", content="manual"), DONE])
         waiting = run("--session", automatic["SessionId"], code=3)
         assert not (workspace / "manual-next.txt").exists(), "a new run defaults back to Ask"
         before = len(requests)
@@ -101,7 +101,7 @@ def check(root):
         assert (workspace / "manual-second.txt").exists()
         print("PASS auto-confirm CLI: multistep, persisted policy, next-run default and pending policy after restart")
 
-        responses.extend([call("files.patch", relativePath="automatic.txt", oldText="second", newText="unguarded"), DONE])
+        responses.extend([call("core.patch", target="automatic.txt", hunks=[{"oldText": "second", "newText": "unguarded"}]), DONE])
         run("--auto-confirm", "on")
         assert (workspace / "automatic.txt").read_text() == "second", "auto-confirm cannot bypass the complete-read guard"
         before = len(requests)
@@ -109,27 +109,27 @@ def check(root):
         assert len(requests) == before, "invalid approval flag must fail before dispatch"
         print("PASS auto-confirm CLI: unread-file guard and invalid flag remain fail-closed")
 
-        responses.extend([call("common.resources_read", target="source.txt"),
-                          call("files.patch", relativePath="source.txt", oldText="before", newText="after"), DONE])
+        responses.extend([call("core.read", target="source.txt"),
+                          call("core.patch", target="source.txt", hunks=[{"oldText": "before", "newText": "after"}]), DONE])
         waiting = run(code=3)
         assert (workspace / "source.txt").read_text() == "before"
         cli("approve", "--session", waiting["SessionId"], "--pending", pending_id(waiting))
         assert (workspace / "source.txt").read_text() == "after"
         print("PASS unified CLI: patch restores accepted read on approval")
 
-        responses.append(call("files.create", relativePath="denied.txt", text="bad"))
+        responses.append(call("core.write", target="denied.txt", content="bad"))
         waiting = run(code=3)
         denied = cli("deny", "--session", waiting["SessionId"], "--pending", pending_id(waiting), code=130)
         assert not (workspace / "denied.txt").exists()
         print("PASS unified CLI: rejection has no effect")
 
-        responses.extend([call("common.resources_read", target="untrusted.txt"),
-                          call("files.create", relativePath="blocked.txt", text="bad"), DONE])
+        responses.extend([call("core.read", target="untrusted.txt"),
+                          call("core.write", target="blocked.txt", content="bad"), DONE])
         run("--mutation-policy", "deny", "--auto-confirm", "on", code=5)
         assert not (workspace / "blocked.txt").exists()
         print("PASS unified CLI: injected write under Deny never dispatches")
 
-        responses.extend([call("common.plan_doc_save", title="Plan", markdown="# Plan\n\nRead, then implement.", status="ready"), DONE])
+        responses.extend([call("plan.document.save", title="Plan", markdown="# Plan\n\nRead, then implement.", status="ready"), DONE])
         plan = run("--mode", "plan", "--mutation-policy", "deny", "--auto-confirm", "on")
         assert plan["reason"] == "model_finish", plan
         responses.append(DONE)
@@ -139,7 +139,7 @@ def check(root):
         run("--session", plan["SessionId"], "--mode", "agent")
         print("PASS unified CLI: planning exception, sticky Plan, explicit switch")
 
-        responses.append(call("files.create", relativePath="superseded.txt", text="bad"))
+        responses.append(call("core.write", target="superseded.txt", content="bad"))
         waiting = run(code=3)
         responses.append(DONE)
         run("--session", waiting["SessionId"], "--mutation-policy", "deny")

@@ -22,7 +22,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
                 var close = new JObject { ["action"] = "close", ["outcome"] = "completed" };
                 var responses = new Queue<string>(new[] {
-                    V8Envelope(V8Call("common.capabilities_read", new JObject { ["id"] = TaskListToolCatalog.SetToolId })),
+                    V8Envelope(V8Call("core.tools.read", new JObject { ["id"] = TaskListToolCatalog.SetToolId })),
                     V8Envelope(V8Call(TaskListToolCatalog.SetToolId, close)),
                     V8Envelope(V8Call(TaskListToolCatalog.SetToolId, new JObject {
                         ["action"] = "save", ["goal"] = "Track the outcome",
@@ -75,17 +75,17 @@ namespace RNAssistant.Harness
                     "task-list carries exact source-owned mode policy");
                 var legacyPlanIds = new[] { "common.plan_create", "common.plan_update", "common.plan_delete", "common.plan_read" };
                 AssertTrue(tools.All(tool => !legacyPlanIds.Contains(tool.Id, StringComparer.OrdinalIgnoreCase)), "legacy plan tools are removed");
-                AssertTrue(tools.All(tool => tool.Id != "common.task_list_create" &&
-                    tool.Id != "common.task_list_update" &&
-                    tool.Id != "common.task_list_close"),
+                AssertTrue(tools.All(tool => tool.Id != "task.list.create" &&
+                    tool.Id != "task.list.update" &&
+                    tool.Id != "task.list.close"),
                     "replaced Task List lifecycle ids are absent");
-                var planningSkill = BuiltInSkillProvider.GetSkills(adapter).Single(skill => skill.Id == "common.task_tracking");
+                var planningSkill = BuiltInSkillProvider.GetSkills(adapter).Single(skill => skill.Id == "skills.task.tracking");
                 AssertContains(planningSkill.BodyMarkdown, TaskListToolCatalog.SetToolId, "tracking skill explains semantic set");
                 AssertContains(planningSkill.BodyMarkdown, "action=update_statuses",
                     "tracking skill selects status-only updates");
                 string contractError;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
-                    new ToolCall("old-task-list", "common.task_list_update", "{}"),
+                    new ToolCall("old-task-list", "task.list.update", "{}"),
                     out contractError),
                     "pre-11O2 Task List calls require an explicit new chat/reset");
                 var create = Command(

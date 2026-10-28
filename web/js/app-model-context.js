@@ -291,7 +291,7 @@
         text = content.slice(end + 1);
       } else {
         var result = JSON.parse(content.indexOf("TOOL_RESULT:\n") === 0 ? content.slice(13) : content);
-        if (result.name !== "common.resources_read" || result.status !== "ok" ||
+        if (result.name !== "core.read" || result.status !== "ok" ||
             result.tool_call_id !== alias(c, "operations", entry.ToolCallId)) return null;
         data = result.data;
         if (!data || data.kind !== "resource-read" || data.representation !== link.View ||

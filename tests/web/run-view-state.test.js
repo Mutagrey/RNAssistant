@@ -29,7 +29,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.normalize(Object.assign(state("bad"), { UnknownEffects: -1 })), null);
   assert.equal(runView.normalize(Object.assign(state("bad-health"), { UnknownEffects: 1 })), null);
   assert.equal(runView.normalize(Object.assign(state("bad-pending", "awaiting_confirmation"), { PendingConfirmation: null })), null);
-  const pending = { PendingId: "pending", ToolCallId: "call", ToolName: "excel.write_range" };
+  const pending = { PendingId: "pending", ToolCallId: "call", ToolName: "excel.range.write" };
   const waiting = runView.normalize(state("waiting", "awaiting_confirmation", "clean", pending));
   assert.equal(waiting.pendingConfirmation.pendingId, "pending");
   assert.ok(Object.isFrozen(waiting.pendingConfirmation));
@@ -37,7 +37,7 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.normalize(Object.assign(state("bad-health-case"), { ExecutionHealth: "Clean" })), null);
   assert.equal(runView.normalize(Object.assign(state("bad-value"), { Lifecycle: "toString" })), null);
   assert.equal(runView.normalize(state("bad-pending-case", "awaiting_confirmation", "clean",
-    { pendingId: "pending", toolCallId: "call", toolName: "excel.write_range" })), null);
+    { pendingId: "pending", toolCallId: "call", toolName: "excel.range.write" })), null);
   const partial = runView.normalize(Object.assign(state("partial"), { Reason: "model_finish", ModelOutcome: "partial",
     ModelResults: [{ Summary: "Chart remains unfinished", Assessment: "partially_satisfied",
       Evidence: ["call-1"] }] }));

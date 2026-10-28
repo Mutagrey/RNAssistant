@@ -137,7 +137,7 @@ namespace RNAssistant.Harness
             {
                 var store = new SkillStore(paths);
                 var skill = store.SaveOne(new SkillDefinition { Id = "common.unread_editor", Name = "Unread", Description = "Before", BodyMarkdown = "# Unread\nSource",
-                    Package = new SkillPackageManifest { PackageId = "editor.package", RequiredTools = new List<SkillToolDependency> { new SkillToolDependency { Id = "common.resources_read" } } } });
+                    Package = new SkillPackageManifest { PackageId = "editor.package", RequiredTools = new List<SkillToolDependency> { new SkillToolDependency { Id = "core.read" } } } });
                 var executor = new OfficeToolExecutor(FakeOfficeAdapter.ForHost("Word"), new VbaJournalStore(paths), store, new ToolStore(paths));
                 var mutation = new SkillLibraryCoreMutation { Kind = "upsert", BaseId = skill.Id, ExpectedRevision = SkillRevision.Compute(skill),
                     PreserveBody = true, Intended = new SkillDefinition { Id = skill.Id, Name = "Unread", Description = "After", BodyMarkdown = null } };
@@ -146,7 +146,7 @@ namespace RNAssistant.Harness
                 AssertEqual(skill.BodyMarkdown, saved.Package.BodyMarkdown, "unread body is preserved by the guarded owner");
                 AssertEqual("After", saved.Package.Description, "metadata change is verified");
                 AssertEqual("editor.package", saved.Package.Package.PackageId, "metadata-only edit preserves the dependency manifest");
-                AssertEqual("common.resources_read", SkillPackageDto.From(saved.Package).Package.RequiredTools.Single().Id,
+                AssertEqual("core.read", SkillPackageDto.From(saved.Package).Package.RequiredTools.Single().Id,
                     "editor clone receives dependency metadata without a body read");
                 var stale = executor.ExecuteSkillLibraryMutation(mutation);
                 AssertTrue(stale.Outcome.Status == SkillAuthoringOutcomeStatus.Error && !stale.DispatchPossible, "preserveBody does not bypass the complete package guard");

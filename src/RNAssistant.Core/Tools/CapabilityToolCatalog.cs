@@ -7,8 +7,8 @@ namespace RNAssistant.Core.Tools
 {
     public static class CapabilityToolCatalog
     {
-        public const string SearchToolId = "common.capabilities_search";
-        public const string ReadToolId = "common.capabilities_read";
+        public const string SearchToolId = "core.tools.search";
+        public const string ReadToolId = "core.tools.read";
 
         public static bool Owns(string toolId)
         {

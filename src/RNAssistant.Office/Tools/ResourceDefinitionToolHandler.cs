@@ -17,10 +17,10 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class ResourceDefinitionToolHandler : IManagedMutationToolHandler
     {
-        internal const string Draft = "common.resources_schema_draft";
-        internal const string Publish = "common.resources_schema_publish";
-        internal const string Mapping = "common.resources_mapping_publish";
-        internal const string Derive = "common.resources_derive";
+        internal const string Draft = "resources.schema.draft";
+        internal const string Publish = "resources.schema.publish";
+        internal const string Mapping = "resources.mapping.publish";
+        internal const string Derive = "resources.derive";
         internal static readonly string[] Ids = { Draft, Publish, Mapping, Derive };
         private readonly ResourceGatewayService _gateway;
         private readonly ChatSession _session;

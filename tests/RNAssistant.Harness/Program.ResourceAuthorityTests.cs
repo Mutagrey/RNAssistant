@@ -432,7 +432,7 @@ namespace RNAssistant.Harness
                             if (view == ResourceRepresentations.Tree) arguments["pointer"] = "";
                             return ToolSchemaSupport.ValidateArguments(arguments, readSchema, false, out schemaError);
                         }),
-                        "model discovery offers only common.resources_read representations");
+                        "model discovery offers only core.read representations");
                     AssertTrue((string)modelItem["mimeType"] == "image/png" && (long?)modelItem["byteLength"] == bytes.Length,
                         "model receives known MIME and physical byte length without a token estimate");
                     var imageCapability = described.ViewCapabilities.Single(item => item.View == "image");
@@ -877,9 +877,9 @@ namespace RNAssistant.Harness
                     paths: paths, resourceAuthorityStore: store);
                 var session = NewSession(adapter);
                 var text = "\ufeff<main>\r\n" + new string('я', 140000) + "😀</main>";
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", text, true));
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "empty.css", "css", "", false));
                 executor.MutateLocalResources(session, "common.html_workspace_bind_data", null,
                     () => HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"count\":1}"));
@@ -898,7 +898,7 @@ namespace RNAssistant.Harness
                     AssertEqual(source.CompleteViewPayload.Sha256, opened.Binary.Payload.Sha256, "raw and source share the same exact CAS bytes");
                     AssertEqual(file.Reference.Uri, opened.Descriptor.Reference.Uri, "binary lease stays pinned to the file");
                     AssertTrue(JObject.FromObject(opened)["text"] == null, "control plane carries no source body");
-                    executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    executor.MutateLocalResources(session, "html.source.write", null,
                         () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>changed</p>", true));
                     var router = new ResourceDataRouter(data);
                     using (var output = new System.IO.MemoryStream())
@@ -1041,7 +1041,7 @@ namespace RNAssistant.Harness
                 var chats = new ChatStore(paths);
                 var session = chats.Create("Excel", "large-tool-document", "Book1", "Large tool call");
                 var call = new RNAssistant.Core.Agent.ToolCall(
-                    "large_tool_call", "common.tools_upsert", text);
+                    "large_tool_call", "tools.upsert", text);
                 var policy = new ToolPolicySnapshot(call.Name, "catalog-r1",
                     true, true);
                 var limits = new RNAssistant.Core.Agent.AgentRunLimits(8, 16);
@@ -1115,7 +1115,7 @@ namespace RNAssistant.Harness
                 var old = executor.CaptureSkills();
                 var oldHead = executor.ResourceAuthority.Store.GetHead(CatalogPublicationService.ScopeId, new ResourceIdentity("rna://catalog/skills")).Revision;
                 var tools = executor.GetControllerTools().ToList();
-                var created = executor.ExecuteManual(Command("common.skills_upsert", "id", "common.resource_test",
+                var created = executor.ExecuteManual(Command("skills.upsert", "id", "common.resource_test",
                     "host", "Common", "name", "Resource test", "description", "Verify catalog publication.", "version", "1.0.0",
                     "bodyMarkdown", "# Resource test\n\nInspect exact resources.", "enabled", true), tools, new AppSettings(), false, true, session);
                 AssertEqual("ok", created.Status, "skill write verifies: " + created.Message + " " + created.DataJson);
@@ -1172,7 +1172,7 @@ namespace RNAssistant.Harness
                     var leases = references.Skip(1).Select(reference => plane.Open(session, "catalog-preview", new ResourceRef(reference.Uri), "text")).ToArray();
                     AssertTrue(references.Skip(1).All(reference => authority.Store.GetHead(scope, reference.Identity) == null),
                         "head reads of catalog members use publication dependencies, never synthetic member heads");
-                    var changed = executor.ExecuteManual(Command("common.skills_upsert", "id", skill.Id, "host", "Common", "name", "Changed name",
+                    var changed = executor.ExecuteManual(Command("skills.upsert", "id", skill.Id, "host", "Common", "name", "Changed name",
                         "description", skill.Description, "version", "1.0.0", "bodyMarkdown", body, "enabled", true),
                         executor.GetControllerTools().ToList(), new AppSettings(), false, true, session);
                     AssertTrue(changed.Success, "metadata-only skill publication: " + changed.Message);
@@ -1581,7 +1581,7 @@ namespace RNAssistant.Harness
                 var payloads = new ChatBlobStore(paths);
                 var content = new string('x', 17 * 1024 * 1024);
                 var arguments = "{\"content\":\"" + content + "\"}";
-                var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "common.html_workspace_write_file" };
+                var invocation = new ToolInvocation { ToolCallId = "large", ToolId = "html.source.write" };
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                     Id = invocation.ToolCallId, Name = invocation.ToolId,
                     Arguments = new Dictionary<string, object> { { "content", content } }
@@ -1632,7 +1632,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>export</p>", true));
                 var target = executor.ResourceGateway.ResolveIntentTarget(session, "Excel range: Data!A1:B4");
                 var binding = new HtmlWorkspaceDataSource { Id = "cells", Name = "cells", Binding =
@@ -1837,13 +1837,13 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => RNAssistant.Office.Tools.HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>one</p>", true));
                 var originalArtifact = session.ActiveHtmlArtifactId;
                 var scope = executor.ResourceAuthority.Scope(session, true);
                 var identity = HtmlWorkspaceIdentity.Identity(session, HtmlWorkspaceIdentity.LogicalId(session.ActiveHtmlArtifactId));
                 var first = executor.ResourceAuthority.Store.GetHead(scope, identity).Revision;
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => RNAssistant.Office.Tools.HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>two</p>", true));
                 executor.MutateLocalResources(session, "common.html_workspace_restore", new Dictionary<string, object> { ["snapshotId"] = originalArtifact }, () => {
                     HtmlWorkspaceArtifactService.RestoreAsRevision(session, originalArtifact); return true; });
@@ -1875,7 +1875,7 @@ namespace RNAssistant.Harness
                     });
                 var session = NewSession(adapter);
                 var edits = new ChatHistoryEditService(_ => { }, (_, reason) => { }, chats.LoadArtifactBody);
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>one</p>", true));
                 executor.MutateLocalResources(session, "common.html_workspace_bind_data", null,
                     () => HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"count\":1}"));
@@ -1883,7 +1883,7 @@ namespace RNAssistant.Harness
                     "title", "Plan", "markdown", "# Plan", "status", "draft"),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), false, false, session);
                 AssertTrue(planResult.Success, "Plan uses its native document publication owner");
-                executor.MutateLocalResources(session, "common.task_list_set", null,
+                executor.MutateLocalResources(session, "task.list.set", null,
                     () => new TaskListService().Set(session, "Goal", new[] { "Read", "Change", "Verify" }
                         .Select(text => new ChatTaskStep { Text = text }).ToList(), () => { }));
                 var scope = executor.ResourceAuthority.Scope(session, false);
@@ -1903,7 +1903,7 @@ namespace RNAssistant.Harness
                     HtmlWorkspaceCheckpoint = ChatResourceUri.ResolveArtifactRevision(session, session.ActiveHtmlArtifactId) };
                 session.Messages.Add(target);
                 chats.Save(session);
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>two</p>", true));
                 session.Messages.Add(new ChatMessage { Role = "assistant", Content = "Changed" });
                 chats.Save(session);
@@ -1975,7 +1975,7 @@ namespace RNAssistant.Harness
                     { chats.Commit(saved, commit); if (fail) throw new System.IO.IOException("Injected failure after durable conversation write."); });
                 var session = NewSession(adapter);
                 var edits = new ChatHistoryEditService(_ => { }, (_, reason) => { });
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>retained</p>", true));
                 var scope = executor.ResourceAuthority.Scope(session, false);
                 var documentScope = executor.ResourceAuthority.Scope(session, true);
@@ -2203,7 +2203,7 @@ namespace RNAssistant.Harness
                     model.AppendToolCall(new AgentToolCall
                     {
                         Id = "next-call-" + scenario,
-                        Name = "common.resources_find",
+                        Name = "core.find",
                         Arguments = new Dictionary<string, object> { ["scope"] = "document", ["query"] = "Data" }
                     }, "Continue.", "Find the current resource.", null,
                         new AcceptedToolCallOrigin("next-step-" + scenario, "next-attempt-" + scenario, 0));
@@ -2609,7 +2609,7 @@ namespace RNAssistant.Harness
                 var history = new List<ChatMessage>();
                 Action<string, ResourceRef, ResourceRef, PayloadRef, long> addWrite = (id, prior, exact, payload, generation) =>
                 {
-                    var command = new ToolInvocation { ToolCallId = id, ToolId = "common.vba_write_module" };
+                    var command = new ToolInvocation { ToolCallId = id, ToolId = "vba.module.write" };
                     var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run", ToolCallId = id,
                         ToolName = command.ToolId, ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> {
                             new RNAssistant.Core.Llm.LlmToolCall { Id = id, Name = command.ToolId, Type = "function", ArgumentsJson = "{}" } } };
@@ -2651,14 +2651,14 @@ namespace RNAssistant.Harness
                 store.RegisterRevision(scope, new ResourceRevisionMetadata(after, currentPayload.Sha256, currentPayload));
                 store.RegisterView(scope, new ResourceRevisionView(after, ResourceRepresentations.Source,
                     currentPayload.Sha256, currentPayload, ResourceCoverage.Whole()));
-                var publishedEffect = new ResourceEffect("published-source", "common.vba_write_module",
+                var publishedEffect = new ResourceEffect("published-source", "vba.module.write",
                     ResourceEffectOutcome.VerifiedChanged, new[] {
                         new ResourceImpact(after.Identity, ResourceImpactRelation.Exact, after: after) });
                 store.Publish(ResourceAuthorityCommit.Create(scope, 0, publishedEffect,
                     new[] { new ResourceHeadChange(after.Identity, null, ResourceHeadState.Known(after, 1)) },
                     AuthorityCommitReason.MutationEffect));
                 var bound = new ChatSession { DocumentAuthorityId = "d" };
-                var publishedCall = new ToolInvocation { ToolCallId = "published", ToolId = "common.vba_write_module" };
+                var publishedCall = new ToolInvocation { ToolCallId = "published", ToolId = "vba.module.write" };
                 var publishedResult = new ToolResultMaterialization(
                     RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved"), resourceEffect: publishedEffect);
                 var publishedMessage = AgentJsonProtocol.CreateToolResultMessage(publishedCall, publishedResult,
@@ -2755,19 +2755,19 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var session = NewSession(adapter);
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<main>CURRENT_HTML</main>", true));
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "styles.css", "css", "body{color:CURRENT_CSS}", true));
                 var scope = executor.ResourceAuthority.Scope(session, true);
                 var effect = executor.ResourceAuthority.Store.Capture(scope).Commits.Last(item =>
-                    item.Effect?.Operation == "common.html_workspace_write_file").Effect;
+                    item.Effect?.Operation == "html.source.write").Effect;
                 var artifact = session.Artifacts.Single(item => item.Id == session.ActiveHtmlArtifactId);
                 var members = new JArray(session.HtmlWorkspace.Files.Select(file => new JObject {
                     ["path"] = file.Path,
                     ["uri"] = ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id).Uri
                 }));
-                var command = new ToolInvocation { ToolCallId = "html-write", ToolId = "common.html_workspace_write_file" };
+                var command = new ToolInvocation { ToolCallId = "html-write", ToolId = "html.source.write" };
                 var materialized = new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("saved",
                     new JObject { ["members"] = members }.ToString()), resourceEffect: effect);
                 var result = AgentJsonProtocol.CreateToolResultMessage(command, materialized, int.MaxValue, "tool");
@@ -2840,7 +2840,7 @@ namespace RNAssistant.Harness
             var r1 = new ResourceRef("rna://vba/d/module", "r1");
             var r2 = new ResourceRef(r1.Uri, "r2");
             var evidence = new ResourceEvidence("read", scope, r1, "source", ResourceCoverage.Whole(), true, 1);
-            var command = new ToolInvocation { ToolId = "common.resources_read", ToolCallId = "call1" };
+            var command = new ToolInvocation { ToolId = "core.read", ToolCallId = "call1" };
             var result = AgentJsonProtocol.CreateToolResultMessage(command,
                 new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("read",
                     new JObject { ["target"] = "VBA module: Module1", ["text"] = "OBSOLETE_BODY" + new string('x', 20000) }.ToString(), new[] { r1 }),
@@ -2887,7 +2887,7 @@ namespace RNAssistant.Harness
 
             // Equal observations must not turn earlier successes into errors or
             // erase different computations over the same exact input snapshot.
-            foreach (var toolId in new[] { "common.resources_read", "common.js_run" })
+            foreach (var toolId in new[] { "core.read", "js.run" })
             {
                 var repeatedFacts = new List<ChatMessage>();
                 foreach (var index in new[] { 1, 2 })
@@ -2910,7 +2910,7 @@ namespace RNAssistant.Harness
                 foreach (var reply in repeated.Messages.Where(item => item.Role == "tool"))
                     AssertEqual(RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok,
                         ToolResultWire.Read(reply.Content).Result.Status, "repeated read retains its actual outcome");
-                if (toolId == "common.resources_read")
+                if (toolId == "core.read")
                 {
                     repeatedFacts[3].Content = repeatedFacts[3].Content.Replace("RESULT_2", "RESULT_1");
                     var identical = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
@@ -2959,7 +2959,7 @@ namespace RNAssistant.Harness
                 var payloads = new ChatBlobStore(paths);
                 var diagnostic = "CURRENT_RECOVERY_SOURCE_" + new string('x', 16000);
                 var mutationCall = new ChatMessage { Role = "assistant", ProtocolMessage = true,
-                    ToolCallId = "failed-patch", ToolName = "common.vba_apply_patch",
+                    ToolCallId = "failed-patch", ToolName = "vba.module.patch",
                     ResourceEvidence = new List<ResourceEvidence> { evidence } };
                 var mutationTool = new ToolCatalogEntry { Id = mutationCall.ToolName,
                     Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" }) };
@@ -3000,7 +3000,7 @@ namespace RNAssistant.Harness
             });
             var oversizedCommand = new ToolInvocation
             {
-                ToolId = "common.resources_read",
+                ToolId = "core.read",
                 ToolCallId = "call2"
             };
             var oversizedResult = AgentJsonProtocol.CreateToolResultMessage(

@@ -234,7 +234,7 @@ console.log("PASS Tool Library form: typed controls, omit/null, bounds and seman
   let next = false;
   const actionState = {
     activeChatId: "chat",
-    tools: [{ Id: "common.capabilities_read" }], selectedToolIndex: 0
+    tools: [{ Id: "core.tools.read" }], selectedToolIndex: 0
   };
   const actions = actionContext.RNAssistantToolActions.create({
     state: actionState,

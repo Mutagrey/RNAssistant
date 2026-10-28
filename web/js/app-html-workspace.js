@@ -91,7 +91,7 @@
     var form = $("chatForm");
     if (!input || !form || typeof form.requestSubmit !== "function") return false;
     input.value = "Выполни утверждённый активный план. Перед началом найди его через " +
-      "common.resources_find и прочитай возвращённую семантическую цель через common.resources_read.";
+      "core.find и прочитай возвращённую семантическую цель через core.read.";
     updateComposerInputState();
     form.requestSubmit();
     return true;

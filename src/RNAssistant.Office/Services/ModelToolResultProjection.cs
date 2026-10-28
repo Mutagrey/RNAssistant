@@ -43,8 +43,8 @@ namespace RNAssistant.Office.Services
         {
             return string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
                 string.Equals(name, PowerPointToolIds.ReplaceText, StringComparison.Ordinal) ||
-                string.Equals(name, "outlook.create_draft", StringComparison.Ordinal) ||
-                string.Equals(name, "outlook.update_mail", StringComparison.Ordinal);
+                string.Equals(name, "outlook.draft.create", StringComparison.Ordinal) ||
+                string.Equals(name, "outlook.mail.update", StringComparison.Ordinal);
         }
 
         private static void RemoveOfficeRuntimeState(string name, JToken data)
@@ -54,9 +54,9 @@ namespace RNAssistant.Office.Services
             if (string.Equals(name, WordToolIds.ReplaceText, StringComparison.Ordinal) ||
                 string.Equals(name, PowerPointToolIds.ReplaceText, StringComparison.Ordinal))
                 RemoveProperties(root, "scopeSha256");
-            else if (string.Equals(name, "outlook.create_draft", StringComparison.Ordinal))
+            else if (string.Equals(name, "outlook.draft.create", StringComparison.Ordinal))
                 RemoveProperties(root, "targetEntryId", "draftEntryId");
-            else if (string.Equals(name, "outlook.update_mail", StringComparison.Ordinal))
+            else if (string.Equals(name, "outlook.mail.update", StringComparison.Ordinal))
                 RemoveProperties(root, "entryId", "stateSha256");
         }
 
@@ -146,6 +146,15 @@ namespace RNAssistant.Office.Services
         {
             error = null;
             if (call == null || string.IsNullOrWhiteSpace(call.Name)) return true;
+            if (CapabilityNaming.IsRetiredTool(call.Name) ||
+                VbaToolCatalog.Owns(call.Name) && call.Name != VbaToolCatalog.RunMacro ||
+                AuthoredFileToolCatalog.Owns(call.Name) || MarkdownDocumentToolCatalog.Owns(call.Name) ||
+                call.Name == HtmlWorkspaceToolCatalog.WriteFileToolId || call.Name == HtmlWorkspaceToolCatalog.ApplyPatchToolId ||
+                call.Name == HtmlWorkspaceToolCatalog.DeleteToolId)
+            {
+                error = "This conversation uses retired tool contracts. Start a new chat; stored history is preserved.";
+                return false;
+            }
             if (call.Name.StartsWith("rna_", StringComparison.OrdinalIgnoreCase))
             {
                 error = "Synthetic rna_* tool names are not part of the public catalog.";
@@ -154,50 +163,59 @@ namespace RNAssistant.Office.Services
             string schema;
             switch (call.Name)
             {
+                case ResourceMutationToolCatalog.Write:
+                case ResourceMutationToolCatalog.Patch:
+                case ResourceMutationToolCatalog.Replace:
+                case ResourceMutationToolCatalog.Copy:
+                case ResourceMutationToolCatalog.Move:
+                case ResourceMutationToolCatalog.Delete:
+                case ResourceMutationToolCatalog.Restore:
+                    schema = ResourceMutationToolCatalog.GetTools().Single(tool => tool.Id == call.Name).ArgumentSchemaJson;
+                    break;
                 case "common.resources_list":
                 case "common.resources_resolve":
                     error = "Public resource list/resolve calls were retired by 11O1.";
                     return false;
-                case "common.plan_doc_create":
-                case "common.plan_doc_update":
-                    error = "Public Plan create/update calls were replaced by common.plan_doc_save in 11O2.";
+                case "plan.document.create":
+                case "plan.document.update":
+                    error = "Public Plan create/update calls were replaced by plan.document.save in 11O2.";
                     return false;
-                case "common.task_list_create":
-                case "common.task_list_update":
-                case "common.task_list_close":
-                    error = "Public Task List lifecycle calls were replaced by common.task_list_set in 11O2.";
+                case "task.list.create":
+                case "task.list.update":
+                case "task.list.close":
+                    error = "Public Task List lifecycle calls were replaced by task.list.set in 11O2.";
                     return false;
-                case "common.html_workspace_inspect":
+                case "html.workspace.inspect":
                     error = "Public HTML inspection was internalized in 11O3.";
                     return false;
-                case "common.html_workspace_set_active":
+                case "html.workspace.set.active":
                     error = "Public HTML preview selection was internalized in 11O3.";
                     return false;
-                case "common.html_workspace_upsert":
-                case "common.html_workspace_upsert_file":
+                case "html.workspace.upsert":
+                case "html.workspace.upsert.file":
                     error = "Public HTML upsert was split into semantic file/data writes in 11O3.";
                     return false;
                 case "common.tools_validate":
                     error = "Tool validation is internal to upsert and Library in 11O4.";
                     return false;
                 case "common.tools_definition_read":
-                    error = "Tool source reads use common.resources_find/read and exact catalog evidence.";
+                    error = "Tool source reads use core.find/read and exact catalog evidence.";
                     return false;
                 case "common.prompts_read":
-                    error = "Prompt reads use common.resources_find/read and exact catalog evidence.";
+                    error = "Prompt reads use core.find/read and exact catalog evidence.";
                     return false;
                 case "excel.read_range":
-                    error = "Excel range reads use common.resources_read and exact document evidence.";
+                    error = "Excel range reads use core.read and exact document evidence.";
                     return false;
                 case "outlook.read_mail":
                 case "outlook.collect_mail":
-                    error = "Mail reads use common.resources_find/read and exact document evidence.";
+                    error = "Mail reads use core.find/read and exact document evidence.";
                     return false;
                 case "powerpoint.read_slides":
-                    error = "PowerPoint slide reads use common.resources_read and exact document evidence.";
+                    error = "PowerPoint slide reads use core.read and exact document evidence.";
                     return false;
                 case "word.read_text":
-                    error = "Word text reads use common.resources_read and exact document evidence.";
+                    error = "Word text reads use core.read and exact document evidence.";
                     return false;
                 case "common.vba_inspect":
                 case "common.vba_list_modules":
@@ -241,17 +259,8 @@ namespace RNAssistant.Office.Services
                 case TaskListToolCatalog.SetToolId:
                     schema = TaskListToolCatalog.Schema();
                     break;
-                case HtmlWorkspaceToolCatalog.WriteFileToolId:
-                    schema = HtmlWorkspaceToolService.WriteFileSchema();
-                    break;
                 case HtmlWorkspaceToolCatalog.WriteDataToolId:
                     schema = HtmlWorkspaceToolService.WriteDataSchema();
-                    break;
-                case HtmlWorkspaceToolCatalog.ApplyPatchToolId:
-                    schema = HtmlWorkspaceToolService.ApplyPatchSchema();
-                    break;
-                case HtmlWorkspaceToolCatalog.DeleteToolId:
-                    schema = HtmlWorkspaceToolCatalog.DeleteSchema();
                     break;
                 case HtmlWorkspaceToolCatalog.BindDataToolId:
                     schema = HtmlWorkspaceToolService.BindSchema();
@@ -275,11 +284,6 @@ namespace RNAssistant.Office.Services
                 case SkillAuthoringCatalog.ReferenceDeleteToolId:
                     schema = SkillAuthoringCatalog.SchemaFor(call.Name);
                     break;
-                case VbaToolCatalog.RestoreBackup:
-                case VbaToolCatalog.WriteModule:
-                case VbaToolCatalog.RenameModule:
-                case VbaToolCatalog.ApplyPatch:
-                case VbaToolCatalog.DeleteModule:
                 case VbaToolCatalog.RunMacro:
                     schema = VbaToolCatalog.SchemaFor(call.Name);
                     break;
@@ -306,6 +310,11 @@ namespace RNAssistant.Office.Services
                             " contains a URI instead of a current semantic target.";
                         return false;
                     }
+                    if (ResourceMutationToolCatalog.Owns(call.Name) && ResourceGatewayService.IsUriLikeIntentTarget((string)arguments["destination"]))
+                    {
+                        error = "Stored destination contains a URI instead of a semantic target.";
+                        return false;
+                    }
                     return true;
                 }
                 error = "Stored " + call.Name + " arguments do not match the current semantic schema.";
@@ -320,6 +329,7 @@ namespace RNAssistant.Office.Services
 
         private static string SemanticTargetField(string toolName)
         {
+            if (ResourceMutationToolCatalog.Owns(toolName)) return "target";
             if (string.Equals(toolName, ResourceToolCatalog.ReadToolId,
                     StringComparison.Ordinal) ||
                 string.Equals(toolName, HtmlWorkspaceToolCatalog.BindDataToolId,

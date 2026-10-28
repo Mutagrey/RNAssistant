@@ -14,7 +14,7 @@ namespace RNAssistant.Harness
     {
         private static void CompactExcelFormatSchemaPreservesArguments()
         {
-            var tool = OfficeToolCatalog.ForHost("Excel").Single(item => item.Id == "excel.format_range");
+            var tool = OfficeToolCatalog.ForHost("Excel").Single(item => item.Id == "excel.range.format");
             JObject schema;
             string error;
             AssertTrue(ToolSchemaSupport.TryParse(tool, out schema, out error), "compact format schema parses: " + error);

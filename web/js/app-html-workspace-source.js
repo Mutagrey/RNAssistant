@@ -48,7 +48,7 @@
       close(pending);
     }
     function validate(workspace, wanted) {
-      var files = workspace.files || [];
+      var files = skills.skills.workspace.files || [];
       if (files.length > 100 || files.some(function (file) { return !Number.isInteger(file.characters) || file.characters < 0; }))
         throw new Error("RESOURCE_BATCH_TOO_LARGE");
       wanted.forEach(function (file) {
@@ -127,7 +127,7 @@
     async function exportSources(workspace, isCurrent) {
       if (pending) { var old = pending; cancel(false); await old.promise; }
       if (!currentWorkspace(workspace) || !isCurrent()) throw new Error("RESOURCE_EXPORT_CANCELLED");
-      var job = start(workspace, (workspace.files || []).slice(), isCurrent, true);
+      var job = start(workspace, (skills.skills.workspace.files || []).slice(), isCurrent, true);
       if (!await job.promise) throw job.error || new Error("RESOURCE_SOURCE_UNAVAILABLE");
     }
     function message() {

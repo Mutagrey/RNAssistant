@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Tools
         {
             if (!HtmlWorkspaceToolCatalog.Owns(toolId)) return null;
             return new ToolBinding(
-                "html." + toolId.Substring("common.html_".Length)
+                "html." + toolId.Substring("html.".Length)
                     .Replace('_', '.') + ".v2");
         }
 
@@ -112,7 +112,7 @@ namespace RNAssistant.Office.Tools
 
             return HtmlWorkspaceToolOutcome.Error(
                 "The model has not seen complete source for the current HTML file contents in this run: " + path +
-                ". Read its complete source with common.resources_find/read before replacing it, or use common.html_workspace_apply_patch for a focused change. A successful read omitted from model context does not authorize replacement.",
+                ". Read its complete source with core.find/read before replacing it, or use html.source.patch for a focused change. A successful read omitted from model context does not authorize replacement.",
                 null, "html_source_observation_required", false,
                 new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
                     ToolRetryPolicy.RefreshRequired, current.Identity,

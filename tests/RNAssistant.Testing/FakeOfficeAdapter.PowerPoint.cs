@@ -16,13 +16,13 @@ namespace RNAssistant.Harness
         internal const string PowerPointReadTextOperation =
             "powerpoint.read_text.direct";
         internal const string PowerPointAddSlideOperation =
-            "powerpoint.add_slide.direct";
+            "powerpoint.slide.add.direct";
         internal const string PowerPointSetTextOperation =
-            "powerpoint.set_text.direct";
+            "powerpoint.text.set.direct";
         internal const string PowerPointReplaceOperation =
             "powerpoint.replace.direct";
         internal const string PowerPointAddObjectOperation =
-            "powerpoint.add_object.direct";
+            "powerpoint.object.add.direct";
         internal const string PowerPointDuplicateOperation =
             "powerpoint.duplicate.direct";
         internal const string PowerPointMoveOperation =

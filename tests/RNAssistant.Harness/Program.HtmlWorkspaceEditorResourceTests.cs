@@ -96,9 +96,9 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
                 var session = NewSession(adapter);
                 var text = "\ufeff<main>\r\n" + new string('я', 140000) + "😀</main>";
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", text, true));
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "empty.css", "css", "", false));
                 var metadata = HtmlWorkspaceEditorResourceService.Metadata(session);
                 var projection = JObject.FromObject(metadata);
@@ -117,7 +117,7 @@ namespace RNAssistant.Harness
                     AssertEqual(file.Sha256, response.Data.Payload.Sha256, "download matches exact file metadata");
                     AssertEqual(file.ByteLength, (int)response.Data.Payload.ByteLength, "complete bounded source byte length");
                     AssertTrue(JObject.FromObject(response)["content"] == null && JObject.FromObject(response)["text"] == null, "read response contains no source body");
-                    executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                    executor.MutateLocalResources(session, "html.source.write", null,
                         () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "new revision", true));
                     using (var output = new MemoryStream())
                     {

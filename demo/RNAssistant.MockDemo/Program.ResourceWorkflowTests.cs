@@ -42,7 +42,7 @@ namespace RNAssistant.MockDemo
                                     sourceIds = new[] { (string)source["sourceId"] } } } }) });
                         }
                         if (requireSelections)
-                            foreach (var skill in new[] { "common.task_tracking", "common.html_workspace_authoring" })
+                            foreach (var skill in new[] { "skills.task.tracking", "skills.html.workspace.authoring" })
                                 if (!messages.Any(message => (message.Content ?? "").StartsWith("SELECTED_SKILL " + skill + "\n", StringComparison.Ordinal)))
                                     throw new Exception("selected skill lost after confirmation/restart: " + skill);
                         if (responses.Count == 0) throw new Exception("unexpected extra model request");
@@ -63,10 +63,10 @@ namespace RNAssistant.MockDemo
                 controller = new AssistantController(adapter, paths, model);
                 var id = controller.Initialize().ActiveChatId;
                 await CheckResourceLibraryReadsAsync(controller, id);
-                responses.Enqueue(tool("common.skills_load", new { id = "common.task_tracking" }));
-                responses.Enqueue(tool("common.task_list_set", new { action = "save", goal = "Edit report", steps = new[] { new { text = "Update HTML", status = "in_progress" } } }));
-                responses.Enqueue(tool("common.skills_load", new { id = "common.html_workspace_authoring" }));
-                responses.Enqueue(tool("common.html_workspace_write_file", new { path = "index.html", content = "<main>Before</main>" }));
+                responses.Enqueue(tool("core.skills.load", new { id = "skills.task.tracking" }));
+                responses.Enqueue(tool("task.list.set", new { action = "save", goal = "Edit report", steps = new[] { new { text = "Update HTML", status = "in_progress" } } }));
+                responses.Enqueue(tool("core.skills.load", new { id = "skills.html.workspace.authoring" }));
+                responses.Enqueue(tool("html.source.write", new { path = "index.html", content = "<main>Before</main>" }));
                 await SubmitAndWaitAsync(controller, "Create a report and update its heading", id);
                 var store = new ChatStore(paths);
                 var session = store.Load(id);
@@ -76,7 +76,7 @@ namespace RNAssistant.MockDemo
                 requireSelections = true;
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
-                responses.Enqueue(tool("common.html_workspace_apply_patch", new { path = "index.html", patch = new[] { new { op = "replace", find = "Before", text = "After" } } }));
+                responses.Enqueue(tool("html.source.patch", new { path = "index.html", patch = new[] { new { op = "replace", find = "Before", text = "After" } } }));
                 await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (session.LastRun.SelectedSkills.Count != 2)
@@ -89,7 +89,7 @@ namespace RNAssistant.MockDemo
                 var before = controller.GetHtmlWorkspace(id).Workspace.Files.Single(file => file.Path == "index.html").Source;
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
-                responses.Enqueue(tool("common.html_workspace_write_file", new { path = "index.html", content = "<main>Final</main>" }));
+                responses.Enqueue(tool("html.source.write", new { path = "index.html", content = "<main>Final</main>" }));
                 await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (session.HtmlWorkspace.Files.Single().Content != "<main>After</main>")
@@ -103,7 +103,7 @@ namespace RNAssistant.MockDemo
                 if (compactionCalls != 1) throw new Exception("controller did not exercise structured compaction");
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
-                responses.Enqueue(tool("common.html_workspace_write_file", new { path = "index.html", content = "<main>Final</main>" }));
+                responses.Enqueue(tool("html.source.write", new { path = "index.html", content = "<main>Final</main>" }));
                 await controller.ConfirmAgentToolAsync(pending.PendingId, id, runId: session.LastRun.RunId);
                 session = store.Load(id);
                 if (session.HtmlWorkspace.Files.Single().Content != "<main>Final</main>")
@@ -145,8 +145,8 @@ namespace RNAssistant.MockDemo
                 await SubmitAndWaitAsync(controller, "Continue with the existing report", id);
                 if (store.Load(id).LastRun.SelectedSkills.Count != 2) throw new Exception("follow-up lost selections after restart");
                 requireSelections = false;
-                responses.Enqueue(tool("common.skills_load", new { id = "common.task_tracking", action = "remove" }));
-                responses.Enqueue(tool("common.skills_load", new { id = "common.html_workspace_authoring", action = "remove" }));
+                responses.Enqueue(tool("core.skills.load", new { id = "skills.task.tracking", action = "remove" }));
+                responses.Enqueue(tool("core.skills.load", new { id = "skills.html.workspace.authoring", action = "remove" }));
                 responses.Enqueue(done);
                 await SubmitAndWaitAsync(controller, "Switch tasks and remove the report procedures", id);
                 if (store.Load(id).LastRun.SelectedSkills.Count != 0) throw new Exception("explicit removal retained selections");
@@ -205,7 +205,7 @@ namespace RNAssistant.MockDemo
             controls.EnableAgentJavaScript = true;
             controller.SaveSettings(new SaveSettingsPayload { ChatId = chatId, Settings = controls,
                 ExpectedPromptPublication = controller.GetSettings().Prompts.Publication }, CancellationToken.None);
-            var configured = controller.GetTools().Tools.Single(tool => tool.Id == "common.tools_upsert");
+            var configured = controller.GetTools().Tools.Single(tool => tool.Id == "tools.upsert");
             var configuredSource = await controller.ReadToolSourceAsync(new ToolSourceReadRequest { Type = ToolSourceReadRequest.ContractType,
                 ContractVersion = 1, ChatId = chatId, ToolId = configured.Id, ExpectedRevision = configured.Revision }, CancellationToken.None);
             ReadControllerDownload(controller, chatId, "tool-editor", configuredSource.Data, configured.Source.Sha256);
@@ -215,7 +215,7 @@ namespace RNAssistant.MockDemo
             controls.EnableAgentJavaScript = false;
             controller.SaveSettings(new SaveSettingsPayload { ChatId = chatId, Settings = controls,
                 ExpectedPromptPublication = controller.GetSettings().Prompts.Publication }, CancellationToken.None);
-            configured = controller.GetTools().Tools.Single(tool => tool.Id == "common.tools_upsert");
+            configured = controller.GetTools().Tools.Single(tool => tool.Id == "tools.upsert");
             configuredSource = await controller.ReadToolSourceAsync(new ToolSourceReadRequest { Type = ToolSourceReadRequest.ContractType,
                 ContractVersion = 1, ChatId = chatId, ToolId = configured.Id, ExpectedRevision = configured.Revision }, CancellationToken.None);
             ReadControllerDownload(controller, chatId, "tool-editor", configuredSource.Data, configured.Source.Sha256);

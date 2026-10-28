@@ -90,17 +90,20 @@
     details.Selected.forEach(function (skill) { capability(body, skill, "skill"); });
     heading(body, "Инструменты · " + details.Tools.length);
     if (!details.Tools.length) paragraph(body, "Инструментов нет.");
-    var groups = new Map();
-    details.Tools.forEach(function (tool) {
-      var group = window.RNAssistantLibraryGroups.category(tool.Id);
-      if (!groups.has(group.key)) groups.set(group.key, { title: group.title, tools: [] });
-      groups.get(group.key).tools.push(tool);
-    });
-    groups.forEach(function (group, id) {
-      var section = disclosure(body, "tools:" + id, group.title, String(group.tools.length));
-      section.classList.add("chat-inspector-tool-group");
-      group.tools.forEach(function (tool) { capability(section, tool, "tool"); });
-    });
+    var rows = details.Tools.map(function (tool) { return { value: tool }; });
+    var tree = window.RNAssistantLibraryGroups.tree(rows, "tools", function (row) {
+      return { kind: "leaf", title: row.value.Id, value: row.value };
+    }, function () { return false; });
+    function append(parent, nodes) {
+      nodes.forEach(function (entry) {
+        if (entry.kind === "leaf") capability(parent, entry.value, "tool");
+        else {
+          var section = disclosure(parent, entry.key, entry.title, "");
+          section.classList.add("chat-inspector-tool-group"); append(section, entry.children);
+        }
+      });
+    }
+    append(body, tree);
   }
 
   function activeChat() {
@@ -859,7 +862,18 @@
     sync();
   }
 
-  window.RNAssistantChatInspector = { bind: bind, render: render, refreshLayout: sync, setOpen: setOpen, openActivity: openActivity,
+  function libraryCapabilityStatus(id, kind) {
+    var details = null;
+    if (owner === "office" && abilities && !abilities.historical && abilitiesKey === currentAbilitiesKey()) details = abilities.details;
+    else if (owner !== "office") {
+      var current = source(), receipt = field(current.snapshot, "contextReceipt");
+      if (receipt && receipt.Arsenal && receipt.Arsenal.RunId === current.run.runId) details = receipt.Arsenal;
+    }
+    var items = details && (kind === "skill" ? details.Selected : details.Tools);
+    var item = items && items.find(function (entry) { return entry.Id === id; });
+    return item ? item.Status === "unavailable" ? "Недоступен" : "Подключён" : null;
+  }
+  window.RNAssistantChatInspector = { libraryCapabilityStatus: libraryCapabilityStatus, bind: bind, render: render, refreshLayout: sync, setOpen: setOpen, openActivity: openActivity,
     mount: mount, target: target, isOpen: function () { return open; }, panelControls: panelControls, panelOpen: panelOpen, togglePanel: togglePanel,
     syncToggle: function () { if (panelToggle) panelToggle.sync(); },
     syncSwitcher: syncSwitcher,

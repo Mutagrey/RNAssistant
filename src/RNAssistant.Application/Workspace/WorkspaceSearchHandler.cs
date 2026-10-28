@@ -15,7 +15,8 @@ namespace RNAssistant.Runtime
         private readonly WorkspaceFileResourceProvider _files;
         private readonly ResourceTextSearch _search = new ResourceTextSearch();
         private readonly IReadOnlyToolHandler _office;
-        public WorkspaceSearchHandler(WorkspaceFileResourceProvider files, IReadOnlyToolHandler office = null) { _files = files; _office = office; }
+        private readonly ResourceSearchObservation _observation;
+        public WorkspaceSearchHandler(WorkspaceFileResourceProvider files, IReadOnlyToolHandler office = null, ResourceSearchObservation observation = null) { _files = files; _office = office; _observation = observation; }
         public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
         {
             try
@@ -27,6 +28,7 @@ namespace RNAssistant.Runtime
                     return _office.ExecuteAsync(context, token);
                 }
                 var page = _search.Search(request, _files.SearchSources(request, token), token);
+                _observation?.Record(request, page, context.Execution.RunId + ":" + context.Execution.StepId);
                 return Return(ToolResult.Ok(page.ScanComplete && page.SourceComplete ? "Selected text scope searched completely." :
                     "Search is incomplete; inspect reasons or continue. Absence is not established.",
                     JsonConvert.SerializeObject(page), page.ExactReferences));

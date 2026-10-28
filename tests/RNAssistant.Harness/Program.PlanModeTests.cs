@@ -149,9 +149,9 @@ namespace RNAssistant.Harness
         {
             AssertEqual(ChatModes.Plan, ChatModes.Normalize("PLAN"), "plan mode normalizes");
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
-                "common.capabilities_read", "Plan includes progressive capability policy");
+                "core.tools.read", "Plan includes progressive capability policy");
             AssertContains(ConversationPromptComposer.BuildInstruction(ChatModes.Plan, new AppSettings()),
-                "Save the active draft with common.plan_doc_save as soon as enough facts exist",
+                "Save the active draft with plan.document.save as soon as enough facts exist",
                 "Plan requires the Markdown artifact");
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -187,7 +187,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!ConversationRunPolicy.For(ChatModes.Plan).AllowsConfirmation, "Plan cannot confirm mutations");
                 string contractError;
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
-                    new ToolCall("old-plan", "common.plan_doc_update", "{}"),
+                    new ToolCall("old-plan", "plan.document.update", "{}"),
                     out contractError),
                     "pre-11O2 Plan calls require an explicit new chat/reset");
             });

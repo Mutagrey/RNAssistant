@@ -41,9 +41,9 @@ namespace RNAssistant.Office.Services
 
         internal AuthoredFileIntent Prepare(ChatSession session, ToolHandlerContext context)
         {
-            var operation = context.Execution.Call.Name;
+            var operation = context.DomainOperation;
             var intent = new AuthoredFileIntent { LogicalId = LogicalId(session, context.Execution) };
-            if (operation == AuthoredFileToolCatalog.PatchToolId)
+            if (operation == AuthoredFileToolCatalog.PatchToolId || operation == AuthoredFileToolCatalog.UpdateToolId)
             {
                 intent.Base = _gateway.ResolveIntentTarget(session, ToolArgumentReader.String(context.Arguments, "target", "")).Reference;
                 var artifact = _artifacts.Read(session, intent.Base, false);
@@ -51,7 +51,7 @@ namespace RNAssistant.Office.Services
                 if (artifact.Kind != ChatArtifactKinds.File || intent.LogicalId == null || DocumentArtifactStore.FileEncoding(artifact) == null)
                     throw new InvalidDataException("Select a current authored text file, not an uploaded original.");
                 intent.Source = JsonConvert.DeserializeObject<AuthoredFileMetadata>(artifact.MetadataJson ?? "{}")?.Source;
-                ParseHunks(context.Arguments);
+                if (operation == AuthoredFileToolCatalog.PatchToolId) ParseHunks(context.Arguments);
             }
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
             {
@@ -98,7 +98,7 @@ namespace RNAssistant.Office.Services
         internal AuthoredFileSave Save(ChatSession session, ToolHandlerContext context)
         {
             var intent = Intent(context.PreparedStateJson);
-            var operation = context.Execution.Call.Name;
+            var operation = context.DomainOperation;
             ChatArtifact parent = null;
             ChatArtifact source = null;
             byte[] bytes;
@@ -141,6 +141,21 @@ namespace RNAssistant.Office.Services
                 changes.AddRange(resolved.Select(h => new AuthoredFileChange {
                     Offset = h.Offset, Removed = h.Find.Length, Inserted = h.Replace.Length,
                     Before = Preview(h.Find), After = Preview(h.Replace) }));
+            }
+            else if (operation == AuthoredFileToolCatalog.UpdateToolId)
+            {
+                parent = _artifacts.Read(session, intent.Base, false);
+                var previous = DocumentArtifactStore.DecodeFileText(_artifacts.ExportBytes(session, intent.Base), out encoding);
+                var content = ToolArgumentReader.String(context.Arguments, "content", "");
+                bytes = DocumentArtifactStore.EncodeFileText(content, encoding);
+                name = parent.Title; mime = parent.MimeType;
+                object edits;
+                if (context.Arguments.TryGetValue("resolvedTextEdits", out edits))
+                    changes.AddRange(JsonConvert.DeserializeObject<List<ResolvedTextEdit>>(JsonConvert.SerializeObject(edits))
+                        .Select(edit => new AuthoredFileChange { Offset = edit.Offset, Removed = edit.Before.Length,
+                            Inserted = edit.After.Length, Before = Preview(edit.Before), After = Preview(edit.After) }));
+                else changes.Add(new AuthoredFileChange { Offset = 0, Removed = previous.Length, Inserted = content.Length,
+                    Before = Preview(previous), After = Preview(content) });
             }
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
             {

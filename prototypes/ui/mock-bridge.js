@@ -1097,9 +1097,9 @@
           Status: "selected", Tools: ["excel.read_table"], References: [], Revision: skill.revision };
       });
       var availableTools = [
-        { Id: "common.resources_find", Name: "Поиск ресурсов", Description: "Поиск материалов чата" },
+        { Id: "core.find", Name: "Поиск ресурсов", Description: "Поиск материалов чата" },
         { Id: "excel.read_table", Name: "Чтение таблицы", Description: "Чтение данных Excel" },
-        { Id: "excel.format_range", Name: "Форматирование диапазона", Description: "Изменение документа", RequiresConfirmation: true }
+        { Id: "excel.range.format", Name: "Форматирование диапазона", Description: "Изменение документа", RequiresConfirmation: true }
       ];
       return { type: "rnassistant.agentArsenal", contractVersion: 1, chatId: activeChatId,
         revision: revision, historical: true, prepared: false, pending: false, restriction: "",

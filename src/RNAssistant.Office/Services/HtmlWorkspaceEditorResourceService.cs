@@ -91,7 +91,7 @@ namespace RNAssistant.Office.Services
         {
             var content = ReadSource(session, request, token);
             var expected = ValidateCurrent(session, request, token);
-            _executor.MutateLocalResources(session, "common.html_workspace_write_file", new Dictionary<string, object> {
+            _executor.MutateLocalResources(session, "html.source.write", new Dictionary<string, object> {
                 ["path"] = request.Path, ["kind"] = request.Kind, ["content"] = content, ["setActive"] = request.SetActive != false,
                 ["expectedActiveHtmlArtifactId"] = request.ExpectedActiveHtmlArtifactId, ["expectedRevision"] = expected },
                 () => HtmlWorkspaceToolService.UpsertFile(session, request.Path, request.Kind, content, request.SetActive != false),
@@ -105,7 +105,7 @@ namespace RNAssistant.Office.Services
         {
             var json = ReadSource(session, request, token);
             var expected = ValidateCurrent(session, request, token);
-            _executor.MutateLocalResources(session, "common.html_data_write", new Dictionary<string, object> {
+            _executor.MutateLocalResources(session, "html.data.write", new Dictionary<string, object> {
                 ["name"] = request.Name, ["json"] = json, ["expectedActiveHtmlArtifactId"] = request.ExpectedActiveHtmlArtifactId,
                 ["expectedRevision"] = expected },
                 () => HtmlWorkspaceToolService.UpsertDataSource(session, request.Name, json),

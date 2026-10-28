@@ -37,7 +37,7 @@ namespace RNAssistant.Harness
                 AssertEqual("RESOURCE_ACCESS_DENIED", RuntimeThrows<ResourceRequestException>(() => HtmlWorkspaceActionGuard.Validate(session, request)).ErrorCode,
                     "explicit addressed chat must match");
                 request.ChatId = session.Id;
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<main>keep</main>", true));
                 RuntimeThrows<ResourceRequestException>(() => HtmlWorkspaceActionGuard.Validate(session, request));
                 request.ExpectedActiveHtmlArtifactId = session.ActiveHtmlArtifactId;
@@ -49,7 +49,7 @@ namespace RNAssistant.Harness
                 var head = executor.ResourceAuthority.Store.Capture(scope).GetHead(identity);
                 var dispatched = false;
                 AssertEqual("RESOURCE_REVISION_CHANGED", RuntimeThrows<ResourceRequestException>(() =>
-                    executor.MutateLocalResources(session, "common.html_workspace_delete", null, () => {
+                    executor.MutateLocalResources(session, "html.source.delete", null, () => {
                         dispatched = true;
                         return HtmlWorkspaceToolService.DeleteFile(session, request.Path);
                     }, validateBeforeDispatch: () => HtmlWorkspaceActionGuard.Validate(session, request))).ErrorCode,
@@ -62,7 +62,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, persisted, "rejected action does not persist an effect");
                 AssertEqual(0, new ResourceMutationJournal(paths).Unresolved().Count, "abandoned preparation leaves no unresolved effect");
                 request.ExpectedSessionRevision = session.Revision;
-                executor.MutateLocalResources(session, "common.html_workspace_delete", null,
+                executor.MutateLocalResources(session, "html.source.delete", null,
                     () => HtmlWorkspaceToolService.DeleteFile(session, request.Path),
                     validateBeforeDispatch: () => HtmlWorkspaceActionGuard.Validate(session, request));
                 AssertEqual(0, session.HtmlWorkspace.Files.Count, "fresh explicit request succeeds after rejected preparation releases its lease");

@@ -1,5 +1,7 @@
 # Resource Fabric
 
+Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+
 Status: unified direct cutover **complete host-neutral** (2026-09-07), with explicit
 unresolved Outlook source-allocation limits and open Windows gates.
 This is not bounded-source qualification or beta/RC/release readiness. Execution order and
@@ -12,7 +14,7 @@ Earlier R61 whole-read/accepted-tool-result binding explanations are superseded.
 
 ## Shared text exploration — 2026-10-25
 
-`common.resources_search` keeps its public ID. Office accepts one semantic `target`
+`core.search` replaces the retired common resource-search ID. Office accepts one semantic `target`
 or `scope=vba|html`; workspace accepts a relative file `target` or `scope=workspace`.
 A workspace with a bound Office document additionally accepts `scope=vba`, or
 `type=office` plus target. The same Core closed schema and matcher serve both routes.
@@ -22,8 +24,8 @@ Workspace scope additionally accepts `directory`, `recursive` (default false),
 `*`, `?`, `**`, `**/`; no character classes, braces or negation).
 
 Streaming search is line-oriented; regex is .NET culture-invariant with 100 ms
-match timeout. Legacy single-target literal search preserves multiline and indexed
-artifact behavior, including part coordinates and long lines. No parser/LSP/index
+match timeout. Literal and regex matching share the non-overlapping matcher with core.replace;
+the public query is single-line. Internal indexed artifact navigation retains part coordinates. No parser/LSP/index
 is required, including for unknown extensions. String matches are candidates,
 not verified references or a complete call graph. The model chooses queries/depth.
 
@@ -53,7 +55,7 @@ writes. Existing live Office capture may still materialize a whole module; this
 is not constant-memory COM qualification. Continuation revalidation can reread
 prior sources and is not an incremental index. CAS retention remains source-owned.
 
-`common.resources_find` keeps its default directory browsing. Its workspace file
+`core.find` keeps its default directory browsing. Its workspace file
 branch additionally accepts recursive/glob selectors for bounded file-only metadata
 discovery. An omitted/null recursive selector must remain absent through runtime
 normalization: injecting false would incorrectly switch directory browsing to
@@ -68,7 +70,7 @@ content search, not a new opaque discovery cursor.
 ## Source sizes and context budgets — 2026-10-22
 
 Text source size is not a model-context limit. Complete text is delivered when it
-fits the configured model input budget; otherwise `common.resources_read` returns
+fits the configured model input budget; otherwise `core.read` returns
 an exact excerpt with coverage and continuation coordinates. Explicit character
 and line selections use that same budget in Office and the workspace runtime,
 including workspace Plans and published skill sources/references. Reading a skill
@@ -173,14 +175,14 @@ An explicit CLI `--read-only` open denies file mutations even when the workspace
 already has a manifest. The descriptor and root mount retain that permission for
 the open; workspace identity and later explicitly writable opens are unchanged.
 
-CLI exposes relative paths through `common.resources_find/read`; a workspace-bound
+CLI exposes relative paths through `core.find/read`; a workspace-bound
 filesystem provider now uses the shared Core `ResourceProviderRouter<TProvider>`.
 The Office `ResourceGatewayService` also uses this router and retains its authority,
 publication and host guards. Both consumers use Core `ResourceFindPage`, semantic
 candidates and `ResourceReadProjection`; `ResourceReadObservation` binds the read
 to its exact evidence. Provider dispatch remains specific to each host. Historical text
 restoration is guarded by a current accepted revision and records the exact source.
-CLI `common.resources_find` scans one selected directory, returns at most 200
+CLI `core.find` scans one selected directory, returns at most 200
 accessible semantic targets, and accepts an optional case-insensitive filename substring.
 It scans at most 5000 entries; truncation reports `complete=false` with a narrowing
 hint. Unavailable entries populate `unavailableScopes` and cannot prove an empty
@@ -199,7 +201,7 @@ and model wire: `directory` belongs only to file discovery, `referencePath` only
 to skill reads, and the skill branch requires explicit `type="skill"`. Wrong-kind
 selectors fail before dispatch rather than being silently ignored. Chat exposes
 only the file branch. Existing nullable optional arguments preserve their defaults.
-CLI `common.resources_read(target)` returns complete UTF-8 text when it fits this
+CLI `core.read(target)` returns complete UTF-8 text when it fits this
 run's model input budget; otherwise it returns the first exact character window
 and can be continued by selectors. Whole, line-pair and character-pair reads are
 separate closed schema alternatives for workspace files, skills and Plans; a model
@@ -214,8 +216,8 @@ preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
 The internal materialized `ReadText` path retains a one-MiB bound; this is not a
 limit on model or application text access. Selected line and UTF-16 character
 windows pin and stream strict UTF-8 sources through fixed decode buffers.
-`files.patch` streams exact source and result, without the former 80-MiB source
-or one-MiB fragment limits. `files.create` and `files.replace` stage larger text
+`core.patch` streams exact source and result, without the former 80-MiB source
+or one-MiB fragment limits. `core.write` and `core.write` stage larger text
 and verify exact read-back; an interrupted possible effect still requires explicit
 reconciliation. The selected model result is bounded by the run's configured
 model input budget; the compiler still checks the full request and explicitly
@@ -237,7 +239,7 @@ both CLI and Office; it never calls a live provider. Office supplies its pure do
 projection through an explicit dependency. The separate CLI result projector and
 request assembler are removed. A prior-turn read without freshly admitted authority
 is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
-authorize a CLI overwrite. A delivered current excerpt can authorize `files.patch`
+authorize a CLI overwrite. A delivered current excerpt can authorize `core.patch`
 when it contains the exact nonempty `oldText`. For a source above 1 MiB, the file
 owner scans the retained revision with fixed buffers, requires one matching
 byte/UTF-8 start, stages the result through CAS, rechecks the live source against
@@ -247,8 +249,8 @@ block ordinary reads and writes until explicit reconciliation; recovery inspects
 current bytes without replay or automatic rollback.
 Overlapping starts count separately. Empty, missing and ambiguous anchors return
 `invalid_patch`, `patch_not_found` and `patch_ambiguous`; external drift returns
-`target_conflict`. Patch leaves untouched line endings intact. `files.replace`
-retains the complete-read prerequisite. `files.copy/move/delete` accept a current
+`target_conflict`. Patch leaves untouched line endings intact. `core.write`
+retains the complete-read prerequisite. `resources.copy/move/delete` accept a current
 delivered exact text window as the source guard; the file owner validates the
 whole retained UTF-8 source and rechecks the live revision before dispatch.
 Large copies stage exact retained bytes, preserve source provenance through a
@@ -288,14 +290,14 @@ interrupted possible effects are not replayed. Office retains its bound gate and
 uses the same logical publisher. This does not introduce a filesystem reader or
 an artifact store, and does not implement workspace-owned Markdown Plans.
 
-The file owner publishes mutation effects. Guarded `files.delete` moves an accepted
+The file owner publishes mutation effects. Guarded `resources.delete` moves an accepted
 UTF-8 file into `.rnassistant/trash`, verifies its retained preimage and publishes an
-unavailable head. Explicit `files.restore` moves that managed preimage back only
+unavailable head. Explicit `resources.restore` moves that managed preimage back only
 when the original path is absent and the latest head is the matching deletion; it
 publishes a new revision with `RestoredFrom` provenance. Large restores stream
 verification of the trash preimage and restored bytes. An interrupted delete
 requires explicit reconciliation before restore. This is workspace-local managed
-trash, not the OS recycle bin or permanent deletion. Guarded `files.move` preserves
+trash, not the OS recycle bin or permanent deletion. Guarded `resources.move` preserves
 the logical file ID, advances its revision, and changes its locator only after an
 accepted exact source read. It requires an existing target parent and never
 overwrites a target or prior target identity. A durable two-path move intent lets
@@ -496,7 +498,7 @@ the `image` capability. Other binaries remain metadata/raw resources. The typed
 application result carries `ResourceBinaryView`; bytes are excluded from JSON.
 CLI emits bytes only with redirected `--raw` stdout, without `--jsonl`. Raw reads
 are whole-file, without text offsets. Model discovery does not advertise these
-application-only views as model read capabilities; `common.resources_read` remains
+application-only views as model read capabilities; `core.read` remains
 complete UTF-8 text. Binary/UI inspection never grants a model write observation.
 
 The browser snapshot uses this exact byte path for both text and PNG/JPEG, with
@@ -589,7 +591,7 @@ and CAS path. The trusted controller pins the addressed chat's active HTML
 artifact revision in attachment metadata and the accepted user-message link;
 the bounded JSON body contains DOM evidence and a semantic source title, never
 the runtime URI. Intake rejects a draft after the active source revision changes.
-The model discovers and reads the selection through `common.resources_*`, and a
+The model discovers and reads the selection through `core.find/read/search`, and a
 selection by itself is not authority to edit an inferred source file.
 The selection DTO, bounded-body admission policy and message/artifact link are
 shared Core owners; the Office bridge payload supplies only the Office-specific
@@ -598,7 +600,7 @@ to the exact chat and a retained plugin release in that workspace. The accepted
 input event and user message carry the same attachment metadata; the body stays
 in the existing immutable attachment CAS. `WorkspaceChatAttachmentResourceProvider`
 derives the semantic target from the accepted user message, verifies its artifact
-link and exact body, and serves it through workspace `common.resources_find/read`.
+link and exact body, and serves it through workspace `core.find/read`.
 Ambiguous targets, missing bodies and foreign selectors fail explicitly. Plugin-frame
 capture and composer staging now use this same accepted body; Windows WebView2
 injection remains unqualified. Core supplies one source-edit instruction shared by
@@ -624,17 +626,17 @@ no plaintext temporary file, head, second store or read evidence is created.
 The index has no configured whole-source byte ceiling; long lines remain addressable by parts. Derived parts remain CAS retention roots. A missing/corrupt part is rebuilt
 from the same exact source; unavailable source bytes fail closed.
 
-`common.resources_find` discovers semantic targets under a one-million-character
+`core.find` discovers semantic targets under a one-million-character
 cross-resource budget; unindexed inline bodies contribute at most 128,000
 characters each. A prefix-only negative reports incomplete coverage.
-`common.resources_search(target, query)` scans one selected
+`core.search(target, query)` scans one selected
 indexed text completely and returns bounded literal
 snippets, a total match count, `scanComplete`, `sourceComplete` and a matching
 `partNumber`. A negative result proves absence only when `scanComplete=true`.
-`common.resources_outline(target, fromPart, limit)` pages exact part/line ranges;
+`resources.outline(target, fromPart, limit)` pages exact part/line ranges;
 Markdown heading names and code declarations are navigation hints. The code
 symbol grammar is deliberately partial (`symbolsComplete=false`), including
-minified/very long lines. `common.resources_read` accepts `partNumber` for indexed
+minified/very long lines. `core.read` accepts `partNumber` for indexed
 artifact text/source and returns at most 32,000 characters with `partCount` and
 character-range evidence. A successful selected part reports
 `selectionComplete=true` and `complete=false` in the model result; its exact
@@ -708,21 +710,21 @@ Provider-specific tree views remain separate work.
 
 Within-target search requires an advertised `text` or `source` representation.
 A VBA project exposes its component inventory as `structure`; search its module
-names and code with `common.resources_find(scope=vba, query=...)`, then use
-`common.resources_search` on a returned VBA module target for literal occurrences.
+names and code with `core.find(scope=vba, query=...)`, then use
+`core.search` on a returned VBA module target for literal occurrences.
 Project discovery and tool guidance expose this route. A structure-only target
 fails with non-retryable `resource_search_unsupported` and actionable guidance
 before a text read; it is never silently searched as a different scope.
 A renamed or removed VBA module target returns `resource_target_not_found` with
-`common.resources_find(scope=vba)` as the recovery route. When a session's last
+`core.find(scope=vba)` as the recovery route. When a session's last
 complete source observation is stale, a later partial read does not refresh its
 rename guard; observe the complete current source before retrying.
 
-Agent `common.file_create` creates a text/code file with an explicit extension;
-`common.file_copy` creates an independent authored `File` from an exact complete
-uploaded or authored text source; `common.file_patch` replaces
+Agent `core.write` creates a text/code file with an explicit extension;
+`resources.copy` creates an independent authored `File` from an exact complete
+uploaded or authored text source; `core.patch` replaces
 unique non-overlapping exact fragments on the selected current authored revision.
-Copy accepts an optional output filename to choose an extension such as `.md`;
+Copy requires an explicit `destination` such as `file: report.md`;
 the rename does not alter the source bytes.
 Call arguments must fit model context; runtime identities remain hidden. There is
 no separate 32,000-character edit ceiling. Copy retains source
@@ -730,7 +732,7 @@ provenance and exact bytes; patch preserves supported UTF-8/UTF-16/UTF-32 encodi
 BOM and untouched line endings, rejecting unroundtrippable text. The runtime
 checks the selected head before dispatch and verifies the complete new CAS bytes
 at read-back before publishing a new immutable version. Unknown possible effects
-are not replayed. The model receives a bounded hunk manifest and semantic target;
+are not replayed. The model receives the semantic mutation result; retained hunk previews belong to UI, while
 the original bytes, hashes and exact references remain runtime evidence. Large
 authored files use the same indexed parts for subsequent reads/search/outline.
 
@@ -740,7 +742,7 @@ coverage (`character-range`, `line-range`, `page-range`, `cell-range`,
 tree is a typed selector for complete structured text, not yet one provider-wide
 navigation contract.
 `resources_outline` is an indexed document-text operation. PDF attachment and
-workspace PDF text can now be read through `common.resources_read` with
+workspace PDF text can now be read through `core.read` with
 `representation=text` and zero-based `pageIndex`; optional `startChar`/`charCount`
 select UTF-16 text within that page.
 `startPage`/`pageCount` instead selects consecutive complete extracted page texts
@@ -809,7 +811,7 @@ table page, including a terminal page with provider `Complete=true`: a completed
 row window is not a whole-resource observation. The table's `totalRows` and
 actual coverage give the next safe offset.
 
-Accepted `common.resources_read` results in Office and workspace/CLI retain typed
+Accepted `core.read` results in Office and workspace/CLI retain typed
 `ReadMetadata` on the existing immutable `ResourceEvidence`. It records requested
 line/character/row coverage (with table path/fields), JSON Pointer child range
 and depth, section/part or procedure name and optional kind,
@@ -854,7 +856,7 @@ message or total prompt cost. MIME and length are retained metadata claims until
 CAS verification, and the estimate does not establish live availability or
 delivery. Indexed/multipart, binary, non-UTF-8 and unclassified views keep an
 unknown token estimate rather than treating their metadata payload as model text.
-An accepted text-serialized `common.resources_read` with one exact evidence link can also
+An accepted text-serialized `core.read` with one exact evidence link can also
 show an estimate for its whole serialized model-facing tool message in the saved
 request trace. This is request-specific and includes the tool-result envelope;
 it does not turn retained-body estimates into prompt costs or split a message
@@ -872,7 +874,7 @@ Old observations without the metadata remain unknown. Context-claim binding and
 fork copying preserve known metadata; a new sliced observation never inherits
 the completeness of its previous whole-body observation.
 
-Model `common.resources_read` may select an exact unique ATX heading with `section`
+Model `core.read` may select an exact unique ATX heading with `section`
 and `representation=text` for document Markdown/Plans and complete uploaded
 Markdown. This uses the same provider/authority/evidence path and retains only
 character-range coverage, even for a complete selected section. It cannot satisfy
@@ -947,8 +949,8 @@ tabular sources.
 Model-facing discovery marks Excel search scopes as discovery-only and points value
 reads to range/table/name targets. Oversized search reads carry the same explicit
 recovery route and prohibit an unchanged retry.
-`common.resources_find` projects only representations accepted by
-`common.resources_read`; application binary views (`raw`, `image`, thumbnails and
+`core.find` projects only representations accepted by
+`core.read`; application binary views (`raw`, `image`, thumbnails and
 PDF renders) remain on runtime descriptors but are not model read offers. Discovery
 also exposes reported MIME and byte length when known. These are source metadata,
 not measured token cost, verified bytes or an observation.
@@ -984,7 +986,7 @@ Equal normalized guards do not certify equal immutable bytes: a fresh complete
 capture with changed line endings receives a new logical revision. Repeated exact
 bytes retain that revision; historical LF/CRLF snapshots are never rewritten.
 
-Model discovery/read uses `common.resources_find/read` with runtime-resolved
+Model discovery/read uses `core.find/read` with runtime-resolved
 semantic targets and exact internal references/continuations. Live document/VBA
 search providers return typed, non-serialized scan captures independently of matches.
 For HTML, `structure` belongs to the workspace root and lists members; an exact
@@ -1023,7 +1025,7 @@ the successful operation/effect receipt and a `bodyIncluded=false` observation
 notice with a bounded-read recovery action. Omitted bytes confer no whole-source
 write authority; they remain in local CAS. Other request/invariant budget failures
 remain explicit and do not silently trim user instructions or task state.
-Office `common.resources_read` accepts `startLine` (1-based) plus `lineCount`
+Office `core.read` accepts `startLine` (1-based) plus `lineCount`
 (positive), or `startChar` (zero-based UTF-16) plus positive `charCount`, for
 text/source. Each excerpt must fit the configured model input budget. This uses the
 provider's bounded capture when available: Word main-story ranges and PowerPoint
@@ -1071,7 +1073,7 @@ Artifact/member search matches retain the creation timestamp needed to reconstru
 the exact semantic target even when the item lies outside the bounded list.
 The prompt working set admits only complete, JSON-quoted semantic targets within
 the whole-index token budget; shown counts reflect admitted rows and omitted
-resources have a `common.resources_find` recovery route.
+resources have a `core.find` recovery route.
 The generic semantic-target resolver refuses incomplete enumeration with
 `resource_scope_incomplete` rather than assuming the observed name is unique.
 Explicit `message attachment:` targets instead resolve the selected message's
@@ -1093,7 +1095,7 @@ reconstructs the same logical cursor from durable evidence. Catalog children hav
 no synthetic heads: the common reducer checks their immutable identity and exact
 root-publication dependency. Open leases remain pinned after publication changes.
 Model-facing semantic targets are opaque labels copied verbatim from
-`RUNTIME_CONTEXT` or `common.resources_find`; they never use a `scheme://` form.
+`RUNTIME_CONTEXT` or `core.find`; they never use a `scheme://` form.
 The shared resolver rejects every URI-shaped target (`rna://`, retired `vba://`,
 `cas://`, file/network URIs and equivalent schemes) before provider or Office
 access. Current-history validation applies the same rule to resource reads, HTML
@@ -1107,8 +1109,8 @@ projection remains in the catalog owner. Remaining domain-specific read consumer
 are tracked below.
 
 Model source inspection now discovers host-visible `tool source` targets through
-`common.resources_find` and reads those same catalog children through
-`common.resources_read`. It records publication-dependent resource evidence, not
+`core.find` and reads those same catalog children through
+`core.read`. It records publication-dependent resource evidence, not
 callable admission. The direct authoring-file reader is removed; exact snapshots
 and generic bounds are shared with the Library. See
 [Model source reads](tool-library.md#model-source-reads).
@@ -1168,7 +1170,7 @@ or publication authority. Bounds and verified-prefix/draft rules are owned by
 ## Excel range reads
 
 `excel.read_range` is removed from catalog, native bindings and the Excel core pack.
-Model/manual callers use `common.resources_read` with an explicit semantic target
+Model/manual callers use `core.read` with an explicit semantic target
 such as `Excel range: Data!A1:B4`: `text` returns values, `formulas` formulas,
 `structure` the existing domain-owned profile, and `table`/`records` bounded rows.
 When sheet and A1 address are known, the caller can form this exact range target
@@ -1184,7 +1186,7 @@ and [worksheet-name rules](https://support.microsoft.com/en-gb/excel/rename-a-wo
 Resource URI segments preserve significant boundary whitespace: `Sheet` and
 ` Sheet ` are distinct identities, with spaces percent-encoded. Whitespace-only,
 dot and slash-containing segments remain invalid; providers own semantic names.
-Discover used ranges through `common.resources_find`; omitted active-sheet/selection
+Discover used ranges through `core.find`; omitted active-sheet/selection
 defaults of the removed tool are not silently translated. `excel.inspect` remains
 the bounded workbook-object metadata action.
 
@@ -1201,7 +1203,7 @@ no cell bodies; a query may additionally search the existing bounded document
 preview. The Excel preview's 2000-cell-per-sheet ceiling remains unchanged.
 
 Resource reads of range bodies use `ExcelResourceProvider` over `ExcelReadService`
-and the bound backend. `excel.summarize_columns` is a separate bounded local
+and the bound backend. `excel.columns.summarize` is a separate bounded local
 analysis action over selected cells. The 100000-cell raw-read ceiling precedes
 values/formulas materialization.
 For ranges within that ceiling, the profile keeps existing counts, headers and
@@ -1245,7 +1247,7 @@ and live model choice/token cost remain unqualified.
 
 ### Large Excel column analysis
 
-Owner: Excel read/analysis domain. `excel.summarize_columns` takes a literal `sheet`,
+Owner: Excel read/analysis domain. `excel.columns.summarize` takes a literal `sheet`,
 explicit A1 `address` rectangle and 1–8 distinct absolute column letters inside it.
 It scans every row of those columns locally, including empty cells, in single-column
 chunks of at most 1024 cells. At most 2000000 selected cells are admitted per call;
@@ -1342,7 +1344,7 @@ qualification remain open, as does finer Excel impact/coverage qualification.
 
 ### Excel search
 
-`excel.find_cells` routes ordinary `mode=literal` queries of at most 255 characters
+`excel.cells.find` routes ordinary `mode=literal` queries of at most 255 characters
 to bound Excel `Range.Find`/`FindNext`. The backend visits candidate cells only;
 `ExcelFindReplaceService` applies the requested case, whole-word and
 values/formulas/both filters and counts all matches. The Excel provider publishes
@@ -1385,8 +1387,8 @@ selection/named-range/count limits, real model and WebView qualification remain 
 ## Word text reads
 
 `word.read_text` is removed. Document and selection targets discovered through
-`common.resources_find`, and explicit `Word range: start:end` targets, use
-`common.resources_read` (`text`). Range positions are main-story, zero-based,
+`core.find`, and explicit `Word range: start:end` targets, use
+`core.read` (`text`). Range positions are main-story, zero-based,
 start-inclusive/end-exclusive; reversed, out-of-document and noncanonical targets
 are rejected, never clamped or given an implicit end.
 
@@ -1411,7 +1413,7 @@ HTML uses this same provider. Word inspection and mutations keep their specializ
 owners. Real Word range/selection/STA and final catalog qualification remain open
 on Windows.
 
-`word.find_text` keeps its semantic literal/regex/main/selection/all contract but
+`word.text.find` keeps its semantic literal/regex/main/selection/all contract but
 executes through `WordSearchResourceService` → Gateway → the existing document
 provider → `WordService.CaptureSearch`. Matching is a pure Word domain operation
 over the retained snapshot; the direct tool-adapter/backend search path is removed.
@@ -1436,7 +1438,7 @@ open; other host-specific searches are covered by their own sections. Generic
 
 ## PowerPoint slide reads
 
-`powerpoint.read_slides` is removed. Use `common.resources_read` with a discovered
+`powerpoint.read_slides` is removed. Use `core.read` with a discovered
 document target or `PowerPoint slide: N` (positive one-based index). The `text`
 view contains slide text; `source` is an ordered JSON array of slide id/index,
 text and speaker notes, including for a single slide. `structure` remains metadata,
@@ -1466,7 +1468,7 @@ open on Windows.
 
 ### PowerPoint search
 
-`powerpoint.search_text` keeps its literal/regex, case/whole-word, notes and
+`powerpoint.text.search` keeps its literal/regex, case/whole-word, notes and
 shape-local coordinate semantics. `PowerPointSearchResourceService` captures through
 Gateway/CAS and invokes pure `PowerPointService.Search` over that exact snapshot;
 the direct adapter search path and public scope/content hashes are removed.
@@ -1493,7 +1495,7 @@ Model/manual reads and HTML bindings use the existing Gateway/document provider,
 shared authority, CAS and evidence. Source continuations retain the first capture;
 historical pages do not read Outlook or fall forward to another mail.
 
-`common.resources_find` discovers `Outlook mail` targets from header-only bounded
+`core.find` discovers `Outlook mail` targets from header-only bounded
 discovery (up to 500 folder items; truncation remains explicit). Targets use subject,
 sender and received time; identical targets fail as ambiguous. Runtime owns EntryID
 and resource keys. An Inspector admits only its retained mail, including an unsaved
@@ -1525,7 +1527,7 @@ remain open; this reader switch does not close those gates.
 `Outlook attachment: <mail title> / <index>: <file name>` is a semantic target.
 Filename discovery covers the selected/open mail only; Explorer coverage is explicitly
 partial. Other mail `structure`/`source` views advertise attachment targets; pass a
-copied target to `common.resources_find`, then `common.resources_read`. Target resolution
+copied target to `core.find`, then `core.read`. Target resolution
 requires unique complete mail discovery (at most 500 folder items); open an Inspector
 when folder discovery is incomplete. Attachment coverage does not gate other resource
 families. No mailbox-wide attachment-content search is introduced.
@@ -1562,7 +1564,7 @@ Existing Windows/x86 PDF and source-allocation gates are unchanged.
 
 Folder collection uses the same document provider, shared authority and CAS;
 `outlook.collect_mail`, its handler/request/output and monthly JSON wrapper are
-removed, including accepted-call replay. `common.resources_find` exposes an
+removed, including accepted-call replay. `core.find` exposes an
 `Outlook collection` target. `text` is the complete JSON projection; `records/table`
 at `$.messages` and HTML bindings derive from that exact retained text snapshot.
 No separate collection store, bulk result tool or compatibility alias remains.
@@ -1594,13 +1596,13 @@ exact historical text/records and opened continuations never fall forward.
 
 ### Outlook search
 
-`outlook.search_mail` retains literal/regex, case/whole-word, field-local coordinates
+`outlook.mail.search` retains literal/regex, case/whole-word, field-local coordinates
 and subject/sender/recipients/body matching. `OutlookSearchResourceService` obtains
 one Gateway/CAS snapshot and invokes pure `OutlookService.SearchMail`. Search output
 contains semantic mail targets and bounded matching previews, not EntryIDs, folder
 paths or repeated body copies. The obsolete `maxBodyChars` argument and direct tool
 adapter search branch are removed without fallback; complete mail bodies use
-`common.resources_read`. Duplicate semantic mail targets remain explicitly ambiguous.
+`core.read`. Duplicate semantic mail targets remain explicitly ambiguous.
 
 The document provider exposes `Outlook search scope: latest:N` (headers only) and
 `latest:N+body`, where N is 1–500 newest folder items; the default 100-item scopes are
@@ -1626,7 +1628,7 @@ Real Windows/COM, OOM pre-materialization and WebView/model qualification remain
 
 ### Outlook mailbox archive (host-neutral implementation; Windows COM open)
 
-Desktop offers stable mailbox chats keyed from StoreID. `outlook.index_archive`
+Desktop offers stable mailbox chats keyed from StoreID. `outlook.archive.index`
 scans the selected mailbox and optionally attached PST stores for an inclusive UTC
 date range; each call persists up to 20 batches of 25 matching mails and may be
 repeated to resume. Folder or mail chats receive `outlook_mailbox_required`; the
@@ -1639,7 +1641,7 @@ starts a new scan. Large bodies have separate exact mail targets and are read th
 the normal resource cursor.
 
 CAS holds indexed bodies and pages; a pointer is a rebuildable cache checkpoint.
-CAS GC traverses its manifest/page/body references. `common.resources_find/read`
+CAS GC traverses its manifest/page/body references. `core.find/read`
 exposes `Outlook archive page` text JSON with period, coverage, page/row source
 context, duplicate flags and attachment counts. Search over indexed page text is
 literal and reports unavailable pages. Each row exposes up to 20 exact attachment
@@ -1794,7 +1796,7 @@ still carry `records`; the internal data plane reads their original view/path
 without silently rewriting them. Its removal gate is recorded in the
 [migration map](stabilization/MIGRATION_MAP.md#historical-structural-records-view--2026-10-21).
 
-`common.html_data_write` stores JSON and immediately creates a named `text`
+`html.data.write` stores JSON and immediately creates a named `text`
 binding. Its result exposes the readable JSON `sourceTarget`, view and policy;
 no second bind is needed. Mutation member entries and model workspace-structure
 reads expose directly readable semantic targets. `scope=html` includes the
@@ -2245,7 +2247,7 @@ See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2
 
 [ADR-0018](decisions/ADR-0018-typed-model-references.md) permits short `R1@v2`
 labels beside the actual model source block: `data.ref` on a delivered
-`common.resources_read`, or `ref` on a hydrated current-source header. No floating
+`core.read`, or `ref` on a hydrated current-source header. No floating
 `resource_refs` list is emitted. `R1` is scoped logical identity; `v2` is the
 ordinal of an observed exact revision, not a resource authority generation or edit
 count. One ChatStore allocator records bindings from typed message observations and

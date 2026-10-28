@@ -1,5 +1,7 @@
 # Skill Library and package revisions
 
+Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+
 ## Status and boundary
 
 Task-scoped skill loading and dependency-bound tools are implemented without a new Code Mode.
@@ -75,7 +77,7 @@ RNAssistant extends it with a single-line JSON `rnassistant` field:
 ---
 name: report-check
 description: Check a report against its source data.
-rnassistant: {"formatVersion":1,"packageId":"reports","requiredTools":[{"id":"common.resources_read","contractVersion":"1"}],"optionalTools":[{"id":"web.verify","contractVersion":"1","fallback":"Inspect the generated source and state that browser verification is unavailable."}]}
+rnassistant: {"formatVersion":1,"packageId":"reports","requiredTools":[{"id":"core.read","contractVersion":"1"}],"optionalTools":[{"id":"web.verify","contractVersion":"1","fallback":"Inspect the generated source and state that browser verification is unavailable."}]}
 ---
 Read the source, compare the report, and verify the final result.
 ```
@@ -87,7 +89,7 @@ The resolver captures exact descriptor/policy/binding revisions, deduplicates sh
 tools, and never silently chooses a different conflicting version. The manifest
 participates in the package fingerprint; editor saves and clones preserve it.
 
-The model calls `common.skills_load` with `{ "id": "report-check" }`; optional
+The model calls `core.skills.load` with `{ "id": "report-check" }`; optional
 `action:"remove"` clears that selection for the next request. The loader is a
 singleton call. Success changes `ChatRunRecord.SelectedSkills`, not the already
 accepted request. On the next step `SkillTaskService.Compile` combines direct core,
@@ -96,18 +98,19 @@ existing direct admissions and selected dependencies. The compiler injects compl
 a source read, attached files and historical results cannot select a skill.
 
 Default prompt schema 46 asks multi-deliverable/staged tasks to select
-`common.task_tracking` and maintain its Task List. This is model guidance, not an
+`skills.task.tracking` and maintain its Task List. This is model guidance, not an
 automatic intent classifier or a completion gate. The compact Office catalog's
 `loadSkill` lists the packages that can expose a specialized tool; it never admits
-that tool by itself. The dynamically configured `common.tools_upsert` descriptor
-retains its skill-only exposure. The five built-in VBA editing tools
-also require a selected package; `common.vba_code_editing` exposes them, while
-`common.vba_userform_authoring` can expose code-only form writes. A direct
+that tool by itself. The dynamically configured `tools.upsert` descriptor
+retains its skill-only exposure. VBA source editing now uses the common Core write/patch/replace tools. The
+`skills.vba.code.editing` and `skills.vba.userform.authoring` packages supply
+VBA-specific guidance and optional lifecycle/macro dependencies, not duplicate
+source tool schemas. A direct
 `capabilities_read` returns bounded `loadSkill` guidance before or after selection
 but cannot admit a skill-only tool. The selected request owns its exact schema;
 discovery does not duplicate it into history or create a cached `skill_required`
 failure that would block another inspection after selection.
-`common.office_run_macro`
+`office.macro.run`
 remains an optional direct tool for requests to execute an existing macro.
 
 Selection continues across user turns in the same chat. Each new run copies only
@@ -143,7 +146,7 @@ Actual dispatch still recompiles against its own frozen authority.
 There is no separate half-input admission gate. The tool-facing load handler
 refuses selection without the complete-request admission callback; removal remains
 available. Pure Select remains usable by explicit setup code, not a tool bypass.
-Office budget-refusal guidance names `common.skills_load` with `action=remove`
+Office budget-refusal guidance names `core.skills.load` with `action=remove`
 for a completed or currently unneeded selection, followed by a separate new load.
 It does not remove a skill automatically. Unloaded-tool protocol repair requires
 resolving any prior admission refusal before retrying; failed loading grants no
@@ -195,8 +198,8 @@ and host/runtime guards. Tools and prompts keep their existing publication owner
 There is no second catalog store; selection is part of the existing run record.
 
 The CLI supplies only enabled skill metadata to the model. It exposes bounded
-`common.resources_find(type="skill", query?)` (up to 50 entries, explicit
-incompleteness) and `common.resources_read(type="skill", target=<skill id>,
+`core.find(type="skill", query?)` (up to 50 entries, explicit
+incompleteness) and `core.read(type="skill", target=<skill id>,
 referencePath?)`. Reference paths come from the core read's metadata. Whole skill
 cores/references above 16000 characters fail explicitly; partial instructions are
 not marked loaded and CLI reference pagination is not implemented. File reads
@@ -212,8 +215,8 @@ already published package; an explicit publication through the existing authorin
 owner is required. CLI skill authoring/import commands remain outside this slice.
 A workspace-local `SKILL.md` is an ordinary file, not an installed instruction.
 
-The workspace built-ins are `workspace.files` and
-`workspace.web_verify_repair`. They cover exact source/edit/final-read workflow
+The workspace built-ins are `skills.workspace.files` and
+`skills.workspace.web.verify.repair`. They cover exact source/edit/final-read workflow
 and local browser verification/repair. Both require available file mutation
 tools; the web skill also requires `web.verify`. They remain discoverable with an explicit unavailable status when required tools
 are missing, the workspace is read-only or the browser provider is absent.
@@ -241,8 +244,8 @@ core text has loaded. The copy has a distinct id; the original keeps its
 published id.
 
 Agent-side authoring uses four exact Agent-only native intents: core
-`common.skills_upsert/delete` and reference
-`common.skills_reference_upsert/delete`. Their schemas cannot mix core and
+`skills.upsert/delete` and reference
+`skills.reference.upsert/delete`. Their schemas cannot mix core and
 reference fields and use a versioned result contract. Preparation
 binds the accepted arguments and complete current package revision; confirmation
 rejects stale state before dispatch, and read-back distinguishes verified change,
@@ -339,7 +342,7 @@ definition of done. It does not copy JSON schemas or gain execution authority.
 
 The system prompt owns the universal Understand → Prepare → Inspect → Execute
 → Verify → Finish lifecycle, including when to select Task Tracking and the final
-completion assessment. `common.task_tracking` owns list maintenance and durable
+completion assessment. `skills.task.tracking` owns list maintenance and durable
 step notes. The tool prompt owns catalog discovery/admission; the shared response
 contract owns the call envelope, batching and outcome interpretation. The current loaded tool description and strict
 schema remain authoritative for the exact operation, root arguments and returned evidence. If a
@@ -376,7 +379,7 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 
 - Agent and Plan receive enabled skill metadata, without instruction bodies or
   package revisions. The retired Chat mode is history only.
-- `common.skills_load` is the canonical selection boundary; resource reads only
+- `core.skills.load` is the canonical selection boundary; resource reads only
   inspect source. Selected complete bodies are compiler invariants restored from
   the frozen published catalog on every request, independent of compaction.
 - Core/source inspection and supporting reads retain their ordinary history/CAS
@@ -397,12 +400,12 @@ empty built-ins and prevents retired `TOOL_RESULT ok=true` guidance from returni
 - Host filtering uses the selected execution endpoint, not the containing window.
 
 
-Workspace built-ins include `workspace.plugin_authoring`: it guides the source
+Workspace built-ins include `skills.workspace.plugin.authoring`: it guides the source
 chat to create a path-only SVG icon from a text brief, update `plugin.json`,
 check the package and preview behavior before publication. For an accepted visual
 annotation it also directs the agent to read the exact selection, match one real
 HTML/CSS/JS source target and patch only a current unique anchor. The Office
-`common.html_workspace_authoring` skill uses the same Core instructions with its
+`skills.html.workspace.authoring` skill uses the same Core instructions with its
 own HTML workspace patch tool. Neither skill turns preview DOM into source or
 write authority. They use existing file tools; an image-generation model is not
 required. Plugin check/apply remain runtime tools with their own authority and
@@ -410,9 +413,10 @@ confirmation.
 
 ## Target Skill Library UX
 
-Skills remain in Library, grouped first by type and then by the stable ID namespace
-or common feature family (`excel.*`, `common.resources_*`, `common.html_*`, etc.).
-Displayed group names may change without renaming callable IDs or package identities.
+Skills remain in Library, grouped by type and then by nested dot namespaces
+(`skills.vba.*`, `skills.html.*`, etc.); the initial `skills` segment is omitted
+inside the skill section. Built-in IDs follow the shared naming contract;
+existing custom package IDs are not rewritten automatically.
 They are not rows in
 the Artifact Library. Each skill row/editor shows:
 
@@ -476,7 +480,7 @@ created directly in Library has no artificial source artifact.
 1. Contract/store: immutable package journal/bodies, replayed head, tombstone and
    no flat-store dual write.
 2. Read projection: built-in/custom metadata, exact head/revision and Host Fabric
-   target scoping without changing `common.capabilities_read` semantics.
+   target scoping without changing `core.tools.read` semantics.
 3. Library history UI: version/revision display, diff, restore-as-new-head and
    deletion impact.
 4. Manual editor: atomic dirty-package save, conflict guard and external-change
@@ -499,7 +503,7 @@ results and needed reference coverage from saved events/CAS. Compaction alone is
 not a reason to load a skill or admit an already callable schema again. A new user
 turn retains selections and may reuse current source evidence. Complete selected
 instructions and specialized schemas are reconstructed from the pinned publication
-without a repeated `common.skills_load`; changed or unavailable dependencies require
+without a repeated `core.skills.load`; changed or unavailable dependencies require
 explicit resolution. Unchanged direct optional schemas may also carry across turns
 when their exact admission remains valid and fits the request budget. Body
 omission/staleness is distinct from the historical successful load. Prompt schema
@@ -513,11 +517,11 @@ retention contract is owned by [Conversation protocol](conversation-protocol.md#
 
 ## Chat visualization
 
-`common.chat_visualization` is a Common built-in instruction-only package from
+`skills.chat.visualization` is a Common built-in instruction-only package from
 Core `ChatVisualizationSkillProvider`; Office and workspace publish the same
 body with no required tools. Default prompt schema 54 recommends selecting it
 when diagrams, comparisons or interactive explanations improve the answer.
-Selection remains an ordinary `common.skills_load` operation, never an automatic
+Selection remains an ordinary `core.skills.load` operation, never an automatic
 intent classifier or new execution capability.
 
 The skill writes closed `mermaid` / `html` fences or Markdown tables directly in

@@ -48,7 +48,7 @@ for (const name of ["app-utils.js", "app-run-view-state.js", "app-agent-model.js
 ctx.enhanceActivity = () => {};
 ctx.isChatNearBottom = () => false; ctx.syncChatScroll = () => {};
 ctx.renderedMessagesChatId = "chat";
-const action = (step, id, status, args) => ({ RunId: "r", Kind: "tool", ToolId: "common.resources_read", ToolCallId: id,
+const action = (step, id, status, args) => ({ RunId: "r", Kind: "tool", ToolId: "core.read", ToolCallId: id,
   StepId: step, StepMessage: "Narration " + step, Status: status, ArgumentsJson: args,
   Subtitle: "Target " + id, ResultMessage: status === "completed" ? "Read complete" : null });
 const marker = step => ({ RunId: "r", Kind: "step", Status: "running", StepId: step, StepMessage: "Narration " + step });
@@ -233,7 +233,7 @@ console.log("PASS live projection: same-chat refresh retains transient output wi
 // A meaningful update can cover several preparation calls, including after reload.
 const preparation = [0, 1, 2].map(index => {
   const activity = action("prepare-" + index, "load-" + index, "completed", '{}');
-  activity.ToolId = "common.capabilities_read";
+  activity.ToolId = "core.tools.read";
   activity.StepMessage = index === 0 ? "Inspect the styles before choosing a change." : "";
   return { activity, message: { Id: "prepare-message-" + index, Role: "assistant", RunId: "r", Activity: activity, Content: "" }, index };
 });

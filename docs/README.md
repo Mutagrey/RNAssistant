@@ -59,6 +59,9 @@ Application-владельца и срез с переключением обо�
 Owner — Core/Application; после принятия diff это исторический срез, текущие
 контракты остаются в canonical docs, следующие решения — в BACKLOG.
 
+[Text mutations](text-mutations.md) задаёт единые core.write/patch/replace, context hunks,
+маршрутизацию по owner, имена tools/skills и встроенное сравнение в шаге.
+
 ## Канонические документы
 
 | Область | Владелец текущего контракта |
@@ -126,7 +129,7 @@ Owner — application/chat UI. Фаза 0 завершена, RFC принят; 
 черновика и единый ChatView controller для Office, проекта и плагина в 1b
 реализованы host-neutral. HTML-preview получил инспектор и подготовку выбранного
 элемента как ресурсного чипа общего Office-чата. Workspace backend принимает
-привязанный draft и читает его через общий `common.resources_*`; plugin-frame
+привязанный draft и читает его через общий `core.find/read/search`; plugin-frame
 annotation использует тот же Inspector, защищённый черновик и composer.
 Общая инструкция и статическая правка исходника через существующий patch проверены
 host-neutral; автоматическое сопоставление DOM с исходником и Windows/WebView2

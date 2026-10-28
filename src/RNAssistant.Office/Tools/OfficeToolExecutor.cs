@@ -154,7 +154,7 @@ namespace RNAssistant.Office.Tools
             var controllerTools = new List<ToolCatalogEntry>();
             if (_vbaExecutor.HostSupportsVba())
                 RegisterControllerTools(controllerTools,
-                    VbaToolCatalog.GetTools());
+                    VbaToolCatalog.GetTools().Where(tool => tool.Id == VbaToolCatalog.RunMacro));
             RegisterControllerTools(controllerTools,
                 SkillAuthoringCatalog.GetTools(_skillAuthoringService));
             RegisterControllerTools(controllerTools,
@@ -169,14 +169,13 @@ namespace RNAssistant.Office.Tools
                 ControllerToolCatalogEntry.CreateReadProjection(JsToolHandler.Descriptor,
                     JsToolHandler.Policy, JsToolHandler.Binding, "JavaScript computation") });
             RegisterControllerTools(controllerTools,
-                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
+                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService).Where(tool => tool.Id != HtmlWorkspaceToolCatalog.WriteFileToolId && tool.Id != HtmlWorkspaceToolCatalog.ApplyPatchToolId && tool.Id != HtmlWorkspaceToolCatalog.DeleteToolId));
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });
             RegisterControllerTools(controllerTools,
                 PlanDocumentToolCatalog.GetTools());
-            RegisterControllerTools(controllerTools, MarkdownDocumentToolCatalog.GetTools());
-            RegisterControllerTools(controllerTools, AuthoredFileToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools, ResourceMutationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
                 UserQuestionToolCatalog.GetTools());
             _controllerTools = controllerTools.ToArray();
@@ -540,10 +539,7 @@ namespace RNAssistant.Office.Tools
             };
         }
 
-        internal string VbaToolId(string suffix)
-        {
-            return _vbaExecutor.ToolId(suffix);
-        }
+
 
         internal string VbaBackupSemanticTarget(string backupId)
         {
@@ -597,7 +593,7 @@ namespace RNAssistant.Office.Tools
         internal SkillManualMutationResult ExecuteSkillLibraryMutation(
             SkillLibraryCoreMutation mutation)
         {
-            return MutateCatalog(mutation.Kind == "delete" ? "common.skills_delete" : "common.skills_upsert",
+            return MutateCatalog(mutation.Kind == "delete" ? "skills.delete" : "skills.upsert",
                 new Dictionary<string, object> { ["kind"] = mutation.Kind, ["id"] = mutation.BaseId,
                     ["expectedRevision"] = mutation.ExpectedRevision, ["preserveBody"] = mutation.PreserveBody, ["intended"] = mutation.Intended },
                 () => _skillAuthoringService.ExecuteManualCoreMutation(mutation), value => value.DispatchPossible,
@@ -607,7 +603,7 @@ namespace RNAssistant.Office.Tools
         internal ToolManualMutationResult ExecuteToolLibraryMutation(
             ToolLibraryCoreMutation mutation)
         {
-            return MutateCatalog(mutation.Kind == "delete" ? "common.tools_delete" : "common.tools_upsert",
+            return MutateCatalog(mutation.Kind == "delete" ? "tools.delete" : "tools.upsert",
                 new Dictionary<string, object> { ["kind"] = mutation.Kind, ["id"] = mutation.BaseId,
                     ["expectedRevision"] = mutation.ExpectedRevision, ["intended"] = mutation.Intended },
                 () => _toolAuthoringService.ExecuteManualCoreMutation(mutation), value => value.DispatchPossible,
@@ -620,7 +616,7 @@ namespace RNAssistant.Office.Tools
             string kind, string skillId, string path, string content,
             string expectedRevision)
         {
-            return MutateCatalog(kind == "delete" ? "common.skills_reference_delete" : "common.skills_reference_upsert", new Dictionary<string, object> {
+            return MutateCatalog(kind == "delete" ? "skills.reference.delete" : "skills.reference.upsert", new Dictionary<string, object> {
                     ["kind"] = kind, ["id"] = skillId, ["path"] = path, ["content"] = content, ["expectedRevision"] = expectedRevision },
                 () => _skillAuthoringService.ExecuteManualReferenceMutation(kind, skillId, path, content, expectedRevision),
                 value => value.DispatchPossible, value => SkillEffect(value.Outcome.Effect));
@@ -658,7 +654,7 @@ namespace RNAssistant.Office.Tools
                 saveMigrated();
                 return;
             }
-            MutateCatalog("common.prompts_schema_migrate", new Dictionary<string, object> {
+            MutateCatalog("prompts.schema.migrate", new Dictionary<string, object> {
                 ["expectedRevision"] = expected.Revision,
                 ["templates"] = JsonConvert.DeserializeObject<Dictionary<string, string>>(live) },
                 () => { saveMigrated(); return ToolEffectEvidence.VerifiedChange; },
@@ -674,7 +670,7 @@ namespace RNAssistant.Office.Tools
         private void SaveSettingsPublication(AppSettings intended, Action save, ResourceRef expected)
         {
             // The durable intent contains only editable templates, never credentials/settings secrets.
-            MutateCatalog("common.prompts_save", new Dictionary<string, object> {
+            MutateCatalog("prompts.save", new Dictionary<string, object> {
                 ["expectedRevision"] = expected.Revision,
                 ["templates"] = JsonConvert.DeserializeObject<Dictionary<string, string>>(PromptSettingsService.CaptureTemplates(intended)) },
                 () => {
@@ -761,7 +757,7 @@ namespace RNAssistant.Office.Tools
         {
             session = BoundManualSession(session);
             BindResourceAuthority(session);
-            return ExecutePackageMutation(source, session, dryRun, "common.vba_package_install",
+            return ExecutePackageMutation(source, session, dryRun, "vba.package.install",
                 cancellationToken, markDispatch =>
                     _vbaExecutor.InstallCustomPackage(
                         source, dryRun, session,
@@ -776,7 +772,7 @@ namespace RNAssistant.Office.Tools
         {
             session = BoundManualSession(session);
             BindResourceAuthority(session);
-            return ExecutePackageMutation(source, session, false, "common.vba_package_remove",
+            return ExecutePackageMutation(source, session, false, "vba.package.remove",
                 cancellationToken, markDispatch =>
                     _vbaExecutor.RemoveCustomPackage(
                         source, session,

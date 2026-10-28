@@ -86,16 +86,16 @@ def run_case(root, recover):
                         assert "OLD_MARKER" in content and old_claim_sources, "Exercise an observed file claim, not only narration"
                         entered.set()
                         assert release.wait(30)
-                        response = call("files.create", relativePath="late.txt", text="MUST_NOT_DISPATCH")
+                        response = call("core.write", target="late.txt", content="MUST_NOT_DISPATCH")
                     elif phase["before"] == 1:
-                        response = call("files.create", relativePath="once.txt", text="CREATED_ONCE")
+                        response = call("core.write", target="once.txt", content="CREATED_ONCE")
                     elif phase["before"] == 2:
                         response = {"action": "execute", "reason": "Read both exact sources.", "tool_calls": [
-                            {"name": "common.resources_read", "arguments": {"target": "app.js"}},
-                            {"name": "common.resources_read", "arguments": {"target": "guard.txt"}}],
+                            {"name": "core.read", "arguments": {"target": "app.js"}},
+                            {"name": "core.read", "arguments": {"target": "guard.txt"}}],
                             "message": "Read both exact sources."}
                     else:
-                        response = call("common.resources_find", query="probe-" + str(phase["before"]))
+                        response = call("core.find", query="probe-" + str(phase["before"]))
                         # Deliberately grow accepted history within the reduced 24K
                         # profile. No synthetic checkpoint or edited event history.
                         response["message"] = "Inspection " + str(phase["before"]) + ": " + "bounded diagnostic context " * 90
@@ -108,21 +108,21 @@ def run_case(root, recover):
                         assert read_progress(request)["remainingCompleteFileReads"] == 1
                         assert "app.js" in read_progress(request)["expectedFilesWithoutCurrentRead"]
                         assert "STRUCTURED_CONTEXT_CLAIMS" in content
-                        response = call("files.patch", relativePath="app.js", oldText="OLD_MARKER", newText="UNSAFE")
+                        response = call("core.patch", target="app.js", hunks=[{"oldText": "OLD_MARKER", "newText": "UNSAFE"}])
                     elif phase["after"] == 2:
                         assert (workspace / "app.js").read_text() == EXTERNAL, "Stale observation overwrote the user's edit"
                         assert "source_observation_required" in content or "resource_conflict" in content
-                        response = call("common.resources_read", target="app.js") if recover else finish(request)
+                        response = call("core.read", target="app.js") if recover else finish(request)
                     elif not recover:
                         assert phase["after"] == 3 and "completionFeedback" in content
                         response = finish(request, "not_satisfied",
                             "The external edit requires review before I can finish.")
                     elif phase["after"] == 3:
                         assert "EXTERNAL_MARKER" in content
-                        response = call("files.patch", relativePath="app.js", oldText="EXTERNAL_MARKER", newText="VERIFIED_MARKER")
+                        response = call("core.patch", target="app.js", hunks=[{"oldText": "EXTERNAL_MARKER", "newText": "VERIFIED_MARKER"}])
                     elif phase["after"] == 4:
                         assert read_progress(request)["remainingCompleteFileReads"] == 1
-                        response = call("common.resources_read", target="app.js")
+                        response = call("core.read", target="app.js")
                     else:
                         assert phase["after"] == 5 and read_progress(request)["remainingCompleteFileReads"] == 0
                         response = finish(request)

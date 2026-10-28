@@ -47,9 +47,9 @@ namespace RNAssistant.Harness
                         "Write failed", "write_rejected", false);
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("outlook.create_draft"),
+                    LoadToolSchemaResponse("outlook.draft.create"),
                     ModelProtocolWire.WriteAcceptedCall("Create the requested draft.", "Write",
-                        new ConversationToolCall { Name = "outlook.create_draft",
+                        new ConversationToolCall { Name = "outlook.draft.create",
                             Arguments = new JObject { ["kind"] = "new", ["body"] = "Replay" } })
                 });
                 var modelCalls = 0;
@@ -62,7 +62,7 @@ namespace RNAssistant.Harness
                         "model cursor saved before dispatch: " + (messages.LastOrDefault()?.Content ?? string.Empty));
                     if (responses.Count > 0)
                         return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                    var write = session.Messages.Last(item => item.ToolName == "outlook.create_draft" &&
+                    var write = session.Messages.Last(item => item.ToolName == "outlook.draft.create" &&
                         item.ExecutionProgress != null);
                     var assessment = outcome == "ok" ? ConversationAssessment.Satisfied :
                         outcome == "error" ? ConversationAssessment.NotSatisfied : ConversationAssessment.Unverified;
@@ -221,7 +221,7 @@ namespace RNAssistant.Harness
                     Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0
                         ? responses.Dequeue()
                         : ScriptedVerifiedFinish(activeSession, "Report the confirmed skill write.", "Done",
-                            "Skill created.", "common.skills_upsert") }));
+                            "Skill created.", "skills.upsert") }));
                 var first = service.ExecuteAsync(ChatModes.Agent, "Create a skill", session,
                     NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, pendingCommand, result) => "pending_replay")
@@ -237,7 +237,7 @@ namespace RNAssistant.Harness
                 var command = PendingCommand(pending);
                 var acceptedCalls = AcceptedCallIdentitiesJson(pending);
                 var accepted = pending.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
-                    message.ToolName == "common.skills_upsert");
+                    message.ToolName == "skills.upsert");
                 AssertEqual(command.ToolCallId, accepted.ToolCallId, "pending command retains the accepted runtime ID");
                 AssertEqual(pending.LastRun.KernelState.Summary.PendingConfirmation.StepId, accepted.AcceptedCallOrigin.StepId,
                     "pending command retains its originating model step");
@@ -305,9 +305,9 @@ namespace RNAssistant.Harness
         {
             return new Queue<string>(new[]
             {
-                LoadSkillResponse("common.skill_authoring"),
+                LoadSkillResponse("skills.skill.authoring"),
                 ModelProtocolWire.WriteAcceptedCall("Create the requested skill.", "Create skill",
-                    new ConversationToolCall { Name = "common.skills_upsert", Arguments = new JObject {
+                    new ConversationToolCall { Name = "skills.upsert", Arguments = new JObject {
                         ["id"] = "common.replay_test", ["description"] = "Replay test", ["bodyMarkdown"] = "# Replay" } })
             });
         }
@@ -358,9 +358,9 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet"),
+                    LoadToolSchemaResponse("excel.sheet.add"),
                     ModelProtocolWire.WriteAcceptedCall("Write the requested sheet.", "Write",
-                        new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "Once" } })
+                        new ConversationToolCall { Name = "excel.sheet.add", Arguments = new JObject { ["name"] = "Once" } })
                 });
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
@@ -376,7 +376,7 @@ namespace RNAssistant.Harness
                 {
                     if (saved.LastRun.KernelState.Summary.ToolCounts.WriteOk != 1) return;
                     var accepted = saved.Messages.Single(message => message.ProtocolMessage && message.Role == "assistant" &&
-                        message.ToolName == "excel.add_sheet");
+                        message.ToolName == "excel.sheet.add");
                     if (!saved.Messages.Any(message =>
                         message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == accepted.ToolCallId))
                         throw new IOException("stopped after terminal evidence but before result projection");
@@ -397,11 +397,11 @@ namespace RNAssistant.Harness
                 AssertTrue(discovery.All(message => !message.ExcludeFromModelContext),
                     "completed schema read stays available in model context");
                 var unfinishedWrite = recovered.Messages.Where(message => message.ProtocolMessage &&
-                    message.ToolName == "excel.add_sheet").ToArray();
+                    message.ToolName == "excel.sheet.add").ToArray();
                 AssertEqual(1, unfinishedWrite.Length, "crash leaves only the accepted write call in history");
                 AssertTrue(unfinishedWrite[0].ExcludeFromModelContext,
                     "unpaired write call is not replayed into model context");
-                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "recovery never replays known mutation");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.sheet.add"), "recovery never replays known mutation");
                 AssertKernelReplay(recovered);
             });
         }
@@ -418,9 +418,9 @@ namespace RNAssistant.Harness
                 var runLease = registry.Start(session.Id, "controller-start", session);
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet"),
+                    LoadToolSchemaResponse("excel.sheet.add"),
                     ModelProtocolWire.WriteAcceptedCall("Write the requested sheet.", "Write",
-                        new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "Once" } })
+                        new ConversationToolCall { Name = "excel.sheet.add", Arguments = new JObject { ["name"] = "Once" } })
                 });
                 Action injectConcurrentCommit = () =>
                 {
@@ -442,12 +442,12 @@ namespace RNAssistant.Harness
                     service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Write once", session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = false },
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), (phase, message, activity) =>
                         {
-                            if (afterDispatch && phase == "tool_running" && activity.ToolId == "excel.add_sheet" && ++writeEntries == 2) injectConcurrentCommit();
+                            if (afterDispatch && phase == "tool_running" && activity.ToolId == "excel.sheet.add" && ++writeEntries == 2) injectConcurrentCommit();
                         }).GetAwaiter().GetResult();
                 }
                 catch (RunStoreException ex) { failure = ex; }
                 AssertTrue(failure != null, "mandatory store failure escapes without retry");
-                AssertEqual(afterDispatch ? 1 : 0, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no dispatch before accepted append / no retry after effect");
+                AssertEqual(afterDispatch ? 1 : 0, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.sheet.add"), "no dispatch before accepted append / no retry after effect");
                 AssertEqual(afterDispatch ? 1 : 0, failure.UnpersistedSummary.ToolCounts.WriteOk, "unpersisted effect is not passed off as durable evidence");
                 var owned = recovery.ReloadAndReconcileInterruptedRun(session.Host, session.DocumentKey, session.Id);
                 AssertEqual(RunLifecycle.Running, owned.LastRun.KernelState.Summary.Lifecycle,
@@ -1329,7 +1329,7 @@ namespace RNAssistant.Harness
                 store.Save(session);
                 var command = new ToolInvocation
                 {
-                    ToolId = "common.vba_write_module", ToolCallId = "confirmed", RuntimeStepId = "original-step",
+                    ToolId = "vba.module.write", ToolCallId = "confirmed", RuntimeStepId = "original-step",
                     Arguments = new Dictionary<string, object>
                     {
                         { "moduleName", "Module1" }, { "code", "Sub Main()\nDebug.Print 42\nEnd Sub" }
@@ -1378,7 +1378,7 @@ namespace RNAssistant.Harness
                 {
                     var result = executor.ExecuteManual(new ToolInvocation
                     {
-                        ToolId = "excel.add_sheet", ToolCallId = "one-write",
+                        ToolId = "excel.sheet.add", ToolCallId = "one-write",
                         Arguments = new Dictionary<string, object> { { "name", "TraceFailure" } }
                     }, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                     AssertTrue(result.Success && adapter.HasSheet("TraceFailure"), "trace failure does not block or reinterpret a tool");
@@ -1397,7 +1397,7 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual("Answer.", final.AssistantText, "optional accepted trace failure preserves response");
                 AssertEqual(RunViewLifecycles.Completed, final.RunViewState.Lifecycle, "optional accepted trace failure preserves outcome");
-                AssertEqual(1, adapter.ExcelSheetRequests.Count(item => item.ToolId == "excel.add_sheet"), "trace failure never retries a write");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(item => item.ToolId == "excel.sheet.add"), "trace failure never retries a write");
             });
         }
 
@@ -2099,35 +2099,35 @@ namespace RNAssistant.Harness
         {
             var displayCall = new ToolInvocation
             {
-                ToolId = "common.resources_read",
+                ToolId = "core.read",
                 Arguments = new Dictionary<string, object> { ["target"] = "Продажи!A1:D120", ["representation"] = "table" }
             };
             var displayActivity = RNAssistant.Office.AgentTranscript.CreateRunningToolActivity(displayCall, "step", "Inspect");
             AssertEqual("Продажи!A1:D120 · Таблица", displayActivity.Subtitle, "activity displays accepted semantic target without resource lookup");
             AssertEqual("running", displayActivity.Status, "display does not change lifecycle");
             AssertTrue(displayActivity.ExecutionEvidence == null, "a target caption does not fabricate execution evidence");
-            var slideCall = new ToolInvocation { ToolId = "powerpoint.set_text", Arguments = new Dictionary<string, object>
+            var slideCall = new ToolInvocation { ToolId = "powerpoint.text.set", Arguments = new Dictionary<string, object>
                 { ["slideIndex"] = 3L, ["target"] = "shape", ["shapeName"] = "Заголовок", ["text"] = "Новый текст" } };
             var exactArguments = JsonConvert.SerializeObject(slideCall.Arguments);
             AssertEqual("Слайд 3 · Заголовок", ToolDisplayCatalog.Target(slideCall), "slide and shape stay visible");
             AssertEqual(exactArguments, JsonConvert.SerializeObject(slideCall.Arguments), "display does not rewrite model arguments");
             AssertEqual("Конец документа", ToolDisplayCatalog.Target(new ToolInvocation {
-                ToolId = "word.write_text", Arguments = new Dictionary<string, object> { ["mode"] = "paragraph", ["location"] = "end", ["text"] = "Body" }
+                ToolId = "word.text.write", Arguments = new Dictionary<string, object> { ["mode"] = "paragraph", ["location"] = "end", ["text"] = "Body" }
             }), "Word insertion location is visible without body text");
             AssertEqual("Вся презентация · Доход", ToolDisplayCatalog.Target(new ToolInvocation {
-                ToolId = "powerpoint.search_text", Arguments = new Dictionary<string, object> { ["query"] = "Доход", ["slideIndex"] = 0L }
+                ToolId = "powerpoint.text.search", Arguments = new Dictionary<string, object> { ["query"] = "Доход", ["slideIndex"] = 0L }
             }), "deck search is not described as an active-slide read");
             AssertEqual("Выделение", ToolDisplayCatalog.Target(new ToolInvocation {
-                ToolId = "word.write_text", Arguments = new Dictionary<string, object> { ["mode"] = "replaceSelection", ["location"] = "end" }
+                ToolId = "word.text.write", Arguments = new Dictionary<string, object> { ["mode"] = "replaceSelection", ["location"] = "end" }
             }), "selection replacement ignores paragraph-only location");
             AssertEqual("Выделение", ToolDisplayCatalog.Target(new ToolInvocation {
-                ToolId = "word.format_text", Arguments = new Dictionary<string, object> { ["kind"] = "style", ["style"] = "Heading 1" }
+                ToolId = "word.text.format", Arguments = new Dictionary<string, object> { ["kind"] = "style", ["style"] = "Heading 1" }
             }), "default style target is the selection");
             AssertEqual("Ответ всем · Текущее письмо", ToolDisplayCatalog.Target(new ToolInvocation {
-                ToolId = "outlook.create_draft", Arguments = new Dictionary<string, object> { ["kind"] = "replyAll" }
+                ToolId = "outlook.draft.create", Arguments = new Dictionary<string, object> { ["kind"] = "replyAll" }
             }), "reply draft retains the addressed operation target");
             AssertEqual("Отчёт · team@example.test", ToolDisplayCatalog.Target(new ToolInvocation {
-                ToolId = "outlook.create_draft", Arguments = new Dictionary<string, object> { ["kind"] = "new", ["subject"] = "Отчёт", ["to"] = "team@example.test" }
+                ToolId = "outlook.draft.create", Arguments = new Dictionary<string, object> { ["kind"] = "new", ["subject"] = "Отчёт", ["to"] = "team@example.test" }
             }), "mail draft shows subject and recipient");
 
             var started = new DateTime(2026, 8, 29, 8, 0, 0, DateTimeKind.Utc);
@@ -2163,9 +2163,9 @@ namespace RNAssistant.Harness
                                 ["Id"] = "accepted-message-1",
                                 ["RunId"] = "run-1",
                                 ["ToolCallId"] = "call-1",
-                                ["ToolName"] = "common.html_workspace_write_file",
+                                ["ToolName"] = "html.source.write",
                                 ["AcceptedCallOrigin"] = new JObject { ["StepId"] = "logical-1", ["ModelAttemptId"] = "attempt-2", ["CallIndex"] = 0 },
-                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "common.html_workspace_write_file", ["Arguments"] = "{\"path\":\"index.html\",\"content\":\"<main>ok</main>\"}" })
+                                ["ToolCalls"] = new JArray(new JObject { ["Id"] = "call-1", ["Name"] = "html.source.write", ["Arguments"] = "{\"path\":\"index.html\",\"content\":\"<main>ok</main>\"}" })
                             } }
                         })
                     }),
@@ -2178,12 +2178,12 @@ namespace RNAssistant.Harness
                             ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
                             {
                                 ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
-                                ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "running"
+                                ["ToolId"] = "html.source.write", ["Status"] = "running"
                             } } }
                         })
                     }),
                 TrajectoryEvent(10, "tool.execution.started", started.AddSeconds(9), "run-1", "turn-1", "logical-1",
-                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "running", ["Boundary"] = "office_tool_executor" }),
+                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "html.source.write", ["Status"] = "running", ["Boundary"] = "office_tool_executor" }),
                 TrajectoryEvent(11, "domain.effect.prepared", started.AddSeconds(10), "run-1", "turn-1", "logical-1",
                     new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "prepared" }),
                 TrajectoryEvent(12, "domain.effect.dispatched", started.AddSeconds(11), "run-1", "turn-1", "logical-1",
@@ -2191,7 +2191,7 @@ namespace RNAssistant.Harness
                 TrajectoryEvent(13, "domain.effect.verified", started.AddSeconds(12), "run-1", "turn-1", "logical-1",
                     new JObject { ["ToolCallId"] = "call-1", ["MutationId"] = "mutation-1", ["JournalRunId"] = "journal-run-1", ["Status"] = "committed" }),
                 TrajectoryEvent(14, "tool.execution.completed", started.AddSeconds(13), "run-1", "turn-1", "logical-1",
-                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "ok", ["Boundary"] = "office_tool_executor" }),
+                    new JObject { ["ToolCallId"] = "call-1", ["ToolId"] = "html.source.write", ["Status"] = "ok", ["Boundary"] = "office_tool_executor" }),
                 TrajectoryEvent(15, SessionEventTypes.SessionCommit, started.AddSeconds(14), "run-1", "turn-1", "logical-1",
                     new JObject
                     {
@@ -2201,7 +2201,7 @@ namespace RNAssistant.Harness
                             ["Data"] = new JObject { ["Value"] = new JObject { ["Activity"] = new JObject
                             {
                                 ["RunId"] = "run-1", ["StepId"] = "logical-1", ["ToolCallId"] = "call-1",
-                                ["ToolId"] = "common.html_workspace_write_file", ["Status"] = "completed", ["ExecutionStatus"] = "completed",
+                                ["ToolId"] = "html.source.write", ["Status"] = "completed", ["ExecutionStatus"] = "completed",
                                 ["ArgumentsJson"] = "{\"path\":\"index.html\",\"content\":\"<main>ok</main>\"}",
                                 ["Subtitle"] = "index.html", ["ResultMessage"] = "Workspace updated.", ["DataJson"] = "{\"changed\":true}",
                                 ["ExecutionEvidence"] = new JObject { ["Dispatch"] = "MayHaveDispatched", ["Effect"] = "VerifiedChange" }
@@ -2212,8 +2212,8 @@ namespace RNAssistant.Harness
                             ["Type"] = SessionOperationTypes.ToolResultRecorded,
                             ["Data"] = new JObject { ["Value"] = new JObject
                             {
-                                ["ToolCallId"] = "call-1", ["ToolName"] = "common.html_workspace_write_file",
-                                ["Content"] = "TOOL_RESULT:\n{\"version\":1,\"tool_call_id\":\"call-1\",\"name\":\"common.html_workspace_write_file\",\"status\":\"ok\",\"message\":\"Workspace updated.\",\"data\":{\"changed\":true}}"
+                                ["ToolCallId"] = "call-1", ["ToolName"] = "html.source.write",
+                                ["Content"] = "TOOL_RESULT:\n{\"version\":1,\"tool_call_id\":\"call-1\",\"name\":\"html.source.write\",\"status\":\"ok\",\"message\":\"Workspace updated.\",\"data\":{\"changed\":true}}"
                             } }
                         })
                     }),
@@ -2239,7 +2239,7 @@ namespace RNAssistant.Harness
                             ["Type"] = SessionOperationTypes.ToolResultRecorded,
                             ["Data"] = new JObject { ["Value"] = new JObject
                             {
-                                ["ToolCallId"] = "call-missing", ["ToolName"] = "excel.write_range",
+                                ["ToolCallId"] = "call-missing", ["ToolName"] = "excel.range.write",
                                 ["AcceptedCallOrigin"] = new JObject { ["StepId"] = "logical-3", ["ModelAttemptId"] = "attempt-4", ["CallIndex"] = 0 }
                             } }
                         })

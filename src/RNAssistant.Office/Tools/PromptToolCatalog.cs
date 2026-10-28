@@ -9,7 +9,7 @@ namespace RNAssistant.Office.Tools
 {
     internal static class PromptToolCatalog
     {
-        internal const string SaveToolId = "common.prompts_save";
+        internal const string SaveToolId = "prompts.save";
 
         internal static bool Owns(string toolId)
         {

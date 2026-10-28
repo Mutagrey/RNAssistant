@@ -114,7 +114,7 @@ def audit_readback_order(root):
             errors.append({"code": "unknown_note_effect", "callId": call["id"]})
         if outcome != 0:  # ToolExecutionOutcome.Ok; refusals are not successful steps.
             continue
-        if call["name"] == "common.resources_read":
+        if call["name"] == "core.read":
             evidence = result.get("ResourceEvidence") or []
             if len(evidence) != 1:
                 continue

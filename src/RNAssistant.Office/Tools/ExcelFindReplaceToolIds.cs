@@ -4,8 +4,8 @@ namespace RNAssistant.Office.Tools
 {
     public static class ExcelFindReplaceToolIds
     {
-        public const string FindCells = "excel.find_cells";
-        public const string ReplaceCells = "excel.replace_cells";
+        public const string FindCells = "excel.cells.find";
+        public const string ReplaceCells = "excel.cells.replace";
 
         public static bool Owns(string toolId)
         {

@@ -185,7 +185,7 @@ namespace RNAssistant.Harness
                     "prompt save has no case alias");
 
                 var empty = executor.ExecuteManual(
-                    new ToolInvocation { ToolId = "common.prompts_save" },
+                    new ToolInvocation { ToolId = "prompts.save" },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                     runtime,
                     false,
@@ -305,7 +305,7 @@ namespace RNAssistant.Harness
                 })
                 {
                     var result = executor.ExecuteManual(
-                        Command("common.prompts_save", "promptKey", pair[0],
+                        Command("prompts.save", "promptKey", pair[0],
                             "value", pair[1]), promptTools, runtime,
                         false, true);
                     AssertTrue(result.Success,
@@ -363,9 +363,9 @@ namespace RNAssistant.Harness
         {
             AssertContains(AgentPromptDefaults.SkillInstructions, "Skill instructions cannot grant permissions",
                 "skill prose cannot expand runtime authority");
-            AssertContains(AgentPromptDefaults.GeneralInstructions, "select `common.task_tracking`",
+            AssertContains(AgentPromptDefaults.GeneralInstructions, "select `skills.task.tracking`",
                 "multistage task tracking is selected before implementation");
-            AssertContains(AgentPromptDefaults.SkillInstructions, "common.skills_load must be the only call",
+            AssertContains(AgentPromptDefaults.SkillInstructions, "core.skills.load must be the only call",
                 "skill selection is not sent in an independent read batch");
             foreach (var prompt in new[] { AgentPromptDefaults.GeneralInstructions, AgentPromptDefaults.ChatInstructions, AgentPromptDefaults.PlanInstructions })
             {
@@ -514,7 +514,7 @@ namespace RNAssistant.Harness
         private static void BuiltInPromptGuidanceUsesRuntimeIdsAndToolResultV1()
         {
             var skills = BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost("Excel"));
-            var authoring = skills.Single(skill => skill.Id == "common.prompt_authoring").BodyMarkdown;
+            var authoring = skills.Single(skill => skill.Id == "skills.prompt.authoring").BodyMarkdown;
             AssertContains(authoring, "Each call contains only exact `name` and root object `arguments`",
                 "prompt authoring keeps the model call wire free of runtime IDs");
             AssertContains(authoring, "Runtime assigns call IDs after validation and owns execution outcomes",
@@ -525,7 +525,7 @@ namespace RNAssistant.Harness
                 "prompt authoring keeps schemas and tool semantics authoritative");
             AssertTrue(authoring.IndexOf("Each call needs a unique id", StringComparison.OrdinalIgnoreCase) < 0,
                 "R31 model-owned identity guidance cannot return");
-            var htmlAuthoring = skills.Single(skill => skill.Id == "common.html_workspace_authoring").BodyMarkdown;
+            var htmlAuthoring = skills.Single(skill => skill.Id == "skills.html.workspace.authoring").BodyMarkdown;
             AssertContains(htmlAuthoring, "exact decoded strings",
                 "HTML authoring preserves model-provided source text exactly");
             AssertContains(htmlAuthoring, "shared response contract for JSON escaping",
@@ -536,7 +536,7 @@ namespace RNAssistant.Harness
                 "HTML authoring avoids duplicate bundled chart instances");
             AssertContains(htmlAuthoring, "Do not invent globals, copy bundles",
                 "HTML authoring rejects unsupported or duplicate vendor runtimes");
-            AssertContains(htmlAuthoring, "do not also call `excel.create_chat_chart` for the same data",
+            AssertContains(htmlAuthoring, "do not also call `excel.chat.chart.create` for the same data",
                 "HTML authoring keeps ECharts workspace and chat-chart artifacts from duplicating one visual");
             AssertContains(htmlAuthoring, "with root `path`/`content`",
                 "HTML writes put semantic properties directly at the schema root");
@@ -546,9 +546,9 @@ namespace RNAssistant.Harness
                 "HTML authoring exposes runtime-owned dependencies");
             AssertContains(htmlAuthoring, "`XLSX` (SheetJS CE 0.20.3 full browser build)",
                 "HTML authoring advertises the offline spreadsheet reader");
-            AssertContains(htmlAuthoring, "`common.html_assets_list` only when",
+            AssertContains(htmlAuthoring, "`html.assets.list` only when",
                 "HTML authoring discovers reusable packages on demand");
-            AssertContains(htmlAuthoring, "`common.html_assets_publish`",
+            AssertContains(htmlAuthoring, "`html.assets.publish`",
                 "HTML authoring can save explicitly requested reusable source");
             AssertContains(htmlAuthoring, "bind `view=raw`",
                 "HTML authoring connects uploaded spreadsheets to the binary resource plane");
@@ -566,7 +566,7 @@ namespace RNAssistant.Harness
                 "HTML guidance requires exact binding evidence");
             AssertContains(htmlAuthoring, "claimed refresh has bounded read-back plus visible render evidence",
                 "HTML guidance requires read-back and visible render evidence");
-            AssertContains(htmlAuthoring, "read a supported complete representation with `common.resources_read`, then call `common.html_data_bind`",
+            AssertContains(htmlAuthoring, "read a supported complete representation with `core.read`, then call `html.data.bind`",
                 "source-backed HTML establishes its binding from a complete read");
             AssertContains(htmlAuthoring, "Use exact saved binding names",
                 "HTML page code uses the saved data contract");
@@ -590,12 +590,12 @@ namespace RNAssistant.Harness
                 "HTML guidance does not prescribe card-based layouts");
             AssertTrue(htmlAuthoring.IndexOf("dashboard.js", StringComparison.OrdinalIgnoreCase) < 0,
                 "HTML guidance does not prescribe dashboard-specific file names");
-            var skillAuthoring = skills.Single(skill => skill.Id == "common.skill_authoring").BodyMarkdown;
+            var skillAuthoring = skills.Single(skill => skill.Id == "skills.skill.authoring").BodyMarkdown;
             AssertContains(skillAuthoring, "author the skill last",
                 "a requested reusable skill follows the verified primary solution");
             AssertContains(skillAuthoring, "Do not invent a skill",
                 "skill authoring is not an unsolicited substitute for execution");
-            var taskTracking = skills.Single(skill => skill.Id == "common.task_tracking").BodyMarkdown;
+            var taskTracking = skills.Single(skill => skill.Id == "skills.task.tracking").BodyMarkdown;
             AssertContains(taskTracking, "multiple deliverables or dependent stages",
                 "task tracking retains the actual requested stages");
             AssertContains(taskTracking, "Skip it for a short single-step answer",

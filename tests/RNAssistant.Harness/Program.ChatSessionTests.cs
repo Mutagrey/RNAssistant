@@ -374,7 +374,7 @@ namespace RNAssistant.Harness
                     "character window cannot start inside a surrogate pair");
                 var observed = new Dictionary<string, ResourceEvidence>();
                 var handler = new WorkspaceResourceHandler(provider, null, () => null, observed, false, null, 16000);
-                var execution = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var execution = new ToolRuntimeFixture().Context(toolId: "core.read");
                 var whole = handler.ExecuteAsync(new ToolHandlerContext(execution,
                     new Dictionary<string, object> { ["target"] = "long.txt" }), CancellationToken.None)
                     .GetAwaiter().GetResult();
@@ -398,7 +398,7 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult();
                 AssertEqual(ToolResultStatus.Ok, result.Result.Status,
                     "model resource handler accepts a bounded character window");
-                var visible = ModelResultProjection.ProjectResourceData("common.resources_read",
+                var visible = ModelResultProjection.ProjectResourceData("core.read",
                     JObject.Parse(result.Result.DataJson));
                 AssertTrue((bool)visible["selectionComplete"] && !(bool)visible["complete"] &&
                     (int)visible["startChar"] == start && (int)visible["requestedCharacters"] == 16000 &&

@@ -48,7 +48,7 @@ namespace RNAssistant.MockDemo
                     : InitialCommands(_host, false)).ToList();
                 if (!isHtmlTask)
                     commands.InsertRange(0, commands.Select(command => command.ToolId)
-                        .Distinct(StringComparer.Ordinal).Select(id => Cmd("common.capabilities_read", "id", id)).ToList());
+                        .Distinct(StringComparer.Ordinal).Select(id => Cmd("core.tools.read", "id", id)).ToList());
                 var next = NextPendingCommand(commands, toolResults);
                 var firstTurn = toolResults.Count == 0;
 
@@ -123,7 +123,7 @@ namespace RNAssistant.MockDemo
             {
                 if (IsHost(host, "Word"))
                 {
-                    return new[] { Cmd("word.write_text", "text", "Mock summary") };
+                    return new[] { Cmd("word.text.write", "text", "Mock summary") };
                 }
 
                 if (IsHost(host, "PowerPoint"))
@@ -143,7 +143,7 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("word.write_text", "mode", "insert", "text", "\n\nRNAssistant mock summary: revenue is up, but retention requires follow-up.")
+                    Cmd("word.text.write", "mode", "insert", "text", "\n\nRNAssistant mock summary: revenue is up, but retention requires follow-up.")
                 };
             }
 
@@ -151,7 +151,7 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("powerpoint.add_slide", "title", "Mock Action Plan", "body", "1. Confirm renewal risks\n2. Prepare retention actions\n3. Review forecast")
+                    Cmd("powerpoint.slide.add", "title", "Mock Action Plan", "body", "1. Confirm renewal risks\n2. Prepare retention actions\n3. Review forecast")
                 };
             }
 
@@ -159,21 +159,21 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("outlook.create_draft", "kind", "reply", "body", "Спасибо за письмо. Предлагаю сегодня согласовать следующие шаги и срок обновленного коммерческого предложения.")
+                    Cmd("outlook.draft.create", "kind", "reply", "body", "Спасибо за письмо. Предлагаю сегодня согласовать следующие шаги и срок обновленного коммерческого предложения.")
                 };
             }
 
             return new[]
             {
-                Cmd("excel.add_sheet", "name", "Demo Report"),
-                Cmd("excel.write_range", "kind", "table", "sheet", "Demo Report", "address", "A1", "values", new[]
+                Cmd("excel.sheet.add", "name", "Demo Report"),
+                Cmd("excel.range.write", "kind", "table", "sheet", "Demo Report", "address", "A1", "values", new[]
                 {
                     new[] { "Month", "Sales" },
                     new[] { "Jan", "120" },
                     new[] { "Feb", "150" },
                     new[] { "Mar", "180" }
                 }),
-                Cmd("excel.upsert_chart", "sheet", "Demo Report", "sourceRange", "A1:B4", "chartType", "line", "title", "Demo Sales")
+                Cmd("excel.chart.upsert", "sheet", "Demo Report", "sourceRange", "A1:B4", "chartType", "line", "title", "Demo Sales")
             };
         }
 
@@ -191,19 +191,19 @@ namespace RNAssistant.MockDemo
             {
                 return new[]
                 {
-                    Cmd("common.skills_load", "id", "common.html_workspace_authoring"),
-                    Cmd("common.html_data_write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
-                    Cmd("common.html_workspace_write_file", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});")
+                    Cmd("core.skills.load", "id", "skills.html.workspace.authoring"),
+                    Cmd("html.data.write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150},{\"month\":\"Mar\",\"sales\":180}],\"title\":\"Updated Sales HTML Dashboard\"}"),
+                    Cmd("html.source.write", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','updated');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});")
                 };
             }
 
             return new[]
             {
-                Cmd("common.skills_load", "id", "common.html_workspace_authoring"),
-                Cmd("common.html_data_write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
-                Cmd("common.html_workspace_write_file", "path", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
-                Cmd("common.html_workspace_write_file", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});"),
-                Cmd("common.html_workspace_write_file", "path", "index.html", "content", "<!doctype html><html><head><meta charset=\"utf-8\"><title>Sales HTML Dashboard</title></head><body><main class=\"dashboard\"><section class=\"hero\"><div><h1 id=\"salesTitle\">Sales HTML Dashboard</h1><p>Data comes from RNAssistantData.sales</p></div><p id=\"salesTotal\" class=\"metric\">Total: 0</p></section><section id=\"salesRows\" class=\"rows\"></section></main></body></html>")
+                Cmd("core.skills.load", "id", "skills.html.workspace.authoring"),
+                Cmd("html.data.write", "name", "sales", "json", "{\"rows\":[{\"month\":\"Jan\",\"sales\":120},{\"month\":\"Feb\",\"sales\":150}],\"title\":\"Sales HTML Dashboard\"}"),
+                Cmd("html.source.write", "path", "styles.css", "content", "body{font-family:Segoe UI,Arial,sans-serif;margin:0;min-height:100vh;background:#f8fafc;color:#111827}.dashboard{min-height:100vh;padding:32px clamp(20px,4vw,56px);display:grid;align-content:start;gap:22px}.hero{display:flex;justify-content:space-between;gap:18px;align-items:flex-end;border-bottom:1px solid #d0d5dd;padding-bottom:18px}.hero h1{margin:0;font-size:clamp(28px,4vw,48px);font-weight:500}.hero p{margin:8px 0 0;color:#475467}.metric{margin:0;font-size:clamp(32px,5vw,56px);font-weight:500;color:#0f766e}.rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.row-card{display:flex;justify-content:space-between;gap:12px;border:1px solid #d0d5dd;border-radius:8px;padding:14px;background:#fff}"),
+                Cmd("html.source.write", "path", "app.js", "content", "(async function(){var handle=await RN.resources.open('sales');var json='';try{for await(var batch of handle.stream({view:'text',limit:4096})){json+=batch.text||'';}}finally{await handle.close();}var data=JSON.parse(json||'{}');var rows=data.rows||[];var total=rows.reduce(function(sum,row){return sum+Number(row.sales||0);},0);document.getElementById('salesTitle').textContent=data.title||'Sales HTML Dashboard';document.getElementById('salesTotal').textContent='Total: '+total;var list=document.getElementById('salesRows');if(list){list.innerHTML=rows.map(function(row){return '<article class=\"row-card\"><strong>'+row.month+'</strong><span>'+row.sales+'</span></article>';}).join('');}document.body.setAttribute('data-script-ready','created');}()).catch(function(error){document.body.setAttribute('data-script-error',error.message||'resource-error');});"),
+                Cmd("html.source.write", "path", "index.html", "content", "<!doctype html><html><head><meta charset=\"utf-8\"><title>Sales HTML Dashboard</title></head><body><main class=\"dashboard\"><section class=\"hero\"><div><h1 id=\"salesTitle\">Sales HTML Dashboard</h1><p>Data comes from RNAssistantData.sales</p></div><p id=\"salesTotal\" class=\"metric\">Total: 0</p></section><section id=\"salesRows\" class=\"rows\"></section></main></body></html>")
             };
         }
 
@@ -216,12 +216,12 @@ namespace RNAssistant.MockDemo
 
             if (IsHost(host, "PowerPoint"))
             {
-                return "Готово: добавил mock slide и проверил deck через `common.resources_read`.";
+                return "Готово: добавил mock slide и проверил deck через `core.read`.";
             }
 
             if (IsHost(host, "Outlook"))
             {
-                return "Готово: подготовил mock reply и проверил выбранное письмо через `common.resources_read`.";
+                return "Готово: подготовил mock reply и проверил выбранное письмо через `core.read`.";
             }
 
             return "Готово: создал лист `Demo Report`, записал таблицу продаж, добавил график `Demo Sales` и проверил диапазон/список графиков.";

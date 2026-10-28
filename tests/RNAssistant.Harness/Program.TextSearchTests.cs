@@ -34,7 +34,7 @@ namespace RNAssistant.Harness
                 var provider = new WorkspaceFileResourceProvider(new WorkspaceFileService(paths), workspace);
                 var handler = new RNAssistant.Runtime.WorkspaceResourceHandler(provider, null, () => null,
                     new Dictionary<string, ResourceEvidence>(), true, null, 2000);
-                var fixture = new ToolRuntimeFixture(RuntimeRegistration("common.resources_find", schema: schema));
+                var fixture = new ToolRuntimeFixture(RuntimeRegistration("core.find", schema: schema));
                 fixture.Handler.Run = handler.ExecuteAsync;
                 Func<string, string[]> find = arguments => {
                     var record = fixture.Runtime.ExecuteAsync(fixture.Context(arguments), CancellationToken.None).GetAwaiter().GetResult();
@@ -158,7 +158,7 @@ namespace RNAssistant.Harness
             var parsed = ResourceModelSearchSchema.Parse(strictArgs.ToObject<Dictionary<string, object>>());
             AssertEqual("literal", parsed.Mode, "strict null optional mode keeps runtime default");
             AssertEqual(20, parsed.Limit, "strict null optional limit keeps runtime default");
-            var projected = ModelResultProjection.ProjectResourceData("common.resources_search", JObject.Parse(
+            var projected = ModelResultProjection.ProjectResourceData("core.search", JObject.Parse(
                 "{\"scope\":\"workspace\",\"query\":\"x\",\"scanComplete\":false,\"matchesComplete\":false,\"sourceComplete\":true,\"revision\":\"secret\",\"matches\":[{\"target\":\"a.js\",\"startLine\":3,\"startColumn\":2,\"snippet\":\"x\",\"uri\":\"rna://secret\"}],\"continuation\":{\"afterTarget\":\"a.js\",\"afterLine\":3,\"afterColumn\":2,\"revision\":\"secret\"}}"));
             AssertTrue(!projected.ToString().Contains("secret") && (int)projected["matches"][0]["startLine"] == 3, "closed projection keeps coordinates and strips authority");
             var blocks = new List<ToolResultBlockDto>(); ToolResultPresentationService.AppendContent(blocks, projected.ToString());
@@ -185,8 +185,8 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, record.Outcome, "native ToolRuntime admits new scoped contract");
                 AssertEqual(1, JObject.Parse(record.Result.DataJson)["matches"].Count(), "native result retained");
                 var catalog = executor.GetControllerTools().ToList();
-                AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", "index.html",
-                    "content", "<main>needleHtml</main>"), catalog, new AppSettings(), false, false, session).Success, "publish HTML fixture");
+                AssertTrue(executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write, "target", "HTML file: index.html",
+                    "content", "<main>needleHtml</main>"), catalog, new AppSettings { AutoConfirmToolActions = true }, false, true, session).Success, "publish HTML fixture");
                 var html = executor.ResourceGateway.SearchText(session, new ResourceTextSearchRequest { Scope = "html", Query = "needleHtml", Mode = "regex" },
                     new ResourceTextSearch(), CancellationToken.None);
                 AssertTrue(html.ScanComplete && html.Matches.Count >= 1 && html.Matches.All(x => x.StartLine.HasValue), "HTML scope uses the same matcher and coordinates");

@@ -466,7 +466,7 @@ namespace RNAssistant.Harness
                                 "sent annotation remains pinned to the retained release");
                             var committed = user.Attachments.Single();
                             AssertTrue(modelRequest.Contains("Current user visual selections") &&
-                                modelRequest.Contains("workspace.plugin_authoring") &&
+                                modelRequest.Contains("skills.workspace.plugin.authoring") &&
                                 modelRequest.Contains("\\\"attachment\\\"") &&
                                 !modelRequest.Contains("rnassistant.html-visual-selection") &&
                                 !modelRequest.Contains(PluginStore.ReleaseRef(plugin.PluginId, plugin.ReleaseId).Uri) &&
@@ -494,13 +494,13 @@ namespace RNAssistant.Harness
                             var findHandler = new WorkspaceResourceHandler(null, null, () => null,
                                 new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), true, null, 16000,
                                 chatAttachments: provider);
-                            var execution = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                            var execution = new ToolRuntimeFixture().Context(toolId: "core.read");
                             var foundByTool = findHandler.ExecuteAsync(new ToolHandlerContext(execution,
                                 new System.Collections.Generic.Dictionary<string, object> { ["type"] = "attachment" }),
                                 CancellationToken.None).GetAwaiter().GetResult();
                             AssertTrue(foundByTool.Result.Status == ToolResultStatus.Ok &&
                                 foundByTool.Result.DataJson.Contains(target),
-                                "common.resources_find discovers the accepted target");
+                                "core.find discovers the accepted target");
                             AssertEqual(body.Length, provider.Read(target, 16000).Result.CompleteViewPayload.ByteLength,
                                 "resource read owns the original body");
                             var handler = new WorkspaceResourceHandler(null, null, () => null,
@@ -511,7 +511,7 @@ namespace RNAssistant.Harness
                                     ["type"] = "attachment", ["target"] = target }), CancellationToken.None)
                                 .GetAwaiter().GetResult();
                             AssertEqual(ToolResultStatus.Ok, read.Result.Status,
-                                "common.resources_read returns the committed selection");
+                                "core.read returns the committed selection");
                             AssertTrue(read.Result.DataJson.Contains("rnassistant.html-visual-selection") &&
                                 read.ResourceEvidence.Single().Immutable,
                                 "model read carries exact immutable evidence");
@@ -733,8 +733,8 @@ namespace RNAssistant.Harness
                 var wire = new ChatMessage { Role = "assistant", ProtocolMessage = true,
                     ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
                     Content = ModelProtocolWire.WriteAcceptedCall("Read the source.", "Читаю исходник",
-                        new ConversationToolCall { Name = "common.resources_read", Arguments = new JObject { ["target"] = "README.md" } }),
-                    ToolCallId = "call-1", ToolName = "common.resources_read",
+                        new ConversationToolCall { Name = "core.read", Arguments = new JObject { ["target"] = "README.md" } }),
+                    ToolCallId = "call-1", ToolName = "core.read",
                     ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                     ToolResultRole = ToolResultRoles.User,
                     PromptTokens = 12345, CompletionTokens = 678, TotalTokens = 13023,
@@ -773,11 +773,11 @@ namespace RNAssistant.Harness
                     "workspace chat retains the exact terminal evidence id");
                 var activity = PluginApplicationService.PresentWorkspaceMessage(new ChatMessage {
                     Role = "assistant", Content = "", Activity = new ChatActivity {
-                        Kind = "tool", Title = "common.resources_read", ToolCallId = "call-1",
+                        Kind = "tool", Title = "core.read", ToolCallId = "call-1",
                         RuntimeGuardJson = "private-guard", ConfirmationCatalogSha256 = "private-catalog"
                     }
                 });
-                AssertEqual("common.resources_read", activity.Activity.Title,
+                AssertEqual("core.read", activity.Activity.Title,
                     "workspace shows the saved tool activity through the shared message view");
                 AssertTrue(activity.Activity.RuntimeGuardJson == null && activity.Activity.ConfirmationCatalogSha256 == null,
                     "workspace browser activity omits runtime-only guard data");

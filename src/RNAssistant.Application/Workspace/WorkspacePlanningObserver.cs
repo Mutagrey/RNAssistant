@@ -20,7 +20,8 @@ namespace RNAssistant.Runtime
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
         {
             _current = PlanDocumentToolCatalog.Owns(context.Call.Name) ? (IToolMutationObserver)_plans :
-                _office != null && _officeToolIds.Contains(context.Call.Name) ? _office : _tasks;
+                _office != null && _officeToolIds.Contains(context.Call.Name) &&
+                    (!ResourceMutationToolCatalog.Owns(context.Call.Name) || arguments.ContainsKey("target") && System.Convert.ToString(arguments["target"]).Contains(": ")) ? _office : _tasks;
             return _current.Prepare(context, arguments, preparedStateJson);
         }
         public void MarkDispatchMayHaveOccurred(string id) { _current.MarkDispatchMayHaveOccurred(id); }

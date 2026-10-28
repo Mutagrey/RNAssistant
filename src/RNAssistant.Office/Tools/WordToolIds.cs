@@ -4,14 +4,14 @@ namespace RNAssistant.Office.Tools
 {
     internal static class WordToolIds
     {
-        internal const string FindText = "word.find_text";
+        internal const string FindText = "word.text.find";
         internal const string Inspect = "word.inspect";
-        internal const string WriteText = "word.write_text";
-        internal const string ReplaceText = "word.replace_text";
-        internal const string FormatText = "word.format_text";
-        internal const string AddTable = "word.add_table";
-        internal const string InsertPageBreak = "word.insert_page_break";
-        internal const string AddComment = "word.add_comment";
+        internal const string WriteText = "word.text.write";
+        internal const string ReplaceText = "word.text.replace";
+        internal const string FormatText = "word.text.format";
+        internal const string AddTable = "word.table.add";
+        internal const string InsertPageBreak = "word.page.break.insert";
+        internal const string AddComment = "word.comment.add";
 
         internal static bool Owns(string toolId)
         {

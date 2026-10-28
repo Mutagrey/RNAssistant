@@ -92,20 +92,20 @@ namespace RNAssistant.Harness
                     "а кнопку-счётчик — чтобы каждый клик прибавлял 2 вместо 1. В существующем VBA ReportModule измени возвращаемую строку на Sales report. " +
                     "Сохрани остальные части исходников. Выполни изменения и проверь конечные исходники всех четырёх файлов. Кратко сообщи результат.";
                 if (vbaOnly) task = "В существующем VBA-модуле ReportModule замени возвращаемую строку Old report на Sales report. " +
-                    "Сначала подключи только навык common.vba_code_editing, затем прочитай модуль и выполни одну точечную правку. " +
+                    "Сначала подключи только навык skills.vba.code.editing, затем прочитай модуль и выполни одну точечную правку. " +
                     "Сохрани остальной исходник, проверь конечный текст и кратко сообщи результат. Выполнять VBA не нужно.";
                 var report = excelReport ? new ExcelReportWorkflowFixture(adapter) : null;
                 if (report != null) task = ExcelReportWorkflowFixture.Task;
-                if (requireReportSkill) task = "Сначала подключи навык excel.analysis_reporting. " + task;
+                if (requireReportSkill) task = "Сначала подключи навык skills.excel.analysis.reporting. " + task;
                 var requireTaskList = !vbaOnly && !excelReport && Environment.GetEnvironmentVariable("RNA_REQUIRE_TASK_LIST") == "true";
-                if (requireTaskList) task = "Сначала подключи skill common.task_tracking и создай Task List с этапами; веди его до завершения задачи. " + task;
+                if (requireTaskList) task = "Сначала подключи skill skills.task.tracking и создай Task List с этапами; веди его до завершения задачи. " + task;
                 File.WriteAllText(Path.Combine(evidence, "task.txt"), task);
                 var reportSkillBody = string.Empty;
                 var reportSkillOffered = false;
                 if (report != null)
                 {
                     File.WriteAllText(Path.Combine(evidence, "before.json"), report.Before.ToString());
-                    var reportSkill = executor.CaptureSkills(executor.CaptureCatalogs()).Skills.Single(skill => skill.Id == "excel.analysis_reporting");
+                    var reportSkill = executor.CaptureSkills(executor.CaptureCatalogs()).Skills.Single(skill => skill.Id == "skills.excel.analysis.reporting");
                     reportSkillBody = reportSkill.BodyMarkdown;
                     File.WriteAllText(Path.Combine(evidence, "report-skill.json"), JsonConvert.SerializeObject(reportSkill, Formatting.Indented));
                 }
@@ -116,9 +116,9 @@ namespace RNAssistant.Harness
                     ModelProtocolWire.WriteAcceptedCall("Perform the next requested workflow step.", "",
                         new ConversationToolCall { Name = name, Arguments = arguments });
                 var script = new Queue<string>(new[] {
-                    LoadSkillResponse("common.vba_code_editing"),
+                    LoadSkillResponse("skills.vba.code.editing"),
                     call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: ReportModule", ["representation"] = "source" }),
-                    call("common.vba_apply_patch", new JObject { ["moduleName"] = "ReportModule", ["patch"] = new JArray(
+                    call("vba.module.patch", new JObject { ["moduleName"] = "ReportModule", ["patch"] = new JArray(
                         new JObject { ["find"] = "ReportTitle = \"Old report\"", ["text"] = "ReportTitle = \"Sales report\"" }) }),
                     null // Generate finish after terminal call IDs are assigned.
                 });
@@ -127,7 +127,7 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate complete = async (config, messages, options, stream, token) => {
                     var number = ++requests;
                     if (report != null) reportSkillOffered |=
-                        session.LastRun.SelectedSkills.Any(skill => skill.Id == "excel.analysis_reporting") &&
+                        session.LastRun.SelectedSkills.Any(skill => skill.Id == "skills.excel.analysis.reporting") &&
                         messages.Any(message => message.Role == config.SystemPromptRole &&
                             (message.Content ?? string.Empty).Contains(reportSkillBody));
                     File.WriteAllText(Path.Combine(evidence, "request-" + number + ".json"), JsonConvert.SerializeObject(messages, Formatting.Indented));
@@ -153,12 +153,12 @@ namespace RNAssistant.Harness
                             scriptedResponse = report == null
                                 ? ScriptedVerifiedFinish(session, "The module patch completed with read-back.",
                                     "Исходник исправлен и проверен; выполнение VBA не проверялось.",
-                                    "VBA module source was updated.", "common.vba_apply_patch")
+                                    "VBA module source was updated.", "vba.module.patch")
                                 : ScriptedVerifiedFinish(session, "The report steps and final read completed.",
                                     "Создан и проверен отчёт. Реальный Excel и внешний вид диаграммы не проверялись.",
                                     "The requested report was created and read back.",
-                                    "common.resources_read", "common.resources_read", "excel.add_sheet",
-                                    "excel.write_range", "excel.add_table", "excel.format_range", "excel.upsert_chart");
+                                    "core.read", "core.read", "excel.sheet.add",
+                                    "excel.range.write", "excel.table.add", "excel.range.format", "excel.chart.upsert");
                         response = new LlmCompletionResult { Content = scriptedResponse };
                     }
                     else
@@ -202,8 +202,8 @@ namespace RNAssistant.Harness
                     else passed &= (vbaOnly || original.Select((file, index) => actual.Single(item => item.Path == file[0]).Content == expected[index]).All(value => value)) &&
                         adapter.GetVbaModuleCode("ReportModule") == vba.Replace("Old report", "Sales report");
                     if (vbaOnly) passed &= adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule) == 1 &&
-                        session.LastRun.SelectedSkills.Count == 1 && session.LastRun.SelectedSkills[0].Id == "common.vba_code_editing";
-                    if (requireTaskList) passed &= session.LastRun.SelectedSkills.Any(skill => skill.Id == "common.task_tracking") &&
+                        session.LastRun.SelectedSkills.Count == 1 && session.LastRun.SelectedSkills[0].Id == "skills.vba.code.editing";
+                    if (requireTaskList) passed &= session.LastRun.SelectedSkills.Any(skill => skill.Id == "skills.task.tracking") &&
                         session.Artifacts.Any(artifact => artifact.Kind == ChatArtifactKinds.TaskList);
                     taskPassed = passed;
                     if (requireReportSkill) passed &= reportSkillOffered;

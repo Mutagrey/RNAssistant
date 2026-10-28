@@ -113,7 +113,7 @@ const { chromium } = require("playwright");
       window.submitInboxMessage = async (...args) => { window.submittedAnswer = args; return true; };
       window.inboxOperationId = () => "answer-operation";
       appendQuestionCards(document.getElementById("questions"), {
-        ToolId: "common.questions_ask", ToolCallId: "ask", RunId: "run", Status: "waiting", DataJson: null
+        ToolId: "core.ask", ToolCallId: "ask", RunId: "run", Status: "waiting", DataJson: null
       }, { index: 0 });
     });
     await page.waitForFunction(() => requests.length === 6);
@@ -142,7 +142,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#chatInput").inputValue(), "Unsent draft");
     await page.evaluate(() => {
       const missing = document.createElement("div"); missing.id = "missing-question-source"; document.body.appendChild(missing);
-      appendQuestionCards(missing, { ToolId: "common.questions_ask", Status: "waiting" }, null);
+      appendQuestionCards(missing, { ToolId: "core.ask", Status: "waiting" }, null);
     });
     assert.match(await page.locator("#missing-question-source").textContent(), /Не удалось определить источник вопросов/);
     assert.equal(await page.evaluate(() => requests.length), 7, "unaddressable questions show an error without guessing a source");

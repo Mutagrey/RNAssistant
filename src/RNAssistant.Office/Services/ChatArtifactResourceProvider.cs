@@ -1017,7 +1017,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new ResourceRequestException(
                     "The chat resource URI has an invalid canonical shape. Copy the exact URI returned by a resource descriptor " +
-                    "or run common.resources_find with scope=html and choose the exact member target.",
+                    "or run core.find with scope=html and choose the exact member target.",
                     "invalid_resource_uri",
                     false);
             }

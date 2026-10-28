@@ -73,8 +73,8 @@ namespace RNAssistant.Harness
                 RequestTimeoutSeconds = 90, AutoCalibrateTokenEstimate = false,
                 AutoCompressContext = false, AutoConfirmToolActions = true
             };
-            var ids = new[] { "common.skills_load", "common.resources_find", "common.resources_read", "common.resources_search",
-                "common.capabilities_search", "common.capabilities_read", "common.questions_ask", "files.create", "files.patch" };
+            var ids = new[] { "core.skills.load", "core.find", "core.read", "core.search",
+                "core.tools.search", "core.tools.read", "core.ask", "core.write", "core.patch", "core.replace" };
             var profile = profileName == "broad" ? CallableToolProfile.AllDirect("workspace-direct")
                 : CallableToolProfile.Explicit("workspace-compact-pilot", ids);
             Action<string, object> save = (name, value) => File.WriteAllText(Path.Combine(evidence, name),
@@ -113,7 +113,7 @@ namespace RNAssistant.Harness
                     File.ReadAllBytes(Path.Combine(root, "assets/templates/письмо.txt")).SequenceEqual(File.ReadAllBytes(Path.Combine(root, "exports/письмо-копия.txt")));
             var calls = session.Messages.Where(message => message.AcceptedCallOrigin != null).ToArray();
             var completed = session.Messages.Where(message => message.ExecutionProgress != null && message.ProtocolMessage).ToArray();
-            var copyUsed = completed.Any(message => message.ToolName == "files.copy" && message.ExecutionProgress.Outcome == ToolExecutionOutcome.Ok);
+            var copyUsed = completed.Any(message => message.ToolName == "resources.copy" && message.ExecutionProgress.Outcome == ToolExecutionOutcome.Ok);
             var taskPassed = exact && exactBytes && (scenario != "copy" || copyUsed);
             var passed = taskPassed && failure == null && result?.Summary.Lifecycle == RunLifecycle.Completed &&
                 result.Summary.ToolCounts.WriteUnknown == 0 && result.Acceptance.State == WorkspaceAcceptanceState.Passed;

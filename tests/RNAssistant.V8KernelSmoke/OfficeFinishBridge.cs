@@ -75,9 +75,9 @@ namespace RNAssistant.Harness
                         requests.Add(request);
                         JObject answer;
                         if (step == 1)
-                            answer = Execute("common.capabilities_read", new JObject { ["id"] = "excel.add_sheet" });
+                            answer = Execute("core.tools.read", new JObject { ["id"] = "excel.sheet.add" });
                         else if (step == 2)
-                            answer = Execute("excel.add_sheet", new JObject { ["name"] = "Report" });
+                            answer = Execute("excel.sheet.add", new JObject { ["name"] = "Report" });
                         else if (step == 3)
                             answer = new JObject { ["action"] = "finish", ["reason"] = "Premature claim.", ["outcome"] = "completed",
                                 ["results"] = new JArray(),
@@ -122,7 +122,7 @@ namespace RNAssistant.Harness
                 if (requests.Count != 4 || sheetCallId == null ||
                     !requests[3]["messages"].ToString(Formatting.None).Contains("missing_finish_results") ||
                     !adapter.HasSheet("Report") ||
-                    adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet") != 1 ||
+                    adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.sheet.add") != 1 ||
                     adapter.ExcelRangeMutationRequests.Count != 0 || adapter.ExcelChartRequests.Count != 0 ||
                     accepted.Length != 2 || accepted.Any(message => message.AcceptedCallOrigin == null) ||
                     replay.Messages.Any(message => message.ProtocolMessage && message.Role == "assistant" &&
@@ -159,7 +159,7 @@ namespace RNAssistant.Harness
                 JObject result;
                 try { result = JObject.Parse(content); }
                 catch (JsonException) { continue; }
-                if ((string)result["name"] == "excel.add_sheet" && (string)result["status"] == "ok")
+                if ((string)result["name"] == "excel.sheet.add" && (string)result["status"] == "ok")
                     return (string)result["tool_call_id"];
             }
             return null;

@@ -39,7 +39,7 @@ namespace RNAssistant.Core.ModelProtocol
             // Receipts describe an outcome, not delivery of the observed source.
             // Discovery/search have no durable per-item source binding. Never zip
             // their items with references or infer identity from semantic targets.
-            var read = source.CompletedOperation == null && source.ToolName == "common.resources_read" &&
+            var read = source.CompletedOperation == null && source.ToolName == "core.read" &&
                 source.ToolResultProtocolVersion == ToolResultWire.CurrentVersion;
             if (!view && !read) return source;
             var start = view ? content.IndexOf('\n') + 1 :

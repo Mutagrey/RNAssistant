@@ -186,12 +186,12 @@ namespace RNAssistant.Harness
                 var hostVisual = skills.Skills.Single(skill => skill.Id == ChatVisualizationSkillProvider.Id);
                 AssertEqual(visual.BodyMarkdown, hostVisual.BodyMarkdown, "Office and workspace use one visualization definition");
                 AssertEqual(0, hostVisual.Package.RequiredTools.Count, "Office visualization is instruction-only");
-                AssertTrue(skills.Skills.Single(skill => skill.Id == "common.html_workspace_authoring")
+                AssertTrue(skills.Skills.Single(skill => skill.Id == "skills.html.workspace.authoring")
                     .BodyMarkdown.Contains(VisualAnnotationSourceWorkflow.Common),
                     host + " HTML authoring includes the same annotation-to-source procedure");
                 if (host == "Outlook")
-                    AssertTrue(!skills.Skills.Any(skill => skill.Id == "common.vba_code_editing" ||
-                        skill.Id == "common.vba_userform_authoring" || skill.Id == "common.tool_authoring"),
+                    AssertTrue(!skills.Skills.Any(skill => skill.Id == "skills.vba.code.editing" ||
+                        skill.Id == "skills.vba.userform.authoring" || skill.Id == "skills.tool.authoring"),
                         "Outlook does not advertise unsupported VBA source or package authoring");
                 foreach (var skill in skills.Skills.Where(item => item.BuiltIn))
                 {
@@ -205,12 +205,12 @@ namespace RNAssistant.Harness
                     AssertEqual(skill.Id, selected.Id, host + " can select its advertised skill " + skill.Id);
                     AssertTrue(selected.Tools.All(id => tools.Any(tool => tool.Id == id)),
                         host + " selection binds only its published tools: " + skill.Id);
-                    var advertisedOperations = skill.Id == "word.document_editing"
-                        ? new[] { "word.write_text", "word.format_text", "word.add_table", "word.add_comment" }
-                        : skill.Id == "powerpoint.deck_building"
-                        ? new[] { "powerpoint.add_slide", "powerpoint.set_text", "powerpoint.add_object", "powerpoint.move_slide" }
-                        : skill.Id == "outlook.email_assistant"
-                        ? new[] { "outlook.create_draft", "outlook.update_mail", "outlook.index_archive" }
+                    var advertisedOperations = skill.Id == "skills.word.document.editing"
+                        ? new[] { "word.text.write", "word.text.format", "word.table.add", "word.comment.add" }
+                        : skill.Id == "skills.powerpoint.deck.building"
+                        ? new[] { "powerpoint.slide.add", "powerpoint.text.set", "powerpoint.object.add", "powerpoint.slide.move" }
+                        : skill.Id == "skills.outlook.email.assistant"
+                        ? new[] { "outlook.draft.create", "outlook.mail.update", "outlook.archive.index" }
                         : new string[0];
                     if (advertisedOperations.Length > 0)
                     {
@@ -221,13 +221,13 @@ namespace RNAssistant.Harness
                             AssertTrue(surface.Tools.Any(tool => tool.Id == id),
                                 skill.Id + " exposes its advertised operation from bootstrap: " + id);
                     }
-                    if (skill.Id == "excel.analysis_reporting")
+                    if (skill.Id == "skills.excel.analysis.reporting")
                     {
                         var initial = CallableToolPack.Create(ChatModes.Agent, host, "host-skill", tools);
                         var surface = SkillTaskService.Compile(session, skills, pack, tools, initial.Tools,
                             "report-step", settings);
-                        foreach (var id in new[] { "excel.add_sheet", "excel.write_range", "excel.add_table",
-                            "excel.format_range", "excel.upsert_chart", "excel.create_chat_chart" })
+                        foreach (var id in new[] { "excel.sheet.add", "excel.range.write", "excel.table.add",
+                            "excel.range.format", "excel.chart.upsert", "excel.chat.chart.create" })
                             AssertTrue(surface.Tools.Any(tool => tool.Id == id),
                                 "report skill supplies its workflow tools from the minimal bootstrap: " + id);
                     }
@@ -284,7 +284,7 @@ namespace RNAssistant.Harness
             var initial = CompilePackage(session, skills, pack, catalog);
             AssertEqual(1, initial.Receipt.Arsenal.Tools.Count, "S02 specialized schema hidden initially");
             // Reading bytes or even a successful resource frame does not mutate task selection.
-            session.Messages.Add(new ChatMessage { Role = "user", Content = one.BodyMarkdown, ProtocolMessage = true, ToolName = "common.resources_read" });
+            session.Messages.Add(new ChatMessage { Role = "user", Content = one.BodyMarkdown, ProtocolMessage = true, ToolName = "core.read" });
             AssertEqual(0, CompilePackage(session, skills, pack, catalog).Receipt.Arsenal.Selected.Count, "S12 source is not selection");
             SkillTaskService.Select(session, plain.Id, skills, pack, "load-plain");
             AssertEqual(1, CompilePackage(session, skills, pack, catalog).Receipt.Arsenal.Tools.Count, "S01 instruction-only loads");

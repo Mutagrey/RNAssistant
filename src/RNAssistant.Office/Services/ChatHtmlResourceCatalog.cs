@@ -101,7 +101,7 @@ namespace RNAssistant.Office.Services
                     "noncanonical_member_uri",
                     "The member URI contains a human-readable path instead of the opaque canonical member key.",
                     false,
-                    "Run common.resources_find with scope=html and choose one exact returned semantic target.");
+                    "Run core.find with scope=html and choose one exact returned semantic target.");
             }
             throw ChatArtifactResourceProvider.ResourceError(
                 "member_not_found",

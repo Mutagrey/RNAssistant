@@ -39,8 +39,8 @@ namespace RNAssistant.Core.ModelProtocol
                     var known = catalog.TryGetValue(call.Name, out entry);
                     return ConversationResponseParseResult.Fail(known ? ConversationResponseError.SchemaNotLoaded : ConversationResponseError.UnknownTool, known
                         ? entry.Exposure == ToolExposure.Skill
-                            ? "Tool schema is not loaded: " + call.Name + ". Select its published skill with common.skills_load, then wait for the next request before using its tools. If that load was refused, resolve its reported blocker before retrying; the rejected selection grants no tools."
-                            : "Tool schema is not loaded: " + call.Name + ". Call common.capabilities_read with arguments " +
+                            ? "Tool schema is not loaded: " + call.Name + ". Select its published skill with core.skills.load, then wait for the next request before using its tools. If that load was refused, resolve its reported blocker before retrying; the rejected selection grants no tools."
+                            : "Tool schema is not loaded: " + call.Name + ". Call core.tools.read with arguments " +
                             new JObject { ["id"] = call.Name }.ToString(Formatting.None) + ", wait for its complete TOOL_RESULT, then call the tool in a later response."
                         : "Unknown tool: " + call.Name + ". Use an exact name from the current callable tools.");
                 }

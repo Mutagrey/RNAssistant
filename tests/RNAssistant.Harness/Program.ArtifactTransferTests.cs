@@ -79,7 +79,7 @@ namespace RNAssistant.Harness
                 try { catalog.Import(target, export.Bytes, export.FileName, export.ContentType, operation); } catch (InvalidOperationException) { rejected = true; }
                 AssertTrue(rejected && chats.DocumentArtifacts.List(target).Count == before, "repeated transfer does not create a duplicate");
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                AssertTrue(executor.ExecuteManual(Command("common.html_workspace_write_file", "path", "continued.css", "content", "h1 { color: green; }"),
+                AssertTrue(executor.ExecuteManual(Command("html.source.write", "path", "continued.css", "content", "h1 { color: green; }"),
                     tools, new AppSettings(), false, false, loaded).Success, "imported project can be continued through normal tools");
             });
         }
@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
                 var before = authority.Capture(scope);
                 authority.Publish(ResourceAuthorityCommit.Create(scope, before.Generation, null,
                     new[] { new ResourceHeadChange(exact.Identity, null, ResourceHeadState.Known(exact, before.Generation + 1, "test")) }, AuthorityCommitReason.InitialObservation));
-                executor.MutateLocalResources(source, "common.html_data_bind", new Dictionary<string, object>(), () => {
+                executor.MutateLocalResources(source, "html.data.bind", new Dictionary<string, object>(), () => {
                     source.HtmlWorkspace.DataSources.Single().Binding = new HtmlWorkspaceDataBinding { Resource = new ResourceRef(exact.Identity.Uri), Policy = "head", View = "records", ViewPath = "$" };
                     return HtmlWorkspaceArtifactService.CaptureCurrent(source, "Saved Office data");
                 });

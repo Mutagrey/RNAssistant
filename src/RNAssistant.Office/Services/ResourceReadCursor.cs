@@ -142,7 +142,7 @@ namespace RNAssistant.Office.Services
             if (string.IsNullOrWhiteSpace(expected) ||
                 string.Equals(expected, actualRevision, StringComparison.OrdinalIgnoreCase)) return;
             throw new ResourceRequestException(
-                "The mutable resource changed during the read. Run common.resources_read again for the same semantic target.",
+                "The mutable resource changed during the read. Run core.read again for the same semantic target.",
                 "resource_revision_changed",
                 true);
         }
@@ -152,7 +152,7 @@ namespace RNAssistant.Office.Services
             if (position == null || string.IsNullOrWhiteSpace(position.Revision) ||
                 string.Equals(position.Revision, actualRevision, StringComparison.OrdinalIgnoreCase)) return;
             throw new ResourceRequestException(
-                "The resource collection changed during internal discovery. Run common.resources_find again with the same semantic scope and query.",
+                "The resource collection changed during internal discovery. Run core.find again with the same semantic scope and query.",
                 "resource_revision_changed",
                 true);
         }

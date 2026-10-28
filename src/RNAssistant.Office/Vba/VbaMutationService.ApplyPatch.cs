@@ -194,7 +194,7 @@ namespace RNAssistant.Office.Vba
                         ["locations"] = PatchLocations(patch),
                         ["locationsComplete"] = patch.LocationsComplete,
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
-                        ["inspectTool"] = "common.resources_read",
+                        ["inspectTool"] = "core.read",
                         ["discoveryScope"] = "vba"
                     },
                     "vba_patch_not_found",
@@ -216,7 +216,7 @@ namespace RNAssistant.Office.Vba
                         ["locations"] = PatchLocations(patch),
                         ["locationsComplete"] = patch.LocationsComplete,
                         ["findSha256"] = TextPatternEngine.Sha256(patch.NormalizedFind),
-                        ["inspectTool"] = "common.resources_read",
+                        ["inspectTool"] = "core.read",
                         ["discoveryScope"] = "vba"
                     },
                     "vba_patch_ambiguous",

@@ -240,7 +240,7 @@ namespace RNAssistant.Harness
                         new ConversationToolCall { Name = HtmlWorkspaceToolCatalog.ApplyPatchToolId, Arguments = new JObject {
                             ["path"] = path, ["patch"] = new JArray(new JObject { ["op"] = "replace", ["find"] = find, ["text"] = text }) } });
                 var responses = new Queue<Func<string>>(new Func<string>[] {
-                    () => LoadSkillResponse("common.html_workspace_authoring"),
+                    () => LoadSkillResponse("skills.html.workspace.authoring"),
                     () => patch("styles.css", "red", "green"), () => patch("index.html", "old", "updated"),
                     () => ScriptedVerifiedFinish(session, "Both file patches completed.", "Updated the HTML and CSS.",
                         "HTML and CSS were updated.", HtmlWorkspaceToolCatalog.ApplyPatchToolId,
@@ -287,7 +287,7 @@ namespace RNAssistant.Harness
                 }
                 var selected = session.ActiveHtmlArtifactId;
                 var snapshotCount = session.Artifacts.Count(item => item.Kind == ChatArtifactKinds.HtmlWorkspace);
-                responses.Enqueue(() => LoadSkillResponse("common.html_workspace_authoring"));
+                responses.Enqueue(() => LoadSkillResponse("skills.html.workspace.authoring"));
                 responses.Enqueue(() => patch("index.html", "updated", "updated"));
                 responses.Enqueue(() => ScriptedVerifiedFinish(session, "The repeated patch made no change.",
                     "No changes needed.", "The file already has the requested text.",

@@ -256,12 +256,13 @@ namespace RNAssistant.Office.Tools
                     "Built-in skill id is reserved: " + id, null,
                     "reserved_skill_id", false);
             }
-            return _isReservedCapabilityId != null &&
-                _isReservedCapabilityId(id)
-                    ? SkillAuthoringOutcome.Error(
+            if (_isReservedCapabilityId != null && _isReservedCapabilityId(id))
+                return SkillAuthoringOutcome.Error(
                         "Skill id collides with an existing tool: " + id,
-                        null, "reserved_skill_id", false)
-                    : null;
+                        null, "reserved_skill_id", false);
+            if (FindStoredSkill(id) == null && !CapabilityNaming.ValidNewId(id, true))
+                return SkillAuthoringOutcome.Error("New skill IDs use skills.<domain>.<name>, for example skills.user.reporting. Existing custom IDs remain unchanged.", null, "invalid_skill_id", false);
+            return null;
         }
 
         private SkillDefinition FindStoredSkill(string id)

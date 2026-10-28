@@ -24,10 +24,10 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 AssertTrue(!executor.RequiresSessionLeaseForManualRun("excel.read_range", tools),
                     "read-only Excel tool can run beside an active chat");
-                AssertTrue(executor.RequiresSessionLeaseForManualRun("excel.write_range", tools),
+                AssertTrue(executor.RequiresSessionLeaseForManualRun("excel.range.write", tools),
                     "document mutation keeps the chat lease");
 
-                AssertTrue(!executor.RequiresSessionLeaseForManualRun("common.resources_read", tools),
+                AssertTrue(!executor.RequiresSessionLeaseForManualRun("core.read", tools),
                     "resource reads can run beside an active chat");
 
                 adapter.VbaModuleCode = "A";
@@ -41,7 +41,7 @@ namespace RNAssistant.Harness
                 AssertEqual("B", ReadVbaSource(executor, manualSnapshot, "Module1").Text,
                     "manual library resource read succeeds on current VBA source");
                 var staleAgent = executor.ExecuteManual(
-                    Command("common.vba_apply_patch", "moduleName", "Module1", "patch", new JArray(new JObject
+                    Command("vba.module.patch", "moduleName", "Module1", "patch", new JArray(new JObject
                     {
                         ["find"] = "A",
                         ["text"] = "C"
@@ -56,13 +56,13 @@ namespace RNAssistant.Harness
                 AssertEqual("B", adapter.VbaModuleCode,
                     "stale patch does not mutate the module");
                 var staleDelete = executor.ExecuteManual(
-                    Command("common.vba_delete_module", "moduleName", "Module1"),
+                    Command("vba.module.delete", "moduleName", "Module1"),
                     tools, new AppSettings { AutoConfirmToolActions = true },
                     false, false, agentSession);
                 AssertEqual("stale_vba_module", staleDelete.ErrorCode,
                     "manual library read does not authorize deletion in the older chat");
                 var staleRename = executor.ExecuteManual(
-                    Command("common.vba_rename_module", "moduleName", "Module1",
+                    Command("vba.module.rename", "moduleName", "Module1",
                         "newModuleName", "RenamedModule"),
                     tools, new AppSettings { AutoConfirmToolActions = true },
                     false, false, agentSession);
@@ -77,7 +77,7 @@ namespace RNAssistant.Harness
                 AssertEqual("A", ReadVbaSource(executor, manualSnapshot, "Module1").Text,
                     "another session observes a return to the older source bytes");
                 var revertedDelete = executor.ExecuteManual(
-                    Command("common.vba_delete_module", "moduleName", "Module1"),
+                    Command("vba.module.delete", "moduleName", "Module1"),
                     tools, new AppSettings { AutoConfirmToolActions = true },
                     false, false, agentSession);
                 AssertEqual("stale_vba_module", revertedDelete.ErrorCode,
@@ -102,7 +102,7 @@ namespace RNAssistant.Harness
 
                 AssertTrue(!unknown.Success, "unknown tool should fail");
                 AssertContains(unknown.Message, "Unknown tool id", "unknown tool message");
-                AssertContains(unknown.Message, "excel.add_sheet", "unknown tool suggestion");
+                AssertContains(unknown.Message, "excel.sheet.add", "unknown tool suggestion");
                 AssertContains(unknown.DataJson, "availableToolIds", "unknown tool diagnostics");
                 AssertEqual(0, fake.TotalBackendCallCount, "unknown adapter count");
 
@@ -287,13 +287,13 @@ namespace RNAssistant.Harness
                 AssertEqual("unknown_tool", removedRead.ErrorCode, "removed HTML read id stays unknown");
                 AssertEqual("unknown_tool", removedSearch.ErrorCode, "removed HTML search id stays unknown");
 
-                var deleteScript = new ToolInvocation { ToolId = "common.html_workspace_delete" };
+                var deleteScript = new ToolInvocation { ToolId = "html.source.delete" };
                 deleteScript.Arguments["target"] = "app.js";
                 var deleteScriptResult = executor.ExecuteManual(deleteScript, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteScriptResult.Success, "html workspace file delete succeeds");
                 AssertEqual(1, session.HtmlWorkspace.Files.Count, "html script deleted");
 
-                var deleteData = new ToolInvocation { ToolId = "common.html_workspace_delete" };
+                var deleteData = new ToolInvocation { ToolId = "html.source.delete" };
                 deleteData.Arguments["target"] = "rows";
                 var deleteDataResult = executor.ExecuteManual(deleteData, tools, new AppSettings(), false, false, session);
                 AssertTrue(deleteDataResult.Success, "html workspace data delete succeeds");

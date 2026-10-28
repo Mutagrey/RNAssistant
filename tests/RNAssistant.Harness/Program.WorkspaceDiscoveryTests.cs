@@ -88,7 +88,7 @@ namespace RNAssistant.Harness
                             AgentResponseMode = AgentResponseModes.JsonSchema, ContextWindowOverrideTokens = 32768 };
                         var profile = CallableToolProfile.Explicit("discovery-fixture", new[] {
                             CapabilityToolCatalog.SearchToolId, CapabilityToolCatalog.ReadToolId,
-                            "common.resources_find", "common.resources_read", "common.skills_load" });
+                            "core.find", "core.read", "core.skills.load" });
                         var binding = "fixture.v1"; var executions = 0;
                         Func<WorkspaceDescriptor, IReadOnlyList<WorkspaceToolContribution>> contributions = _ => new[] {
                             new WorkspaceToolContribution { Entry = PackageTool("fixture.extra", ToolExposure.Direct, binding),

@@ -20,10 +20,10 @@ def run_case(root, result_role, response_mode):
     for name in ("first.txt", "second.txt"):
         (workspace / name).write_text(name, encoding="utf-8")
     narrative = {"message": "I will read the next file.", "action": "continue", "tool_calls": []}
-    question = call("common.questions_ask", questions=[{"header": "File", "prompt": "Which file should I read next?",
+    question = call("core.ask", questions=[{"header": "File", "prompt": "Which file should I read next?",
         "selection": "single", "allowFreeText": True, "options": [{"label": "second.txt", "description": "Read second.txt."}, {"label": "first.txt", "description": "Read first.txt again"}]}])
-    responses = [call("common.resources_read", target="first.txt"), narrative,
-                 question, call("common.resources_read", target="second.txt"), DONE]
+    responses = [call("core.read", target="first.txt"), narrative,
+                 question, call("core.read", target="second.txt"), DONE]
     requests, errors = [], []
 
     class Handler(BaseHTTPRequestHandler):

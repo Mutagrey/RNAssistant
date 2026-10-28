@@ -230,8 +230,8 @@ namespace RNAssistant.Harness
                     var first = ++attempt == 1;
                     return Task.FromResult(new LlmCompletionResult {
                         Content = first ? ModelProtocolWire.WriteAcceptedCall("Inspect available resources.", "",
-                            new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject() }) :
-                            ScriptedVerifiedFinish(session, "Report the search.", "Ready.", "Resources inspected.", "common.resources_find"),
+                            new ConversationToolCall { Name = "core.find", Arguments = new JObject() }) :
+                            ScriptedVerifiedFinish(session, "Report the search.", "Ready.", "Resources inspected.", "core.find"),
                         ReasoningContent = first ? "Accepted tool reasoning." : null
                     });
                 });

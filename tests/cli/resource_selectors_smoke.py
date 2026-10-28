@@ -22,17 +22,17 @@ def run_case(root):
     (draft.parent / "references" / "details.md").write_text("SKILL_REFERENCE_BYTES")
     requests, errors = [], []
     responses = [
-        call("common.resources_read", type="file", target="notes.txt", referencePath="notes.txt"),
-        call("common.resources_find", type=None, directory=None, query=None),
-        call("common.resources_find", type="skill", directory="nested"),
-        call("common.resources_find", type="skill", query=None),
-        call("common.resources_read", type="skill", target="common.example", referencePath=None),
-        call("common.resources_read", type="skill", target="common.example", referencePath="references/details.md"),
-        call("common.resources_find", directory="/"),
-        call("common.resources_read", type=None, target="notes.txt"),
-        call("common.resources_find", directory="."),
-        call("common.resources_find", directory="nested"),
-        call("common.resources_read", target="nested/other.txt"),
+        call("core.read", type="file", target="notes.txt", referencePath="notes.txt"),
+        call("core.find", type=None, directory=None, query=None),
+        call("core.find", type="skill", directory="nested"),
+        call("core.find", type="skill", query=None),
+        call("core.read", type="skill", target="common.example", referencePath=None),
+        call("core.read", type="skill", target="common.example", referencePath="references/details.md"),
+        call("core.find", directory="/"),
+        call("core.read", type=None, target="notes.txt"),
+        call("core.find", directory="."),
+        call("core.find", directory="nested"),
+        call("core.read", target="nested/other.txt"),
         DONE,
     ]
 

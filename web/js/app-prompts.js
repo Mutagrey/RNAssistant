@@ -201,11 +201,14 @@
     var meta = "";
     if (row.kind === "skill") meta = value.BuiltIn ? "Встроенный" : "Пользовательский";
     if (row.kind === "tool") meta = value.BuiltIn ? "Встроенный" : (value.Executor || "vba");
-    var title = row.kind === "prompt" ? value.label : (value.Name || value.Id || (row.kind === "tool" ? "Инструмент" : "Навык"));
+    var title = row.kind === "prompt" ? value.label : (row.kind === "tool" && value.BuiltIn ? value.Id : value.Name || value.Id || (row.kind === "tool" ? "Инструмент" : "Навык"));
     return {
       key: instructionRowKey(row), kind: "leaf", title: title,
       iconHtml: window.RNAssistantNavigationTree.icon(row.kind),
       selected: instructionRowKey(row) === activeKey,
+      badge: row.kind === "prompt" ? "" : value.Enabled === false || value.CapabilityStatus && ["available", "partial"].indexOf(value.CapabilityStatus) < 0 ? "Недоступен" :
+        (window.RNAssistantChatInspector && window.RNAssistantChatInspector.libraryCapabilityStatus ? window.RNAssistantChatInspector.libraryCapabilityStatus(value.Id, row.kind) : null) ||
+        (row.kind === "tool" && String(value.Id).indexOf("core.") === 0 ? "Core" : "По запросу"),
       tooltip: [title, value.Id && value.Id !== title ? value.Id : "", meta,
         row.kind === "prompt" ? value.description : value.Description].filter(Boolean).join(" · "),
       row: row
@@ -222,19 +225,10 @@
   }
 
   function instructionTreeCategories(kind, rows, activeKey) {
-    var groups = Object.create(null);
-    rows.forEach(function (row) {
-      var item = row.value || {};
-      var category = window.RNAssistantLibraryGroups.category(item.Id, item.Host);
-      if (!groups[category.key]) groups[category.key] = { title: category.title, rows: [] };
-      groups[category.key].rows.push(row);
-    });
-    return Object.keys(groups).sort(function (left, right) {
-      return groups[left].title.localeCompare(groups[right].title, "ru");
-    }).map(function (categoryKey) {
-      return instructionTreeGroup("library:" + kind + ":" + categoryKey,
-        groups[categoryKey].title, groups[categoryKey].rows, activeKey);
-    });
+    var searching = !!($("skillSearchInput") && $("skillSearchInput").value.trim());
+    return window.RNAssistantLibraryGroups.tree(rows, kind,
+      function (row) { return instructionTreeNode(row, activeKey); },
+      function (key) { return searching || !(state.collapsedResourceGroups && state.collapsedResourceGroups[key]); });
   }
 
   function renderInstructions() {
@@ -449,7 +443,7 @@
       context,
       { type: "agent_prompt", key: def.key, field: def.field });
     switchTab("chat");
-    setChatInputText("Улучши RNAssistant prompt template из добавленного контекста. Если правка нужна, предложи обновленный Markdown и после подтверждения используй common.prompts_save для сохранения.", true);
+    setChatInputText("Улучши RNAssistant prompt template из добавленного контекста. Если правка нужна, предложи обновленный Markdown и после подтверждения используй prompts.save для сохранения.", true);
   }
 
   function cancelPromptSettingsWrite() {

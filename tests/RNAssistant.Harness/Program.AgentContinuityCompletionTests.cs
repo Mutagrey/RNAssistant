@@ -30,7 +30,7 @@ namespace RNAssistant.Harness
                 {
                     var data = JsonConvert.SerializeObject(new { kind = "resource-read", representation = "source",
                         text = new string('x', size), returnedCharacters = size, complete = true });
-                    var activity = SummaryActivity("common.resources_read", data, "read" + size);
+                    var activity = SummaryActivity("core.read", data, "read" + size);
                     activity.RunId = "run";
                     session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = activity });
                 }
@@ -52,29 +52,29 @@ namespace RNAssistant.Harness
                     AssertEqual(size, activity.ResultSummary.ReturnedCharacters.Value, "missing body does not rewrite the read outcome");
                 }
                 var cases = new[] {
-                    new { Tool = "common.resources_find", Name = "find-empty", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.find", Name = "find-empty", Data = JsonConvert.SerializeObject(new
                         { items = new object[0], total = 0, complete = true }), Count = (int?)0, Rows = (int?)null,
                         Complete = true, Partial = false, Representation = (string)null },
-                    new { Tool = "common.resources_find", Name = "find-partial", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.find", Name = "find-partial", Data = JsonConvert.SerializeObject(new
                         { items = new[] { new { target = "document: A" } }, total = 1, complete = false,
                             unavailableScopes = new[] { "document" } }), Count = (int?)1, Rows = (int?)null,
                         Complete = false, Partial = true, Representation = (string)null },
-                    new { Tool = "common.resources_read", Name = "read-empty", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.read", Name = "read-empty", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "text", text = "", returnedCharacters = 0, complete = true }), Count = (int?)null, Rows = (int?)null,
                         Complete = true, Partial = false, Representation = "text" },
-                    new { Tool = "common.resources_read", Name = "read-partial", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.read", Name = "read-partial", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "table", table = new { rows = new[] { new { value = 1 } } }, complete = false }), Count = (int?)null, Rows = (int?)1,
                         Complete = false, Partial = false, Representation = "table" },
-                    new { Tool = "common.capabilities_search", Name = "cap-empty", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.tools.search", Name = "cap-empty", Data = JsonConvert.SerializeObject(new
                         { kind = "capability-search", items = new object[0], total = 0, complete = true }), Count = (int?)0, Rows = (int?)null,
                         Complete = true, Partial = false, Representation = (string)null },
-                    new { Tool = "common.capabilities_search", Name = "cap-incomplete", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.tools.search", Name = "cap-incomplete", Data = JsonConvert.SerializeObject(new
                         { kind = "capability-search", items = new[] { new { id = "sample" } }, total = 2, complete = false }), Count = (int?)1, Rows = (int?)null,
                         Complete = false, Partial = false, Representation = (string)null },
-                    new { Tool = "common.capabilities_read", Name = "cap-read", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.tools.read", Name = "cap-read", Data = JsonConvert.SerializeObject(new
                         { kind = "skill", complete = true, bodyMarkdown = "" }), Count = (int?)null, Rows = (int?)null,
                         Complete = true, Partial = false, Representation = "skill" },
-                    new { Tool = "common.capabilities_read", Name = "cap-reference", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.tools.read", Name = "cap-reference", Data = JsonConvert.SerializeObject(new
                         { kind = "reference", complete = false, returnedChars = 5, content = "hello" }), Count = (int?)null, Rows = (int?)null,
                         Complete = false, Partial = false, Representation = "reference" }
                 };
@@ -90,14 +90,14 @@ namespace RNAssistant.Harness
                     session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = activity });
                 }
                 var large = new[] {
-                    new { Tool = "common.resources_find", Name = "large-find", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.find", Name = "large-find", Data = JsonConvert.SerializeObject(new
                         { items = new[] { new { target = "document: A" } }, total = 1, complete = false,
                             unavailableScopes = new[] { "document" }, padding = new string('x', 130000) }) },
-                    new { Tool = "common.resources_read", Name = "large-read", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.read", Name = "large-read", Data = JsonConvert.SerializeObject(new
                         { kind = "resource-read", representation = "source", text = new string('x', 130000), returnedCharacters = 130000, complete = false }) },
-                    new { Tool = "common.capabilities_search", Name = "large-cap-search", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.tools.search", Name = "large-cap-search", Data = JsonConvert.SerializeObject(new
                         { kind = "capability-search", items = new[] { new { id = "sample" } }, total = 2, complete = false, padding = new string('x', 130000) }) },
-                    new { Tool = "common.capabilities_read", Name = "large-cap-read", Data = JsonConvert.SerializeObject(new
+                    new { Tool = "core.tools.read", Name = "large-cap-read", Data = JsonConvert.SerializeObject(new
                         { kind = "skill", complete = true, bodyMarkdown = new string('x', 130000) }) }
                 };
                 foreach (var item in large)
@@ -108,7 +108,7 @@ namespace RNAssistant.Harness
                     AssertTrue(JObject.Parse(activity.DataJson).Value<bool>("truncated"), item.Name + " transcript is bounded");
                     session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = activity });
                 }
-                var readContext = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var readContext = new ToolRuntimeFixture().Context(toolId: "core.read");
                 var originalRead = ToolResult.Ok("Read", large[1].Data);
                 var readRecord = new ToolExecutionRecord(readContext, ToolExecutionOutcome.Ok,
                     readContext.StartedUtc, "Read", result: originalRead);
@@ -122,21 +122,21 @@ namespace RNAssistant.Harness
                 AssertEqual(large[1].Data, readRecord.Result.DataJson, "durable terminal data stays exact");
                 var mediaData = JsonConvert.SerializeObject(new
                     { kind = "resource-read", representation = "media", complete = true, hydratedForNextModelStep = true });
-                var media = SummaryActivity("common.resources_read", mediaData, "media");
+                var media = SummaryActivity("core.read", mediaData, "media");
                 AssertTrue(!media.ResultSummary.HydratedForNextModelStep,
                     "raw result data cannot claim request-local media hydration");
-                var mediaContext = new ToolRuntimeFixture().Context(toolId: "common.resources_read");
+                var mediaContext = new ToolRuntimeFixture().Context(toolId: "core.read");
                 var mediaResult = ToolResult.Ok("Read", mediaData);
                 var mediaRecord = new ToolExecutionRecord(mediaContext, ToolExecutionOutcome.Ok,
                     mediaContext.StartedUtc, "Read", result: mediaResult);
                 var mediaPrepared = new ToolResultMaterialization(mediaResult, new[] { new ChatAttachment {
                     Kind = "image", FileName = "pixel.png", ContentType = "image/png" } });
-                media = AgentTranscript.CreateToolActivity(new ToolInvocation { ToolId = "common.resources_read",
+                media = AgentTranscript.CreateToolActivity(new ToolInvocation { ToolId = "core.read",
                     ToolCallId = "media" }, ToolRunResultFactory.Create(mediaRecord, mediaPrepared), "tool");
                 AssertTrue(media.ResultSummary.HydratedForNextModelStep,
                     "actual request-local attachment is retained separately from effects");
                 AssertTrue(media.ExecutionEvidence == null, "summary does not invent effect evidence");
-                var legacy = new ChatActivity { Kind = "tool", ToolId = "common.resources_read", ToolCallId = "legacy",
+                var legacy = new ChatActivity { Kind = "tool", ToolId = "core.read", ToolCallId = "legacy",
                     ReadSummary = new ResourceReadSummary { Representation = "source", ReturnedCharacters = 12, Complete = false } };
                 session.Messages.Add(new ChatMessage { Role = "assistant", RunId = "run", ExcludeFromModelContext = true, Activity = legacy });
                 store.Save(session);
@@ -276,7 +276,7 @@ namespace RNAssistant.Harness
                     LoadToolSchemaResponse(TaskListToolCatalog.SetToolId),
                     call(TaskListToolCatalog.SetToolId, new JObject { ["action"] = "save", ["goal"] = "Restore chart appearance",
                         ["steps"] = new JArray(new[] { cssTarget, jsTarget }.Select(target => new JObject { ["text"] = target })) }),
-                    LoadSkillResponse("common.html_workspace_authoring"),
+                    LoadSkillResponse("skills.html.workspace.authoring"),
                     call(HtmlWorkspaceToolCatalog.WriteFileToolId, new JObject { ["path"] = "styles.css", ["content"] = "body{color:blue}" }),
                     close });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
@@ -323,7 +323,7 @@ namespace RNAssistant.Harness
                 var snapshot = new ModelAuthoritySnapshot(authority.CaptureMany(new[] { scope }), "pack", new SkillCatalogSnapshot(null), null, 0);
                 foreach (var role in new[] { "user", "developer", "tool" })
                 {
-                    var result = ContinuityResult("large", "common.resources_read", ToolResult.Ok("Read", JsonConvert.SerializeObject(new {
+                    var result = ContinuityResult("large", "core.read", ToolResult.Ok("Read", JsonConvert.SerializeObject(new {
                         kind = "resource-read", target = "Source lines", text = body, complete = true })), role);
                     result.ResourceEvidence.Add(evidence);
                     result.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(result.Content, "application/json"));

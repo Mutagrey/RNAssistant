@@ -351,8 +351,8 @@ namespace RNAssistant.MockDemo
                 throw new InvalidOperationException("chat messages were not returned");
             }
             var transcriptJson = messages.ToString(Formatting.None);
-            if (transcriptJson.IndexOf("excel.add_sheet", StringComparison.OrdinalIgnoreCase) < 0 ||
-                transcriptJson.IndexOf("excel.upsert_chart", StringComparison.OrdinalIgnoreCase) < 0)
+            if (transcriptJson.IndexOf("excel.sheet.add", StringComparison.OrdinalIgnoreCase) < 0 ||
+                transcriptJson.IndexOf("excel.chart.upsert", StringComparison.OrdinalIgnoreCase) < 0)
             {
                 throw new InvalidOperationException("agent transcript did not retain executed tool activities");
             }
@@ -450,7 +450,7 @@ namespace RNAssistant.MockDemo
             if (expectEdit)
             {
                 var results = CurrentToolActivities(payload).ToList();
-                foreach (var expected in new[] { "common.html_data_write", "common.html_workspace_write_file" })
+                foreach (var expected in new[] { "html.data.write", "html.source.write" })
                     if (!results.Any(item =>
                         string.Equals((string)item["ToolId"], expected, StringComparison.Ordinal) &&
                         string.Equals((string)item["Status"], "completed", StringComparison.OrdinalIgnoreCase)))

@@ -171,7 +171,7 @@
       var plan = options.validatePlanDraft(selection.item);
       var result = await options.send("runTool", {
         chatId: chatId,
-        toolId: "common.plan_doc_save",
+        toolId: "plan.document.save",
         arguments: { title: plan.title, markdown: plan.markdown, status: "draft" },
         dryRun: false
       });
@@ -256,7 +256,7 @@
         var chatId = state.activeChatId;
         var result = await options.send("runTool", {
           chatId: chatId,
-          toolId: "common.plan_doc_restore",
+          toolId: "plan.document.restore",
           arguments: {
             version: Number(request.revision)
           },
@@ -452,7 +452,7 @@
       try {
         var result = await options.send("runTool", {
           chatId: chatId,
-          toolId: "common.plan_doc_save",
+          toolId: "plan.document.save",
           arguments: {
             title: "Новый план",
             markdown: "# Новый план\n\nОпишите цель, решения, этапы и проверку.",
@@ -528,7 +528,7 @@
           if (targets[index]) args.name = targets[index];
           var result = await options.send("runTool", {
             chatId: chatId,
-            toolId: "common.html_data_refresh",
+            toolId: "html.data.refresh",
             arguments: args,
             dryRun: false
           });

@@ -723,7 +723,7 @@ namespace RNAssistant.Core.Llm
                     !string.IsNullOrWhiteSpace(entry.EvidenceLinks[0].EvidenceId) &&
                     !string.IsNullOrWhiteSpace(entry.EvidenceLinks[0].View) &&
                     entry.EvidenceLinks[0].ObservedCoverage != null &&
-                    string.Equals(message.ToolName, "common.resources_read", StringComparison.Ordinal) &&
+                    string.Equals(message.ToolName, "core.read", StringComparison.Ordinal) &&
                     string.Equals(message.Role, "tool", StringComparison.Ordinal) &&
                     string.Equals(entry.SourceMessageId, message.Id, StringComparison.Ordinal) &&
                     string.Equals(entry.ToolCallId, message.ToolCallId, StringComparison.Ordinal) &&

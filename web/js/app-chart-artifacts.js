@@ -547,7 +547,7 @@
     try {
       var result = await send("runTool", {
         chatId: chatId,
-        toolId: "excel.create_chat_chart",
+        toolId: "excel.chat.chart.create",
         arguments: args,
         dryRun: false
       });

@@ -162,7 +162,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     sourceRevisionArtifactId: "plan-r1",
     revision: 1
   }), true);
-  assert.equal(calls[0].payload.toolId, "common.plan_doc_restore");
+  assert.equal(calls[0].payload.toolId, "plan.document.restore");
   assert.equal(calls[0].payload.chatId, "chat-c");
   assert.deepEqual(calls[0].payload.arguments, { version: 1 });
   assert.equal(calls[0].payload.dryRun, false);

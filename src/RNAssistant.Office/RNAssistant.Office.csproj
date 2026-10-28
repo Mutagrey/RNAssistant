@@ -211,6 +211,7 @@
     <Compile Include="Ribbon\AssistantRibbonXml.cs" />
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
     <Compile Include="Services\RunChangesService.cs" />
+    <Compile Include="Services\WorkspaceToolChangesProjection.cs" />
     <Compile Include="Services\ToolResultPresentationService.cs" />
     <Compile Include="Services\ArtifactPdfViewerService.cs" />
     <Compile Include="Services\ArtifactViewerService.cs" />
@@ -380,6 +381,7 @@
     <Compile Include="Tools\VbaToolCatalog.Schemas.cs" />
     <Compile Include="Tools\VbaToolCatalog.cs" />
     <Compile Include="Tools\VbaToolHandler.cs" />
+    <Compile Include="Tools\OfficeResourceMutationHandler.cs" />
     <Compile Include="WebView\AssistantPaneControl.cs" />
     <Compile Include="WebView\TabularWebViewExecutor.cs" />
     <Compile Include="WebView\AssistantWebBridge.cs" />

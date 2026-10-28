@@ -213,7 +213,7 @@ namespace RNAssistant.Core.Tools
                 ["truncated"] = false,
                 ["idEnumEnforced"] = HasBoundIdEnum(toolCatalog, entries.Count),
                 ["instruction"] =
-                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; common.capabilities_search is an optional filter. For a tool with loadSkill, select one listed skill through common.skills_load before calling the tool; an empty list means unavailable. common.capabilities_read inspects sources or admits direct tool schemas. Never synthesize an id."
+                    "This is the complete runnable tool and enabled skill index for this run. Use only an exact id shown here; core.tools.search is an optional filter. For a tool with loadSkill, select one listed skill through core.skills.load before calling the tool; an empty list means unavailable. core.tools.read inspects sources or admits direct tool schemas. Never synthesize an id."
             };
         }
 
@@ -293,7 +293,7 @@ namespace RNAssistant.Core.Tools
                 var records = Records(tools, skills).ToList();
                 var suggestions = Suggest(id, records, 5);
                 return CapabilityToolOutcome.Error(
-                    "Capability not found: " + id + ". Use an exact id from RUNTIME_CONTEXT.capabilities or common.capabilities_search; never invent an id.",
+                    "Capability not found: " + id + ". Use an exact id from RUNTIME_CONTEXT.capabilities or core.tools.search; never invent an id.",
                     new JObject
                     {
                         ["id"] = id,
@@ -327,7 +327,7 @@ namespace RNAssistant.Core.Tools
                 // that survives selection. The selected request owns the schema;
                 // duplicating it in history wastes the budget needed for the skill.
                 return CapabilityToolOutcome.Ok("Tool schema is supplied by its selected skill: " + tool.Id +
-                    ". If already present in RUNTIME_CONTEXT.tools, call it directly. Otherwise select one listed loadSkill through common.skills_load. This read grants no tool access.",
+                    ". If already present in RUNTIME_CONTEXT.tools, call it directly. Otherwise select one listed loadSkill through core.skills.load. This read grants no tool access.",
                     new JObject
                     {
                         ["kind"] = "skill-tool",
@@ -693,7 +693,7 @@ namespace RNAssistant.Core.Tools
             var id = new JObject
             {
                 ["type"] = "string",
-                ["description"] = "Exact capability id from RUNTIME_CONTEXT.capabilities or common.capabilities_search. Never invent an id.",
+                ["description"] = "Exact capability id from RUNTIME_CONTEXT.capabilities or core.tools.search. Never invent an id.",
                 ["minLength"] = 1,
                 ["maxLength"] = 200
             };

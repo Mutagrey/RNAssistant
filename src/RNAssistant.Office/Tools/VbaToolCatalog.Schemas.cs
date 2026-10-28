@@ -95,7 +95,7 @@ namespace RNAssistant.Office.Tools
                 ["target"] = new JObject
                 {
                     ["type"] = "string",
-                    ["description"] = "Exact readable VBA backup target copied verbatim from common.resources_find with scope=backups. It never contains ://; do not construct it from a module name.",
+                    ["description"] = "Exact readable VBA backup target copied verbatim from core.find with scope=backups. It never contains ://; do not construct it from a module name.",
                     ["minLength"] = 1
                 },
                 ["moduleName"] = new JObject

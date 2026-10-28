@@ -25,7 +25,7 @@ function item(id, revision, description = "Description") {
     revision, id, host: "Common", name: id,
     description, version: "1.0.0", body: { sha256: "b".repeat(64), byteLength: 10, characters: 10 },
     enabled: true, builtIn: false, references: [],
-    package: { formatVersion: 1, packageId: "fixture", requiredTools: [{ id: "common.resources_read", contractVersion: "1" }], optionalTools: [] }
+    package: { formatVersion: 1, packageId: "fixture", requiredTools: [{ id: "core.read", contractVersion: "1" }], optionalTools: [] }
   };
 }
 
@@ -75,7 +75,7 @@ function library(skills) {
   assert.equal(mutations[0].preserveBody, true, "metadata edits do not need to fetch or send the body");
   assert.equal(mutations[0].bodyMarkdown, undefined);
   assert.equal(mutations[1].bodyMarkdown, "# New");
-  assert.equal(mutations[0].package.requiredTools[0].id, "common.resources_read", "metadata edits retain dependencies");
+  assert.equal(mutations[0].package.requiredTools[0].id, "core.read", "metadata edits retain dependencies");
   assert.equal(mutations[1].package.packageId, "fixture", "new copies retain their manifest");
   assert.equal(mutations[1].baseId, "");
   assert.equal(mutations[1].expectedRevision, "");

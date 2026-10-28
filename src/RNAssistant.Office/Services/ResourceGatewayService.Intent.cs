@@ -22,22 +22,6 @@ namespace RNAssistant.Office.Services
             var targets = new List<string>();
             if (!string.IsNullOrEmpty(request.Target))
             {
-                // Preserve existing literal target search (including multiline queries, long lines and indexed parts).
-                // It is a provider optimization, not another model-facing tool or authority path.
-                if (request.Mode == "literal" && request.Continuation == null)
-                {
-                    var page = SearchWithin(session, request.Target, request.Query, request.Limit, request.MatchCase, token);
-                    if (page.TotalMatches <= request.Limit)
-                    {
-                        page.ExactReferences.Add(page.ExactReference);
-                        page.MatchesComplete = page.ScanComplete && page.SourceComplete;
-                        page.TotalMatchesExact = page.ScanComplete && page.SourceComplete;
-                        if (!page.ScanComplete) page.IncompleteReasons.Add("source_scan_incomplete");
-                        if (!page.SourceComplete) page.IncompleteReasons.Add("source_text_incomplete");
-                        foreach (var match in page.Matches) match.Target = request.Target;
-                        return page;
-                    }
-                }
                 targets.Add(request.Target);
             }
             else
@@ -109,7 +93,7 @@ namespace RNAssistant.Office.Services
             if (representation == null)
                 throw new ResourceRequestException("This target has no searchable text/source representation. " +
                     (IntentUsage(selected.Type, selected.Descriptor) ??
-                        "Use common.resources_find with a query, then search a returned text/source target."),
+                        "Use core.find with a query, then search a returned text/source target."),
                     "resource_search_unsupported", false);
             var read = ReadWhole(session, reference, representation, cancellationToken).Result;
             if (read.Text == null)
@@ -361,7 +345,7 @@ namespace RNAssistant.Office.Services
 
         public ResourceIntentTarget ResolveIntentTarget(
             ChatSession session,
-            string target)
+            string target, bool allowUniqueBase = false)
         {
             target = (target ?? string.Empty).Trim();
             if (target.Length == 0)
@@ -374,7 +358,7 @@ namespace RNAssistant.Office.Services
             if (IsUriLikeIntentTarget(target))
             {
                 throw new ResourceRequestException(
-                    "Resource URIs cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or common.resources_find; it never contains ://.",
+                    "Resource URIs cannot be used as model targets. Copy one exact semantic target from RUNTIME_CONTEXT or core.find; it never contains ://.",
                     "resource_target_runtime_owned",
                     true);
             }
@@ -585,7 +569,8 @@ namespace RNAssistant.Office.Services
             }
             AssignIntentTargets(states);
             var matches = states.Where(state => string.Equals(
-                    state.Target, target, StringComparison.Ordinal))
+                    state.Target, target, StringComparison.Ordinal) ||
+                    allowUniqueBase && string.Equals(IntentBaseTarget(state.Descriptor), target, StringComparison.Ordinal))
                 .Take(2)
                 .ToList();
             if (unavailable.Count > 0)
@@ -593,7 +578,7 @@ namespace RNAssistant.Office.Services
                 ResourceRequestException availabilityFailure;
                 if (failures.TryGetValue(scope, out availabilityFailure)) throw availabilityFailure;
                 throw new ResourceRequestException(
-                    "Some resources in this scope are unavailable; target uniqueness cannot be established. Restore availability and run common.resources_find again. Exact retained references remain readable.",
+                    "Some resources in this scope are unavailable; target uniqueness cannot be established. Restore availability and run core.find again. Exact retained references remain readable.",
                     "resource_scope_incomplete", false);
             }
             if ((truncated || searchIncomplete) &&
@@ -606,7 +591,7 @@ namespace RNAssistant.Office.Services
             if (matches.Count > 1)
             {
                 throw new ResourceRequestException(
-                    "The selected resource target is ambiguous. Run common.resources_find again and choose one exact returned target.",
+                    "The selected resource target is ambiguous. Run core.find again and choose one exact returned target.",
                     "resource_target_ambiguous",
                     false);
             }
@@ -614,7 +599,7 @@ namespace RNAssistant.Office.Services
             {
                 throw new ResourceRequestException(
                     "Resource target is no longer available: " + target +
-                    ". Run common.resources_find and choose one exact returned target.",
+                    ". Run core.find and choose one exact returned target.",
                     "resource_target_not_found",
                     true);
             }
@@ -906,9 +891,9 @@ namespace RNAssistant.Office.Services
             ResourceDescriptor descriptor)
         {
             if (type == "VBA project")
-                return "Read structure for the complete component inventory. To search code across the project, use common.resources_find with scope=vba and query; use common.resources_search with scope=vba for literal/regex occurrences across modules.";
+                return "Read structure for the complete component inventory. To search code across the project, use core.find with scope=vba and query; use core.search with scope=vba for literal/regex occurrences across modules.";
             if (type == "VBA module")
-                return "Read source directly; procedure selects a unique VBA procedure, optionally qualified by procedureKind for a property accessor. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use common.resources_search for literal/regex occurrences. Live VBA modules do not support common.resources_outline or partNumber.";
+                return "Read source directly; procedure selects a unique VBA procedure, optionally qualified by procedureKind for a property accessor. For a large module, continue with startLine/lineCount using sourceTotalLines and sourceCoverage; use core.search for literal/regex occurrences. Live VBA modules do not support resources.outline or partNumber.";
             if (type == "HTML file")
                 return "Read source for the complete file contents. Structure belongs to the HTML workspace root; a structure request on this file returns source explicitly.";
             if (type == "HTML workspace")
@@ -916,7 +901,7 @@ namespace RNAssistant.Office.Services
             if (type == "HTML data")
                 return "Existing binding, not data values: read text for name/view/policy/sourceTarget. Page code already opens RN.resources.open(name). Do not bind this metadata or request table on it; use its sourceTarget for data reads or a deliberate rebind.";
             if (type == "Outlook mail")
-                return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to common.resources_find, then read its text or media.";
+                return "Read structure for attachment metadata and targets without reading the mail body. Pass a copied attachment target to core.find, then read its text or media.";
             if (type == "Outlook attachment")
                 return "Read text for PDF/text files or media for images/scanned PDFs (vision model). Filename discovery covers selected/open mail only; read another mail with structure for its attachment targets.";
             if (descriptor.Kind == ChatArtifactKinds.Attachment &&
@@ -927,9 +912,9 @@ namespace RNAssistant.Office.Services
             if (type == "Outlook archive digest")
                 return "Read text for compact conversation groups ranked by message count. Grouping without ConversationID is approximate; samples do not prove decisions or complete issue coverage. Open cited archive pages and rows for evidence.";
             if (type == "Excel search scope")
-                return "Discovery only: use excel.find_cells with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
+                return "Discovery only: use excel.cells.find with a query. Do not read this target to enumerate worksheet data; read an Excel range, table, or name target instead.";
             if (type == "Excel range" && ExcelResourceProvider.NeedsRangeOverview(descriptor))
-                return "Read structure for dimensions and small sample targets, then read selected targets for values. Samples cannot establish whole-range totals; excel.find_cells locates text.";
+                return "Read structure for dimensions and small sample targets, then read selected targets for values. Samples cannot establish whole-range totals; excel.cells.find locates text.";
             if (descriptor.Kind == LiveDocumentResourceProvider.DocumentKind &&
                 descriptor.Metadata.TryGetValue("host", out var host) && host == "Word")
                 return "Read structure for exact main-story start/end without materializing document text. For a large document, read explicit Word range: start:end targets within those bounds; each range is a selected part, not the whole document.";

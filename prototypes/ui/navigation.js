@@ -25,9 +25,9 @@
   P.sectionNodes = function (section) {
     var s = P.state, sub = s.route.split("/")[1];
     if (section === "library") return [
-      group("skills", "Навыки", [group("skills-excel", window.RNAssistantLibraryGroups.category("excel.analysis_reporting").title,
+      group("skills", "Навыки", [group("skills-excel", window.RNAssistantLibraryGroups.category("skills.excel.analysis.reporting").title,
         [leaf("Анализ продаж", "library/skill", "Навык · Excel", "skill", ["all", "skill", "references"].includes(sub))])]),
-      group("tools", "Инструменты", [group("tools-excel", window.RNAssistantLibraryGroups.category("excel.format_range").title,
+      group("tools", "Инструменты", [group("tools-excel", window.RNAssistantLibraryGroups.category("excel.range.format").title,
         [leaf("Форматирование таблицы", "library/tool", "Excel · VBA", "tool", ["tool", "schema", "implementation", "test", "docs", "manage"].includes(sub))])]),
       group("prompts", "Инструкции", [leaf("Основная инструкция", "library/prompt", "Общая инструкция агента", "prompt")])
     ];

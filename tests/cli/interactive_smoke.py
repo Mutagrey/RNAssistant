@@ -135,8 +135,8 @@ class Scenario:
 
 
 def questions_case(s):
-    s.responses.extend([call("files.create", relativePath="once.txt", text="ONCE"),
-                        call("common.questions_ask", questions=[*QUESTIONS,
+    s.responses.extend([call("core.write", target="once.txt", content="ONCE"),
+                        call("core.ask", questions=[*QUESTIONS,
                             dict(QUESTIONS[1], header="Notes", prompt="Any additional notes?", selection="single")])])
     terminal = s.terminal("run", "--interactive", "--message", "Create once and ask questions.",
                           "--max-iterations", "6", "--max-tool-steps", "6", "--context-tokens", "24000",
@@ -154,7 +154,7 @@ def questions_case(s):
     terminal.send(b"\x04")
     terminal.finish(3)
     assert s.json("inspect", "--session", session)["Revision"] == before["Revision"]
-    s.responses.extend([call("common.resources_read", target="once.txt"), DONE])
+    s.responses.extend([call("core.read", target="once.txt"), DONE])
     terminal = s.terminal("resume", "--session", session)
     terminal.until("Choice number")
     terminal.send(b"1\n")
@@ -179,7 +179,7 @@ def questions_case(s):
 def approval_case(s):
     (s.workspace / "keep.txt").write_text("ORIGINAL")
     def pending():
-        s.responses.extend([call("common.resources_read", target="keep.txt"), call("files.delete", relativePath="keep.txt")])
+        s.responses.extend([call("core.read", target="keep.txt"), call("resources.delete", target="keep.txt")])
         result = s.json("run", "--message", "Delete keep.txt after explicit approval.",
                         "--context-tokens", "24000", "--max-iterations", "6", "--max-tool-steps", "6",
                         "--tool-result-role", "tool", code=3, input="yes\n")
@@ -225,16 +225,16 @@ def approval_case(s):
     terminal.until("Type yes to approve")
     terminal.send(b"yes\n")
     output = terminal.finish(0)
-    assert not (s.workspace / "keep.txt").exists() and "Verified change: files.delete keep.txt" in output
+    assert not (s.workspace / "keep.txt").exists() and "Verified change: resources.delete keep.txt" in output
     assert len(s.requests) == 8
     print("PASS approvals: JSONL/blank/Ctrl+C/no-interactive preserve pending; offline denial; stale guard and explicit yes")
 
 
 def presentation_case(s):
-    s.responses.extend([call("files.create", relativePath="real.txt", text="ORIGINAL"),
-                        call("files.create", relativePath="real.txt", text="OVERWRITE"),
-                        call("common.resources_read", target="real.txt"),
-                        call("files.replace", relativePath="real.txt", text="ORIGINAL"),
+    s.responses.extend([call("core.write", target="real.txt", content="ORIGINAL"),
+                        call("core.write", target="real.txt", content="OVERWRITE"),
+                        call("core.read", target="real.txt"),
+                        call("core.write", target="real.txt", content="ORIGINAL"),
                         dict(DONE, message="I created imaginary.txt.\u001b[2J" + "x" * 3000)])
     result = s.cli("run", "--message", "Create one real file.")
     assert "Thinking (step" in result.stdout and "[truncated]" in result.stdout
@@ -251,7 +251,7 @@ def presentation_case(s):
 
 
 def bounded_case(s):
-    s.responses.extend(call("files.create", relativePath=f"note-{i:02}.txt", text="x") for i in range(33))
+    s.responses.extend(call("core.write", target=f"note-{i:02}.txt", content="x") for i in range(33))
     s.responses.append(DONE)
     result = s.json("run", "--message", "Create notes.", "--max-iterations", "36", "--max-tool-steps", "36",
                     "--context-tokens", "65536")
@@ -274,7 +274,7 @@ def browser_case(s, stale):
         if stale and len(s.requests) == 3:
             script.write_text(script.read_text().replace("count += 1", "count += 0"))
     s.before_response = drift
-    s.responses.extend([call("common.skills_load", id="workspace.web_verify_repair"), call("web.verify", entryPath="index.html"), DONE])
+    s.responses.extend([call("core.skills.load", id="skills.workspace.web.verify.repair"), call("web.verify", entryPath="index.html"), DONE])
     result = s.json("run", "--message", "Verify the existing counter snapshot.", "--auto-confirm", "on", "--max-iterations", "3",
                     "--web-checks", str(REPO / "tests/cli/counter_checks.json"),
                     "--expect-files", "index.html,styles.css,app.js", code=5 if stale else 0)

@@ -24,11 +24,11 @@ def main():
     request_bodies = []
     responses = [
         {"action": "execute", "reason": "Load the verification capability.", "message": "", "tool_calls": [
-            {"name": "common.skills_load", "arguments": {"id": "workspace.web_verify_repair"}}]},
+            {"name": "core.skills.load", "arguments": {"id": "skills.workspace.web.verify.repair"}}]},
         {"message": "Find workspace files.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
-            {"name": "common.resources_find", "arguments": {"directory": "", "query": "app"}}]},
+            {"name": "core.find", "arguments": {"directory": "", "query": "app"}}]},
         {"message": "Read the current source.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
-            {"name": "common.resources_read", "arguments": {"target": "app.js"}}]},
+            {"name": "core.read", "arguments": {"target": "app.js"}}]},
         {"message": "Check the browser error.", "action": "execute", "reason": "Perform the checked step.", "tool_calls": [
             {"name": "web.verify", "arguments": {"entryPath": "index.html"}}]},
         {"invalid_protocol": "Exercise repair from the frozen context."},

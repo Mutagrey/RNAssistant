@@ -490,12 +490,12 @@ namespace RNAssistant.Harness
             ExcelRangeMutationSpec spec)
         {
             var toolId = spec.Kind == ExcelRangeMutationKind.Clear
-                ? "excel.clear_range"
+                ? "excel.range.clear"
                 : spec.Kind == ExcelRangeMutationKind.Sort
-                    ? "excel.sort_range"
+                    ? "excel.range.sort"
                     : spec.Kind == ExcelRangeMutationKind.Filter
-                        ? "excel.filter_range"
-                        : "excel.format_range";
+                        ? "excel.range.filter"
+                        : "excel.range.format";
             return new ToolInvocation
             {
                 ToolId = toolId,

@@ -92,7 +92,7 @@ def run_case(root):
         assert sequence(initial_cursor) == initial["Revision"]
         args = ("--session", session, "--request-id", "create-once", "--message", "Create note.txt once.",
                 "--mode", "agent", "--auto-confirm", "on", "--min-writes", "1", "--instruction-role", "system", "--tool-result-role", "tool")
-        responses.extend([(call("files.create", relativePath="note.txt", text="WRITTEN_ONCE"), True), (DONE, False)])
+        responses.extend([(call("core.write", target="note.txt", content="WRITTEN_ONCE"), True), (DONE, False)])
         process = start(args)
         assert blocked.wait(10), "Original run did not reach the controlled model wait"
         running = data("inspect", "--session", session, environment=offline)
@@ -135,7 +135,7 @@ def run_case(root):
         assert not events(session, tail["NextCursor"])["Events"]
 
         # A later turn and an external edit cannot make a duplicate re-run or re-grade the old task.
-        responses.extend([(call("common.resources_read", target="note.txt"), False), (DONE, False)])
+        responses.extend([(call("core.read", target="note.txt"), False), (DONE, False)])
         data("run", "--session", session, "--request-id", "later-turn", "--message", "Read the note.")
         (workspace / "note.txt").write_text("EXTERNAL_EDIT")
         count = len(requests)

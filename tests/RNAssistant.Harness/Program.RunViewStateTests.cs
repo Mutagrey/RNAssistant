@@ -101,7 +101,7 @@ namespace RNAssistant.Harness
 
         private static void RunViewStateProjectsPendingConfirmation()
         {
-            var call = new ToolCall("call-pending", "excel.write_range", "{\"address\":\"A1\"}");
+            var call = new ToolCall("call-pending", "excel.range.write", "{\"address\":\"A1\"}");
             var policy = new ToolPolicySnapshot(call.Name, "policy-rev", true, true);
             var pending = new PendingConfirmation("pending-1", call, policy, "step-1", 1);
             var session = RunViewSession(new RunSummary("run-pending", "turn-pending",
@@ -116,7 +116,7 @@ namespace RNAssistant.Harness
             AssertEqual(RunViewLifecycles.AwaitingConfirmation, view.Lifecycle, "pending lifecycle is typed");
             AssertEqual("pending-1", view.PendingConfirmation.PendingId, "pending id projected from kernel");
             AssertEqual("call-pending", view.PendingConfirmation.ToolCallId, "call id projected from kernel");
-            AssertEqual("excel.write_range", view.PendingConfirmation.ToolName, "tool name projected from kernel");
+            AssertEqual("excel.range.write", view.PendingConfirmation.ToolName, "tool name projected from kernel");
             AssertEqual(1, view.VerifiedWrites,
                 "confirmation continuation retains source evidence from the same logical turn");
             var wire = JObject.FromObject(view);

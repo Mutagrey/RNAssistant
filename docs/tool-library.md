@@ -1,9 +1,11 @@
 # Tool Library and capability truth
 
+Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+
 Conversation permission composition is owned by
 [ConversationRunPolicy](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13).
 The source-owned `ToolPolicy.ExecutesCode` flag marks read-producing executors
-(`common.js_run`, JS packages, CLI `web.verify`); a read result does not exempt code
+(`js.run`, JS packages, CLI `web.verify`); a read result does not exempt code
 execution from approval. An accepted Agent/Ask run may grant automatic approval
 through the user's captured `AutoConfirmToolActions` setting; the tool's effect,
 verification, code classification and confirmation requirement stay unchanged.
@@ -19,9 +21,9 @@ fingerprint with schema, policy and binding. Core/direct discovery remains usabl
 without a skill. Specialized HTML workspace and skill/tool/prompt authoring tools,
 and CLI browser verification, are exposed through declared skill dependencies.
 
-`common.skills_load` is a direct bootstrap call in Agent and Plan. The loader
+`core.skills.load` is a direct bootstrap call in Agent and Plan. The loader
 captures exact compatible dependencies; they become callable on the next request.
-`common.capabilities_read` inspects direct schemas. For `Skill` exposure it returns
+`core.tools.read` inspects direct schemas. For `Skill` exposure it returns
 successful bounded selection guidance with related skill ids, not a cached
 refusal. The selected request supplies the exact schema; discovery neither
 duplicates it into history nor admits the tool. An already selected tool can be
@@ -40,41 +42,21 @@ model-context results likewise report their error and incomplete content without
 a selection flag. Original durable read metadata, including `loaded`, stays
 available to its existing runtime consumers; no admission rule changes.
 
-### Minimal Office bootstrap
+### Общий Core и расширение каталога — 2026-10-28
 
-`CallableToolPack` starts Agent/Excel with six callable tools: `common.skills_load`,
-`common.resources_find/read`, `common.capabilities_search/read`, and `excel.inspect`.
-Other hosts and Plan start with the five common tools. The complete visible catalog
-remains discoverable. Other direct Excel tools use the existing exact schema
-admission through `common.capabilities_read`; independent schema reads may share
-one batch. A selected skill can supply its declared tools in the next request.
-Neither route changes confirmation, execution policy or effect verification.
+Office, проект и плагин используют `CallableToolProfile.Core()` (`resource-core-v1`):
+`core.find`, `core.read`, `core.search`, `core.write`, `core.patch`, `core.replace`,
+`core.ask`, `core.tools.search`, `core.tools.read`, `core.skills.load`.
+Mode, read-only и доступность owner фильтруют этот список: отсутствующая возможность
+не появляется только из-за префикса `core.`. Встроенные host-specific tools не
+подмешиваются в начальную схему. Остальные descriptors подключаются через существующий
+exact admission `core.tools.read` или зависимости выбранного skill.
 
-### Shared direct-tool profile selection — 2026-10-26
-
-Core `CallableToolProfile` now selects the direct inputs for both hosts. Office
-`CallableToolPack` owns its explicit initial IDs and durable admissions; workspace
-composition explicitly selects `workspace-direct` (all published non-Skill entries).
-Core `SkillTaskService` still combines these inputs with validated selected-skill
-dependencies, deduplicates IDs and records exact registration revisions in Arsenal.
-`ModelRequestPreparation` still checks the complete request budget. No second
-registry, admission journal, permission layer or intent classifier is introduced.
-
-| Context | Initial direct surface | Extension |
-| --- | --- | --- |
-| Office Agent/Excel | skills_load, resources_find/read, capabilities_search/read, excel.inspect | Existing exact direct admission or selected skill |
-| Office Agent/Word, PowerPoint, Outlook; Office Plan | The five common bootstrap IDs above, subject to mode catalog | Same routes, with existing mode policy |
-| Workspace/CLI | Published non-Skill catalog after mode filtering, including capabilities_search/read in Agent/Plan | Exact direct admission or selected skills |
-| Writable workspace Agent | Common skills_load, resources_find/read/search, capabilities_search/read, questions_ask, task_list_set, plan_doc_save/restore/delete; files.create/copy/move/patch/replace/delete/restore | Available contributions plus selected skills |
-| Read-only workspace | Same profile over the catalog without files.* mutations | Read-only filesystem association does not redefine Plan/task or bound-Office policy |
-| Workspace with Office target | Workspace profile also includes published non-Skill Office contributions | Exact pinned target and existing guards remain |
-| Plugin source workspace | Workspace profile also includes available non-Skill plugin contributions | Specialized tools such as web.verify still require a selected skill |
-
-Common names in the table use the `common.` namespace. Profile selection preserves
-the supplied catalog order, descriptors, policies and bindings; it never selects a
-Skill-only tool via a direct admission. It does not republish disabled/missing tools
-or replace catalog-owner availability checks. Existing Office profile IDs and
-snapshot revision rules are unchanged, so this extraction requires no data migration.
+Контракт текста, hunks, upsert, recovery и имён задаёт
+[Text mutations](text-mutations.md). Профиль сохраняет exact policy/binding и порядок
+каталога. Смена профиля явно сбрасывает несовместимые admissions; старые вызовы
+не переименовываются и не исполняются через aliases. Explicit AllDirect остаётся
+только композиционным выбором для диагностики, не production default.
 
 ### Shared discovery and admission — 2026-10-26
 
@@ -85,10 +67,9 @@ accepted/rejected extensions in the existing chat event stream. Office retains i
 profile factory and ResourceGateway skill source reader. No second registry/journal,
 alias path or migration adapter remains.
 
-Workspace Agent/Plan now registers `common.capabilities_search/read`. Its default
-`workspace-direct` profile remains broad, including existing plugin and bound-Office
-contributions. A composition-owned `CallableToolProfile` can specify a smaller
-surface; this is not a model argument, user permission or automatic intent classifier.
+Workspace Agent/Plan registers `core.tools.search/read` and uses the shared Core profile.
+Plugin and bound-Office contributions remain discoverable and use exact admission.
+The composition-owned profile is not a model argument or a permission override.
 Chat and unavailable/read-only filesystem tools retain their mode/catalog filters.
 
 A completed schema result stages membership only after terminal persistence. At the
@@ -104,20 +85,16 @@ with an explicit notice; no effect is replayed. Current-run effects remain kerne
 Schema receipts and runtime metadata removal now share Core helpers: exact callable
 schemas are not duplicated in model history, and `loaded`/revision fields do not
 claim selection authority. Workspace capability reads of skill IDs return routing
-metadata to `common.resources_read` (`type=skill`, semantic target) and
-`common.skills_load`; they do not read source, select the skill or execute code.
+metadata to `core.read` (`type=skill`, semantic target) and
+`core.skills.load`; they do not read source, select the skill or execute code.
 Office retains its existing exact skill/reference source reads through ResourceGateway.
 
-The [paired live pilot](audits/tool-profile-comparison.md) exercises broad and compact
-profiles on identical synthetic workspaces with Gemma cloud/local. Compact discovery
-and exact admission work, but task/protocol failures prevent a default-change claim.
-The directory-browsing default defect is now repaired and the repeated cloud pairs
-pass 4/4; baseline local completion/operation-selection failures remain open. The
-broad default remains until the task corpus and model evidence are sufficient. Adding resources_search/questions_ask to the Office core or
-narrowing workspace is not part of this cutover. Measure task completion, discovery
-calls, request size and selection errors; no partial skills or keyword-based routing.
+The [paired live pilot](audits/tool-profile-comparison.md) records the earlier broad/compact
+comparison. This cutover deliberately selects the compact Core requested by the user;
+the historical model metrics do not qualify the new contract. Scripted production-loop
+checks cover discovery, admission, patch and copy; live-model evaluation remains separate.
 
-The Office `common.resources_read` selector schema has one Core owner. The direct
+The Office `core.read` selector schema has one Core owner. The direct
 Office descriptor uses it unchanged; the workspace/CLI Office binding adds only
 its required `type=office` discriminator to each closed alternative. A section,
 PDF page/range, tree, table, procedure or paired text window therefore has the
@@ -141,9 +118,9 @@ durable tool-pack extension decisions. The compact receipt cannot grant authorit
 Missing admission/surface, incomplete reads, mismatches and
 stale/error diagnostics do not become successful compact receipts.
 
-The `excel.analysis_reporting` package supplies inspection, sheet creation, range
+The `skills.excel.analysis.reporting` package supplies inspection, sheet creation, range
 writes, tables, formatting and both workbook/chat charts. Standalone operations do
-not require selecting that skill. The Excel profile is `excel-inspect-core`;
+not require selecting that skill. The shared profile is `resource-core-v1`;
 incompatible older direct admissions explicitly reset to the current core without
 deleting history or replaying calls. Unchanged admissions under the current profile
 retain the existing exact validation and budget checks across turns and restart.
@@ -169,10 +146,10 @@ validated and confirmed import creates a tool package revision.
 The UI may place Artifacts, Tools and Skills under one Library shell, but they keep
 separate owners, stores, version rules and model transports:
 
-- artifacts use revision-pinned `ResourceRef` values and `common.resources_*`;
+- artifacts use revision-pinned `ResourceRef` values and `core.find/read/search`;
 - tools use the selected endpoint's exact capability catalog and
-  `common.capabilities_*` for model discovery/schema admission; source inspection
-  uses `common.resources_find/read` without admission;
+  `core.tools.search/read` for model discovery/schema admission; source inspection
+  uses `core.find/read` without admission;
 - skills use the same capability reader for instruction bodies, but never become
   executable tools;
 - authoring remains separate from discovery and cannot grant authority to an
@@ -180,13 +157,13 @@ separate owners, stores, version rules and model transports:
 
 ## Current implementation
 
-The Library tree groups tools by stable ID namespace and, for `common.*`, by
-the first feature family in the next segment: `common.resources_read` →
-«Ресурсы», `common.html_workspace_write_file` → «HTML»,
-`common.plan_doc_save` → «Планы». Labels live in `web/js/app-library-groups.js`
-and are shared with the demo; tool IDs, schemas and bindings do not change.
+Library строит вложенные группы по всем сегментам до имени действия:
+`html.data.write` → HTML → data → write. Tools и skills имеют отдельные корни;
+у skills префикс `skills.` служит типом, а не лишней группой. Core идёт первым.
+Статусы Core / Подключён / По запросу / Недоступен берутся из текущего каталога
+и уже существующего Inspector Arsenal; название группы не выдаёт authority.
 
-Office publishes `common.resources_find/read/search/outline` as direct, read-only
+Office publishes `core.find/read/search + resources.outline` as direct, read-only
 semantic resource tools. Search accepts one target or a scoped VBA/HTML collection with literal/regex matching;
 outline pages indexed document text parts. Workspace supplies the same search ID for
 relative files and recursive/glob scopes; a bound Office document adds VBA/Office targets. `resources_read.partNumber` is a bounded
@@ -198,7 +175,7 @@ Search is a direct read capability with exact binding revision `resources.search
 in Office. It is not marked independent-batch read because continuation state belongs
 to its handler. Workspace registers the exact same Core schema owner; descriptor,
 policy and binding changes participate in existing snapshot compatibility checks.
-The current finite Office bootstrap remains unchanged; discover/admit search normally.
+Search belongs to Core; outline remains an optional schema.
 Search details use existing typed result blocks and activity summaries; Inspector still
 shows the saved request/result, not a second reconstructed log. Five VBA captions now
 use the active catalog constants and moduleName rather than retired tool IDs.
@@ -206,7 +183,7 @@ use the active catalog constants and moduleName rather than retired tool IDs.
 ### Excel row and column deletion
 
 Owner: `ExcelDeleteRowsColumnsService` in Office; the bound Excel backend owns COM.
-`excel.delete_rows_columns` removes consecutive `rows` or `columns` using explicit
+`excel.rows.columns.delete` removes consecutive `rows` or `columns` using explicit
 `sheet`, `scope`, one-based `start` and positive `count`. `scope=table` also requires
 the exact `table` name; indexes are relative to that table, with row indexes
 excluding headers and totals. `scope=worksheet` deletes whole worksheet rows or
@@ -216,7 +193,7 @@ all data rows may be removed. There is no implicit worksheet fallback.
 For the extra seventh column in `filesTB`, use table scope, `axis=columns`,
 `start=7`, `count=1`. The adapter uses Excel's
 [ListColumn.Delete](https://learn.microsoft.com/en-us/office/vba/api/excel.listcolumn.delete),
-which does not remove the worksheet column. `excel.clear_range` only clears content
+which does not remove the worksheet column. `excel.range.clear` only clears content
 or formatting; clearing table header values is refused before dispatch with
 `excel_clear_table_header` and guidance to the structural deletion tool.
 
@@ -232,15 +209,15 @@ is open, including empty tables, totals, formulas, protection and partial COM fa
 
 ### Workspace CLI file tools (development)
 
-The independent CLI advertises `common.resources_find/read/search` and the exact
-`files.create/copy/move/patch/replace/delete/restore` catalog for writable workspaces.
-CLI `common.resources_find` accepts an optional `directory` and filename `query`.
+The independent CLI advertises `core.find/read/search`, `core.write/patch/replace`
+and optional `resources.copy/move/delete/restore` for writable workspaces.
+CLI `core.find` accepts an optional `directory` and filename `query`.
 By default it returns at most 200 semantic targets from a single directory, with
 explicit completeness/unavailable-scope information. Scanned-entry counts remain
 diagnostic metadata. An incomplete result requires narrowing and does not prove
 absence. The scan stops after 5000 entries; there is no opaque model cursor. Optional recursive/includeGlobs/excludeGlobs discover nested files;
-common.resources_search supplies bounded content search and semantic continuation.
-`files.move` requires an accepted complete source read and explicit confirmation;
+core.search supplies bounded content search and semantic continuation.
+`resources.move` requires a current source observation and confirmation under the accepted policy;
 it preserves identity, verifies the target bytes and source absence, then publishes
 a new revision. The target parent must exist and no existing file or reserved
 identity may be overwritten. An interrupted move uses its durable two-path intent
@@ -284,22 +261,20 @@ the policy and semantic entry target, without dependency URIs/revisions. The nex
 verification is still an explicit model call and captures a new immutable snapshot.
 This recovery applies to failed snapshots with complete source evidence; `NotRun`
 and failures before snapshot publication do not receive it.
-`files.delete` requires a complete accepted read of the current UTF-8 file and
+`resources.delete` requires a current accepted observation of the UTF-8 file and
 moves it to workspace-local managed trash after explicit confirmation and journal preparation. It publishes
 success only after the original path is absent and trash bytes match the retained
-preimage. `files.restore` explicitly restores the latest managed deletion to an
+preimage. `resources.restore` explicitly restores the latest managed deletion to an
 absent original path and publishes a new revision. A possible effect after dispatch
 returns `unknown` and requires `recover` before another mutation; no automatic
-retry or permanent-delete fallback exists. The CLI file read adapter is still
-temporary pending common Office/file dispatch described in
-[Resource Fabric](resource-fabric.md#goals).
+retry or permanent-delete fallback exists. Workspace and Office mutation routing share the public text contract and retain their domain owners.
 
 ### Read-only JavaScript tools
 
 Agent JavaScript is experimental and disabled by default. The Settings → Agent →
 Execution checkbox `JavaScript инструменты агента` enables it for separate testing.
-While disabled, `common.js_run` and saved JS packages are absent from the visible
-tool catalog, JS creation fields and guidance are omitted from `common.tools_upsert`,
+While disabled, `js.run` and saved JS packages are absent from the visible
+tool catalog, JS creation fields and guidance are omitted from `tools.upsert`,
 and direct execution or authoring fails closed. Its VBA-only model schema omits
 `host` and `executor`: the manifest owns the package host and VBA is the only
 available executor. When enabled, the schema exposes `executor`, `host`,
@@ -310,7 +285,7 @@ VBA packages only, so disabling the switch leaves no JS skill instructions activ
 
 Source text has no separate character or request-byte ceiling; the worker's execution
 memory, deadline, statement and result budgets still apply.
-`common.js_run` runs one async JavaScript function body in a separate local .NET Framework
+`js.run` runs one async JavaScript function body in a separate local .NET Framework
 worker. It accepts named `{name,target,view,path?}` resource bindings and exposes
 `RN.resources.names()`, `await RN.resources.open(name)`, bounded `read()` and
 `for await (const batch of handle.stream())`. The Office resource Gateway resolves
@@ -350,7 +325,7 @@ descriptor and runtime remain the authority for execution policy.
 Existing custom VBA packages are stored under `%AppData%/RNAssistant/tools` and the
 current Library editor can validate, save, clone, test and delete them. The current
 flat package store is not immutable revision history. Model authoring uses separate
-`common.tools_upsert` and `common.tools_delete` operations; source inspection uses
+`tools.upsert` and `tools.delete` operations; source inspection uses
 the published resources described below. These Agent-only writes use native typed
 handlers; R61/11O4 removes separate model validation and limits upsert to semantic
 package source/documentation. The manifest
@@ -377,7 +352,7 @@ scalar `report` argument. Labels are single-line text up to 200 characters, neve
 Markdown/HTML or runtime status. An explicit empty selector list disables target
 argument selection. Omitting `display` on update preserves it; supplying the object
 replaces its hints, with missing `runningAction` defaulting to `action`.
-The model authoring `common.tools_upsert` schema and typed Library mutations both
+The model authoring `tools.upsert` schema and typed Library mutations both
 support it. Library edits preserve it even without a dedicated form control.
 
 `Core.Tools.ToolDisplayCatalog` owns the shipped localized defaults and bounded
@@ -439,10 +414,10 @@ immutable history.
 
 ### Model source reads
 
-`common.resources_find` with `scope=catalogs` and a tool id discovers a semantic
+`core.find` with `scope=catalogs` and a tool id discovers a semantic
 `tool source: <id>` target for the current host's custom and source-owned builtin
 tools, including Common definitions. Discovery carries metadata only. Passing the
-returned target to `common.resources_read` reads the existing exact catalog
+returned target to `core.read` reads the existing exact catalog
 `/source` child, also used by the Library editor. Its JSON text contains
 `argumentSchemaJson`, `code`, `readme` and `components`; generic whole-read bounds
 and exact internal continuation rules apply. Generated human docs are not listed
@@ -668,7 +643,7 @@ Closed object schemas may share `properties`, types, defaults and common
 Every fragment name must be declared by that parent. `ToolSchemaSupport` combines
 each fragment with the parent for validation and optional-null normalization;
 complete object variants retain their existing branch-owned contracts.
-`excel.format_range` uses this form for its seven optional formatting operations.
+`excel.range.format` uses this form for its seven optional formatting operations.
 At least one real option is required; `bold=false` is an option, all-null fields
 are not. Its field names, defaults, effects and accepted arguments are unchanged.
 
@@ -690,7 +665,7 @@ must preserve those values and leave the source contract unchanged.
 Only schema-node annotations `description` and `default` are removed from the
 structured output; prompt descriptions and runtime defaults keep their owners.
 Required argument names must remain declared in the closed output object.
-The regression uses the actual `common.questions_ask` wire schema: its required
+The regression uses the actual `core.ask` wire schema: its required
 option `description` is both generatable and checked by the runtime. Missing
 descriptions still fail; parser, format-repair bounds and execution policy remain
 strict. This conversion is shared by Office and CLI, independent of model/result role.
@@ -716,7 +691,7 @@ retains these parts. Neither compact/public catalog projections nor execution
 registrations acquire generated Markdown or reconstructed runtime policy.
 
 Startup and successful settings save publish the currently configured built-ins.
-In particular, changing Agent JavaScript updates both `common.tools_upsert` source
+In particular, changing Agent JavaScript updates both `tools.upsert` source
 and documentation in one committed built-in catalog snapshot. Library metadata
 and runtime use the same configured descriptor, retaining its skill-only exposure.
 Unchanged publication bytes keep the existing head; older exact snapshots remain
@@ -918,15 +893,15 @@ The older audit below remains historical evidence, not a current defect list.
 
 | Area | Current code / evidence | Decision |
 |---|---|---|
-| Capability read versus selection | Native source-read metadata uses `loaded` for completeness, while only `common.skills_load` selects a skill. | Fixed in the model view: omit the root flag, retain completeness/content/guidance and exact `schemaInRequest` checks. Durable admission evidence is unchanged. Local checks establish the distinction; improved live model behavior has not been measured. |
-| Excel write target | `excel.write_range` requires nonblank `sheet` and `address` in all three branches. Schema, adapter, domain and backend no longer substitute a destination. | Omitted/null/blank targets fail before dispatch. Explicit `A1`, scalar null, formulas and bounded tables retain their meaning. This intentionally changes accepted arguments; it is separate from schema compression and does not establish a prior wrong-target incident. |
+| Capability read versus selection | Native source-read metadata uses `loaded` for completeness, while only `core.skills.load` selects a skill. | Fixed in the model view: omit the root flag, retain completeness/content/guidance and exact `schemaInRequest` checks. Durable admission evidence is unchanged. Local checks establish the distinction; improved live model behavior has not been measured. |
+| Excel write target | `excel.range.write` requires nonblank `sheet` and `address` in all three branches. Schema, adapter, domain and backend no longer substitute a destination. | Omitted/null/blank targets fail before dispatch. Explicit `A1`, scalar null, formulas and bounded tables retain their meaning. This intentionally changes accepted arguments; it is separate from schema compression and does not establish a prior wrong-target incident. |
 | Worksheet names and references | A `sheet` argument is the literal worksheet name. Composed references use the shared formatter: `Sales Report` → `'Sales Report'!A1`, `O'Brien` → `'O''Brien'!A1`. | Quote only the composed reference; retain literal names in lookup, result coordinates and resource identity. Resource reads decode Excel quoting once; host-enumerated names are not unquoted or trimmed. Double quotes are literal name characters, not alternate reference delimiters. |
-| Large Excel ranges | Discovery is metadata-only. Above 100000 cells, `structure` returns dimensions and sample targets; `excel.summarize_columns` scans explicitly selected columns locally and returns compact counts/numeric aggregates. Current `table`/`records` row selectors still apply after whole-source capture. | Keep overview, raw slice reads and selected-column aggregates distinct. The analysis is a narrow read-only tool rather than a broad `excel.inspect` action or an unbounded resource representation. Exact selector pushdown/filtering remains open; evaluate the extra descriptor's live token/tool-choice cost. See [large ranges](resource-fabric.md#large-excel-range-overview) and [column analysis](resource-fabric.md#large-excel-column-analysis). |
+| Large Excel ranges | Discovery is metadata-only. Above 100000 cells, `structure` returns dimensions and sample targets; `excel.columns.summarize` scans explicitly selected columns locally and returns compact counts/numeric aggregates. Current `table`/`records` row selectors still apply after whole-source capture. | Keep overview, raw slice reads and selected-column aggregates distinct. The analysis is a narrow read-only tool rather than a broad `excel.inspect` action or an unbounded resource representation. Exact selector pushdown/filtering remains open; evaluate the extra descriptor's live token/tool-choice cost. See [large ranges](resource-fabric.md#large-excel-range-overview) and [column analysis](resource-fabric.md#large-excel-column-analysis). |
 | Other Excel destinations | `add_table` requires an explicit nonblank `sourceRange`; generated name, headers and optional active-sheet selection retain their existing behavior. `upsert_chart` also requires an explicit nonblank `sourceRange` when creating a chart; omitted source on an existing chart preserves its series. Chart name, type, title and geometry keep their creation defaults. Explicit chart types are limited to `line`, `column`/`col`, `bar` and `pie`. Formatting and other range mutations retain their documented active-sheet/default-range behavior. | Missing table source fails before backend read; missing chart source fails after existence discovery but before dispatch. `upsert_chart` retains omission-as-keep on updates, including `updateOnly`; an explicit blank source or unsupported type is invalid before dispatch. Do not apply these contracts indiscriminately to other mutations. |
 | Structural views | `table` and `records` use the same internal gateway branch, CAS index, row selectors, `ResourceTableBatch`, coverage and HTML/JS batch shape. New built-in model reads, discovery and HTML/JS input schemas expose only `table`; derived mappings already select it. Saved HTML bindings, v1 artifact transfers and previously authored custom JS inputs may still carry `records`. | Internal `records` reads remain for those consumers. Their explicit upgrade, provider-capability cleanup and removal gate are in the [migration map](stabilization/MIGRATION_MAP.md#historical-structural-records-view--2026-10-21). No distinct structural semantics were found; live model-choice improvement is unmeasured. |
-| Discovery, content and search | `excel.inspect` supplies metadata, `excel.find_cells` finds cell matches, `resources_read` supplies values/source, and `resources_search` searches a text/source target. | Keep these purposes distinct; review descriptions and supported representations together. A known range needs no discovery call. Do not merge them into an unconstrained action switch. |
-| Workbook and chat charts | `excel.upsert_chart` mutates the workbook; `excel.create_chat_chart` reads source data and creates a chat artifact. | Keep separate destinations and effect policies. Check that results clearly identify the destination and do not imply Excel rendering was verified. |
-| Format schema repetition | `excel.format_range` now shares field definitions with seven required-only fragments. The runtime combines each fragment with its parent; strict output expands to the previous full variants. | Implemented with argument-equivalence checks: prompt schema 7021 → 1191 characters. The first paired live run passes the report but spends more cumulative input after extra protocol repairs; no overall token-saving rate is established. See the current progress entry. |
+| Discovery, content and search | `excel.inspect` supplies metadata, `excel.cells.find` finds cell matches, `resources_read` supplies values/source, and `resources_search` searches a text/source target. | Keep these purposes distinct; review descriptions and supported representations together. A known range needs no discovery call. Do not merge them into an unconstrained action switch. |
+| Workbook and chat charts | `excel.chart.upsert` mutates the workbook; `excel.chat.chart.create` reads source data and creates a chat artifact. | Keep separate destinations and effect policies. Check that results clearly identify the destination and do not imply Excel rendering was verified. |
+| Format schema repetition | `excel.range.format` now shares field definitions with seven required-only fragments. The runtime combines each fragment with its parent; strict output expands to the previous full variants. | Implemented with argument-equivalence checks: prompt schema 7021 → 1191 characters. The first paired live run passes the report but spends more cumulative input after extra protocol repairs; no overall token-saving rate is established. See the current progress entry. |
 | Model batching | The current report runs attempt write batches; the parser rejects them and executes no writes. | Treat this as observed protocol-choice friction. It does not establish that tool duplication caused it, or justify combining five independently verified writes into a report macro. |
 
 ### Other families and destinations
@@ -983,7 +958,10 @@ contract evidence; exact live-model choice and Office qualification remain open.
    passing trajectory does not establish reliability; fake Office does not qualify
    calculation, rendering or COM delivery. Run only checks relevant to each change.
 
-## Tool ergonomics audit — 2026-10-01
+## Historical tool ergonomics audit — 2026-10-01
+
+The following inventory predates the shared Core and universal mutation cutover.
+Current names and contracts are defined above and in [Text mutations](text-mutations.md).
 
 Статус: каталог исследован; общий selector/whole-read/context cutover реализован.
 Ниже сохранены исходные наблюдения; массовое объединение/переименование tools
@@ -1009,7 +987,7 @@ HTML vendor globals исполняются только в sandbox HTML workspac
 
 Переиспользуемые JS/CSS/HTML файлы находятся в локальном каталоге HTML assets
 ([контракт](artifact-library.md#reusable-local-html-assets--2026-10-02)):
-`common.html_assets_list` читает компактные метаданные по запросу, import копирует
+`html.assets.list` читает компактные метаданные по запросу, import копирует
 выбранный пакет в workspace, publish сохраняет новую версию. Это исходники
 страницы, не новые исполняемые инструменты агента; список пакетов не добавляется
 в обычный контекст модели.
@@ -1074,7 +1052,7 @@ enums и диапазоны уже используются. Критичная 
 |---|---|
 | Resource find/read — 2 | Сохранить отдельно discovery и content read. Exact known target читать напрямую; поиск не должен быть обязательным ритуалом. Не добавлять отдельные Excel/VBA/HTML readers поверх общего gateway |
 | Resource schema/mapping/derive — 4 | Оставить отдельным optional advanced workflow. Не требовать draft → publish → mapping → derive для обычного чтения диапазона или dashboard binding |
-| Capabilities — 2 | Search только фильтрует каталог; read показывает исходник skill либо допускает прямую schema. Выбор skill выполняет только `common.skills_load`. Показывать actual per-request inclusion/admission; не заставлять искать известный id или заново читать уже callable schema |
+| Capabilities — 2 | Search только фильтрует каталог; read показывает исходник skill либо допускает прямую schema. Выбор skill выполняет только `core.skills.load`. Показывать actual per-request inclusion/admission; не заставлять искать известный id или заново читать уже callable schema |
 | HTML — 7 | Сохранить разделение file write/patch, JSON data write и live source binding. JSON write уже создаёт binding: эта атомарность полезна и должна быть видна в результате. Freeze/refresh оставить optional; не объединять их в универсальный action tool |
 | JS — 1 | Сохранить отдельный read-only worker с explicit resource inputs. Его `ok` не доказывает исполнение app.js в WebView или отрисовку страницы. Переиспользовать общий selector/batch contract с HTML runtime |
 | VBA/macro — 6 | Whole write, targeted patch, rename, delete, restore и arbitrary execution различаются effects/guards; объединять их нельзя. Согласовать reuse after-source для write/patch. Длинное описание patch сократить до выбора/правил/исправления ошибки; подробную грамматику оставить в нужном skill/reference |

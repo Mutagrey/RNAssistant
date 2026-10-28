@@ -145,12 +145,11 @@ namespace RNAssistant.Office
                     {
                         var code = new VbaEditorResourceService(_toolExecutor.ResourceGateway, _resourceData)
                             .ReadUploadedSource(session, request, token);
-                        var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_write_module"),
-                            ExpectedContentSha256 = expectedCodeSha256 };
-                        command.Arguments["moduleName"] = request.ModuleName;
-                        command.Arguments["code"] = code;
-                        command.Arguments["mode"] = mode;
-                        if (componentType != null) command.Arguments["componentType"] = componentType;
+                        var command = new ToolInvocation { ToolId = RNAssistant.Core.Tools.ResourceMutationToolCatalog.Write,
+                            ExpectedContentSha256 = expectedCodeSha256, ExpectedTargetAbsent = mode == "createOnly" };
+                        command.Arguments["target"] = "VBA module: " + request.ModuleName;
+                        command.Arguments["content"] = code;
+                        if (componentType != null) command.Arguments["resourceType"] = componentType;
                         return _toolExecutor.ExecuteManual(command, tools, settings, false, true, session, token);
                     }, token).ConfigureAwait(false);
                     _toolCatalog.InvalidateDocumentVbaTools();
@@ -170,8 +169,8 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_delete_module") };
-            command.Arguments["moduleName"] = moduleName;
+            var command = new ToolInvocation { ToolId = RNAssistant.Core.Tools.ResourceMutationToolCatalog.Delete };
+            command.Arguments["target"] = "VBA module: " + moduleName;
             return WithReservedSession(LoadSession(null), session =>
             {
                 var result = _toolExecutor.ExecuteManual(command, tools,
@@ -185,7 +184,7 @@ namespace RNAssistant.Office
         {
             var settings = _settingsService.Load();
             var tools = _toolCatalog.GetVisibleTools().Where(s => s.Enabled).ToList();
-            var command = new ToolInvocation { ToolId = _toolExecutor.VbaToolId("vba_restore_backup") };
+            var command = new ToolInvocation { ToolId = RNAssistant.Core.Tools.ResourceMutationToolCatalog.Restore };
             return WithReservedSession(LoadSession(null), session =>
             {
                 try
@@ -194,7 +193,7 @@ namespace RNAssistant.Office
                         command.Arguments["target"] =
                             _toolExecutor.VbaBackupSemanticTarget(backupId);
                     else if (!string.IsNullOrWhiteSpace(moduleName))
-                        command.Arguments["moduleName"] = moduleName;
+                        command.Arguments["target"] = "VBA module: " + moduleName;
                 }
                 catch (Exception ex)
                 {

@@ -52,13 +52,13 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator('[data-inspector-key="composition:0"]').evaluate(n => n.open), true);
     await view("abilities");
     await page.locator(".chat-inspector-tool-group").first().waitFor();
-    assert.equal(await page.locator(".chat-inspector-tool-group").count(), 2);
+    assert.equal(await page.locator(".chat-inspector-tool-group").count(), 3, "dot segments form nested groups");
     await page.locator(".chat-inspector-tool-group > summary").first().click();
-    const tool = page.locator('[data-inspector-key="tool:common.resources_find"]');
+    const tool = page.locator('[data-inspector-key="tool:core.find"]');
     assert.equal(await tool.evaluate(n => n.open), false);
     await screenshot("abilities");
     await tool.locator("summary").click();
-    assert.match(await tool.locator("code").textContent(), /common.resources_find/);
+    assert.match(await tool.locator("code").textContent(), /core.find/);
     await view("usage");
     assert.equal(await page.locator('[data-inspector-key="composition:0"]').evaluate(n => n.open), true, "view switching preserves disclosure");
     assert.equal(await page.locator('[data-inspector-key="context-item:history:history-item"]').evaluate(n => n.open), true, "nested source disclosure survives redraw");
@@ -105,7 +105,7 @@ const { chromium } = require("playwright");
       state.activeRunViewState = { lifecycle: "completed", executionHealth: "unknown", runId: "inspector-run", currentAction: "Проверка модулей завершена" };
       state.messages = [];
       state.liveAgentRun = [1, 2].map(i => ({ Id: "activity-" + i, Kind: "tool", RunId: "inspector-run", StepId: "step-" + i,
-        StepMessage: "Проверю содержимое модуля", ToolId: "common.resources_read", ToolCallId: "call-" + i,
+        StepMessage: "Проверю содержимое модуля", ToolId: "core.read", ToolCallId: "call-" + i,
         Status: i === 1 ? "completed" : "unknown", ResultMessage: "Прочитан фрагмент " + i }));
       window.inspectorRoutes = [];
       openRunJournal = options => inspectorRoutes.push(options);
@@ -231,7 +231,7 @@ const { chromium } = require("playwright");
       state.activeChatId = "preview-chat";
       const items = Array.from({ length: 6 }, (_, index) => {
         const activity = { Kind: "tool", RunId: "grouped-run", StepId: "grouped-step",
-          StepMessage: "Читаю модули", ToolId: "common.resources_read", ToolCallId: "read-" + index,
+          StepMessage: "Читаю модули", ToolId: "core.read", ToolCallId: "read-" + index,
           Status: "completed", ResultMessage: "Прочитан модуль " + index };
         return { message: { Id: "grouped-message-" + index, Role: "assistant",
           RunId: "grouped-run", Activity: activity }, activity, index };

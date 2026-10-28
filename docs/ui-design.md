@@ -71,9 +71,11 @@ Office-действия и native-проверка публикации здес
 Иконки задаёт `web/js/app-icons.js`: статическая разметка использует `data-rna-icon`,
 динамическая — `RNAssistantIcons.render` через дерево или `P.icon`. Плагин с
 `icon.svg` передаёт в rail только проверенные SVG-пути; их рисует тот же реестр.
-Библиотека использует общий `app-library-groups.js`: тип → группа по namespace
-и семейству (`excel.*`, `common.resources_*`, `common.plan_*`), при этом ID
-инструментов и навыков не меняются. Общие кнопки,
+Библиотека использует общий `app-library-groups.js`: тип → вложенные сегменты
+имени (`core.*`, `html.data.*`, `excel.range.*`). Core показан первым;
+статусы подключения берутся из текущего Arsenal. Built-in skills используют
+`skills.*`, этот префикс не дублируется внутри раздела навыков. Контракт имён и
+компактного diff внутри шага описан в [Text mutations](text-mutations.md). Общие кнопки,
 наведение, вкладки, таблицы и строки дерева оформлены в
 `web/css/app-product-components.css`. «Все материалы» остаётся отдельной кнопкой
 вне ARIA tree, но использует общие отступы, подсветку и переходы навигации;
@@ -1541,7 +1543,7 @@ Resource/fetch/Office bridge в preview не предоставляется; с�
 Поддерживаются обе темы и узкая лента. Mermaid перестраивается при смене темы;
 работающий HTML сохраняет состояние и тему запуска до переключения чата.
 Это presentation существующего message, не новый artifact/store/wire contract.
-Навык `common.chat_visualization` описан в [Skills](skills.md#chat-visualization).
+Навык `skills.chat.visualization` описан в [Skills](skills.md#chat-visualization).
 
 Проверки: `tests/web/chat-visuals.test.js`, raw HTML/JSON, stream render cost,
 shared workspace chat layout и vendor gate. Реальная проверка навигации и

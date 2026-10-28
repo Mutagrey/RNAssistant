@@ -33,7 +33,7 @@ const { chromium } = require("playwright");
       send = (type, args) => { if (type === "getModelContextPayload") layoutPayloadReads++; return original(type, args); };
       state.activeRunViewState = { runId: "preview-run", lifecycle: "completed", executionHealth: "clean", currentAction: "Сравнение готово" };
       state.liveAgentRun = [{ Kind: "tool", RunId: "preview-run", StepId: "preview-step", ToolCallId: "preview-call",
-        StepMessage: "Сравню показатели продаж", ToolId: "common.resources_read", Status: "completed" }];
+        StepMessage: "Сравню показатели продаж", ToolId: "core.read", Status: "completed" }];
       RNAssistantChatInspector.openActivity({ chatId: state.activeChatId, runId: "preview-run", stepId: "preview-step" });
     });
     const source = page.getByRole("button", { name: "Запрос / ответ модели", exact: true });
@@ -267,7 +267,7 @@ const { chromium } = require("playwright");
       const resource = () => ({ uri: captionFixturePdf ? "rna://workspace/files/report.pdf" : "rna://workspace/files/src/A.cs", revision: "exact-a" });
       const scope = { kind: "workspace", id: "project-a" };
       const wire = () => JSON.stringify({ messages: [{ role: "user", content: "TOOL_RESULT:\n" + JSON.stringify({
-        tool_call_id: "E7", name: "common.resources_read", status: "ok", message: "Read.",
+        tool_call_id: "E7", name: "core.read", status: "ok", message: "Read.",
         data: { kind: "resource-read", ref: "R3@v1", target: captionFixturePdf ? "report.pdf" : "src/A.cs", representation: "text", coverage: coverage(),
           pageIndex: captionFixturePdf ? 1 : undefined,
           text: "искомый текст", complete: false }
@@ -314,7 +314,7 @@ const { chromium } = require("playwright");
           source: { reference: "R3@v1", target: "src/A.cs", view: "text", coverage: { kind: "line-range", start: 42, end: 43 },
             excerpt: "искомый текст", excerptTruncated: false }
         }] } : oldSend(type, args);
-      const activity = { Kind: "tool", ToolId: "common.resources_read", ToolCallId: "caption-call", RunId: "preview-run",
+      const activity = { Kind: "tool", ToolId: "core.read", ToolCallId: "caption-call", RunId: "preview-run",
         Status: "completed", Title: "Чтение исходника", ResultMessage: "Фрагмент прочитан.", ArgumentsJson: '{"target":"src/A.cs"}' };
       const card = renderActivityNode(activity, false, false, { message: { RunId: "preview-run" } });
       card.id = "caption-activity"; document.getElementById("messages").replaceChildren(card);

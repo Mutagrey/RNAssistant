@@ -127,8 +127,8 @@ def run_case(root):
 
     process = None
     try:
-        reply(call("files.create", relativePath="note.txt", text="ONCE"))
-        entered, released = reply(call("files.create", relativePath="late.txt", text="MUST_NOT_RUN"), True)
+        reply(call("core.write", target="note.txt", content="ONCE"))
+        entered, released = reply(call("core.write", target="late.txt", content="MUST_NOT_RUN"), True)
         process = start("run", "--message", "Create and read note.txt.", "--min-writes", "1", "--min-reads", "1",
                         "--max-iterations", "4", "--max-tool-steps", "4", "--tool-result-role", "tool", "--instruction-role", "system",
                         "--auto-confirm", "on")
@@ -152,7 +152,7 @@ def run_case(root):
         cli("resume", "--continue", *control(running), code=5)
         assert len(requests) == 2 and inspect(session)["Cursor"] == stopped["Cursor"]
 
-        entered, released = reply(call("common.resources_read", target="note.txt"), True)
+        entered, released = reply(call("core.read", target="note.txt"), True)
         reply(DONE)
         process = start("resume", "--continue", *control(stopped))
         assert entered.wait(10)
@@ -208,8 +208,8 @@ def run_case(root):
 
         # A confirmed mutation completes once; cancelling the following model
         # wait and continuing must preserve its effect and reservation accounting.
-        reply(call("common.resources_read", target="note.txt"))
-        reply(call("files.delete", relativePath="note.txt"))
+        reply(call("core.read", target="note.txt"))
+        reply(call("resources.delete", target="note.txt"))
         pending = cli("run", "--message", "Delete note.txt after approval.", "--max-iterations", "4",
                       "--tool-result-role", "tool", "--instruction-role", "system", code=3)
         approved_session = pending["SessionId"]

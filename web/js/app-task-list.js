@@ -60,7 +60,7 @@
     if (!activity) return current;
     var toolId = typeof activityToolId === "function" ? activityToolId(activity) : "";
     var status = typeof activityStatus === "function" ? activityStatus(activity) : "";
-    if (status === "completed" && toolId === "common.task_list_set") {
+    if (status === "completed" && toolId === "task.list.set") {
       var projected = taskListFromToolActivity(activity);
       current = projected && ["active", "blocked"].indexOf(String(value(projected, "Status", "status", "active")).toLowerCase()) >= 0
         ? projected : null;

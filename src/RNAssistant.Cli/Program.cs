@@ -13,6 +13,7 @@ using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Runtime;
 using RNAssistant.Runtime.Contracts;
 
@@ -797,22 +798,22 @@ namespace RNAssistant.Cli
 
         private static string PendingPath(string toolId, string argumentsJson)
         {
-            if (toolId == null || !toolId.StartsWith("files.", StringComparison.Ordinal)) return null;
-            try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.RelativePath; }
+            if (!ResourceMutationToolCatalog.Owns(toolId)) return null;
+            try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.Target; }
             catch (JsonException) { return null; }
         }
 
         private static string PendingTarget(string toolId, string argumentsJson)
         {
-            if (toolId != "files.move" && toolId != "files.copy") return null;
-            try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.TargetPath; }
+            if (toolId != ResourceMutationToolCatalog.Move && toolId != ResourceMutationToolCatalog.Copy) return null;
+            try { return JsonConvert.DeserializeObject<PendingFileTarget>(argumentsJson)?.Destination; }
             catch (JsonException) { return null; }
         }
 
         private sealed class PendingFileTarget
         {
-            public string RelativePath { get; set; }
-            public string TargetPath { get; set; }
+            public string Target { get; set; }
+            public string Destination { get; set; }
         }
 
         private static Dictionary<string, string> Parse(string[] args)

@@ -24,8 +24,8 @@ namespace RNAssistant.Harness
                 var store = new ChatStore(FixturePaths.Value);
                 var tools = executor.GetControllerTools().ToList();
                 var source = "<!doctype html><main>Пример🙂 before</main><script>window.run()</script>";
-                var created = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CreateToolId,
-                    "name", "index.html", "content", source), tools, new AppSettings(), false, false, session);
+                var created = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write,
+                    "target", "file: index.html", "content", source), tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(created.Success, "HTML creation succeeds: " + created.Message);
                 var original = session.Artifacts.Single(item => item.Title == "index.html");
                 AssertTrue(ChatArtifactResourceProvider.FindExactAttachment(session, original) == null,
@@ -72,10 +72,10 @@ namespace RNAssistant.Harness
                     }
                 };
                 assertSource(session, original, source);
-                var patched = executor.ExecuteManual(Command(AuthoredFileToolCatalog.PatchToolId,
+                var patched = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch,
                     "target", (string)JObject.Parse(created.DataJson)["target"],
-                    "patches", new[] { new { find = "before", replace = "after" } }),
-                    tools, new AppSettings(), false, false, session);
+                    "hunks", new[] { new { oldText = "before", newText = "after" } }),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(patched.Success, "HTML patch succeeds: " + patched.Message);
                 var latest = session.Artifacts.Single(item => item.Title == "index.html" && item.Revision == 2);
                 var changed = source.Replace("before", "after");
@@ -105,8 +105,8 @@ namespace RNAssistant.Harness
                 ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
                 var upload = session.Artifacts.Single(item => item.Title == "copy.htm");
                 var target = executor.ResourceGateway.Find(session, "copy.htm", "document").Items.Single().Target;
-                var copied = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CopyToolId,
-                    "source", target), tools, new AppSettings(), false, false, session);
+                var copied = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Copy,
+                    "target", target, "destination", "file: copy.htm"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(copied.Success, "HTML upload copies as an authored file: " + copied.Message);
                 var copy = session.Artifacts.Single(item => item.Title == "copy.htm" && item.Kind == ChatArtifactKinds.File);
                 AssertEqual("text/html", copy.MimeType, "copied HTML retains its MIME type");
@@ -162,17 +162,17 @@ namespace RNAssistant.Harness
                 var originalRef = ChatResourceUri.CreateArtifactRevision(session, original);
                 var sourceTarget = executor.ResourceGateway.Find(session, "large.js", "document").Items.Single().Target;
                 var tools = executor.GetControllerTools().ToList();
-                var copied = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CopyToolId, "source", sourceTarget),
-                    tools, new AppSettings(), false, false, session);
+                var copied = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Copy, "target", sourceTarget, "destination", "file: large.js"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(copied.Success, "large file copy: " + copied.Message);
                 var copyTarget = (string)JObject.Parse(copied.DataJson)["target"];
                 var copy = session.Artifacts.Single(item => item.Kind == ChatArtifactKinds.File && item.Title == "large.js");
                 var copiedRef = ChatResourceUri.CreateArtifactRevision(session, copy);
                 AssertEqual(originalBytes.Length, (int)copy.ContentByteLength.Value, "copy retains exact byte length");
                 AssertTrue(store.DocumentArtifacts.ExportBytes(session, copiedRef).SequenceEqual(originalBytes), "copy preserves exact original bytes");
-                var patches = new[] { new { find = "slow(slow(value))", replace = "fast(value)" } };
-                var patchCommand = Command(AuthoredFileToolCatalog.PatchToolId, "target", copyTarget, "patches", patches);
-                var patched = executor.ExecuteManual(patchCommand, tools, new AppSettings(), false, false, session);
+                var patches = new[] { new { oldText = "slow(slow(value))", newText = "fast(value)" } };
+                var patchCommand = Command(ResourceMutationToolCatalog.Patch, "target", copyTarget, "hunks", patches);
+                var patched = executor.ExecuteManual(patchCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(patched.Success, "large file patch: " + patched.Message);
                 AssertTrue(!patched.DataJson.Contains("rna://") && !patched.DataJson.Contains("\"offset\"") &&
                     !patched.DataJson.Contains("\"version\""),
@@ -194,9 +194,9 @@ namespace RNAssistant.Harness
                     "Library export returns the exact verified edited bytes");
                 AssertTrue(store.DocumentArtifacts.ExportBytes(session, originalRef).SequenceEqual(originalBytes),
                     "uploaded original remains byte-for-byte unchanged");
-                var renamed = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CopyToolId,
-                    "source", sourceTarget, "name", "code-export.md"),
-                    tools, new AppSettings(), false, false, session);
+                var renamed = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Copy,
+                    "target", sourceTarget, "destination", "file: code-export.md"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(renamed.Success, "10 MiB code original can be saved under a requested .md extension");
                 var renamedArtifact = session.Artifacts.Single(item => item.Kind == ChatArtifactKinds.File && item.Title == "code-export.md");
                 var renamedDownload = catalog.Export(session, new ArtifactTransferRequest { ChatId = session.Id,
@@ -209,7 +209,7 @@ namespace RNAssistant.Harness
                 AssertTrue(diff.Items.Any(item => item.Availability == "hunks" &&
                     item.Hunks.Any(h => h.Before.Contains("slow(slow(value))") && h.After.Contains("fast(value)"))),
                     "run changes presents verified bounded file hunks");
-                AssertTrue(!executor.ExecuteManual(patchCommand, tools, new AppSettings(), false, false, session).Success,
+                AssertTrue(!executor.ExecuteManual(patchCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session).Success,
                     "stale file target cannot overwrite a newer version");
                 var part = store.DocumentArtifacts.ReadIndexedTextPart(session, latestRef, 1);
                 AssertTrue(part.PartCount > 300 && part.Text.Length <= 32000, "large authored file is navigable by bounded parts");
@@ -230,10 +230,10 @@ namespace RNAssistant.Harness
                     "semantic search locates the late changed part");
                 AssertTrue(executor.ResourceGateway.Outline(session, nextTarget, 1, 10).PartCount > 300,
                     "semantic outline navigates the complete authored file");
-                var ambiguous = executor.ExecuteManual(Command(AuthoredFileToolCatalog.PatchToolId,
+                var ambiguous = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch,
                     "target", nextTarget,
-                    "patches", new[] { new { find = "xx", replace = "x" } }),
-                    tools, new AppSettings(), false, false, session);
+                    "hunks", new[] { new { oldText = "xx", newText = "x" } }),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(!ambiguous.Success, "ambiguous patch is refused without another revision");
                 store.Save(session);
                 var restarted = store.Load(session.Id);
@@ -245,8 +245,8 @@ namespace RNAssistant.Harness
                 var mdMessage = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { mdDraft.Id }).ToList() };
                 session.Messages.Add(mdMessage); ingestion.CommitAndLink(session, mdMessage, session.Messages.Count - 1);
                 var mdTarget = executor.ResourceGateway.Find(session, "large.md", "document").Items.Single().Target;
-                var mdCopy = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CopyToolId, "source", mdTarget),
-                    tools, new AppSettings(), false, false, session);
+                var mdCopy = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Copy, "target", mdTarget, "destination", "file: large.md"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(mdCopy.Success, "Markdown beyond the inline save limit copies as a real .md file");
                 var mdArtifact = session.Artifacts.Single(item => item.Kind == ChatArtifactKinds.File && item.Title == "large.md");
                 AssertTrue(store.DocumentArtifacts.ExportBytes(session, ChatResourceUri.CreateArtifactRevision(session, mdArtifact))
@@ -263,13 +263,13 @@ namespace RNAssistant.Harness
                 var codeMessage = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { codeDraft.Id }).ToList() };
                 session.Messages.Add(codeMessage); ingestion.CommitAndLink(session, codeMessage, session.Messages.Count - 1);
                 var codeTarget = executor.ResourceGateway.Find(session, "unicode.cs", "document").Items.Single().Target;
-                var codeCopy = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CopyToolId, "source", codeTarget),
-                    tools, new AppSettings(), false, false, session);
+                var codeCopy = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Copy, "target", codeTarget, "destination", "file: unicode.cs"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(codeCopy.Success, "UTF-16 source copies without conversion");
-                var codePatch = executor.ExecuteManual(Command(AuthoredFileToolCatalog.PatchToolId,
+                var codePatch = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch,
                     "target", (string)JObject.Parse(codeCopy.DataJson)["target"],
-                    "patches", new[] { new { find = "slow(value)", replace = "fast(value)" } }),
-                    tools, new AppSettings(), false, false, session);
+                    "hunks", new[] { new { oldText = "slow(value)", newText = "fast(value)" } }),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(codePatch.Success, "UTF-16 source patches losslessly");
                 var codeLatest = session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.File && item.Title == "unicode.cs")
                     .OrderByDescending(item => item.Revision).First();
@@ -284,16 +284,16 @@ namespace RNAssistant.Harness
                     "UTF-16 authored file is readable as text through the gateway");
                 AssertEqual("first\r\nfast(value)\r\n", store.DocumentArtifacts.ReadIndexedTextPart(session, codeRef, 1).Text,
                     "UTF-16 authored file is indexed without losing source bytes");
-                var created = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CreateToolId,
-                    "name", "new.py", "content", "print('ready')\n"),
-                    tools, new AppSettings(), false, false, session);
+                var created = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write,
+                    "target", "file: new.py", "content", "print('ready')\n"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(created.Success, "small code file can be authored in its requested format");
                 var newFile = session.Artifacts.Single(item => item.Kind == ChatArtifactKinds.File && item.Title == "new.py");
                 AssertEqual("print('ready')\n", Encoding.UTF8.GetString(store.DocumentArtifacts.ExportBytes(session,
                     ChatResourceUri.CreateArtifactRevision(session, newFile))), "created source is exactly exportable");
-                var unicodeCreated = executor.ExecuteManual(Command(AuthoredFileToolCatalog.CreateToolId,
-                    "name", "emoji.txt", "content", "A😀B"),
-                    tools, new AppSettings(), false, false, session);
+                var unicodeCreated = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Write,
+                    "target", "file: emoji.txt", "content", "A😀B"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(unicodeCreated.Success, "Unicode text file creation succeeds");
                 var emojiFile = session.Artifacts.Single(item => item.Kind == ChatArtifactKinds.File && item.Title == "emoji.txt");
                 var emojiRef = ChatResourceUri.CreateArtifactRevision(session, emojiFile);

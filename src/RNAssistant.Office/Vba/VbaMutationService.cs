@@ -80,14 +80,14 @@ namespace RNAssistant.Office.Vba
                 (string.Equals(requestedModuleName, normalizedName, StringComparison.Ordinal)
                     ? "."
                     : ". Runtime also tried the normalized name " + normalizedName + ".") +
-                " Resolve the component that owns the procedure using common.resources_find with scope=vba. " +
-                "If creation is intended, call common.vba_write_module with moduleName, complete code, and mode=createOnly. " +
+                " Resolve the component that owns the procedure using core.find with scope=vba. " +
+                "If creation is intended, call vba.module.write with moduleName, complete code, and mode=createOnly. " +
                 "Do not create a substitute module for a failed edit.",
                 new Newtonsoft.Json.Linq.JObject
                 {
                     ["requestedModuleName"] = requestedModuleName,
                     ["normalizedModuleName"] = normalizedName,
-                    ["discoveryTool"] = "common.resources_find",
+                    ["discoveryTool"] = "core.find",
                     ["discoveryScope"] = "vba",
                     ["creationTool"] = ToolId("vba_write_module"),
                     ["creationMode"] = "createOnly"
@@ -189,7 +189,7 @@ namespace RNAssistant.Office.Vba
                 {
                     ["moduleName"] = moduleName ?? string.Empty,
                     ["retrySameTool"] = false,
-                    ["inspectTool"] = "common.resources_read",
+                    ["inspectTool"] = "core.read",
                     ["discoveryScope"] = "vba"
                 },
                 "vba_code_invalid",

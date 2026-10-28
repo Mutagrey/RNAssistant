@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed class JsToolHandler : IReadOnlyToolHandler
     {
-        internal const string RunId = "common.js_run";
+        internal const string RunId = "js.run";
         internal const string PackageHandlerId = "js.custom.package.execute.v1";
         internal static readonly ToolBinding Binding = new ToolBinding("js.run.v1");
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,

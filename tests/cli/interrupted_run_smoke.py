@@ -44,12 +44,12 @@ def main():
                        "results": [], "message": "Waiting for an explicit new task."}
             if len(requests) == 1:
                 content = {"action": "execute", "reason": "Inspect both source files.",
-                           "tool_calls": [{"name": "common.resources_read", "arguments": {"target": name}}
+                           "tool_calls": [{"name": "core.read", "arguments": {"target": name}}
                                           for name in ("seed.txt", "second.txt")],
                            "message": "Read the existing sources."}
             if len(requests) == 4:
                 content = {"action": "execute", "reason": "Inspect available files.",
-                           "tool_calls": [{"name": "common.resources_find",
+                           "tool_calls": [{"name": "core.find",
                                            "arguments": {"query": "index.html"}}],
                            "message": "Inspect available files."}
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content":

@@ -449,7 +449,7 @@ namespace RNAssistant.Harness
         private static void ProtocolContextBatchSafetyUsesLocalAuthority()
         {
             var read = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.inspect");
-            var write = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.add_sheet");
+            var write = OfficeToolCatalog.ForHost("Excel").Single(tool => tool.Id == "excel.sheet.add");
             var external = new ToolCatalogEntry { Id = "external.lookup", BuiltIn = true };
             var pipeline = new ToolCatalogEntry { Id = "pipeline.read", Executor = "pipeline" };
             var scope = ConversationProtocolContext.SequentialBatchIds(new[] { read, write, external, pipeline });
@@ -533,7 +533,7 @@ namespace RNAssistant.Harness
                     attemptIds.Add(options.TraceModelAttemptId);
                     var content = responses.Count > 0 ? responses.Dequeue() : rawCalls == 5
                         ? ScriptedVerifiedFinish(session, "Report the completed reads.", "Done", "Sheets inspected.",
-                            "common.capabilities_read", "excel.inspect", "excel.inspect")
+                            "core.tools.read", "excel.inspect", "excel.inspect")
                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Answer the new request.", "Fresh answer", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = content });
@@ -562,7 +562,7 @@ namespace RNAssistant.Harness
                 AssertEqual(2, adapter.ExcelBackendCalls.Count(operation =>
                     operation == FakeOfficeAdapter.ExcelInspectOperation),
                     "independent native reads dispatch once each through the direct typed backend");
-                AssertTrue(requests[0].CallContext.SequentialBatchToolIds.Contains("common.resources_read") &&
+                AssertTrue(requests[0].CallContext.SequentialBatchToolIds.Contains("core.read") &&
                     requests[0].CallContext.SequentialBatchToolIds.Contains("excel.inspect"), "runtime metadata feeds the batch-safe projection");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, result.ResponseProtocolVersion, "accepted writes use v8");
                 var acceptedBeforeNextRun = JsonConvert.SerializeObject(acceptedCalls);
@@ -582,16 +582,16 @@ namespace RNAssistant.Harness
             {
                 var responses = new Queue<string>(new[]
                 {
-                    LoadSkillResponse("common.skill_authoring"),
+                    LoadSkillResponse("skills.skill.authoring"),
                     ModelProtocolWire.WriteAcceptedCall("Create the requested skill.", "Create skill",
-                        new ConversationToolCall { Name = "common.skills_upsert", Arguments = new JObject {
+                        new ConversationToolCall { Name = "skills.upsert", Arguments = new JObject {
                             ["id"] = "common.context_probe", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } })
                 });
                 var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                     Task.FromResult(new LlmCompletionResult { Content = responses.Count > 0 ? responses.Dequeue() :
                         ScriptedVerifiedFinish(session, "Report the confirmed skill write.", "Done",
-                            "Skill created.", "common.skills_upsert") });
+                            "Skill created.", "skills.upsert") });
                 var requests = new List<ModelProtocolRequest>();
                 var service = CreateConversationRunService(adapter, executor, completion, null,
                     () => new RecordingModelProtocol(completion, requests));
@@ -605,7 +605,7 @@ namespace RNAssistant.Harness
                 var selectionCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
                     message.ToolName == SkillLoadToolHandler.ToolId);
                 var skillCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
-                    message.ToolName == "common.skills_upsert");
+                    message.ToolName == "skills.upsert");
                 var selectionId = selectionCall.ToolCallId;
                 var skillId = skillCall.ToolCallId;
                 AssertEqual(skillId, confirmed.ToolCallId, "pending confirmation retains the accepted runtime ID");
@@ -647,7 +647,7 @@ namespace RNAssistant.Harness
                     "confirmation preserves accepted raw-attempt provenance");
                 AssertEqual(1, session.Messages.Count(message => message.ProtocolMessage && message.Role != "assistant" && message.ToolCallId == skillId),
                     "confirmed result references the same runtime call exactly once");
-                AssertTrue(!continuation.CallContext.SequentialBatchToolIds.Contains("common.skills_upsert"), "confirmation tool is never batch-safe");
+                AssertTrue(!continuation.CallContext.SequentialBatchToolIds.Contains("skills.upsert"), "confirmation tool is never batch-safe");
                 AssertEqual(AgentResponseProtocol.CurrentVersion, last.ResponseProtocolVersion, "confirmation writes the active v8 protocol: " + role);
             });
         }
@@ -1297,9 +1297,9 @@ namespace RNAssistant.Harness
                 adapter.ExcelSheetThrowAfterMutation = true;
                 var responses = new Queue<string>(new[]
                 {
-                    LoadToolSchemaResponse("excel.add_sheet"),
+                    LoadToolSchemaResponse("excel.sheet.add"),
                     ModelProtocolWire.WriteAcceptedCall("Create the requested sheet.", "Создаю лист.",
-                        new ConversationToolCall { Name = "excel.add_sheet", Arguments = new JObject { ["name"] = "Report" } })
+                        new ConversationToolCall { Name = "excel.sheet.add", Arguments = new JObject { ["name"] = "Report" } })
                 });
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { Status = "running" };
@@ -1312,7 +1312,7 @@ namespace RNAssistant.Harness
                     new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
                 AssertEqual(RunViewLifecycles.Cancelled, cancelled.RunViewState.Lifecycle, "kernel owns cancellation lifecycle");
-                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.add_sheet"), "no automatic write retry");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(command => command.ToolId == "excel.sheet.add"), "no automatic write retry");
                 AssertEqual(RunViewHealth.Unknown, RunViewStateProjector.Create(session).ExecutionHealth,
                     "cancellation cannot erase unknown");
                 AssertKernelReplay(session);
@@ -1355,7 +1355,7 @@ namespace RNAssistant.Harness
             AssertContains(settings.AgentSkillsPrompt, "Read supporting files only when needed",
                 "skill prompt explains progressive reference reads");
             AssertTrue(settings.ChatSystemPrompt.StartsWith("# RNAssistant Chat", StringComparison.Ordinal), "chat prompt Markdown heading");
-            AssertContains(settings.ChatSystemPrompt, "common.resources_*", "chat prompt documents read-only resource access");
+            AssertContains(settings.ChatSystemPrompt, "core.find/core.read/core.search", "chat prompt documents read-only resource access");
             AssertContains(settings.ChatSystemPrompt, "## Response contract", "chat uses the structured response envelope");
             AssertContains(settings.ChatSystemPrompt, "multimodal model", "chat prompt keeps current media direct when supported");
             AssertTrue(settings.ContextCompactionPrompt.StartsWith("# Context compaction", StringComparison.Ordinal), "compaction prompt Markdown heading");
@@ -1659,7 +1659,7 @@ namespace RNAssistant.Harness
                     (string)schema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
                     "schema property named type");
 
-                var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_apply_patch");
+                var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "vba.module.patch");
                 var patchSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { patchTool }, new ModelProtocolCallContext(new string[0])));
                 var exactReplace = patchSchema.SelectToken(
                     "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
@@ -1675,7 +1675,7 @@ namespace RNAssistant.Harness
                     exactReplace.SelectToken("properties.pattern") == null,
                     "unchecked line deletion and regex patch fields are absent from the model schema");
 
-                var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "common.vba_restore_backup");
+                var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "vba.module.restore");
                 var restoreSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { restoreTool }, new ModelProtocolCallContext(new string[0])));
                 var restoreVariants = restoreSchema.SelectToken(
                     "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
@@ -1894,7 +1894,7 @@ namespace RNAssistant.Harness
                 TerminalToolResult.Unknown("read", sourceJson, new[] { exactResult }),
                 resultResource: exactResult, data: source);
             var preboundedEnvelope = JObject.Parse(AgentJsonProtocol.BuildToolResult(command, prebounded, 256));
-            AssertContains((string)preboundedEnvelope.SelectToken("data.hint"), "common.resources_find",
+            AssertContains((string)preboundedEnvelope.SelectToken("data.hint"), "core.find",
                 "an existing truncated payload receives the externalized-result hint");
             AssertEqual("retained", (string)preboundedEnvelope.SelectToken("data.value"), "hint replacement retains business data");
             AssertEqual("unknown", (string)preboundedEnvelope["status"], "projection retains the terminal status");
@@ -1917,7 +1917,7 @@ namespace RNAssistant.Harness
                 "bounded envelope exposes the exact durable result reference");
             AssertEqual("result", (string)resourceEnvelope.SelectToken("resources[0].relation"),
                 "externalized full result is distinguished from other produced resources");
-            AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "common.resources_find",
+            AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "core.find",
                 "bounded envelope names semantic discovery for the externalized result");
             AssertContains((string)resourceEnvelope.SelectToken("data.hint"), "read that target",
                 "bounded envelope tells the model to read the discovered semantic target");
@@ -2041,11 +2041,11 @@ namespace RNAssistant.Harness
                 new { Name = PowerPointToolIds.ReplaceText,
                     Data = new JObject { ["replacements"] = 2, ["scopeSha256"] = runtimeHash },
                     Hidden = "scopeSha256", Kept = "replacements" },
-                new { Name = "outlook.create_draft",
+                new { Name = "outlook.draft.create",
                     Data = new JObject { ["kind"] = "new", ["subject"] = "Report",
                         ["targetEntryId"] = "target-internal", ["draftEntryId"] = "draft-internal" },
                     Hidden = "draftEntryId", Kept = "subject" },
-                new { Name = "outlook.update_mail",
+                new { Name = "outlook.mail.update",
                     Data = new JObject { ["categories"] = "Review", ["unread"] = false,
                         ["entryId"] = "mail-internal", ["stateSha256"] = runtimeHash },
                     Hidden = "stateSha256", Kept = "categories" }
@@ -2234,7 +2234,7 @@ namespace RNAssistant.Harness
                 new AgentToolCall
                 {
                     Id = "mutation_projection",
-                    Name = "excel.add_sheet",
+                    Name = "excel.sheet.add",
                     Arguments = new Dictionary<string, object>
                     {
                         ["name"] = "Report"
@@ -2245,13 +2245,13 @@ namespace RNAssistant.Harness
                 new ToolInvocation
                 {
                     ToolCallId = "mutation_projection",
-                    ToolId = "excel.add_sheet"
+                    ToolId = "excel.sheet.add"
                 }, TerminalToolResult.Ok(
                     "Changed " + genericReference.Uri + ".", "{}",
                     new[] { genericReference }));
             mutationResult.ResourceEffect = new ResourceEffect(
                 "effect-projection",
-                "excel.add_sheet",
+                "excel.sheet.add",
                 ResourceEffectOutcome.VerifiedChanged,
                 new[]
                 {
@@ -2263,7 +2263,7 @@ namespace RNAssistant.Harness
                 "verified " + genericReference.Uri);
             var mutationTool = new ToolCatalogEntry
             {
-                Id = "excel.add_sheet",
+                Id = "excel.sheet.add",
                 Policy = new ToolPolicy(
                     ToolEffect.Write,
                     ToolVerification.Tool,
@@ -2386,7 +2386,7 @@ namespace RNAssistant.Harness
             AssertContains((string)JObject.Parse(
                     chartProjection.Content.Substring("TOOL_RESULT:\n".Length))
                     .SelectToken("data.hint"),
-                "common.resources_find",
+                "core.find",
                 "model chart projection directs semantic discovery");
             AssertEqual(chartArtifact.Id, ToolResultResourceService.ExternalizeIfNeeded(
                 chartSession, command, chartResult, 10000, new AppSettings()).Id,
@@ -2534,7 +2534,7 @@ namespace RNAssistant.Harness
                     AssertTrue(JToken.DeepEquals(expectedData, ToolResultWire.ParseData(wire.Result.DataJson)),
                         "the next actual model request carries all observed chart fields, including the final bytes");
                     AssertTrue(!projectedResult.Content.Contains("payload_externalized") &&
-                        !projectedResult.Content.Contains("common.resources_find"),
+                        !projectedResult.Content.Contains("core.find"),
                         "full data is not replaced by a marker or unnecessary reread instruction");
                     AssertTrue(wire.Result.Resources.Count == 0 &&
                         projectedResult.Content.IndexOf("rna://", StringComparison.OrdinalIgnoreCase) < 0,

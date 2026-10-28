@@ -15,8 +15,8 @@ from tempfile import TemporaryDirectory
 
 from read_acceptance_context_smoke import CLI, REPO, DONE, call
 
-SAVE, RESTORE, DELETE = ("common.plan_doc_" + name for name in ("save", "restore", "delete"))
-FIND, READ = "common.resources_find", "common.resources_read"
+SAVE, RESTORE, DELETE = ("plan.document." + name for name in ("save", "restore", "delete"))
+FIND, READ = "core.find", "core.read"
 V1, V2 = "  # EXACT_PLAN_V1\r\n\n- Review source  \n", "# EXACT_PLAN_V2\n- Review and repair\n"
 
 

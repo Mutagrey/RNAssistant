@@ -106,15 +106,15 @@ def run_case(root, mode, role):
 
     try:
         capabilities = checked("env", "--mode", mode)["capabilities"]
-        assert {"common.resources_find", "common.resources_read"}.issubset(capabilities)
-        assert "common.questions_ask" in capabilities
-        assert ("files.create" in capabilities) == (mode == "agent")
+        assert {"core.find", "core.read"}.issubset(capabilities)
+        assert "core.ask" in capabilities
+        assert ("core.write" in capabilities) == (mode == "agent")
         if mode == "plan":
-            responses.append(call("files.create", relativePath="forbidden.txt", text="bad"))
+            responses.append(call("core.write", target="forbidden.txt", content="bad"))
         if mode == "agent":
-            responses.append(call("files.create", relativePath="created-before-question.txt", text="ONLY_WRITE"))
-        responses.extend([call("common.resources_read", target="notes.txt"),
-            call("common.questions_ask", questions=QUESTIONS)])
+            responses.append(call("core.write", target="created-before-question.txt", content="ONLY_WRITE"))
+        responses.extend([call("core.read", target="notes.txt"),
+            call("core.ask", questions=QUESTIONS)])
         final = checked("run", "--mode", mode, "--tool-result-role", role, "--instruction-role", "system",
             "--auto-confirm", "on" if mode == "agent" else "off",
             "--message", "Read notes.txt and ask for the format and sections before proceeding.",
@@ -166,7 +166,7 @@ def run_case(root, mode, role):
             assert result.returncode == 2 and len(requests) == before, (result.stdout, result.stderr)
         assert checked("inspect", "--session", session_id)["Revision"] == inspected["Revision"], "Rejected answers changed durable state"
         path.write_text(json.dumps(answer))
-        responses.extend([call("common.resources_read", target="notes.txt"), DONE])
+        responses.extend([call("core.read", target="notes.txt"), DONE])
         completed = checked("answer", "--session", session_id, "--answers-file", str(path), "--request-id", "answer-once")
         assert completed["reason"] == "model_finish" and completed["acceptance"] == "passed", completed
         assert completed["verifiedFileChanges"] == (1 if mode == "agent" else 0), "Answer required repeating a prior verified write"
@@ -184,7 +184,7 @@ def run_case(root, mode, role):
                 if message["role"] == "tool":
                     previous = continuation["messages"][index - 1]
                     assert message["tool_call_id"] in [call["id"] for call in previous["tool_calls"]]
-                    question_pair |= any(call["function"]["name"] == "common.questions_ask" for call in previous["tool_calls"])
+                    question_pair |= any(call["function"]["name"] == "core.ask" for call in previous["tool_calls"])
             assert question_pair, "The accepted question call/result pair was lost"
         else:
             assert not any(message["role"] == "tool" for message in continuation["messages"])

@@ -815,15 +815,15 @@ namespace RNAssistant.Harness
                             "closed matching identity is not advertised as a live document");
                         calls++;
                         return Task.FromResult(new LlmCompletionResult { Content = calls == 1
-                            ? LoadSkillResponse("common.html_workspace_authoring")
+                            ? LoadSkillResponse("skills.html.workspace.authoring")
                             : calls == 2
                                 ? ModelProtocolWire.WriteAcceptedCall("Create local HTML after the document closed.",
-                                    "Creating HTML.", new ConversationToolCall { Name = "common.html_workspace_write_file",
+                                    "Creating HTML.", new ConversationToolCall { Name = "html.source.write",
                                         Arguments = new JObject { ["path"] = "index.html",
                                             ["content"] = "<main>Offline</main>" } })
                                 : ScriptedVerifiedFinish(selected, "The local HTML write has a terminal result.",
                                     "Done.", "The HTML file was created in the selected chat.",
-                                    "common.html_workspace_write_file") });
+                                    "html.source.write") });
                     };
                     var result = CreateConversationRunService(adapter, executor, completion).ExecuteWithApprovalsAsync(
                         ChatModes.Agent, "Create HTML", selected, new DocumentContext(), new AppSettings(),

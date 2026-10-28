@@ -66,7 +66,7 @@ evidence и ADR — только когда нужны причина, точн�
   `finish` обязателен непустой ответ, `outcome` — оценка модели, не runtime proof.
   IDs, guards, URI/revision/cursor и authority принадлежат
   runtime, а не модели/UI.
-- Model-facing reads используют только `common.resources_*` и semantic target;
+- Model-facing reads используют только `core.find/read/search` и semantic target;
   revision-pinned `rna://`/durable `ResourceRef` остаются runtime-only evidence. Chat events — append-only source of truth;
   immutable bodies — CAS; projections не становятся вторым durable store.
 - ToolRuntime исполняет exact descriptor/policy/binding. `ok` не доказывает effect;

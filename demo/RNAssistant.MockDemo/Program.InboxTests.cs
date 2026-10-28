@@ -43,8 +43,8 @@ namespace RNAssistant.MockDemo
                 responses.Enqueue(done);
                 var direct = await SubmitAndWaitAsync(controller, "Direct answer", id);
                 if (calls != 1 || direct.RunViewState.Lifecycle != "completed") throw new Exception("direct answer did not finish once");
-                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
-                responses.Enqueue(tool("excel.add_sheet", new { name = "ApprovedSheet" }));
+                responses.Enqueue(tool("core.tools.read", new { id = "excel.sheet.add" }));
+                responses.Enqueue(tool("excel.sheet.add", new { name = "ApprovedSheet" }));
                 await SubmitAndWaitAsync(controller, "Create sheet", id);
                 var store = new ChatStore(paths);
                 var pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
@@ -61,9 +61,9 @@ namespace RNAssistant.MockDemo
                 var approved = await controller.ConfirmAgentToolAsync(pending.PendingId, id);
                 if (!adapter.HasSheet("ApprovedSheet") || approved.RunViewState.Lifecycle != "completed")
                     throw new Exception("controller lost accepted policy across approval/restart");
-                if (adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet") != 1)
+                if (adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.sheet.add") != 1)
                     throw new Exception("approved mutation dispatched more than once");
-                responses.Enqueue(tool("excel.add_sheet", new { name = "AutomaticSheet" }));
+                responses.Enqueue(tool("excel.sheet.add", new { name = "AutomaticSheet" }));
                 responses.Enqueue(done);
                 var automatic = await SubmitAndWaitAsync(controller, "Create sheet automatically", id);
                 if (!adapter.HasSheet("AutomaticSheet") || automatic.RunViewState.Lifecycle != "completed" ||
@@ -72,10 +72,10 @@ namespace RNAssistant.MockDemo
 
                 controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Deny);
                 controller.SetChatMode(id, ChatModes.Plan);
-                responses.Enqueue(tool("common.capabilities_read", new { id = "common.plan_doc_save" }));
-                responses.Enqueue(tool("common.plan_doc_save", new { title = "Review", markdown = "# Review", status = "draft" }));
-                responses.Enqueue(tool("common.capabilities_read", new { id = "common.task_list_set" }));
-                responses.Enqueue(tool("common.task_list_set", new { action = "save", goal = "Review", steps = new[] { new { text = "Inspect", status = "pending" } } }));
+                responses.Enqueue(tool("core.tools.read", new { id = "plan.document.save" }));
+                responses.Enqueue(tool("plan.document.save", new { title = "Review", markdown = "# Review", status = "draft" }));
+                responses.Enqueue(tool("core.tools.read", new { id = "task.list.set" }));
+                responses.Enqueue(tool("task.list.set", new { action = "save", goal = "Review", steps = new[] { new { text = "Inspect", status = "pending" } } }));
                 responses.Enqueue(done);
                 var planned = await SubmitAndWaitAsync(controller, "Save the plan and task list", id);
                 var saved = store.Load(id);
@@ -83,14 +83,14 @@ namespace RNAssistant.MockDemo
                     string.IsNullOrEmpty(saved.ActivePlanDocumentArtifactId) || string.IsNullOrEmpty(saved.ActiveTaskListArtifactId) ||
                     planned.RunViewState.ExecutionHealth != "clean") throw new Exception("Plan/Deny did not preserve both planning artifacts");
 
-                responses.Enqueue(tool("common.capabilities_read", new { id = "common.questions_ask" }));
-                responses.Enqueue(tool("common.questions_ask", new { questions = new[] { new {
+                responses.Enqueue(tool("core.tools.read", new { id = "core.ask" }));
+                responses.Enqueue(tool("core.ask", new { questions = new[] { new {
                     header = "Format", prompt = "Choose format " + new string('x', 9000), selection = "single", allowFreeText = true,
                     options = new[] { new { label = "Markdown", description = "Text" }, new { label = "HTML", description = "Web" } }
                 } } }));
                 await SubmitAndWaitAsync(controller, "Ask before continuing", id);
                 var questionState = store.Load(id);
-                if (!questionState.Messages.Any(m => m.ToolName == "common.questions_ask" && m.ResultPayload != null))
+                if (!questionState.Messages.Any(m => m.ToolName == "core.ask" && m.ResultPayload != null))
                     throw new Exception("large question fixture did not reach CAS");
                 controller.Dispose();
                 controller = new AssistantController(adapter, paths, model);
@@ -132,8 +132,8 @@ namespace RNAssistant.MockDemo
                 controls.AutoConfirmToolActions = false;
                 controller.SaveSettings(new SaveSettingsPayload { ChatId = id, Settings = controls,
                     ExpectedPromptPublication = controller.GetSettings().Prompts.Publication }, CancellationToken.None);
-                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
-                responses.Enqueue(tool("excel.add_sheet", new { name = "CancelledSheet" }));
+                responses.Enqueue(tool("core.tools.read", new { id = "excel.sheet.add" }));
+                responses.Enqueue(tool("excel.sheet.add", new { name = "CancelledSheet" }));
                 await SubmitAndWaitAsync(controller, "Create another sheet", id);
                 pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
                 if (pending == null) throw new Exception("second mutation did not wait");
@@ -144,8 +144,8 @@ namespace RNAssistant.MockDemo
                 catch (InvalidOperationException) { rejected = true; }
                 if (!rejected || adapter.HasSheet("CancelledSheet") || calls != before) throw new Exception("stale approval was not cancelled");
                 controller.SetChatMutationPolicy(id, RNAssistant.Core.Services.MutationPolicy.Ask);
-                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
-                responses.Enqueue(tool("excel.add_sheet", new { name = "UserCancelledSheet" }));
+                responses.Enqueue(tool("core.tools.read", new { id = "excel.sheet.add" }));
+                responses.Enqueue(tool("excel.sheet.add", new { name = "UserCancelledSheet" }));
                 await SubmitAndWaitAsync(controller, "Ask permission for a sheet", id);
                 pending = store.Load(id).LastRun.KernelState.Summary.PendingConfirmation;
                 if (pending == null) throw new Exception("explicit cancellation fixture did not wait");

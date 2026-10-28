@@ -17,7 +17,7 @@ namespace RNAssistant.Core.Services
     public sealed class ModelResultProjection
     {
         private const string Prefix = "TOOL_RESULT:\n";
-        // Match common.resources_read; binary data-plane views stay runtime-only.
+        // Match core.read; binary data-plane views stay runtime-only.
         private static readonly HashSet<string> ModelReadRepresentations = new HashSet<string>(StringComparer.Ordinal) {
             ResourceRepresentations.Metadata, ResourceRepresentations.Text, ResourceRepresentations.Structure,
             ResourceRepresentations.Source, ResourceRepresentations.Media, ResourceRepresentations.Tree,
@@ -39,6 +39,9 @@ namespace RNAssistant.Core.Services
         {
             var projected = HistoricalContextProjector.Project(source);
             if (projected == null) return null;
+            if (CapabilityNaming.IsRetiredTool(source.ToolName) ||
+                source.ToolCalls?.Any(call => CapabilityNaming.IsRetiredTool(call.Name)) == true)
+                throw new InvalidOperationException("This conversation uses retired tool contracts. Start a new chat; stored history is preserved.");
             projected.ResourceRefs = new List<ResourceRef>();
             projected.ResultPayload = null;
             projected.HtmlWorkspaceCheckpoint = null;
@@ -144,36 +147,57 @@ namespace RNAssistant.Core.Services
 
         public static bool IsResourceEvidence(string name)
         {
-            return string.Equals(name, "common.resources_find", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(name, "common.resources_read", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(name, "common.resources_search", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(name, "common.resources_outline", StringComparison.OrdinalIgnoreCase);
+            return string.Equals(name, "core.find", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "core.read", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "core.search", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "resources.outline", StringComparison.OrdinalIgnoreCase);
         }
 
         public static bool IsExactReadEvidence(string name)
         {
             return IsResourceEvidence(name) ||
-                string.Equals(name, "common.capabilities_search", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(name, "common.capabilities_read", StringComparison.OrdinalIgnoreCase);
+                string.Equals(name, "core.tools.search", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(name, "core.tools.read", StringComparison.OrdinalIgnoreCase);
         }
 
         private static ToolResultMaterialization ProjectData(string name, ToolResultMaterialization source)
         {
             if (!IsResourceEvidence(name) && !IsWorkspaceMutation(name)) return GenericForModel(name, source);
             var data = IsWorkspaceMutation(name)
-                ? SelectFields(source.Data, "path", "targetPath", "changed", "restored", "moved", "deleted", "code")
+                ? SelectFields(source.Data, "target", "path", "destination", "name", "moduleName", "newModuleName", "componentType", "vbeNormalized", "changed", "restored", "moved", "deleted", "code", "retryable")
                 : ProjectResourceData(name, source.Data);
             if (IsResourceEvidence(name)) SanitizeResourceEnvelope(data, source.Result.Resources);
             var result = new ToolResult(source.Result.Status,
-                SanitizeOperationalText(RemoveRuntimeResourceValues(source.Result.Message, source.Result.Resources)),
+                SanitizeOperationalText(RemoveRuntimeResourceValues(IsWorkspaceMutation(name)
+                    ? SanitizeMutationMessage(source.Result.Message, source.Data) : source.Result.Message, source.Result.Resources)),
                 data.ToString(Formatting.None), new ResourceRef[0]);
             return new ToolResultMaterialization(result, source.ModelAttachments, data: data);
         }
 
         private static bool IsWorkspaceMutation(string name)
         {
-            return new[] { "files.create", "files.patch", "files.replace", "files.copy", "files.move", "files.delete", "files.restore" }
-                .Contains(name, StringComparer.Ordinal);
+            return ResourceMutationToolCatalog.Owns(name);
+        }
+
+        private static string SanitizeMutationMessage(string message, JToken data)
+        {
+            // Only operational prose is redacted. Source payloads and semantic target fields are unchanged.
+            var root = data as JContainer;
+            var values = root == null ? Enumerable.Empty<string>() : root.Descendants().OfType<JProperty>()
+                .Where(property => property.Value.Type == JTokenType.String &&
+                    (property.Name.Equals("id", StringComparison.OrdinalIgnoreCase) ||
+                     property.Name.EndsWith("Id", StringComparison.Ordinal) ||
+                     property.Name.EndsWith("_id", StringComparison.OrdinalIgnoreCase) ||
+                     property.Name.IndexOf("sha256", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     property.Name.IndexOf("hash", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     property.Name.IndexOf("revision", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     property.Name.IndexOf("fingerprint", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     property.Name.EndsWith("uri", StringComparison.OrdinalIgnoreCase)))
+                .Select(property => (string)property.Value).Where(value => value.Length >= 4)
+                .Distinct(StringComparer.Ordinal).OrderByDescending(value => value.Length);
+            var result = message ?? string.Empty;
+            foreach (var value in values) result = result.Replace(value, "[runtime value]");
+            return result;
         }
 
         // Only the service-owned envelope is selected. Text, tables and user JSON
@@ -191,17 +215,17 @@ namespace RNAssistant.Core.Services
 
         public static JObject ProjectResourceData(string name, JToken data)
         {
-            var result = name == "common.resources_find"
+            var result = name == "core.find"
                 ? SelectFields(data, "scope", "query", "items", "total", "complete", "availabilityHint", "unavailableScopes", "directory", "code", "retryable")
-                : name == "common.resources_search"
+                : name == "core.search"
                 ? SelectFields(data, "target", "scope", "query", "mode", "matches", "totalMatches", "totalMatchesExact", "scanComplete", "sourceComplete", "matchesComplete", "incompleteReasons", "unavailableScopes", "continuation", "code", "retryable")
-                : name == "common.resources_outline"
+                : name == "resources.outline"
                 ? SelectFields(data, "target", "partCount", "totalLines", "nextPart", "sourceComplete", "symbolLanguage", "symbolsComplete", "parts", "code", "retryable")
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "startPage", "requestedPages", "nextPageIndex", "pageCount", "kind", "target", "type", "scope",
                     "representation", "text", "table", "tree", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
                     "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
                     "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
-            if (name == "common.resources_read")
+            if (name == "core.read")
             {
                 if (result["tree"] is JObject tree)
                 {
@@ -224,7 +248,7 @@ namespace RNAssistant.Core.Services
                         result[field] = SelectFields(coverage, "kind", "address", "start", "end", "path", "fields");
                 }
             }
-            if (name == "common.resources_find" && result["items"] is JArray)
+            if (name == "core.find" && result["items"] is JArray)
                 result["items"] = new JArray(((JArray)result["items"]).Select(item =>
                 {
                     var candidate = SelectFields(item, "target", "type", "title", "mimeType", "byteLength",
@@ -234,12 +258,12 @@ namespace RNAssistant.Core.Services
                             ModelReadRepresentations.Contains((string)view)));
                     return candidate;
                 }));
-            if (name == "common.resources_search" && result["matches"] is JArray)
+            if (name == "core.search" && result["matches"] is JArray)
                 result["matches"] = new JArray(((JArray)result["matches"]).Select(item => SelectFields(item,
                     "target", "startLine", "startColumn", "snippet", "partNumber", "sectionTitle")));
-            if (name == "common.resources_search" && result["continuation"] != null)
+            if (name == "core.search" && result["continuation"] != null)
                 result["continuation"] = SelectFields(result["continuation"], "afterTarget", "afterLine", "afterColumn");
-            if (name == "common.resources_outline" && result["parts"] is JArray)
+            if (name == "resources.outline" && result["parts"] is JArray)
                 result["parts"] = new JArray(((JArray)result["parts"]).Select(item =>
                 {
                     var projected = SelectFields(item, "partNumber", "firstLine", "lastLine", "characters", "symbols");
@@ -289,7 +313,7 @@ namespace RNAssistant.Core.Services
                  JToken.DeepEquals(objectData["truncated"], new JValue(true)) && objectData["preview"] != null && objectData["original_chars"] != null))
             {
                 objectData["hint"] =
-                    "The complete result is stored durably. Find its semantic target with common.resources_find before reading it; do not use runtime resource references.";
+                    "The complete result is stored durably. Find its semantic target with core.find before reading it; do not use runtime resource references.";
             }
             return data;
         }

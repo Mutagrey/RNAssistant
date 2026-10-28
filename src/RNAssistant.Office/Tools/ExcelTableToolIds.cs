@@ -4,7 +4,7 @@ namespace RNAssistant.Office.Tools
 {
     internal static class ExcelTableToolIds
     {
-        internal const string AddTable = "excel.add_table";
+        internal const string AddTable = "excel.table.add";
 
         internal static bool Owns(string toolId)
         {

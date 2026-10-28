@@ -61,22 +61,22 @@ namespace RNAssistant.Harness
                         Messages = new List<ChatMessage>() };
                     var initial = office.ForTarget(target, session, new AppSettings(), "run-one");
                     AssertTrue(initial.Available && initial.Tools.Any(item => item.Entry.Id == "excel.inspect") &&
-                        initial.Tools.Any(item => item.Entry.Id == "excel.write_range") &&
-                        initial.Tools.All(item => item.Entry.Id != "excel.create_chat_chart"),
+                        initial.Tools.Any(item => item.Entry.Id == "excel.range.write") &&
+                        initial.Tools.All(item => item.Entry.Id != "excel.chat.chart.create"),
                         "workspace run receives document tools without chat-owned chart artifacts");
                     AssertTrue(ReferenceEquals(ModelToolResultProjection.Instance, initial.ModelProjection),
                         "workspace Office capabilities carry the same model result projection as Office chat");
                     var registry = RegisterOfficeContributions(initial);
                     var runtime = new ToolRuntime(registry, "agent", true, true,
                         mutationObserver: initial.MutationObserver);
-                    var liveWriteCall = new ToolCall("live-write", "excel.write_range",
+                    var liveWriteCall = new ToolCall("live-write", "excel.range.write",
                         "{\"kind\":\"value\",\"sheet\":\"Data\",\"address\":\"C1\",\"value\":\"42\"}");
                     var liveWrite = runtime.ExecuteAsync(new ToolExecutionContext(liveWriteCall, runtime.Describe(liveWriteCall),
                         "run-one", "run-one", "step", DateTime.UtcNow, false, 1), CancellationToken.None)
                         .GetAwaiter().GetResult();
                     AssertEqual(ToolExecutionOutcome.Ok, liveWrite.Outcome,
                         "workspace document mutation uses the Office handler and authority observer");
-                    var liveCall = new ToolCall("live-resource", "common.resources_read",
+                    var liveCall = new ToolCall("live-resource", "core.read",
                         "{\"target\":\"Excel range: Data!A1:B2\",\"representation\":\"text\"}");
                     var liveExecution = new ToolExecutionContext(liveCall,
                         new ToolPolicySnapshot(liveCall.Name, "test", ResourceReadToolHandler.Policy),
@@ -106,7 +106,7 @@ namespace RNAssistant.Harness
                         "Office read refuses the replacement document");
                     AssertTrue(read.Result.DataJson.Contains("active_document_changed"),
                         "Office read reports exact target mismatch");
-                    var resourceCall = new ToolCall("pinned-resource", "common.resources_read",
+                    var resourceCall = new ToolCall("pinned-resource", "core.read",
                         "{\"target\":\"Excel range: Data!A1:B2\",\"representation\":\"text\"}");
                     var resourceExecution = new ToolExecutionContext(resourceCall,
                         new ToolPolicySnapshot(resourceCall.Name, "test", ResourceReadToolHandler.Policy),
@@ -132,7 +132,7 @@ namespace RNAssistant.Harness
                             .GetAwaiter().GetResult();
                         AssertEqual(ToolResultStatus.Error, refused.Result.Status,
                             "host switch refuses an Office read before dispatch");
-                        var write = switched.Tools.Single(item => item.Entry.Id == "excel.write_range");
+                        var write = switched.Tools.Single(item => item.Entry.Id == "excel.range.write");
                         var writeCall = new ToolCall("pinned-write", write.Entry.Id, "{}");
                         var writeExecution = new ToolExecutionContext(writeCall,
                             new ToolPolicySnapshot(writeCall.Name, "test", write.Entry.Policy),

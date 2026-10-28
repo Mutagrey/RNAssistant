@@ -621,7 +621,7 @@ namespace RNAssistant.OfficeHosts.Vba
                     expectedCodeSha256 = expectedCodeSha256,
                     actualExists = actualExists,
                     actualCodeSha256 = actualCodeSha256,
-                    inspectTool = "common.resources_read",
+                    inspectTool = "core.read",
                     discoveryScope = "vba"
                 },
                 "stale_vba_module",
@@ -1114,14 +1114,15 @@ namespace RNAssistant.OfficeHosts.Vba
         private static void ReplaceCode(dynamic module, string code)
         {
             code = PrepareLiveCodeForWrite(code);
-            if ((int)module.CountOfLines > 0)
+            var count = (int)module.CountOfLines;
+            var before = count == 0 ? string.Empty : VbaTextCanonicalizer.NormalizeLiveCode((string)module.Lines[1, count]);
+            // All coordinates address the original module; bottom-up dispatch preserves them.
+            foreach (var edit in TextLineEdits.Plan(before, code.Replace("\r\n", "\n")))
             {
-                module.DeleteLines(1, (int)module.CountOfLines);
+                if (edit.RemoveCount > 0) module.DeleteLines(edit.StartLine, edit.RemoveCount);
+                if (edit.Insert.Length > 0) module.InsertLines(edit.StartLine, string.Join("\r\n", edit.Insert));
             }
-            if (!string.IsNullOrEmpty(code))
-            {
-                module.InsertLines(1, code);
-            }
+
         }
 
         private static string PrepareLiveCodeForWrite(string code)

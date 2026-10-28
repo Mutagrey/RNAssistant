@@ -11,83 +11,83 @@ namespace RNAssistant.Core.Tools
         private static readonly IReadOnlyDictionary<string, ToolDisplayMetadata> BuiltIns =
             new Dictionary<string, ToolDisplayMetadata>(StringComparer.Ordinal)
         {
-            { "common.capabilities_read", new ToolDisplayMetadata("Чтение описания", "Изучаю", ToolDisplayOperation.Learn, new[] { "id", "referencePath" }) },
-            { "common.capabilities_search", new ToolDisplayMetadata("Поиск инструментов и навыков", "Ищу подходящие инструменты", ToolDisplayOperation.Search) },
-            { "common.skills_load", new ToolDisplayMetadata("Настройка навыка", "Настраиваю навык", ToolDisplayOperation.Plan, new[] { "id", "action" }) },
-            { "common.skills_upsert", new ToolDisplayMetadata("Сохранение навыка", "Сохраняю навык", ToolDisplayOperation.Write, new[] { "id", "name" }) },
-            { "common.skills_delete", new ToolDisplayMetadata("Удаление навыка", "Удаляю навык", ToolDisplayOperation.Delete, new[] { "id" }) },
-            { "common.skills_reference_upsert", new ToolDisplayMetadata("Сохранение справки навыка", "Сохраняю справку навыка", ToolDisplayOperation.Write, new[] { "id", "referencePath" }) },
-            { "common.skills_reference_delete", new ToolDisplayMetadata("Удаление справки навыка", "Удаляю справку навыка", ToolDisplayOperation.Delete, new[] { "id", "referencePath" }) },
-            { "common.tools_upsert", new ToolDisplayMetadata("Сохранение инструмента", "Сохраняю инструмент", ToolDisplayOperation.Write, new[] { "id", "name" }) },
-            { "common.tools_delete", new ToolDisplayMetadata("Удаление инструмента", "Удаляю инструмент", ToolDisplayOperation.Delete, new[] { "id" }) },
-            { "common.file_create", new ToolDisplayMetadata("Создание файла", "Создаю файл", ToolDisplayOperation.Write, new[] { "name" }) },
-            { "common.file_copy", new ToolDisplayMetadata("Копирование файла", "Копирую файл", ToolDisplayOperation.Write, new[] { "source", "name" }) },
-            { "common.file_patch", new ToolDisplayMetadata("Изменение файла", "Изменяю файл", ToolDisplayOperation.Write, new[] { "target" }) },
-            { "files.create", new ToolDisplayMetadata("Создание файла", "Создаю файл", ToolDisplayOperation.Write, new[] { "relativePath" }) },
-            { "files.copy", new ToolDisplayMetadata("Копирование файла", "Копирую файл", ToolDisplayOperation.Write, new[] { "relativePath", "targetPath" }) },
-            { "files.move", new ToolDisplayMetadata("Перемещение файла", "Перемещаю файл", ToolDisplayOperation.Write, new[] { "relativePath", "targetPath" }) },
-            { "files.patch", new ToolDisplayMetadata("Изменение файла", "Изменяю файл", ToolDisplayOperation.Write, new[] { "relativePath" }) },
-            { "files.replace", new ToolDisplayMetadata("Замена файла", "Заменяю файл", ToolDisplayOperation.Write, new[] { "relativePath" }) },
-            { "files.delete", new ToolDisplayMetadata("Удаление файла", "Удаляю файл", ToolDisplayOperation.Delete, new[] { "relativePath" }) },
-            { "files.restore", new ToolDisplayMetadata("Восстановление файла", "Восстанавливаю файл", ToolDisplayOperation.Write, new[] { "relativePath" }) },
-            { "common.html_data_bind", new ToolDisplayMetadata("Подключение данных к странице", "Подключаю данные к странице", ToolDisplayOperation.Write) },
-            { "common.html_data_freeze", new ToolDisplayMetadata("Сохранение снимка данных", "Сохраняю снимок данных", ToolDisplayOperation.Write) },
-            { "common.html_data_refresh", new ToolDisplayMetadata("Обновление данных страницы", "Обновляю данные страницы", ToolDisplayOperation.Write) },
-            { "common.html_data_write", new ToolDisplayMetadata("Запись данных страницы", "Записываю данные страницы", ToolDisplayOperation.Write) },
-            { "common.html_workspace_apply_patch", new ToolDisplayMetadata("Изменение файла страницы", "Изменяю файл страницы", ToolDisplayOperation.Write) },
-            { "common.html_workspace_delete", new ToolDisplayMetadata("Удаление файла или данных страницы", "Удаляю файл или данные страницы", ToolDisplayOperation.Delete) },
-            { "common.html_workspace_write_file", new ToolDisplayMetadata("Запись файла страницы", "Записываю файл страницы", ToolDisplayOperation.Write) },
-            { "common.office_run_macro", new ToolDisplayMetadata("Выполнение макроса", "Выполняю макрос", ToolDisplayOperation.Command) },
-            { "common.plan_doc_delete", new ToolDisplayMetadata("Удаление плана", "Удаляю план", ToolDisplayOperation.Delete) },
-            { "common.plan_doc_restore", new ToolDisplayMetadata("Восстановление плана", "Восстанавливаю план", ToolDisplayOperation.Plan) },
-            { "common.plan_doc_save", new ToolDisplayMetadata("Сохранение плана", "Сохраняю план", ToolDisplayOperation.Plan) },
-            { "common.questions_ask", new ToolDisplayMetadata("Уточнение задачи", "Готовлю уточнение", ToolDisplayOperation.Question) },
-            { "common.resources_find", new ToolDisplayMetadata("Поиск", "Ищу", ToolDisplayOperation.Search) },
-            { "common.resources_read", new ToolDisplayMetadata("Чтение", "Читаю", ToolDisplayOperation.Read, new[] { "target", "procedure", "startLine", "lineCount", "startChar", "charCount" }) },
-            { "common.resources_search", new ToolDisplayMetadata("Поиск в ресурсе", "Ищу в ресурсе", ToolDisplayOperation.Search, new[] { "scope", "target", "directory", "query", "mode" }) },
-            { "common.resources_outline", new ToolDisplayMetadata("Структура ресурса", "Строю карту ресурса", ToolDisplayOperation.Read) },
-            { "common.task_list_set", new ToolDisplayMetadata("Обновление шагов задачи", "Обновляю шаги задачи", ToolDisplayOperation.Plan) },
-            { "common.vba_delete_module", new ToolDisplayMetadata("Удаление VBA-модуля", "Удаляю VBA-модуль", ToolDisplayOperation.Delete, new[] { "moduleName" }) },
-            { "common.vba_apply_patch", new ToolDisplayMetadata("Изменение VBA-модуля", "Изменяю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
-            { "common.vba_rename_module", new ToolDisplayMetadata("Переименование VBA-модуля", "Переименовываю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
-            { "common.vba_restore_backup", new ToolDisplayMetadata("Восстановление VBA-модуля", "Восстанавливаю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
-            { "common.vba_write_module", new ToolDisplayMetadata("Запись VBA-модуля", "Записываю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
-            { "excel.add_sheet", new ToolDisplayMetadata("Создание листа", "Создаю лист", ToolDisplayOperation.Write) },
-            { "excel.add_table", new ToolDisplayMetadata("Создание таблицы", "Создаю таблицу", ToolDisplayOperation.Write) },
-            { "excel.clear_range", new ToolDisplayMetadata("Очистка диапазона", "Очищаю диапазон", ToolDisplayOperation.Delete) },
-            { "excel.delete_rows_columns", new ToolDisplayMetadata("Удаление строк или столбцов", "Удаляю строки или столбцы", ToolDisplayOperation.Delete,
+            { "core.tools.read", new ToolDisplayMetadata("Чтение описания", "Изучаю", ToolDisplayOperation.Learn, new[] { "id", "referencePath" }) },
+            { "core.tools.search", new ToolDisplayMetadata("Поиск инструментов и навыков", "Ищу подходящие инструменты", ToolDisplayOperation.Search) },
+            { "core.skills.load", new ToolDisplayMetadata("Настройка навыка", "Настраиваю навык", ToolDisplayOperation.Plan, new[] { "id", "action" }) },
+            { "skills.upsert", new ToolDisplayMetadata("Сохранение навыка", "Сохраняю навык", ToolDisplayOperation.Write, new[] { "id", "name" }) },
+            { "skills.delete", new ToolDisplayMetadata("Удаление навыка", "Удаляю навык", ToolDisplayOperation.Delete, new[] { "id" }) },
+            { "skills.reference.upsert", new ToolDisplayMetadata("Сохранение справки навыка", "Сохраняю справку навыка", ToolDisplayOperation.Write, new[] { "id", "referencePath" }) },
+            { "skills.reference.delete", new ToolDisplayMetadata("Удаление справки навыка", "Удаляю справку навыка", ToolDisplayOperation.Delete, new[] { "id", "referencePath" }) },
+            { "tools.upsert", new ToolDisplayMetadata("Сохранение инструмента", "Сохраняю инструмент", ToolDisplayOperation.Write, new[] { "id", "name" }) },
+            { "tools.delete", new ToolDisplayMetadata("Удаление инструмента", "Удаляю инструмент", ToolDisplayOperation.Delete, new[] { "id" }) },
+            { "file.source.create", new ToolDisplayMetadata("Создание файла", "Создаю файл", ToolDisplayOperation.Write, new[] { "name" }) },
+            { "file.source.copy", new ToolDisplayMetadata("Копирование файла", "Копирую файл", ToolDisplayOperation.Write, new[] { "source", "name" }) },
+            { "file.source.patch", new ToolDisplayMetadata("Изменение файла", "Изменяю файл", ToolDisplayOperation.Write, new[] { "target" }) },
+            { "core.write", new ToolDisplayMetadata("Запись ресурса", "Записываю ресурс", ToolDisplayOperation.Write, new[] { "target" }) },
+            { "core.patch", new ToolDisplayMetadata("Изменение текста", "Изменяю текст", ToolDisplayOperation.Write, new[] { "target" }) },
+            { "core.replace", new ToolDisplayMetadata("Замена совпадений", "Заменяю совпадения", ToolDisplayOperation.Write, new[] { "target" }) },
+            { "resources.move", new ToolDisplayMetadata("Перемещение ресурса", "Перемещаю ресурс", ToolDisplayOperation.Write, new[] { "target", "destination" }) },
+            { "resources.copy", new ToolDisplayMetadata("Копирование ресурса", "Копирую ресурс", ToolDisplayOperation.Write, new[] { "target", "destination" }) },
+            { "resources.delete", new ToolDisplayMetadata("Удаление ресурса", "Удаляю ресурс", ToolDisplayOperation.Delete, new[] { "target" }) },
+            { "resources.restore", new ToolDisplayMetadata("Восстановление ресурса", "Восстанавливаю ресурс", ToolDisplayOperation.Write, new[] { "target" }) },
+            { "html.data.bind", new ToolDisplayMetadata("Подключение данных к странице", "Подключаю данные к странице", ToolDisplayOperation.Write) },
+            { "html.data.freeze", new ToolDisplayMetadata("Сохранение снимка данных", "Сохраняю снимок данных", ToolDisplayOperation.Write) },
+            { "html.data.refresh", new ToolDisplayMetadata("Обновление данных страницы", "Обновляю данные страницы", ToolDisplayOperation.Write) },
+            { "html.data.write", new ToolDisplayMetadata("Запись данных страницы", "Записываю данные страницы", ToolDisplayOperation.Write) },
+            { "html.source.patch", new ToolDisplayMetadata("Изменение файла страницы", "Изменяю файл страницы", ToolDisplayOperation.Write) },
+            { "html.source.delete", new ToolDisplayMetadata("Удаление файла или данных страницы", "Удаляю файл или данные страницы", ToolDisplayOperation.Delete) },
+            { "html.source.write", new ToolDisplayMetadata("Запись файла страницы", "Записываю файл страницы", ToolDisplayOperation.Write) },
+            { "office.macro.run", new ToolDisplayMetadata("Выполнение макроса", "Выполняю макрос", ToolDisplayOperation.Command) },
+            { "plan.document.delete", new ToolDisplayMetadata("Удаление плана", "Удаляю план", ToolDisplayOperation.Delete) },
+            { "plan.document.restore", new ToolDisplayMetadata("Восстановление плана", "Восстанавливаю план", ToolDisplayOperation.Plan) },
+            { "plan.document.save", new ToolDisplayMetadata("Сохранение плана", "Сохраняю план", ToolDisplayOperation.Plan) },
+            { "core.ask", new ToolDisplayMetadata("Уточнение задачи", "Готовлю уточнение", ToolDisplayOperation.Question) },
+            { "core.find", new ToolDisplayMetadata("Поиск", "Ищу", ToolDisplayOperation.Search) },
+            { "core.read", new ToolDisplayMetadata("Чтение", "Читаю", ToolDisplayOperation.Read, new[] { "target", "procedure", "startLine", "lineCount", "startChar", "charCount" }) },
+            { "core.search", new ToolDisplayMetadata("Поиск в ресурсе", "Ищу в ресурсе", ToolDisplayOperation.Search, new[] { "scope", "target", "directory", "query", "mode" }) },
+            { "resources.outline", new ToolDisplayMetadata("Структура ресурса", "Строю карту ресурса", ToolDisplayOperation.Read) },
+            { "task.list.set", new ToolDisplayMetadata("Обновление шагов задачи", "Обновляю шаги задачи", ToolDisplayOperation.Plan) },
+            { "vba.module.delete", new ToolDisplayMetadata("Удаление VBA-модуля", "Удаляю VBA-модуль", ToolDisplayOperation.Delete, new[] { "moduleName" }) },
+            { "vba.module.patch", new ToolDisplayMetadata("Изменение VBA-модуля", "Изменяю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
+            { "vba.module.rename", new ToolDisplayMetadata("Переименование VBA-модуля", "Переименовываю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
+            { "vba.module.restore", new ToolDisplayMetadata("Восстановление VBA-модуля", "Восстанавливаю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
+            { "vba.module.write", new ToolDisplayMetadata("Запись VBA-модуля", "Записываю VBA-модуль", ToolDisplayOperation.Write, new[] { "moduleName" }) },
+            { "excel.sheet.add", new ToolDisplayMetadata("Создание листа", "Создаю лист", ToolDisplayOperation.Write) },
+            { "excel.table.add", new ToolDisplayMetadata("Создание таблицы", "Создаю таблицу", ToolDisplayOperation.Write) },
+            { "excel.range.clear", new ToolDisplayMetadata("Очистка диапазона", "Очищаю диапазон", ToolDisplayOperation.Delete) },
+            { "excel.rows.columns.delete", new ToolDisplayMetadata("Удаление строк или столбцов", "Удаляю строки или столбцы", ToolDisplayOperation.Delete,
                 new[] { "sheet", "scope", "table", "axis", "start", "count" }) },
-            { "excel.create_chat_chart", new ToolDisplayMetadata("Создание диаграммы в чате", "Создаю диаграмму в чате", ToolDisplayOperation.Chart) },
-            { "excel.delete_chart", new ToolDisplayMetadata("Удаление диаграммы", "Удаляю диаграмму", ToolDisplayOperation.Delete) },
-            { "excel.filter_range", new ToolDisplayMetadata("Фильтрация диапазона", "Фильтрую диапазон", ToolDisplayOperation.Write) },
-            { "excel.find_cells", new ToolDisplayMetadata("Поиск ячеек", "Ищу ячейки", ToolDisplayOperation.Search) },
-            { "excel.format_range", new ToolDisplayMetadata("Форматирование диапазона", "Оформляю диапазон", ToolDisplayOperation.Write) },
+            { "excel.chat.chart.create", new ToolDisplayMetadata("Создание диаграммы в чате", "Создаю диаграмму в чате", ToolDisplayOperation.Chart) },
+            { "excel.chart.delete", new ToolDisplayMetadata("Удаление диаграммы", "Удаляю диаграмму", ToolDisplayOperation.Delete) },
+            { "excel.range.filter", new ToolDisplayMetadata("Фильтрация диапазона", "Фильтрую диапазон", ToolDisplayOperation.Write) },
+            { "excel.cells.find", new ToolDisplayMetadata("Поиск ячеек", "Ищу ячейки", ToolDisplayOperation.Search) },
+            { "excel.range.format", new ToolDisplayMetadata("Форматирование диапазона", "Оформляю диапазон", ToolDisplayOperation.Write) },
             { "excel.inspect", new ToolDisplayMetadata("Проверка структуры книги", "Проверяю структуру книги", ToolDisplayOperation.Read) },
-            { "excel.rename_sheet", new ToolDisplayMetadata("Переименование листа", "Переименовываю лист", ToolDisplayOperation.Write) },
-            { "excel.replace_cells", new ToolDisplayMetadata("Замена содержимого ячеек", "Заменяю содержимое ячеек", ToolDisplayOperation.Write) },
-            { "excel.sort_range", new ToolDisplayMetadata("Сортировка диапазона", "Сортирую диапазон", ToolDisplayOperation.Write) },
-            { "excel.upsert_chart", new ToolDisplayMetadata("Обновление диаграммы", "Обновляю диаграмму", ToolDisplayOperation.Chart) },
-            { "excel.write_range", new ToolDisplayMetadata("Запись диапазона", "Записываю диапазон", ToolDisplayOperation.Write) },
-            { "outlook.create_draft", new ToolDisplayMetadata("Создание черновика письма", "Создаю черновик письма", ToolDisplayOperation.Write) },
-            { "outlook.search_mail", new ToolDisplayMetadata("Поиск письма", "Ищу письмо", ToolDisplayOperation.Search) },
-            { "outlook.index_archive", new ToolDisplayMetadata("Индексирование архива Outlook", "Читаю письма архива", ToolDisplayOperation.Read) },
-            { "outlook.update_mail", new ToolDisplayMetadata("Обновление письма", "Обновляю письмо", ToolDisplayOperation.Write) },
-            { "powerpoint.add_object", new ToolDisplayMetadata("Создание объекта", "Создаю объект", ToolDisplayOperation.Write) },
-            { "powerpoint.add_slide", new ToolDisplayMetadata("Создание слайда", "Создаю слайд", ToolDisplayOperation.Write) },
-            { "powerpoint.duplicate_slide", new ToolDisplayMetadata("Копирование слайда", "Копирую слайд", ToolDisplayOperation.Write) },
-            { "powerpoint.list_objects", new ToolDisplayMetadata("Просмотр списка объектов", "Смотрю список объектов", ToolDisplayOperation.Read) },
-            { "powerpoint.move_slide", new ToolDisplayMetadata("Перемещение слайда", "Перемещаю слайд", ToolDisplayOperation.Write) },
-            { "powerpoint.replace_text", new ToolDisplayMetadata("Замена текста", "Заменяю текст", ToolDisplayOperation.Write) },
-            { "powerpoint.search_text", new ToolDisplayMetadata("Поиск текста", "Ищу текст", ToolDisplayOperation.Search) },
-            { "powerpoint.set_text", new ToolDisplayMetadata("Изменение текста", "Меняю текст", ToolDisplayOperation.Write) },
-            { "word.add_comment", new ToolDisplayMetadata("Создание комментария", "Создаю комментарий", ToolDisplayOperation.Write) },
-            { "word.add_table", new ToolDisplayMetadata("Создание таблицы", "Создаю таблицу", ToolDisplayOperation.Write) },
-            { "word.find_text", new ToolDisplayMetadata("Поиск текста", "Ищу текст", ToolDisplayOperation.Search) },
-            { "word.format_text", new ToolDisplayMetadata("Форматирование текста", "Оформляю текст", ToolDisplayOperation.Write) },
-            { "word.insert_page_break", new ToolDisplayMetadata("Вставка разрыва страницы", "Вставляю разрыв страницы", ToolDisplayOperation.Write) },
+            { "excel.sheet.rename", new ToolDisplayMetadata("Переименование листа", "Переименовываю лист", ToolDisplayOperation.Write) },
+            { "excel.cells.replace", new ToolDisplayMetadata("Замена содержимого ячеек", "Заменяю содержимое ячеек", ToolDisplayOperation.Write) },
+            { "excel.range.sort", new ToolDisplayMetadata("Сортировка диапазона", "Сортирую диапазон", ToolDisplayOperation.Write) },
+            { "excel.chart.upsert", new ToolDisplayMetadata("Обновление диаграммы", "Обновляю диаграмму", ToolDisplayOperation.Chart) },
+            { "excel.range.write", new ToolDisplayMetadata("Запись диапазона", "Записываю диапазон", ToolDisplayOperation.Write) },
+            { "outlook.draft.create", new ToolDisplayMetadata("Создание черновика письма", "Создаю черновик письма", ToolDisplayOperation.Write) },
+            { "outlook.mail.search", new ToolDisplayMetadata("Поиск письма", "Ищу письмо", ToolDisplayOperation.Search) },
+            { "outlook.archive.index", new ToolDisplayMetadata("Индексирование архива Outlook", "Читаю письма архива", ToolDisplayOperation.Read) },
+            { "outlook.mail.update", new ToolDisplayMetadata("Обновление письма", "Обновляю письмо", ToolDisplayOperation.Write) },
+            { "powerpoint.object.add", new ToolDisplayMetadata("Создание объекта", "Создаю объект", ToolDisplayOperation.Write) },
+            { "powerpoint.slide.add", new ToolDisplayMetadata("Создание слайда", "Создаю слайд", ToolDisplayOperation.Write) },
+            { "powerpoint.slide.duplicate", new ToolDisplayMetadata("Копирование слайда", "Копирую слайд", ToolDisplayOperation.Write) },
+            { "powerpoint.objects.list", new ToolDisplayMetadata("Просмотр списка объектов", "Смотрю список объектов", ToolDisplayOperation.Read) },
+            { "powerpoint.slide.move", new ToolDisplayMetadata("Перемещение слайда", "Перемещаю слайд", ToolDisplayOperation.Write) },
+            { "powerpoint.text.replace", new ToolDisplayMetadata("Замена текста", "Заменяю текст", ToolDisplayOperation.Write) },
+            { "powerpoint.text.search", new ToolDisplayMetadata("Поиск текста", "Ищу текст", ToolDisplayOperation.Search) },
+            { "powerpoint.text.set", new ToolDisplayMetadata("Изменение текста", "Меняю текст", ToolDisplayOperation.Write) },
+            { "word.comment.add", new ToolDisplayMetadata("Создание комментария", "Создаю комментарий", ToolDisplayOperation.Write) },
+            { "word.table.add", new ToolDisplayMetadata("Создание таблицы", "Создаю таблицу", ToolDisplayOperation.Write) },
+            { "word.text.find", new ToolDisplayMetadata("Поиск текста", "Ищу текст", ToolDisplayOperation.Search) },
+            { "word.text.format", new ToolDisplayMetadata("Форматирование текста", "Оформляю текст", ToolDisplayOperation.Write) },
+            { "word.page.break.insert", new ToolDisplayMetadata("Вставка разрыва страницы", "Вставляю разрыв страницы", ToolDisplayOperation.Write) },
             { "word.inspect", new ToolDisplayMetadata("Проверка структуры документа", "Проверяю структуру документа", ToolDisplayOperation.Read) },
-            { "word.replace_text", new ToolDisplayMetadata("Замена текста", "Заменяю текст", ToolDisplayOperation.Write) },
-            { "word.write_text", new ToolDisplayMetadata("Запись текста", "Записываю текст", ToolDisplayOperation.Write) },
+            { "word.text.replace", new ToolDisplayMetadata("Замена текста", "Заменяю текст", ToolDisplayOperation.Write) },
+            { "word.text.write", new ToolDisplayMetadata("Запись текста", "Записываю текст", ToolDisplayOperation.Write) },
         };
 
         public static ToolDisplayMetadata Resolve(ToolCatalogEntry tool)
@@ -126,50 +126,50 @@ namespace RNAssistant.Core.Tools
                         return Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
                     return string.Empty; // Never dump arrays, objects, guards or full bodies into a caption.
                 }).Where(value => !string.IsNullOrWhiteSpace(value)));
-            if (command.ToolId == "common.resources_find")
+            if (command.ToolId == "core.find")
                 return string.Join(" · ", new[] { text("query"), ResourceCaption(text("scope")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
-            if (command.ToolId == "common.resources_read")
+            if (command.ToolId == "core.read")
                 return string.Join(" · ", new[] { text("target"), ResourceCaption(text("representation")) }.Where(value => !string.IsNullOrWhiteSpace(value)));
-            if (command.ToolId == "common.capabilities_read") return text("id");
-            if (command.ToolId == "common.capabilities_search") return text("query");
+            if (command.ToolId == "core.tools.read") return text("id");
+            if (command.ToolId == "core.tools.search") return text("query");
             if ((command.ToolId ?? string.Empty).StartsWith("powerpoint.", StringComparison.Ordinal))
             {
                 object index;
                 var slide = command.Arguments.TryGetValue("slideIndex", out index) && (index is int || index is long)
                     ? "Слайд " + Convert.ToString(index, System.Globalization.CultureInfo.InvariantCulture)
                     : "Текущий слайд";
-                if (command.ToolId == "powerpoint.add_slide") return string.IsNullOrWhiteSpace(text("title")) ? "Новый слайд" : text("title");
-                if (command.ToolId == "powerpoint.list_objects" && text("kind") == "slides") return "Слайды презентации";
-                if ((command.ToolId == "powerpoint.search_text" || command.ToolId == "powerpoint.replace_text") &&
+                if (command.ToolId == "powerpoint.slide.add") return string.IsNullOrWhiteSpace(text("title")) ? "Новый слайд" : text("title");
+                if (command.ToolId == "powerpoint.objects.list" && text("kind") == "slides") return "Слайды презентации";
+                if ((command.ToolId == "powerpoint.text.search" || command.ToolId == "powerpoint.text.replace") &&
                     (!command.Arguments.TryGetValue("slideIndex", out index) || Convert.ToString(index, System.Globalization.CultureInfo.InvariantCulture) == "0"))
                     slide = "Вся презентация";
-                if (command.ToolId == "powerpoint.move_slide" && command.Arguments.TryGetValue("toIndex", out index) &&
+                if (command.ToolId == "powerpoint.slide.move" && command.Arguments.TryGetValue("toIndex", out index) &&
                     (index is int || index is long))
                     return slide + " → позиция " + Convert.ToString(index, System.Globalization.CultureInfo.InvariantCulture);
                 var target = text("target") == "notes" ? "Заметки" : text("shapeName");
-                if (command.ToolId == "powerpoint.add_object") target = text("kind") == "table" ? "Таблица" :
+                if (command.ToolId == "powerpoint.object.add") target = text("kind") == "table" ? "Таблица" :
                     text("kind") == "picture" ? "Изображение" : text("kind") == "textBox" ? "Текстовый блок" : target;
                 return string.Join(" · ", new[] { slide, target, text("query"), text("find"), text("path") }
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
             }
             if ((command.ToolId ?? string.Empty).StartsWith("word.", StringComparison.Ordinal))
             {
-                var location = command.ToolId == "word.write_text" && text("mode") != "paragraph" ? "selection" : text("location");
+                var location = command.ToolId == "word.text.write" && text("mode") != "paragraph" ? "selection" : text("location");
                 if (command.ToolId == "word.inspect") return "Документ";
                 var scope = text("scope");
-                var target = command.ToolId == "word.format_text" && text("kind") == "font" ? "selection" : text("target");
-                if (command.ToolId == "word.format_text" && string.IsNullOrWhiteSpace(target)) target = "selection";
-                if (string.IsNullOrWhiteSpace(scope) && (command.ToolId == "word.find_text" || command.ToolId == "word.replace_text")) scope = "main";
+                var target = command.ToolId == "word.text.format" && text("kind") == "font" ? "selection" : text("target");
+                if (command.ToolId == "word.text.format" && string.IsNullOrWhiteSpace(target)) target = "selection";
+                if (string.IsNullOrWhiteSpace(scope) && (command.ToolId == "word.text.find" || command.ToolId == "word.text.replace")) scope = "main";
                 var place = location == "start" ? "Начало документа" : location == "end" ? "Конец документа" :
                     location == "selection" || scope == "selection" || target == "selection" ? "Выделение" :
                     scope == "main" ? "Текст документа" : scope == "all" || target == "document" ? "Весь документ" : string.Empty;
-                if (string.IsNullOrWhiteSpace(place) && (command.ToolId == "word.write_text" ||
-                    command.ToolId == "word.add_table" || command.ToolId == "word.insert_page_break" ||
-                    command.ToolId == "word.add_comment")) place = "Выделение";
+                if (string.IsNullOrWhiteSpace(place) && (command.ToolId == "word.text.write" ||
+                    command.ToolId == "word.table.add" || command.ToolId == "word.page.break.insert" ||
+                    command.ToolId == "word.comment.add")) place = "Выделение";
                 return string.Join(" · ", new[] { place, text("query"), text("find"), target == "selection" || target == "document" ? "" : target }
                     .Where(value => !string.IsNullOrWhiteSpace(value)));
             }
-            if (command.ToolId == "outlook.create_draft")
+            if (command.ToolId == "outlook.draft.create")
             {
                 var draftTarget = string.Join(" · ", new[] { text("subject"), text("to") }.Where(value => !string.IsNullOrWhiteSpace(value)));
                 var kind = text("kind");
@@ -178,7 +178,7 @@ namespace RNAssistant.Core.Tools
                         " · Текущее письмо" + (string.IsNullOrWhiteSpace(draftTarget) ? "" : " · " + draftTarget);
                 return string.IsNullOrWhiteSpace(draftTarget) ? "Новое письмо" : draftTarget;
             }
-            if (command.ToolId == "outlook.update_mail")
+            if (command.ToolId == "outlook.mail.update")
                 return "Текущее письмо" + (text("kind") == "markRead" ? " · Отметка о прочтении" :
                     text("kind") == "categories" ? " · Категории: " + text("categories") : "");
             var sheet = text("sheet");

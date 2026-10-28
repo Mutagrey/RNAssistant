@@ -326,7 +326,7 @@ function appendLiveAgentStep(parent, step, isLast, suppressAmbient, suppressArti
     var kind = activityKind(item.activity);
     var presentation = activityPresentationState(item.activity);
     var groupable = (kind === "tool" || kind === "control") &&
-      activityToolId(item.activity) !== "common.questions_ask" && presentation !== "waiting";
+      activityToolId(item.activity) !== "core.ask" && presentation !== "waiting";
     if (groupable) {
       adjacent.push(item);
     } else {

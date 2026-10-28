@@ -10,7 +10,7 @@ namespace RNAssistant.Core.Tools
 {
     public static class TaskListToolCatalog
     {
-        public const string SetToolId = "common.task_list_set";
+        public const string SetToolId = "task.list.set";
 
         public static bool Owns(string toolId)
         {

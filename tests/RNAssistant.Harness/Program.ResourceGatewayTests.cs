@@ -187,14 +187,14 @@ namespace RNAssistant.Harness
                 var error = JObject.Parse(rejected.Result.DataJson);
                 AssertEqual("resource_search_unsupported", (string)error["code"], "project search rejects before choosing an unavailable representation");
                 AssertEqual(false, (bool)error["retryable"], "the same project search is not retryable");
-                AssertContains(rejected.Message, "common.resources_find", "failure gives the project-wide search tool");
+                AssertContains(rejected.Message, "core.find", "failure gives the project-wide search tool");
                 AssertContains(rejected.Message, "scope=vba", "failure gives the search scope");
                 AssertEqual(reads, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "rejection does not silently search module source");
 
                 var inventory = execute(ResourceToolCatalog.FindToolId, new { scope = "vba" });
                 AssertEqual(ToolExecutionOutcome.Ok, inventory.Outcome, "VBA discovery succeeds");
                 var project = JObject.Parse(inventory.Result.DataJson)["items"].Single(item => (string)item["type"] == "VBA project");
-                AssertContains((string)project["usage"], "common.resources_find", "project discovery advertises its code search route");
+                AssertContains((string)project["usage"], "core.find", "project discovery advertises its code search route");
 
                 var found = execute(ResourceToolCatalog.FindToolId, new { scope = "vba", query = "ParentPath" });
                 AssertEqual(ToolExecutionOutcome.Ok, found.Outcome, "project-wide code discovery succeeds");
@@ -589,7 +589,7 @@ namespace RNAssistant.Harness
                 AssertEqual("body", (string)readData["text"], "read returns complete content without caller page size");
                 AssertTrue(readData["nextCursor"] == null && readData["resource"] == null,
                     "read data hides cursor and exact resource plumbing");
-                executor.MutateLocalResources(session, "common.html_workspace_write_file", null,
+                executor.MutateLocalResources(session, "html.source.write", null,
                     () => HtmlWorkspaceToolService.UpsertFile(session, "nested/report.html", "html",
                         "<main>Resolved through native tool</main>", true));
                 var htmlFind = execute(ResourceToolCatalog.FindToolId,
@@ -2235,7 +2235,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var staleRename = executor.ExecuteManual(
                     Command(
-                        "common.vba_rename_module",
+                        "vba.module.rename",
                         "moduleName", "ResourceModule",
                         "newModuleName", "ResourceModuleRenamed"),
                     tools,
@@ -2252,7 +2252,7 @@ namespace RNAssistant.Harness
                     "rename setup observes the complete current module");
                 var renamed = executor.ExecuteManual(
                     Command(
-                        "common.vba_rename_module",
+                        "vba.module.rename",
                         "moduleName", "ResourceModule",
                         "newModuleName", "ResourceModuleRenamed"),
                     tools,
@@ -2508,7 +2508,7 @@ namespace RNAssistant.Harness
             AssertTrue(!bounded.Contains(new string('x', 10)), "oversized target omitted whole, never advertised as a prefix");
             AssertContains(bounded, "note: Small", "oversized preferred row does not starve later useful resources");
             AssertContains(bounded, "showing=1/2", "count reflects rows actually admitted");
-            AssertContains(bounded, "common.resources_find", "omission includes discovery recovery");
+            AssertContains(bounded, "core.find", "omission includes discovery recovery");
 
             var unusual = new ChatSession();
             unusual.Artifacts.Add(new ChatArtifact { Kind = ChatArtifactKinds.Markdown,
@@ -2940,7 +2940,7 @@ namespace RNAssistant.Harness
                         "resource projection failure has an actionable code");
                     AssertEqual(ToolResultStatus.Ok,
                         ToolResultResourceService.ProjectionFailureStatus(
-                            new ToolInvocation { ToolId = "excel.add_sheet" }, ToolResultStatus.Ok),
+                            new ToolInvocation { ToolId = "excel.sheet.add" }, ToolResultStatus.Ok),
                         "projection failure cannot rewrite a known mutation outcome");
                     AssertEqual(ToolResultStatus.Ok,
                         ToolResultResourceService.ProjectionFailureStatus(

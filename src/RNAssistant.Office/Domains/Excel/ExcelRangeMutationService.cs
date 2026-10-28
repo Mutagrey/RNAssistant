@@ -216,7 +216,7 @@ namespace RNAssistant.Office.Domains.Excel
                     "Cannot clear values in the header of table '" + snapshot.TableHeader.TableName +
                     "' (" + ExcelWorksheetNameRules.FormatRangeReference(snapshot.Sheet, snapshot.TableHeader.Address) +
                     "). Excel keeps column names; clearing a header does not remove the column. " +
-                    "Clear only data rows, rename the header, or use excel.delete_rows_columns with scope=table " +
+                    "Clear only data rows, rename the header, or use excel.rows.columns.delete with scope=table " +
                     "if the task requires removing the table column. Nothing was dispatched.",
                     "excel_clear_table_header", false,
                     new JObject

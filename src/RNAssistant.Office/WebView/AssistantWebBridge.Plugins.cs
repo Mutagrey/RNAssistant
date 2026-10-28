@@ -62,7 +62,10 @@ namespace RNAssistant.Office.WebView
                         var presentationRequest = Payload<ProjectToolResultPresentationRequest>(payload);
                         var presentationSession = Plugins.ProjectChatSessionForPresentation(
                             presentationRequest.WorkspaceId, presentationRequest.SessionId);
-                        var presentation = new ToolResultPresentationService(null, new ChatBlobStore(_controller.StoragePaths))
+                        var presentationPayloads = new ChatBlobStore(_controller.StoragePaths);
+                        var workspaceChanges = new WorkspaceToolChangesProjection(new WorkspaceFileService(_controller.StoragePaths), presentationPayloads);
+                        var presentation = new ToolResultPresentationService(call => workspaceChanges.Read(presentationSession,
+                            presentationRequest.RunId, call), presentationPayloads)
                             .Read(presentationSession, presentationRequest.RunId, presentationRequest.ToolCallId);
                         presentation.WorkspaceId = presentationRequest.WorkspaceId;
                         return presentation;

@@ -35,21 +35,21 @@ def run_case(root, ending):
     workspace.mkdir(parents=True)
     requests = []
     responses = [
-        call("files.create", relativePath="app.txt", text="original"),
-        call("files.create", relativePath="other.txt", text="other"),
-        call("common.resources_read", target="app.txt"),
-        call("common.resources_read", target="app.txt"),
-        call("common.resources_read", target="other.txt"),
-        call("files.patch", relativePath="app.txt", oldText="original", newText="updated"),
+        call("core.write", target="app.txt", content="original"),
+        call("core.write", target="other.txt", content="other"),
+        call("core.read", target="app.txt"),
+        call("core.read", target="app.txt"),
+        call("core.read", target="other.txt"),
+        call("core.patch", target="app.txt", hunks=[{"oldText": "original", "newText": "updated"}]),
     ]
     if ending != "early":
         responses += [{"invalid_protocol": "Repair must preserve the frozen read assessment."},
-                      call("common.resources_read", target="app.txt"),
-                      call("common.resources_read", target="other.txt")]
+                      call("core.read", target="app.txt"),
+                      call("core.read", target="other.txt")]
     responses.append(DONE)
     first_done = len(responses) - 1
     if ending != "repair":
-        responses.extend([call("common.resources_read", target="app.txt"), DONE])
+        responses.extend([call("core.read", target="app.txt"), DONE])
     first_run_requests = len(responses)
 
     class Handler(BaseHTTPRequestHandler):
@@ -150,10 +150,10 @@ def run_completion_case(root, ending):
     try:
         if ending == "repair":
             scenario.responses.extend([DONE, {"invalid": "Preserve completion feedback during repair."},
-                call("files.create", relativePath="required.txt", text="Delivered"), DONE])
+                call("core.write", target="required.txt", content="Delivered"), DONE])
         else:
             if ending == "needs_input":
-                scenario.responses.append(call("common.questions_ask", questions=[{"header": "Obstacle", "prompt": "What should I create?",
+                scenario.responses.append(call("core.ask", questions=[{"header": "Obstacle", "prompt": "What should I create?",
                     "selection": "single", "allowFreeText": True, "options": [{"label": "required.txt", "description": "Create the required file"}, {"label": "Stop", "description": "Leave the task incomplete"}]}]))
             else:
                 scenario.responses.append({**DONE, "assessment": "not_satisfied" if ending == "blocked" else "satisfied"})

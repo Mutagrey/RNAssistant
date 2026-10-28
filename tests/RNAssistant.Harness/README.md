@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+`universal mutations:` covers the shared public source contract: original-snapshot
+hunks and overlapping/repeated text, UTF-8/BOM/CRLF and large streamed files,
+shared regex/literal matching, upsert and owner routing, delivered VBA excerpts,
+confirmation collisions, stale reads, copy/move/delete/restore, retained file diffs,
+and unknown effects. `text search:`, `tool pack:`, `authored file:`, `run changes:`
+and `tool presentation:` cover their existing owners. No COM/VSTO runs are involved.
+`tests/cli/read_recovery_smoke.py` checks six production CLI refusal/read/retry
+paths, including restart; optional lifecycle tools are admitted before use.
+`tests/web/universal-tools.test.js` and `universal-tools-browser.test.js` cover
+nested namespace groups and inline diff pagination, safe text, long lines and
+unverified previews. `tests/cli/tool_name_migration_test.py` uses only temporary
+skill packages to check explicit migration with preserved originals/body/BOM.
+See the current [source tool contract](../../docs/text-mutations.md).
+
 `workspace: failed read activity` verifies a real failed tool outcome remains failed
 with its semantic target after persistence; accepted-history checks cover shared
 display metadata and summaries. `tools: validates save metadata` covers skill
@@ -47,8 +61,7 @@ provider and an explicit small composition profile. A tool absent from the first
 request is found/read, admitted only in the next schema, executed once, restored
 after reopening, then invalidated on binding drift. A Skill-only schema read never
 admits it. The fixture checks one canonical admission event and model receipts
-without duplicated schemas, loaded flags or runtime revisions. Default workspace
-profiles stay broad. Existing `tool pack:`, Office discovery/skill-reference tests,
+without duplicated schemas, loaded flags or runtime revisions. Default workspace and Office profiles use the shared Core; optional tools require admission. Existing `tool pack:`, Office discovery/skill-reference tests,
 workspace strict/object history and pinned-Office tests cover the shared owners.
 
 `tool pack: explicit profiles` compares explicit and all-direct profiles through
@@ -85,11 +98,11 @@ workspace/VBA/HTML patch, v8 and saved-request checks retain their own coverage.
 
 `visual selection: workspace intake and common resource read` checks one accepted
 workspace attachment identity through input journal, chat CAS, model prompt and
-`common.resources_read`, plus native plugin-instance staging for active and checked
+`core.read`, plus native plugin-instance staging for active and checked
 candidate releases, browser-safe draft projection, duplicate submission and
 ambiguous-target refusal.
 The same fixture now checks a static annotated plugin button against its retained
-release and current source, applies one revision-guarded `files.patch`, reads the
+release and current source, applies one revision-guarded `core.patch`, reads the
 changed source and retains a checked candidate. Ambiguous anchors and stale reads
 refuse the write. It does not assert browser behavior.
 
@@ -674,7 +687,7 @@ schema placement across strict transport and `json_object` fallback.
 For report discovery use `--excel-report-workflow-scripted`, then
 `--excel-report-workflow-live`, with the same profile variables and separate new
 evidence directories. The real adapter and fake host share the production
-`excel.analysis_reporting` definition. The task asks for numeric regional totals,
+`skills.excel.analysis.reporting` definition. The task asks for numeric regional totals,
 a named sheet/table, a number format and a workbook chart, preserving source data.
 Acceptance compares the final fake workbook independently of the model's message:
 six state checks, completed runtime, at least five verified writes and no unknown
@@ -1323,7 +1336,7 @@ create-only import, cross-workspace publish/reuse and unsafe manifest rejection.
 
 `model context: request schema` measures exact retained request bytes for Excel
 Agent core, Task Tracking, VBA and HTML selections, each with one directly admitted
-extension. It uses native descriptor evidence for `common.markdown_save`, verifies
+extension. It uses native descriptor evidence for `markdown.save`, verifies
 complete selected bodies appear once, and prints prompt/skill characters plus the
 serialized UTF-8 byte breakdown for `json_schema` and `json_object`. It also checks
 schema-rejection fallback during repair. The optional-schema admission test checks
@@ -1987,8 +2000,8 @@ covers the shared writer. Use `bridge: typed tools and skills` and
 
 The `skills:` filter covers the complete current-package revision, core/reference
 CRUD and collision/validation behavior. The CRUD case also verifies the four exact
-core `common.skills_upsert/delete` and reference
-`common.skills_reference_upsert/delete` registrations, Agent-only confirmed-write policy,
+core `skills.upsert/delete` and reference
+`skills.reference.upsert/delete` registrations, Agent-only confirmed-write policy,
 versioned result data, no dispatch before confirmation, verified change/no-change
 and rejection of a stale prepared package. Focused `agent: confirmation`,
 `protocol context:` and `kernel replay:`/`kernel recovery:` cases keep durable
@@ -2110,7 +2123,7 @@ is unchanged.
 See [2C3B evidence](../../docs/stabilization/PHASE_2C3B_PROMPT_REVIEW.md).
 
 Phase 8D moved the original resource data plane to native handlers. R61/11O1 now
-publishes semantic `common.resources_find/read/search/outline`, keeping provider routing,
+publishes semantic `core.find/read/search/outline`, keeping provider routing,
 revision-pinned `ResourceRef` and continuation state inside runtime/durable evidence.
 Use `tool runtime: native resource tools`, `resources:`, the focused model-projection,
 media/replay cases, and `harness: production projects include all source files` to
@@ -2131,13 +2144,13 @@ UTF-16 chat reopening remains a separate [open risk](../../docs/stabilization/RI
 `node tests/web/artifact-json-viewer.test.js` also checks automatic inert source
 loading for authored HTML without uploaded-original controls.
 
-The schema-20 correction makes `common.resources_read` return one complete bounded
+The schema-20 correction makes `core.read` return one complete bounded
 representation or an explicit error. Broad VBA inspection starts from
 `RUNTIME_CONTEXT.document.vba_project_target`; unfiltered VBA find is only fallback
 discovery and keeps the project target first, while queried find remains filtered.
 
-R61/11O2 replaces Plan create/update with `common.plan_doc_save`, replaces the
-three Task List lifecycle ids with `common.task_list_set`, and removes caller-owned
+R61/11O2 replaces Plan create/update with `plan.document.save`, replaces the
+three Task List lifecycle ids with `task.list.set`, and removes caller-owned
 question/option/plan/artifact/list/step/revision identity. Use `plan mode:`,
 `plan document:`, `task lists:`, the focused model-projection case and the R61
 property inventory. The services still bind exact active revisions and stable ids

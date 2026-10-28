@@ -34,25 +34,25 @@ def run_case(root):
     install(state, "workspace.extra", "Workspace", "WORKSPACE_HOST_BODY")
     install(state, "excel.hidden", "Excel", "OFFICE_ONLY_BODY")
     install(state, "common.disabled", "Common", "DISABLED_BODY", enabled=False)
-    install(state, "workspace.files", "Common", "SHADOWED_BUILTIN_BODY")
+    install(state, "skills.skills.workspace.files", "Common", "SHADOWED_BUILTIN_BODY")
     requests, server_errors = [], []
     responses = [
-        call("common.resources_find", type="skill"),
-        call("common.resources_read", type="skill", target="workspace.files"),
-        call("common.resources_read", type="skill", target="common.example"),
+        call("core.find", type="skill"),
+        call("core.read", type="skill", target="skills.skills.workspace.files"),
+        call("core.read", type="skill", target="common.example"),
         # A skill with the same semantic name does not authorize a file edit.
-        call("files.replace", relativePath="common.example", text="UNSAFE_REPLACEMENT"),
-        call("common.resources_read", type="skill", target="common.example", referencePath="references/details.md"),
-        call("common.resources_read", type="skill", target="workspace.extra"),
-        call("files.create", relativePath="app.txt", text="first"),
-        call("common.resources_read", target="app.txt"),
-        call("files.patch", relativePath="app.txt", oldText="first", newText="fixed"),
-        call("common.resources_read", target="app.txt"),
+        call("core.write", target="common.example", content="UNSAFE_REPLACEMENT"),
+        call("core.read", type="skill", target="common.example", referencePath="references/details.md"),
+        call("core.read", type="skill", target="workspace.extra"),
+        call("core.write", target="app.txt", content="first"),
+        call("core.read", target="app.txt"),
+        call("core.patch", target="app.txt", hunks=[{"oldText": "first", "newText": "fixed"}]),
+        call("core.read", target="app.txt"),
         DONE,
         # Separate-process continuation reads the same committed publication,
         # despite removal of the authoring package after its first capture.
-        call("common.resources_read", type="skill", target="common.example"),
-        call("common.resources_read", type="skill", target="common.example", referencePath="references/details.md"),
+        call("core.read", type="skill", target="common.example"),
+        call("core.read", type="skill", target="common.example", referencePath="references/details.md"),
         DONE,
     ]
 
@@ -107,7 +107,7 @@ def run_case(root):
         assert (workspace / "app.txt").read_text() == "fixed"
         assert (workspace / "common.example").read_text() == "ORIGINAL_FILE_BYTES"
         initial = text_at(0)
-        for target in ("workspace.files", "common.example", "workspace.extra"):
+        for target in ("skills.skills.workspace.files", "common.example", "workspace.extra"):
             assert target in initial, target
         for hidden in ("PUBLISHED_CORE_MARKER", "WORKSPACE_HOST_BODY", "OFFICE_ONLY_BODY", "DISABLED_BODY",
                        "SHADOWED_BUILTIN_BODY", "WORKSPACE_FILE_IS_NOT_INSTALLED_INSTRUCTIONS", "excel.hidden", "common.disabled"):
@@ -136,7 +136,7 @@ def run_case(root):
         assert "UNPUBLISHED_CORE_DRIFT" not in json.dumps(requests)
         assert "UNPUBLISHED_REFERENCE_DRIFT" not in json.dumps(requests)
         for read_only in (False, True):
-            responses.extend([call("common.skills_load", id="workspace.files" if read_only else "workspace.web_verify_repair"), DONE])
+            responses.extend([call("core.skills.load", id="skills.skills.workspace.files" if read_only else "skills.workspace.web.verify.repair"), DONE])
             env["RNA_BROWSER_EXECUTABLE"] = "/missing/chromium"
             hidden = run(*(["--read-only"] if read_only else []), iterations="2")
             assert hidden.returncode == 5, (hidden.stdout, hidden.stderr)
@@ -144,7 +144,7 @@ def run_case(root):
             metadata, _ = json.JSONDecoder().raw_decode(prompt.split("Available skill metadata: ", 1)[1])
             ids = {item["target"] for item in metadata["items"]}
             # Discovery retains unavailable metadata; admission owns capability refusal.
-            assert "workspace.web_verify_repair" in ids and "workspace.files" in ids, ids
+            assert "skills.workspace.web.verify.repair" in ids and "skills.skills.workspace.files" in ids, ids
             assert "Required tool unavailable" in text_at(len(requests) - 1)
             assert "SELECTED_SKILL workspace." not in text_at(len(requests) - 1)
         print("PASS CLI skills: shared publication, metadata/body separation, host/enabled/shadow filtering, "

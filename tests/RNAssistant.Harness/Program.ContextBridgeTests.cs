@@ -131,13 +131,13 @@ namespace RNAssistant.Harness
                     ExecutionStatus = "partial_failure",
                     ErrorCode = "pipeline_partial_failure",
                     Retryable = false,
-                    ToolId = "excel.write_range",
+                    ToolId = "excel.range.write",
                     ArgumentsJson = sourceArgumentsJson,
                     DataJson = sourceArgumentsJson,
                     RuntimeGuardJson = "{\"version\":1}",
                     Children = new List<ChatActivity>
                     {
-                        new ChatActivity { Kind = "tool", Title = "Nested", Status = "completed", ToolId = "excel.add_sheet" }
+                        new ChatActivity { Kind = "tool", Title = "Nested", Status = "completed", ToolId = "excel.sheet.add" }
                     }
                 },
                 CreatedUtc = new DateTime(2024, 1, 1, 1, 0, 0, DateTimeKind.Utc)
@@ -430,7 +430,7 @@ namespace RNAssistant.Harness
             var bridge = new AssistantWebBridge(controller, progressMessages.Add);
             var token = BridgeToken(bridge);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":2,\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"excel.add_sheet\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
+                "{\"contractVersion\":2,\"id\":\"b1\",\"type\":\"runTool\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-a\",\"toolId\":\"excel.sheet.add\",\"arguments\":{\"name\":\"Report\",\"count\":2,\"enabled\":true,\"values\":[[\"A\"]]},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -439,7 +439,7 @@ namespace RNAssistant.Harness
             AssertEqual("b1", response["id"].Value<string>(), "bridge response id");
             AssertTrue(response["payload"]["success"].Value<bool>(), "bridge payload success");
             AssertEqual("chat-a", controller.LastChatId, "manual tool keeps exact chat identity");
-            AssertEqual("excel.add_sheet", controller.LastToolId, "tool id");
+            AssertEqual("excel.sheet.add", controller.LastToolId, "tool id");
             AssertContains(controller.LastArgumentsJson, "Report", "tool args");
             AssertEqual(2, JObject.Parse(controller.LastArgumentsJson)["count"].Value<int>(), "integer tool arg");
             AssertEqual(true, JObject.Parse(controller.LastArgumentsJson)["enabled"].Value<bool>(), "bool tool arg");
@@ -503,7 +503,7 @@ namespace RNAssistant.Harness
             var controller = new AssistantController();
             var bridge = new AssistantWebBridge(controller, null);
             var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":2,\"id\":\"bad\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.add_sheet\",\"arguments\":{},\"dryRun\":true}}")
+                "{\"contractVersion\":2,\"id\":\"bad\",\"type\":\"runTool\",\"payload\":{\"toolId\":\"excel.sheet.add\",\"arguments\":{},\"dryRun\":true}}")
                 .GetAwaiter()
                 .GetResult();
 
@@ -773,7 +773,7 @@ namespace RNAssistant.Harness
             {
                 var refused = JObject.Parse(bridge.HandleMessageAsync(new JObject {
                     ["id"] = "mismatch", ["type"] = "runTool", ["bridgeToken"] = token,
-                    ["contractVersion"] = version, ["payload"] = new JObject { ["toolId"] = "excel.add_sheet" }
+                    ["contractVersion"] = version, ["payload"] = new JObject { ["toolId"] = "excel.sheet.add" }
                 }.ToString()).GetAwaiter().GetResult());
                 AssertEqual("bridge_contract_mismatch", (string)refused["errorCode"], "incompatible UI is refused before dispatch");
                 AssertTrue(controller.LastToolId == null, "mismatch never dispatches a tool");
@@ -1026,13 +1026,13 @@ namespace RNAssistant.Harness
         {
             var result = new ToolResultDescriptionDto
             {
-                ToolId = "common.resources_read",
+                ToolId = "core.read",
                 Success = true,
                 Message = "Read complete",
                 Description = new string('z', 128 * 1024)
             };
             var wire = JObject.FromObject(ToolResultLogDto.From(result));
-            AssertEqual("common.resources_read", (string)wire["toolId"], "completion tool id retained");
+            AssertEqual("core.read", (string)wire["toolId"], "completion tool id retained");
             AssertTrue((bool)wire["success"], "completion success retained");
             AssertEqual("Read complete", (string)wire["message"], "completion message retained");
             AssertTrue(wire["dataJson"] == null && wire.ToString(Formatting.None).Length < 256,

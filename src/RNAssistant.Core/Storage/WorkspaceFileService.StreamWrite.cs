@@ -72,7 +72,7 @@ namespace RNAssistant.Core.Storage
 
         private WorkspaceFileObservation CopyStreamedText(WorkspaceDescriptor workspace,
             string sourceRelativePath, ResourceRef expectedSource, string targetRelativePath,
-            Action onDispatch)
+            Action onDispatch, string effectOperation = null)
         {
             var source = AcceptedStreamedTextSource(workspace, sourceRelativePath, expectedSource);
             var sourcePath = ResolvePath(workspace, sourceRelativePath, false, true);
@@ -89,7 +89,7 @@ namespace RNAssistant.Core.Storage
                     () => {
                         ResolvePath(workspace, sourceRelativePath, false, true);
                         VerifyLargePatchSource(sourcePath, sourceRevision);
-                    });
+                    }, effectOperation);
                 return new WorkspaceFileObservation { RelativePath = targetRelativePath,
                     Reference = saved.Reference, ContentSha256 = saved.ContentSha256,
                     SourceByteLength = saved.ByteLength, AuthorityCommit = saved.AuthorityCommit };
@@ -105,7 +105,7 @@ namespace RNAssistant.Core.Storage
         private WorkspaceFileObservation RestoreStreamedDeletedText(WorkspaceDescriptor workspace,
             ResourceAuthorityScopeId scope, string id, string relativePath, string path,
             string trashPath, ResourceHeadState expectedHead, ResourceRef previous,
-            ResourceRevisionMetadata retained, Action onDispatch)
+            ResourceRevisionMetadata retained, Action onDispatch, string effectOperation = null)
         {
             long length;
             var hash = HashUtf8File(trashPath, out length);
@@ -146,7 +146,7 @@ namespace RNAssistant.Core.Storage
                 var head = snapshot.GetHead(Identity(id));
                 if (head == null || !head.SameAuthority(expectedHead))
                     throw new WorkspaceFileException("authority_conflict", "File authority changed before restore publication.");
-                var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.restore",
+                var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), effectOperation ?? "files.restore",
                     ResourceEffectOutcome.Restored,
                     new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
                         after: exact, changeKind: "text-restore") }, "exact streamed read-back");
@@ -169,7 +169,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private WorkspaceFileObservation WriteStagedText(WorkspaceDescriptor workspace,
-            string relativePath, string text, ResourceRef expected, Action onDispatch)
+            string relativePath, string text, ResourceRef expected, Action onDispatch, string effectOperation = null)
         {
             RequireWritable(workspace);
             text = text ?? string.Empty;
@@ -191,7 +191,7 @@ namespace RNAssistant.Core.Storage
                     staged.Flush(true);
                 }
                 var saved = CommitStagedFileCore(workspace, relativePath, stagedPath, expected,
-                    long.MaxValue, onDispatch, default(CancellationToken), true);
+                    long.MaxValue, onDispatch, default(CancellationToken), true, effectOperation: effectOperation);
                 return new WorkspaceFileObservation { RelativePath = relativePath,
                     Reference = saved.Reference, ContentSha256 = saved.ContentSha256,
                     SourceByteLength = saved.ByteLength, AuthorityCommit = saved.AuthorityCommit };
@@ -253,7 +253,7 @@ namespace RNAssistant.Core.Storage
         private WorkspaceFileSnapshot CommitStagedFileCore(WorkspaceDescriptor workspace,
             string relativePath, string stagedPath, ResourceRef expected, long maximumBytes,
             Action onDispatch, CancellationToken token, bool textSource,
-            ResourceRef copySource = null, Action preDispatchCheck = null)
+            ResourceRef copySource = null, Action preDispatchCheck = null, string effectOperation = null)
         {
             RequireWritable(workspace);
             if (copySource != null && (expected != null || !textSource))
@@ -336,7 +336,7 @@ namespace RNAssistant.Core.Storage
                     _authority.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Raw, payload.Sha256, payload, ResourceCoverage.Whole()));
                     var frozen = _authority.Capture(scope); var head = frozen.GetHead(Identity(id));
                     if (head?.Revision?.Revision != expected?.Revision) throw new WorkspaceFileException("authority_conflict", "File authority changed before publication.");
-                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), attempt.Operation, ResourceEffectOutcome.VerifiedChanged,
+                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), effectOperation ?? attempt.Operation, ResourceEffectOutcome.VerifiedChanged,
                         new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact, before: expected,
                             after: exact, changeKind: copySource == null ? "file-write" : "text-copy") }, "exact read-back");
                     var commit = ResourceAuthorityCommit.Create(scope, frozen.Generation, effect,

@@ -240,7 +240,7 @@ namespace RNAssistant.Office.Domains.Excel
         {
             failure = null;
             var delete = string.Equals(
-                request.ToolId, "excel.delete_chart", StringComparison.Ordinal);
+                request.ToolId, "excel.chart.delete", StringComparison.Ordinal);
             var mode = string.IsNullOrWhiteSpace(request.Mode)
                 ? "upsert" : request.Mode.Trim().ToLowerInvariant();
             if (!delete && mode != "upsert" && mode != "createonly" &&

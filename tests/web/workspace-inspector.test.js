@@ -48,7 +48,7 @@ const { chromium } = require("playwright");
           TotalTokens: id === "one" ? 5200 : id === "two" ? 6250 : null,
           Activity: {
           RunId: runId, StepId: id, Kind: "tool", Title: text, StepMessage: text, Status: "completed",
-          ToolId: "common.resources_read", ToolCallId: "call-" + id, ResultMessage: "Содержимое получено" } });
+          ToolId: "core.read", ToolCallId: "call-" + id, ResultMessage: "Содержимое получено" } });
         result.messages = [step("old-run", "old", "Предыдущий запуск"),
           { Id: "old-final", Role: "assistant", RunId: "old-run", Content: "Старая сводка", RunViewState: run("old-run") },
           step("current-run", "one", "Проверка исходников"), step("current-run", "two", "Чтение отчёта"),
@@ -64,9 +64,9 @@ const { chromium } = require("playwright");
             { Id: "reports", Name: "Подготовка отчёта", Description: "Сравнивает данные и составляет сводку по материалам проекта.", Status: "selected" },
             { Id: "archive", Name: "Работа с архивом", Description: "Анализирует архивные материалы проекта.", Status: "unavailable", Reason: "Выбранная версия навыка больше недоступна." }
           ], Tools: [
-            { Id: "common.resources_read", Name: "Чтение материалов", Description: "Читает выбранный источник. Поддерживает таблицы, документы и большие файлы с постраничной загрузкой." },
-            { Id: "common.resources_find", Name: "Поиск материалов", Description: "Находит доступные источники в проекте." },
-            { Id: "common.office_run_macro", Name: "Выполнение макроса", Description: "Запускает выбранный макрос документа.", RequiresConfirmation: true }
+            { Id: "core.read", Name: "Чтение материалов", Description: "Читает выбранный источник. Поддерживает таблицы, документы и большие файлы с постраничной загрузкой." },
+            { Id: "core.find", Name: "Поиск материалов", Description: "Находит доступные источники в проекте." },
+            { Id: "office.macro.run", Name: "Выполнение макроса", Description: "Запускает выбранный макрос документа.", RequiresConfirmation: true }
           ], Available: [{ Id: "not-selected", Name: "Навык вне запроса" }] } };
         if (result.project.workspaceId === "preview-plugin-workspace") {
           result.state.office = null;
@@ -110,7 +110,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.getByText("Выбранная версия навыка больше недоступна.", { exact: true }).isVisible(), true,
       "an unavailable skill keeps its reason even when a description exists");
     await page.locator('[data-inspector-key="tools:common"] > summary').click();
-    assert.match(await page.locator('[data-inspector-key="tool:common.office_run_macro"] > summary').textContent(), /С разрешения/);
+    assert.match(await page.locator('[data-inspector-key="tool:office.macro.run"] > summary').textContent(), /С разрешения/);
     await capture("project-abilities");
     await page.evaluate(() => {
       window.savedWorkspaceArsenal = structuredClone(RNAssistantWorkspaceChat.snapshot().state.contextReceipt.Arsenal);

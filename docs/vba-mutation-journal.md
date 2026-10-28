@@ -84,7 +84,7 @@ Controller/STA/COM and WebView2 save/create/cancel still require Windows qualifi
 
 ## Mutation ownership
 
-Phase 6C moves the complete `common.vba_apply_patch` workflow and shared module
+Phase 6C moves the complete `core.patch` workflow and shared module
 prepare/dispatch/terminal orchestration to `Office.Vba.VbaMutationService`.
 `Office.Vba.VbaVerifier` owns module write/delete read-back and before/intended
 assessment. Phase 6D replaces the temporary command/result seam with typed
@@ -107,24 +107,18 @@ mapping plus custom package/manual/reconciliation UI projections. Package journa
 read-back/reconciliation belongs to `Office.Vba.VbaPackageService`; CAS bytes and
 durable event formats remain unchanged.
 
-Since 11O5 the six public VBA/macro registrations use exact intent bindings. Whole-
-source write and identity-preserving rename are separate tools. Model patch hunks
-require `find` and `text`. Repeated source within `moduleName` is selected by
-unchanged `contextBefore`/`contextAfter` or explicit `startLine` and optional
-`startColumn` (1-based UTF-16 column including indentation; default 1). A location
-checks exact old text and adjacent context only there, with no search elsewhere
-or format-normalized redirection. These are code coordinates, not runtime resource
-handles. Runtime supplies the fixed replace operation before domain preparation. Restore accepts either an exact readable backup target returned
-by Resource Fabric or a module name meaning its latest available backup. Runtime
-resolves that intent to the exact backup id before confirmation and stores it only
-in prepared state. Raw backup ids, hashes, revisions, guards and journal identities
-are absent from accepted model arguments and replay.
+Public VBA source operations now use the same `core.write/patch/replace` and
+`resources.move/copy/delete/restore` contracts as other text owners; see
+[Text mutations](text-mutations.md). `target` is a semantic resource such as
+`VBA module: Module1`, and `destination` selects another component in the same
+project. `core.write` is an implicit upsert: runtime pins existence and current
+source before confirmation. `resourceType` is a creation hint, never a type change.
+The accepted public call/policy is immutable; private owner commands preserve the
+existing VBA journal, guard and read-back workflow.
 
-`moduleName` selects the component from the project inventory (for example
-`Module1`), not a procedure (`Module1.Run`) or read target (`VBA module: Module1`).
-Use `createOnly` for intended creation and `updateOnly` for replacement of an
-existing component; default `upsert` permits either outcome. A missing edit target
-requires resolving its owning component, not creating a substitute module.
+Restore selects a discovered backup target or the latest backup of an existing
+module. The exact backup and prepared guard stay runtime-owned. To restore a deleted
+component, discover its retained backup and use that target. UserForms remain CodeOnly.
 
 | Representation | Purpose / existing transformation |
 |---|---|
@@ -134,21 +128,12 @@ requires resolving its owning component, not creating a substitute module.
 | VBE-comparable fingerprint | `NormalizeVbeComparableCode` / `VbeComparableCodeSha256`: existing token-based comparison; quoted strings/bracketed names and apostrophe comment text remain significant; not replacement source |
 | Package-comparable fingerprint | `PackageComparableCodeSha256`: package normalization followed by VBE-comparable normalization |
 
-Patch inputs match actual newline characters to the current source style. Literal
-backslash sequences are never decoded again. Comparison representations are never
-written over the original CAS body. Every starting offset counts toward uniqueness,
-including overlaps (`aaaa` / `aaa` has two matches). Without a location, a
-replacement requires exactly one match even when its text equals the find block.
-Ambiguity returns `vba_patch_ambiguous`, full `matchCount`, up to 20 candidate
-`locations` and explicit `locationsComplete`; source remains unchanged. A pointed
-replacement requires exact matching at that location, even if other copies exist.
-Later hunks use coordinates in the candidate after preceding hunks.
-
-Ordered operations work on candidate text only. If any operation is ambiguous,
-the entire patch is rejected before confirmation, backend write or creation of a
-backup/prepared journal record for that patch; earlier candidate edits are not
-partially dispatched. This R33 correction does not change existing recovery or
-the journal protocol; Windows/VBE qualification remains open.
+Hunks match exact source with `oldText`/`newText`, optional adjacent context and
+1-based UTF-16 coordinates. Every hunk addresses the original source. Repeated
+matches, mismatched coordinates and overlapping edits reject the entire plan before
+confirmation/dispatch; there is no fuzzy or sequential shifted-position matching.
+Literal backslash sequences are never decoded again. Normalized fingerprints do
+not become replacement source. Whole-source validation still runs on the result.
 
 A model-visible module observation is distinct from internal guard and verification
 reads. Whole-source overwrite still requires a complete current model observation;
@@ -159,12 +144,12 @@ redundant whole-source read, while stale or ambiguous hunks fail with no effect.
 
 Internal mutation snapshots have no configured character ceiling. Preparation,
 verification, retained after-source, restore and restart reconciliation all request
-the complete module; incomplete snapshots still fail explicitly. Full
-in-memory candidate construction and whole-module backend replacement are deliberate:
-all hunks are validated together before any COM write, and the journal retains the
-complete before/intended source. Removing the former one-million-character ceiling
-does not introduce partial COM edits or require sending the whole module to the
-model. Resource read windows and model context admission remain separate.
+the complete module; incomplete snapshots still fail explicitly. The complete candidate is validated before COM and retained in the journal.
+`TextLineEdits` computes physical line edits and the host applies them bottom-up.
+Unchanged lines are preserved; bounded LCS falls back to the changed middle span
+for very large comparisons. Full-module read-back still determines the outcome. Removing the former one-million-character ceiling
+does not require sending the whole module to the model or make multiple COM
+operations atomic; an uncertain partial effect remains unknown. Resource read windows and model context admission remain separate.
 
 A whole-write conflict returns complete current source up to 16,384 characters
 and a changed-span diff in typed recovery. This diagnostic text is not a published
@@ -181,19 +166,19 @@ body restored after compaction, can authorize the next replacement. A successful
 historical read whose body was omitted by the context budget cannot.
 `vba_snapshot_refresh_required` reports this missing/stale model observation; it
 does not establish an Office access denial. If the whole source does not fit,
-`common.resources_read` with `representation=source`, `startLine` and `lineCount`
-provides an exact excerpt for `common.vba_apply_patch`. Do not repeat an unchanged
+`core.read` with `representation=source`, `startLine` and `lineCount`
+provides an exact excerpt for `core.patch`. Do not repeat an unchanged
 whole-read/write loop, invent a cursor, or create another module to bypass the
 guard. Excerpts never authorize a whole-source replacement.
 
-Related edits from one snapshot should remain one ordered patch array when that
+Related edits from one snapshot should remain one hunk array against the original source when that
 is the natural single mutation. Each model mutation is a singleton call followed
 by its result; unknown effects remain cumulative run evidence.
 
 Accepted model calls retain the resource evidence from the input snapshot that
 produced that exact call. VBA observation guards use that retained evidence against
 current authority, not all later tool results in the chat. A same-response sequence
-`patch → resources_read → write_module` cannot use the sibling read to authorize
+`core.patch → core.read → core.write` cannot use the sibling read to authorize
 whole source already authored before that read completed. The stale write returns
 `vba_snapshot_refresh_required` before VBA journal preparation or dispatch; a new
 model response can use the delivered current source. Manual/editor writes retain
@@ -220,7 +205,7 @@ persists `mutation.prepared` with:
 - rollback backup id when a before state exists;
 - chat/session, run, turn, step, and tool-call correlation.
 
-An exact patch whose ordered replacements produce the current source is already satisfied, not a mutation: its execution returns success and writes neither a backup nor journal events.
+An exact patch whose resolved hunks produce the current source is already satisfied, not a mutation: its execution returns success and writes neither a backup nor journal events.
 
 After the Office operation and read-back, one `mutation.terminal` records:
 

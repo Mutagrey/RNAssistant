@@ -24,7 +24,7 @@
   }
 
   function continuationFrom(tool, args, result) {
-    if (!tool || tool.Id !== "common.capabilities_read" ||
+    if (!tool || tool.Id !== "core.tools.read" ||
         !args || typeof args.id !== "string" || !args.id ||
         typeof args.referencePath !== "string" || !args.referencePath ||
         result.status !== "ok" || !result.dataJson) return null;

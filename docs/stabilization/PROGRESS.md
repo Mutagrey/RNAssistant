@@ -1,5 +1,32 @@
 # Stabilization progress
 
+## Общий контракт текстовых мутаций и имён — 2026-10-28
+
+Owner: Core Tools / Application Workspace / Office Tools; Library и лента — Web.
+По согласованному scope введены `core.write` с upsert, `core.patch` с точными hunks
+оригинального snapshot, `core.replace` после проверенного поиска и общие
+`resources.copy/move/delete/restore`. Начальный профиль — доступные 10 Core tools;
+остальные подключаются по exact schema/skill. Public source tools отдельных сред
+удалены, старые имена не aliases. Вложенные dot-группы видны в Library/Inspector,
+внутри шага показан компактный diff; unknown остаётся предварительным результатом.
+
+Host-neutral: 5 universal mutation, 6 text search, 11 tool pack, 2 authored file,
+4 run changes и 5 tool presentation checks прошли. Production Workspace pilot —
+4/4 scripted сценария; отказ → целевое чтение → повтор и restart — 6/6 CLI.
+Chrome проверил Inspector и inline diff в узкой панели, длинные строки, раскрытие
+и безопасный текст; explicit skill migration проверена на временных пакетах.
+Дополнительно прошли 3 проверки native VBA/schema/большого модуля и проверки
+границ зависимостей/включения source files. Public history проверяет общую schema;
+операционные сообщения не выдают runtime IDs/hash из owner result.
+Известный старый assertion `skills-contract.test.js` остаётся в BACKLOG.
+Часть старых integration fixtures ещё требует переноса с private source IDs на
+общий API; полный Harness не объявляется пройденным (см. BACKLOG).
+
+Контракт, encoding/coverage, ограничения lifecycle по owner и явная миграция —
+[Text mutations](../text-mutations.md). Временный private owner bridge описан в
+[MIGRATION_MAP](MIGRATION_MAP.md). Windows x64 / Office x64 / WebView2,
+физические VBA DeleteLines/InsertLines и UserForms не квалифицированы на этой машине.
+
 ## Одиночное действие и разделитель перед final — 2026-10-28
 
 Общий renderer Office/project/plugin теперь показывает одно действие без

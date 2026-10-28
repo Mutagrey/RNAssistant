@@ -16,7 +16,7 @@ from tempfile import TemporaryDirectory
 from read_acceptance_context_smoke import CLI, REPO, DONE, call
 
 
-TOOL = "common.task_list_set"
+TOOL = "task.list.set"
 
 
 def task(request):
@@ -100,7 +100,7 @@ def run_case(root, mode, role):
             call(TOOL, action="save", goal="Review source", steps=[
                 {"text": "Read source", "status": "in_progress", "note": "Need exact text"},
                 {"text": "Explain result"}]),
-            call("common.resources_read", target="notes.txt"),
+            call("core.read", target="notes.txt"),
             call(TOOL, action="save", goal="Review source", steps=[
                 {"text": "Explain result"}, {"text": "Read source"}], reason="Read before explaining"),
             call(TOOL, action="update_statuses", updates=[{"index": 32, "status": "completed"}]),

@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Services
     internal static class HtmlWorkspacePublication
     {
         internal static bool Owns(string operation)
-        { return operation.StartsWith("common.html_", StringComparison.Ordinal) &&
+        { return operation.StartsWith("html.", StringComparison.Ordinal) &&
             operation != RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.PublishAssetToolId; }
         internal static string OperationKey(ChatSession session, ToolExecutionContext context)
         {
@@ -29,8 +29,9 @@ namespace RNAssistant.Office.Services
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, key)); }
 
         internal static IReadOnlyList<ResourceImpact> Prepare(ChatSession session, ToolExecutionContext context,
-            IDictionary<string, object> arguments, DocumentArtifactStore owner, ResourceAuthorityService authority)
+            IDictionary<string, object> arguments, DocumentArtifactStore owner, ResourceAuthorityService authority, string operation = null)
         {
+            operation = operation ?? context.Call.Name;
             try
             {
                 var scope = authority.Scope(session, true);
@@ -70,11 +71,11 @@ namespace RNAssistant.Office.Services
                         throw new InvalidDataException("The selected HTML aggregate is invalid or unavailable.");
                 }
                 session.PreparedHtmlWorkspaceId = logicalId;
-                var includeAllFiles = context.Call.Name == "common.html_workspace_restore" ||
-                    context.Call.Name == "common.html_workspace_redo" ||
-                    context.Call.Name == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;
+                var includeAllFiles = operation == "html.workspace.restore" ||
+                    operation == "html.workspace.redo" ||
+                    operation == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;
                 var path = ResourceMutationDomains.Argument(arguments, "path");
-                includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(context.Call.Name);
+                includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(operation);
                 return new[] { new ResourceImpact(HtmlWorkspaceIdentity.Identity(session, logicalId), ResourceImpactRelation.Exact) }
                     .Concat((session.HtmlWorkspace?.Files ?? new List<HtmlWorkspaceFile>()).Where(file => file != null)
                         .Where(file => includeAllFiles || string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase))
@@ -86,7 +87,8 @@ namespace RNAssistant.Office.Services
         }
 
         internal static IReadOnlyList<ResourceMutationReadBack> ReadBack(ChatSession session, MutationAttempt attempt,
-            ToolExecutionContext context, string operationKey, DocumentArtifactStore owner, ChatBlobStore payloads)
+            ToolExecutionContext context, string operationKey, DocumentArtifactStore owner, ChatBlobStore payloads,
+            IDictionary<string, object> domainArguments = null, string domainOperation = null)
         {
             var logicalId = ResourceUri.Parse(attempt.Target.Uri).Segments.Last();
             var artifact = session.Artifacts.SingleOrDefault(item => item.Id == session.ActiveHtmlArtifactId);
@@ -143,11 +145,11 @@ namespace RNAssistant.Office.Services
             result.Add(new ResourceMutationReadBack(OperationIdentity(session, operationKey), true, "text", link.Sha256, link,
                 dependencies: new[] { new ResourceDependency(exact, kind: "operation-result") }));
             var allFiles = (snapshot.Files ?? new List<HtmlWorkspaceFile>()).Where(file => file != null).ToArray();
-            var includeAllFiles = context.Call.Name == "common.html_workspace_restore" ||
-                context.Call.Name == "common.html_workspace_redo" ||
+            var includeAllFiles = (domainOperation ?? context.Call.Name) == "html.workspace.restore" ||
+                context.Call.Name == "html.workspace.redo" ||
                 context.Call.Name == RNAssistant.Office.Tools.HtmlWorkspaceToolCatalog.ImportAssetToolId;
-            var path = (string)JObject.Parse(context.Call.ArgumentsJson)["path"];
-            includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(context.Call.Name);
+            var path = domainArguments == null ? (string)JObject.Parse(context.Call.ArgumentsJson)["path"] : ResourceMutationDomains.Argument(domainArguments, "path");
+            includeAllFiles |= string.IsNullOrWhiteSpace(path) && SourceFileOperation(domainOperation ?? context.Call.Name);
             foreach (var file in allFiles.Where(file => includeAllFiles ||
                 string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))
             {

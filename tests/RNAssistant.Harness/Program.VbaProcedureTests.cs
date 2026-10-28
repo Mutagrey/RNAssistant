@@ -177,7 +177,7 @@ namespace RNAssistant.Harness
                 AssertTrue(ToolSchemaSupport.ValidateArguments(fileArgs, schema, false, out error), "workspace schema admits procedure reads");
                 fileArgs["startLine"] = 1;
                 AssertTrue(!ToolSchemaSupport.ValidateArguments(fileArgs, schema, false, out error), "workspace schema rejects mixed procedure/line selectors");
-                var strictTool = new ToolCatalogEntry { Id = "common.resources_read",
+                var strictTool = new ToolCatalogEntry { Id = "core.read",
                     ArgumentSchemaJson = schema.ToString(Formatting.None) };
                 var strict = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { strictTool },
                     new ModelProtocolCallContext(new string[0])));

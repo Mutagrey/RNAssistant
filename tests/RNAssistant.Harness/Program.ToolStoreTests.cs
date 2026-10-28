@@ -226,15 +226,15 @@ namespace RNAssistant.Harness
                 AssertEqual(string.Empty, ToolDisplayCatalog.Target(targetCall), "explicit empty selectors do not guess a target");
                 targeted.Display = new ToolDisplayMetadata("Пересчёт", targetArguments: new[] { "missing" });
                 AssertEqual("tool_display_invalid", executor.ValidateToolDefinition(targeted).ErrorCode, "unknown display selector rejected");
-                var capability = new ToolInvocation { ToolId = "common.capabilities_read",
-                    Display = ToolDisplayCatalog.Resolve(CapabilityToolCatalog.GetTools().Single(t => t.Id == "common.capabilities_read")),
+                var capability = new ToolInvocation { ToolId = "core.tools.read",
+                    Display = ToolDisplayCatalog.Resolve(CapabilityToolCatalog.GetTools().Single(t => t.Id == "core.tools.read")),
                     Arguments = new Dictionary<string, object> { ["id"] = "excel-analysis", ["referencePath"] = "references/formulas.md", ["body"] = "not a caption" } };
                 AssertEqual("excel-analysis · references/formulas.md", ToolDisplayCatalog.Target(capability),
                     "skill reference attempts show the exact skill and reference without body text");
                 var file = new ToolInvocation { ToolId = "files.copy", Display = ToolDisplayCatalog.Resolve(new ToolCatalogEntry { Id = "files.copy", BuiltIn = true }),
                     Arguments = new Dictionary<string, object> { ["relativePath"] = "src/A.cs", ["targetPath"] = "src/B.cs", ["text"] = "not a caption" } };
                 AssertEqual("src/A.cs · src/B.cs", ToolDisplayCatalog.Target(file), "workspace file actions show source and destination");
-                AssertEqual(ToolDisplayOperation.Plan, ToolDisplayCatalog.Resolve(new ToolCatalogEntry { Id = "common.skills_load", BuiltIn = true }).Operation,
+                AssertEqual(ToolDisplayOperation.Plan, ToolDisplayCatalog.Resolve(new ToolCatalogEntry { Id = "core.skills.load", BuiltIn = true }).Operation,
                     "removing a selected skill must not inherit a misleading loaded result caption");
 
             });
@@ -264,9 +264,9 @@ namespace RNAssistant.Harness
                     "published global capture does not discover live document VBA");
                 var catalog = new ToolCatalogService(adapter, executor).GetVisibleTools();
 
-                AssertTrue(HasTool(catalog, "excel.add_sheet"), "built-in tool visible");
-                AssertTrue(HasTool(catalog, "common.vba_apply_patch"), "common controller VBA tool visible");
-                AssertTrue(HasTool(catalog, "common.resources_read"), "common built-in tool visible");
+                AssertTrue(HasTool(catalog, "excel.sheet.add"), "built-in tool visible");
+                AssertTrue(HasTool(catalog, "vba.module.patch"), "common controller VBA tool visible");
+                AssertTrue(HasTool(catalog, "core.read"), "common built-in tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
             });
@@ -284,9 +284,9 @@ namespace RNAssistant.Harness
                     AssertTrue(HasTool(tools, ResourceToolCatalog.ReadToolId) &&
                         HasTool(tools, ResourceToolCatalog.FindToolId),
                         host + " exposes shared resource reads");
-                    AssertTrue(HasTool(tools, "common.vba_write_module"), host + " exposes common VBA upsert");
-                    AssertTrue(HasTool(tools, "common.vba_rename_module"), host + " exposes common VBA rename");
-                    AssertTrue(HasTool(tools, "common.vba_apply_patch"), host + " exposes common VBA patch");
+                    AssertTrue(HasTool(tools, "vba.module.write"), host + " exposes common VBA upsert");
+                    AssertTrue(HasTool(tools, "vba.module.rename"), host + " exposes common VBA rename");
+                    AssertTrue(HasTool(tools, "vba.module.patch"), host + " exposes common VBA patch");
                     AssertTrue(!HasTool(tools, "common.vba_read_module") &&
                         !HasTool(tools, "common.vba_search_code") &&
                         !HasTool(tools, "common.vba_list_backups") &&
@@ -307,7 +307,7 @@ namespace RNAssistant.Harness
                         string.Equals(tool.Id, hostPrefix + "run_macro", StringComparison.OrdinalIgnoreCase)),
                         host + " keeps the host macro backend out of the public adapter catalog");
                     var runMacro = tools.Single(tool =>
-                        string.Equals(tool.Id, "common.office_run_macro", StringComparison.OrdinalIgnoreCase));
+                        string.Equals(tool.Id, "office.macro.run", StringComparison.OrdinalIgnoreCase));
                     AssertTrue(runMacro.AgentCanRun && runMacro.MutatesDocument && runMacro.RequiresConfirmation &&
                         runMacro.RiskLevel == 3,
                         host + " publishes one host-neutral confirmed macro tool with high-risk metadata");
@@ -316,8 +316,8 @@ namespace RNAssistant.Harness
 
                 var outlook = FakeOfficeAdapter.ForHost("Outlook");
                 var outlookExecutor = new OfficeToolExecutor(outlook, new VbaJournalStore(paths), new SkillStore(paths));
-                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "common.vba_apply_patch"), "Outlook does not expose VBA facade");
-                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "common.office_run_macro"), "Outlook does not expose unsupported Application.Run");
+                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "vba.module.patch"), "Outlook does not expose VBA facade");
+                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "office.macro.run"), "Outlook does not expose unsupported Application.Run");
 
                 var excel = FakeOfficeAdapter.ForHost("Excel");
                 var store = new ToolStore(paths);
@@ -356,7 +356,7 @@ namespace RNAssistant.Harness
             WithTempPaths(delegate(AppDataPaths paths)
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel");
-                var shadow = CustomTool("Excel", "excel.add_sheet");
+                var shadow = CustomTool("Excel", "excel.sheet.add");
                 var store = new ToolStore(paths);
                 store.SaveOne(shadow);
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), store);
@@ -371,9 +371,9 @@ namespace RNAssistant.Harness
 
                 AssertTrue(result.Success, "built-in executes despite custom collision");
                 AssertTrue(adapter.HasSheet("Protected"), "built-in add sheet was executed");
-                AssertEqual(1, adapter.ExcelSheetRequests.Count(item => string.Equals(item.ToolId, "excel.add_sheet", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
+                AssertEqual(1, adapter.ExcelSheetRequests.Count(item => string.Equals(item.ToolId, "excel.sheet.add", StringComparison.OrdinalIgnoreCase)), "built-in add sheet executed once");
 
-                var save = new ToolInvocation { ToolId = "common.tools_upsert" };
+                var save = new ToolInvocation { ToolId = "tools.upsert" };
                 save.Arguments["id"] = shadow.Id;
                 save.Arguments["components"] = ToolComponentsPayload(shadow);
                 var saveResult = executor.ExecuteManual(save, OfficeToolCatalog.ForHost(adapter.HostName).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -409,12 +409,12 @@ namespace RNAssistant.Harness
             AssertContains(FindTool(excel, "excel.inspect").Description, "Not a write preflight",
                 "excel inspection contract discourages unchanged preflight loops");
             AssertTrue(!HasTool(excel, "excel.read_range"), "direct range reader is removed");
-            AssertTrue(HasTool(excel, "excel.find_cells"), "excel find cells visible");
-            AssertTrue(FindTool(excel, "excel.replace_cells").ArgumentSchemaJson.IndexOf("expectedScopeSha256", StringComparison.Ordinal) < 0,
+            AssertTrue(HasTool(excel, "excel.cells.find"), "excel find cells visible");
+            AssertTrue(FindTool(excel, "excel.cells.replace").ArgumentSchemaJson.IndexOf("expectedScopeSha256", StringComparison.Ordinal) < 0,
                 "excel replacement owns current-scope checks");
-            AssertTrue(HasTool(excel, "excel.add_table"), "excel add table visible");
-            AssertTrue(HasTool(excel, "excel.upsert_chart"), "excel chart upsert facade visible");
-            AssertTrue(FindTool(excel, "excel.clear_range").RequiresConfirmation, "excel clear requires confirmation");
+            AssertTrue(HasTool(excel, "excel.table.add"), "excel add table visible");
+            AssertTrue(HasTool(excel, "excel.chart.upsert"), "excel chart upsert facade visible");
+            AssertTrue(FindTool(excel, "excel.range.clear").RequiresConfirmation, "excel clear requires confirmation");
             AssertTrue(!HasTool(excel, "excel.run_macro"), "excel macro backend is hidden from built-ins");
             AssertTrue(!HasTool(excel, "excel.get_context") && !HasTool(excel, "excel.get_selection"),
                 "generic Excel context and selection reads use document resources");
@@ -423,29 +423,29 @@ namespace RNAssistant.Harness
             AssertTrue(!HasTool(word, "word.get_context"), "generic Word context uses document resources");
             AssertTrue(!HasTool(word, "word.read_text"), "direct Word text reader is removed");
             AssertTrue(HasTool(word, "word.inspect"), "word inspection facade visible");
-            AssertTrue(HasTool(word, "word.find_text"), "word find text visible");
-            AssertTrue(FindTool(word, "word.replace_text").ArgumentSchemaJson.IndexOf("expectedMatches", StringComparison.Ordinal) < 0,
+            AssertTrue(HasTool(word, "word.text.find"), "word find text visible");
+            AssertTrue(FindTool(word, "word.text.replace").ArgumentSchemaJson.IndexOf("expectedMatches", StringComparison.Ordinal) < 0,
                 "word replacement has no model-owned precondition");
-            AssertTrue(HasTool(word, "word.format_text"), "word formatting facade visible");
-            AssertTrue(HasTool(word, "word.add_table"), "word add table visible");
+            AssertTrue(HasTool(word, "word.text.format"), "word formatting facade visible");
+            AssertTrue(HasTool(word, "word.table.add"), "word add table visible");
             AssertTrue(!HasTool(word, "word.run_macro"), "word macro backend is hidden from built-ins");
 
             var powerpoint = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost("PowerPoint"));
             AssertTrue(!HasTool(powerpoint, "powerpoint.get_context") &&
                 !HasTool(powerpoint, "powerpoint.get_selection"),
                 "generic PowerPoint context and selection reads use document resources");
-            AssertTrue(HasTool(powerpoint, "powerpoint.list_objects"), "powerpoint list facade visible");
-            AssertTrue(HasTool(powerpoint, "powerpoint.set_text") && HasTool(powerpoint, "powerpoint.add_object"), "powerpoint mutation facades visible");
-            AssertTrue(FindTool(powerpoint, "powerpoint.move_slide").RequiresConfirmation, "powerpoint move requires confirmation");
+            AssertTrue(HasTool(powerpoint, "powerpoint.objects.list"), "powerpoint list facade visible");
+            AssertTrue(HasTool(powerpoint, "powerpoint.text.set") && HasTool(powerpoint, "powerpoint.object.add"), "powerpoint mutation facades visible");
+            AssertTrue(FindTool(powerpoint, "powerpoint.slide.move").RequiresConfirmation, "powerpoint move requires confirmation");
             AssertTrue(!HasTool(powerpoint, "powerpoint.run_macro"), "powerpoint macro backend is hidden from built-ins");
 
             var outlook = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost("Outlook"));
             AssertTrue(!HasTool(outlook, "outlook.get_context"), "generic Outlook context uses document resources");
             AssertTrue(!HasTool(outlook, "outlook.collect_mail"), "Outlook collection uses document resources");
-            AssertTrue(HasTool(outlook, "outlook.search_mail"), "outlook search visible");
-            AssertTrue(HasTool(outlook, "outlook.index_archive"), "outlook archive indexing visible");
-            AssertTrue(HasTool(outlook, "outlook.create_draft"), "outlook draft facade visible");
-            AssertTrue(FindTool(outlook, "outlook.update_mail").AgentCanRun, "outlook mail updates remain runnable");
+            AssertTrue(HasTool(outlook, "outlook.mail.search"), "outlook search visible");
+            AssertTrue(HasTool(outlook, "outlook.archive.index"), "outlook archive indexing visible");
+            AssertTrue(HasTool(outlook, "outlook.draft.create"), "outlook draft facade visible");
+            AssertTrue(FindTool(outlook, "outlook.mail.update").AgentCanRun, "outlook mail updates remain runnable");
 
             var catalogs = new Dictionary<string, List<ToolCatalogEntry>>
             {
@@ -475,7 +475,7 @@ namespace RNAssistant.Harness
                         foreach (var variant in variants)
                         {
                             var arguments = MinimalValidArguments(variant);
-                            if (tool.Id == "excel.format_range") arguments["numberFormat"] = "General";
+                            if (tool.Id == "excel.range.format") arguments["numberFormat"] = "General";
                             string argumentError;
                             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, true, out argumentError), tool.Id + " variant arguments: " + argumentError);
                             var command = new ToolInvocation { ToolId = tool.Id };
@@ -575,7 +575,7 @@ namespace RNAssistant.Harness
                 AssertTrue(prompt.IndexOf("common.tools_validate",
                         StringComparison.Ordinal) < 0,
                     "model prompt omits internal tool validation");
-                AssertTrue(!prompt.Contains("common.prompts_read") && prompt.Contains("common.resources_read"), "prompt inspection uses the generic resource reader");
+                AssertTrue(!prompt.Contains("common.prompts_read") && prompt.Contains("core.read"), "prompt inspection uses the generic resource reader");
 
                 var promptTools = ConversationPromptComposer.BuildTools(tools);
                 var bindParameters = (JObject)promptTools.OfType<JObject>()
@@ -593,7 +593,7 @@ namespace RNAssistant.Harness
                     "prompt does not expose nested source execution");
 
                 var skillParameters = (JObject)promptTools.OfType<JObject>()
-                    .Single(item => string.Equals((string)item.SelectToken("function.name"), "common.skills_upsert", StringComparison.OrdinalIgnoreCase))
+                    .Single(item => string.Equals((string)item.SelectToken("function.name"), "skills.upsert", StringComparison.OrdinalIgnoreCase))
                     .SelectToken("function.parameters");
                 AssertTrue(skillParameters["properties"] is JObject &&
                         skillParameters["anyOf"] == null &&
@@ -643,7 +643,7 @@ namespace RNAssistant.Harness
                         "common.vba_tool_authoring"),
                     "VBA package guidance has one entry skill");
                 var toolAuthoring = builtInSkills.Single(skill =>
-                    skill.Id == "common.tool_authoring").BodyMarkdown;
+                    skill.Id == "skills.tool.authoring").BodyMarkdown;
                 AssertContains(toolAuthoring, "Domain identity rationale:",
                     "tool skill documents dynamic argument review");
                 AssertContains(toolAuthoring, "not to the active document VBA project",
@@ -653,11 +653,11 @@ namespace RNAssistant.Harness
                 AssertTrue(toolAuthoring.IndexOf("common.tools_validate",
                         StringComparison.Ordinal) < 0,
                     "tool skill does not teach retired validation");
-                AssertTrue(!toolAuthoring.Contains("common.tools_definition_read") && toolAuthoring.Contains("common.resources_find") &&
-                    toolAuthoring.Contains("common.resources_read"), "tool skill uses resource discovery/read for existing implementation");
-                var promptAuthoring = builtInSkills.Single(skill => skill.Id == "common.prompt_authoring").BodyMarkdown;
-                AssertTrue(!promptAuthoring.Contains("common.prompts_read") && promptAuthoring.Contains("common.resources_find") &&
-                    promptAuthoring.Contains("common.resources_read") && promptAuthoring.Contains("prompt default"), "prompt guidance compares exact current/default resources");
+                AssertTrue(!toolAuthoring.Contains("common.tools_definition_read") && toolAuthoring.Contains("core.find") &&
+                    toolAuthoring.Contains("core.read"), "tool skill uses resource discovery/read for existing implementation");
+                var promptAuthoring = builtInSkills.Single(skill => skill.Id == "skills.prompt.authoring").BodyMarkdown;
+                AssertTrue(!promptAuthoring.Contains("common.prompts_read") && promptAuthoring.Contains("core.find") &&
+                    promptAuthoring.Contains("core.read") && promptAuthoring.Contains("prompt default"), "prompt guidance compares exact current/default resources");
 
                 string error;
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
@@ -1019,7 +1019,7 @@ namespace RNAssistant.Harness
                         stringifiedComponents.Result.DataJson)["code"],
                     "malformed component shape keeps the runtime error code");
 
-                var command = new ToolInvocation { ToolId = "common.tools_upsert" };
+                var command = new ToolInvocation { ToolId = "tools.upsert" };
                 command.Arguments["id"] = "excel.generated_report";
                 var authored = CustomTool("Excel", "excel.generated_report");
                 authored.Components[0].Code = authored.Components[0].Code
@@ -1086,7 +1086,7 @@ namespace RNAssistant.Harness
                         .Single().Code, "rejected package mutation preserves the previous tool");
                 }
 
-                var update = new ToolInvocation { ToolId = "common.tools_upsert" };
+                var update = new ToolInvocation { ToolId = "tools.upsert" };
                 update.Arguments["id"] = "excel.generated_report";
                 update.Arguments["readme"] = "Updated report notes";
                 var updated = executor.ExecuteManual(update, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -1142,11 +1142,11 @@ namespace RNAssistant.Harness
                     "tool_definition_changed",
                     "stale tool update exposes a stable error code");
 
-                var emptyUpdate = executor.ExecuteManual(Command("common.tools_upsert", "id", "excel.generated_report"), new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings(), false, false);
+                var emptyUpdate = executor.ExecuteManual(Command("tools.upsert", "id", "excel.generated_report"), new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings(), false, false);
                 AssertTrue(!emptyUpdate.Success, "empty tool update fails before confirmation");
                 AssertEqual("tool_update_empty", emptyUpdate.ErrorCode, "empty tool update error");
 
-                var missingDelete = executor.ExecuteManual(Command("common.tools_delete", "id", "excel.missing"), new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings(), false, false);
+                var missingDelete = executor.ExecuteManual(Command("tools.delete", "id", "excel.missing"), new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings(), false, false);
                 AssertTrue(!missingDelete.Success, "missing tool delete fails before confirmation");
                 AssertEqual("tool_not_found", missingDelete.ErrorCode, "missing tool delete error");
 
@@ -1355,7 +1355,7 @@ namespace RNAssistant.Harness
 
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var create = Command(
-                    "common.skills_upsert",
+                    "skills.upsert",
                     "id", "excel.review_style",
                     "host", "Excel",
                     "name", "Review style",
@@ -1389,11 +1389,11 @@ namespace RNAssistant.Harness
                     created.Result.DataJson)["contractVersion"],
                     "skill authoring result contract is versioned");
 
-                var update = Command("common.skills_upsert", "id", "excel.review_style", "description", "Review workbook formatting consistently.");
+                var update = Command("skills.upsert", "id", "excel.review_style", "description", "Review workbook formatting consistently.");
                 var updated = executor.ExecuteManual(update, tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(updated.Success, "partial skill update succeeds");
 
-                var read = executor.ExecuteManual(Command("common.capabilities_read", "id", "excel.review_style"), tools, new AppSettings(), false, true);
+                var read = executor.ExecuteManual(Command("core.tools.read", "id", "excel.review_style"), tools, new AppSettings(), false, true);
                 AssertTrue(read.Success, "skill read succeeds");
                 AssertContains(read.DataJson, "Review workbook formatting consistently", "skill description updated");
                 AssertContains(read.DataJson, "Preserve workbook conventions", "omitted skill body preserved");
@@ -1453,7 +1453,7 @@ namespace RNAssistant.Harness
                     stale.Recovery.RetryPolicy,
                     "stale skill preparation requires refreshed intent");
 
-                var restore = Command("common.skills_upsert",
+                var restore = Command("skills.upsert",
                     "id", "excel.review_style", "description",
                     "Review workbook formatting consistently.");
                 AssertTrue(executor.ExecuteManual(restore, tools,
@@ -1475,7 +1475,7 @@ namespace RNAssistant.Harness
                 AssertContains(referenceCreated.DataJson, "references/checklist.md", "reference mutation returns path");
 
                 var mixed = Command(
-                    "common.skills_upsert",
+                    "skills.upsert",
                     "id", "excel.review_style",
                     "description", "Mixed core change",
                     "referencePath", "references/mixed.md",
@@ -1485,7 +1485,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!string.Equals(mixedResult.ErrorCode, "mixed_skill_reference_update", StringComparison.Ordinal), "mixed call never reaches the old runtime trap");
 
                 var upsertDefinition = executor.GetControllerTools()
-                    .Single(item => item.Id == "common.skills_upsert");
+                    .Single(item => item.Id == "skills.upsert");
                 var referenceDefinition = executor.GetControllerTools()
                     .Single(item => item.Id ==
                         SkillAuthoringCatalog.ReferenceUpsertToolId);
@@ -1497,7 +1497,7 @@ namespace RNAssistant.Harness
                     "skill reference schema excludes core fields");
 
                 var referenceRead = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", "excel.review_style", "referencePath", "references/checklist.md"),
+                    Command("core.tools.read", "id", "excel.review_style", "referencePath", "references/checklist.md"),
                     tools, new AppSettings(), false, true);
                 AssertTrue(referenceRead.Success, "agent-created reference can be read");
                 AssertContains(referenceRead.DataJson, "Preserve formats", "agent-created reference content");
@@ -1513,15 +1513,15 @@ namespace RNAssistant.Harness
                     referenceDelete, tools, new AppSettings { AutoConfirmToolActions = true }, false, false).Success,
                     "agent reference delete succeeds");
 
-                var emptyUpdate = executor.ExecuteManual(Command("common.skills_upsert", "id", "excel.review_style"), tools, new AppSettings(), false, false);
+                var emptyUpdate = executor.ExecuteManual(Command("skills.upsert", "id", "excel.review_style"), tools, new AppSettings(), false, false);
                 AssertTrue(!emptyUpdate.Success, "empty skill update fails before confirmation");
                 AssertEqual("skill_update_empty", emptyUpdate.ErrorCode, "empty skill update error");
 
-                var missingDelete = executor.ExecuteManual(Command("common.skills_delete", "id", "excel.missing_skill"), tools, new AppSettings(), false, false);
+                var missingDelete = executor.ExecuteManual(Command("skills.delete", "id", "excel.missing_skill"), tools, new AppSettings(), false, false);
                 AssertTrue(!missingDelete.Success, "missing skill delete fails before confirmation");
                 AssertEqual("skill_not_found", missingDelete.ErrorCode, "missing skill delete error");
 
-                var deleted = executor.ExecuteManual(Command("common.skills_delete", "id", "excel.review_style"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
+                var deleted = executor.ExecuteManual(Command("skills.delete", "id", "excel.review_style"), tools, new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(deleted.Success, "skill delete succeeds");
             });
         }
@@ -1760,7 +1760,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var runtimeSkills = executor.CaptureSkills().Skills;
                 var main = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id), tools, new AppSettings(), false, false,
+                    Command("core.tools.read", "id", stored.Id), tools, new AppSettings(), false, false,
                     NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(main.Success, "published skill body read: " + main.ErrorCode + " " + main.Message + " " + main.DataJson);
                 var mainData = JObject.Parse(main.DataJson);
@@ -1770,7 +1770,7 @@ namespace RNAssistant.Harness
                     "core read lists references without their bodies");
 
                 var readSession = NewSession(adapter);
-                var firstCommand = Command("common.capabilities_read",
+                var firstCommand = Command("core.tools.read",
                     "id", stored.Id,
                     "referencePath", "references/details.md");
                 firstCommand.ToolCallId = "skill_reference_first";
@@ -1792,7 +1792,7 @@ namespace RNAssistant.Harness
                 readSession.Messages.Add(firstMessage);
 
                 var rest = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id,
+                    Command("core.tools.read", "id", stored.Id,
                         "referencePath", "references/details.md", "action", "next"),
                     tools, new AppSettings(), false, false, readSession, 40, runtimeSkills, CancellationToken.None);
                 var restData = JObject.Parse(rest.DataJson);
@@ -1801,14 +1801,14 @@ namespace RNAssistant.Harness
                     "semantic next resumes at the runtime-owned exact offset");
 
                 var traversal = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/../secret.md"),
+                    Command("core.tools.read", "id", stored.Id, "referencePath", "references/../secret.md"),
                     tools, new AppSettings(), false, false, NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!traversal.Success, "reference traversal is rejected");
 
                 var referencePath = Path.Combine(stored.StoragePath, "references", "details.md");
                 File.WriteAllText(referencePath, "# Details\n\nChanged");
                 var retained = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md"),
+                    Command("core.tools.read", "id", stored.Id, "referencePath", "references/details.md"),
                     tools, new AppSettings(), false, false, NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(retained.Success, "authoring disk changes cannot alter an active publication");
                 AssertEqual(referenceContent.Substring(0, 24000), (string)JObject.Parse(retained.DataJson)["content"],
@@ -1825,7 +1825,7 @@ namespace RNAssistant.Harness
                     Reference = frozenReference.Resource, Representation = "text", MaxChars = 32000 }).Result;
                 AssertEqual(referenceContent, historical.Text, "old reference remains readable after new publication");
                 var stale = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", stored.Id, "referencePath", "references/details.md", "action", "next"),
+                    Command("core.tools.read", "id", stored.Id, "referencePath", "references/details.md", "action", "next"),
                     tools, new AppSettings(), false, false, readSession, 40, executor.CaptureSkills().Skills, CancellationToken.None);
                 AssertEqual("skill_reference_changed", stale.ErrorCode, "continuation never mixes publication revisions");
 
@@ -1917,7 +1917,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var runtimeSkills = executor.CaptureSkills().Skills;
                 var enabledRead = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", "common.a.b"), tools, new AppSettings(), false, false,
+                    Command("core.tools.read", "id", "common.a.b"), tools, new AppSettings(), false, false,
                     NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(enabledRead.Success,
                     "enabled runtime skill can be read: " +
@@ -1925,13 +1925,13 @@ namespace RNAssistant.Harness
                     enabledRead.DataJson);
 
                 var disabledRead = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", "common.a_b"), tools, new AppSettings(), false, false,
+                    Command("core.tools.read", "id", "common.a_b"), tools, new AppSettings(), false, false,
                     NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!disabledRead.Success, "disabled runtime skill cannot be read by agent");
                 AssertTrue(disabledRead.DataJson == null || disabledRead.DataJson.IndexOf("DISABLED_SKILL", StringComparison.Ordinal) < 0,
                     "disabled skill body is not exposed");
                 var confirmedRuntimeRead = executor.ExecuteManual(
-                    Command("common.capabilities_read", "id", "common.a_b"), tools, new AppSettings(), false, true,
+                    Command("core.tools.read", "id", "common.a_b"), tools, new AppSettings(), false, true,
                     NewSession(adapter), 40, runtimeSkills, CancellationToken.None);
                 AssertTrue(!confirmedRuntimeRead.Success, "confirmation bypass does not broaden the runtime skill catalog");
             });

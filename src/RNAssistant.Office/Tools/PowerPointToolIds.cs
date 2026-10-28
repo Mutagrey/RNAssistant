@@ -4,14 +4,14 @@ namespace RNAssistant.Office.Tools
 {
     internal static class PowerPointToolIds
     {
-        internal const string ListObjects = "powerpoint.list_objects";
-        internal const string SearchText = "powerpoint.search_text";
-        internal const string AddSlide = "powerpoint.add_slide";
-        internal const string SetText = "powerpoint.set_text";
-        internal const string ReplaceText = "powerpoint.replace_text";
-        internal const string AddObject = "powerpoint.add_object";
-        internal const string DuplicateSlide = "powerpoint.duplicate_slide";
-        internal const string MoveSlide = "powerpoint.move_slide";
+        internal const string ListObjects = "powerpoint.objects.list";
+        internal const string SearchText = "powerpoint.text.search";
+        internal const string AddSlide = "powerpoint.slide.add";
+        internal const string SetText = "powerpoint.text.set";
+        internal const string ReplaceText = "powerpoint.text.replace";
+        internal const string AddObject = "powerpoint.object.add";
+        internal const string DuplicateSlide = "powerpoint.slide.duplicate";
+        internal const string MoveSlide = "powerpoint.slide.move";
 
         internal static bool Owns(string toolId)
         {

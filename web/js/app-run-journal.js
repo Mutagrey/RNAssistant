@@ -513,8 +513,8 @@
   function actionTitle(rows) {
     var tool = rows.map(function (row) { return correlation(row, "ToolId"); }).filter(Boolean)[0];
     var labels = {
-      "common.resources_find": "Поиск источников", "common.resources_read": "Чтение источника",
-      "common.capabilities_search": "Поиск возможностей", "common.capabilities_read": "Описание возможности",
+      "core.find": "Поиск источников", "core.read": "Чтение источника",
+      "core.tools.search": "Поиск возможностей", "core.tools.read": "Описание возможности",
       "excel.read_cells": "Чтение ячеек", "excel.write_cells": "Запись ячеек", "excel.create_sheet": "Создание листа"
     };
     return labels[tool] || tool || "Действие";

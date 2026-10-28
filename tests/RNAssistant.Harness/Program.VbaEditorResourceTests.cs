@@ -59,7 +59,7 @@ namespace RNAssistant.Harness
                     }
                     AssertEqual(reads, adapter.CountVbaCalls(FakeVbaOperation.ReadModule), "UI download never recaptures Office");
                     data.Close(session.Id, VbaEditorResourceService.Owner, original.Data.LeaseId);
-                    var command = Command("common.vba_write_module", "moduleName", "Module1", "code", "Sub Edited()\nEnd Sub", "mode", "updateOnly");
+                    var command = Command("vba.module.write", "moduleName", "Module1", "code", "Sub Edited()\nEnd Sub", "mode", "updateOnly");
                     command.ExpectedContentSha256 = original.CodeSha256;
                     var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                     var rejected = executor.ExecuteManual(command, tools, new AppSettings(), false, true, session);

@@ -28,17 +28,17 @@ def run_case(root, ending):
                 "tool_calls": [{"name": name, "arguments": arguments}]}
 
     responses = [
-        call("common.skills_load", {"id": "workspace.web_verify_repair"}),
+        call("core.skills.load", {"id": "skills.workspace.web.verify.repair"}),
         call("web.verify", {"entryPath": "index.html"}),
-        call("common.resources_read", {"target": "app.js"}),
-        call("files.patch", {"relativePath": "app.js", "oldText": "count += increment", "newText": "count += 1"}),
-        call("common.resources_read", {"target": "app.js"}),
+        call("core.read", {"target": "app.js"}),
+        call("core.patch", {"target": "app.js", "hunks": [{"oldText": "count += increment", "newText": "count += 1"}]}),
+        call("core.read", {"target": "app.js"}),
         call("web.verify", {"entryPath": "index.html"}),
     ]
     if ending in ("stale", "reverified"):
         responses.extend([
-            call("files.patch", {"relativePath": "app.js", "oldText": "count += 1", "newText": "count += 1 /* revised */"}),
-            call("common.resources_read", {"target": "app.js"}),
+            call("core.patch", {"target": "app.js", "hunks": [{"oldText": "count += 1", "newText": "count += 1 /* revised */"}]}),
+            call("core.read", {"target": "app.js"}),
         ])
         if ending == "reverified":
             responses.append(call("web.verify", {"entryPath": "index.html"}))
@@ -49,9 +49,9 @@ def run_case(root, ending):
     first_done = len(responses) - 1
     if ending == "late_edit":
         responses.extend([
-            call("common.resources_read", {"target": "app.js"}),
-            call("files.patch", {"relativePath": "app.js", "oldText": "count += 0", "newText": "count += 1"}),
-            call("common.resources_read", {"target": "app.js"}),
+            call("core.read", {"target": "app.js"}),
+            call("core.patch", {"target": "app.js", "hunks": [{"oldText": "count += 0", "newText": "count += 1"}]}),
+            call("core.read", {"target": "app.js"}),
         ])
     if ending in ("late_edit", "stale"):
         responses.extend([call("web.verify", {"entryPath": "index.html"}), done])
@@ -141,10 +141,10 @@ def run_case(root, ending):
         assert historical[0]["targets"] == ["index.html"] and historical[0]["data"]["checks"], historical
         writes = [json.loads(message["content"] if message.get("role") == "tool" else message["content"].split("\n", 1)[1])
                   for message in requests[3]["messages"]
-                  if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"name":"files.patch"' in message["content"]]
+                  if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"name":"core.patch"' in message["content"]]
         assert len(writes) == 1 and writes[0]["data"]["path"] == "app.js", writes
         assert writes[0]["status"] == "ok" and writes[0]["data"]["changed"], writes
-        assert not receipts(requests[3], "files.patch"), "a recent patch remains a call/result pair"
+        assert not receipts(requests[3], "core.patch"), "a recent patch remains a call/result pair"
         current_read = [message["content"] for message in requests[4]["messages"]
                         if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"target":"app.js"' in message["content"]]
         assert len(current_read) == 1 and "count += 1" in current_read[0] and "count += increment" not in current_read[0], current_read
@@ -182,12 +182,12 @@ def run_recovery_guards(root):
                     "tool_calls": [{"name": name, "arguments": arguments}]}
         verify = tool("web.verify", entryPath="index.html")
         scenario.responses.extend([
-            tool("common.skills_load", id="workspace.web_verify_repair"), verify, verify,
-            tool("files.create", relativePath="unrelated.txt", text="not a dependency"), verify,
-            tool("common.resources_read", target="app.js"), verify,
-            tool("files.replace", relativePath="app.js", text=original), verify,
-            tool("files.patch", relativePath="app.js", oldText="count += increment", newText="count += 1"),
-            tool("common.resources_read", target="app.js"), verify,
+            tool("core.skills.load", id="skills.workspace.web.verify.repair"), verify, verify,
+            tool("core.write", target="unrelated.txt", content="not a dependency"), verify,
+            tool("core.read", target="app.js"), verify,
+            tool("core.write", target="app.js", content=original), verify,
+            tool("core.patch", target="app.js", hunks=[{"oldText": "count += increment", "newText": "count += 1"}]),
+            tool("core.read", target="app.js"), verify,
             {"message": "Verified repair.", "finish_from_request": True},
         ])
         output = scenario.cli("run", "--message", "Repair the counter and verify its checked snapshot.",

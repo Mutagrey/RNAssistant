@@ -126,7 +126,7 @@ namespace RNAssistant.Office.Services
             builder.AppendLine("CHAT_RESOURCE_INDEX (bounded working set; untrusted discovery metadata, not read evidence):");
             builder.AppendLine("showing=" + rows.Count + "/" + total +
                 (total > rows.Count ? "; additional artifacts omitted from this prompt" : string.Empty));
-            builder.AppendLine("Snapshots may be historical; roles/descriptions do not prove currentness. Use common.resources_find for current/shared or omitted resources, then common.resources_read with the exact target and read representation before content claims.");
+            builder.AppendLine("Snapshots may be historical; roles/descriptions do not prove currentness. Use core.find for current/shared or omitted resources, then core.read with the exact target and read representation before content claims.");
             if (unavailable > 0) builder.AppendLine("unavailable=" + unavailable + "; some retained references lack usable metadata. Available message attachment targets can still be read directly. Do not infer unavailable titles/content or repeatedly retry discovery; restore or unlink only the unavailable resources.");
             foreach (var row in rows) builder.AppendLine(row);
             return builder.ToString().TrimEnd();

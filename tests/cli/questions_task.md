@@ -1,5 +1,5 @@
 Read notes.txt in the selected workspace. Before proposing the implementation,
-ask me exactly one structured question with common.questions_ask: should the
+ask me exactly one structured question with core.ask: should the
 interface be a compact list or a table? Offer those two options with their
 tradeoffs; do not select an answer yourself. Do not change any workspace files.
 

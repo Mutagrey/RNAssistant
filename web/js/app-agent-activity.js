@@ -29,7 +29,7 @@ function renderActivityNode(activity, nested, current, context) {
 }
 
 function appendQuestionCards(node, activity, context) {
-  if (String(activityToolId(activity) || "") !== "common.questions_ask" || activityStatus(activity) !== "waiting") return;
+  if (String(activityToolId(activity) || "") !== "core.ask" || activityStatus(activity) !== "waiting") return;
   if (context && Number.isInteger(context.index) && (state.messages || []).slice(context.index + 1).some(function (message) {
     return !messageProtocolMessage(message) && String(messageRole(message) || "").toLowerCase() === "user";
   })) return;
@@ -155,7 +155,7 @@ function activityPrimaryText(activity) {
   if (activityKind(activity) === "diagnostic") return "Выполнение";
   if (activityToolId(activity)) {
     var summary = activityTypedResultSummary(activity);
-    if (activityToolId(activity) === "common.capabilities_read" && summary) {
+    if (activityToolId(activity) === "core.tools.read" && summary) {
       var representation = activityValue(summary, "Representation", "representation", "");
       var capabilityTitle = { skill: "Чтение навыка", reference: "Чтение справки навыка", "tool-schema": "Чтение описания инструмента" }[representation];
       if (capabilityTitle) return capabilityTitle;
@@ -203,11 +203,11 @@ function activityPrimaryText(activity) {
 
 function activityTypedResultSummary(activity) {
   var kinds = {
-    "common.resources_find": "resource-find",
-    "common.resources_search": "resource-search",
-    "common.resources_read": "resource-read",
-    "common.capabilities_search": "capability-search",
-    "common.capabilities_read": "capability-read"
+    "core.find": "resource-find",
+    "core.search": "resource-search",
+    "core.read": "resource-read",
+    "core.tools.search": "capability-search",
+    "core.tools.read": "capability-read"
   };
   var kind = kinds[activityToolId(activity)];
   var summary = activityValue(activity, "ResultSummary", "resultSummary", null);
@@ -215,7 +215,7 @@ function activityTypedResultSummary(activity) {
 }
 
 function activityReadSummary(activity) {
-  return activityToolId(activity) === "common.resources_read"
+  return activityToolId(activity) === "core.read"
     ? activityTypedResultSummary(activity) || activityValue(activity, "ReadSummary", "readSummary", null) : null;
 }
 
@@ -239,8 +239,8 @@ function activityResultCaption(activity) {
   var toolId = activityToolId(activity);
   var summary = activityTypedResultSummary(activity);
   if (summary) {
-    if (toolId === "common.resources_read") return activityReadCaption(summary);
-    if (toolId === "common.capabilities_read") return activityValue(summary, "Complete", "complete", true)
+    if (toolId === "core.read") return activityReadCaption(summary);
+    if (toolId === "core.tools.read") return activityValue(summary, "Complete", "complete", true)
       ? "Загружено" : "Загружена часть описания";
     var count = activityValue(summary, "ReturnedItems", "returnedItems", null);
     if (Number.isSafeInteger(count) && count >= 0) return "Получено элементов: " + count +
@@ -249,7 +249,7 @@ function activityResultCaption(activity) {
   }
   var read = activityReadSummary(activity);
   if (read) return activityReadCaption(read); // Historical read activity.
-  if (["common.resources_find", "common.resources_read", "common.capabilities_search", "common.capabilities_read"].indexOf(toolId) >= 0) return "";
+  if (["core.find", "core.read", "core.tools.search", "core.tools.read"].indexOf(toolId) >= 0) return "";
   var source = activityDataJson(activity);
   if (!source || source.length > 32768) return "";
   var cached = activityPresentationCache.get(activity);

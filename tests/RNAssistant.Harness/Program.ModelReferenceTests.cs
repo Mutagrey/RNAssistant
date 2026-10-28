@@ -67,7 +67,7 @@ namespace RNAssistant.Harness
 
         private static void ModelReferencesSurviveCompactionWithoutBodies()
         {
-            var result = ContinuityResult("canonical-read", "common.resources_read", TerminalToolResult.Ok("Read complete."));
+            var result = ContinuityResult("canonical-read", "core.read", TerminalToolResult.Ok("Read complete."));
             result.RunId = "run-refs";
             result.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 42);
             var call = ContinuityCall(result);
@@ -136,7 +136,7 @@ namespace RNAssistant.Harness
             var sequence = 0;
             Func<ResourceEvidence, ChatMessage> read = evidence => {
                 var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
-                    ToolCallId = "canonical-read-" + (++sequence), ToolId = "common.resources_read" },
+                    ToolCallId = "canonical-read-" + (++sequence), ToolId = "core.read" },
                     TerminalToolResult.Ok("Excerpt read.", new JObject {
                         ["kind"] = "resource-read", ["target"] = "example.txt", ["representation"] = "text",
                         ["coverage"] = JObject.FromObject(evidence.Coverage), ["complete"] = false,
@@ -182,7 +182,7 @@ namespace RNAssistant.Harness
             mismatched.ResourceEvidence = new List<ResourceEvidence> { second };
             AssertTrue(project(mismatched)["data"]["ref"] == null, "a matching resource with different coverage does not bind the displayed slice");
 
-            foreach (var tool in new[] { "common.resources_find", "common.resources_search", "common.resources_outline", "files.create" })
+            foreach (var tool in new[] { "core.find", "core.search", "resources.outline", "files.create" })
             {
                 var navigation = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "navigation", ToolId = tool },
                     TerminalToolResult.Ok("Navigation or outcome.", "{\"target\":\"example.txt\",\"matches\":[{\"target\":\"example.txt\",\"snippet\":\"fragment\"}]}"), ToolResultRoles.User);
@@ -251,7 +251,7 @@ namespace RNAssistant.Harness
                 var restored = observe(scope, "canonical-revision-one");
                 AssertEqual("R1@v1", restored.ResourceModelReferences.Single().Alias, "removal/restart keeps the original mapping");
                 AssertEqual(3, session.ResourceReferenceIndex.Count, "derived index has one entry per exact scoped revision");
-                var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "canonical-call", ToolId = "common.resources_read" },
+                var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "canonical-call", ToolId = "core.read" },
                     TerminalToolResult.Ok("Read.", "{\"kind\":\"resource-read\",\"target\":\"example.txt\",\"representation\":\"source\",\"coverage\":{\"kind\":\"whole\",\"fields\":[]},\"text\":\"r1@v2 literal\"}"), ToolResultRoles.User);
                 result.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 1);
                 result.ResourceModelReferences = changed.ResourceModelReferences;

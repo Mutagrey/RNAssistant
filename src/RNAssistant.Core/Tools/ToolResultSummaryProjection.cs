@@ -10,14 +10,14 @@ namespace RNAssistant.Core.Tools
         public static RNAssistant.Core.Models.ToolResultSummary Summarize(string toolId, string dataJson)
         {
             if (string.IsNullOrWhiteSpace(dataJson)) return null;
-            if (toolId != "common.resources_find" && toolId != "common.resources_read" && toolId != "common.resources_search" &&
+            if (toolId != "core.find" && toolId != "core.read" && toolId != "core.search" &&
                 toolId != CapabilityToolCatalog.SearchToolId && toolId != CapabilityToolCatalog.ReadToolId) return null;
             try
             {
                 var data = JObject.Parse(dataJson);
-                if (toolId == "common.resources_find") return SummarizeFind(data);
-                if (toolId == "common.resources_read") return SummarizeRead(data);
-                if (toolId == "common.resources_search" && data["matches"] is JArray matches)
+                if (toolId == "core.find") return SummarizeFind(data);
+                if (toolId == "core.read") return SummarizeRead(data);
+                if (toolId == "core.search" && data["matches"] is JArray matches)
                     return new RNAssistant.Core.Models.ToolResultSummary { Kind = "resource-search", ReturnedItems = matches.Count,
                         Complete = data.Value<bool?>("scanComplete") == true && data.Value<bool?>("sourceComplete") == true && data.Value<bool?>("matchesComplete") == true,
                         Partial = (data["unavailableScopes"] as JArray)?.Count > 0 };

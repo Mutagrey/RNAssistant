@@ -4,7 +4,7 @@ namespace RNAssistant.Core.Services
 {
     public static class ChatVisualizationSkillProvider
     {
-        public const string Id = "common.chat_visualization";
+        public const string Id = "skills.chat.visualization";
 
         public static SkillDefinition Create()
         {

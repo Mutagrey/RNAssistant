@@ -4,10 +4,10 @@ namespace RNAssistant.Office.Tools
 {
     internal static class OutlookToolIds
     {
-        internal const string SearchMail = "outlook.search_mail";
-        internal const string IndexArchive = "outlook.index_archive";
-        internal const string CreateDraft = "outlook.create_draft";
-        internal const string UpdateMail = "outlook.update_mail";
+        internal const string SearchMail = "outlook.mail.search";
+        internal const string IndexArchive = "outlook.archive.index";
+        internal const string CreateDraft = "outlook.draft.create";
+        internal const string UpdateMail = "outlook.mail.update";
 
         internal static bool Owns(string toolId)
         {

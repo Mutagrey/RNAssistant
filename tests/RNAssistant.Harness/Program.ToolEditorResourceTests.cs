@@ -28,7 +28,7 @@ namespace RNAssistant.Harness
             {
                 var adapter = FakeOfficeAdapter.ForHost("Excel"); var skills = new SkillStore(paths); var tools = new ToolStore(paths);
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), skills, tools);
-                var session = NewSession(adapter); var tool = executor.GetControllerTools().Single(item => item.Id == "common.resources_read");
+                var session = NewSession(adapter); var tool = executor.GetControllerTools().Single(item => item.Id == "core.read");
                 var catalog = new ToolCatalogService(adapter, executor);
                 using (var data = new ResourceDataPlaneService(executor.ResourceGateway))
                 {
@@ -37,7 +37,7 @@ namespace RNAssistant.Harness
                     var response = editor.OpenDocumentation(session, request, CancellationToken.None);
                     var metadata = JObject.FromObject(response);
                     AssertTrue(metadata["markdown"] == null && metadata["code"] == null && metadata["data"] != null, "only metadata and a shared download lease cross the bridge");
-                    AssertEqual("rna://catalog/builtin-tools-excel/common.resources_read/documentation", response.Resource.Uri, "exact builtin documentation child");
+                    AssertEqual("rna://catalog/builtin-tools-excel/core.read/documentation", response.Resource.Uri, "exact builtin documentation child");
                     AssertEqual(0, adapter.VbaBackendCalls.Count, "documentation never discovers or reads Office/VBA");
                     AssertEqual(0, session.Messages.Count, "reading human documentation grants no model evidence");
                     var expected = ToolLibraryDocumentationService.Build(tool);

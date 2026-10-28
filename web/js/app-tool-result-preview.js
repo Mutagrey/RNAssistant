@@ -70,7 +70,7 @@
     text_changes: function (body, block) {
       if (!block.changes.items.length && block.changes.complete && block.changes.evidenceFound)
         body.appendChild(node("p", "tool-result-note", "Изменений нет."));
-      else window.RNAssistantRunChanges.render(body, block.changes);
+      else window.RNAssistantRunChanges.renderInline(body, block.changes);
     }
   };
   function render(parent, response) {

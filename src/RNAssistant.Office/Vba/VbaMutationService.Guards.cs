@@ -184,13 +184,13 @@ namespace RNAssistant.Office.Vba
         private static VbaMutationOutcome SnapshotRefreshRequired(string moduleName)
         {
             return VbaMutationOutcome.Error(
-                "Whole-module replacement requires the complete current source in model context. That observation is missing or stale; it may have been omitted by the context budget. This is a source-observation guard, not a VBA access denial. Read the complete current source with common.resources_read and reconcile before replacing; diagnostic currentContent in this error is not a resource-read observation. If the complete source does not fit, read the relevant source lines with startLine/lineCount and use common.vba_apply_patch for a focused edit. Do not repeat an unchanged whole-source read/write loop or create another module to bypass this guard.",
+                "Whole-module replacement requires the complete current source in model context. That observation is missing or stale; it may have been omitted by the context budget. This is a source-observation guard, not a VBA access denial. Read the complete current source with core.read and reconcile before replacing; diagnostic currentContent in this error is not a resource-read observation. If the complete source does not fit, read the relevant source lines with startLine/lineCount and use vba.module.patch for a focused edit. Do not repeat an unchanged whole-source read/write loop or create another module to bypass this guard.",
                 new JObject
                 {
                     ["moduleName"] = moduleName ?? string.Empty,
                     ["retrySameTool"] = false,
                     ["retryAfterRefresh"] = true,
-                    ["inspectTool"] = "common.resources_read",
+                    ["inspectTool"] = "core.read",
                     ["discoveryScope"] = "vba",
                     ["completeSourceRequired"] = true,
                     ["requiredRepresentation"] = "source"
@@ -213,9 +213,9 @@ namespace RNAssistant.Office.Vba
             var message = editor
                 ? "The VBA module changed after it was loaded in the editor. Reload it and reconcile the changes before saving."
                 : wholeWrite
-                    ? "The VBA module changed after the source was inspected or this write was prepared. Obtain its complete current source and reconcile before replacing it. If the complete source does not fit in context, read the relevant source lines with startLine/lineCount and use common.vba_apply_patch. This conflict does not mean VBA access was denied."
+                    ? "The VBA module changed after the source was inspected or this write was prepared. Obtain its complete current source and reconcile before replacing it. If the complete source does not fit in context, read the relevant source lines with startLine/lineCount and use vba.module.patch. This conflict does not mean VBA access was denied."
                     : patch
-                        ? "The VBA module changed after the source was inspected. Use current source supplied with this result, or read relevant lines with common.resources_read, then correct the patch anchors. Do not retry the unchanged patch."
+                        ? "The VBA module changed after the source was inspected. Use current source supplied with this result, or read relevant lines with core.read, then correct the patch anchors. Do not retry the unchanged patch."
                     : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
             return VbaMutationOutcome.Error(
                 message,
@@ -230,7 +230,7 @@ namespace RNAssistant.Office.Vba
                     ["retryAfterRefresh"] = wholeWrite || patch,
                     ["reloadEditor"] = editor,
                     ["reconcileBeforeOverwrite"] = wholeWrite,
-                    ["inspectTool"] = "common.resources_read",
+                    ["inspectTool"] = "core.read",
                     ["discoveryScope"] = "vba",
                     ["completeSourceRequired"] = wholeWrite,
                     ["requiredRepresentation"] = wholeWrite ? "source" : null

@@ -4,11 +4,11 @@ namespace RNAssistant.Office.Tools
 {
     internal static class ExcelRangeMutationToolIds
     {
-        internal const string FormatRange = "excel.format_range";
-        internal const string ClearRange = "excel.clear_range";
-        internal const string DeleteRowsColumns = "excel.delete_rows_columns";
-        internal const string SortRange = "excel.sort_range";
-        internal const string FilterRange = "excel.filter_range";
+        internal const string FormatRange = "excel.range.format";
+        internal const string ClearRange = "excel.range.clear";
+        internal const string DeleteRowsColumns = "excel.rows.columns.delete";
+        internal const string SortRange = "excel.range.sort";
+        internal const string FilterRange = "excel.range.filter";
 
         internal static bool Owns(string toolId)
         {

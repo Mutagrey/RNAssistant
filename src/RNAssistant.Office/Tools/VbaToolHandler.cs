@@ -15,9 +15,10 @@ namespace RNAssistant.Office.Tools
         private readonly VbaToolExecutor _executor;
         private readonly HostRuntime _runtime;
         private readonly ChatSession _session;
+        private readonly string _verifiedSourceHash;
 
         internal VbaToolHandler(string toolId, VbaToolExecutor executor,
-            HostRuntime runtime, ChatSession session)
+            HostRuntime runtime, ChatSession session, string verifiedSourceHash = null)
         {
             if (!VbaToolCatalog.Owns(toolId))
                 throw new ArgumentException(
@@ -26,6 +27,7 @@ namespace RNAssistant.Office.Tools
             _executor = executor ?? throw new ArgumentNullException(nameof(executor));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _session = session;
+            _verifiedSourceHash = verifiedSourceHash;
         }
 
         internal static ToolBinding BindingFor(string toolId)
@@ -62,7 +64,7 @@ namespace RNAssistant.Office.Tools
                         return _executor.PrepareNativeTool(
                             _toolId, context.Arguments, context.Execution,
                             _session,
-                            cancellationToken);
+                            cancellationToken, _verifiedSourceHash);
                     });
                 if (preparation == null || preparation.Outcome == null)
                     throw new InvalidOperationException(
@@ -94,7 +96,7 @@ namespace RNAssistant.Office.Tools
                             _toolId, context.Arguments, context.Execution,
                             _session,
                             context.PreparedStateJson,
-                            context.MarkDispatchPossible, cancellationToken);
+                            context.MarkDispatchPossible, cancellationToken, _verifiedSourceHash);
                     }, terminalOutcome =>
                     {
                         terminal = ProjectOutcome(terminalOutcome, context);

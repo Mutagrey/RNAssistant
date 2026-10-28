@@ -66,7 +66,7 @@ namespace RNAssistant.Harness
                 Text = "Revenue 100; Cost 40"
             });
             var tools = OfficeToolCatalog.ForHost(adapter.HostName)
-                .Where(tool => tool.Id == "excel.add_sheet").Concat(ResourceToolCatalog.GetControllerTools())
+                .Where(tool => tool.Id == "excel.sheet.add").Concat(ResourceToolCatalog.GetControllerTools())
                 .ToList();
             var skills = new[]
             {
@@ -141,7 +141,7 @@ namespace RNAssistant.Harness
                 var adapter = FakeOfficeAdapter.ForHost("Word");
                 var session = PackageSession();
                 var dependency = OfficeToolCatalog.ForHost(adapter.HostName)
-                    .Single(tool => tool.Id == "word.add_comment");
+                    .Single(tool => tool.Id == "word.comment.add");
                 var catalog = new[] { dependency };
                 var skill = PackageSkill("fixture.selected", dependency.Id);
                 var publication = new SkillCatalogSnapshot(new[] { skill });
@@ -227,8 +227,8 @@ namespace RNAssistant.Harness
                     "chat inspector shows read-only resource schemas");
                 AssertTrue(!raw.Sections.Any(section => section.Id == "catalog_skills"),
                     "chat inspector excludes skills");
-                AssertContains(raw.RawRequestJson, "common.resources_read", "chat raw request includes resource reads");
-                AssertTrue(raw.RawRequestJson.IndexOf("excel.add_sheet", StringComparison.OrdinalIgnoreCase) < 0,
+                AssertContains(raw.RawRequestJson, "core.read", "chat raw request includes resource reads");
+                AssertTrue(raw.RawRequestJson.IndexOf("excel.sheet.add", StringComparison.OrdinalIgnoreCase) < 0,
                     "Deny raw request excludes mutation tools");
                 AssertContains(raw.RawRequestJson, "json_object", "chat raw request includes structured response format");
                 session.MutationPolicy = RNAssistant.Core.Services.MutationPolicy.Ask;

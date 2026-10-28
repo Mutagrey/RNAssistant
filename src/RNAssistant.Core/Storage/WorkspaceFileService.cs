@@ -734,6 +734,27 @@ namespace RNAssistant.Core.Storage
                 SourceByteLength = bytes.LongLength };
         }
 
+        // Presentation-only read of an exact revision already scoped by the calling chat.
+        // No live path lookup, refresh, replay or new authority is performed here.
+        public string ReadRetainedComparisonText(ResourceRef exact, int maximumCharacters)
+        {
+            if (maximumCharacters < 1) throw new ArgumentOutOfRangeException(nameof(maximumCharacters));
+            var address = ResourceUri.Parse(exact.Uri);
+            if (!exact.IsExact || address.Provider != "file" || address.Segments.Count != 1)
+                throw new WorkspaceFileException("invalid_resource_ref", "An exact file revision is required.");
+            var scope = Scope(address.Segments[0]);
+            var view = _authority.GetView(scope, exact, ResourceRepresentations.Text) != null
+                ? ResourceRepresentations.Text : ResourceRepresentations.Raw;
+            var evidence = PublishedEvidence(exact, view);
+            if (evidence.Payload.ByteLength > maximumCharacters * 4L)
+                throw new WorkspaceFileException("file_too_large", "Retained comparison exceeds its display budget.");
+            var bytes = _blobs.ReadBytes(evidence.Payload.ToBlobReference());
+            if (bytes == null) throw new WorkspaceFileException("snapshot_unavailable", "Retained comparison is unavailable.");
+            var text = Decode(bytes);
+            if (text.Length > maximumCharacters) throw new WorkspaceFileException("file_too_large", "Retained comparison exceeds its display budget.");
+            return text;
+        }
+
         private ResourceEvidence PublishedEvidence(ResourceRef exact, string viewName)
         {
             var address = ResourceUri.Parse(exact.Uri);
@@ -757,33 +778,33 @@ namespace RNAssistant.Core.Storage
         }
 
         public WorkspaceFileObservation CreateText(WorkspaceDescriptor workspace, string relativePath, string text,
-            Action onDispatch = null)
+            Action onDispatch = null, string effectOperation = null)
         {
             if (TextByteLength(text) > MaximumTextBytes)
-                return WriteStagedText(workspace, relativePath, text, null, onDispatch);
-            return CreateTextCore(workspace, relativePath, text, null, "files.create", onDispatch);
+                return WriteStagedText(workspace, relativePath, text, null, onDispatch, effectOperation);
+            return CreateTextCore(workspace, relativePath, text, null, "files.create", onDispatch, effectOperation);
         }
 
         public WorkspaceFileObservation CopyText(WorkspaceDescriptor workspace, string sourceRelativePath,
-            ResourceRef expectedSource, string targetRelativePath, Action onDispatch = null)
+            ResourceRef expectedSource, string targetRelativePath, Action onDispatch = null, string effectOperation = null)
         {
             RequireWritable(workspace);
             var sourcePath = ResolvePath(workspace, sourceRelativePath, false, true);
             if (RequiresStreamedFile(sourcePath, expectedSource))
                 return CopyStreamedText(workspace, sourceRelativePath, expectedSource,
-                    targetRelativePath, onDispatch);
+                    targetRelativePath, onDispatch, effectOperation);
             var source = ReadText(workspace, sourceRelativePath);
             if (expectedSource == null || expectedSource.Uri != source.Reference.Uri ||
                 expectedSource.Revision != source.Reference.Revision)
                 throw new WorkspaceFileException("target_conflict", "Source changed since the accepted complete read.");
             return CreateTextCore(workspace, targetRelativePath, source.Text,
-                source.Reference, "files.copy", onDispatch);
+                source.Reference, "files.copy", onDispatch, effectOperation);
         }
 
         // An in-workspace move keeps the logical file id but advances its revision:
         // old path observations must be refreshed after the locator changes.
         public WorkspaceFileObservation MoveText(WorkspaceDescriptor workspace, string sourceRelativePath,
-            ResourceRef expectedSource, string targetRelativePath, Action onDispatch = null)
+            ResourceRef expectedSource, string targetRelativePath, Action onDispatch = null, string effectOperation = null)
         {
             RequireWritable(workspace);
             var source = ResolvePath(workspace, sourceRelativePath, false, true);
@@ -869,7 +890,7 @@ namespace RNAssistant.Core.Storage
                     var currentHead = current.GetHead(Identity(id));
                     if (currentHead == null || !currentHead.SameAuthority(head))
                         throw new WorkspaceFileException("authority_conflict", "File authority changed before move publication.");
-                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.move",
+                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), effectOperation ?? "files.move",
                         ResourceEffectOutcome.VerifiedChanged,
                         new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
                             before: expectedSource, after: exact, changeKind: "text-move") },
@@ -903,7 +924,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private WorkspaceFileObservation CreateTextCore(WorkspaceDescriptor workspace, string relativePath,
-            string text, ResourceRef copySource, string operation, Action onDispatch)
+            string text, ResourceRef copySource, string operation, Action onDispatch, string effectOperation = null)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
@@ -924,18 +945,18 @@ namespace RNAssistant.Core.Storage
                     ResolvePath(workspace, relativePath, false, true);
                     using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                     { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
-                }, path, copySource);
+                }, path, copySource, effectOperation: effectOperation);
             }
         }
 
         public WorkspaceFileObservation ReplaceText(WorkspaceDescriptor workspace, string relativePath,
-            ResourceRef expected, string text, Action onDispatch = null)
+            ResourceRef expected, string text, Action onDispatch = null, string effectOperation = null)
         {
             if (TextByteLength(text) > MaximumTextBytes || IsLargeExpected(expected))
-                return WriteStagedText(workspace, relativePath, text, expected, onDispatch);
-            try { return ReplaceTextCore(workspace, relativePath, expected, text, null, "files.replace", onDispatch); }
+                return WriteStagedText(workspace, relativePath, text, expected, onDispatch, effectOperation);
+            try { return ReplaceTextCore(workspace, relativePath, expected, text, null, "files.replace", onDispatch, effectOperation); }
             catch (WorkspaceFileException error) when (error.Code == "file_too_large")
-            { return WriteStagedText(workspace, relativePath, text, expected, onDispatch); }
+            { return WriteStagedText(workspace, relativePath, text, expected, onDispatch, effectOperation); }
         }
 
         public WorkspaceFileObservation RestoreHistoricalText(WorkspaceDescriptor workspace, string relativePath,
@@ -949,7 +970,7 @@ namespace RNAssistant.Core.Storage
         // Move the accepted whole text to workspace-local managed trash. No unlink
         // fallback is allowed if the move or read-back cannot be verified.
         public WorkspaceFileDeletion DeleteText(WorkspaceDescriptor workspace, string relativePath,
-            ResourceRef expected, Action onDispatch = null)
+            ResourceRef expected, Action onDispatch = null, string effectOperation = null)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
@@ -1012,7 +1033,7 @@ namespace RNAssistant.Core.Storage
                     var currentHead = current.GetHead(Identity(id));
                     if (!currentHead.SameAuthority(head))
                         throw new WorkspaceFileException("authority_conflict", "File authority changed before deletion publication.");
-                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), "files.delete",
+                    var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), effectOperation ?? "files.delete",
                         ResourceEffectOutcome.VerifiedChanged,
                         new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
                             before: expected, changeKind: "text-delete-to-managed-trash") }, "source absent; managed trash preimage verified");
@@ -1034,10 +1055,27 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        public ResourceRef CaptureDeletedTextVersion(WorkspaceDescriptor workspace, string relativePath)
+        {
+            var path = ResolvePath(workspace, relativePath, false, true);
+            using (AcquireFileScope(path, out var id, out var scope))
+            {
+                EnsureNoUnresolved(scope);
+                if (File.Exists(path) || Directory.Exists(path)) throw new WorkspaceFileException("target_conflict", "Restore never overwrites an existing path.");
+                var snapshot = _authority.Capture(scope);
+                var deletion = snapshot.Commits.LastOrDefault(commit => commit.NewGeneration == snapshot.Generation &&
+                    (commit.Effect?.Operation == "files.delete" || commit.Effect?.Operation == "resources.delete") && commit.MutationAttemptId != null);
+                var change = deletion?.HeadChanges.SingleOrDefault();
+                if (snapshot.GetHead(Identity(id))?.Knowledge != HeadKnowledge.Unavailable || change?.Before?.Knowledge != HeadKnowledge.Known)
+                    throw new WorkspaceFileException("snapshot_unavailable", "No verified managed deletion is available.");
+                return change.Before.Revision.Copy();
+            }
+        }
+
         // Restores only the latest verified (or explicitly reconciled) managed
         // deletion. The new head gets a fresh revision with exact provenance.
         public WorkspaceFileObservation RestoreDeletedText(WorkspaceDescriptor workspace,
-            string relativePath, Action onDispatch = null)
+            string relativePath, Action onDispatch = null, ResourceRef expectedDeleted = null, string effectOperation = null)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
@@ -1049,12 +1087,14 @@ namespace RNAssistant.Core.Storage
                 var snapshot = _authority.Capture(scope);
                 var head = snapshot.GetHead(Identity(id));
                 var deletion = snapshot.Commits.LastOrDefault(commit => commit.NewGeneration == snapshot.Generation &&
-                    commit.Effect?.Operation == "files.delete" && commit.MutationAttemptId != null);
+                    (commit.Effect?.Operation == "files.delete" || commit.Effect?.Operation == "resources.delete") && commit.MutationAttemptId != null);
                 var change = deletion?.HeadChanges.SingleOrDefault();
                 if (head?.Knowledge != HeadKnowledge.Unavailable || change?.Before?.Knowledge != HeadKnowledge.Known ||
                     !change.After.SameAuthority(head))
                     throw new WorkspaceFileException("target_conflict", "The current head is not a recoverable managed deletion.");
                 var previous = change.Before.Revision;
+                if (expectedDeleted != null && (expectedDeleted.Uri != previous.Uri || expectedDeleted.Revision != previous.Revision))
+                    throw new WorkspaceFileException("target_conflict", "The selected deletion changed after preparation.");
                 var retained = _authority.GetRevision(scope, previous);
                 if (retained?.Payload == null || !_blobs.HasVerifiedReference(retained.Payload.ToBlobReference()))
                     throw new WorkspaceFileException("snapshot_unavailable", "The retained deleted text is unavailable.");
@@ -1064,7 +1104,7 @@ namespace RNAssistant.Core.Storage
                 if (retained.Payload.ByteLength > MaximumTextBytes ||
                     new FileInfo(trashPath).Length > MaximumTextBytes)
                     return RestoreStreamedDeletedText(workspace, scope, id, relativePath,
-                        path, trashPath, head, previous, retained, onDispatch);
+                        path, trashPath, head, previous, retained, onDispatch, effectOperation);
                 var bytes = ReadBounded(trashPath);
                 Decode(bytes);
                 if (Hash(bytes) != retained.ContentSha256)
@@ -1076,12 +1116,12 @@ namespace RNAssistant.Core.Storage
                         throw new WorkspaceFileException("target_conflict", "Restore target appeared before dispatch.");
                     markDispatch();
                     File.Move(trashPath, path);
-                }, path, expectedHead: head);
+                }, path, expectedHead: head, effectOperation: effectOperation);
             }
         }
 
         private WorkspaceFileObservation ReplaceTextCore(WorkspaceDescriptor workspace, string relativePath,
-            ResourceRef expected, string text, ResourceRef restoredFrom, string operation, Action onDispatch)
+            ResourceRef expected, string text, ResourceRef restoredFrom, string operation, Action onDispatch, string effectOperation = null)
         {
             RequireWritable(workspace);
             var path = ResolvePath(workspace, relativePath, false, true);
@@ -1134,7 +1174,7 @@ namespace RNAssistant.Core.Storage
                         File.Replace(temp, path, null);
                     }
                     finally { if (File.Exists(temp)) File.Delete(temp); }
-                }, path);
+                }, path, effectOperation: effectOperation);
             }
         }
 
@@ -1387,7 +1427,7 @@ namespace RNAssistant.Core.Storage
         private WorkspaceFileObservation Mutate(ResourceAuthorityScopeId scope, string id, string relativePath,
             byte[] bytes, ResourceRef before, ResourceRef restoredFrom, string operation,
             Action onDispatch, Action<Action> dispatch, string path, ResourceRef copySource = null,
-            ResourceHeadState expectedHead = null)
+            ResourceHeadState expectedHead = null, string effectOperation = null)
         {
             var payload = PayloadRef.FromBlob(_blobs.StoreBytes(bytes, "text/plain; charset=utf-8"));
             var attempt = _journal.Prepare(scope, operation, Identity(id), before?.Revision, payload);
@@ -1416,7 +1456,7 @@ namespace RNAssistant.Core.Storage
                 if (expectedHead != null ? head == null || !head.SameAuthority(expectedHead) :
                     head?.Revision?.Revision != before?.Revision)
                     throw new WorkspaceFileException("authority_conflict", "File authority changed before publication.");
-                var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), operation,
+                var effect = new ResourceEffect("fx_" + Guid.NewGuid().ToString("N"), effectOperation ?? operation,
                     restoredFrom == null ? ResourceEffectOutcome.VerifiedChanged : ResourceEffectOutcome.Restored,
                     new[] { new ResourceImpact(Identity(id), ResourceImpactRelation.Exact,
                         before: before, after: exact,

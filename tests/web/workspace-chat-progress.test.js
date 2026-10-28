@@ -53,7 +53,7 @@ const { chromium } = require('playwright');
       const activeList = document.createElement('section');
       const activeChat = { project: { workspaceId: 'workspace' }, sessionId: 'active-run',
         messages: [{ Id: 'saved-call', RunId: 'active', Role: 'assistant', Content: '', Activity: {
-          RunId: 'active', Kind: 'tool', ToolId: 'common.resources_read', ToolCallId: 'call',
+          RunId: 'active', Kind: 'tool', ToolId: 'core.read', ToolCallId: 'call',
           Title: 'Чтение', Status: 'completed', ResultMessage: 'Источник прочитан.' } }],
         state: { status: 'running', runId: 'active', modelProgress: { RunId: 'active', Message: 'Формирую ответ.' } } };
       RNAssistantWorkspaceChat.renderMessages(activeList, activeChat);

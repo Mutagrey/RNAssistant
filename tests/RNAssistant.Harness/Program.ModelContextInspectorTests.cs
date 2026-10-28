@@ -28,7 +28,7 @@ namespace RNAssistant.Harness
                 new ChatMessage { Id = "resource", Role = "user", Content = "Observed source fragment" },
                 new ChatMessage { Id = "unmapped", Role = "developer", Content = "RUNTIME_CONTEXT: this text is not attribution" },
                 new ChatMessage { Id = "call", Role = "assistant", Content = "Reading", ToolCalls = new List<LlmToolCall> {
-                    new LlmToolCall { Id = "call-1", Name = "common.resources_read", ArgumentsJson = "{\"target\":\"file\"}" } } },
+                    new LlmToolCall { Id = "call-1", Name = "core.read", ArgumentsJson = "{\"target\":\"file\"}" } } },
                 new ChatMessage { Id = "result", Role = "tool", ToolCallId = "call-1", Content = "Result" },
                 new ChatMessage { Id = "excluded", Role = "user", Content = new string('x', 1000), ExcludeFromModelContext = true }
             };
@@ -200,7 +200,7 @@ namespace RNAssistant.Harness
                 var scope = new ResourceAuthorityScopeId("conversation", session.Id);
                 var reference = new ResourceRef(ResourceStateProvider.Identity(scope, "read-cost").Uri, "r1");
                 var message = new ChatMessage { Id = "read-cost-result", Role = "tool",
-                    ToolCallId = "read-cost-call", ToolName = "common.resources_read",
+                    ToolCallId = "read-cost-call", ToolName = "core.read",
                     Content = "{\"text\":\"Ω😀\",\"coverage\":{\"kind\":\"line-range\"}}" };
                 var source = new ContextMessagePresentation { SourceMessageId = message.Id,
                     MessageIndex = 0, Role = "tool", ToolCallId = message.ToolCallId,
@@ -280,7 +280,7 @@ namespace RNAssistant.Harness
                     changedWire, settings);
                 AssertTrue(mismatched.Single().EstimatedWireMessageTokens == null,
                     "a final wire text mismatch cannot assign the view cost");
-                message.ToolName = "common.resources_search";
+                message.ToolName = "core.search";
                 var otherTool = LlmClient.DescribeWireMessages(new[] { message }, receipt, new bool[0], null, wire, settings);
                 AssertTrue(otherTool.Single().EstimatedWireMessageTokens == null,
                     "an unrelated tool result cannot inherit the read-view estimate");
@@ -411,7 +411,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                const string extensionId = "common.markdown_save";
+                const string extensionId = "markdown.save";
                 var catalog = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
                 var store = new ChatStore(FixturePaths.Value);
                 var session = store.Create("Excel", "size-document", "Size.xlsx", "Size");
@@ -460,7 +460,7 @@ namespace RNAssistant.Harness
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))
                 {
                     var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(store), blobs, data);
-                    foreach (var selection in new[] { "", "common.task_tracking", "common.vba_code_editing", "common.html_workspace_authoring" })
+                    foreach (var selection in new[] { "", "skills.task.tracking", "skills.vba.code.editing", "skills.html.workspace.authoring" })
                     {
                         var requestSizes = new System.Collections.Generic.Dictionary<string, int>();
                         foreach (var mode in new[] { AgentResponseModes.JsonSchema, AgentResponseModes.JsonObject })
@@ -1168,7 +1168,7 @@ namespace RNAssistant.Harness
                     AssertEqual("fixture:extractor-v1", observation.ReadMetadata.ExtractionProfile,
                         "inspector receives the saved extraction profile after restart");
                 }
-                var mutation = ContinuityResult("saved", "common.vba_write_module", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
+                var mutation = ContinuityResult("saved", "vba.module.write", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Saved", "{\"changed\":true}"));
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);

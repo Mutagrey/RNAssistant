@@ -9,7 +9,7 @@ namespace RNAssistant.Core.Tools
 {
     public static class UserQuestionToolCatalog
     {
-        public const string AskToolId = "common.questions_ask";
+        public const string AskToolId = "core.ask";
 
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {

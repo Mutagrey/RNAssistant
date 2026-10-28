@@ -101,8 +101,8 @@ namespace RNAssistant.MockDemo
                 Func<string, object, string> tool = (name, arguments) => JsonConvert.SerializeObject(new
                     { message = "", action = "execute", reason = "Perform the checked step.", tool_calls = new[] { new { name, arguments } } });
                 const string done = "fixture-finish";
-                responses.Enqueue(tool("common.capabilities_read", new { id = "excel.add_sheet" }));
-                responses.Enqueue(tool("excel.add_sheet", new { name = "ImageSheet1" }));
+                responses.Enqueue(tool("core.tools.read", new { id = "excel.sheet.add" }));
+                responses.Enqueue(tool("excel.sheet.add", new { name = "ImageSheet1" }));
                 controller.SubmitChatInput(new SubmitChatInputPayload { ChatId = chatId, OperationId = "image-a",
                     Text = "Use this image to create a sheet", ResourceDraftIds = new List<string> { stage("first.png") },
                     Delivery = InputDelivery.Queue }, null, null);
@@ -125,7 +125,7 @@ namespace RNAssistant.MockDemo
                     await controller.InboxWorkersDrained.ConfigureAwait(false);
                     var latest = ConversationInputMessage.Latest(store.Load(chatId));
                     if (helperCalls != 2 || latest.Id == firstUserId || latest.AttachmentAnalysis?.Content?.Contains(expectedAnalysis) != true ||
-                        adapter.ExcelSheetRequests.Any(request => request.ToolId == "excel.add_sheet"))
+                        adapter.ExcelSheetRequests.Any(request => request.ToolId == "excel.sheet.add"))
                         throw new Exception("Image steer reused old input or dispatched superseded mutation.");
                 }
                 else
@@ -145,7 +145,7 @@ namespace RNAssistant.MockDemo
                         controller.SaveSettings(new SaveSettingsPayload { ChatId = chatId, Settings = controls.Settings,
                             ExpectedPromptPublication = controls.Prompts.Publication }, CancellationToken.None);
                     }
-                    responses.Enqueue(tool("excel.add_sheet", new { name = "ImageSheet2" }));
+                    responses.Enqueue(tool("excel.sheet.add", new { name = "ImageSheet2" }));
                     await controller.ConfirmAgentToolAsync(pending.PendingId, chatId).ConfigureAwait(false);
                     var saved = store.Load(chatId);
                     var call = saved.Messages.Single(message => message.AcceptedCallOrigin != null && message.ToolCallId == pending.Call.Id);
@@ -159,10 +159,10 @@ namespace RNAssistant.MockDemo
                     await controller.ConfirmAgentToolAsync(pending.PendingId, chatId).ConfigureAwait(false);
                     var expectedHelpers = routing == "native" ? 0 : routing == "changed-helper" ? 2 : 1;
                     if (helperCalls != expectedHelpers || primaryCalls != 4 || !adapter.HasSheet("ImageSheet1") || !adapter.HasSheet("ImageSheet2") ||
-                        adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet") != 2)
+                        adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.sheet.add") != 2)
                         throw new Exception(role + "/" + routing + ": repeated helper or mutation, or lost continuation: helper=" +
                             helperCalls + ", primary=" + primaryCalls + ", sheets=" + adapter.HasSheet("ImageSheet1") + "/" +
-                            adapter.HasSheet("ImageSheet2") + ", writes=" + adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.add_sheet") +
+                            adapter.HasSheet("ImageSheet2") + ", writes=" + adapter.ExcelSheetRequests.Count(request => request.ToolId == "excel.sheet.add") +
                             ", status=" + store.Load(chatId).LastRun.Status + ", action=" + store.Load(chatId).LastRun.CurrentAction);
                 }
                 var finalRun = store.Load(chatId).LastRun;

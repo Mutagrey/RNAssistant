@@ -100,7 +100,7 @@ console.log("PASS message actions: send/edit/approval/reconnect transitions rest
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-run-view-state.js"), "utf8"), ctx);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-model.js"), "utf8"), ctx);
 const activity = (id, status) => ({ RunId: "r", StepId: "s", StepMessage: "One step",
-  Kind: "tool", ToolId: "common.resources_read", ToolCallId: id, Status: status });
+  Kind: "tool", ToolId: "core.read", ToolCallId: id, Status: status });
 const persisted = { message: { RunId: "r", Id: "p" }, index: 0, activity: activity("a", "completed") };
 let snapshot = { items: [persisted], finalMessage: null, nextIndex: 1 };
 ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => snapshot;

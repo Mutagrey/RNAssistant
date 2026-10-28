@@ -129,19 +129,19 @@ def main():
             for schema in schemas.values():
                 Draft202012Validator.check_schema(schema)
             for name, arguments, valid in (
-                ("common.resources_read", {"target": "catalog.txt"}, True),
-                ("common.resources_read", {"target": "catalog.txt", "startLine": 1, "lineCount": 2}, True),
-                ("common.resources_read", {"target": "catalog.txt", "startChar": 0, "charCount": 12}, True),
-                ("common.resources_read", {"target": "catalog.txt", "startLine": 1}, False),
-                ("common.resources_read", {"target": "catalog.txt", "startLine": 1, "lineCount": 2,
+                ("core.read", {"target": "catalog.txt"}, True),
+                ("core.read", {"target": "catalog.txt", "startLine": 1, "lineCount": 2}, True),
+                ("core.read", {"target": "catalog.txt", "startChar": 0, "charCount": 12}, True),
+                ("core.read", {"target": "catalog.txt", "startLine": 1}, False),
+                ("core.read", {"target": "catalog.txt", "startLine": 1, "lineCount": 2,
                                            "startChar": 0, "charCount": 12}, False),
-                ("common.resources_search", {"target": "catalog.txt", "query": "needle"}, True),
-                ("common.resources_search", {"scope": "workspace", "query": "needle"}, True),
-                ("common.resources_search", {"scope": "workspace", "target": "catalog.txt", "query": "needle"}, False),
-                ("common.resources_search", {"target": "catalog.txt"}, False),
-                ("common.resources_find", {"query": "catalog.txt"}, True),
-                ("common.resources_find", {"type": "skill", "query": "VBA"}, True),
-                ("common.resources_find", {"target": "catalog.txt"}, False),
+                ("core.search", {"target": "catalog.txt", "query": "needle"}, True),
+                ("core.search", {"scope": "workspace", "query": "needle"}, True),
+                ("core.search", {"scope": "workspace", "target": "catalog.txt", "query": "needle"}, False),
+                ("core.search", {"target": "catalog.txt"}, False),
+                ("core.find", {"query": "catalog.txt"}, True),
+                ("core.find", {"type": "skill", "query": "VBA"}, True),
+                ("core.find", {"target": "catalog.txt"}, False),
             ):
                 errors = list(Draft202012Validator(schemas[name]).iter_errors(arguments))
                 assert (not errors) == valid, (name, arguments, [e.message for e in errors])
@@ -188,32 +188,32 @@ def main():
 
             (workspace / "catalog.txt").write_text("needle in source\n", encoding="utf-8")
             scripted.extend([
-                execute("Search one source.", "common.resources_search", {"target": "catalog.txt", "query": "needle"}),
-                execute("Read the source.", "common.resources_read", {"target": "catalog.txt"}),
+                execute("Search one source.", "core.search", {"target": "catalog.txt", "query": "needle"}),
+                execute("Read the source.", "core.read", {"target": "catalog.txt"}),
             ])
             start = len(requests)
             run = cli("run", "--workspace", str(workspace), "--message", "Find needle in catalog.txt and read it.",
                       "--response-mode", "json_object")
             assert run.returncode == 0 and len(requests) == start + 3 and not scripted, (run.stdout, run.stderr)
-            assert_pair(requests[start + 1], "user", "common.resources_search", {"target": "catalog.txt", "query": "needle"})
-            assert_pair(requests[start + 2], "user", "common.resources_read", {"target": "catalog.txt"})
+            assert_pair(requests[start + 1], "user", "core.search", {"target": "catalog.txt", "query": "needle"})
+            assert_pair(requests[start + 2], "user", "core.read", {"target": "catalog.txt"})
             assert json.loads(run.stdout.splitlines()[-1])["data"]["ToolCounts"]["ReadOk"] == 2
 
             for role in ("user", "developer", "tool"):
                 path = role + ".html"
-                arguments = {"relativePath": path, "text": "<p>Exact accepted source.</p>"}
+                arguments = {'target': path, 'content': "<p>Exact accepted source.</p>"}
                 scripted.extend([
-                    execute("Create.", "files.create", arguments),
-                    execute("Read back.", "common.resources_read", {"target": path}),
+                    execute("Create.", "core.write", arguments),
+                    execute("Read back.", "core.read", {"target": path}),
                 ])
                 start = len(requests)
                 run = cli("run", "--workspace", str(workspace), "--message", "Create and read " + path,
                           "--tool-result-role", role.upper(), "--auto-confirm", "on")
                 assert run.returncode == 0 and not scripted, (run.stdout, run.stderr)
                 assert len(requests) == start + 3, len(requests)
-                assert_pair(requests[start + 1], role, "files.create", arguments)
-                assert_pair(requests[start + 2], role, "common.resources_read", {"target": path})
-                assert (workspace / path).read_text() == arguments["text"]
+                assert_pair(requests[start + 1], role, "core.write", arguments)
+                assert_pair(requests[start + 2], role, "core.read", {"target": path})
+                assert (workspace / path).read_text() == arguments["content"]
                 session = json.loads(run.stdout.splitlines()[-1])["data"]["SessionId"]
                 inspected = cli("inspect", "--workspace", str(workspace), "--session", session)
                 assert json.loads(inspected.stdout)["data"]["modelConfiguration"]["ToolResultRole"] == role
@@ -221,8 +221,8 @@ def main():
             original = "Preserve until confirmation."
             (workspace / "victim.txt").write_text(original, encoding="utf-8")
             scripted.extend([
-                execute("Read before requesting deletion.", "common.resources_read", {"target": "victim.txt"}),
-                execute("Request guarded deletion.", "files.delete", {"relativePath": "victim.txt"}),
+                execute("Read before requesting deletion.", "core.read", {"target": "victim.txt"}),
+                execute("Request guarded deletion.", "resources.delete", {'target': "victim.txt"}),
             ])
             env["RNA_INSTRUCTION_ROLE"] = "system"
             env["RNA_TOOL_RESULT_ROLE"] = "tool"
@@ -231,7 +231,7 @@ def main():
                           "--response-mode", "json_object")
             assert pending.returncode == 3, (pending.stdout, pending.stderr)
             state = json.loads(pending.stdout.splitlines()[-1])["data"]
-            assert state["pendingTool"] == "files.delete", state
+            assert state["pendingTool"] == "resources.delete", state
             assert len(requests) == start + 2 and not scripted, len(requests)
             assert all(request["messages"][0]["role"] == "system" for request in requests[start:])
             assert (workspace / "victim.txt").read_text() == original
@@ -251,7 +251,7 @@ def main():
             assert approved.returncode == 0, (approved.stdout, approved.stderr)
             assert len(requests) == start + 3 and requests[-1]["messages"][0]["role"] == "system", requests[-1]
             assert requests[-1]["response_format"]["type"] == "json_object", requests[-1]
-            assert_pair(requests[-1], "tool", "files.delete", {"relativePath": "victim.txt"})
+            assert_pair(requests[-1], "tool", "resources.delete", {'target': "victim.txt"})
             assert not (workspace / "victim.txt").exists()
             assert json.loads(approved.stdout.splitlines()[-1])["data"]["ToolCounts"]["WriteOk"] == 1
             print("PASS CLI response modes, advertised JSON schemas, search/read dispatch, all tool-result roles, exact pairs and guarded approval inheritance")

@@ -199,7 +199,7 @@ namespace RNAssistant.Core.Services
                 if (atom.Messages.Last().CompletedOperation != null || failed && atom.Evidence.Count == 0)
                     continue;
                 if (atom.Evidence.Count == 0 && atom.Messages.Any(message =>
-                    message.ToolName == "common.resources_read" && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
+                    message.ToolName == "core.read" && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
                 {
                     RecordExclusion(exclusions, atom, ContextExclusionKind.UnavailableEvidence);
                     Mark(atom, "This historical read has no canonical observation metadata; read the resource again.",
@@ -695,7 +695,7 @@ namespace RNAssistant.Core.Services
         private static bool IsResourceRead(ChatMessage message)
         {
             ToolResultWireReadResult wire; string error;
-            return message.ToolName == "common.resources_read" && message.CompletedOperation == null &&
+            return message.ToolName == "core.read" && message.CompletedOperation == null &&
                 ToolResultHistoryReader.TryRead(message, out wire, out error) && wire.Result.Status == ToolResultStatus.Ok;
         }
 
@@ -760,7 +760,7 @@ namespace RNAssistant.Core.Services
             ContextAtom atom;
             if (source.SyntheticResourceObservation) atom = Atom("current-source", Clone(source), false);
             else if (source.ResourceEffect == null && candidate.Call != null &&
-                (source.ToolName == "common.capabilities_read" || (string)data?["type"] == "skill" || evidence.Any(item =>
+                (source.ToolName == "core.tools.read" || (string)data?["type"] == "skill" || evidence.Any(item =>
                     !item.Complete || item.View != ResourceRepresentations.Text && item.View != ResourceRepresentations.Source ||
                     item.Coverage.Kind != ResourceCoverageKinds.Whole)))
                 atom = InteractionAtom(Clone(candidate.Call), Clone(source), false);
@@ -787,10 +787,10 @@ namespace RNAssistant.Core.Services
             if (message.ResourceEffect != null) return message.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                 message.ResourceEffect.Outcome == ResourceEffectOutcome.Restored;
             var data = wire.Data as JObject;
-            if (message.ToolName == "common.resources_read")
+            if (message.ToolName == "core.read")
                 return (string)data?["type"] != "shared context" && (string)data?["type"] != "HTML data" &&
                     (string)data?["type"] != "HTML workspace";
-            return message.ToolName == "common.capabilities_read" &&
+            return message.ToolName == "core.tools.read" &&
                 ((string)data?["kind"] == "skill" || (string)data?["kind"] == "reference" ||
                  message.ResourceEvidence.Any(item => {
                      var address = ResourceUri.Parse(item.Resource.Uri);
@@ -829,14 +829,14 @@ namespace RNAssistant.Core.Services
         private static bool IsSharedContextRead(ChatMessage message)
         {
             ToolResultWireReadResult wire; string error;
-            return message.ToolName == "common.resources_read" && ToolResultHistoryReader.TryRead(message, out wire, out error) &&
+            return message.ToolName == "core.read" && ToolResultHistoryReader.TryRead(message, out wire, out error) &&
                 (string)(wire.Data as JObject)?["type"] == "shared context";
         }
 
         private void ProjectSharedContext(ChatMessage message, ModelAuthoritySnapshot authority)
         {
             ToolResultWireReadResult wire; string error;
-            if (message.ToolName != "common.resources_read" || !ToolResultHistoryReader.TryRead(message, out wire, out error)) return;
+            if (message.ToolName != "core.read" || !ToolResultHistoryReader.TryRead(message, out wire, out error)) return;
             var data = wire.Data as JObject;
             if ((string)data?["type"] != "shared context") return;
             if (wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok) { message.ContextClaims.Clear(); return; }
@@ -893,7 +893,7 @@ namespace RNAssistant.Core.Services
                 : "The read/verified source is retained locally, but its body exceeds this request budget and was not included.",
             NextAction = aggregateBudget
                 ? "Read only the next needed target, one at a time; a fresh read can replace older bodies. Do not repeat the whole batch. An omitted body cannot authorize a write; never replay a completed mutation."
-                : "Read a narrower supported view of this target. If common.resources_read advertises source/text, use its available bounded selector (startLine/lineCount, or startChar/charCount where offered); otherwise reduce context or use a larger context window. An omitted body cannot authorize a whole-file overwrite. Do not repeat the same whole read or replay a completed mutation." }; }
+                : "Read a narrower supported view of this target. If core.read advertises source/text, use its available bounded selector (startLine/lineCount, or startChar/charCount where offered); otherwise reduce context or use a larger context window. An omitted body cannot authorize a whole-file overwrite. Do not repeat the same whole read or replay a completed mutation." }; }
 
         private static ChatMessage OmittedSourceNotice(string target, bool aggregateBudget = false)
         { return new ChatMessage { Role = "user", ProtocolMessage = true,
@@ -918,7 +918,7 @@ namespace RNAssistant.Core.Services
             ToolResultWireReadResult wire; string error;
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error) ||
                 wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
-                result.ToolName != "common.resources_read" && atom.Kind != "terminal-mutation" ||
+                result.ToolName != "core.read" && atom.Kind != "terminal-mutation" ||
                 !HasCompleteSource(result)) return false;
             var projected = _projection.Project(result);
             if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) return false;

@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                 throw new ArgumentNullException(nameof(markDispatchPossible));
             ExcelSheetRequests.Add(new ToolInvocation
             {
-                ToolId = "excel.add_sheet",
+                ToolId = "excel.sheet.add",
                 Arguments = new Dictionary<string, object> { { "name", request.Name } }
             });
             ThrowQueuedExcelSheetFailure();
@@ -64,7 +64,7 @@ namespace RNAssistant.Harness
                 throw new ArgumentNullException(nameof(markDispatchPossible));
             ExcelSheetRequests.Add(new ToolInvocation
             {
-                ToolId = "excel.rename_sheet",
+                ToolId = "excel.sheet.rename",
                 Arguments = new Dictionary<string, object>
                 {
                     { "sheet", request.Sheet },

@@ -68,7 +68,7 @@ namespace RNAssistant.Harness
                     AssertEqual(ToolExecutionOutcome.Error, refused.Outcome, "header clearing is a definite pre-dispatch refusal");
                     AssertEqual(ToolDispatchEvidence.NotDispatched, refused.Evidence.Dispatch, "header is untouched");
                     AssertEqual("excel_clear_table_header", (string)JObject.Parse(refused.Result.DataJson)["code"], "actionable header error");
-                    AssertContains(refused.Message, "excel.delete_rows_columns", "recovery names the structural tool");
+                    AssertContains(refused.Message, "excel.rows.columns.delete", "recovery names the structural tool");
                 }
                 var formats = new ToolCall("header-format", ExcelRangeMutationToolIds.ClearRange,
                     "{\"sheet\":\"Data\",\"address\":\"H18\",\"clearWhat\":\"formats\"}");

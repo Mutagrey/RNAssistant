@@ -33,11 +33,11 @@ def main():
         for i in range(4):
             (workspace / f"small{i}.txt").write_text(f"small source {i}")
         replies = [
-            response("BATCH_NARRATION_ONCE", call("common.resources_read", target="large.txt", startLine=1257, lineCount=2),
-                     *(call("common.resources_read", target=f"small{i}.txt") for i in range(4))),
-            response("Attempt whole replacement from a partial read.", call("files.replace", relativePath="large.txt", text="UNSAFE")),
-            response("Patch only the observed anchor.", call("files.patch", relativePath="large.txt", oldText="TARGET_OLD", newText="TARGET_NEW")),
-            response("Use the delivered after-source.", call("files.patch", relativePath="large.txt", oldText="TARGET_NEW", newText="TARGET_FINAL")),
+            response("BATCH_NARRATION_ONCE", call("core.read", target="large.txt", startLine=1257, lineCount=2),
+                     *(call("core.read", target=f"small{i}.txt") for i in range(4))),
+            response("Attempt whole replacement from a partial read.", call("core.write", target="large.txt", content="UNSAFE")),
+            response("Patch only the observed anchor.", call("core.patch", target="large.txt", hunks=[{"oldText": "TARGET_OLD", "newText": "TARGET_NEW"}])),
+            response("Use the delivered after-source.", call("core.patch", target="large.txt", hunks=[{"oldText": "TARGET_NEW", "newText": "TARGET_FINAL"}])),
             response("Verified patches complete."),
         ]
         requests = []
@@ -71,7 +71,7 @@ def main():
             approvals = 0
             while run.returncode == 3 and approvals < 2:
                 pending = json.loads(run.stdout.splitlines()[-1])["data"]
-                assert pending["pendingTool"] == "files.patch", pending
+                assert pending["pendingTool"] == "core.patch", pending
                 run = subprocess.run(["dotnet", str(CLI), "approve", "--workspace", str(workspace),
                     "--session", pending["SessionId"], "--pending", pending["pendingId"], "--jsonl"],
                     cwd=REPO, env=env, text=True, capture_output=True, timeout=60)

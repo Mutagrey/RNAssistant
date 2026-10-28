@@ -10,9 +10,9 @@ namespace RNAssistant.Core.Tools
 {
     public static class PlanDocumentToolCatalog
     {
-        public const string SaveToolId = "common.plan_doc_save";
-        public const string RestoreToolId = "common.plan_doc_restore";
-        public const string DeleteToolId = "common.plan_doc_delete";
+        public const string SaveToolId = "plan.document.save";
+        public const string RestoreToolId = "plan.document.restore";
+        public const string DeleteToolId = "plan.document.delete";
 
         public static bool Owns(string toolId)
         {

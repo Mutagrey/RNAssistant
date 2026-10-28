@@ -5,7 +5,7 @@ namespace RNAssistant.Office.Tools
     public static class ExcelReadToolIds
     {
         public const string Inspect = "excel.inspect";
-        public const string SummarizeColumns = "excel.summarize_columns";
+        public const string SummarizeColumns = "excel.columns.summarize";
 
         public static bool Owns(string toolId)
         {

@@ -99,5 +99,28 @@
       row.appendChild(code); container.appendChild(row);
     });
   }
-  window.RNAssistantTextDiff = { format: format, render: render };
+  function renderInline(container, diff) {
+    var summary = document.createElement("div"); summary.className = "vba-diff-summary";
+    summary.textContent = diff.summary || ""; container.appendChild(summary);
+    var lines = diff.lines || [], shown = 0;
+    var body = document.createElement("div"); body.className = "inline-text-diff";
+    body.tabIndex = 0; body.setAttribute("aria-label", "Изменённый текст"); container.appendChild(body);
+    var more = document.createElement("button"); more.type = "button"; more.className = "run-changes-more";
+    function page() {
+      var end = Math.min(shown + 40, lines.length);
+      for (; shown < end; shown++) {
+        var line = lines[shown], row = document.createElement("div");
+        row.className = "inline-diff-line " + line.type;
+        var marker = document.createElement("span"); marker.className = "inline-diff-marker";
+        marker.textContent = line.type === "add" ? "+" : line.type === "remove" ? "−" : " ";
+        var code = document.createElement("code"); code.textContent = line.text || "";
+        if (line.noNewline && line.type !== "context") code.appendChild(document.createTextNode(" ⏎ нет перевода строки"));
+        row.appendChild(marker); row.appendChild(code); body.appendChild(row);
+      }
+      more.hidden = shown >= lines.length;
+      more.textContent = "Показать ещё · " + Math.min(40, lines.length - shown);
+    }
+    more.addEventListener("click", page); page(); container.appendChild(more);
+  }
+  window.RNAssistantTextDiff = { format: format, render: render, renderInline: renderInline };
 }());

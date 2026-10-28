@@ -201,7 +201,7 @@ const root = path.resolve(__dirname, "../..");
         { Id: "question", Role: "assistant", RunId: "office-run", Content: "",
         RunViewState: { RunId: "office-run", TurnId: "turn", Lifecycle: "awaiting_user", ExecutionHealth: "clean", GoalVerification: "not_assessed",
           SuccessfulReads: 0, VerifiedWrites: 0, NoChangeWrites: 0, UnverifiedWrites: 0, FailedCalls: 0, UnknownEffects: 0, Reason: "awaiting_user" },
-        Activity: { RunId: "office-run", ToolId: "common.questions_ask", ToolCallId: "ask", Kind: "tool", Status: "waiting", Title: "Уточнение задачи" } }];
+        Activity: { RunId: "office-run", ToolId: "core.ask", ToolCallId: "ask", Kind: "tool", Status: "waiting", Title: "Уточнение задачи" } }];
       state.messages[1].RunViewState = state.messages[2].RunViewState;
       renderMessages();
     });

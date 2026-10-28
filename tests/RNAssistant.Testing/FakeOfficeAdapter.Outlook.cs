@@ -36,9 +36,9 @@ namespace RNAssistant.Harness
         internal const string OutlookReadFolderOperation =
             "outlook.read_folder.direct";
         internal const string OutlookCreateDraftOperation =
-            "outlook.create_draft.direct";
+            "outlook.draft.create.direct";
         internal const string OutlookUpdateMailOperation =
-            "outlook.update_mail.direct";
+            "outlook.mail.update.direct";
 
         public bool OutlookSelectedUnread
         {

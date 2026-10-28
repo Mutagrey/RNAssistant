@@ -7,8 +7,8 @@ namespace RNAssistant.Office.Tools
 {
     internal static partial class ToolAuthoringCatalog
     {
-        internal const string UpsertToolId = "common.tools_upsert";
-        internal const string DeleteToolId = "common.tools_delete";
+        internal const string UpsertToolId = "tools.upsert";
+        internal const string DeleteToolId = "tools.delete";
 
         internal static bool Owns(string toolId)
         {

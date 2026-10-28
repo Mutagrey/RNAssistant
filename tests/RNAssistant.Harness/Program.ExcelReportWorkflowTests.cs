@@ -78,16 +78,16 @@ namespace RNAssistant.Harness
                     ModelProtocolWire.WriteAcceptedCall("Perform the next report step.", "",
                         new ConversationToolCall { Name = name, Arguments = arguments });
                 return new Queue<string>(new[] {
-                    LoadSkillResponse("excel.analysis_reporting"),
-                    call("common.resources_read", new JObject { ["target"] = "Excel range: Data!A1:C7", ["representation"] = "table" }),
-                    call("excel.add_sheet", new JObject { ["name"] = "SalesReport" }),
-                    call("excel.write_range", new JObject { ["kind"] = "table", ["sheet"] = "SalesReport", ["address"] = "A1",
+                    LoadSkillResponse("skills.excel.analysis.reporting"),
+                    call("core.read", new JObject { ["target"] = "Excel range: Data!A1:C7", ["representation"] = "table" }),
+                    call("excel.sheet.add", new JObject { ["name"] = "SalesReport" }),
+                    call("excel.range.write", new JObject { ["kind"] = "table", ["sheet"] = "SalesReport", ["address"] = "A1",
                         ["values"] = JArray.Parse("[['Region','Revenue'],['North',150],['South',100],['West',110]]") }),
-                    call("excel.add_table", new JObject { ["sheet"] = "SalesReport", ["sourceRange"] = "A1:B4", ["name"] = "SalesSummary" }),
-                    call("excel.format_range", new JObject { ["sheet"] = "SalesReport", ["address"] = "B2:B4", ["numberFormat"] = "#,##0" }),
-                    call("excel.upsert_chart", new JObject { ["sheet"] = "SalesReport", ["sourceRange"] = "A1:B4", ["chartName"] = "SalesByRegion",
+                    call("excel.table.add", new JObject { ["sheet"] = "SalesReport", ["sourceRange"] = "A1:B4", ["name"] = "SalesSummary" }),
+                    call("excel.range.format", new JObject { ["sheet"] = "SalesReport", ["address"] = "B2:B4", ["numberFormat"] = "#,##0" }),
+                    call("excel.chart.upsert", new JObject { ["sheet"] = "SalesReport", ["sourceRange"] = "A1:B4", ["chartName"] = "SalesByRegion",
                         ["chartType"] = "column", ["title"] = "Revenue by region" }),
-                    call("common.resources_read", new JObject { ["target"] = "Excel range: SalesReport!A1:B4", ["representation"] = "table" }),
+                    call("core.read", new JObject { ["target"] = "Excel range: SalesReport!A1:B4", ["representation"] = "table" }),
                     null // The finish is generated after runtime assigns terminal call IDs.
                 });
             }

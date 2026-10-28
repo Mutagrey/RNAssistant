@@ -50,10 +50,7 @@ namespace RNAssistant.Office.Tools
 
         internal VbaReader Reader { get { return _reader; } }
 
-        public string ToolId(string suffix)
-        {
-            return "common." + suffix;
-        }
+
 
         ToolRunResult IVbaResourceSource.ListResourceModules()
         {
@@ -157,14 +154,14 @@ namespace RNAssistant.Office.Tools
             if (matches.Length == 0)
             {
                 return VbaNativeOutcome.Error(
-                    "The selected VBA backup target is no longer available. Run common.resources_find with scope=backups and choose one exact returned target.",
+                    "The selected VBA backup target is no longer available. Run core.find with scope=backups and choose one exact returned target.",
                     "vba_backup_target_not_found",
                     true);
             }
             if (matches.Length > 1)
             {
                 return VbaNativeOutcome.Error(
-                    "The selected VBA backup target is ambiguous. Run common.resources_find with scope=backups and choose one exact returned target.",
+                    "The selected VBA backup target is ambiguous. Run core.find with scope=backups and choose one exact returned target.",
                     "vba_backup_target_ambiguous",
                     false);
             }

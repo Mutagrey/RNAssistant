@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Services
                 if (artifact.Kind != ChatArtifactKinds.Markdown || intent.LogicalId == null)
                     throw new InvalidDataException("This target is not an authored Markdown document. Uploaded originals are immutable; create a new document explicitly.");
             }
-            if (context.Execution.Call.Name == MarkdownDocumentToolCatalog.RestoreToolId)
+            if (context.DomainOperation == MarkdownDocumentToolCatalog.RestoreToolId)
             {
                 if (intent.Base == null) throw new InvalidDataException("Restore requires an explicit Markdown target.");
                 var version = ToolArgumentReader.Int32(context.Arguments, "version");
@@ -136,7 +136,7 @@ namespace RNAssistant.Office.Services
             var title = ToolArgumentReader.String(arguments, "title", "");
             var markdown = ToolArgumentReader.String(arguments, "markdown", "");
             var description = ToolArgumentReader.String(arguments, "description", "");
-            if (string.IsNullOrWhiteSpace(title) || title.Length > 200 || string.IsNullOrWhiteSpace(markdown) || markdown.Length > MaximumCharacters ||
+            if (string.IsNullOrWhiteSpace(title) || title.Length > 200 || markdown.Length > MaximumCharacters ||
                 string.IsNullOrWhiteSpace(description) || description.Length > 1200)
                 throw new InvalidDataException("Provide a title, complete Markdown and a concise description of purpose and contents within the declared bounds.");
         }

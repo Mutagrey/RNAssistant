@@ -24,7 +24,7 @@ class Trace:
 
     def record(self, name, path, evidence=None, effect=None):
         call_id = "call-" + str(len(self.results))
-        args = {"target" if name == "common.resources_read" else "relativePath": path}
+        args = {"target" if name == "core.read" else "relativePath": path}
         call = {"Role": "assistant", "RunId": "same-run", "ToolCalls": [
             {"Id": call_id, "Name": name, "ArgumentsJson": json.dumps(args)}]}
         result = {"Role": self.role, "RunId": "same-run", "ToolCallId": call_id, "ToolName": name,
@@ -43,7 +43,7 @@ class Trace:
         packed = gzip.compress(body)
         blob.write_bytes(b"RNACAS01" + (1).to_bytes(4, "little") + len(body).to_bytes(8, "little") +
                          len(packed).to_bytes(8, "little") + packed)
-        return self.record("common.resources_read", path, evidence=[{
+        return self.record("core.read", path, evidence=[{
             "Complete": True, "Coverage": {"kind": "whole"}, "ScopeId": {"kind": "file"}, "View": "text",
             "Resource": self.ref(path), "ContentSha256": sha, "Payload": {"sha256": sha, "byteLength": len(body)}}])
 
@@ -52,7 +52,7 @@ class Trace:
         self.revisions[path] += 1
         self.bodies[path] = self.bodies[path].replace(b"review: pending\n", b"review: complete\n") if review else \
             self.bodies[path].replace(b"status: draft\n", b"status: ready\n")
-        return self.record("files.patch", path, effect={"operation": "files.patch", "outcome": "VerifiedChanged",
+        return self.record("core.patch", path, effect={"operation": "core.patch", "outcome": "VerifiedChanged",
             "verification": "exact read-back", "impacts": [{"relation": "Exact", "coverage": {"kind": "whole"},
             "before": before, "after": self.ref(path)}]})
 

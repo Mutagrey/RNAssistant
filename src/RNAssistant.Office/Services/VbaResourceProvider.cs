@@ -127,7 +127,7 @@ namespace RNAssistant.Office.Services
                         target.Substring(prefix.Length), StringComparison.Ordinal)) : null;
                 if (module != null) return DescribeComponent(session, module, null);
                 throw new ResourceRequestException("VBA target is no longer available: " + target +
-                    ". Run common.resources_find with scope=vba and choose one current module target.",
+                    ". Run core.find with scope=vba and choose one current module target.",
                     "resource_target_not_found", true);
             });
         }
@@ -148,7 +148,7 @@ namespace RNAssistant.Office.Services
             descriptor.Metadata["host"] = _adapter.HostName ?? string.Empty;
             descriptor.Metadata["live"] = "true";
             descriptor.Metadata["childKinds"] = ComponentKind + "," + BackupKind;
-            descriptor.Metadata["childDiscovery"] = "Use common.resources_find with scope=backups for backup evidence.";
+            descriptor.Metadata["childDiscovery"] = "Use core.find with scope=backups for backup evidence.";
             return descriptor;
         }
 
@@ -364,7 +364,7 @@ namespace RNAssistant.Office.Services
         {
             return new ResourceRequestException(
                 "VBA resource is no longer available at this URI: " + resourceUri +
-                ". Run common.resources_find with scope=vba or scope=backups, then choose one exact returned semantic target.",
+                ". Run core.find with scope=vba or scope=backups, then choose one exact returned semantic target.",
                 "resource_not_found",
                 true);
         }

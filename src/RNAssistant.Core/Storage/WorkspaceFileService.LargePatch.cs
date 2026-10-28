@@ -128,7 +128,7 @@ namespace RNAssistant.Core.Storage
             { throw new WorkspaceFileException("encoding_ambiguous", "Patch fragments must be valid UTF-8 text."); }
         }
 
-        private static long FindUniqueUtf8Anchor(Stream source, byte[] needle, long expectedLength)
+        private static long FindUniqueUtf8Anchor(Stream source, byte[] needle, long expectedLength, CancellationToken token = default(CancellationToken))
         {
             var prefix = new int[needle.Length];
             var matched = 0;
@@ -148,6 +148,7 @@ namespace RNAssistant.Core.Storage
             {
                 while ((count = source.Read(buffer, 0, buffer.Length)) != 0)
                 {
+                    token.ThrowIfCancellationRequested();
                     decoder.GetChars(buffer, 0, count, chars, 0, false);
                     for (var i = 0; i < count; i++, position++)
                     {
@@ -168,11 +169,12 @@ namespace RNAssistant.Core.Storage
             return first;
         }
 
-        private static void CopyExactly(Stream input, Stream output, long count)
+        private static void CopyExactly(Stream input, Stream output, long count, CancellationToken token = default(CancellationToken))
         {
             var buffer = new byte[81920];
             while (count > 0)
             {
+                token.ThrowIfCancellationRequested();
                 var read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, count));
                 if (read == 0) throw new IOException("Retained source ended during patch preparation.");
                 output.Write(buffer, 0, read);

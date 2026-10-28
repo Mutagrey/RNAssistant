@@ -30,13 +30,13 @@ def main():
         listed, output = cli("env", "--workspace", str(workspace))
         assert listed.returncode == 0, listed.stderr
         capabilities = output["data"]["capabilities"]
-        assert "common.resources_find" in capabilities and "common.resources_read" in capabilities
-        assert "files.create" in capabilities and "files.patch" in capabilities
+        assert "core.find" in capabilities and "core.read" in capabilities
+        assert "core.write" in capabilities and "core.patch" in capabilities
         read_only, read_only_output = cli("env", "--workspace", str(workspace), "--read-only")
         assert read_only.returncode == 0, read_only.stderr
         read_only_capabilities = read_only_output["data"]["capabilities"]
         assert not any(tool.startswith("files.") for tool in read_only_capabilities), read_only_capabilities
-        assert "common.resources_read" in read_only_capabilities
+        assert "core.read" in read_only_capabilities
         assert "web.verify" not in capabilities, capabilities
         assert not any("excel" in tool.lower() or "vba" in tool.lower() or
                        "outlook" in tool.lower() or "powerpoint" in tool.lower() or

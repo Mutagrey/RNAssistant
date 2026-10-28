@@ -8,19 +8,19 @@ namespace RNAssistant.Office.Tools
     internal static class HtmlWorkspaceToolCatalog
     {
         internal const string WriteFileToolId =
-            "common.html_workspace_write_file";
+            "html.source.write";
         internal const string WriteDataToolId =
-            "common.html_data_write";
+            "html.data.write";
         internal const string ApplyPatchToolId =
-            "common.html_workspace_apply_patch";
+            "html.source.patch";
         internal const string DeleteToolId =
-            "common.html_workspace_delete";
-        internal const string BindDataToolId = "common.html_data_bind";
-        internal const string RefreshDataToolId = "common.html_data_refresh";
-        internal const string FreezeDataToolId = "common.html_data_freeze";
-        internal const string ListAssetsToolId = "common.html_assets_list";
-        internal const string ImportAssetToolId = "common.html_assets_import";
-        internal const string PublishAssetToolId = "common.html_assets_publish";
+            "html.source.delete";
+        internal const string BindDataToolId = "html.data.bind";
+        internal const string RefreshDataToolId = "html.data.refresh";
+        internal const string FreezeDataToolId = "html.data.freeze";
+        internal const string ListAssetsToolId = "html.assets.list";
+        internal const string ImportAssetToolId = "html.assets.import";
+        internal const string PublishAssetToolId = "html.assets.publish";
 
         internal static bool Owns(string toolId)
         {
@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Tools
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
             yield return Projection(WriteFileToolId,
-                "Workspace: Create or replace one complete HTML/CSS/classic JavaScript file with root path/content. Replacement requires complete current source in context; reuse a read or verified after-source, or use common.html_workspace_apply_patch for focused edits. Runtime infers kind, injects workspace CSS/JS, loads pinned offline vendors on use and runs static preflight. Do not add local link/script src tags or copy vendor bundles.",
+                "Workspace: Create or replace one complete HTML/CSS/classic JavaScript file with root path/content. Replacement requires complete current source in context; reuse a read or verified after-source, or use html.source.patch for focused edits. Runtime infers kind, injects workspace CSS/JS, loads pinned offline vendors on use and runs static preflight. Do not add local link/script src tags or copy vendor bundles.",
                 HtmlWorkspaceToolService.WriteFileSchema(),
                 "html_workspace_write_file", true, 0);
             yield return Projection(WriteDataToolId,

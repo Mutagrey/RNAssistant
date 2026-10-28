@@ -374,7 +374,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, gateway.SearchWithin(session, firstTarget, "late-marker", 5, true, CancellationToken.None).TotalMatches,
                     "bounded search uses the selected original");
                 AssertTrue(gateway.Outline(session, firstTarget, 1, 5).PartCount > 1, "outline uses the same original");
-                var readTool = executor.GetControllerTools().Single(item => item.Id == "common.resources_read");
+                var readTool = executor.GetControllerTools().Single(item => item.Id == "core.read");
                 Func<ChatSession, string, RNAssistant.Core.Tools.ToolExecutionRecord> read = (chat, target) => {
                     var runtime = executor.CreateNativeRuntime(chat, new[] { readTool }, new AppSettings(), ChatModes.Agent, false, manualRun: true);
                     var call = new RNAssistant.Core.Agent.ToolCall(Guid.NewGuid().ToString("N"), readTool.Id,

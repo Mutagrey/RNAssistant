@@ -473,18 +473,18 @@ namespace RNAssistant.Harness
                 excelAdapterSource.IndexOf("private Excel.Workbook ActiveWorkbook(", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("OfficeTargetDescriptor", StringComparison.Ordinal) < 0 &&
                 excelAdapterSource.IndexOf("_target.", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.find_cells\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.replace_cells\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.add_sheet\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.rename_sheet\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.clear_range\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.sort_range\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.filter_range\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.format_range\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.add_table\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.create_chat_chart\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.upsert_chart\"", StringComparison.Ordinal) < 0 &&
-                excelAdapterSource.IndexOf("case \"excel.delete_chart\"", StringComparison.Ordinal) < 0,
+                excelAdapterSource.IndexOf("case \"excel.cells.find\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.cells.replace\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.sheet.add\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.sheet.rename\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.range.clear\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.range.sort\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.range.filter\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.range.format\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.table.add\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.chat.chart.create\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.chart.upsert\"", StringComparison.Ordinal) < 0 &&
+                excelAdapterSource.IndexOf("case \"excel.chart.delete\"", StringComparison.Ordinal) < 0,
                 "Excel execution adapter must not retain ActiveWorkbook or descriptor fallback");
             AssertTrue(
                 excelFactorySource.IndexOf("ActiveWorkbook", StringComparison.Ordinal) < 0 &&
@@ -498,8 +498,8 @@ namespace RNAssistant.Harness
             {
                 "excel.inspect_internal",
                 "excel.read_range_internal",
-                "excel.write_range_read_internal",
-                "excel.write_range_apply_internal"
+                "excel.range.write_read_internal",
+                "excel.range.write_apply_internal"
             })
             {
                 AssertTrue(!excelProductionSources.Any(source =>

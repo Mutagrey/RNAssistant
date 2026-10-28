@@ -35,15 +35,15 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
-        { ToolId: "common.capabilities_read", Subtitle: "excel.write_range", ResultMessage: "Loaded catalogRevision=private-id", ResultSummary: { Kind: "capability-read", Representation: "tool-schema", Complete: true } },
-        { ToolId: "common.resources_find", Subtitle: "Таблицы с продажами · Документ", ResultSummary: { Kind: "resource-find", ReturnedItems: 4, Complete: true } },
-        { ToolId: "common.resources_read", Subtitle: "Продажи!A1:D120 · Таблица", ResultSummary: { Kind: "resource-read", Representation: "table", ReturnedRows: 120, Complete: true } },
-        { ToolId: "excel.write_range", Subtitle: "Продажи!B2:D121", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "VerifiedChange" } },
-        { ToolId: "excel.add_sheet", Subtitle: "Отчёт", Status: "failed", ErrorCode: "excel_sheet_already_exists", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" }, ResultMessage: "Sheet already exists: raw error" },
-        { ToolId: "common.office_run_macro", Subtitle: "ОбновитьОтчёт", Status: "failed", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } },
-        { ToolId: "common.resources_find", Subtitle: "Архив отчётов", ResultSummary: { Kind: "resource-find", ReturnedItems: 0, Complete: false, Partial: true } },
-        { ToolId: "common.resources_read", Subtitle: "Папка документа / Очень длинное название раздела с аналитикой продаж по регионам / Итоговые данные за последний квартал!A1:F180", Status: "running" },
-        { ToolId: "common.resources_read", Subtitle: "Закрытый ресурс", Status: "failed", ErrorCode: "resource_access_denied", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } }
+        { ToolId: "core.tools.read", Subtitle: "excel.range.write", ResultMessage: "Loaded catalogRevision=private-id", ResultSummary: { Kind: "capability-read", Representation: "tool-schema", Complete: true } },
+        { ToolId: "core.find", Subtitle: "Таблицы с продажами · Документ", ResultSummary: { Kind: "resource-find", ReturnedItems: 4, Complete: true } },
+        { ToolId: "core.read", Subtitle: "Продажи!A1:D120 · Таблица", ResultSummary: { Kind: "resource-read", Representation: "table", ReturnedRows: 120, Complete: true } },
+        { ToolId: "excel.range.write", Subtitle: "Продажи!B2:D121", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "VerifiedChange" } },
+        { ToolId: "excel.sheet.add", Subtitle: "Отчёт", Status: "failed", ErrorCode: "excel_sheet_already_exists", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" }, ResultMessage: "Sheet already exists: raw error" },
+        { ToolId: "office.macro.run", Subtitle: "ОбновитьОтчёт", Status: "failed", ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } },
+        { ToolId: "core.find", Subtitle: "Архив отчётов", ResultSummary: { Kind: "resource-find", ReturnedItems: 0, Complete: false, Partial: true } },
+        { ToolId: "core.read", Subtitle: "Папка документа / Очень длинное название раздела с аналитикой продаж по регионам / Итоговые данные за последний квартал!A1:F180", Status: "running" },
+        { ToolId: "core.read", Subtitle: "Закрытый ресурс", Status: "failed", ErrorCode: "resource_access_denied", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } }
       ];
       const displays = [
         ["Изучение", "Learn"], ["Поиск ресурсов", "Search"], ["Чтение ресурса", "Read"],
@@ -54,7 +54,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       for (const item of fixtures) document.getElementById("actions").appendChild(renderActivityNode(
         Object.assign({ Kind: "tool", Status: "completed", ArgumentsJson: '{"target":"exact model argument"}' }, item), false, false, null));
       ["excel-analysis", "vba-edit", "references/formulas.md"].forEach(function (target, index) {
-        document.getElementById("actions").appendChild(renderActivityNode({ Kind: "tool", ToolId: "common.capabilities_read",
+        document.getElementById("actions").appendChild(renderActivityNode({ Kind: "tool", ToolId: "core.tools.read",
           ToolCallId: "skill-attempt-" + index, Subtitle: target, Status: index === 2 ? "running" : "completed",
           Display: { action: "Чтение описания", runningAction: "Изучаю", operation: "Learn" },
           ResultSummary: index === 2 ? null : { Kind: "capability-read", Representation: "skill", Complete: true } }, false, false, null));
@@ -71,7 +71,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       run.id = "full-run";
       document.querySelector("main").appendChild(run);
       const action = (id, step) => ({ activity: { Kind: "tool", RunId: "r-layout", StepId: step,
-        StepMessage: step, ToolCallId: id, ToolId: "common.resources_read", Status: "completed", Subtitle: id,
+        StepMessage: step, ToolCallId: id, ToolId: "core.read", Status: "completed", Subtitle: id,
         Display: { action: "Чтение", operation: "Read" } }, message: { Id: id, RunId: "r-layout" } });
       const single = renderAgentRunArticle({ live: true, items: [action("only", "one")] });
       single.id = "single-action-run"; document.querySelector("main").appendChild(single);
@@ -139,7 +139,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(bounds[6].colors[2], bounds[5].colors[2], "incomplete reads use the same warning color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
       assert.ok(bounds[2].text.includes("Получено строк: 120"));
-      assert.ok(bounds[0].text.includes("excel.write_range"), "capability identity is visible without opening details");
+      assert.ok(bounds[0].text.includes("excel.range.write"), "capability identity is visible without opening details");
       assert.ok(bounds[3].text.includes("Продажи!B2:D121"), "mutation receipt includes its target beside the verified outcome");
       assert.ok(bounds[9].text.includes("Чтение навыка") && bounds[9].text.includes("excel-analysis"));
       assert.ok(bounds[10].text.includes("vba-edit") && bounds[9].text !== bounds[10].text, "skill calls are distinguishable while collapsed");
@@ -231,7 +231,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator(".agent-activity-row").first().click();
     assert.equal(await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).count(), 0);
     assert.equal(await page.locator(".agent-activity-context-note").count(), 0);
-    assert.equal(await page.locator("#actions .agent-activity-tool-id").first().textContent(), "common.capabilities_read");
+    assert.equal(await page.locator("#actions .agent-activity-tool-id").first().textContent(), "core.tools.read");
     assert.match(await page.locator("#actions").textContent(), /Код ошибки: excel_sheet_already_exists/);
     assert.equal(await page.locator("#actions .agent-activity-result").first().textContent(), "Loaded catalogRevision=private-id");
     await page.evaluate(() => {
@@ -290,7 +290,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       ];
       window.sparseItems = states.map((extra, index) => {
         const activity = Object.assign({ Kind: "tool", RunId: "sparse", StepId: "sparse-" + index,
-          ToolId: "common.resources_read", ToolCallId: "sparse-call-" + index,
+          ToolId: "core.read", ToolCallId: "sparse-call-" + index,
           Subtitle: "Источник " + index, StepMessage: index === 0 ? "Проверю исходные данные перед изменением." : "",
           Display: { action: "Чтение", running: "Читаю", operation: "Read" } }, extra);
         return { activity, index, message: { Id: "sparse-message-" + index, Role: "assistant",

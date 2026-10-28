@@ -131,26 +131,24 @@ namespace RNAssistant.Harness
                 OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var publicTools = executor.GetControllerTools()
-                    .Where(tool => tool.Id.StartsWith(
-                        "common.vba_", StringComparison.Ordinal) ||
-                        tool.Id == "common.office_run_macro")
+                    .Where(tool => ResourceMutationToolCatalog.Owns(tool.Id) ||
+                        tool.Id == "office.macro.run")
                     .ToArray();
-                AssertEqual(6, publicTools.Length,
+                AssertEqual(8, publicTools.Length,
                     "all public VBA and macro tools are present");
                 foreach (var tool in publicTools)
                 {
                     AssertTrue(NativeToolRuntimeAdapter.Owns(tool.Id),
                         tool.Id + " is owned by native ToolRuntime");
                     var binding = tool.Binding;
-                    AssertTrue(binding != null && binding.HandlerId.StartsWith(
-                            "vba.public.", StringComparison.Ordinal) &&
-                            binding.HandlerId.IndexOf(".intent.",
-                                StringComparison.Ordinal) >= 0,
+                    AssertTrue(binding != null && (ResourceMutationToolCatalog.Owns(tool.Id)
+                            ? binding.HandlerId == tool.Id + ".resource.v1"
+                            : binding.HandlerId.StartsWith("vba.public.", StringComparison.Ordinal)),
                         tool.Id + " has an exact non-legacy handler binding");
                     AssertTrue(tool.Policy != null &&
                             tool.Policy.RequiresConfirmation,
                         tool.Id + " carries source-owned confirmation policy");
-                    AssertEqual(tool.Id == "common.office_run_macro"
+                    AssertEqual(tool.Id == "office.macro.run"
                             ? ToolEffect.External : ToolEffect.Write,
                         tool.Policy.Effect,
                         tool.Id + " carries its exact effect kind");
@@ -158,7 +156,7 @@ namespace RNAssistant.Harness
 
                 var session = NewSession(adapter);
                 var command = Command(
-                    "common.office_run_macro",
+                    "office.macro.run",
                     "macroName", "Module1.Main",
                     "arguments", new JArray("value", 2, true));
                 var pending = PrepareVbaNative(
@@ -182,10 +180,9 @@ namespace RNAssistant.Harness
                     "macro backend dispatches exactly once");
 
                 var manualWrite = executor.ExecuteManual(
-                    Command("common.vba_write_module",
-                        "moduleName", "ManualNative",
-                        "code", "Sub ManualNativeRun()\nEnd Sub",
-                        "mode", "createOnly"),
+                    Command("core.write",
+                        "target", "VBA module: ManualNative",
+                        "content", "Sub ManualNativeRun()\nEnd Sub"),
                     executor.GetControllerTools().ToList(),
                     new AppSettings { AutoConfirmToolActions = false },
                     false,
@@ -205,49 +202,43 @@ namespace RNAssistant.Harness
                 OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
                 var tools = executor.GetControllerTools()
-                    .Where(tool => VbaToolCatalog.Owns(tool.Id))
+                    .Where(tool => ResourceMutationToolCatalog.Owns(tool.Id))
                     .ToArray();
                 var write = JObject.Parse(tools.Single(tool =>
-                    tool.Id == VbaToolCatalog.WriteModule).ArgumentSchemaJson);
+                    tool.Id == ResourceMutationToolCatalog.Write).ArgumentSchemaJson);
                 AssertTrue(write["anyOf"] == null &&
                     write.SelectToken("properties.newModuleName") == null &&
                     write.SelectToken("properties.mode.enum[3]") == null,
                     "write schema contains only whole-source intent");
 
                 var rename = JObject.Parse(tools.Single(tool =>
-                    tool.Id == VbaToolCatalog.RenameModule).ArgumentSchemaJson);
+                    tool.Id == ResourceMutationToolCatalog.Move).ArgumentSchemaJson);
                 AssertEqual(2, ((JObject)rename["properties"]).Properties().Count(),
                     "rename schema contains only two semantic names");
                 AssertTrue(rename.SelectToken("properties.mode") == null,
                     "rename schema has no constant discriminator");
 
                 var patch = JObject.Parse(tools.Single(tool =>
-                    tool.Id == VbaToolCatalog.ApplyPatch).ArgumentSchemaJson);
-                var hunk = (JObject)patch.SelectToken("properties.patch.items");
-                AssertEqual(6, ((JObject)hunk["properties"]).Properties().Count(),
+                    tool.Id == ResourceMutationToolCatalog.Patch).ArgumentSchemaJson);
+                var hunk = (JObject)patch.SelectToken("properties.hunks.items");
+                AssertEqual(7, ((JObject)hunk["properties"]).Properties().Count(),
                     "VBA patch hunk contains replacement, exact context and location");
                 AssertTrue(hunk.SelectToken("properties.op") == null,
                     "fixed replace operation belongs to runtime");
                 var editingSkill = BuiltInSkillProvider.GetSkills(adapter)
-                    .Single(skill => skill.Id == "common.vba_code_editing")
+                    .Single(skill => skill.Id == "skills.vba.code.editing")
                     .BodyMarkdown;
                 AssertContains(editingSkill, "contextBefore",
                     "VBA editing skill teaches exact patch disambiguation");
 
                 var restore = JObject.Parse(tools.Single(tool =>
-                    tool.Id == VbaToolCatalog.RestoreBackup).ArgumentSchemaJson);
+                    tool.Id == ResourceMutationToolCatalog.Restore).ArgumentSchemaJson);
                 AssertTrue(restore.SelectToken("properties.target") != null &&
-                    restore.SelectToken("properties.moduleName") != null &&
+                    restore.SelectToken("properties.moduleName") == null &&
                     restore.SelectToken("properties.backupId") == null,
                     "restore accepts readable target or latest-for-module intent");
-                var promptRestore = ToolSchemaSupport.ForPrompt(restore);
-                var promptRestoreVariants = promptRestore["anyOf"] as JArray;
-                AssertTrue(promptRestore["properties"] == null &&
-                    promptRestoreVariants != null &&
-                    promptRestoreVariants.OfType<JObject>().All(variant =>
-                        ((JObject)variant["properties"]).Properties().Count() == 1 &&
-                        ((JArray)variant["required"]).Count == 1),
-                    "model prompt exposes two complete restore alternatives without an optional envelope");
+                AssertTrue(restore.SelectToken("properties.version") != null,
+                    "restore has one target and an optional owner version");
                 var backupTime = new DateTime(
                     2026, 9, 3, 10, 0, 0, DateTimeKind.Utc);
                 var firstTarget = VbaResourceProvider.BackupSemanticTarget(
@@ -268,42 +259,42 @@ namespace RNAssistant.Harness
 
                 string error;
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("patch_current", VbaToolCatalog.ApplyPatch,
-                            "{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"old\",\"text\":\"new\"}]}"),
+                        new ToolCall("patch_current", ResourceMutationToolCatalog.Patch,
+                            "{\"target\":\"VBA module: Module1\",\"hunks\":[{\"oldText\":\"old\",\"newText\":\"new\"}]}"),
                         out error),
                     "current patch history is replayable");
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("patch_context", VbaToolCatalog.ApplyPatch,
-                            "{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"old\",\"text\":\"new\",\"contextBefore\":\"Sub Main()\\n\",\"contextAfter\":\"\\nEnd Sub\"}]}"),
+                        new ToolCall("patch_context", ResourceMutationToolCatalog.Patch,
+                            "{\"target\":\"VBA module: Module1\",\"hunks\":[{\"oldText\":\"old\",\"newText\":\"new\",\"contextBefore\":\"Sub Main()\\n\",\"contextAfter\":\"\\nEnd Sub\"}]}"),
                         out error),
                     "context-qualified patch history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("patch_old", VbaToolCatalog.ApplyPatch,
-                            "{\"moduleName\":\"Module1\",\"patch\":[{\"op\":\"replace\",\"find\":\"old\",\"text\":\"new\"}]}"),
+                        new ToolCall("patch_old", ResourceMutationToolCatalog.Patch,
+                            "{\"target\":\"VBA module: Module1\",\"hunks\":[{\"op\":\"replace\",\"oldText\":\"old\",\"newText\":\"new\"}]}"),
                         out error),
                     "old constant-op patch history requires reset");
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("rename_current", VbaToolCatalog.RenameModule,
-                            "{\"moduleName\":\"Old\",\"newModuleName\":\"New\"}"),
+                        new ToolCall("rename_current", ResourceMutationToolCatalog.Move,
+                            "{\"target\":\"VBA module: Old\",\"destination\":\"VBA module: New\"}"),
                         out error),
                     "separate rename history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("rename_old", VbaToolCatalog.WriteModule,
+                        new ToolCall("rename_old", ResourceMutationToolCatalog.Write,
                             "{\"moduleName\":\"Old\",\"newModuleName\":\"New\",\"mode\":\"rename\"}"),
                         out error),
                     "old write/rename branch requires reset");
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("restore_current", VbaToolCatalog.RestoreBackup,
+                        new ToolCall("restore_current", ResourceMutationToolCatalog.Restore,
                             "{\"target\":\"VBA backup: Module1 backup 2026-09-03 10:00:00.0000000Z\"}"),
                         out error),
                     "readable restore target history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("restore_old", VbaToolCatalog.RestoreBackup,
+                        new ToolCall("restore_old", ResourceMutationToolCatalog.Restore,
                             "{\"backupId\":\"backup-secret\"}"),
                         out error),
                     "raw backup-id restore history requires reset");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
-                        new ToolCall("restore_mixed", VbaToolCatalog.RestoreBackup,
+                        new ToolCall("restore_mixed", ResourceMutationToolCatalog.Restore,
                             "{\"target\":\"VBA backup: Module1 backup\",\"moduleName\":\"Module1\"}"),
                         out error),
                     "restore requires exactly one semantic selector");
@@ -311,7 +302,7 @@ namespace RNAssistant.Harness
                 var invocation = new ToolInvocation
                 {
                     ToolCallId = "vba_projection",
-                    ToolId = VbaToolCatalog.RestoreBackup
+                    ToolId = ResourceMutationToolCatalog.Restore
                 };
                 var opaqueHash = new string('a', 64);
                 var projected = ModelToolResultProjection.Project(
@@ -353,7 +344,7 @@ namespace RNAssistant.Harness
                     new ToolInvocation
                     {
                         ToolCallId = "vba_verification_failure",
-                        ToolId = VbaToolCatalog.WriteModule
+                        ToolId = ResourceMutationToolCatalog.Write
                     },
                     RNAssistant.Core.Tools.Contracts.ToolResult.Error(
                         "VBA module creation verification failed: " +
@@ -388,7 +379,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
                 var command = Command(
-                    "common.vba_apply_patch",
+                    "vba.module.patch",
                     "moduleName", "Module1",
                     "patch", new JArray(new JObject
                     {
@@ -442,7 +433,7 @@ namespace RNAssistant.Harness
                     new VbaMutationHostReader(reader),
                     new VbaMutationHostBackend(adapter.VbaHostBackend));
                 var session = NewSession(adapter);
-                var command = Command("common.vba_apply_patch", "moduleName", "Module1");
+                var command = Command("vba.module.patch", "moduleName", "Module1");
                 var correlation = new VbaMutationCorrelation
                 {
                     SessionId = session.Id,
@@ -1445,7 +1436,7 @@ namespace RNAssistant.Harness
                     Reference = new ResourceRef(target.Uri), Representation = "source", MaxChars = 32000 }).Result.Resource.Reference;
 
                 var command = Command(
-                    "common.vba_apply_patch",
+                    "vba.module.patch",
                     "moduleName", "Module1",
                     "patch", new JArray(new JObject
                     {
@@ -1506,7 +1497,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var command = Command(
-                    "common.vba_write_module",
+                    "vba.module.write",
                     "moduleName", "CreatedDuringConfirmation",
                     "componentType", "StdModule",
                     "code", "Sub Requested()\nEnd Sub",
@@ -1542,7 +1533,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
 
                 var updated = executor.ExecuteManual(
-                    Command("common.vba_write_module", "moduleName", "Module1", "code", "Sub UpdatedCode()\nEnd Sub"),
+                    Command("vba.module.write", "moduleName", "Module1", "code", "Sub UpdatedCode()\nEnd Sub"),
                     tools,
                     settings,
                     false,
@@ -1554,7 +1545,7 @@ namespace RNAssistant.Harness
 
                 var requestedName = "123 very bad-module name with spaces and punctuation !!! more than forty chars";
                 var created = executor.ExecuteManual(
-                    Command("common.vba_write_module", "moduleName", requestedName, "componentType", "ClassModule", "code", "Option Explicit\nPublic Value As Long"),
+                    Command("vba.module.write", "moduleName", requestedName, "componentType", "ClassModule", "code", "Option Explicit\nPublic Value As Long"),
                     tools,
                     settings,
                     false,
@@ -1572,7 +1563,7 @@ namespace RNAssistant.Harness
                     "complete source refreshes the normalized module before another write");
 
                 var repeated = executor.ExecuteManual(
-                    Command("common.vba_write_module", "moduleName", requestedName, "componentType", "StdModule", "code", "Option Explicit\nPublic Value As String"),
+                    Command("vba.module.write", "moduleName", requestedName, "componentType", "StdModule", "code", "Option Explicit\nPublic Value As String"),
                     tools,
                     settings,
                     false,
@@ -1590,7 +1581,7 @@ namespace RNAssistant.Harness
 
                 adapter.SetVbaModule("SafeName", "Sub KeepMe()\nEnd Sub", "StdModule");
                 var collisionSafe = executor.ExecuteManual(
-                    Command("common.vba_write_module", "moduleName", "SafeName!", "code", "Sub NewNormalized()\nEnd Sub"),
+                    Command("vba.module.write", "moduleName", "SafeName!", "code", "Sub NewNormalized()\nEnd Sub"),
                     tools,
                     settings,
                     false,
@@ -1606,7 +1597,7 @@ namespace RNAssistant.Harness
                     "whole-source resource read records the edit observation");
                 adapter.SetVbaModule("ObservedModule", "Sub ExternalChange()\nEnd Sub", "StdModule");
                 var observedWrite = Command(
-                    "common.vba_write_module",
+                    "vba.module.write",
                     "moduleName", "ObservedModule",
                     "code", "Sub IntendedFromOldSource()\nEnd Sub");
                 var stale = executor.ExecuteManual(observedWrite, tools, settings, false, false, session);
@@ -1633,12 +1624,12 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var writeSchema = JObject.Parse(tools.Single(item =>
-                    item.Id == "common.vba_write_module").ArgumentSchemaJson);
+                    item.Id == "vba.module.write").ArgumentSchemaJson);
                 AssertTrue(writeSchema["anyOf"] == null &&
                     writeSchema.SelectToken("properties.newModuleName") == null,
                     "whole-source write no longer carries a rename branch");
                 var renameSchema = JObject.Parse(tools.Single(item =>
-                    item.Id == "common.vba_rename_module").ArgumentSchemaJson);
+                    item.Id == "vba.module.rename").ArgumentSchemaJson);
                 AssertEqual(2, ((JObject)renameSchema["properties"]).Properties().Count(),
                     "rename exposes only source and destination names");
                 AssertEqual(2, ((JArray)renameSchema["required"]).Count,
@@ -1650,7 +1641,7 @@ namespace RNAssistant.Harness
 
                 var renamed = executor.ExecuteManual(
                     Command(
-                        "common.vba_rename_module",
+                        "vba.module.rename",
                         "moduleName", "OldModule",
                         "newModuleName", "RenamedModule"),
                     tools,
@@ -1683,7 +1674,7 @@ namespace RNAssistant.Harness
 
                 var invalid = executor.ExecuteManual(
                     Command(
-                        "common.vba_rename_module",
+                        "vba.module.rename",
                         "moduleName", "RenamedModule",
                         "newModuleName", "AnotherModule",
                         "code", source),
@@ -1707,7 +1698,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var command = Command(
-                    "common.vba_rename_module",
+                    "vba.module.rename",
                     "moduleName", "RenameSource",
                     "newModuleName", "RenameTarget");
                 var pending = PrepareVbaNative(executor, session, command);
@@ -1737,7 +1728,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var settings = new AppSettings { AutoConfirmToolActions = true };
                 var result = executor.ExecuteManual(
-                    Command("common.vba_delete_module", "moduleName", "Module1"),
+                    Command("vba.module.delete", "moduleName", "Module1"),
                     tools,
                     settings,
                     false,
@@ -1755,7 +1746,7 @@ namespace RNAssistant.Harness
                 AssertContains(ReadVbaSource(executor, session, "Module2").Text, "BeforeRead",
                     "optional resource read records the delete observation");
                 adapter.SetVbaModule("Module2", "Sub ChangedAfterRead()\nEnd Sub", "StdModule");
-                var deleteObserved = Command("common.vba_delete_module", "moduleName", "Module2");
+                var deleteObserved = Command("vba.module.delete", "moduleName", "Module2");
                 var stale = executor.ExecuteManual(deleteObserved, tools, settings, false, false, session);
                 AssertEqual("stale_vba_module", stale.ErrorCode, "runtime uses an optional prior delete snapshot without a hash argument");
                 ReadVbaSource(executor, session, "Module2");
@@ -1770,7 +1761,7 @@ namespace RNAssistant.Harness
                 adapter.SetVbaModule("Module3", "Sub ChangedForSecondChat()\nEnd Sub", "StdModule");
                 var secondSession = NewSession(adapter);
                 var secondChatDelete = executor.ExecuteManual(
-                    Command("common.vba_delete_module", "moduleName", "Module3"),
+                    Command("vba.module.delete", "moduleName", "Module3"),
                     tools,
                     settings,
                     false,
@@ -1787,7 +1778,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var session = NewSession(adapter);
-                var command = Command("common.vba_delete_module", "moduleName", "Module1");
+                var command = Command("vba.module.delete", "moduleName", "Module1");
                 var firstPending = PrepareVbaNative(executor, session, command);
                 AssertEqual("awaiting_confirmation",
                     ToolRunResultFactory.Create(firstPending.Record).Status,
@@ -1799,7 +1790,7 @@ namespace RNAssistant.Harness
                 AssertTrue(sameDocument.Success, "stable document key tolerates a changed runtime identity");
 
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
-                var changedCommand = Command("common.vba_delete_module", "moduleName", "Module1");
+                var changedCommand = Command("vba.module.delete", "moduleName", "Module1");
                 var secondPending = PrepareVbaNative(
                     executor, session, changedCommand);
                 AssertEqual("awaiting_confirmation",
@@ -1826,7 +1817,7 @@ namespace RNAssistant.Harness
                 var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
-                var command = new ToolInvocation { ToolId = executor.VbaToolId("vba_apply_patch") };
+                var command = new ToolInvocation { ToolId = "vba.module.patch" };
                 command.Arguments["moduleName"] = "Module2";
                 command.Arguments["patch"] = new JArray
                 {
@@ -1860,7 +1851,7 @@ namespace RNAssistant.Harness
 
                 var mixedNoOp = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module2",
                         "patch", new JArray(
                             new JObject { ["find"] = "\"new\"", ["text"] = "\"new\"" },
@@ -1880,7 +1871,7 @@ namespace RNAssistant.Harness
                 var backupsBeforeNoOp = backupStore.List("Excel", "doc").Count;
                 var allNoOp = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module2",
                         "patch", new JArray(new JObject
                         {
@@ -1899,7 +1890,7 @@ namespace RNAssistant.Harness
                 AssertEqual(backupsBeforeNoOp, backupStore.List("Excel", "doc").Count,
                     "all-no-op patch creates no mutation backup");
 
-                var malformed = new ToolInvocation { ToolId = executor.VbaToolId("vba_apply_patch") };
+                var malformed = new ToolInvocation { ToolId = "vba.module.patch" };
                 malformed.Arguments["moduleName"] = "Module2";
                 malformed.Arguments["patch"] = "[{\"op\":\"replace\"}}trailing";
                 var malformedResult = executor.ExecuteManual(malformed, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -1909,7 +1900,7 @@ namespace RNAssistant.Harness
                     "native schema gate rejects a stringified patch");
 
                 var emptyAnchor = Command(
-                    "common.vba_apply_patch",
+                    "vba.module.patch",
                     "moduleName", "Module2",
                     "patch", new JArray(new JObject { ["find"] = string.Empty, ["text"] = "Debug.Print 1" }));
                 var emptyAnchorResult = executor.ExecuteManual(emptyAnchor, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false);
@@ -1925,7 +1916,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "Option Explicit\r\nPublic Sub Run()\r\nDebug.Print 1\r\nEnd Sub";
                 var result = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(
                             new JObject
@@ -1955,7 +1946,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "A\r\nB\r\n";
                 var appended = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -1977,7 +1968,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "A\r\n";
                 var appended = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -2007,7 +1998,7 @@ namespace RNAssistant.Harness
                     Code = null
                 });
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
-                var command = Command("common.vba_write_module", "moduleName", "Module1", "code", "Sub Changed()\nEnd Sub", "mode", "updateOnly");
+                var command = Command("vba.module.write", "moduleName", "Module1", "code", "Sub Changed()\nEnd Sub", "mode", "updateOnly");
 
                 var result = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
 
@@ -2018,13 +2009,13 @@ namespace RNAssistant.Harness
                     "only backup read executed");
 
                 adapter.VbaBackendCalls.Clear();
-                var create = Command("common.vba_write_module", "moduleName", "NewModule", "code", "Sub NewMacro()\nEnd Sub", "mode", "createOnly");
+                var create = Command("vba.module.write", "moduleName", "NewModule", "code", "Sub NewMacro()\nEnd Sub", "mode", "createOnly");
                 var created = executor.ExecuteManual(create, OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(created.Success, "missing module can be created");
                 AssertContains(adapter.GetVbaModuleCode("NewModule"), "NewMacro", "new module code");
 
                 var missingPatch = Command(
-                    "common.vba_apply_patch",
+                    "vba.module.patch",
                     "moduleName", "MissingModule",
                     "patch", new Newtonsoft.Json.Linq.JArray(new Newtonsoft.Json.Linq.JObject
                     {
@@ -2047,7 +2038,7 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode = "Sub Main()\nEnd Sub";
                 var command = Command(
-                    executor.VbaToolId("vba_apply_patch"),
+                    "vba.module.patch",
                     "moduleName", "Module1",
                     "patch", new JArray(new JObject
                     {
@@ -2086,7 +2077,7 @@ namespace RNAssistant.Harness
 
                 var rejected = executor.ExecuteManual(
                     Command(
-                        "common.vba_write_module",
+                        "vba.module.write",
                         "moduleName", "Module1",
                         "code", duplicateCode,
                         "mode", "updateOnly"),
@@ -2119,7 +2110,7 @@ namespace RNAssistant.Harness
                     "End Property";
                 var accepted = executor.ExecuteManual(
                     Command(
-                        "common.vba_write_module",
+                        "vba.module.write",
                         "moduleName", "Module1",
                         "code", propertyCode,
                         "mode", "updateOnly"),
@@ -2147,7 +2138,7 @@ namespace RNAssistant.Harness
 
                 var first = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -2163,7 +2154,7 @@ namespace RNAssistant.Harness
                 AssertEqual("A\nX\nB\nC", adapter.VbaModuleCode, "first patch applied in memory then replaced whole module");
 
                 var staleSource = Command(
-                    "common.vba_apply_patch",
+                    "vba.module.patch",
                     "moduleName", "Module1",
                     "patch", new JArray(new JObject
                     {
@@ -2214,7 +2205,7 @@ namespace RNAssistant.Harness
 
                 var rejected = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -2411,7 +2402,7 @@ namespace RNAssistant.Harness
                     }
                 };
                 var command = Command(
-                    "common.vba_apply_patch",
+                    "vba.module.patch",
                     "moduleName", "Module1",
                     "patch", patch);
 
@@ -2444,7 +2435,7 @@ namespace RNAssistant.Harness
                 ToolCall lastCall = null;
                 for (var index = 0; index < 3; index++)
                 {
-                    var pending = PrepareVbaNative(executor, session, Command("common.vba_apply_patch",
+                    var pending = PrepareVbaNative(executor, session, Command("vba.module.patch",
                         "moduleName", "Module1", "patch", new JArray(new JObject {
                             ["find"] = "Debug.Print FOV", ["text"] = "Debug.Print fov" })));
                     var completed = ConfirmVbaNative(pending);
@@ -2467,7 +2458,7 @@ namespace RNAssistant.Harness
                 AssertEqual("repeated_tool_no_progress", reason, "case loop reaches the existing progress guard");
                 AssertEqual(3, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only dispatched attempts wrote");
 
-                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("common.vba_apply_patch",
+                var renamed = ConfirmVbaNative(PrepareVbaNative(executor, session, Command("vba.module.patch",
                     "moduleName", "Module1", "patch", new JArray(new JObject {
                         ["find"] = source, ["text"] = source.Replace("fov", "viewFov").Replace("FOV", "viewFov") }))));
                 AssertEqual(ToolEffectEvidence.VerifiedChange, renamed.Evidence.Effect,
@@ -2620,7 +2611,7 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings { AutoConfirmToolActions = true };
                 var session = NewSession(adapter);
                 var publicCreate = executor.ExecuteManual(
-                    Command("common.vba_write_module", "moduleName", "UserForm2", "componentType", "MSForm", "code", "Option Explicit\n", "mode", "createOnly"),
+                    Command("vba.module.write", "moduleName", "UserForm2", "componentType", "MSForm", "code", "Option Explicit\n", "mode", "createOnly"),
                     tools,
                     settings,
                     false,
@@ -2633,7 +2624,7 @@ namespace RNAssistant.Harness
 
                 var publicEdit = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "UserForm2",
                         "patch", new JArray(new JObject
                         {
@@ -2664,7 +2655,7 @@ namespace RNAssistant.Harness
             var skills = BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost("Excel"));
             var userForm = skills.Single(skill => string.Equals(
                 skill.Id,
-                "common.vba_userform_authoring",
+                "skills.vba.userform.authoring",
                 StringComparison.OrdinalIgnoreCase));
             AssertTrue(userForm.BuiltIn && userForm.Enabled, "code-only UserForm skill is available");
             AssertContains(userForm.Description, "entirely from source code", "catalog triggers for code-only authoring");
@@ -2678,7 +2669,7 @@ namespace RNAssistant.Harness
 
             var editing = skills.Single(skill => string.Equals(
                 skill.Id,
-                "common.vba_code_editing",
+                "skills.vba.code.editing",
                 StringComparison.OrdinalIgnoreCase));
             AssertContains(editing.Description, "Use whenever a request changes VBA source", "catalog reliably triggers VBA editing guidance");
             AssertContains(editing.BodyMarkdown, "RUNTIME_CONTEXT.document.vba_project_target",
@@ -2689,7 +2680,7 @@ namespace RNAssistant.Harness
                 "VBA discovery fallback selects the aggregate project target");
             AssertContains(editing.BodyMarkdown, "whole reads are complete only when the source body is included",
                 "VBA skill distinguishes a successful read from source omitted by the context budget");
-            AssertContains(editing.BodyMarkdown, "one ordered `common.vba_apply_patch` call",
+            AssertContains(editing.BodyMarkdown, "one ordered `vba.module.patch` call",
                 "VBA skill batches same-snapshot hunks into one atomic mutation");
             AssertContains(editing.BodyMarkdown, "Exact patches can use relevant excerpts",
                 "VBA skill does not require whole-source observation for focused patches");
@@ -2702,7 +2693,7 @@ namespace RNAssistant.Harness
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
             AssertContains(editing.BodyMarkdown, "Follow the supplied hunk-field schema for matching, context, positions, insertion and deletion",
                 "insertions follow the current patch schema");
-            AssertContains(editing.BodyMarkdown, "common.vba_rename_module", "skill explains the strict rename intent");
+            AssertContains(editing.BodyMarkdown, "vba.module.rename", "skill explains the strict rename intent");
             AssertTrue(editing.BodyMarkdown.IndexOf("mode=rename", StringComparison.Ordinal) < 0,
                 "skill no longer teaches the retired write branch");
             AssertContains(editing.BodyMarkdown, "Never imitate rename with write plus delete", "skill forbids unsafe rename emulation");
@@ -2714,7 +2705,7 @@ namespace RNAssistant.Harness
             AssertContains(editing.BodyMarkdown, "PtrSafe", "skill covers Office x64 declarations");
             AssertContains(editing.BodyMarkdown, "VBE-equivalent source read-back", "skill describes normalized verification precisely");
             AssertContains(editing.BodyMarkdown, "does not prove VBA compilation or runtime behavior", "read-back is not overstated as functional validation");
-            AssertContains(editing.BodyMarkdown, "common.vba_userform_authoring", "general VBA editing points to the focused UserForm profile");
+            AssertContains(editing.BodyMarkdown, "skills.vba.userform.authoring", "general VBA editing points to the focused UserForm profile");
         }
 
         private static void VbaResourcesReadBoundedSource()
@@ -2805,7 +2796,7 @@ namespace RNAssistant.Harness
                 AssertTrue(initial.Complete, "initial complete source is model-visible");
 
                 var first = executor.ExecuteManual(
-                    Command("common.vba_apply_patch",
+                    Command("vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -2829,7 +2820,7 @@ namespace RNAssistant.Harness
                 var secondPending = PrepareVbaNative(
                     executor,
                     session,
-                    Command("common.vba_apply_patch",
+                    Command("vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -2848,7 +2839,7 @@ namespace RNAssistant.Harness
                 var blockedExecution = PrepareVbaNative(
                     executor,
                     session,
-                    Command("common.vba_write_module",
+                    Command("vba.module.write",
                         "moduleName", "Module1",
                         "code", adapter.VbaModuleCode.Replace("\"second\"", "\"whole\""),
                         "mode", "updateOnly")).Record;
@@ -2890,7 +2881,7 @@ namespace RNAssistant.Harness
                 AssertTrue(progress.CanDispatch(blockedExecution.Context.Call, out reason, out message, out delay),
                     "complete current read releases the same rejected whole-write arguments");
                 var whole = executor.ExecuteManual(
-                    Command("common.vba_write_module",
+                    Command("vba.module.write",
                         "moduleName", "Module1",
                         "code", adapter.VbaModuleCode.Replace("\"second\"", "\"whole\""),
                         "mode", "updateOnly"),
@@ -2987,7 +2978,7 @@ namespace RNAssistant.Harness
                         ["text"] = "Debug.Print 1\nEnd Sub"
                     });
                     var result = executor.ExecuteManual(
-                        Command("common.vba_apply_patch", "moduleName", "Module1", "patch", operations),
+                        Command("vba.module.patch", "moduleName", "Module1", "patch", operations),
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
                         new AppSettings { AutoConfirmToolActions = sample.AutoConfirm },
                         false,
@@ -3111,7 +3102,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "A\nB\nC";
                 var result = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -3132,7 +3123,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "A\nB\n\nC";
                 var result = executor.ExecuteManual(
                     Command(
-                        "common.vba_apply_patch",
+                        "vba.module.patch",
                         "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
@@ -3152,7 +3143,7 @@ namespace RNAssistant.Harness
                 adapter.VbaModuleCode = "P\r\nA\r\nB\r\nS";
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var parsed = ParseV8(
-                    "{\"action\":\"execute\",\"reason\":\"Apply the exact patch.\",\"tool_calls\":[{\"name\":\"common.vba_apply_patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}],\"message\":\"patch\"}",
+                    "{\"action\":\"execute\",\"reason\":\"Apply the exact patch.\",\"tool_calls\":[{\"name\":\"vba.module.patch\",\"arguments\":{\"moduleName\":\"Module1\",\"patch\":[{\"find\":\"A\\nB\",\"text\":\"\\nA\\n\\nB\\n\"}]}}],\"message\":\"patch\"}",
                     tools.ToArray());
                 AssertTrue(parsed.Success, "raw model JSON with escaped newlines parses");
                 var invocation = new ToolInvocation
@@ -3389,7 +3380,7 @@ namespace RNAssistant.Harness
                 var backupStore = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var command = Command(
-                    executor.VbaToolId("vba_apply_patch"),
+                    "vba.module.patch",
                     "moduleName", "Module1",
                     "patch", new JArray(new JObject
                     {
@@ -3425,7 +3416,7 @@ namespace RNAssistant.Harness
                         "scripted success without delete"));
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths));
                 var command = Command(
-                    executor.VbaToolId("vba_delete_module"),
+                    "vba.module.delete",
                     "moduleName", "Module1");
 
                 var result = executor.ExecuteManual(command, OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(),
@@ -3453,7 +3444,7 @@ namespace RNAssistant.Harness
                 AssertEqual(backupTarget,
                     executor.VbaBackupSemanticTarget(backup.BackupId),
                     "internal UI adapter resolves the same readable backup target");
-                var command = Command(executor.VbaToolId("vba_restore_backup"),
+                var command = Command("vba.module.restore",
                     "target", backupTarget);
 
                 var listedBackup = executor.ResourceGateway.List(
@@ -3476,7 +3467,7 @@ namespace RNAssistant.Harness
                     32000).Result.Text, "Restored", "backup source is read only on demand");
 
                 var missingSelector = executor.ExecuteManual(
-                    Command(executor.VbaToolId("vba_restore_backup")),
+                    Command("vba.module.restore"),
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
@@ -3497,7 +3488,7 @@ namespace RNAssistant.Harness
                 var classTarget = executor.ResourceGateway.Find(
                     session, "RestoredClass", "backups").Items.Single().Target;
                 var classRestore = executor.ExecuteManual(
-                    Command(executor.VbaToolId("vba_restore_backup"), "target", classTarget),
+                    Command("vba.module.restore", "target", classTarget),
                     tools,
                     new AppSettings { AutoConfirmToolActions = true },
                     false,
@@ -3521,7 +3512,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, backupStore, new SkillStore(paths));
                 var session = NewSession(adapter);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var command = Command("common.vba_restore_backup", "moduleName", "Module1");
+                var command = Command("vba.module.restore", "moduleName", "Module1");
                 var pending = PrepareVbaNative(executor, session, command);
                 var waiting = ToolRunResultFactory.Create(pending.Record);
                 AssertEqual("awaiting_confirmation", waiting.Status, "restore waits for confirmation");
@@ -3648,7 +3639,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "run-vba", TurnId = "turn-vba" };
-                var command = Command("common.vba_write_module", "moduleName", "Module1", "code", after);
+                var command = Command("vba.module.write", "moduleName", "Module1", "code", after);
                 command.ToolCallId = "call-vba";
                 command.RuntimeStepId = "step-vba";
 
@@ -3871,7 +3862,7 @@ namespace RNAssistant.Harness
                 var secondSession = NewSession(adapter);
                 AssertEqual(before, ReadVbaSource(second, secondSession, "Module1").Text,
                     "second chat observes the source before another mutation");
-                var queuedCommand = Command("common.vba_apply_patch", "moduleName", "Module1", "patch",
+                var queuedCommand = Command("vba.module.patch", "moduleName", "Module1", "patch",
                     new JArray(new JObject { ["find"] = "\"before\"", ["text"] = "\"queued\"" }));
                 AssertTrue(string.IsNullOrWhiteSpace(queuedCommand.RuntimeGuardJson), "queued call has not prepared a guard");
 
@@ -3900,7 +3891,7 @@ namespace RNAssistant.Harness
                         return code;
                     };
                     var writeTask = Task.Run(() => first.ExecuteManual(
-                        Command("common.vba_write_module", "moduleName", "Module1", "code", after),
+                        Command("vba.module.write", "moduleName", "Module1", "code", after),
                         tools, settings, false, false, firstSession));
                     Task<ToolRunResult> queuedTask = null;
                     try
@@ -3969,7 +3960,7 @@ namespace RNAssistant.Harness
                     var snapshotReads = adapter.DocumentSnapshotReadCount;
                     var observedCode = string.Empty;
                     var writeTask = Task.Run(() => first.ExecuteManual(
-                        Command("common.vba_write_module", "moduleName", "Module1", "code", after),
+                        Command("vba.module.write", "moduleName", "Module1", "code", after),
                         tools, settings, false, false, session));
                     Task<string> readTask = null;
                     try
@@ -4285,7 +4276,8 @@ namespace RNAssistant.Harness
         {
             var runtime = executor.CreateNativeRuntime(
                 session,
-                executor.GetControllerTools(),
+                // This fixture exercises the private VBA owner contract. Public source routing has its own universal tests.
+                executor.GetControllerTools().Concat(VbaToolCatalog.GetTools().Where(tool => tool.Id != VbaToolCatalog.RunMacro)),
                 new AppSettings { AutoConfirmToolActions = false },
                 "agent",
                 false,

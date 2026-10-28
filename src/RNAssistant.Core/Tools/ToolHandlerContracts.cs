@@ -188,15 +188,18 @@ namespace RNAssistant.Core.Tools
         public ToolExecutionContext Execution { get; private set; }
         public IDictionary<string, object> Arguments { get; private set; }
         public string PreparedStateJson { get; private set; }
+        // Internal domain intent; never changes the accepted call or its exact runtime policy.
+        public string DomainOperation { get; private set; }
         public bool MayHaveDispatched { get { return Volatile.Read(ref _dispatchPossible) != 0; } }
 
         public ToolHandlerContext(ToolExecutionContext execution, IDictionary<string, object> arguments,
             string preparedStateJson = null, Action onDispatchPossible = null,
-            Action<ToolHandlerResult> onCompleted = null)
+            Action<ToolHandlerResult> onCompleted = null, string domainOperation = null)
         {
             Execution = execution ?? throw new ArgumentNullException(nameof(execution));
             Arguments = ToolArgumentNormalizer.NormalizeDictionary(arguments ?? throw new ArgumentNullException(nameof(arguments)));
             PreparedStateJson = preparedStateJson;
+            DomainOperation = domainOperation ?? execution.Call.Name;
             _onDispatchPossible = onDispatchPossible;
             _onCompleted = onCompleted;
         }

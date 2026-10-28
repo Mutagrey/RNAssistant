@@ -69,12 +69,12 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await powerPoint.click();
     await page.waitForFunction(() => calls.length === 2);
     await page.evaluate(() => succeed({ host: "PowerPoint", chatId: "ppt-chat", init: {
-      host: "PowerPoint", activeChatId: "ppt-chat", tools: ["powerpoint.add_slide"], skills: ["powerpoint.deck_building"]
+      host: "PowerPoint", activeChatId: "ppt-chat", tools: ["powerpoint.slide.add"], skills: ["skills.powerpoint.deck.building"]
     } }));
     await page.waitForFunction(() => !state.officeHostChatPending && state.host === "PowerPoint");
     assert.equal(await page.getByRole("alert").count(), 0);
-    assert.equal(await page.evaluate(() => state.tools[0]), "powerpoint.add_slide");
-    assert.equal(await page.evaluate(() => state.skills[0]), "powerpoint.deck_building");
+    assert.equal(await page.evaluate(() => state.tools[0]), "powerpoint.slide.add");
+    assert.equal(await page.evaluate(() => state.skills[0]), "skills.powerpoint.deck.building");
     assert.deepEqual(errors, []);
     console.log("PASS Office chat browser: actual PowerPoint click, queue, visible wrapping errors, explicit retry and target initialization");
   } finally { await browser.close(); }

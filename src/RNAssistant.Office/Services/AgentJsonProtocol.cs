@@ -59,7 +59,7 @@ namespace RNAssistant.Office.Services
                 {
                     if (ReferenceEquals(data, materialized.Data))
                         data = boundedData = (JObject)boundedData.DeepClone();
-                    boundedData["hint"] = "The full result is available as a resource with relation=result. Find its semantic target with common.resources_find, then read that target, or request a smaller scope.";
+                    boundedData["hint"] = "The full result is available as a resource with relation=result. Find its semantic target with core.find, then read that target, or request a smaller scope.";
                 }
             }
             var envelopeResult = new TerminalResult(result.Status,

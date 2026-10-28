@@ -14,7 +14,7 @@ namespace RNAssistant.Office.Tools
     {
         internal string BuildBindDescription()
         {
-            return "Workspace: Bind a source target returned by common.resources_find or a binding's sourceTarget. " +
+            return "Workspace: Bind a source target returned by core.find or a binding's sourceTarget. " +
                 "The workspace stores only a canonical resource reference, view and head/exact policy. " +
                 "HTML workspace and HTML data targets describe the workspace/binding, not its source values; never bind them. html_data_write already creates a text binding. " +
                 "For Excel chart/report data, bind an Excel range, table, or name target with table; an Excel search scope is discovery output, not a tabular data source. " +
@@ -46,7 +46,7 @@ namespace RNAssistant.Office.Tools
             if (policy != "head" && policy != "exact") throw new InvalidOperationException("Invalid binding policy.");
             if (target.Type == "Excel search scope" && view == "table")
                 throw new ResourceRequestException(
-                    "Excel search scopes expose search evidence, not tabular source data. Bind an Excel range, table, or name target returned by common.resources_find.",
+                    "Excel search scopes expose search evidence, not tabular source data. Bind an Excel range, table, or name target returned by core.find.",
                     "RESOURCE_VIEW_UNSUPPORTED", false);
             var requestedPath = ToolArgumentReader.String(arguments, "path", null);
             var binding = new HtmlWorkspaceDataBinding { Resource = target.Reference, Policy = "head", View = view,

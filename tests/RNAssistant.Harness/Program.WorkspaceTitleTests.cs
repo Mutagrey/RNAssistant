@@ -49,14 +49,14 @@ namespace RNAssistant.Harness
                                 var content = number == 1
                                     ? new ConversationResponse(ConversationResponse.ExecuteAction, "Inspect available resources.",
                                         "Смотрю ресурсы.", calls: new[] {
-                                            new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject() },
-                                            failedRead ? new ConversationToolCall { Name = "common.resources_read", Arguments = new JObject { ["target"] = "missing.txt" } }
-                                                : new ConversationToolCall { Name = "common.resources_find", Arguments = new JObject { ["query"] = "missing" } }
+                                            new ConversationToolCall { Name = "core.find", Arguments = new JObject() },
+                                            failedRead ? new ConversationToolCall { Name = "core.read", Arguments = new JObject { ["target"] = "missing.txt" } }
+                                                : new ConversationToolCall { Name = "core.find", Arguments = new JObject { ["query"] = "missing" } }
                                         }).ToJson()
                                     : number < expectedRequests
                                         ? ScriptedVerifiedFinish(new ChatStore(paths).Load(sessionId),
                                             "Report the resource search.", "Первый ответ.", "Resources inspected.",
-                                            failedRead ? new[] { "common.resources_find" } : new[] { "common.resources_find", "common.resources_find" })
+                                            failedRead ? new[] { "core.find" } : new[] { "core.find", "core.find" })
                                         : ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                                             "Answer the follow-up from persisted history.", "История читается.",
                                             results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
@@ -104,7 +104,7 @@ namespace RNAssistant.Harness
                                 "workspace presentation uses kernel lifecycle");
                             var calls = service.GetSession(workspace, sessionId).Messages.Where(message =>
                                 message.Role == "assistant" && message.AcceptedCallOrigin != null &&
-                                (message.ToolName == "common.resources_find" || failedRead && message.ToolName == "common.resources_read")).ToArray();
+                                (message.ToolName == "core.find" || failedRead && message.ToolName == "core.read")).ToArray();
                             if (rejectFinish)
                             {
                                 AssertEqual(3, first.Summary.IterationsUsed, "rejected finish consumes a step of the same run");
@@ -173,7 +173,7 @@ namespace RNAssistant.Harness
                                 item.Content.Contains("\"message\":\"Первый ответ.\"")),
                                 "model projection leaves the durable v8 response intact");
                             var oldCall = corrupted.Messages.First(message => message.Role == "assistant" &&
-                                message.AcceptedCallOrigin != null && message.ToolName == "common.resources_find");
+                                message.AcceptedCallOrigin != null && message.ToolName == "core.find");
                             oldCallMessageId = oldCall.Id;
                             oldCallId = oldCall.ToolCallId;
                             oldToolName = oldCall.ToolName;
@@ -253,7 +253,7 @@ namespace RNAssistant.Harness
                             new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
                         forged = new ChatStore(paths).Load(sessionId);
                         var forgedResult = forged.Messages.First(message => message.Role == "tool" &&
-                            message.ToolName == "common.resources_find");
+                            message.ToolName == "core.find");
                         forgedResult.ToolName = "different.tool";
                         new ChatStore(paths).Commit(forged,
                             new RNAssistant.Core.Persistence.ConversationCommit(new[] { forgedResult }));

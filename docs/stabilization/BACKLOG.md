@@ -12,6 +12,17 @@
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Интеграционные fixtures после перехода на Core tools — 2026-10-28
+
+Owner: Harness / Core Tools / Office Tools. Новые focused проверки общего контракта
+проходят, но полный набор не запускался. В `Program.SimpleAgentTests.cs` остались
+scripted model calls и assertions для `html.source.write`, `vba.module.*`;
+в других owner suites также есть обращения к приватным source-командам через
+public catalog. Перенести модельные сценарии на `core.*`/`resources.*` и actual
+Core/admission profile; низкоуровневые owner tests явно отделить от public API.
+Не возвращать старые aliases ради fixtures. После переноса запускать только
+затронутые сценарии. Известный отдельный stale Skill Library assertion — ниже.
+
 ## Восстановление рабочих сценариев чата — 2026-10-26
 
 Owner: Application conversation delivery. Основание —

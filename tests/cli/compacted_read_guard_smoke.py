@@ -32,21 +32,21 @@ def run_case(root, role):
                     summaries.append(response)
                 elif phase["patched"]:
                     assert target.read_text() == original.replace("COMPACTED_READ_SOURCE", "VERIFIED_EDIT"), content
-                    response = DONE if phase["reread"] else call("common.resources_read", target="app.js")
+                    response = DONE if phase["reread"] else call("core.read", target="app.js")
                     phase["reread"] = True
                 elif summaries:
                     assert any("CURRENT_RESOURCE_VIEW" in (item.get("content") or "") and
                                "COMPACTED_READ_SOURCE" in item["content"] for item in request["messages"]), content
                     assert not any(item["role"] == "tool" and "COMPACTED_READ_SOURCE" in
                                    (item.get("content") or "") for item in request["messages"]), "Read must be archived"
-                    response = call("files.patch", relativePath="app.js", oldText="COMPACTED_READ_SOURCE", newText="VERIFIED_EDIT")
+                    response = call("core.patch", target="app.js", hunks=[{"oldText": "COMPACTED_READ_SOURCE", "newText": "VERIFIED_EDIT"}])
                     phase["patched"] = True
                 else:
                     phase["step"] += 1
                     if phase["step"] == 1:
-                        response = call("common.resources_read", target="app.js")
+                        response = call("core.read", target="app.js")
                     else:
-                        response = call("common.resources_find", query="probe-" + str(phase["step"]))
+                        response = call("core.find", query="probe-" + str(phase["step"]))
                         response["message"] = "Inspection: " + "bounded diagnostic context " * 90
                 body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
                 self.send_response(200)

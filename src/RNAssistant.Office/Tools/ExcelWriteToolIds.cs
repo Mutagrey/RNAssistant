@@ -4,7 +4,7 @@ namespace RNAssistant.Office.Tools
 {
     public static class ExcelWriteToolIds
     {
-        public const string WriteRange = "excel.write_range";
+        public const string WriteRange = "excel.range.write";
 
         public static bool Owns(string toolId)
         {

@@ -84,7 +84,7 @@
           body.appendChild(element("p", "run-changes-caption", "Полный файл проверен после записи. Здесь показаны изменённые фрагменты; длинные фрагменты сокращены."));
           (item.hunks || []).forEach(function (hunk) {
             var block = element("div", "run-change-preview-source");
-            block.appendChild(element("p", "run-changes-caption", "Версия " + hunk.version + " · символ " + hunk.offset + " · −" + hunk.removed + " / +" + hunk.inserted));
+            block.appendChild(element("p", "run-changes-caption", (hunk.version ? "Версия " + hunk.version + " · " : "") + (hunk.offset >= 0 ? "символ " + hunk.offset : "Фрагмент") + " · −" + hunk.removed + " / +" + hunk.inserted));
             var fragment = window.RNAssistantTextDiff.format(hunk.before || "", hunk.after || "");
             if (fragment) window.RNAssistantTextDiff.render(block, fragment);
             body.appendChild(block);
@@ -115,7 +115,27 @@
     if (!result.complete) card.appendChild(element("p", "run-changes-caption", "Список неполный: достигнут лимит или часть журнала недоступна."));
     parent.appendChild(card);
   }
-  window.RNAssistantRunChanges = { render: render };
+  function renderInline(parent, result) {
+    (result.items || []).forEach(function (item) {
+      var block = element("div", "inline-change");
+      var title = item.beforeTitle && item.beforeTitle !== item.title ? item.beforeTitle + " → " + item.title : item.title;
+      block.appendChild(element("div", "run-change-title", title || "Исходник"));
+      var preview = item.availability === "unverified" && typeof item.before === "string" && typeof item.intendedAfter === "string";
+      if (preview) block.appendChild(element("p", "run-changes-caption", "Предварительный diff · результат не подтверждён"));
+      if (item.availability === "available" || preview) {
+        window.RNAssistantTextDiff.renderInline(block, window.RNAssistantTextDiff.format(item.before, preview ? item.intendedAfter : item.after));
+      } else if (item.availability === "hunks") {
+        block.appendChild(element("p", "run-changes-caption", "Проверенные фрагменты · длинные фрагменты сокращены"));
+        (item.hunks || []).forEach(function (hunk, index) {
+          block.appendChild(element("p", "run-changes-caption", "@@ " + (hunk.offset >= 0 ? "символ " + hunk.offset : "фрагмент " + (index + 1)) + " · −" + hunk.removed + " / +" + hunk.inserted + " @@"));
+          window.RNAssistantTextDiff.renderInline(block, window.RNAssistantTextDiff.format(hunk.before || "", hunk.after || ""));
+        });
+      } else block.appendChild(element("p", "run-changes-caption", availability(item)));
+      parent.appendChild(block);
+    });
+    if (!result.complete) parent.appendChild(element("p", "run-changes-caption", "Часть сравнений недоступна."));
+  }
+  window.RNAssistantRunChanges = { render: render, renderInline: renderInline };
   window.appendRunChanges = function (parent, chatId, runId) {
     if (!chatId || !runId) return;
     // Session revision invalidates cached unknown/missing data after reconciliation.

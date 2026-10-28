@@ -35,7 +35,7 @@ namespace RNAssistant.Harness
                     Target = "photo.png", Representation = "media", Coverage = ResourceCoverage.Whole(),
                     Complete = true, HydratedForNextModelStep = true, RawContentIncluded = false } })
                 {
-                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "common.resources_read" },
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "core.read" },
                         RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", JsonConvert.SerializeObject(data)), ToolResultRoles.User);
                     terminal.RunId = "run";
                     terminal.ResourceEvidence.Add(new ResourceEvidence("observation", scope, reference, data.Representation, data.Coverage, false, 1));
@@ -58,7 +58,7 @@ namespace RNAssistant.Harness
                     } else {
                         AssertTrue(block.Source.Reference == null && block.Source.Excerpt == null, "media receipt does not manufacture a body citation");
                         AssertContains(block.Text, "Фактическую отправку", "preparation is not model delivery");
-                        AssertTrue(ToolResultSummaryProjection.Summarize("common.resources_read", result.RawJson).HydratedForNextModelStep,
+                        AssertTrue(ToolResultSummaryProjection.Summarize("core.read", result.RawJson).HydratedForNextModelStep,
                             "shared workspace summary preserves resource-owned media preparation");
                     }
                     AssertEqual(before, JsonConvert.SerializeObject(session), "presentation leaves canonical results and evidence unchanged");
@@ -66,7 +66,7 @@ namespace RNAssistant.Harness
                 foreach (var status in new[] { RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown }) {
                     var data = JsonConvert.SerializeObject(new ResourceReadProjection { Target = "sound.wav", Representation = "media",
                         Complete = true, HydratedForNextModelStep = true, Coverage = ResourceCoverage.Whole() });
-                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "failed", ToolId = "common.resources_read" },
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "failed", ToolId = "core.read" },
                         new RNAssistant.Core.Tools.Contracts.ToolResult(status, "Unverified.", data), ToolResultRoles.User);
                     terminal.RunId = "run";
                     var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
@@ -97,14 +97,14 @@ namespace RNAssistant.Harness
                 {
                     var data = JsonConvert.SerializeObject(new ResourceReadProjection { Target = "src/A.cs", Representation = "text",
                         Coverage = coverage, Text = "искомый текст 日本語 <script>literal</script>", Complete = false, SelectionComplete = true });
-                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "common.resources_read" },
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "core.read" },
                         RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", data), role);
                     terminal.RunId = "run"; terminal.ResourceEvidence.Add(evidence); terminal.ResourceModelReferences = references;
                     terminal.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 7);
                     terminal.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(terminal.Content, "application/json"));
                     terminal.Content = "Body retained in CAS.";
                     var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
-                        Activity = new ChatActivity { ToolId = "common.resources_read", ToolCallId = "read",
+                        Activity = new ChatActivity { ToolId = "core.read", ToolCallId = "read",
                             DataJson = "{\"kind\":\"resource-read\",\"target\":\"src/A.cs\",\"text\":\"unrelated preview\",\"ref\":\"R999\"}" } } } };
                     var before = JsonConvert.SerializeObject(session);
                     var service = new ToolResultPresentationService(null, payloads);
@@ -126,7 +126,7 @@ namespace RNAssistant.Harness
                 }
                 foreach (var status in new[] { RNAssistant.Core.Tools.Contracts.ToolResultStatus.Error, RNAssistant.Core.Tools.Contracts.ToolResultStatus.Unknown })
                 {
-                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "failed", ToolId = "common.resources_read" },
+                    var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "failed", ToolId = "core.read" },
                         new RNAssistant.Core.Tools.Contracts.ToolResult(status, "Unverified read.", JsonConvert.SerializeObject(new ResourceReadProjection {
                             Target = "src/A.cs", Representation = "text", Coverage = coverage, Text = "Recovery information" })), ToolResultRoles.User);
                     terminal.RunId = "run"; terminal.ResourceEvidence.Add(evidence); terminal.ResourceModelReferences = references;
@@ -137,13 +137,13 @@ namespace RNAssistant.Harness
                 }
                 var blocks = new List<ToolResultBlockDto>();
                 ToolResultPresentationService.AppendContent(blocks,
-                    "{\"matches\":[{\"target\":\"src/B.cs\",\"startLine\":17,\"startColumn\":2,\"snippet\":\"другое совпадение\",\"ref\":\"R8@v2\"}]}", "common.resources_search");
+                    "{\"matches\":[{\"target\":\"src/B.cs\",\"startLine\":17,\"startColumn\":2,\"snippet\":\"другое совпадение\",\"ref\":\"R8@v2\"}]}", "core.search");
                 var match = ((ToolListBlockDto)blocks[0]).Items.Single().Source;
                 AssertTrue(match.Reference == null && match.Line == 17 && match.Excerpt == "другое совпадение",
                     "search retains the compact format without accepting a business ref field as authority");
                 blocks.Clear();
                 ToolResultPresentationService.AppendContent(blocks, "{\"kind\":\"resource-read\",\"target\":\"data.json\",\"representation\":\"tree\",\"complete\":false," +
-                    "\"coverage\":{\"kind\":\"json-path\",\"path\":\"/\"},\"tree\":{\"nodes\":[{\"pointer\":\"/name\",\"type\":\"string\",\"value\":\"日本語\"}],\"nextOffset\":1}}", "common.resources_read");
+                    "\"coverage\":{\"kind\":\"json-path\",\"path\":\"/\"},\"tree\":{\"nodes\":[{\"pointer\":\"/name\",\"type\":\"string\",\"value\":\"日本語\"}],\"nextOffset\":1}}", "core.read");
                 var tree = blocks.OfType<ToolListBlockDto>().Single();
                 AssertTrue(!tree.Complete && tree.Source.Target == "data.json" && tree.Items.Single().Title == "/name", "bounded tree values have a typed preview and source caption");
             });

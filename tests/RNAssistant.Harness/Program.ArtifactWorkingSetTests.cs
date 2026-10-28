@@ -291,7 +291,7 @@ namespace RNAssistant.Harness
                     if (artifact.Kind == ChatArtifactKinds.HtmlWorkspace || artifact.Kind == ChatArtifactKinds.PlanDocument)
                     {
                         var command = artifact.Kind == ChatArtifactKinds.HtmlWorkspace
-                            ? Command("common.html_workspace_write_file", "path", "deleted.css", "content", "body{}")
+                            ? Command("html.source.write", "path", "deleted.css", "content", "body{}")
                             : Command(PlanDocumentToolCatalog.SaveToolId, "title", "Resurrection", "markdown", "# Refused", "status", "draft");
                         AssertTrue(!executor.ExecuteManual(command, tools, new AppSettings(), false, false, b).Success,
                             "stale writer cannot recreate a removed logical resource");

@@ -52,7 +52,7 @@ namespace RNAssistant.Harness
                     ["sourceTotalLines"] = 240, ["sourceEndChar"] = 64000,
                     ["sourceComplete"] = true, ["complete"] = false }.ToString(), new[] { exact });
             var source = RNAssistant.Office.Services.AgentJsonProtocol.CreateToolResultMessage(
-                new ToolInvocation { ToolId = "common.resources_read", ToolCallId = "projection-source" },
+                new ToolInvocation { ToolId = "core.read", ToolCallId = "projection-source" },
                 new ToolResultMaterialization(result));
             foreach (var projection in new[] { new ModelResultProjection().Project(source),
                 RNAssistant.Office.Services.ModelToolResultProjection.Project(source) })
@@ -79,10 +79,10 @@ namespace RNAssistant.Harness
                     "runtime offset and exact references stay private");
             }
             foreach (var variant in new[] {
-                new { Name = "common.resources_search", Data = new JObject {
+                new { Name = "core.search", Data = new JObject {
                     ["target"] = "Source file", ["matches"] = new JArray(new JObject { ["snippet"] = literal,
                         ["partNumber"] = 1, ["reference"] = exact.Uri }) } },
-                new { Name = "common.resources_outline", Data = new JObject {
+                new { Name = "resources.outline", Data = new JObject {
                     ["target"] = "Source file", ["parts"] = new JArray(new JObject { ["partNumber"] = 1,
                         ["symbols"] = new JArray(new JObject { ["name"] = literal, ["kind"] = "heading", ["reference"] = exact.Uri }) }) } }
             })
@@ -98,7 +98,7 @@ namespace RNAssistant.Harness
                     ToolResultWireReadResult wire; string error;
                     AssertTrue(ToolResultHistoryReader.TryRead(projection, out wire, out error), "projected navigation is valid wire");
                     var data = ToolResultWire.ParseData(wire.Result.DataJson);
-                    var body = variant.Name == "common.resources_search"
+                    var body = variant.Name == "core.search"
                         ? (string)data["matches"][0]["snippet"] : (string)data["parts"][0]["symbols"][0]["name"];
                     AssertEqual(literal, body, "source-owned snippets and headings preserve literal URI-shaped text");
                     AssertTrue(!wire.Result.DataJson.Contains(exact.Uri) && !wire.Result.Message.Contains(exact.Uri),
@@ -118,7 +118,7 @@ namespace RNAssistant.Harness
                 Complete = false, Truncated = true
             };
             var projection = ResourceReadProjection.FromTable(result, "Records", "file", "document", 1, 2);
-            var visible = ModelResultProjection.ProjectResourceData("common.resources_read", JObject.FromObject(projection));
+            var visible = ModelResultProjection.ProjectResourceData("core.read", JObject.FromObject(projection));
             AssertTrue((bool)visible["selectionComplete"] == false && !(bool)visible["complete"] &&
                 (int)visible["requestedOffset"] == 1 && (int)visible["requestedRows"] == 2 &&
                 (int)visible["coverage"]["end"] == 2,

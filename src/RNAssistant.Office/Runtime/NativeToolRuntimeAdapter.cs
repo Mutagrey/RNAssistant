@@ -78,6 +78,7 @@ namespace RNAssistant.Office.Runtime
         {
             if (snapshot == null) throw new ArgumentNullException(nameof(snapshot));
             var registry = new ToolHandlerRegistry();
+            var searchObservation = new RNAssistant.Core.Services.ResourceSearchObservation();
             _ownedToolIds = new HashSet<string>(StringComparer.Ordinal);
             foreach (var registration in snapshot.Registrations.Where(OwnsRegistration))
             {
@@ -88,7 +89,13 @@ namespace RNAssistant.Office.Runtime
                 var packageRegistration = VbaPackageToolHandler.Owns(registration) || JsToolHandler.Owns(registration);
                 ToolBinding binding;
                 IToolHandler handler;
-                if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
+                if (ResourceMutationToolCatalog.Owns(registration.Descriptor.Id))
+                {
+                    binding = ResourceMutationToolCatalog.BindingFor(registration.Descriptor.Id);
+                    handler = new OfficeResourceMutationHandler(registration.Descriptor.Id, gateway, session,
+                        vbaTools, hostRuntime, htmlWorkspaceTools, authoredFiles, markdownDocuments, searchObservation);
+                }
+                else if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
                 {
                     binding = SkillLoadToolHandler.Binding;
                     handler = new SkillLoadToolHandler(session, () => new SkillCatalogSnapshot(skillCatalog), () => snapshot, settings, skillAdmission);
@@ -106,7 +113,7 @@ namespace RNAssistant.Office.Runtime
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal))
                 {
                     binding = ResourceSearchToolHandler.Binding;
-                    handler = new ResourceSearchToolHandler(gateway, session);
+                    handler = new ResourceSearchToolHandler(gateway, session, searchObservation);
                 }
                 else if (string.Equals(registration.Descriptor.Id, ResourceToolCatalog.OutlineToolId, StringComparison.Ordinal))
                 {
@@ -346,7 +353,7 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, ResourceToolCatalog.SearchToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, ResourceToolCatalog.OutlineToolId, StringComparison.Ordinal) ||
                 string.Equals(toolId, JsToolHandler.RunId, StringComparison.Ordinal) ||
-                ResourceDefinitionToolHandler.Owns(toolId) ||
+                ResourceMutationToolCatalog.Owns(toolId) || ResourceDefinitionToolHandler.Owns(toolId) ||
                 ExcelReadToolIds.Owns(toolId) || ExcelWriteToolIds.Owns(toolId) ||
                 ExcelFindReplaceToolIds.Owns(toolId) || ExcelSheetToolIds.Owns(toolId) ||
                 ExcelRangeMutationToolIds.Owns(toolId) ||
@@ -428,7 +435,7 @@ namespace RNAssistant.Office.Runtime
             var context = new ToolExecutionContext(call, policy, runId, turnId,
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
                 DateTime.UtcNow, confirmed, remainingSteps,
-                expectedContentSha256: command.ExpectedContentSha256);
+                expectedContentSha256: command.ExpectedContentSha256, expectedTargetAbsent: command.ExpectedTargetAbsent);
             var record = ExecuteAsync(context, token).GetAwaiter().GetResult();
             var materialized = TakeMaterialization(record);
             return ToolRunResultFactory.Create(record, materialized);

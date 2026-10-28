@@ -38,13 +38,9 @@ namespace RNAssistant.Core.Services
                 string.IsNullOrEmpty(request.Target) == string.IsNullOrEmpty(request.Scope) ||
                 request.Query.IndexOfAny(new[] { '\r', '\n' }) >= 0)
                 throw Invalid("Select one target or scope and a nonempty single-line query, mode literal/regex, limit 1–50.");
-            Regex regex = null;
-            if (request.Mode == "regex")
-            {
-                try { regex = new Regex(request.Query, RegexOptions.CultureInvariant |
-                    (request.MatchCase ? RegexOptions.None : RegexOptions.IgnoreCase), TimeSpan.FromMilliseconds(100)); }
-                catch (ArgumentException) { throw Invalid("Invalid .NET regular expression."); }
-            }
+            RNAssistant.Core.Tools.ResourceTextMatcher matcher;
+            try { matcher = new RNAssistant.Core.Tools.ResourceTextMatcher(request.Query, request.Mode, request.MatchCase); }
+            catch (RNAssistant.Core.Tools.TextPatternException ex) { throw Invalid(ex.Message); }
             var items = sources.Items.OrderBy(x => x.Target, StringComparer.Ordinal).ToList();
             if (items.Select(x => x.Target).Distinct(StringComparer.Ordinal).Count() != items.Count)
                 throw Invalid("Search targets are ambiguous.");
@@ -100,7 +96,7 @@ namespace RNAssistant.Core.Services
                         {
                             token.ThrowIfCancellationRequested();
                             bool tooLong;
-                            var line = ReadLine(text.Reader, token, ref scanned, regex == null ? MaximumScanCharacters : MaximumLineCharacters, out tooLong);
+                            var line = ReadLine(text.Reader, token, ref scanned, matcher.IsRegex ? MaximumLineCharacters : MaximumScanCharacters, out tooLong);
                             if (line == null) break;
                             lineNumber++;
                             if (scanned > MaximumScanCharacters)
@@ -111,13 +107,9 @@ namespace RNAssistant.Core.Services
                             while (start <= line.Length)
                             {
                                 token.ThrowIfCancellationRequested();
-                                int hit, next;
-                                if (regex == null)
-                                { hit = line.IndexOf(request.Query, start,
-                                    request.MatchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase); next = hit + 1; }
-                                else
-                                { var match = regex.Match(line, start); hit = match.Success ? match.Index : -1;
-                                    next = hit + Math.Max(1, match.Length); }
+                                var match = matcher.Next(line, start);
+                                var hit = match == null ? -1 : match.Index;
+                                var next = hit + (match == null ? 1 : Math.Max(1, match.Length));
                                 if (hit < 0) break;
                                 // Coordinates do not split Unicode scalar values.
                                 if (hit < line.Length && char.IsLowSurrogate(line[hit])) { start = hit + 1; continue; }

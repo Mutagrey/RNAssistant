@@ -8,6 +8,7 @@ namespace RNAssistant.Office.Tools
     internal sealed class ResourceSearchToolHandler : ResourceToolHandlerBase
     {
         private readonly RNAssistant.Core.Services.ResourceTextSearch _search = new RNAssistant.Core.Services.ResourceTextSearch();
+        private readonly RNAssistant.Core.Services.ResourceSearchObservation _observation;
         internal static readonly ToolDescriptor Descriptor = new ToolDescriptor(
             ResourceToolCatalog.SearchToolId, RNAssistant.Core.Services.ResourceModelSearchSchema.Description,
             RNAssistant.Core.Services.ResourceModelSearchSchema.Create(false, true));
@@ -15,13 +16,14 @@ namespace RNAssistant.Office.Tools
             false, false, new[] { "agent", "plan", "chat" });
         internal static readonly ToolBinding Binding = new ToolBinding("resources.search.v3");
 
-        internal ResourceSearchToolHandler(ResourceGatewayService gateway, RNAssistant.Core.Models.ChatSession session)
-            : base(gateway, session) { }
+        internal ResourceSearchToolHandler(ResourceGatewayService gateway, RNAssistant.Core.Models.ChatSession session, RNAssistant.Core.Services.ResourceSearchObservation observation = null)
+            : base(gateway, session) { _observation = observation; }
 
         protected override ToolHandlerResult Execute(ToolHandlerContext context, CancellationToken cancellationToken)
         {
-            var page = Gateway.SearchText(Session,
-                RNAssistant.Core.Services.ResourceModelSearchSchema.Parse(context.Arguments), _search, cancellationToken);
+            var request = RNAssistant.Core.Services.ResourceModelSearchSchema.Parse(context.Arguments);
+            var page = Gateway.SearchText(Session, request, _search, cancellationToken);
+            _observation?.Record(request, page, context.Execution.RunId + ":" + context.Execution.StepId);
             return Completed(RuntimeResult.Ok(page.ScanComplete && page.SourceComplete
                 ? "The selected text scope was searched completely."
                 : "Search is incomplete; inspect reasons or continue. Absence is not established.",

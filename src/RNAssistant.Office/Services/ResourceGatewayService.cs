@@ -320,6 +320,12 @@ namespace RNAssistant.Office.Services
             });
         }
 
+        internal string ReadObservedText(ResourceEvidence evidence)
+        {
+            if (evidence?.Payload == null || _authority?.Payloads == null) return null;
+            return _authority.Payloads.ReadText(evidence.Payload.ToBlobReference());
+        }
+
         internal IReadOnlyList<ResourceEvidence> Evidence(ChatSession session, ResourceReadResult result)
         {
             if (_authority != null) _authority.RetainView(session, result,

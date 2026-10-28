@@ -258,7 +258,7 @@ namespace RNAssistant.Office.Services
         {
             var activity = message.Activity;
             if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
-                !activity.ToolId.StartsWith("common.task_list_", StringComparison.OrdinalIgnoreCase) ||
+                !activity.ToolId.StartsWith("task.list.", StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(activity.DataJson))
             {
                 return;
@@ -283,7 +283,7 @@ namespace RNAssistant.Office.Services
         {
             var activity = message.Activity;
             if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
-                !activity.ToolId.StartsWith("common.plan_doc_", StringComparison.OrdinalIgnoreCase) ||
+                !activity.ToolId.StartsWith("plan.document.", StringComparison.OrdinalIgnoreCase) ||
                 string.IsNullOrWhiteSpace(activity.DataJson)) return;
             try
             {

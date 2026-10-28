@@ -163,8 +163,8 @@ async function serve() {
     assert.equal(progress.filter(item => item.phase === "streaming").length, 2);
     assert.equal(await normal.locator("#chatInput").inputValue(), "");
     await normal.locator('.section-rail [data-section="library"]').click();
-    assert.deepEqual(await normal.evaluate(() => ['common.resources_read', 'common.html_workspace_write_file',
-      'common.plan_doc_save', 'excel.inspect'].map(id => RNAssistantLibraryGroups.category(id).title)),
+    assert.deepEqual(await normal.evaluate(() => ['core.read', 'html.source.write',
+      'plan.document.save', 'excel.inspect'].map(id => RNAssistantLibraryGroups.category(id).title)),
       ['Ресурсы', 'HTML', 'Планы', 'Excel']);
     assert.equal(await normal.locator('#instructionsList [data-tree-key="library:skills:excel"]').count(), 1,
       "skills use the shared Excel namespace group");

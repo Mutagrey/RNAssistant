@@ -4,9 +4,9 @@ namespace RNAssistant.Office.Tools
 {
     internal static class ExcelChartToolIds
     {
-        internal const string CreateChatChart = "excel.create_chat_chart";
-        internal const string UpsertChart = "excel.upsert_chart";
-        internal const string DeleteChart = "excel.delete_chart";
+        internal const string CreateChatChart = "excel.chat.chart.create";
+        internal const string UpsertChart = "excel.chart.upsert";
+        internal const string DeleteChart = "excel.chart.delete";
 
         internal static bool Owns(string toolId)
         {

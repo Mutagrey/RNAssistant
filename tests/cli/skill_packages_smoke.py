@@ -18,7 +18,7 @@ def check(root):
     package = state / "skills" / "workspace" / "fixture"
     package.mkdir(parents=True)
     manifest = {"formatVersion": 1, "packageId": "fixture.report", "requiredTools": [
-        {"id": name, "contractVersion": "1"} for name in ("common.resources_read", "files.patch", "files.create")],
+        {"id": name, "contractVersion": "1"} for name in ("core.read", "core.patch", "core.write")],
         "optionalTools": [{"id": "fixture.absent", "contractVersion": "1", "fallback": "Report missing validator; use exact source readback."}]}
     marker = "EXACT_PUBLISHED_PROCEDURE: read, update unique total, create report, read both final files."
     source = package / "SKILL.md"
@@ -68,13 +68,13 @@ def check(root):
 
     try:
         responses.extend([
-            call("common.resources_read", type="skill", target="fixture.report"),
-            call("common.skills_load", id="fixture.report"),
-            call("common.resources_read", target="source.txt"),
-            call("files.patch", relativePath="source.txt", oldText="total=12", newText="total=13"),
-            call("common.resources_read", target="source.txt"),
-            call("files.create", relativePath="report.txt", text="Verified total: 13\n"),
-            call("common.resources_read", target="report.txt"), DONE])
+            call("core.read", type="skill", target="fixture.report"),
+            call("core.skills.load", id="fixture.report"),
+            call("core.read", target="source.txt"),
+            call("core.patch", target="source.txt", hunks=[{"oldText": "total=12", "newText": "total=13"}]),
+            call("core.read", target="source.txt"),
+            call("core.write", target="report.txt", content="Verified total: 13\n"),
+            call("core.read", target="report.txt"), DONE])
         waiting = cli("run", "--message", "Apply fixture.report, update total and create a verified report.",
                       "--tool-result-role", "tool", "--context-tokens", "32768", code=3)
         assert (workspace / "source.txt").read_text() == "total=12\n", "No effect before permission"
@@ -97,23 +97,23 @@ def check(root):
         assert len(requests) == prior + 1 and selected(requests[-1]) == ["SELECTED_SKILL fixture.report\n" + marker], "Follow-up must retain selection without a load call"
         assert "Verified total: 13" in json.dumps(requests[-1]), "Current report evidence survives new input and process restart"
         assert direct["ToolCounts"]["ReadOk"] == 0, direct
-        responses.extend([call("files.patch", relativePath="source.txt", oldText="total=13", newText="total=14"), DONE])
+        responses.extend([call("core.patch", target="source.txt", hunks=[{"oldText": "total=13", "newText": "total=14"}]), DONE])
         guarded = cli("run", "--session", final["SessionId"], "--message", "Check the follow-up write guard.", "--auto-confirm", "on")
         assert (workspace / "source.txt").read_text() == "total=13\n", "Carried skill must not inherit the prior turn's write guard"
         assert guarded["ToolCounts"]["WriteOk"] == 0 and "source_observation_required" in json.dumps(requests[-1]), guarded
         responses.append(DONE)
         cli("run", "--session", final["SessionId"], "--message", "Inspect with restricted permissions.", "--mutation-policy", "deny")
         assert not selected(requests[-1]), "Current policy must suspend an incompatible retained selection"
-        responses.extend([call("common.skills_load", id="fixture.report", action="remove"), DONE])
+        responses.extend([call("core.skills.load", id="fixture.report", action="remove"), DONE])
         cli("run", "--session", final["SessionId"], "--message", "Switch tasks and remove the report procedure.")
         assert not selected(requests[-1]), "Explicit removal takes effect on the next request"
         responses.append(DONE)
         cli("run", "--session", final["SessionId"], "--message", "Continue after removal.")
         assert not selected(requests[-1]), "Removed selection must not return after restart"
-        responses.extend([call("common.skills_load", id="fixture.report"), DONE])
+        responses.extend([call("core.skills.load", id="fixture.report"), DONE])
         cli("run", "--message", "Inspect only", "--mutation-policy", "deny")
         assert not selected(requests[-1]), "Unavailable required writer prevents partial selection under Deny"
-        responses.extend([call("common.skills_load", id="fixture.large"), DONE])
+        responses.extend([call("core.skills.load", id="fixture.large"), DONE])
         limited = cli("run", "--message", "Select fixture.large if the complete request fits.", "--context-tokens", "24576")
         assert not selected(requests[-1]), "Rejected candidate never becomes active instructions"
         refusals = [message.get("content", "") for message in requests[-1]["messages"]

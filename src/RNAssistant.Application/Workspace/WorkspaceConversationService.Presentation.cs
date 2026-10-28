@@ -14,14 +14,14 @@ namespace RNAssistant.Runtime
     {
         private sealed class FilePresentationTarget
         {
-            public string RelativePath { get; set; }
-            public string TargetPath { get; set; }
+            public string Target { get; set; }
+            public string Destination { get; set; }
         }
 
         private static WorkspaceFileActivity FileActivity(string toolId, string arguments,
             ToolExecutionOutcome? outcome, ResourceEffect effect)
         {
-            if (toolId == null || !toolId.StartsWith("files.", StringComparison.Ordinal)) return null;
+            if (!ResourceMutationToolCatalog.Owns(toolId)) return null;
             var state = effect?.Outcome;
             if (outcome == ToolExecutionOutcome.Unknown) state = ResourceEffectOutcome.UnknownAfterDispatch;
             if (state != ResourceEffectOutcome.VerifiedChanged && state != ResourceEffectOutcome.Restored &&
@@ -29,9 +29,10 @@ namespace RNAssistant.Runtime
             FilePresentationTarget target = null;
             try { target = JsonConvert.DeserializeObject<FilePresentationTarget>(arguments ?? "{}"); }
             catch (JsonException) { /* Missing target is explicit, never guessed from narrative. */ }
-            return new WorkspaceFileActivity { ToolId = toolId, Path = PresentationText(target?.RelativePath, 1024),
-                TargetPath = PresentationText(target?.TargetPath, 1024),
-                PathsTruncated = target?.RelativePath?.Length > 1024 || target?.TargetPath?.Length > 1024,
+            if (target?.Target?.Contains(": ") == true) return null;
+            return new WorkspaceFileActivity { ToolId = toolId, Path = PresentationText(target?.Target, 1024),
+                TargetPath = PresentationText(target?.Destination, 1024),
+                PathsTruncated = target?.Target?.Length > 1024 || target?.Destination?.Length > 1024,
                 Effect = state.Value };
         }
 
@@ -81,7 +82,7 @@ namespace RNAssistant.Runtime
                 var item = session.Messages[i];
                 if (!runs.Contains(item.RunId) || !item.ProtocolMessage || string.IsNullOrWhiteSpace(item.ToolCallId)) continue;
                 if (verification == null && item.ToolName == "web.verify") verification = item;
-                if (item.ToolName != null && item.ToolName.StartsWith("files.", StringComparison.Ordinal) &&
+                if (ResourceMutationToolCatalog.Owns(item.ToolName) &&
                     (item.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                      item.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored ||
                      item.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch ||

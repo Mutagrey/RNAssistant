@@ -194,13 +194,13 @@ same retained manifest, saved result and freshness checks at accepted completion
 
 After an interrupted file mutation, `recover --workspace
 <path> --path <relative-path>` reports the exact recovery outcome without replaying
-the write. Agent `files.delete` moves a previously read UTF-8 file into
-workspace-local `.rnassistant/trash`; `files.restore` explicitly restores the latest
-managed deletion if its original path is still absent. `files.delete` stops at a
+the write. Agent `resources.delete` moves a previously read UTF-8 file into
+workspace-local `.rnassistant/trash`; `resources.restore` explicitly restores the latest
+managed deletion if its original path is still absent. `resources.delete` stops at a
 durable confirmation. Use `resume` to inspect the pending id, then `approve` or
 `deny` with that exact id. Approval resumes the same kernel run and rechecks the
 accepted file before dispatch; denial closes the call without dispatch.
-`files.move` also requires confirmation after a complete read. It moves a file
+`resources.move` also requires confirmation after a complete read. It moves a file
 to an unoccupied path with an existing parent while preserving its logical identity;
 an interrupted move requires explicit `recover` from its source or target path.
 Without `--jsonl`, run commands show progress, recorded file effects and browser/
@@ -510,14 +510,14 @@ The HTML tab shows the selected chat's workspace; its authored revisions belong 
 There is no separate HTML mode: Agent chooses the workspace from the request and available tools when a visual artifact materially improves the result.
 Agent mode and document-independent local tools remain usable when that chat's Office document is closed. Office reads, writes, VBA actions, and Office-backed HTML bindings become available again only after the bound document is opened.
 
-- Use `common.html_workspace_write_file` with `path` and complete `content` for HTML, CSS, and classic JavaScript files; runtime infers the kind and runs bounded static preflight automatically.
-- Use `common.html_data_write` with `name` and exact JSON text for static data sources opened by page code through `RN.resources.open(name)`.
-- Use `common.resources_find` and `common.resources_read` with their semantic targets to discover or inspect current HTML members; URIs, revisions, cursors, and guards remain runtime-owned.
-- Use `common.html_workspace_apply_patch` for atomic ordered exact replace/insert edits to one current file; ambiguous anchors are rejected.
-- Use `common.html_data_bind` with a semantic target returned by resource discovery. The runtime owns the canonical resource reference, view, and exact/head binding policy.
-- Use `common.html_data_refresh` to resolve current head-bound sources and `common.html_data_freeze` to pin one binding to an exact revision.
-- Use `common.html_workspace_delete` with the exact file path or data-source name. Deletions remain recoverable through workspace history.
-- Reuse local JS/CSS/HTML from `%AppData%\RNAssistant\assets\<id>\<version>\manifest.json`: `common.html_assets_list` discovers packages on demand, `common.html_assets_import` copies a listed package into the current workspace, and `common.html_assets_publish` saves selected workspace files as a new package version. See the [asset contract and manifest example](docs/artifact-library.md#reusable-local-html-assets--2026-10-02).
+- Use `core.write` with a semantic `target` (for example `HTML file: index.html`) and complete `content` for HTML, CSS, and classic JavaScript files; runtime infers the kind and runs bounded static preflight automatically.
+- Use `html.data.write` with `name` and exact JSON text for static data sources opened by page code through `RN.resources.open(name)`.
+- Use `core.find` and `core.read` with their semantic targets to discover or inspect current HTML members; URIs, revisions, cursors, and guards remain runtime-owned.
+- Use `core.patch` for exact context hunks against the original snapshot to one current file; ambiguous anchors are rejected.
+- Use `html.data.bind` with a semantic target returned by resource discovery. The runtime owns the canonical resource reference, view, and exact/head binding policy.
+- Use `html.data.refresh` to resolve current head-bound sources and `html.data.freeze` to pin one binding to an exact revision.
+- Use `resources.delete` with the exact discovered file or data-binding target. Deletions remain recoverable through workspace history.
+- Reuse local JS/CSS/HTML from `%AppData%\RNAssistant\assets\<id>\<version>\manifest.json`: `html.assets.list` discovers packages on demand, `html.assets.import` copies a listed package into the current workspace, and `html.assets.publish` saves selected workspace files as a new package version. See the [asset contract and manifest example](docs/artifact-library.md#reusable-local-html-assets--2026-10-02).
 - The runtime selects the displayed HTML entry when files are written or restored; there is no model-facing set-active or inspect tool.
 - Every workspace mutation also records an immutable chat artifact revision. Full revision bodies are addressed by SHA-256 in the shared CAS; editing or forking from an older message activates the exact existing revision instead of duplicating it.
 - Undo/redo history is bounded by item count and stored content size. UI responses carry only snapshot ids/labels/timestamps; Agent reads return a manifest or one targeted current item, never history bodies.
@@ -554,7 +554,7 @@ For Excel, Word, and PowerPoint, `executor: "vba"` uses a strict comment manifes
 
 Agent does not inject the whole dynamic registry. Its finite mode/host core contains resource/capability bootstrap schemas and, on Excel, the complete built-in Excel/VBA pack; the runtime context also carries the complete compact list of exact tool and skill ids. Search returns schema-free metadata only when needed. The unified reader returns one exact revisioned descriptor or skill body. Optional tool-schema reads from one response form one prospective extension: runtime checks the complete next request plus bounded repair overhead, appends an accepted/rejected typed event, and only then publishes the whole batch under a new revision. Overflow publishes none and keeps the previous pack; calls never update recency and no schema is evicted inside the logical turn. Strict `json_schema` is generated only from the current callable pack. Confirmation continuation, compaction, and restart replay the exact accepted extension chain for the same `TurnId`; raw read results and rejected events never grant callable authority. Descriptor drift visibly falls back to the finite core until a fresh accepted extension rebases the chain.
 
-Agent mode manages custom tool definitions through `common.tools_definition_read/validate/upsert/delete`; `tools_definition_read` without id lists compact custom metadata and never loads a callable schema. Upsert creates a missing id or preserves omitted fields while updating an existing one, then validates the effective definition automatically. Optional `createOnly`/`updateOnly` modes retain strict existence semantics; `tools_validate` is only a no-save preflight. In strict Agent output, `parameterDefinitions` provides compact native entries which runtime compiles to a canonical strict `parameters` object. Advanced callers may still pass `parameters` directly; VBA `components` remains a native array. None of these forms is an escaped JSON string. The supported schema dialect is closed to `type`, `description`, `properties`, `required`, `additionalProperties`, `items`, `anyOf`, `enum`, `const`, `default`, `minimum`, `maximum`, `minLength`, `maxLength`, `minItems`, and `maxItems`; unsupported assertion keywords are rejected instead of being advertised to the endpoint while ignored locally. A compact model-facing descriptor over 24,000 characters is omitted instead of partially advertised. Upsert/delete requires confirmation unless auto-confirm is enabled. Built-in, controller, and private backend ids are reserved; a stored collision remains on disk for manual recovery but is omitted from the runnable catalog. The catalog refreshes after confirmation or on the next user run.
+Agent mode manages custom tool definitions through `tools.upsert/delete`. Inspect source through `core.find/read`; load a callable schema through `core.tools.read`. Upsert validates the effective definition and preserves omitted metadata; source packages remain complete owner-managed units. New IDs use lower-case dotted names. Built-in, controller, and private backend IDs are reserved. A stored collision remains on disk for manual recovery and is omitted from the runnable catalog. See [Tool Library](docs/tool-library.md) for the current package schema, validation and confirmation contract.
 
 ## Skill Library
 
@@ -562,7 +562,7 @@ Markdown skills are stored under:
 
 `%AppData%\RNAssistant\skills`
 
-Each custom skill is a concise UTF-8 `SKILL.md` guidance file with front matter (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Optional detailed UTF-8 Markdown references live directly under the same package's `references/` directory and can be created, edited, or deleted in the Skill Library. A package may contain at most 64 direct `.md` references; malformed UTF-8/front matter, unreadable or reparse-point content, case-colliding names, and an over-limit reference set make the whole package unavailable instead of exposing a partial revision. Every enabled visible skill contributes its exact id, `kind:"skill"`, name, summary, package `revision`, `bodyChars`, and `referenceCount` to `RUNTIME_CONTEXT.capabilities.items`; the revision covers the core body and reference manifest. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `common.capabilities_read` with an exact id for each clearly relevant catalog entry. Agent authoring remains `common.skills_upsert/delete`; `skills_upsert` uses `referencePath` plus `referenceMarkdown` for a reference-only mutation, and `skills_delete` uses `referencePath` to delete one reference. Core and reference mutations are separate calls. Upsert/delete requires confirmation unless auto-confirm is enabled.
+Each custom skill is a concise UTF-8 `SKILL.md` guidance file with front matter (`id`, `host`, `name`, `description`, `version`, `enabled`) and Markdown instructions. Optional detailed UTF-8 Markdown references live directly under the same package's `references/` directory and can be created, edited, or deleted in the Skill Library. A package may contain at most 64 direct `.md` references; malformed UTF-8/front matter, unreadable or reparse-point content, case-colliding names, and an over-limit reference set make the whole package unavailable instead of exposing a partial revision. Every enabled visible skill contributes its exact id, `kind:"skill"`, name, summary, package `revision`, `bodyChars`, and `referenceCount` to `RUNTIME_CONTEXT.capabilities.items`; the revision covers the core body and reference manifest. There is no skill router, activation state, dependency graph, or hidden tool ownership. The model calls `core.tools.read` with an exact id for each clearly relevant catalog entry. Agent authoring remains `skills.upsert/delete`; `skills_upsert` uses `referencePath` plus `referenceMarkdown` for a reference-only mutation, and `skills_delete` uses `referencePath` to delete one reference. Core and reference mutations are separate calls. Upsert/delete requires confirmation unless auto-confirm is enabled.
 
 ```markdown
 ---
@@ -580,7 +580,7 @@ enabled: true
 - Preserve the requested column order.
 ```
 
-At runtime the catalog entry is `{"id","kind":"skill","name","summary","revision","bodyChars","referenceCount"}`. The core `common.capabilities_read` result returns `kind:"skill"`, the same package revision, metadata, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. Generic context bounding removes this loaded marker and returns top-level `data.truncated:true`, so an oversized result cannot be mistaken for a loaded skill. Compaction or a changed revision requires another core read.
+At runtime the catalog entry is `{"id","kind":"skill","name","summary","revision","bodyChars","referenceCount"}`. The core `core.tools.read` result returns `kind:"skill"`, the same package revision, metadata, `format:"markdown"`, the complete `bodyMarkdown`, and explicit `loaded:true`, `complete:true`, `truncated:false`. Generic context bounding removes this loaded marker and returns top-level `data.truncated:true`, so an oversized result cannot be mistaken for a loaded skill. Compaction or a changed revision requires another core read.
 
 The core read lists reference paths, sizes, and independent revisions without loading their text. Read a needed file by passing its exact `referencePath`; `offset` and `maxChars` page it with `nextOffset`. Reference chunks never replace the core loaded-state evidence. Keep `SKILL.md` below roughly 500 lines and move only detailed, selectively useful material into direct `references/*.md` files.
 
@@ -589,26 +589,26 @@ The core read lists reference paths, sizes, and independent revisions without lo
 Office VBA support requires Office setting `Trust access to the VBA project object model`.
 
 - Settings has request timeout seconds; increase it for slow local or proxy LLM endpoints.
-- Excel, Word, and PowerPoint expose VBA projects, components, bounded pageable source, literal search, and rollback backups through provider `vba` and `common.resources_list/resolve/search/read`. Public `common.vba_*` tools are mutation-only: write/rename, exact patch, delete, and restore.
+- Excel, Word, and PowerPoint expose VBA projects, components, source excerpts and backups through `core.find/read/search`. Text mutations use the same `core.write/patch/replace` and `resources.move/copy/delete/restore` contract as other source owners.
 - `Preview Diff` shows the current editor changes before saving.
 - `Save Module` replaces the selected module only after a document-scoped prepared mutation and CAS-backed rollback snapshot are durable under `%AppData%\RNAssistant\vba-journals` and `chat-blobs`.
 - `Restore Backup` is itself a confirmed journaled mutation; restoring snapshots the current module first and verifies read-back.
 - Existing-module writes fail closed when a rollback backup cannot be created. A failed code write restores the original module when Office still permits access.
-- VBA writes retain a CAS-backed rollback snapshot, strict live-code snapshot, ownership, stale-state, and post-write read-back checks inside the VBA tools. A mutation reads and binds the current VBIDE state itself, then rechecks it after confirmation; the model neither performs a preparatory read nor supplies a hash argument. If the model already inspected the module, runtime uses that snapshot automatically for one stale warning and then allows an intentional retry. Post-write verification accepts only VBE-equivalent case/spacing/terminal-line normalization and returns the actual read-back hash. If runtime stops after `mutation.prepared`, the next safe VBA access compares live state with both recorded sides and closes it without replaying the effect.
+- VBA writes retain CAS-backed before/intended source, ownership and read-back checks. Existing-source mutations require delivered source evidence: a whole rewrite needs complete source; a patch can use its exact excerpt. Runtime pins current VBIDE state before confirmation and rechecks it before dispatch. A changed source requires a fresh read. VBE-equivalent case/spacing/terminal-line normalization is reported explicitly; an unresolved prepared mutation is never replayed automatically.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-Agent uses the same provider `vba` in Excel, Word, and PowerPoint. It discovers `vba-project`, `vba-component`, and `vba-backup` metadata, then reads only needed source chunks by canonical URI; live reads are serialized with document mutations and return content-hash revision evidence. `common.vba_write_module` has strict write and rename schema branches: write requires complete `code`; rename requires `moduleName`, `newModuleName`, and `mode=rename` and rejects write-only fields. Rename guards and journals both names, preserves the component source/type, and never uses write+delete. It does not rewrite explicit textual references to the old module name. Mutations read and bind current state internally, require confirmation unless auto-confirm is enabled, and reject races or mismatched read-back. Removed VBA list/read/search/create/replace-text/read-lines ids are unsupported; host-prefixed whole-module, rename, and macro backends remain hidden.
-
-Patch operations support:
+The model addresses a module by semantic `target`, for example `VBA module: Module1`. `core.write` accepts complete `content` and creates or updates it. `resources.move` accepts `target` and `destination` for a guarded rename without rewriting textual references. `core.patch` accepts exact hunks against one original source snapshot:
 
 ```json
-[
-  { "op": "replace", "find": "exact current unique block", "text": "exact replacement block" },
-  { "op": "replace", "find": "exact anchor", "text": "exact anchor\nnew code" }
-]
+{
+  "target": "VBA module: Module1",
+  "hunks": [
+    { "oldText": "Debug.Print 1", "newText": "Debug.Print 2", "startLine": 3 }
+  ]
+}
 ```
 
-VBA patching has no line-number or fuzzy mode. Every exact hunk is applied to one current full-module snapshot in memory; missing or ambiguous source fails without writing. Strings and boundary newlines are preserved, with only LF/CRLF converted to the module's current style.
+Use adjacent context or 1-based UTF-16 coordinates to disambiguate repeated text. All hunks are resolved before writing; no fuzzy matching or shifted coordinates are used. Physical VBA line edits run bottom-up with journal and full read-back. See [Text mutations](docs/text-mutations.md) for insertion, deletion, counted replacement, encoding and per-owner limits.
 
 ## Tool Usage
 

@@ -231,12 +231,12 @@ tests.push(["adjacent runs and confirmation segments retain their own results", 
 tests.push(["waiting and running are not replaced by previous failed attempts", () => {
   const rv = context.RNAssistantRunViewState;
   assert.equal(rv.displayStatus(rv.normalize(view("errors", { lifecycle: "running", failed: 1 }))), "running");
-  const pending = { PendingId: "p", ToolCallId: "c", ToolName: "excel.write_range" };
+  const pending = { PendingId: "p", ToolCallId: "c", ToolName: "excel.range.write" };
   assert.equal(rv.displayStatus(rv.normalize(view("errors", { lifecycle: "awaiting_confirmation", failed: 1, pending }))), "waiting");
 }]);
 vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-agent-activity.js"), "utf8"), context);
 tests.push(["semantic target is visible and unknown effect takes precedence over conflict wording", () => {
-  const activity = { Kind: "tool", ToolId: "common.resources_read", Display: { action: "Чтение ресурса", runningAction: "Читаю ресурс", operation: "Read" }, Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
+  const activity = { Kind: "tool", ToolId: "core.read", Display: { action: "Чтение ресурса", runningAction: "Читаю ресурс", operation: "Read" }, Title: "Resource read", ProgressTitle: "Working", Subtitle: "Продажи!A1:D120", Status: "running" };
   const row = context.renderActivityRow(activity, true, false, null);
   assert.match(row.textContent, /Читаю/);
   assert.match(context.renderActivityNode(activity, false, true, null).textContent, /Продажи!A1:D120/);
@@ -247,11 +247,11 @@ tests.push(["semantic target is visible and unknown effect takes precedence over
 }]);
 
 tests.push(["uncertain and correctable actions are amber while hard failures stay red", () => {
-  const macro = { Kind: "tool", ToolId: "common.office_run_macro", Status: "failed", ErrorCode: "tool_effect_uncertain",
+  const macro = { Kind: "tool", ToolId: "office.macro.run", Status: "failed", ErrorCode: "tool_effect_uncertain",
     ExecutionEvidence: { Dispatch: "MayHaveDispatched", Effect: "Unknown" } };
   assert.equal(context.activityPresentationState(macro), "unknown");
   assert.match(context.renderActivityRow(macro, false, false, null).textContent, /Результат не подтверждён/);
-  const correctable = { Kind: "tool", ToolId: "common.resources_read", Status: "failed", ErrorCode: "resource_revision_changed",
+  const correctable = { Kind: "tool", ToolId: "core.read", Status: "failed", ErrorCode: "resource_revision_changed",
     ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" } };
   assert.equal(context.activityPresentationState(correctable), "warning");
   assert.match(walk(context.renderActivityRow(correctable, false, false, null)).find(node =>
@@ -277,18 +277,18 @@ tests.push(["uncertain and correctable actions are amber while hard failures sta
 }]);
 
 tests.push(["tool rows preserve action target and result without rewriting model data", () => {
-  const activity = { Kind: "tool", ToolId: "common.capabilities_read", Display: { action: "Изучение", runningAction: "Изучаю", operation: "Learn" }, Subtitle: "excel.write_range", Status: "completed",
-    ArgumentsJson: '{"id":"excel.write_range"}', DataJson: '{"kind":"tool-schema","catalogRevision":"private-revision","complete":true}',
+  const activity = { Kind: "tool", ToolId: "core.tools.read", Display: { action: "Изучение", runningAction: "Изучаю", operation: "Learn" }, Subtitle: "excel.range.write", Status: "completed",
+    ArgumentsJson: '{"id":"excel.range.write"}', DataJson: '{"kind":"tool-schema","catalogRevision":"private-revision","complete":true}',
     ResultMessage: "Capability loaded with catalogRevision=private-revision" };
   const before = JSON.stringify(activity);
   const row = context.renderActivityRow(activity, false, true, null);
   assert.match(row.textContent, /Изучение/);
-  assert.match(context.renderActivityNode(activity, false, false, null).textContent, /excel.write_range/);
+  assert.match(context.renderActivityNode(activity, false, false, null).textContent, /excel.range.write/);
   assert.match(row.textContent, /Загружено/);
   assert.doesNotMatch(row.textContent, /catalogRevision|private-revision|Capability loaded/);
   assert.equal(JSON.stringify(activity), before, "presentation leaves exact arguments and results unchanged");
   const longTarget = "Документ / " + "Раздел с длинным названием / ".repeat(8) + "Конец";
-  const write = { Kind: "tool", ToolId: "word.replace_text", Display: { action: "Замена текста", operation: "Write" }, Subtitle: longTarget, Status: "completed",
+  const write = { Kind: "tool", ToolId: "word.text.replace", Display: { action: "Замена текста", operation: "Write" }, Subtitle: longTarget, Status: "completed",
     ExecutionEvidence: { Effect: "VerifiedChange", Dispatch: "MayHaveDispatched" } };
   const changed = context.renderActivityRow(write, false, false, null);
   assert.match(changed.textContent, /Замена текста/);
@@ -300,7 +300,7 @@ tests.push(["tool rows preserve action target and result without rewriting model
   assert.notEqual(context.activityDisplayResult(write), "Без изменений", "failed no-op remains a failure");
 }]);
 tests.push(["search and read captions distinguish complete empty and partial data", () => {
-  const search = { Kind: "tool", ToolId: "common.resources_find", Status: "completed",
+  const search = { Kind: "tool", ToolId: "core.find", Status: "completed",
     ResultSummary: { Kind: "resource-find", ReturnedItems: 0, Complete: false, Partial: true },
     DataJson: '{"truncated":true,"preview":"not a search result"}' };
   assert.equal(context.activityDisplayResult(search), "Получено элементов: 0 · неполный список");
@@ -314,7 +314,7 @@ tests.push(["search and read captions distinguish complete empty and partial dat
   search.DataJson = '{"items":[{},{}],"complete":false,"partial":true}';
   assert.equal(context.activityDisplayResult(search), "Завершено", "legacy search JSON is not parsed for coverage");
   assert.equal(context.activityPresentationState(search), "completed");
-  const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed",
+  const read = { Kind: "tool", ToolId: "core.read", Status: "completed",
     ResultSummary: { Kind: "resource-read", ReturnedRows: 2, Complete: false } };
   assert.equal(context.activityDisplayResult(read), "Получено строк: 2 · часть данных");
   read.DataJson = '{"truncated":true,"preview":"not the model result"}';
@@ -324,14 +324,14 @@ tests.push(["search and read captions distinguish complete empty and partial dat
   assert.equal(context.activityDisplayResult(read), "Завершено", "old record without summary uses a generic label");
   read.ReadSummary = { Representation: "source", ReturnedCharacters: 12, Complete: false };
   assert.equal(context.activityDisplayResult(read), "Получен исходный код · символов: 12 · часть данных", "legacy read summary replays");
-  const capabilitySearch = { Kind: "tool", ToolId: "common.capabilities_search", Status: "completed",
+  const capabilitySearch = { Kind: "tool", ToolId: "core.tools.search", Status: "completed",
     ResultSummary: { Kind: "capability-search", ReturnedItems: 0, Complete: true },
     DataJson: "x".repeat(130000) };
   assert.equal(context.activityDisplayResult(capabilitySearch), "Получено элементов: 0");
   capabilitySearch.ResultSummary = { Kind: "capability-search", ReturnedItems: 1, Complete: false };
   assert.equal(context.activityDisplayResult(capabilitySearch), "Получено элементов: 1 · неполный список");
   assert.equal(context.activityPresentationState(capabilitySearch), "partial");
-  const capabilityRead = { Kind: "tool", ToolId: "common.capabilities_read", Status: "completed",
+  const capabilityRead = { Kind: "tool", ToolId: "core.tools.read", Status: "completed",
     ResultSummary: { Kind: "capability-read", Representation: "reference", Complete: false },
     DataJson: "x".repeat(130000) };
   assert.equal(context.activityDisplayResult(capabilityRead), "Загружена часть описания");
@@ -362,7 +362,7 @@ tests.push(["result representations work for new tools without identity-specific
     assert.equal(context.activityDisplayResult(activity), expected);
     assert.equal(JSON.stringify(activity), before);
   }
-  activity.ToolId = "common.resources_read";
+  activity.ToolId = "core.read";
   for (const [data, expected] of [
     [{ representation: "text", returnedCharacters: 125, complete: true }, "Получен текст · символов: 125"],
     [{ representation: "media", hydratedForNextModelStep: true }, "Медиа подготовлено для следующего запроса модели"],
@@ -373,7 +373,7 @@ tests.push(["result representations work for new tools without identity-specific
     activity.DataJson = JSON.stringify(Object.assign({ kind: "resource-read" }, data));
     assert.equal(context.activityDisplayResult(activity), expected);
   }
-  activity.ToolId = "common.capabilities_read";
+  activity.ToolId = "core.tools.read";
   activity.DataJson = '{"kind":"skill","complete":false,"truncated":true}';
   activity.ResultSummary = { Kind: "capability-read", Representation: "skill", Complete: false };
   assert.equal(context.activityDisplayResult(activity), "Загружена часть описания");
@@ -390,7 +390,7 @@ tests.push(["result representations work for new tools without identity-specific
 }]);
 tests.push(["read metadata survives absent and large bodies without granting effects", () => {
   for (const DataJson of [null, JSON.stringify({ text: "x".repeat(40000) })]) {
-    const read = { Kind: "tool", ToolId: "common.resources_read", Status: "completed", DataJson,
+    const read = { Kind: "tool", ToolId: "core.read", Status: "completed", DataJson,
       ResultSummary: { Kind: "resource-read", Representation: "source", ReturnedCharacters: 40000, Complete: true } };
     assert.equal(context.activityDisplayResult(read), "Получен исходный код · символов: 40000");
     read.ExecutionEvidence = { Effect: "Unknown" };
@@ -418,7 +418,7 @@ tests.push(["catalog display works for arbitrary ids while zero-action history s
   assertVisibleEvidence(uncertain, "unknown");
 }]);
 tests.push(["localized failures and operation icons remain independent of model wording", () => {
-  const failure = { Kind: "tool", ToolId: "common.capabilities_read", Status: "failed", ErrorCode: "capability_not_found",
+  const failure = { Kind: "tool", ToolId: "core.tools.read", Status: "failed", ErrorCode: "capability_not_found",
     ResultMessage: "Missing tool. RUNTIME_CONTEXT.capabilities catalogRevision=abc" };
   assert.equal(context.activityDisplayResult(failure), "Инструмент или навык не найден · capability_not_found");
   failure.ErrorCode = "parameters_schema";
@@ -428,7 +428,7 @@ tests.push(["localized failures and operation icons remain independent of model 
   failure.ExecutionEvidence = { Effect: "Unknown", Dispatch: "MayHaveDispatched" };
   assert.match(context.activityDisplayResult(failure), /не подтверждён/);
   assert.equal(context.activityPresentationState(failure), "unknown");
-  const types = ["common.resources_find", "common.resources_read", "excel.write_range", "common.capabilities_read", "common.questions_ask", "common.vba_delete"];
+  const types = ["core.find", "core.read", "excel.range.write", "core.tools.read", "core.ask", "common.vba_delete"];
   assert.deepEqual(types.map((ToolId, index) => context.activityOperation({ Kind: "tool", ToolId, Display: { operation: ["Search", "Read", "Write", "Learn", "Question", "Delete"][index] } })), ["search", "read", "write", "learn", "question", "delete"]);
   assert.equal(new Set(types.map((ToolId, index) => context.activityOperationIcon({ Kind: "tool", ToolId, Display: { operation: ["Search", "Read", "Write", "Learn", "Question", "Delete"][index] } }))).size, types.length);
 }]);
@@ -437,8 +437,8 @@ context.appendActivityArtifacts = () => {};
 context.appendQuestionCards = () => {};
 context.enhanceActivity = () => {};
 tests.push(["live feed keeps previous steps and nested actions visible until the run ends", () => {
-  const done = { Kind: "tool", ToolId: "common.resources_find", Status: "completed", ToolCallId: "one", StepId: "s1", StepMessage: "Ищу таблицу" };
-  const child = { Kind: "tool", ToolId: "common.resources_read", Subtitle: "Продажи", Status: "running", ToolCallId: "two" };
+  const done = { Kind: "tool", ToolId: "core.find", Status: "completed", ToolCallId: "one", StepId: "s1", StepMessage: "Ищу таблицу" };
+  const child = { Kind: "tool", ToolId: "core.read", Subtitle: "Продажи", Status: "running", ToolCallId: "two" };
   const parent = { Kind: "group", Status: "running", StepId: "s2", StepMessage: "Проверяю данные", Children: [child] };
   const items = [done, parent].map(activity => ({ activity }));
   const live = context.renderAgentRunArticle({ live: true, items });
@@ -466,7 +466,7 @@ tests.push(["live feed keeps previous steps and nested actions visible until the
 }]);
 
 tests.push(["one step narration groups all calls and completion replaces its running row", () => {
-  const call = (id, status) => ({ Kind: "tool", ToolId: "common.resources_read",
+  const call = (id, status) => ({ Kind: "tool", ToolId: "core.read",
     RunId: "run", StepId: "step", StepMessage: "Проверю три ресурса.",
     ToolCallId: id, Subtitle: id, Status: status });
   const items = [call("a", "running"), call("a", "completed"),
@@ -483,7 +483,7 @@ tests.push(["one step narration groups all calls and completion replaces its run
 
 tests.push(["undispatched repeats keep actionable reasons instead of cancellation", () => {
   for (const code of ["repeated_unknown_tool_call", "repeated_tool_failure", "repeated_tool_no_progress", "excel_clear_table_header"]) {
-    const activity = { Kind: "tool", ToolId: "excel.clear_range", Status: "failed", ErrorCode: code,
+    const activity = { Kind: "tool", ToolId: "excel.range.clear", Status: "failed", ErrorCode: code,
       ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "Unreported" } };
     assert.equal(context.activityPresentationState(activity), "warning");
     assert.doesNotMatch(context.activityDisplayResult(activity), /Отменено|Не удалось начать действие/);
@@ -508,7 +508,7 @@ tests.push(["late status updates preserve failure evidence and notices split sta
 }]);
 
 tests.push(["terminal runtime state stops motion without discarding incomplete actions", () => {
-  const activity = { Kind: "tool", ToolCallId: "interrupted", ToolId: "common.resources_read", Status: "running", StepMessage: "Проверю данные" };
+  const activity = { Kind: "tool", ToolCallId: "interrupted", ToolId: "core.read", Status: "running", StepMessage: "Проверю данные" };
   const node = context.renderAgentRunArticle({ items: [{ activity, message: { RunId: "r", Activity: activity,
     RunViewState: view("errors", { lifecycle: "failed", failed: 1 }) } }] });
   assert.equal(walk(node).some(item => /agent-status-shimmer|is-live-current/.test(item.className)), false);

@@ -882,3 +882,15 @@
 }
 
 .agent-activity-detail-summary { margin: 0; color: var(--ink); font-size: .9286rem; line-height: 1.6; }
+
+/* A bounded single-column source diff inside the corresponding tool step. */
+.inline-text-diff { overflow: auto; max-width: 100%; font: 12px/1.5 var(--font-mono, monospace); }
+.inline-diff-line { display: flex; min-width: max-content; white-space: pre; }
+.inline-diff-marker { flex: 0 0 20px; text-align: center; user-select: none; }
+.inline-diff-line code { font: inherit; white-space: pre; }
+.inline-diff-line.add { background: rgba(35, 160, 80, .1); color: #167b39; }
+.inline-diff-line.remove { background: rgba(205, 60, 60, .1); color: #bd3535; }
+.inline-diff-line.note { opacity: .65; }
+.inline-change + .inline-change { margin-top: 12px; }
+html[data-theme="dark"] .inline-diff-line.add { color: #8cd9a6; }
+html[data-theme="dark"] .inline-diff-line.remove { color: #fca5a5; }

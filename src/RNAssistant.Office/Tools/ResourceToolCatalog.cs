@@ -8,10 +8,10 @@ namespace RNAssistant.Office.Tools
     // runtime handlers, not to model arguments.
     internal static class ResourceToolCatalog
     {
-        public const string FindToolId = "common.resources_find";
-        public const string ReadToolId = "common.resources_read";
-        public const string SearchToolId = "common.resources_search";
-        public const string OutlineToolId = "common.resources_outline";
+        public const string FindToolId = "core.find";
+        public const string ReadToolId = "core.read";
+        public const string SearchToolId = "core.search";
+        public const string OutlineToolId = "resources.outline";
 
         internal static IEnumerable<ToolCatalogEntry> GetControllerTools()
         {

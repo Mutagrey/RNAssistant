@@ -200,7 +200,7 @@ namespace RNAssistant.Harness
             AssertEqual(1, resourceMessage.ResourceRefs.Count,
                 "durable resource message retains exact evidence");
 
-            foreach (var tool in new[] { "excel.upsert_chart", "common.vba_write_module", "files.create" })
+            foreach (var tool in new[] { "excel.chart.upsert", "vba.module.write", "files.create" })
             {
                 var operation = Command(tool); operation.ToolCallId = "diagnostic_" + tool;
                 var input = AgentJsonProtocol.CreateToolResultMessage(operation, TerminalToolResult.Error("Inspect the target.",
@@ -388,7 +388,7 @@ namespace RNAssistant.Harness
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
                 var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                var tool = catalog.Single(item => item.Id == "excel.format_range");
+                var tool = catalog.Single(item => item.Id == "excel.range.format");
                 var evidence = ReadSchemaEvidence(executor, catalog, tool.Id, "schema-projection");
                 evidence.RunId = "projected-evidence";
                 var original = evidence.Content;
@@ -475,7 +475,7 @@ namespace RNAssistant.Harness
 
                 var compact = CapabilityCatalogService.BuildPromptCatalog(catalog, skills, catalog);
                 AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
-                    (string)item["id"] == "excel.add_sheet" && (string)item["kind"] == "tool"),
+                    (string)item["id"] == "excel.sheet.add" && (string)item["kind"] == "tool"),
                     "compact catalog contains exact tool ids with kind");
                 AssertTrue(((JArray)compact["items"]).OfType<JObject>().Any(item =>
                     (string)item["id"] == ExcelReadToolIds.SummarizeColumns && (string)item["kind"] == "tool"),
@@ -486,7 +486,7 @@ namespace RNAssistant.Harness
                 AssertEqual(true, (bool)compact["idEnumEnforced"],
                     "bounded catalogs also constrain the reader schema to exact ids");
                 var reader = catalog.Single(tool => tool.Id == CapabilityToolCatalog.ReadToolId);
-                AssertContains(reader.ArgumentSchemaJson, "excel.add_sheet", "reader enum contains exact tool id");
+                AssertContains(reader.ArgumentSchemaJson, "excel.sheet.add", "reader enum contains exact tool id");
                 AssertContains(reader.ArgumentSchemaJson, ExcelReadToolIds.SummarizeColumns,
                     "reader enum permits loading the column-analysis schema");
                 AssertContains(reader.ArgumentSchemaJson, "excel.review_workbook", "reader enum contains exact skill id");
@@ -572,7 +572,7 @@ namespace RNAssistant.Harness
                     "search contains no exact schemas");
 
                 var read = executor.ExecuteManual(
-                    Command(CapabilityToolCatalog.ReadToolId, "id", "excel.add_sheet"),
+                    Command(CapabilityToolCatalog.ReadToolId, "id", "excel.sheet.add"),
                     catalog,
                     new AppSettings(),
                     false,
@@ -588,7 +588,7 @@ namespace RNAssistant.Harness
                 AssertEqual(false, (bool)data["truncated"], "exact schema is not truncated");
                 AssertEqual("already_callable_or_next_model_step", (string)data["admission"],
                     "schema evidence does not claim callable publication");
-                AssertEqual("excel.add_sheet", (string)data.SelectToken("descriptor.function.name"),
+                AssertEqual("excel.sheet.add", (string)data.SelectToken("descriptor.function.name"),
                     "exact descriptor names the tool");
                 AssertTrue(data.SelectToken("descriptor.function.parameters") is JObject,
                     "exact descriptor includes strict parameters");
@@ -605,7 +605,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!wrongCaseRead.Success,
                     "capability ids have no case-insensitive read alias");
                 AssertEqual(
-                    CapabilityCatalogService.Revision(catalog.Single(tool => tool.Id == "excel.add_sheet")),
+                    CapabilityCatalogService.Revision(catalog.Single(tool => tool.Id == "excel.sheet.add")),
                     (string)data["revision"],
                     "schema revision is deterministic");
 
@@ -627,7 +627,7 @@ namespace RNAssistant.Harness
                 {
                     CapabilityCatalogService.ThrowOnCollision(catalog, new[]
                     {
-                        new SkillDefinition { Id = "excel.add_sheet", Enabled = true }
+                        new SkillDefinition { Id = "excel.sheet.add", Enabled = true }
                     });
                 }
                 catch (InvalidOperationException)
@@ -682,11 +682,11 @@ namespace RNAssistant.Harness
                 var htmlCatalog = CapabilityCatalogService.BuildPromptCatalog(catalog,
                     new RNAssistant.Core.Services.SkillCatalogService(adapter.HostName, executor.CapturePublishedSkills).GetVisibleSkills(), new ToolCatalogEntry[0]);
                 var htmlTool = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item =>
-                    (string)item["id"] == "common.html_workspace_apply_patch");
-                AssertTrue(((JArray)htmlTool["loadSkill"]).Values<string>().Contains("common.html_workspace_authoring"),
+                    (string)item["id"] == "html.source.patch");
+                AssertTrue(((JArray)htmlTool["loadSkill"]).Values<string>().Contains("skills.html.workspace.authoring"),
                     "unexposed specialized tool identifies the skill to load");
-                var authoring = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item => (string)item["id"] == "common.tools_upsert");
-                AssertTrue(((JArray)authoring["loadSkill"]).Values<string>().Contains("common.tool_authoring"),
+                var authoring = ((JArray)htmlCatalog["items"]).OfType<JObject>().Single(item => (string)item["id"] == "tools.upsert");
+                AssertTrue(((JArray)authoring["loadSkill"]).Values<string>().Contains("skills.tool.authoring"),
                     "dynamic authoring schema preserves skill-bound exposure");
                 AssertTrue(completeCatalog["items"].ToString(Newtonsoft.Json.Formatting.None)
                         .IndexOf("\"parameters\"", StringComparison.Ordinal) < 0,
@@ -727,17 +727,17 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
-                const string optionalId = "common.html_workspace_write_file";
+                const string optionalId = "html.data.write";
                 var earlyWrite = ModelProtocolWire.WriteAcceptedCall("Attempt the tool before admission.",
                     "Создаю сразу.", new ConversationToolCall { Name = optionalId,
-                        Arguments = new JObject { ["path"] = "progressive.html", ["content"] = "<main>Ready</main>" } });
+                        Arguments = new JObject { ["name"] = "progressive", ["json"] = "{}" } });
                 var write = ModelProtocolWire.WriteAcceptedCall("Create the requested HTML file.",
                     "Создаю после admission.", new ConversationToolCall { Name = optionalId,
-                        Arguments = new JObject { ["path"] = "progressive.html", ["content"] = "<main>Ready</main>" } });
+                        Arguments = new JObject { ["name"] = "progressive", ["json"] = "{}" } });
                 var responses = new Queue<string>(new[]
                 {
                     earlyWrite,
-                    LoadSkillResponse("common.html_workspace_authoring"),
+                    LoadSkillResponse("skills.html.workspace.authoring"),
                     write,
                     null
                 });
@@ -770,8 +770,8 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual("HTML создан.", result.AssistantText, "optional tool run completes");
-                AssertTrue(session.HtmlWorkspace != null && session.HtmlWorkspace.Files.Any(file =>
-                    file != null && string.Equals(file.Path, "progressive.html", StringComparison.OrdinalIgnoreCase)),
+                AssertTrue(session.HtmlWorkspace != null && session.HtmlWorkspace.DataSources.Any(file =>
+                    file != null && string.Equals(file.Name, "progressive", StringComparison.OrdinalIgnoreCase)),
                     "admitted optional tool executes once");
                 AssertEqual(4, requests.Count, "unloaded repair, schema read, execution, and final requests");
                 var initialCallableNames = ResponseSchemaCallNames(options[0].ResponseSchemaJson)
@@ -787,17 +787,17 @@ namespace RNAssistant.Harness
                     "strict wire prompt keeps callable metadata while response schema carries arguments");
                 AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: " + optionalId,
                     "local parser distinguishes an unloaded known tool during repair");
-                AssertContains(FlattenSimple(requests[1]), "common.skills_load",
+                AssertContains(FlattenSimple(requests[1]), "core.skills.load",
                     "repair directs specialized tools through the skill loader");
                 AssertContains(FlattenSimple(requests[1]), "If that load was refused, resolve its reported blocker",
                     "unloaded-tool repair does not override an admission refusal");
                 var repair = requests[1].Single(message =>
                     (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal));
-                AssertTrue(!repair.Content.Contains("common.capabilities_read"),
+                AssertTrue(!repair.Content.Contains("core.tools.read"),
                     "generic repair must not contradict the skill-only recovery route");
-                AssertContains(FlattenSimple(requests[2]), "SELECTED_SKILL common.html_workspace_authoring",
+                AssertContains(FlattenSimple(requests[2]), "SELECTED_SKILL skills.html.workspace.authoring",
                     "complete instructions reach the same request as specialized tools");
-                AssertTrue(session.LastRun.SelectedSkills.Any(skill => skill.Id == "common.html_workspace_authoring"),
+                AssertTrue(session.LastRun.SelectedSkills.Any(skill => skill.Id == "skills.html.workspace.authoring"),
                     "HTML pilot retains the task selection");
             });
             foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
@@ -814,17 +814,17 @@ namespace RNAssistant.Harness
                 Func<string, JObject, ConversationToolCall> call = (name, arguments) =>
                     new ConversationToolCall { Name = name, Arguments = arguments };
                 var write = ModelProtocolWire.WriteAcceptedCall("Write the requested value.", "",
-                    call("excel.write_range", new JObject {
+                    call("excel.range.write", new JObject {
                         ["kind"] = "value", ["sheet"] = "Data", ["address"] = "D1", ["value"] = "42" }));
                 var script = new Queue<string>(new[] {
                     write,
                     ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
                         "Read both independent tool schemas.", "", new[] {
-                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.write_range" }),
-                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.format_range" }) })),
+                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.range.write" }),
+                        call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "excel.range.format" }) })),
                     write,
                     ModelProtocolWire.WriteAcceptedCall("Format the written cell.", "",
-                        call("excel.format_range", new JObject {
+                        call("excel.range.format", new JObject {
                             ["sheet"] = "Data", ["address"] = "D1", ["bold"] = true })),
                     null // Generate finish after terminal call IDs are assigned.
                 });
@@ -834,11 +834,11 @@ namespace RNAssistant.Harness
                     requests++;
                     AssertTrue(script.Count > 0, "Excel admission needs only the deliberate unloaded-call repair");
                     var callable = session.LastContextReceipt.Arsenal.Tools.Select(tool => tool.Id).ToArray();
-                    foreach (var id in new[] { "excel.write_range", "excel.format_range" })
+                    foreach (var id in new[] { "excel.range.write", "excel.range.format" })
                         AssertEqual(requests >= 3, callable.Contains(id), "direct Excel schema is callable only after admission: " + id);
                     if (requests == 2)
                     {
-                        AssertContains(FlattenSimple(messages), "Call common.capabilities_read", "direct tools retain their exact recovery route");
+                        AssertContains(FlattenSimple(messages), "Call core.tools.read", "direct tools retain their exact recovery route");
                         AssertEqual(0, adapter.ExcelBackendCalls.Count(operation => operation == FakeOfficeAdapter.ExcelWriteApplyOperation),
                             "guessed tool cannot mutate before admission");
                     }
@@ -859,7 +859,7 @@ namespace RNAssistant.Harness
                     }
                     var scriptedResponse = script.Dequeue() ?? ScriptedVerifiedFinish(session,
                         "The write and format have terminal results.", "Ячейка записана и отформатирована.",
-                        "The requested cell was written and formatted.", "excel.write_range", "excel.format_range");
+                        "The requested cell was written and formatted.", "excel.range.write", "excel.range.format");
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 };
                 var settings = new AppSettings { AgentResponseMode = responseMode, AutoConfirmToolActions = true,
@@ -1186,22 +1186,22 @@ namespace RNAssistant.Harness
 
                 foreach (var id in OfficeToolCatalog.ForHost(adapter.HostName).Select(tool => tool.Id))
                 {
-                    AssertEqual(id == "excel.inspect", toolPack.Tools.Any(tool => tool.Id == id),
-                        "only Excel inspection is callable before admission: " + id);
+                    AssertEqual(false, toolPack.Tools.Any(tool => tool.Id == id),
+                        "host tools require admission: " + id);
                     AssertTrue(toolPack.Catalog.Any(tool => tool.Id == id),
                         "every Excel tool remains discoverable: " + id);
                 }
                 foreach (var id in new[]
                 {
-                    "common.vba_write_module", "common.vba_apply_patch",
-                    "common.vba_restore_backup", "common.vba_rename_module",
-                    "common.vba_delete_module"
+                    "vba.module.write", "vba.module.patch",
+                    "vba.module.restore", "vba.module.rename",
+                    "vba.module.delete"
                 })
                 {
                     AssertTrue(!toolPack.Tools.Any(tool => tool.Id == id),
                         "VBA procedure tool requires a selected skill: " + id);
-                    AssertTrue(toolPack.Catalog.Any(tool => tool.Id == id),
-                        "VBA intent remains in the exact catalog: " + id);
+                    AssertTrue(!toolPack.Catalog.Any(tool => tool.Id == id),
+                        "private VBA owner commands are absent from the model catalog: " + id);
                 }
                 AssertTrue(!toolPack.Tools.Any(tool => tool.Id == VbaToolCatalog.RunMacro) &&
                     toolPack.Catalog.Any(tool => tool.Id == VbaToolCatalog.RunMacro),
@@ -1217,13 +1217,13 @@ namespace RNAssistant.Harness
                     (bool?)item["schemaLoaded"] == true),
                     "model capability context exposes semantic callable membership");
                 AssertTrue(((JArray)capabilityContext["items"]).OfType<JObject>().Any(item =>
-                    (string)item["id"] == "common.vba_rename_module" &&
+                    (string)item["id"] == "resources.move" &&
                     (bool?)item["schemaLoaded"] == false),
                     "compact catalog exposes the exact optional rename without publishing its schema");
 
                 var first = ReadSchemaEvidence(executor, catalog, "fixture.dynamic_1", "read_1");
                 var blockedSkill = executor.ExecuteManual(Command(CapabilityToolCatalog.ReadToolId,
-                    "id", "common.vba_rename_module"), catalog, new AppSettings(), false, false);
+                    "id", "html.data.write"), catalog, new AppSettings(), false, false);
                 AssertTrue(blockedSkill.Success && blockedSkill.DataJson.Contains("skill-tool") &&
                     !blockedSkill.DataJson.Contains("\"descriptor\""),
                     "skill-only schema inspection returns guidance without admitting a descriptor");
@@ -1494,25 +1494,7 @@ namespace RNAssistant.Harness
                         CapabilityCatalogService.BindReadSchema(catalog, null);
                         var pack = CallableToolPack.Create(
                             mode, adapter.HostName, "r61-profile-run", catalog);
-                        var expected = new HashSet<string>(StringComparer.Ordinal);
-                        if (string.Equals(mode, ChatModes.Chat, StringComparison.Ordinal))
-                        {
-                            expected.Add(ResourceToolCatalog.FindToolId);
-                            expected.Add(ResourceToolCatalog.ReadToolId);
-                        }
-                        else
-                        {
-                            expected.Add(ResourceToolCatalog.FindToolId);
-                            expected.Add(ResourceToolCatalog.ReadToolId);
-                            expected.Add(CapabilityToolCatalog.SearchToolId);
-                            expected.Add(CapabilityToolCatalog.ReadToolId);
-                            expected.Add(SkillLoadToolHandler.ToolId);
-                            if (string.Equals(mode, ChatModes.Agent, StringComparison.Ordinal) &&
-                                string.Equals(host, "Excel", StringComparison.Ordinal))
-                            {
-                                expected.Add("excel.inspect");
-                            }
-                        }
+                        var expected = new HashSet<string>(CallableToolProfile.CoreIds.Where(id => catalog.Any(tool => tool.Id == id)), StringComparer.Ordinal);
 
                         var actual = pack.Tools.Select(tool => tool.Id)
                             .OrderBy(id => id, StringComparer.Ordinal).ToArray();
@@ -1671,6 +1653,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "durable-run-1", TurnId = "durable-turn" };
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "durable-read");
+                evidence.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 1);
                 evidence.RunId = session.LastRun.RunId;
                 session.Messages.Add(evidence);
                 var store = new ChatStore(FixturePaths.Value);

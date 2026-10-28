@@ -81,7 +81,7 @@ namespace RNAssistant.Office.Services
 
     internal sealed class VbaResourceMutationDomain : IResourceMutationDomain
     {
-        public bool Owns(string operation) { return operation.StartsWith("common.vba_", StringComparison.Ordinal); }
+        public bool Owns(string operation) { return operation.StartsWith("vba.module.", StringComparison.Ordinal); }
         internal static IEnumerable<string> Modules(IDictionary<string, object> arguments)
         {
             object modules;
@@ -140,14 +140,14 @@ namespace RNAssistant.Office.Services
     {
         public bool Owns(string operation)
         {
-            return operation.StartsWith("common.tools_", StringComparison.Ordinal) ||
-                operation.StartsWith("common.skills_", StringComparison.Ordinal) || operation.StartsWith("common.prompts_", StringComparison.Ordinal);
+            return operation.StartsWith("tools.", StringComparison.Ordinal) ||
+                operation.StartsWith("skills.", StringComparison.Ordinal) || operation.StartsWith("prompts.", StringComparison.Ordinal);
         }
         public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
             IDictionary<string, object> arguments, ResourceAuthoritySnapshot snapshot)
         {
-            var kind = operation.StartsWith("common.tools_", StringComparison.Ordinal) ? "tools" :
-                operation.StartsWith("common.skills_", StringComparison.Ordinal) ? "skills" : "prompts";
+            var kind = operation.StartsWith("tools.", StringComparison.Ordinal) ? "tools" :
+                operation.StartsWith("skills.", StringComparison.Ordinal) ? "skills" : "prompts";
             yield return new ResourceImpact(new ResourceIdentity(ResourceUri.Create("catalog", kind)),
                 ResourceImpactRelation.CatalogGeneration);
         }
@@ -162,13 +162,13 @@ namespace RNAssistant.Office.Services
         }
         internal static string StateName(string operation)
         {
-            return operation.StartsWith("common.plan_", StringComparison.Ordinal) ? "plan-document" :
-                operation.StartsWith("common.task_", StringComparison.Ordinal) ? "task-list" : null;
+            return operation.StartsWith("plan.", StringComparison.Ordinal) ? "plan-document" :
+                operation.StartsWith("task.", StringComparison.Ordinal) ? "task-list" : null;
         }
         public bool Owns(string operation)
         {
-            return operation.StartsWith("common.plan_", StringComparison.Ordinal) || operation.StartsWith("common.task_", StringComparison.Ordinal) ||
-                operation == "excel.create_chat_chart" || IsHistoryMutation(operation);
+            return operation.StartsWith("plan.", StringComparison.Ordinal) || operation.StartsWith("task.", StringComparison.Ordinal) ||
+                operation == "excel.chat.chart.create" || IsHistoryMutation(operation);
         }
         public IEnumerable<ResourceImpact> Impacts(ResourceAuthorityScopeId scope, string operation,
             IDictionary<string, object> arguments, ResourceAuthoritySnapshot snapshot)

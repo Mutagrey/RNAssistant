@@ -303,11 +303,11 @@ namespace RNAssistant.Office.Tools
 
         private ToolAuthoringOutcome ValidateAuthoredToolId(string id)
         {
-            return _isProtectedToolId != null && _isProtectedToolId(id)
-                ? ToolAuthoringOutcome.Error(
-                    "Tool id is reserved by a built-in tool: " + id,
-                    null, "reserved_tool_id", false)
-                : null;
+            if (_isProtectedToolId != null && _isProtectedToolId(id))
+                return ToolAuthoringOutcome.Error("Tool id is reserved by a built-in tool: " + id, null, "reserved_tool_id", false);
+            if (FindStoredTool(id) == null && !CapabilityNaming.ValidNewId(id, false))
+                return ToolAuthoringOutcome.Error("New tool IDs use lower-case dot segments, for example user.report.build. Existing custom IDs remain unchanged.", null, "invalid_tool_id", false);
+            return null;
         }
 
         private static string StateHash(ToolCatalogEntry tool)

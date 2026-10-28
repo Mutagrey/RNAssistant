@@ -263,7 +263,7 @@ namespace RNAssistant.Harness
             return new ToolInvocation
             {
                 ToolId = plan.Kind == ExcelChartMutationKind.Delete
-                    ? "excel.delete_chart" : "excel.upsert_chart",
+                    ? "excel.chart.delete" : "excel.chart.upsert",
                 Arguments = new Dictionary<string, object>
                 {
                     { "sheet", plan.Sheet ?? string.Empty },

@@ -87,7 +87,7 @@ fs.mkdirSync(captures, {recursive:true});
           {Id:'user',Role:'user',Content:'Проверь структуру проекта и подготовь краткую сводку.'},
           {Id:'step',Role:'assistant',Content:'Проверяю состав исходников.'},
           {Id:'read',Role:'assistant',Content:'',RunId:'preview-run',Activity:{
-            RunId:'preview-run',Kind:'tool',Title:'common.resources_read',ToolId:'common.resources_read',
+            RunId:'preview-run',Kind:'tool',Title:'core.read',ToolId:'core.read',
             ToolCallId:'preview-call',Status:'completed',ResultMessage:'Исходник прочитан.'}},
           {Id:'finish',Role:'assistant',Content:'Исходники доступны.\n\n| Файл | Назначение |\n| --- | --- |\n| plugin.json | Описание плагина |\n| index.html | Интерфейс |\n\nЭто пример для проверки интерфейса; модель не запускалась.'}
         ];

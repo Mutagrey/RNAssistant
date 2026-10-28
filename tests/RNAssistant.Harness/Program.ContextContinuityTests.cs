@@ -126,7 +126,7 @@ namespace RNAssistant.Harness
             var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
             foreach (var role in new[] { "user", "developer", "tool" })
             {
-                var failed = ContinuityResult("failed", "common.resources_read", ToolResult.Error(
+                var failed = ContinuityResult("failed", "core.read", ToolResult.Error(
                     "This target exposes records at $. Omit path or pass that exact value.",
                     "{\"code\":\"RESOURCE_VIEW_PATH_MISMATCH\",\"retryable\":false}"), role);
                 failed.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
@@ -162,7 +162,7 @@ namespace RNAssistant.Harness
             AssertTrue(!string.Join("\n", stale.Messages.Select(m => m.Content)).Contains(claim.Text), "actual dependency change invalidates claim");
             AssertEqual(1, stale.Receipt.RejectedClaims, "claim rejection is observable");
 
-            var mutation = ContinuityResult("saved", "common.vba_write_module", ToolResult.Ok("Saved and read back.", "{\"changed\":true}"));
+            var mutation = ContinuityResult("saved", "vba.module.write", ToolResult.Ok("Saved and read back.", "{\"changed\":true}"));
             mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged, verification: "read-back");
             var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation },
                 null, new ToolCatalogEntry[0], new AppSettings(), 10000);
@@ -203,7 +203,7 @@ namespace RNAssistant.Harness
                 {
                     var id = "read-" + index;
                     var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = id,
-                        Name = "common.resources_read", Arguments = new Dictionary<string, object> { { "target", "notes.txt" } } },
+                        Name = "core.read", Arguments = new Dictionary<string, object> { { "target", "notes.txt" } } },
                         index == 0 ? finding : "", "Read the requested notes.", null, role, FixtureCallOrigin(id));
                     call.RunId = "continuity";
                     var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolId = call.ToolName, ToolCallId = id },
@@ -578,10 +578,10 @@ namespace RNAssistant.Harness
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 "pack", new SkillCatalogSnapshot(null), null, 1);
             foreach (var resource in new[] {
-                new { Tool = "common.vba_write_module", Data = "{\"moduleName\":\"NormalizeReport\",\"source\":\"HISTORICAL_BODY\"}",
+                new { Tool = "vba.module.write", Data = "{\"moduleName\":\"NormalizeReport\",\"source\":\"HISTORICAL_BODY\"}",
                     Targets = new[] { "VBA module: NormalizeReport" } },
                 new { Tool = "files.patch", Data = "{\"path\":\"app.js\",\"changed\":true}", Targets = new[] { "app.js" } },
-                new { Tool = "common.html_workspace_apply_patch", Data = "{\"members\":[{\"target\":\"HTML file: index.html\"},{\"target\":\"HTML file: app.js\"}],\"source\":\"HISTORICAL_BODY\"}",
+                new { Tool = "html.source.patch", Data = "{\"members\":[{\"target\":\"HTML file: index.html\"},{\"target\":\"HTML file: app.js\"}],\"source\":\"HISTORICAL_BODY\"}",
                     Targets = new[] { "HTML file: index.html", "HTML file: app.js" } } })
             foreach (var role in new[] { "user", "developer", "tool" })
             foreach (var outcome in new[] { ResourceEffectOutcome.VerifiedChanged, ResourceEffectOutcome.VerifiedNoChange,
@@ -816,11 +816,11 @@ namespace RNAssistant.Harness
                     ["tool_calls"] = new JArray(new JObject { ["name"] = tool, ["arguments"] = arguments }),
                     ["message"] = "Читаю модуль."
                 }.ToString();
-                var invalidRead = response("common.resources_read", new JObject {
+                var invalidRead = response("core.read", new JObject {
                     ["target"] = "VBA module: Module1", ["representation"] = "table" });
                 var responses = new Queue<string>(new[] { invalidRead, invalidRead,
-                    response("common.resources_find", new JObject { ["scope"] = "vba", ["query"] = "Module1" }),
-                    response("common.resources_read", new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" }) });
+                    response("core.find", new JObject { ["scope"] = "vba", ["query"] = "Module1" }),
+                    response("core.read", new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" }) });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 ChatSession session = null;
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
@@ -828,7 +828,7 @@ namespace RNAssistant.Harness
                     requests.Add(messages.ToList());
                     if (responses.Count > 0)
                         return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
-                    var read = session.Messages.Last(item => item.ToolName == "common.resources_read" &&
+                    var read = session.Messages.Last(item => item.ToolName == "core.read" &&
                         item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
                     var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "The corrected read returned the current module source.", "Прочитано.",
@@ -853,8 +853,8 @@ namespace RNAssistant.Harness
                 var deliveredRead = requests.Last().Where(message => message.Content != null &&
                         message.Content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal))
                     .Select(message => JObject.Parse(message.Content.Substring("TOOL_RESULT:\n".Length)))
-                    .Last(root => (string)root["name"] == "common.resources_read" && (string)root["status"] == "ok");
-                var canonicalRead = session.Messages.Last(message => message.ToolName == "common.resources_read" &&
+                    .Last(root => (string)root["name"] == "core.read" && (string)root["status"] == "ok");
+                var canonicalRead = session.Messages.Last(message => message.ToolName == "core.read" &&
                     message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
                 AssertEqual(canonicalRead.ResourceModelReferences.Single().Alias, (string)deliveredRead["data"]?["ref"],
                     "actual next model request binds the read body to its event-backed resource reference");
@@ -876,7 +876,7 @@ namespace RNAssistant.Harness
                 var scope = new ResourceAuthorityScopeId("document", "review");
                 var exact = new ResourceRef("rna://vba/review/module", "r1");
                 var observation = new ResourceEvidence("source", scope, exact, "source", ResourceCoverage.Whole(), true, 1, payload);
-                var result = ContinuityResult("archived_source", "common.resources_read", ToolResult.Ok("Read.",
+                var result = ContinuityResult("archived_source", "core.read", ToolResult.Ok("Read.",
                     "{\"target\":\"VBA module: Review\",\"representation\":\"source\",\"complete\":true}"));
                 result.ResourceEvidence.Add(observation);
                 result.ResourceModelReferences.Add(new ModelResourceReference(scope, exact,
@@ -935,7 +935,7 @@ namespace RNAssistant.Harness
                         new ToolCatalogEntry[0], new AppSettings(), 12000);
                     AssertEqual(0, diagnosticsOnly.DeliveredObservations.Count, "diagnostics alone never authorize a source read");
                 }
-                var missingRead = ContinuityResult("missing_active", "common.resources_read", ToolResult.Ok("Read.",
+                var missingRead = ContinuityResult("missing_active", "core.read", ToolResult.Ok("Read.",
                     "{\"target\":\"VBA module: Review\",\"representation\":\"source\",\"complete\":true}"));
                 missingRead.ResourceEvidence.Add(observation);
                 missingRead.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(missingRead.Content, "application/json"));
@@ -974,7 +974,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ContextExclusionKind.Budget,
                     omitted.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
                     "zero budget identifies the archived body's exclusion without reading missing CAS");
-                var activeResult = ContinuityResult("active_source", "common.resources_read", ToolResult.Ok("Read.",
+                var activeResult = ContinuityResult("active_source", "core.read", ToolResult.Ok("Read.",
                     new JObject { ["target"] = "VBA module: Review", ["representation"] = "source", ["complete"] = true, ["text"] = body }.ToString()));
                 activeResult.ResourceEvidence.Add(observation);
                 var active = new[] { ContinuityCall(activeResult), activeResult };
@@ -1006,7 +1006,7 @@ namespace RNAssistant.Harness
                 ["sourceCoverage"] = JObject.FromObject(new ResourceCoverage(
                     ResourceCoverageKinds.LineRange, start: 2, end: 5))
             };
-            var result = ContinuityResult("lines", "common.resources_read",
+            var result = ContinuityResult("lines", "core.read",
                 ToolResult.Ok("Exact selected lines.", data.ToString()));
             result.ResourceEvidence.Add(new ResourceEvidence("lines", scope, reference, "source",
                 ResourceCoverage.Whole(), false, 1));
@@ -1046,14 +1046,14 @@ namespace RNAssistant.Harness
             var scope = new ResourceAuthorityScopeId("catalog", "test");
             var source = new ResourceRef("rna://catalog/skills/test/body", "r1");
             var definition = new SkillDefinition { Id = "test", Name = "test", Enabled = true, BodyMarkdown = "KEEP_COMPLETE_BODY" };
-            var skill = ContinuityResult("skill_body", "common.capabilities_read", ToolResult.Ok("loaded",
+            var skill = ContinuityResult("skill_body", "core.tools.read", ToolResult.Ok("loaded",
                 "{\"kind\":\"skill\",\"id\":\"test\",\"revision\":\"" + SkillRevision.Compute(definition) + "\",\"loaded\":true,\"complete\":true,\"truncated\":false,\"bodyMarkdown\":\"KEEP_COMPLETE_BODY\"}"));
             skill.ResourceEvidence.Add(new ResourceEvidence("e1", scope, source, "text", ResourceCoverage.Whole(), true, 1, immutable: true));
-            var rows = ContinuityResult("rows", "common.resources_read", ToolResult.Ok("Selected rows.",
+            var rows = ContinuityResult("rows", "core.read", ToolResult.Ok("Selected rows.",
                 "{\"target\":\"Excel range: Sheet!A62:B85\",\"representation\":\"records\",\"complete\":false,\"table\":{\"rows\":[{\"id\":7,\"revision\":\"business value\"}],\"columns\":[{\"key\":\"id\"}]}}"));
             rows.ResourceEvidence.Add(new ResourceEvidence("rows", scope, source, "records",
                 new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: 61, end: 84, path: "$", fields: new[] { "id", "revision" }), false, 1));
-            var mutation = ContinuityResult("write_done", "common.html_workspace_write_file", ToolResult.Ok("Saved and read back."));
+            var mutation = ContinuityResult("write_done", "html.source.write", ToolResult.Ok("Saved and read back."));
             mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged);
             var checkpoint = new ContextCheckpoint { ThroughMessageId = mutation.Id, Claims = new List<StructuredContextClaim> {
                 new StructuredContextClaim { ClaimId = "c", Kind = "interpretation", Text = "Continue.",
@@ -1098,7 +1098,7 @@ namespace RNAssistant.Harness
             AssertTrue(!removedRequest.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")),
                 "a previously restored body cannot survive removal in the next frozen request");
             AssertContains(skill.Content, "KEEP_COMPLETE_BODY", "removal does not rewrite historical observations");
-            var oversized = ContinuityResult("large_receipt", "common.vba_write_module",
+            var oversized = ContinuityResult("large_receipt", "vba.module.write",
                 ToolResult.Error(new string('x', 24000)));
             session.Messages.Add(ContinuityCall(oversized)); session.Messages.Add(oversized);
             checkpoint.ThroughMessageId = oversized.Id;
@@ -1134,14 +1134,14 @@ namespace RNAssistant.Harness
             var recoverySet = ContextWorkingSet.Restore(session, active, 0);
             AssertContains(string.Join("\n", compileSet(recoverySet).Select(m => m.Content)), "RefreshRequired",
                 "an earlier successful observation cannot release a later recovery");
-            var failedRefresh = ContinuityResult("failed_refresh", "common.resources_read", ToolResult.Error("Read failed."));
+            var failedRefresh = ContinuityResult("failed_refresh", "core.read", ToolResult.Error("Read failed."));
             failedRefresh.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error);
             failedRefresh.ResourceEvidence.Add(skill.ResourceEvidence.Single());
             session.Messages.Add(ContinuityCall(failedRefresh)); session.Messages.Add(failedRefresh);
             AssertTrue(compileSet(ContextWorkingSet.Restore(session, active, 0))
                 .Any(m => m.CompletedOperation?.ToolCallId == "needs_refresh"),
                 "a failed later read cannot release recovery even with matching evidence");
-            var refreshed = ContinuityResult("refreshed", "common.resources_read", ToolResult.Ok("Read."));
+            var refreshed = ContinuityResult("refreshed", "core.read", ToolResult.Ok("Read."));
             refreshed.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
             refreshed.ExcludeFromModelContext = true;
             refreshed.ResourceEvidence.Add(skill.ResourceEvidence.Single());

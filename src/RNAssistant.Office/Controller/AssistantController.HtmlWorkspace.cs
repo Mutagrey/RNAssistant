@@ -155,7 +155,7 @@ namespace RNAssistant.Office
         {
             return WithHtmlWorkspaceAction(request, session =>
             {
-                var imported = MutateHtmlWorkspaceAction(session, request, "common.html_workspace_import",
+                var imported = MutateHtmlWorkspaceAction(session, request, "html.workspace.import",
                     new Dictionary<string, object> { ["source"] = request.SourceResourceUri, ["expected"] = request.ExpectedActiveHtmlArtifactId, ["path"] = request.TargetPath },
                     () => _uploadedHtmlResources.Import(session, request.SourceResourceUri, request.ExpectedActiveHtmlArtifactId, request.TargetPath));
                 SaveSessionChanges(session);
@@ -172,7 +172,7 @@ namespace RNAssistant.Office
             return WithHtmlWorkspaceAction(request, session =>
             {
                 var previousArtifactId = session.ActiveHtmlArtifactId;
-                var exportArtifactId = MutateHtmlWorkspaceAction(session, request, "common.html_workspace_export",
+                var exportArtifactId = MutateHtmlWorkspaceAction(session, request, "html.workspace.export",
                     new Dictionary<string, object> { ["expected"] = request.ExpectedActiveHtmlArtifactId },
                     () => HtmlWorkspaceArtifactService.PrepareExport(session, request.ExpectedActiveHtmlArtifactId));
                 if (!string.Equals(previousArtifactId, exportArtifactId, System.StringComparison.OrdinalIgnoreCase))
@@ -197,7 +197,7 @@ namespace RNAssistant.Office
         {
             return WithHtmlWorkspaceAction(request, session =>
             {
-                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = request.Path },
+                MutateHtmlWorkspaceAction(session, request, "html.source.delete", new Dictionary<string, object> { ["target"] = request.Path },
                     () => HtmlWorkspaceToolService.DeleteFile(session, request.Path));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
@@ -208,7 +208,7 @@ namespace RNAssistant.Office
         {
             return WithHtmlWorkspaceAction(request, session =>
             {
-                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_delete", new Dictionary<string, object> { ["target"] = request.Name },
+                MutateHtmlWorkspaceAction(session, request, "html.source.delete", new Dictionary<string, object> { ["target"] = request.Name },
                     () => HtmlWorkspaceToolService.DeleteDataSource(session, request.Name));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
@@ -219,7 +219,7 @@ namespace RNAssistant.Office
         {
             return WithHtmlWorkspaceAction(request, session =>
             {
-                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_select", new Dictionary<string, object> { ["path"] = request.Path },
+                MutateHtmlWorkspaceAction(session, request, "html.workspace.select", new Dictionary<string, object> { ["path"] = request.Path },
                     () => HtmlWorkspaceToolService.SetActiveFile(session, request.Path));
                 SaveSessionChanges(session);
                 return HtmlWorkspaceState(session);
@@ -249,7 +249,7 @@ namespace RNAssistant.Office
                 {
                     throw new System.InvalidOperationException("HTML workspace snapshot was not found.");
                 }
-                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_restore",
+                MutateHtmlWorkspaceAction(session, request, "html.workspace.restore",
                     new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
                         HtmlWorkspaceArtifactService.RestoreAsRevision(session, targetId);
                         return true;
@@ -276,7 +276,7 @@ namespace RNAssistant.Office
                     throw new System.InvalidOperationException("HTML workspace redo target must be a direct child revision.");
                 }
                 var targetId = branch.Id;
-                MutateHtmlWorkspaceAction(session, request, "common.html_workspace_redo",
+                MutateHtmlWorkspaceAction(session, request, "html.workspace.redo",
                     new Dictionary<string, object> { ["snapshotId"] = targetId }, () => {
                         HtmlWorkspaceArtifactService.RestoreAsRevision(session, targetId, true);
                         return true;

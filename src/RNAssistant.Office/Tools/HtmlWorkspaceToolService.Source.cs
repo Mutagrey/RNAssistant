@@ -138,9 +138,19 @@ namespace RNAssistant.Office.Tools
                 workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
                 file = FindFile(workspace, name, false);
                 before = file.Content ?? string.Empty;
-                operations = ReadPatchOperations(arguments);
-                var patch = StructuredTextPatchEngine.Apply(
-                    before, operations, MaxHtmlChars);
+                StructuredTextPatchResult patch;
+                object canonical;
+                if (arguments.TryGetValue("canonicalHunks", out canonical))
+                {
+                    var planned = TextEditPlan.Patch(before, JArray.FromObject(canonical).ToObject<List<TextEditHunk>>(), cancellationToken);
+                    patch = new StructuredTextPatchResult { Text = planned.Text };
+                    patch.Steps.Add(new StructuredTextPatchStep { Op = "patch", MatchCount = planned.Edits.Count, Message = "All hunks resolved against the original snapshot." });
+                }
+                else
+                {
+                    operations = ReadPatchOperations(arguments);
+                    patch = StructuredTextPatchEngine.Apply(before, operations, MaxHtmlChars);
+                }
                 ValidateFile(file.Path, file.Kind, patch.Text);
                 ValidateWorkspaceCapacity(workspace, file.Id, null);
                 var changed = !string.Equals(before, patch.Text, StringComparison.Ordinal);
@@ -222,7 +232,7 @@ namespace RNAssistant.Office.Tools
                         ["path"] = file.Path,
                         ["hunkIndex"] = ex.OperationIndex,
                         ["sourceCharacters"] = before.Length,
-                        ["inspectTool"] = "common.resources_read"
+                        ["inspectTool"] = "core.read"
                     };
                     if (matchingPaths.Count > 0)
                         details["matchingPaths"] = new JArray(matchingPaths);
@@ -234,7 +244,7 @@ namespace RNAssistant.Office.Tools
                               "; patch each file separately. "
                             : string.Empty) + (complete
                             ? "Use the complete current source in recovery to revise the patch."
-                            : "Read current source with common.resources_read or find a unique snippet with common.resources_find, then revise the patch.") +
+                            : "Read current source with core.read or find a unique snippet with core.find, then revise the patch.") +
                         " Do not repeat the same patch unchanged.",
                         details,
                         ex.ErrorCode, true, recovery);

@@ -37,18 +37,23 @@ def run_case(root, operation, restart=False):
     target = workspace / "app.txt"
     target.write_text("original", encoding="utf-8")
     (workspace / "other.txt").write_text("unrelated", encoding="utf-8")
-    arguments = {"relativePath": "app.txt"}
+    arguments = {'target': "app.txt"}
     if operation == "replace":
-        arguments["text"] = "updated"
+        arguments["content"] = "updated"
     elif operation == "patch":
-        arguments.update(oldText="original", newText="updated")
+        arguments["hunks"] = [{"oldText": "original", "newText": "updated"}]
     elif operation in ("copy", "move"):
-        arguments["targetPath"] = "destination.txt"
-    mutation = call("files." + operation, **arguments)
-    responses = [mutation, call("common.resources_read", target="other.txt")]
+        arguments["destination"] = "destination.txt"
+    mutation = call({"replace": "core.write", "patch": "core.patch", "copy": "resources.copy", "move": "resources.move", "delete": "resources.delete"}[operation], **arguments)
+    admission = []
+    if operation in ("copy", "move", "delete"):
+        admission.append(call("core.tools.read", id=mutation["tool_calls"][0]["name"]))
     if restart:
-        responses.append(call("files.delete", relativePath="other.txt"))
-    responses += [mutation, call("common.resources_read", target="app.txt"), mutation, DONE]
+        admission.append(call("core.tools.read", id="resources.delete"))
+    responses = admission + [mutation, call("core.read", target="other.txt")]
+    if restart:
+        responses.append(call("resources.delete", target="other.txt"))
+    responses += [mutation, call("core.read", target="app.txt"), mutation, DONE]
     requests = []
 
     class Handler(BaseHTTPRequestHandler):
@@ -87,17 +92,19 @@ def run_case(root, operation, restart=False):
                   "--tool-result-role", "tool" if operation == "move" or restart else "user",
                   "--min-writes", "2" if restart else "1", "--max-iterations", "10", "--max-tool-steps", "10")
         assert len(requests) >= 2, (run.stdout, run.stderr)
-        failure = list(results(requests[1]))[-1]
+        failure = list(results(requests[len(admission) + 1]))[-1]
         assert failure["status"] == "error" and failure["data"]["code"] == "source_observation_required", failure
         expected_recovery = {
             "failureKind": "RejectedNoEffect", "retryPolicy": "RefreshRequired",
             "target": "app.txt", "representation": "text"}
-        if operation == "patch":
-            expected_recovery["readScope"] = "relevant_lines"
+        expected_recovery["readScope"] = "whole" if operation == "replace" else "relevant_lines"
         assert failure["data"].get("recovery") == expected_recovery, failure
         approvals = 0
         while run.returncode == 3 and approvals < (2 if restart else 1):
             pending = json.loads(run.stdout.splitlines()[-1])["data"]
+            assert pending["pendingPath"] == ("other.txt" if restart and approvals == 0 else "app.txt"), pending
+            if operation in ("copy", "move"):
+                assert pending["pendingTargetPath"] == "destination.txt", pending
             assert target.read_text() == "original", "No effect before approval"
             run = cli("approve", "--workspace", str(workspace), "--session", pending["SessionId"],
                       "--pending", pending["pendingId"])
@@ -107,7 +114,7 @@ def run_case(root, operation, restart=False):
         final = json.loads(run.stdout.splitlines()[-1])["data"]
         assert final["reason"] == "model_finish" and final["acceptance"] == "passed", final
         assert final["ToolCounts"]["WriteOk"] == (2 if restart else 1), final
-        retry_index = 3 if restart else 2
+        retry_index = len(admission) + (3 if restart else 2)
         rejected = list(results(requests[retry_index + 1]))[-1]
         assert rejected["data"]["code"] == "repeated_tool_failure", rejected
         assert list(results(requests[-1]))[-1]["status"] == "ok", requests[-1]

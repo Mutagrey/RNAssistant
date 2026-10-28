@@ -57,7 +57,7 @@ def views(s):
                    "--revision", retained["reference"]["revision"], code=5)
     assert "snapshot_unavailable" in failed.stderr and not failed.stdout
     assert not s.requests and not s.json("sessions")["sessions"]
-    s.responses.extend([call("files.replace", relativePath="other.txt", text="MODEL WRITE"), DONE])
+    s.responses.extend([call("core.write", target="other.txt", content="MODEL WRITE"), DONE])
     s.json("open", "--path", "other.txt")
     run = s.cli("run", "--message", "Replace other.txt.", "--max-iterations", "3", "--max-tool-steps", "3", "--jsonl")
     assert "source_observation_required" in json.dumps(s.requests) and not s.errors

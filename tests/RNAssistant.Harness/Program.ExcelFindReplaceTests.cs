@@ -27,7 +27,7 @@ namespace RNAssistant.Harness
                 executor.BindResourceAuthority(session);
                 var gateway = executor.ResourceGateway;
                 var searchScope = gateway.Find(session, "", "document").Items.First(item => item.Type == "Excel search scope");
-                AssertContains(searchScope.Usage, "excel.find_cells", "search scope identifies its discovery tool");
+                AssertContains(searchScope.Usage, "excel.cells.find", "search scope identifies its discovery tool");
                 AssertContains(searchScope.Usage, "Excel range, table, or name", "search scope points value reads to a bounded data target");
                 AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "discovery never captures cell contents");
                 AssertTrue(gateway.Find(session, "Excel search scope: range 'Data'!D1", "document").Items.Any(item => item.Type == "Excel search scope"),
@@ -197,7 +197,7 @@ namespace RNAssistant.Harness
                 var oversized = ExecuteHtmlNative(runtime, ExcelFindReplaceToolIds.FindCells, new JObject { ["query"] = "x", ["mode"] = "regex", ["sheet"] = "Data", ["address"] = "A1:Z10000" });
                 AssertEqual(ToolExecutionOutcome.Error, oversized.Outcome, "oversized range rejected");
                 AssertContains(oversized.Result.Message, "Do not retry it unchanged", "oversized search returns a bounded recovery route");
-                AssertContains(oversized.Result.Message, "common.resources_read",
+                AssertContains(oversized.Result.Message, "core.read",
                     "known cells use a direct range read after an oversized search");
                 AssertEqual(0, adapter.ExcelSearchCellCaptureCount, "cell-count bound precedes materialization");
                 var args = new JObject { ["query"] = "x", ["mode"] = "regex", ["sheet"] = "Data", ["address"] = "A1" };

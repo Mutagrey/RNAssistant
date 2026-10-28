@@ -23,6 +23,9 @@ namespace RNAssistant.Core.Tools
         [JsonIgnore]
         public string ExpectedContentSha256 { get; set; }
 
+        [JsonIgnore]
+        public bool ExpectedTargetAbsent { get; set; }
+
         public ToolInvocation()
         {
             Arguments = new Dictionary<string, object>(

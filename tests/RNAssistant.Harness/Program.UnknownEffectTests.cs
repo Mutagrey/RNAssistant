@@ -25,10 +25,10 @@ namespace RNAssistant.Harness
                 System.Func<string, JObject, string, string> execute = (tool, arguments, message) =>
                     ModelProtocolWire.WriteAcceptedCall("Perform the next requested operation.", message,
                         new ConversationToolCall { Name = tool, Arguments = arguments });
-                var read = execute("common.resources_read", new JObject {
+                var read = execute("core.read", new JObject {
                     ["target"] = "Excel range: Data!A2:B2", ["representation"] = "text" },
                     "Проверяю фактическое содержимое диапазона.");
-                var clear = execute("excel.clear_range", new JObject {
+                var clear = execute("excel.range.clear", new JObject {
                     ["sheet"] = "Data", ["address"] = "A2:B2" }, "Очищаю диапазон.");
                 System.Func<string, string> loadSchema = id => execute(CapabilityToolCatalog.ReadToolId,
                     new JObject { ["id"] = id }, "Загружаю схему инструмента.");
@@ -36,13 +36,13 @@ namespace RNAssistant.Harness
                     "The clear has not been inspected yet.", "", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
                 var responses = new Queue<string>(new[] {
                     read,
-                    loadSchema("excel.clear_range"),
+                    loadSchema("excel.range.clear"),
                     clear,
                     premature,
                     clear,
                     read,
-                    loadSchema("excel.add_sheet"),
-                    execute("excel.add_sheet", new JObject { ["name"] = "Report" },
+                    loadSchema("excel.sheet.add"),
+                    execute("excel.sheet.add", new JObject { ["name"] = "Report" },
                         "Диапазон пуст. Создаю оставшийся лист.")
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
@@ -58,11 +58,11 @@ namespace RNAssistant.Harness
                     if (responses.Count > 0)
                         return Task.FromResult(new LlmCompletionResult { Content = responses.Dequeue() });
                     if (++finishCount != 1) throw new System.InvalidOperationException("Unexpected extra finish request.");
-                    var clearResult = session.Messages.Last(item => item.ToolName == "excel.clear_range" &&
+                    var clearResult = session.Messages.Last(item => item.ToolName == "excel.range.clear" &&
                         item.ExecutionProgress?.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Unknown);
-                    var inspected = session.Messages.Last(item => item.ToolName == "common.resources_read" &&
+                    var inspected = session.Messages.Last(item => item.ToolName == "core.read" &&
                         item.ExecutionProgress?.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Ok);
-                    var sheet = session.Messages.Last(item => item.ToolName == "excel.add_sheet" &&
+                    var sheet = session.Messages.Last(item => item.ToolName == "excel.sheet.add" &&
                         item.ExecutionProgress?.Outcome == RNAssistant.Core.Tools.ToolExecutionOutcome.Ok);
                     var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "Inspection observed an empty range and the sheet write completed.",
@@ -106,7 +106,7 @@ namespace RNAssistant.Harness
                     "unknown-effect reminder ends after inspection; reflection budget may remain: " + role + "/" + format);
                 AssertContains(result.AssistantText, "Report создан", "the final answer includes the completed remaining work");
                 var loaded = new ChatStore(FixturePaths.Value).Load(session.Id);
-                AssertEqual(2, loaded.Messages.Count(message => message.ToolName == "common.resources_read" &&
+                AssertEqual(2, loaded.Messages.Count(message => message.ToolName == "core.read" &&
                     message.ExecutionProgress?.IndependentLocalRead == true), "durable read policy supports continuation replay");
                 AssertTrue(!loaded.Messages.Any(message => message.Role == "assistant" && message.ProtocolMessage &&
                     message.Content == premature),

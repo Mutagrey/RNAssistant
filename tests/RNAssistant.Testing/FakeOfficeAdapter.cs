@@ -381,15 +381,15 @@ namespace RNAssistant.Harness
         {
             if (string.Equals(_hostName, "Word", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { BuiltInSkill("word.document_editing", "Word", "Word document editing", "Rewrite, insert, format, and review Word document content.") };
+                return new[] { BuiltInSkill("skills.word.document.editing", "Word", "Word document editing", "Rewrite, insert, format, and review Word document content.") };
             }
             if (string.Equals(_hostName, "PowerPoint", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { BuiltInSkill("powerpoint.deck_building", "PowerPoint", "PowerPoint deck building", "Create and improve slide structure, content, and speaker notes.") };
+                return new[] { BuiltInSkill("skills.powerpoint.deck.building", "PowerPoint", "PowerPoint deck building", "Create and improve slide structure, content, and speaker notes.") };
             }
             if (string.Equals(_hostName, "Outlook", StringComparison.OrdinalIgnoreCase))
             {
-                return new[] { BuiltInSkill("outlook.email_assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.") };
+                return new[] { BuiltInSkill("skills.outlook.email.assistant", "Outlook", "Outlook email assistant", "Draft, summarize, and reply to Outlook mail.") };
             }
             return RNAssistant.Office.Services.ExcelBuiltInSkillProvider.GetSkills();
         }

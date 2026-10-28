@@ -50,8 +50,8 @@ def run_writes(mode):
                     requests.append(request)
                     index = len(requests)
                     if index == 1:
-                        response = execute("files.create", {
-                            "relativePath": "data.csv", "text": "month,value\nJan,1\n"})
+                        response = execute("core.write", {
+                            'target': "data.csv", 'content': "month,value\nJan,1\n"})
                     elif index == 2:
                         response = {"action": "finish", "outcome": "completed", "reason": "Empty answer.",
                                     "results": [], "message": " \t\n"}
@@ -62,8 +62,8 @@ def run_writes(mode):
                         response = {"action": "finish", "outcome": "completed", "reason": "Premature claim.",
                                     "results": [], "message": "Everything is finished."}
                     elif index == 5:
-                        response = execute("files.create", {
-                            "relativePath": "chart.json", "text": '{"series":[1]}'})
+                        response = execute("core.write", {
+                            'target': "chart.json", 'content': '{"series":[1]}'})
                     elif index == 6:
                         response = finish(request)
                     else:

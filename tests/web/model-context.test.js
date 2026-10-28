@@ -663,7 +663,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
         assessment: "partially_satisfied", evidence: ["call-1"] }], message: "" }
       : action === "reflection"
       ? { action: "reflection", reason: "Нужно уточнить диапазон.", decision: "Проверить заголовки таблицы.", message: "" }
-      : { action: "execute", reason: "Нужно прочитать таблицу.", tool_calls: [{ name: "common.resources_read", arguments: {} }], message: "" };
+      : { action: "execute", reason: "Нужно прочитать таблицу.", tool_calls: [{ name: "core.read", arguments: {} }], message: "" };
     const source = JSON.stringify({ Content: JSON.stringify(wrapped ? { response: inner } : inner) });
     decision.response(source);
     decision.events.push({ eventId: "response1", sequence: 6, type: "llm.response", hasPayload: true,
@@ -677,7 +677,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     assert.equal(info.open, true, "an empty v8 message exposes its recorded action and decision basis");
     assert.ok(descendants(info).some(node => node.textContent === inner.reason));
     assert.ok(descendants(info).some(node => node.textContent === (action === "finish" ? inner.results[0].summary :
-      action === "reflection" ? inner.decision : "common.resources_read")));
+      action === "reflection" ? inner.decision : "core.read")));
     if (action === "finish") assert.ok(descendants(info).some(node => /Оценка модели: выполнено частично/.test(node.textContent)));
     assert.equal(decision.mounts.some(mount => mount.kind === "markdown" && !mount.options.text), false);
     const raw = nodes.find(node => node.tag === "details" && node.children[0]?.textContent === "Полный ответ · исходный JSON");

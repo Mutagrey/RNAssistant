@@ -52,6 +52,11 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("universal mutations: exact original hunks", UniversalHunksUseOriginalSnapshot),
+                Test("universal mutations: streamed file and shared matcher", UniversalFileHunksStageOnce),
+                Test("universal mutations: public Office routing", UniversalOfficeRoutesToOwners),
+                Test("universal mutations: delivered Office source authority", UniversalOfficeRequiresDeliveredSource),
+                Test("universal mutations: workspace confirmation and unknown effect", UniversalWorkspaceGuardsSurviveConfirmation),
                 Test("text search: default directory browse through runtime", WorkspaceFindDefaultKeepsDirectories),
                 Test("text search: workspace exact continuation", TextSearchWorkspaceAndContinuation),
                 Test("text search: regex and coverage", TextSearchRegexAndCoverage),
