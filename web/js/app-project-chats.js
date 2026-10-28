@@ -518,7 +518,21 @@
     }
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
     var loaded;
-    if (next === "projects") loaded = refresh(target);
+    if (next === "projects") {
+      var known = target && projects().some(function (entry) {
+        return entry.workspaceId === target.workspaceId && entry.available &&
+          (entry.chats || []).some(function (chat) { return chat.Id === target.sessionId; });
+      });
+      if (known) {
+        // Explicit navigation can read the addressed chat immediately. Refresh
+        // the tree independently; a slow catalog must not gate the detail read.
+        loaded = open(target.workspaceId, target.sessionId);
+        var version = serial;
+        refreshCatalog(function () { return version === serial; })
+          .then(function (refreshed) { if (refreshed && version === serial) render(); })
+          .catch(function () { /* The addressed chat read reports its own error. */ });
+      } else loaded = refresh(target);
+    }
     if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.refresh();
     if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
     return loaded;

@@ -85,6 +85,36 @@ const root = path.resolve(__dirname, "../..");
       assert.deepEqual(revisitErrors, []);
       await revisit.close();
       console.log("PASS conversation pending: early Workspace release and A-B-A response fencing");
+
+      const navigation = await browser.newPage(), navigationErrors = [];
+      navigation.on("pageerror", error => navigationErrors.push(error.message));
+      await navigation.goto(address + "preview/web/?scenario=ready");
+      await navigation.waitForFunction(() => state.activeChatId === "preview-chat" && !state.initializePromise);
+      await navigation.evaluate(() => RNAssistantProjectChats.setScope("projects"));
+      const destination = await navigation.evaluate(() => ({ workspaceId: RNAssistantProjectChats.workspaceId(),
+        sessionId: RNAssistantProjectChats.snapshot().sessionId === "preview-project-clean"
+          ? "preview-project-review" : "preview-project-clean" }));
+      await navigation.evaluate(target => {
+        const original = send;
+        window.navigationReads = [];
+        window.slowNavigationCatalog = { release: null };
+        window.send = function (type, payload) {
+          if (type === "getProjectChat" || type === "getProjectChats") navigationReads.push(type);
+          if (type === "getProjectChats") return new Promise(resolve => {
+            slowNavigationCatalog.release = () => original(type, payload).then(resolve);
+          });
+          return original(type, payload);
+        };
+        window.openKnownChat = RNAssistantProjectChats.open(target.workspaceId, target.sessionId);
+      }, destination);
+      await navigation.waitForFunction(target => RNAssistantProjectChats.snapshot()?.sessionId === target.sessionId &&
+        !!slowNavigationCatalog.release, destination, { timeout: 5000 });
+      assert.deepEqual(await navigation.evaluate(() => navigationReads.slice(0, 2)),
+        ["getProjectChat", "getProjectChats"], "known chat detail starts before catalog refresh");
+      await navigation.evaluate(async () => { slowNavigationCatalog.release(); await openKnownChat; });
+      assert.deepEqual(navigationErrors, []);
+      await navigation.close();
+      console.log("PASS conversation navigation: known chat detail does not wait for project catalog");
     } finally { await browser.close(); }
   } finally { server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });
