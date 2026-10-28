@@ -609,6 +609,7 @@ function applyChatState(response, skipDraftCapture) {
     state.chats = window.RNAssistantRunViewState.mergeCatalog(
       state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions);
   }
+  if (typeof reconcileTerminalChatRuns === "function") reconcileTerminalChatRuns();
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
   }
@@ -693,6 +694,7 @@ function applyChatCatalogState(response) {
     state.chats = window.RNAssistantRunViewState.mergeCatalog(
       state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions, true);
   }
+  if (typeof reconcileTerminalChatRuns === "function") reconcileTerminalChatRuns();
   if (response.documents !== undefined || response.Documents !== undefined) {
     state.documents = response.documents || response.Documents || [];
   }
@@ -917,12 +919,15 @@ function chatDocumentTreeNode(documentItem, query) {
 
 function chatTreeNode(chat) {
   var id = chatId(chat);
-  var run = state.chatRuns[id] || state.activeSends[id];
   var persistedRun = chatSummaryRunViewState(chat);
-  var hasActiveRun = !!run || !!(persistedRun && persistedRun.lifecycle === "running");
   var inbox = (state.chatInboxes || {})[id];
+  var terminalRun = persistedRun && persistedRun.lifecycle !== "running";
+  var queuedWork = !!(inbox && inbox.running && (!terminalRun || (inbox.items || []).length));
+  var run = state.chatRuns[id];
+  var hasActiveRun = !!state.activeSends[id] || !!(run && !chatRunTerminalView(id, run.runId)) ||
+    !!(persistedRun && persistedRun.lifecycle === "running") || !!(inbox && inbox.running);
   var presence = window.RNAssistantConversationState.status(
-    !!(inbox && inbox.running && !state.bridgeUnavailable),
+    queuedWork && !state.bridgeUnavailable,
     !!(persistedRun && persistedRun.lifecycle === "running"), false);
   var warning = chatStorageWarningLevel(chat);
   var badgeLevel = chatCasMissingBlobCount(chat) || chatCasReferenceIssueCount(chat) ? "critical" : warning;
@@ -934,7 +939,7 @@ function chatTreeNode(chat) {
     badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,
     status: presence.status,
     statusLabel: presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
-      ? "Запрос останавливается" : presence.label,
+      ? "Запрос останавливается" : terminalRun && queuedWork ? "Запускается следующая задача" : presence.label,
     actions: [
       { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
         onClick: function () { renameChat(id); } },

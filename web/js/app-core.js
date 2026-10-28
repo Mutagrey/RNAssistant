@@ -456,14 +456,18 @@ if (window.chrome && window.chrome.webview) {
       var progress = response.payload || {};
       var progressPending = state.pending[response.id];
       if (progressPending) refreshBridgeWait(response.id);
-      if (progressPending && typeof progressPending.onProgress === "function") progressPending.onProgress(progress);
       if (progress.workspaceId) {
+        if (progressPending && typeof progressPending.onProgress === "function") progressPending.onProgress(progress);
         if (window.RNAssistantWorkspaceChat) window.RNAssistantWorkspaceChat.acceptProgress(progress);
         return;
       }
       var isChatProgress = String(response.id || "").indexOf("inbox:") === 0 || progressPending && (progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
       var progressChatId = progress.chatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
       var progressRunId = progress.runId || "";
+      // Saved kernel state wins over a delayed progress frame for the same run.
+      if (isChatProgress && progressRunId && typeof chatRunTerminalView === "function" &&
+          chatRunTerminalView(progressChatId, progressRunId)) return;
+      if (progressPending && typeof progressPending.onProgress === "function") progressPending.onProgress(progress);
       if (progressChatId && isChatProgress) {
         trackChatProgressRun(progressChatId, progressRunId).phase = progress.phase || "working";
       }

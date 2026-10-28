@@ -166,6 +166,23 @@ function trackChatProgressRun(chatId, runId) {
   return tracked;
 }
 
+function chatRunTerminalView(chatId, runId) {
+  if (!chatId || !runId) return null;
+  var active = chatId === state.activeChatId ? state.activeRunViewState : null;
+  if (active && active.runId === runId && active.lifecycle !== "running") return active;
+  var summary = (state.chats || []).find(function (chat) { return chatId === (chat.Id || chat.id); });
+  var view = summary && window.RNAssistantRunViewState.fromChatSummary(summary);
+  return view && view.runId === runId && view.lifecycle !== "running" ? view : null;
+}
+
+function reconcileTerminalChatRuns() {
+  (state.chats || []).forEach(function (chat) {
+    var id = chat.Id || chat.id;
+    var tracked = id && state.chatRuns[id];
+    if (tracked && chatRunTerminalView(id, tracked.runId)) endChatRunTracking(id);
+  });
+}
+
 function endChatRunTracking(chatId) {
   if (!chatId) {
     return;
