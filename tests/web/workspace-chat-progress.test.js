@@ -132,6 +132,18 @@ const { chromium } = require('playwright');
       }
       await page.waitForFunction(expected => RNAssistantWorkspaceChat.owner() === expected &&
         RNAssistantWorkspaceChat.selectedSession(expected === 'project' ? 'preview-data-workspace' : 'preview-plugin-workspace'), owner);
+      const idleTree = await page.evaluate(() => {
+        const row = document.querySelector('#projectChatTree [data-tree-key]');
+        const original = RNAssistantNavigationTree.render;
+        let calls = 0;
+        RNAssistantNavigationTree.render = function (...args) { calls++; return original.apply(this, args); };
+        try {
+          for (let index = 0; index < 30; index++) RNAssistantProjectChats.render();
+          return { calls, retained: row === document.querySelector('#projectChatTree [data-tree-key]') };
+        } finally { RNAssistantNavigationTree.render = original; }
+      });
+      assert.deepEqual(idleTree, { calls: 0, retained: true },
+        owner + ': unchanged chat state does not replace the project tree');
       await page.evaluate(() => {
         window.__workspaceProgress = [];
         chrome.webview.addEventListener('message', event => {
@@ -184,6 +196,18 @@ const { chromium } = require('playwright');
       assert.equal(delivered.scope, true, owner + ': event has exact workspace scope');
       assert.equal(delivered.unchanged, true, owner + ': stale and foreign events do not replace preview');
       await page.waitForFunction(() => !document.querySelector('#messages .agent-stream-step'));
+      await page.waitForFunction(() => {
+        const snapshot = RNAssistantProjectChats.snapshot();
+        return snapshot && (snapshot.state.status || snapshot.state.Status) !== 'running';
+      });
+      const terminal = await page.evaluate(() => {
+        const snapshot = RNAssistantProjectChats.snapshot();
+        const row = document.querySelector('[data-tree-key="project-chat:' + snapshot.project.workspaceId + ':' + snapshot.sessionId + '"]');
+        return { stopHidden: document.getElementById('stopButton').hidden,
+          runningBadge: !!row?.querySelector('.tree-run') };
+      });
+      assert.deepEqual(terminal, { stopHidden: true, runningBadge: false },
+        owner + ': terminal snapshot clears Stop and the tree running badge');
     }
     assert.deepEqual(errors, []);
     console.log('PASS workspace progress: project/plugin bridge events, scoped live preview, retry reset, accepted reasoning and stable DOM');

@@ -13,6 +13,7 @@
       if (!ownsView() || !window.RNAssistantWorkspaceChat.paintProgress(el("Messages"), active)) render();
     });
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect", connectionRequest = null;
+  var treeRenderKey = null;
   var noticeText = "", noticeError = false, fileNotices = new Map();
   function el(id) {
     return window.RNAssistantWorkspaceChat.node(id) || document.getElementById("projectChat" + id);
@@ -177,6 +178,12 @@
   function renderTree() {
     var root = el("Tree"), selected = currentId(), needle = query.trim().toLocaleLowerCase("ru");
     var pluginSource = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId();
+    var selectedRun = runState();
+    var key = JSON.stringify([catalogRevision, selectedWorkspaceId, selected, needle, pluginSource,
+      field(selectedRun, "status", "Status"), field(selectedRun, "title", "Title"),
+      field(selectedRun, "modelProgressUnavailable", "ModelProgressUnavailable")]);
+    if (key === treeRenderKey && root.firstChild) return;
+    treeRenderKey = key;
     var nodes = projects().map(function (entry) {
       var ownMatch = entry.name.toLocaleLowerCase("ru").includes(needle);
       var items = (entry.chats || []).filter(function (chat) {
