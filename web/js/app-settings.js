@@ -534,6 +534,8 @@ function bindSettingsActions() {
     renderSettingsNavigation();
     updateSettingsSaveButton();
     loadSettingsModelCatalogIfNeeded();
+    if (page === "service" && window.RNAssistantPerformanceDiagnostics)
+      window.RNAssistantPerformanceDiagnostics.render();
   }
 
   function renderSettingsNavigation() {

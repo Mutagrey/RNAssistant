@@ -33,6 +33,14 @@ namespace RNAssistant.Runtime
     // materialized model protocol, ToolRuntime and canonical stores as Office.
     public sealed partial class WorkspaceConversationService : IDisposable
     {
+        public event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
+
+        private void ReportModelRequestDiagnostics(LlmRequestDiagnosticUpdate update)
+        {
+            var handler = ModelRequestDiagnostics;
+            if (handler != null) handler(update);
+        }
+
         private readonly AppDataPaths _paths;
         private readonly ConversationLeaseService _conversationLeases;
         private readonly ConversationRunOwner _activeRuns;
@@ -544,7 +552,8 @@ namespace RNAssistant.Runtime
                 var ports = new WorkspacePorts(_paths, _chats, _files, _payloads, _webSnapshots, workspace, session, settings, apiKeyProvider,
                     progress, acceptedContract, runPolicy: policy, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace), office: OfficeFor(workspace, officeTarget, session, settings, runId),
-                    pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
+                    pluginSource: pluginSource, modelProgress: value => SetModelProgress(session.Id, value),
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics);
                 var userMessage = new ChatMessage { Id = Guid.NewGuid().ToString("N"), Role = "user",
                     Content = message ?? string.Empty, RunId = runId,
                     Attachments = editedSource == null ? drafts : editedSource.Attachments ?? new List<ChatAttachment>(),
@@ -696,7 +705,8 @@ namespace RNAssistant.Runtime
                     settings ?? new AppSettings(), apiKeyProvider, report, acceptance, approve, webHost: _webHost,
                     extraTools: _extraTools?.Invoke(workspace),
                     office: OfficeFor(workspace, session.LastRun.OfficeTarget, session, settings ?? new AppSettings(), session.LastRun.RunId),
-                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value), toolProfile: _toolProfile);
+                    pluginSource: IsPluginSource(workspace), modelProgress: value => SetModelProgress(session.Id, value),
+                    toolProfile: _toolProfile, diagnosticProgress: ReportModelRequestDiagnostics);
                 using (var inputChannel = approve ? new WorkspaceInputChannel(this, session) : null)
                 using (var control = OpenRunControl(session, runReservation, cancellationToken, inputChannel))
                 {
@@ -1137,7 +1147,8 @@ namespace RNAssistant.Runtime
                 Action<WorkspaceRunEvent> progress, WorkspaceRunAcceptance acceptance = null,
                 bool restorePendingObservation = true, ConversationRunPolicy runPolicy = null, IWorkspaceWebVerifierFactory webHost = null,
                 IReadOnlyList<WorkspaceToolContribution> extraTools = null, WorkspaceOfficeCapabilitySet office = null,
-                bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null, CallableToolProfile toolProfile = null)
+                bool pluginSource = false, Action<WorkspaceModelProgress> modelProgress = null,
+                CallableToolProfile toolProfile = null, Action<LlmRequestDiagnosticUpdate> diagnosticProgress = null)
             {
                 _chats = chats; _payloads = payloads; _files = files; _workspace = workspace; _session = session;
                 _webSnapshots = webSnapshots;
@@ -1154,7 +1165,7 @@ namespace RNAssistant.Runtime
                 _resources = new ResourceProviderRouter<WorkspaceFileResourceProvider>(new[]
                     { new WorkspaceFileResourceProvider(files, workspace) });
                 _chatAttachments = session == null ? null : new WorkspaceChatAttachmentResourceProvider(paths, session);
-                var client = new LlmClient(apiKeyProvider);
+                var client = new LlmClient(apiKeyProvider, null, null, null, null, diagnosticProgress);
                 _compaction = new ContextCompactionRuntime((configuration, messages, options, stream, token) =>
                 {
                     options.TraceStepId = _session.LastRun.RunId + ":" + _session.LastRun.KernelState.Summary.IterationsUsed;

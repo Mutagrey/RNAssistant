@@ -46,6 +46,12 @@ concurrent append into a missing chat. The lock is released before model/user wa
 projection reads, trace appends and saves report stage timings without chat content. An
 indexed cold read still materializes all messages needed by an active conversation;
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
+The Help screen also keeps a bounded, memory-only timing view for the current pane:
+UI navigation queue/bridge/render, slow bridge handle/JSON, slow Office UI WebView
+posts, model HTTP phases and supported JavaScript long tasks. No timer or chat read
+is started by opening this view. The HTTP preparation number begins in `LlmClient`;
+it does not include earlier Application context compilation. Bridge handle time
+still combines storage, host gating and orchestration until measured separately.
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
 Workspace older-history reads use the same bounded SQLite window through the exact

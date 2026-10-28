@@ -94,6 +94,7 @@ function switchTab(name) {
   } else if (name === "settings") {
     renderSettings();
     loadSettingsModelCatalogIfNeeded();
+    if (window.RNAssistantPerformanceDiagnostics) window.RNAssistantPerformanceDiagnostics.render();
   } else if (name === "plugins" && window.RNAssistantPlugins) {
     window.RNAssistantPlugins.show();
   } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {

@@ -12,7 +12,19 @@ namespace RNAssistant.Office.WebView
 {
     public sealed partial class AssistantWebBridge
     {
-        public PluginApplicationService Plugins { get; set; }
+        private PluginApplicationService _plugins;
+        public PluginApplicationService Plugins
+        {
+            get { return _plugins; }
+            set
+            {
+                if (_plugins?.Conversations != null)
+                    _plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+                _plugins = value;
+                if (_plugins?.Conversations != null)
+                    _plugins.Conversations.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
+            }
+        }
         private Task<object> HandlePluginAsync(string id, BridgeOperationId operation, JToken payload, CancellationToken token)
         {
             if(Plugins==null)throw new PluginException("plugins_unavailable","Plugin host is unavailable.");

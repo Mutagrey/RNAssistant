@@ -23,6 +23,10 @@ function sendChatPreference(type, payload) {
 }
 
 function navigateChat(type, payload) {
+  var clock = function () { return window.performance && window.performance.now ? window.performance.now() : Date.now(); };
+  var startedAt = clock(), sentAt = null, queueMs = 0;
+  var timing = window.RNAssistantPerformanceDiagnostics;
+  var timingId = timing ? timing.beginNavigation(type) : null;
   var previous = state.chatNavigationPromise;
   var selectionVersion = 0;
   if (type === "selectChat") {
@@ -33,17 +37,24 @@ function navigateChat(type, payload) {
   state.chatNavigationPending = (state.chatNavigationPending || 0) + 1;
   if (selectionVersion && typeof renderChatSessions === "function") renderChatSessions();
   if (typeof renderSendControls === "function") renderSendControls();
-  var startedAt = window.performance && window.performance.now ? window.performance.now() : Date.now();
   var navigation = (async function () {
     if (previous) await previous.catch(function () {});
     if (state.chatSyncPromise) await state.chatSyncPromise;
     if (state.chatPreferencePromise) await state.chatPreferencePromise.catch(function () {});
-    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) return null;
+    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) {
+      if (timingId) timing.updateNavigation(timingId, { phase: "skipped" });
+      return null;
+    }
     if (typeof cancelModelCatalogLoad === "function") await cancelModelCatalogLoad();
-    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) return null;
+    if (selectionVersion && selectionVersion !== state.chatSelectionRequestVersion) {
+      if (timingId) timing.updateNavigation(timingId, { phase: "skipped" });
+      return null;
+    }
     var version = beginChatNavigation();
+    sentAt = clock(); queueMs = sentAt - startedAt;
+    if (timingId) timing.updateNavigation(timingId, { phase: "waiting", queueMs: Math.round(queueMs) });
     var response = await send(type, payload);
-    var bridgeMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt;
+    var bridgeMs = clock() - sentAt;
     // Apply each completed switch before dispatching the next. If the next request
     // fails, the visible chat still matches the controller's committed binding.
     var selectedState = response && (response.state || response);
@@ -59,10 +70,13 @@ function navigateChat(type, payload) {
       renderChatSessions();
       renderMessages();
     }
-    var renderMs = (window.performance && window.performance.now ? window.performance.now() : Date.now()) - startedAt - bridgeMs;
-    if (bridgeMs + renderMs >= (type === "init" ? 500 : 250)) send("reportClientTiming", {
+    var renderMs = clock() - sentAt - bridgeMs;
+    if (timingId) timing.updateNavigation(timingId, { phase: "completed", queueMs: Math.round(queueMs),
+      bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs), messages: (state.messages || []).length });
+    if (queueMs + bridgeMs + renderMs >= (type === "init" ? 500 : 250)) send("reportClientTiming", {
       kind: type === "init" ? "startup" : "chatNavigation",
-      bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs), messages: (state.messages || []).length
+      queueMs: Math.round(queueMs), bridgeMs: Math.round(bridgeMs), renderMs: Math.round(renderMs),
+      messages: (state.messages || []).length
     }).catch(function () {});
     return response;
   })();
@@ -77,6 +91,9 @@ function navigateChat(type, payload) {
     if (typeof renderSendControls === "function") renderSendControls();
   };
   navigation.then(finished, function (error) {
+    if (timingId) timing.updateNavigation(timingId, { phase: "failed",
+      queueMs: Math.round(sentAt ? queueMs : clock() - startedAt),
+      bridgeMs: Math.round(sentAt ? clock() - sentAt : 0) });
     if (type === "selectChat" && state.chatDetailPending && state.activeChatId === payload.chatId) {
       state.chatDetailPending = false;
       state.chatDetailError = error.detail || error.message || "Не удалось загрузить чат";

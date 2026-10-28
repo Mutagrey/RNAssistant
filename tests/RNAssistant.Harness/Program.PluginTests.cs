@@ -109,6 +109,10 @@ namespace RNAssistant.Harness
                         try
                         {
                             AssertTrue(entered.Wait(5000), "model request starts");
+                            AssertTrue(wire.Select(JObject.Parse).Any(item =>
+                                (string)item["type"] == "modelDiagnostics" &&
+                                (string)item["payload"]?["phase"] == "sending"),
+                                "Workspace model HTTP stage reaches the real bridge before its response");
                             AssertTrue(pending.Wait(5000), "submit returns while the model response is still held");
                             terminal = JObject.Parse(pending.GetAwaiter().GetResult());
                             AssertTrue((bool)terminal["ok"], "admission succeeds");

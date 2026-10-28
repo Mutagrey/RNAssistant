@@ -371,17 +371,31 @@
   }
   async function open(workspaceId, sessionId) {
     if (!workspaceId || !sessionId) return;
+    var clock = function () { return window.performance && window.performance.now ? window.performance.now() : Date.now(); };
+    var startedAt = clock();
     if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; render(); }
     if (!project() || !project().available) return;
+    var timing = window.RNAssistantPerformanceDiagnostics;
+    var timingId = timing ? timing.beginNavigation(window.RNAssistantWorkspaceChat.owner() + "Chat") : null;
     var version = ++serial, pid = projectId();
     if (currentId() !== sessionId) { active = null; render(); }
     notice("Загружаю чат…");
     try {
+      var sentAt = clock();
+      if (timingId) timing.updateNavigation(timingId, { phase: "waiting", queueMs: Math.round(sentAt - startedAt) });
       var result = await readProjectChat({ workspaceId: pid, sessionId: sessionId });
+      var bridgeMs = clock() - sentAt;
       if (version === serial && projectId() === pid) {
         active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); window.RNAssistantWorkspaceChat.rememberSession(pid, result.sessionId); notice(statusText()); render();
       }
-    } catch (error) { if (version === serial) notice(error.detail || error.message, true); }
+      if (timingId) timing.updateNavigation(timingId, { phase: "completed", queueMs: Math.round(sentAt - startedAt),
+        bridgeMs: Math.round(bridgeMs), renderMs: Math.round(clock() - sentAt - bridgeMs),
+        messages: result.messages && result.messages.length || 0 });
+    } catch (error) {
+      if (timingId) timing.updateNavigation(timingId, { phase: "failed", queueMs: 0,
+        bridgeMs: Math.round(clock() - startedAt) });
+      if (version === serial) notice(error.detail || error.message, true);
+    }
   }
   async function create() {
     if (catalogBusy || !project() || !project().available) return;

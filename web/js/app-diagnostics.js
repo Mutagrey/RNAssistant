@@ -9,6 +9,106 @@ function formatDiagnosticDuration(value) {
   return (milliseconds / 1000).toFixed(milliseconds < 10000 ? 1 : 0) + " с";
 }
 
+var performanceDiagnostics = (function () {
+  var navigation = [], model = [], bridge = [], hostPosts = [], longTasks = [];
+  var nextId = 0;
+  function bounded(list, entry, limit) {
+    list.unshift(entry);
+    if (list.length > limit) list.length = limit;
+  }
+  function visible() {
+    var settings = $("tab-settings"), page = document.querySelector('.settings-page[data-settings-page="service"]');
+    var overview = document.querySelector('[data-diagnostics-panel="overview"]');
+    return settings && settings.classList.contains("active") && page && page.classList.contains("active") &&
+      overview && overview.classList.contains("active");
+  }
+  function duration(value) { return value !== null && value !== undefined && Number.isFinite(Number(value))
+    ? formatDiagnosticDuration(value) : "—"; }
+  function render() {
+    if (!visible()) return;
+    var root = $("performanceDiagnosticsResults");
+    if (!root) return;
+    var lines = [];
+    navigation.slice(0, 4).forEach(function (entry) {
+      var age = duration(Date.now() - entry.startedMs);
+      var part = entry.phase === "waiting" ? "ожидание bridge " + age + " (с " + entry.at + ")" :
+        entry.phase === "queued" ? "в очереди " + age + " (с " + entry.at + ")" :
+        entry.phase === "skipped" ? "заменено новым переключением" :
+        entry.phase === "failed" ? "ошибка после " + duration(entry.queueMs + entry.bridgeMs) :
+        "очередь " + duration(entry.queueMs) + ", bridge " + duration(entry.bridgeMs) +
+          ", рендер " + duration(entry.renderMs) + ", сообщений " + entry.messages;
+      lines.push("Чат · " + entry.kind + ": " + part);
+    });
+    bridge.slice(0, 4).forEach(function (entry) {
+      lines.push("Bridge · " + entry.operation + ": работа " + duration(entry.handleMs) +
+        ", JSON " + duration(entry.serializeMs) + ", ответ " + Math.round(entry.responseChars / 1024) + " КБ");
+    });
+    hostPosts.slice(0, 2).forEach(function (entry) {
+      lines.push("Office UI → WebView: " + duration(entry.elapsedMs) +
+        ", сообщение " + Math.round(entry.responseChars / 1024) + " КБ");
+    });
+    model.slice(0, 4).forEach(function (entry) {
+      var value = entry.value, phase = String(value.phase || "");
+      var stage = phase === "preparing" ? "подготовка HTTP" : phase === "sending" ? "ожидание заголовков" :
+        phase === "headers" ? "ожидание данных" : phase === "first_chunk" ? "получение ответа" :
+        phase === "completed" ? "завершён" : phase === "cancelled" ? "отменён" : "ошибка";
+      var summary = "подготовка " + duration(value.preparationMs) +
+        ", заголовки " + (value.responseHeadersMs == null || value.preparationMs == null ? "—" :
+          duration(value.responseHeadersMs - value.preparationMs)) +
+        ", первые данные " + (value.firstChunkMs == null || value.responseHeadersMs == null ? "—" :
+          duration(value.firstChunkMs - value.responseHeadersMs)) +
+        ", всего " + duration(value.totalMs == null ? value.elapsedMs : value.totalMs);
+      lines.push("Модель · " + String(value.requestId || "?").slice(0, 12) + ": " + stage +
+        " (" + summary + ")" + (value.statusCode == null ? "" : ", HTTP " + value.statusCode) +
+        (value.requestBytes == null ? "" : ", запрос " + Math.round(value.requestBytes / 1024) + " КБ") +
+        (value.failureKind ? ", " + String(value.failureKind).slice(0, 40) : "") +
+        (value.error ? ", " + String(value.error).replace(/[\r\n]+/g, " ").slice(0, 160) : "") +
+        (phase === "completed" || phase === "failed" || phase === "cancelled" ? "" :
+          ", в этапе " + duration(Date.now() - entry.updatedAt)));
+    });
+    longTasks.slice(0, 2).forEach(function (entry) {
+      lines.push("Интерфейс · долгая задача: " + duration(entry.durationMs) + " (" + entry.at + ")");
+    });
+    root.textContent = lines.length ? lines.join("\n") : "Пока нет измерений.";
+  }
+  function beginNavigation(kind) {
+    var entry = { id: ++nextId, kind: kind, phase: "queued",
+      startedMs: Date.now(), at: new Date().toLocaleTimeString("ru") };
+    bounded(navigation, entry, 12); render(); return entry.id;
+  }
+  function updateNavigation(id, values) {
+    var entry = navigation.find(function (item) { return item.id === id; });
+    if (!entry) return;
+    Object.assign(entry, values); render();
+  }
+  function recordModel(value) {
+    if (!value || !value.requestId) return;
+    var index = model.findIndex(function (entry) { return entry.value.requestId === value.requestId; });
+    if (index >= 0) model.splice(index, 1);
+    bounded(model, { value: value, updatedAt: Date.now() }, 12);
+    render();
+  }
+  function recordBridge(value) { if (value) { bounded(bridge, value, 12); render(); } }
+  function recordHostPost(value) { if (value) { bounded(hostPosts, value, 8); render(); } }
+  function recordLongTask(value) {
+    bounded(longTasks, { durationMs: value.duration, at: new Date().toLocaleTimeString("ru") }, 8);
+    render();
+  }
+  function observeLongTasks() {
+    if (typeof PerformanceObserver !== "function") return;
+    try {
+      var observer = new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (entry) { if (entry.duration >= 100) recordLongTask(entry); });
+      });
+      observer.observe({ entryTypes: ["longtask"] });
+    } catch (_) { /* Older WebView2 may not expose long tasks. */ }
+  }
+  return { beginNavigation: beginNavigation, updateNavigation: updateNavigation,
+    recordModel: recordModel, recordBridge: recordBridge, recordHostPost: recordHostPost,
+    observeLongTasks: observeLongTasks, render: render };
+})();
+window.RNAssistantPerformanceDiagnostics = performanceDiagnostics;
+
 function appendConnectionMetric(root, label, value) {
   if (value === null || value === undefined || value === "") return;
   var item = document.createElement("div");
@@ -212,9 +312,11 @@ function setDiagnosticsTab(name, refreshRecords) {
   if (name === "runtime-log" && typeof updateLogScrollButton === "function") {
     requestAnimationFrame(updateLogScrollButton);
   }
+  if (name === "overview") performanceDiagnostics.render();
 }
 
 function bindDiagnosticsActions() {
+  performanceDiagnostics.observeLongTasks();
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (tab) {
     tab.addEventListener("click", function () {
       setDiagnosticsTab(tab.getAttribute("data-diagnostics-tab"), true);
@@ -222,6 +324,8 @@ function bindDiagnosticsActions() {
   });
   setDiagnosticsTab(state.diagnosticsTab || "runtime-log", false);
   var button = $("testModelConnectionButton");
+  var timingRefresh = $("refreshPerformanceDiagnosticsButton");
+  if (timingRefresh) timingRefresh.addEventListener("click", performanceDiagnostics.render);
   if (button) button.addEventListener("click", async function () {
     var root = $("modelConnectionResults");
     try {

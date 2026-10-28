@@ -380,7 +380,8 @@ checking receipt recovery without resubmission and one persisted user message.
 `plugins: input receipt crosses bridge before model response` holds the scripted
 model response while checking both receipts through the real Application/WebView
 bridge, early submit response, retry idempotency while still running, retained
-runtime lease and completion after bridge recreation. Set `RNA_WORKSPACE_RECEIPT_FIXTURE` to an output JSON
+runtime lease, Workspace model HTTP stage delivery and completion after bridge
+recreation. Set `RNA_WORKSPACE_RECEIPT_FIXTURE` to an output JSON
 path; `node tests/web/workspace-input-receipt.test.js <that-path>` consumes those
 actual envelopes in Chromium. It checks early draft clearing, exact input identity,
 repeated acknowledgements, a newer identical draft, background Office isolation,
@@ -392,6 +393,9 @@ the terminal change notice completes the run without a 1.2-second full-chat poll
 and retains a newer draft. A later title notice refreshes the idle chat once
 without the removed two-second title watcher. The preview bridge also returns
 admission before its simulated run finishes.
+`node tests/web/performance-diagnostics.test.js` checks the bounded on-screen
+timing view for queue/bridge/render, Workspace/Office model phases, host post and
+event-driven long tasks. It does not qualify Office STA or Windows WebView2 timing.
 `plugins: admitted run cancellation and shutdown belong to application` checks
 cancellation before admission while waiting for a lease, detachment of transport
 cancellation after admission, exact Stop and owner shutdown. Both paths persist
