@@ -76,6 +76,26 @@ S1a, S1b и S1c — отдельные изменения; каждый посл
 автоматического удаления чатов, переписывания event history, сброса unknown или
 увеличения всех лимитов как способа скрыть проблему.
 
+### Уточнения по ленте и отзывчивости — 2026-10-28
+
+Это сообщения пользователя о текущей Windows-сборке, а не закрытое локальное
+воспроизведение. Проверки на Windows возможны по фотографиям экрана; логи и файлы
+от пользователя не требуются. Срезы ниже используют общий Application owner и
+один Web ChatView для Office, проекта и плагина.
+
+| Приоритет / owner | Ближайший проверяемый срез | Приёмка |
+|---|---|---|
+| P0 / Application delivery + Kernel state + Web projection | Сверить terminal event, сохранённый `RunViewState`, активный owner, receipt и видимый статус на `completed`/`failed`/`cancelled`/`awaiting_*`, после reconnect и переключения A → B → A. Убрать вывод `running` из одного лишь loading/polling. Отдельно проверить исчезающие принятые сообщения при смене attempt, step и после reload. | Когда kernel завершил run, статус и Stop исчезают без нового пользовательского действия; незавершённый, но потерявший owner run показывает неопределённость, а не ложное выполнение. Каждое принятое сообщение остаётся в истории; provisional явно отличается от принятого. Одинаковая матрица Office/project/plugin. |
+| P1 / shared ChatView | Для одного действия в шаге показывать строку действия без обёртки группы; группировать только 2+ соседних действий. Пометить reflection отдельным значком/подписью, убрать разделители между обычными шагами и оставить их только перед final. Проверить Markdown в каждом типе текстового сообщения. Большую карточку неподтверждённого эффекта заменить компактным предупреждением с доступными подробностями, не скрывая `unknown` и read-back evidence. | 1 и 2 действия, reflection, tool error, unknown effect, итог и Markdown одинаково читаются в Office/project/plugin, на узкой и широкой панели. Принятый текст не заменяется черновиком другой попытки. |
+| P1 / Web input + WebView2 host | Найти обработчик, который подавляет правый клик/вставку как текста в composer, и проверить hit targets кнопок во время run. Сохранить защиту от повторной отправки конкретного запроса, но не блокировать редактирование другого черновика или доступные действия. | Контекстное меню и вставка работают в доступном поле; hover/click работают при model wait, tool и terminal. Browser-проверка плюс открытый Windows/WebView2 фото-сценарий. |
+| P1 / Storage + Application delivery + Web observer | Разложить время открытия чата на catalog, индекс/сессию, state, bridge и DOM. Убрать полную загрузку session на неизменном Workspace poll через cursor/state + ограниченные сообщения, сохранив recovery, IPC preview и receipt. Подробности истории/event stream открывать лениво и постранично. Отдельно измерить startup/каталог плагинов и UI long tasks при кликах; idle не должен перерисовывать ленту. | Warm/cold открытие и first paint на одинаковых короткой/длинной беседах; 30 idle polls не меняют DOM и не читают все bodies. История открывает только нужную страницу. Плагин/проект/Office не блокируют ввод постороннего чата. Метрики до/после: p50/p95, bytes, allocations, long tasks. |
+| P1 / Core context + ModelProtocol + shared usage UI | Разложить «формирование запроса» на authority/resources, skill/schema, context compile/compaction, wire build, trace CAS и HTTP wait. Сравнить actual serialized request на каждом step с уникальными message/schema/media IDs: нет дублирования; состав повторно строится только при новом model attempt или изменении authority, не при UI action/poll. Отделить фактические API tokens от оценки и суммы по повторным попыткам. | Один request ID даёт один точный набор и одну trace запись; usage считает уникальные attempts и объясняет estimate vs provider usage. Узкие/длинные fixture и реальная модель не показывают неожиданного повторного роста. Office и Workspace используют одинаковую подпись и критерий. |
+| P1 / ModelProtocol + settings owner | Проверить отключение reflection до run и во время run. При лимите 0 схема, owned prompt и repair не предлагают reflection, а ответ с ним отклоняется до исполнения. Определить видимый момент применения переключателя во время уже отправленного запроса и проверить следующий запрос; прежняя история reflection не меняет текущую схему. | Exact request в `json_schema` и `json_object` не содержит разрешённой reflection-ветви при эффективном 0; mid-run toggle не оставляет ложное «выключено» при ещё разрешённом ответе. |
+
+Следующий P0-срез — terminal/accepted-state truth. Экранная косметика и полная
+перекомпоновка вкладок идут после него, через один ChatView и предметные панели,
+без отдельного воспроизведения Office-функций в Workspace.
+
 Целевой submit возвращает durable receipt до завершения run; lifetime/cancel/dispose
 и session lease принадлежат application run owner. CLI ожидает terminal result через
 того же owner. Не заменять await на fire-and-forget и не привязывать выполнение
