@@ -46,6 +46,11 @@ concurrent append into a missing chat. The lock is released before model/user wa
 projection reads, trace appends and saves report stage timings without chat content. An
 indexed cold read still materializes all messages needed by an active conversation;
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
+Active-pointer and full-session reads wait at most two seconds for that document lock;
+the timeout is a typed busy result and cannot be treated as a missing chat. Writes retain
+their ten-second lock wait. Startup recovery defers a busy document and reconciles an
+unfinished run when its chat is next opened. Slow-lock diagnostics identify the lock by
+an opaque hash prefix and report a tracked in-process holder when one exists.
 The Help screen also keeps a bounded, memory-only timing view for the current pane:
 UI navigation queue/bridge/render, slow bridge handle/JSON, slow Office UI WebView
 posts, model HTTP phases and supported JavaScript long tasks. No timer or chat read

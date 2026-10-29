@@ -66,14 +66,26 @@ namespace RNAssistant.Office.Services
 
         public void ReconcileInterruptedRuns(string runtimeId)
         {
+            var busyDocuments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var header in _conversations.ListHeaders())
             {
                 if (!IsUnfinishedRun(header.RunStatus))
                 {
                     continue;
                 }
-                var session = _conversations.Load(header.Host, header.DocumentKey, header.Id);
-                ReconcileInterruptedRun(session, runtimeId, true);
+                var document = (header.Host ?? string.Empty) + "\u001f" + (header.DocumentKey ?? string.Empty);
+                if (busyDocuments.Contains(document)) continue;
+                try
+                {
+                    var session = _conversations.Load(header.Host, header.DocumentKey, header.Id);
+                    ReconcileInterruptedRun(session, runtimeId, true);
+                }
+                catch (ChatStorageLockTimeoutException)
+                {
+                    // Retry recovery when an affected chat is opened; do not wait
+                    // again for another chat behind the same document lock.
+                    busyDocuments.Add(document);
+                }
             }
         }
 
@@ -435,6 +447,12 @@ namespace RNAssistant.Office.Services
             if (session == null)
             {
                 session = _conversations.LoadOrCreateActive(host, documentKey, title);
+            }
+
+            if (IsUnfinishedRun(session.LastRun?.Status))
+            {
+                session = ReconcileInterruptedRun(session, null, false)
+                    ?? throw new ChatConcurrencyException("Chat changed during run recovery. Reload it before continuing.");
             }
 
             if (IsCurrentDocument(session))

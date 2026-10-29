@@ -14,10 +14,18 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Core.Storage
 {
-    public sealed class ChatConcurrencyException : InvalidOperationException
+    public class ChatConcurrencyException : InvalidOperationException
     {
         public ChatConcurrencyException(string message)
             : base(message)
+        {
+        }
+    }
+
+    public sealed class ChatStorageLockTimeoutException : ChatConcurrencyException
+    {
+        public ChatStorageLockTimeoutException()
+            : base("Chat storage is busy. Retry this operation after the current write finishes.")
         {
         }
     }
@@ -125,6 +133,7 @@ namespace RNAssistant.Core.Storage
         private long _artifactCasExternalizationCount;
 
         public Action<string> PerformanceLog { get; set; }
+        internal TimeSpan ReadLockTimeout { get; set; } = TimeSpan.FromSeconds(2);
 
         private IDisposable AcquirePersistenceRead()
         {
@@ -847,7 +856,7 @@ namespace RNAssistant.Core.Storage
             {
                 using (AcquirePersistenceRead())
                 {
-                    using (AcquireDocumentLock(host, documentKey))
+                    using (AcquireDocumentLockForRead(host, documentKey))
                     {
                         return File.Exists(path) ? (File.ReadAllText(path) ?? string.Empty).Trim() : string.Empty;
                     }
@@ -855,6 +864,7 @@ namespace RNAssistant.Core.Storage
             }
             catch (IOException) { return string.Empty; }
             catch (UnauthorizedAccessException) { return string.Empty; }
+            catch (ChatStorageLockTimeoutException) { throw; }
             catch (ChatConcurrencyException) { return string.Empty; }
         }
 
@@ -1126,7 +1136,7 @@ namespace RNAssistant.Core.Storage
                 // boundary as pages and appends. A concurrent append is not a
                 // missing chat, nor permission to index a changing JSONL prefix.
                 using (AcquirePersistenceRead())
-                using (AcquireDocumentPathLock(path))
+                using (AcquireDocumentPathLockForRead(path))
                 {
                     EventLogReadResult ignored;
                     var session = ReadProjectedSession(path, hydrateActiveArtifacts, true, out ignored);
@@ -1139,6 +1149,7 @@ namespace RNAssistant.Core.Storage
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }
             catch (JsonException) { return null; }
+            catch (ChatStorageLockTimeoutException) { throw; }
             catch (ChatConcurrencyException) { return null; }
         }
 

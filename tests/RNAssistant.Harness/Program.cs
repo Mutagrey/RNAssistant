@@ -519,6 +519,7 @@ namespace RNAssistant.Harness
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
                 Test("storage: session read waits for document writer", SessionReadUsesDocumentBoundary),
+                Test("storage: busy chat stays visible and recovers after lock release", BusyChatDoesNotBecomeNewChat),
                 Test("storage: sqlite projection pages messages", SqliteProjectionPagesMessages),
                 Test("storage: sqlite page preserves tombstone context", SqlitePagePreservesTombstoneContext),
                 Test("storage: sqlite metadata commit avoids full diff", SqliteMetadataCommitAvoidsFullDiff),
@@ -881,6 +882,8 @@ namespace RNAssistant.Harness
                 Test("task lists: caller-owned step ids rejected", TaskListCrudRejectsAmbiguousSteps),
                 Test("task lists: verified native runtime", TaskListUsesVerifiedNativeRuntime),
                 Test("task lists: retry after exact state repair", TaskListRetriesAfterStateRepair),
+                Test("shared source: Plan package and policy", SharedPlanSourcePackage),
+                Test("shared source: catalog edits and retained diff", SharedCatalogSourceEdits),
                 Test("plan mode: filters mutations and keeps planning tools", PlanModeFiltersMutationsAndKeepsPlanningTools),
                 Test("plan mode: plan document revisions and questions", PlanModePersistsMarkdownAndAwaitsAnswers),
                 Test("plan mode: native question pauses kernel", PlanModeNativeQuestionPausesKernel),

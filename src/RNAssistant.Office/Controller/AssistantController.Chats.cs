@@ -765,10 +765,12 @@ namespace RNAssistant.Office
             var htmlWorkspace = HtmlWorkspaceEditorResourceService.Metadata(session);
             var htmlMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs;
             response.Inbox = InboxResponse(_inbox.Snapshot(session));
+            var inboxMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs - htmlMs;
             response.MessageStartIndex = messageStartIndex;
             response.MessageTotalCount = session.Messages.Count;
             response.SessionRevision = session == null ? 0 : session.Revision;
             response.RunViewState = RunViewStateProjector.Create(session);
+            var runViewMs = timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs - htmlMs - inboxMs;
             response.ActiveChatId = activeId;
             response.ActiveChatModel = session == null ? string.Empty : session.Model;
             response.ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode);
@@ -791,8 +793,8 @@ namespace RNAssistant.Office
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info("Chat state timing: messages=" + messagesMs +
                     "ms, artifacts=" + artifactsMs + "ms, catalog=" + catalogMs +
                     "ms, context=" + contextMs + "ms, usage=" + usageMs +
-                    "ms, html=" + htmlMs + "ms, other=" +
-                    (timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs - htmlMs) +
+                    "ms, html=" + htmlMs + "ms, inbox=" + inboxMs + "ms, runView=" + runViewMs + "ms, other=" +
+                    (timer.ElapsedMilliseconds - messagesMs - artifactsMs - catalogMs - contextMs - usageMs - htmlMs - inboxMs - runViewMs) +
                     "ms, totalMessages=" + (session.Messages == null ? 0 : session.Messages.Count) +
                     ", totalArtifacts=" + (session.Artifacts == null ? 0 : session.Artifacts.Count) + ".");
         }

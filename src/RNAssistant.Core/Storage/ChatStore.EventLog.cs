@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -15,6 +16,35 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
+        private static readonly ConcurrentDictionary<string, TrackedPathLock> LocalPathLocks =
+            new ConcurrentDictionary<string, TrackedPathLock>(StringComparer.OrdinalIgnoreCase);
+
+        private sealed class TrackedPathLock : IDisposable
+        {
+            private readonly string _path;
+            private FileStream _stream;
+            internal readonly long AcquiredAt = Stopwatch.GetTimestamp();
+            internal readonly int ThreadId = Thread.CurrentThread.ManagedThreadId;
+
+            internal TrackedPathLock(string path, FileStream stream)
+            {
+                _path = path;
+                _stream = stream;
+            }
+
+            public void Dispose()
+            {
+                var stream = Interlocked.Exchange(ref _stream, null);
+                if (stream == null) return;
+                try { stream.Dispose(); }
+                finally
+                {
+                    ((ICollection<KeyValuePair<string, TrackedPathLock>>)LocalPathLocks)
+                        .Remove(new KeyValuePair<string, TrackedPathLock>(_path, this));
+                }
+            }
+        }
+
         private EventLogReadResult ReadEventLog(string path)
         {
             return ReadEventLog(path, 0, null);
@@ -235,28 +265,37 @@ namespace RNAssistant.Core.Storage
             return _protectionProvider() ?? StorageProtector.None;
         }
 
-        private IDisposable AcquirePathLock(string targetPath)
+        private IDisposable AcquirePathLock(string targetPath, TimeSpan? waitTimeout = null)
         {
             var timer = Stopwatch.StartNew();
             var directory = Path.Combine(_paths.Root, "locks");
             Directory.CreateDirectory(directory);
             var normalized = Path.GetFullPath(targetPath ?? _paths.Root);
             var lockPath = Path.Combine(directory, "chat_" + AppDataPaths.SafeFileName(normalized) + ".lck");
-            var deadline = DateTime.UtcNow.AddSeconds(10);
+            var deadline = DateTime.UtcNow.Add(waitTimeout ?? TimeSpan.FromSeconds(10));
             while (true)
             {
                 try
                 {
                     var lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                    LogPerformance("documentLockWait", timer.ElapsedMilliseconds);
-                    return lease;
+                    var tracked = new TrackedPathLock(lockPath, lease);
+                    LocalPathLocks[lockPath] = tracked;
+                    LogPerformance("documentLockWait", timer.ElapsedMilliseconds,
+                        "lock=" + Path.GetFileNameWithoutExtension(lockPath).Substring(0, 17));
+                    return tracked;
                 }
                 catch (IOException)
                 {
                     if (DateTime.UtcNow >= deadline)
                     {
-                        LogPerformance("documentLockTimeout", timer.ElapsedMilliseconds);
-                        throw new ChatConcurrencyException("Timed out waiting for another RNAssistant instance to finish saving this chat.");
+                        TrackedPathLock localOwner;
+                        var owner = LocalPathLocks.TryGetValue(lockPath, out localOwner)
+                            ? ", localThread=" + localOwner.ThreadId + ", localHeld=" +
+                                (long)((Stopwatch.GetTimestamp() - localOwner.AcquiredAt) * 1000.0 / Stopwatch.Frequency) + "ms"
+                            : ", localOwner=untracked";
+                        LogPerformance("documentLockTimeout", timer.ElapsedMilliseconds,
+                            "lock=" + Path.GetFileNameWithoutExtension(lockPath).Substring(0, 17) + owner);
+                        throw new ChatStorageLockTimeoutException();
                     }
                     Thread.Sleep(25);
                 }
@@ -268,14 +307,29 @@ namespace RNAssistant.Core.Storage
             return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey));
         }
 
+        private IDisposable AcquireDocumentLockForRead(string host, string documentKey)
+        {
+            return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey), ReadLockTimeout);
+        }
+
         private IDisposable AcquireDocumentPathLock(string path)
         {
             return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty));
         }
 
+        private IDisposable AcquireDocumentPathLockForRead(string path)
+        {
+            return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty), ReadLockTimeout);
+        }
+
         private IDisposable AcquireDocumentDirectoryLock(string directory)
         {
             return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document");
+        }
+
+        private IDisposable AcquireDocumentDirectoryLock(string directory, TimeSpan waitTimeout)
+        {
+            return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document", waitTimeout);
         }
 
         private IDisposable AcquireTwoDocumentLocks(string firstHost, string firstKey, string secondHost, string secondKey)

@@ -745,6 +745,44 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void BusyChatDoesNotBecomeNewChat()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var writer = new ChatStore(paths);
+                var chat = writer.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Existing");
+                chat.LastRun = new ChatRunRecord
+                {
+                    RunId = "busy-recovery", RuntimeId = "previous", Status = "running",
+                    StartedUtc = DateTime.UtcNow
+                };
+                writer.Save(chat);
+                var diagnostics = new List<string>();
+                var reader = new ChatStore(paths)
+                {
+                    ReadLockTimeout = TimeSpan.FromMilliseconds(300),
+                    PerformanceLog = diagnostics.Add
+                };
+                var service = new ChatSessionService(adapter, ConversationStore(reader));
+                var gate = typeof(ChatStore).GetMethod("AcquireDocumentLock", BindingFlags.Instance | BindingFlags.NonPublic);
+                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey }))
+                {
+                    service.ReconcileInterruptedRuns("current");
+                    var refused = false;
+                    try { reader.LoadOrCreateActive(chat.Host, chat.DocumentKey, chat.DocumentTitle); }
+                    catch (ChatStorageLockTimeoutException) { refused = true; }
+                    AssertTrue(refused, "busy active chat is not replaced by a transient new chat");
+                }
+                AssertTrue(diagnostics.Any(line => line.Contains("stage=documentLockTimeout") &&
+                    line.Contains("localThread=")), "busy lock reports a tracked local owner without a path");
+                var recovered = service.LoadSession(null);
+                AssertEqual(chat.Id, recovered.Id, "existing active chat opens after its lock releases");
+                AssertEqual("interrupted", recovered.LastRun.Status,
+                    "deferred recovery closes the interrupted run on opening the chat");
+            });
+        }
+
         private static void SqliteProjectionPagesMessages()
         {
             WithTempPaths(paths =>
