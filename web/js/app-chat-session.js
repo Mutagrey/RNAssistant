@@ -51,13 +51,9 @@ function navigateChat(type, payload) {
       return null;
     }
     var version = beginChatNavigation();
-    log("Navigation: " + type + " (" + (payload && payload.chatId || "") + ") started...");
     sentAt = clock(); queueMs = sentAt - startedAt;
     if (timingId) timing.updateNavigation(timingId, { phase: "waiting", queueMs: Math.round(queueMs) });
-    var response = await Promise.race([
-      send(type, payload),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Bridge request timeout")), 10000))
-    ]);
+    var response = await send(type, payload);
     var bridgeMs = clock() - sentAt;
     // Apply each completed switch before dispatching the next. If the next request
     // fails, the visible chat still matches the controller's committed binding.
@@ -471,8 +467,6 @@ function applyInitState(init) {
   renderSettings();
   renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);
-  renderChatSessions();
-  renderChatSessions();
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }
@@ -654,10 +648,7 @@ async function synchronizeChatState(force) {
   var stateApplyVersion = state.chatStateApplyVersion || 0;
   state.chatSyncPromise = (async function () {
     try {
-      var response = await Promise.race([
-      send("listChats", {}),
-      new Promise((_, reject) => setTimeout(() => reject(new Error("Sync timeout")), 5000))
-    ]);
+      var response = await send("listChats", {});
       var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
       if (!state.chatNavigationPending && navigationVersion === state.chatNavigationVersion &&
           stateApplyVersion === state.chatStateApplyVersion &&
