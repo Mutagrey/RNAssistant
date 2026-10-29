@@ -67,7 +67,13 @@ namespace RNAssistant.Office.Services
         public void ReconcileInterruptedRuns(string runtimeId)
         {
             var busyDocuments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var header in _conversations.ListHeaders())
+            var timer = Stopwatch.StartNew();
+            var headers = _conversations.ListHeaders();
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat recovery headers timing: scan=" + timer.ElapsedMilliseconds +
+                    "ms, chats=" + headers.Count + ".");
+            foreach (var header in headers)
             {
                 if (!IsUnfinishedRun(header.RunStatus))
                 {
@@ -878,7 +884,13 @@ namespace RNAssistant.Office.Services
                 return true;
             }
 
-            var aliases = _conversations.ListHeaders()
+            var timer = Stopwatch.StartNew();
+            var headers = _conversations.ListHeaders();
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                    "Chat alias headers timing: scan=" + timer.ElapsedMilliseconds +
+                    "ms, chats=" + headers.Count + ".");
+            var aliases = headers
                 .Where(header => header != null &&
                     string.Equals(header.Host, host, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(header.DocumentKey, documentKey, StringComparison.OrdinalIgnoreCase) &&

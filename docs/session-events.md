@@ -57,6 +57,13 @@ posts, model HTTP phases and supported JavaScript long tasks. No timer or chat r
 is started by opening this view. The HTTP preparation number begins in `LlmClient`;
 it does not include earlier Application context compilation. Bridge handle time
 still combines storage, host gating and orchestration until measured separately.
+Slow storage diagnostics separate a header catalog pass into SQLite open/cursor,
+header/CAS size calculation, and directory enumeration/sort. Startup recovery and
+document-alias scans identify their own catalog passes. Complete event reads report
+their JSONL bytes and retained event count after lock acquisition; this includes
+the first inbox replay, which still reads the canonical stream outside the SQLite
+message projection. These timings do not include the document lock wait, reported
+separately.
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
 Workspace older-history reads use the same bounded SQLite window through the exact

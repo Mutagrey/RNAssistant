@@ -501,7 +501,11 @@ namespace RNAssistant.Core.Storage
             {
                 using (AcquireDocumentLock(host, documentKey))
                 {
+                    var timer = Stopwatch.StartNew();
                     var log = ReadEventLog(path);
+                    LogPerformance("eventReadComplete", timer.ElapsedMilliseconds,
+                        "bytes=" + (log == null ? 0 : log.ByteLength) +
+                        ", events=" + (log == null ? 0 : log.Events.Count));
                     if (log != null && log.HasIncompleteTail)
                     {
                         throw new ChatConcurrencyException("The chat event log has an incomplete tail and cannot be exported.");
@@ -825,27 +829,47 @@ namespace RNAssistant.Core.Storage
         internal IReadOnlyList<ChatSessionHeader> ListHeaders()
         {
             if (!Directory.Exists(_paths.ChatDirectory)) return new List<ChatSessionHeader>();
+            var timer = Stopwatch.StartNew();
+            long readTicks = 0, sizeTicks = 0;
+            Action<long, long> recordTiming = (read, size) => { readTicks += read; sizeTicks += size; };
             var storageSizes = _blobs.CreateStorageSizeSnapshot();
             var headers = new List<ChatSessionHeader>();
             foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {
                 headers.AddRange(SafeGetSessionFiles(directory)
-                    .Select(path => LoadHeader(path, null, null, null, storageSizes))
+                    .Select(path => LoadHeader(path, null, null, null, storageSizes, recordTiming))
                     .Where(header => header != null));
             }
-            return headers.OrderByDescending(header => header.UpdatedUtc).ToList();
+            var result = headers.OrderByDescending(header => header.UpdatedUtc).ToList();
+            LogHeaderCatalogTiming(timer, readTicks, sizeTicks, result.Count);
+            return result;
         }
 
         internal IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string documentKey, string documentTitle)
         {
             var directory = GetDocumentDirectory(host, documentKey);
             if (!Directory.Exists(directory)) return new List<ChatSessionHeader>();
+            var timer = Stopwatch.StartNew();
+            long readTicks = 0, sizeTicks = 0;
+            Action<long, long> recordTiming = (read, size) => { readTicks += read; sizeTicks += size; };
             var storageSizes = _blobs.CreateStorageSizeSnapshot();
-            return SafeGetSessionFiles(directory)
-                .Select(path => LoadHeader(path, host, documentKey, documentTitle, storageSizes))
+            var result = SafeGetSessionFiles(directory)
+                .Select(path => LoadHeader(path, host, documentKey, documentTitle, storageSizes, recordTiming))
                 .Where(header => header != null)
                 .OrderByDescending(header => header.UpdatedUtc)
                 .ToList();
+            LogHeaderCatalogTiming(timer, readTicks, sizeTicks, result.Count);
+            return result;
+        }
+
+        private void LogHeaderCatalogTiming(Stopwatch timer, long readTicks, long sizeTicks, int count)
+        {
+            var millisecondsPerTick = 1000.0 / Stopwatch.Frequency;
+            LogPerformance("headerCatalog", timer.ElapsedMilliseconds,
+                "chats=" + count +
+                ", sqliteOpenAndCursor=" + (long)((readTicks - sizeTicks) * millisecondsPerTick) + "ms" +
+                ", headerAndCasSize=" + (long)(sizeTicks * millisecondsPerTick) + "ms" +
+                ", enumerationAndSort=" + (long)((timer.ElapsedTicks - readTicks) * millisecondsPerTick) + "ms");
         }
 
         internal string LoadActiveSessionId(string host, string documentKey)
@@ -1158,16 +1182,21 @@ namespace RNAssistant.Core.Storage
             string host,
             string documentKey,
             string documentTitle,
-            ChatBlobStore.StorageSizeSnapshot storageSizes)
+            ChatBlobStore.StorageSizeSnapshot storageSizes,
+            Action<long, long> recordTiming)
         {
+            var started = Stopwatch.GetTimestamp();
+            long sizeTicks = 0;
             try
             {
-                return ReadSqliteHeader(path, host, documentKey, documentTitle, storageSizes);
+                return ReadSqliteHeader(path, host, documentKey, documentTitle, storageSizes,
+                    ticks => sizeTicks += ticks);
             }
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }
             catch (JsonException) { return null; }
             catch (ChatConcurrencyException) { return null; }
+            finally { recordTiming?.Invoke(Stopwatch.GetTimestamp() - started, sizeTicks); }
         }
 
         private ChatSession Project(EventLogReadResult log, bool hydrateActiveArtifacts)

@@ -796,13 +796,19 @@ namespace RNAssistant.Core.Storage
         }
 
         private ChatSessionHeader ReadSqliteHeader(string path, string host, string documentKey,
-            string documentTitle, ChatBlobStore.StorageSizeSnapshot storageSizes)
+            string documentTitle, ChatBlobStore.StorageSizeSnapshot storageSizes, Action<long> recordSizeTiming)
         {
             return ReadSqliteProjection(path, connection =>
             {
                 var cursor = EnsureSqliteProjection(connection, path);
-                return cursor == null ? null : cursor.Header.CreateHeader(storageSizes, cursor.Sequence,
-                    cursor.ByteLength, host, documentKey, documentTitle);
+                if (cursor == null) return null;
+                var started = Stopwatch.GetTimestamp();
+                try
+                {
+                    return cursor.Header.CreateHeader(storageSizes, cursor.Sequence,
+                        cursor.ByteLength, host, documentKey, documentTitle);
+                }
+                finally { recordSizeTiming?.Invoke(Stopwatch.GetTimestamp() - started); }
             });
         }
 
