@@ -23,7 +23,7 @@ Office adapters; качество Qwen/GLM/DeepSeek и реальный VBE эт
 
 Открыто: Windows/Office/WebView2, межмодульный регистр VBE, сбой между DeleteLines
 и InsertLines, CodeOnly UserForms; полный source в памяти Markdown/HTML aggregates
-и непотоковых authored-file mutations; общий revision HTML workspace.
+и непотоковых authored-file mutations.
 Подробности — [контракт](../text-mutations.md) и
 [риски](RISK_REGISTER.md#пакетный-corepatch-границы-квалификации--2026-10-29).
 Продолжение: authored-file patch, candidate и полный read-back переведены на потоковый
@@ -36,6 +36,14 @@ Office adapters; качество Qwen/GLM/DeepSeek и реальный VBE эт
 проверки и включение исходников/границы зависимостей проходят. Пакет объединяет
 VBA/HTML/Markdown/authored-file owners; diff после частичного чтения использует
 полный retained snapshot, не расширяя model observation.
+Чистка продолжения: удалены Workspace substring writer, HTML JSON patch engine и
+VBA patch-specific engine/service/guards. VBA replace пишет через общий guarded
+whole-module writer. HTML пакет проверяет существующие member heads и generation:
+соседние изменения агрегата допустимы, изменение самой цели с возвратом прежнего
+текста — конфликт. Проверены 7 universal сценариев, HTML bounded diagnostics,
+10 VBA mutation/journal проверок, large-module safety, line contract и anchors;
+5 Workspace/plugin проверок переведены на hunks. Включение исходников и границы
+зависимостей проходят. Оставшиеся старые интеграционные fixtures учтены в BACKLOG.
 Полный Harness и Office/VSTO validation не запускались.
 
 ## Общий контракт текстовых мутаций и имён — 2026-10-28

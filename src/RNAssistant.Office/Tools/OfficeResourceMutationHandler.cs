@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Tools
     // The accepted public call never changes. This is private owner preparation, not another callable alias.
     internal sealed class ResourceMutationPrepared
     {
-        public int Version { get; set; } = 1;
+        public int Version { get; set; } = 2;
         public string ToolId { get; set; }
         public string ArgumentsHash { get; set; }
         public string Operation { get; set; }
@@ -26,12 +26,13 @@ namespace RNAssistant.Office.Tools
         public ResourceRef Source { get; set; }
         public string SourceHash { get; set; }
         public string OwnerSourceHash { get; set; }
+        public ResourceHeadState HtmlSourceHead { get; set; }
         public Dictionary<string, object> RoutingArguments { get; set; }
         public string OwnerState { get; set; }
         internal static ResourceMutationPrepared Read(string json)
         {
             var value = JsonConvert.DeserializeObject<ResourceMutationPrepared>(json ?? "null");
-            if (value?.Version != 1 || !ResourceMutationToolCatalog.Owns(value.ToolId) || value.RoutingArguments == null)
+            if (value?.Version != 2 || !ResourceMutationToolCatalog.Owns(value.ToolId) || value.RoutingArguments == null)
                 throw new InvalidDataException("Missing or incompatible resource mutation preparation.");
             return value;
         }
@@ -90,7 +91,7 @@ namespace RNAssistant.Office.Tools
                     var owner = Owner(prepared);
                     var args = Arguments(prepared, context, source?.Text, token);
                     if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
-                        _html.PrepareSourcePatch(_session, selected, source.Text, Value(args, "content"));
+                        prepared.HtmlSourceHead = _html.PrepareSourcePatch(_session, selected, source.Text, Value(args, "content"));
                     var preparable = owner as IPreparableToolHandler;
                     PatchTargetPlan filePlan = null;
                     if (preparable != null)
@@ -146,8 +147,20 @@ namespace RNAssistant.Office.Tools
                                 Arguments(prepared, context, null, token)), token).ConfigureAwait(false);
                         }
                         source = Read(selected.Reference, token);
-                        if (source.Resource.Reference.Uri != prepared.Source.Uri || source.Resource.Reference.Revision != prepared.Source.Revision ||
-                            TextPatternEngine.Sha256(source.Text) != prepared.SourceHash)
+                        if (TextPatternEngine.Sha256(source.Text) != prepared.SourceHash)
+                            throw new ResourceRequestException("Resource changed after preparation; read it again.", "target_conflict", false);
+                        if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
+                        {
+                            // Sibling edits advance the aggregate snapshot, but not this member's head.
+                            // Pin the existing member authority, including ABA/republication generation.
+                            var current = _html.PrepareSourcePatch(_session, selected, source.Text,
+                                Value(Arguments(prepared, context, source.Text, token), "content"));
+                            if (prepared.HtmlSourceHead == null || !current.SameAuthority(prepared.HtmlSourceHead) ||
+                                current.AuthorityGeneration != prepared.HtmlSourceHead.AuthorityGeneration)
+                                throw new ResourceRequestException("HTML file changed after preparation; read this target again.", "target_conflict", false);
+                        }
+                        else if (prepared.HtmlSourceHead != null || source.Resource.Reference.Uri != prepared.Source.Uri ||
+                            source.Resource.Reference.Revision != prepared.Source.Revision)
                             throw new ResourceRequestException("Resource changed after preparation; read it again.", "target_conflict", false);
                     }
                     else

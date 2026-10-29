@@ -216,6 +216,93 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void UniversalHtmlBatchPinsMembers()
+        {
+            WithTempExecutor((executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var catalog = executor.GetControllerTools().ToList();
+                var settings = new AppSettings { AutoConfirmToolActions = true };
+                Action<string, string> write = (path, content) => {
+                    var saved = executor.ExecuteManual(Command("core.write", "target", "HTML file: " + path,
+                        "content", content), catalog, settings, false, true, session);
+                    AssertTrue(saved.Success, "HTML fixture publication: " + saved.Message);
+                };
+                Func<string, string> source = path => session.HtmlWorkspace.Files.Single(f => f.Path == path).Content;
+                Func<string, string, string, string> section = (path, before, after) =>
+                    "*** Update Target: HTML file: " + path + "\n" + LineHunk(before, after);
+                write("index.html", "<main>one</main>");
+                write("script.js", "let count = 1;");
+                var patch = Command("core.patch", "patch", section("index.html", "<main>one</main>", "<main>two</main>") +
+                    section("script.js", "let count = 1;", "let count = 2;"));
+                var pending = PrepareVbaNative(executor, session, patch);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "two HTML members prepare together");
+                AssertEqual("<main>one</main>", source("index.html"), "confirmation does not publish changes");
+                var completed = ConfirmVbaNative(pending);
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "sibling aggregate revision does not stale the second member: " + completed.Result?.DataJson);
+                AssertTrue(completed.ResourceEffect.Targets.All(t => t.Status == ResourceTargetStatus.Changed), "both member writes are confirmed");
+                AssertEqual("<main>two</main>", source("index.html"), "first member saved");
+                AssertEqual("let count = 2;", source("script.js"), "second member saved");
+                var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = completed.Context.Call.Id,
+                    Name = "core.patch", Arguments = patch.Arguments }, "Edit.", "Update two HTML members.", null, ToolResultRoles.User, FixtureCallOrigin());
+                var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = completed.Context.Call.Id,
+                    ToolId = "core.patch" }, completed.Result, ToolResultRoles.User);
+                accepted.RunId = terminal.RunId = completed.Context.RunId; terminal.ResourceEffect = completed.ResourceEffect;
+                session.Messages.Add(accepted); session.Messages.Add(terminal);
+                var view = PatchChangesProjection.Read(session, completed.Context.RunId, completed.Context.Call.Id,
+                    new ChatBlobStore(FixturePaths.Value),
+                    (reference, maximum) => PatchChangesProjection.ReadSource(executor.ResourceAuthority, reference, maximum),
+                    (reference, after, body) => PatchChangesProjection.ReadFragments(executor.ResourceAuthority, reference, after, body));
+                AssertEqual(2, view.Items.Count, "member effects retain separate diff rows");
+                AssertTrue(view.Items.All(item => item.Availability == "available"), "both retained diffs remain readable after the aggregate advances");
+                AssertEqual("<main>one</main>", view.Items[0].Before, "first original snapshot is retained");
+                AssertEqual("let count = 2;", view.Items[1].After, "second diff uses verified member read-back");
+
+                var stale = PrepareVbaNative(executor, session, Command("core.patch", "patch",
+                    section("index.html", "<main>two</main>", "<main>three</main>") + section("script.js", "let count = 2;", "let count = 3;")));
+                write("script.js", "let count = 9;");
+                var refused = ConfirmVbaNative(stale);
+                AssertEqual(ToolExecutionOutcome.Error, refused.Outcome, "external change before confirmation rejects the whole package");
+                AssertTrue(!refused.MayHaveDispatched, "preflight detects drift before the first write");
+                AssertEqual("<main>two</main>", source("index.html"), "first member is unchanged after failed preflight");
+                write("script.js", "let count = 2;");
+                write("style.css", "body{}");
+                adapter.VbaModuleCode = "Sub Main()\nDebug.Print 1\nEnd Sub";
+                var crossPatch = Command("core.patch", "patch",
+                    section("index.html", "<main>two</main>", "<main>three</main>") +
+                    "*** Update Target: VBA module: Module1\n" + LineHunk("Debug.Print 1", "Debug.Print 2") +
+                    section("script.js", "let count = 2;", "let count = 3;") +
+                    section("style.css", "body{}", "body{color:red;}"));
+                var injected = false;
+                var crossRuntime = executor.CreateNativeRuntime(session, ToolPackSnapshotFactory.Capture("agent", adapter.HostName, catalog),
+                    new AppSettings { AutoConfirmToolActions = false }, "agent", false, (execution, preparation) => "cross-confirm",
+                    dispatchGuard: execution => {
+                        if (!injected && execution.TargetOrdinal == 2)
+                        {
+                            injected = true;
+                            write("script.js", "let count = 99;");
+                            write("script.js", "let count = 2;");
+                        }
+                        return null;
+                    });
+                var crossCall = new ToolCall("html-cross", "core.patch", Newtonsoft.Json.JsonConvert.SerializeObject(crossPatch.Arguments));
+                var cross = new VbaPendingExecution { Runtime = crossRuntime,
+                    Record = crossRuntime.ExecuteAsync(new ToolExecutionContext(crossCall, crossRuntime.Describe(crossCall),
+                        "html-cross-run", "html-cross-turn", "cross", DateTime.UtcNow, false, 5), CancellationToken.None).GetAwaiter().GetResult() };
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, cross.Record.Outcome, "mixed package pins all members before dispatch");
+                var partial = ConfirmVbaNative(cross);
+                AssertTrue(injected, "prior write triggers a member change and restoration before the next target");
+                AssertEqual(ToolExecutionOutcome.Error, partial.Outcome, "equal text does not hide member republication");
+                AssertTrue(partial.ResourceEffect.Targets.Select(t => t.Status).SequenceEqual(new[] {
+                    ResourceTargetStatus.Changed, ResourceTargetStatus.Changed, ResourceTargetStatus.Rejected, ResourceTargetStatus.NotStarted }),
+                    "member conflict preserves completed effects and stops the remainder: " + partial.Result?.DataJson);
+                AssertContains(partial.Result.DataJson, "source_changed", "member version drift has a stable diagnostic");
+                AssertEqual("<main>three</main>", source("index.html"), "confirmed first effect is preserved");
+                AssertEqual("let count = 2;", source("script.js"), "stale candidate is never written despite identical restored source");
+                AssertEqual("body{}", source("style.css"), "later member is not started");
+            });
+        }
+
         private static void UniversalOfficeRequiresDeliveredSource()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {

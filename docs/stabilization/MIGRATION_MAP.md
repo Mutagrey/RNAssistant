@@ -27,6 +27,11 @@ reader, `StructuredTextPatchEngine` and unused private tool schemas/descriptors
 are removed. Private operation identifiers still route existing owner commands;
 they are not model-visible registrations. Public diagnostics retain bounded hunk
 errors/candidates instead of returning the complete HTML source after a mismatch.
+HTML batch guards now pin existing member heads plus their authority generations.
+Sibling publication no longer invalidates an unchanged next member; source/hash,
+member identity/version and selected current aggregate remain guarded. A changed
+then restored member fails before its write. Office prepared state is version 2;
+older pending state fails closed and needs fresh preparation, not migration/replay.
 
 ## Universal text tools — 2026-10-28
 

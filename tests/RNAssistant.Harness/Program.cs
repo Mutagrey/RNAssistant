@@ -55,6 +55,7 @@ namespace RNAssistant.Harness
                 Test("universal mutations: exact original hunks", UniversalHunksUseOriginalSnapshot),
                 Test("universal mutations: streamed file and shared matcher", UniversalFileHunksStageOnce),
                 Test("universal mutations: public Office routing", UniversalOfficeRoutesToOwners),
+                Test("universal mutations: HTML member guards", UniversalHtmlBatchPinsMembers),
                 Test("universal mutations: delivered Office source authority", UniversalOfficeRequiresDeliveredSource),
                 Test("universal mutations: package preparation and partial effects", UniversalPatchBatchesPreservePerTargetFacts),
                 Test("universal mutations: workspace confirmation and unknown effect", UniversalWorkspaceGuardsSurviveConfirmation),

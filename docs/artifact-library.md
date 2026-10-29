@@ -1506,6 +1506,13 @@ removal is the separate common operation described above:
   prior revisions or message references.
 - HTML Save/delete/bind operates on exact workspace members and publishes a
   complete new workspace revision. Save uses the guarded upload contract above.
+  A prepared `core.patch` additionally pins each file's existing member head and
+  authority generation. Sequential sibling edits may advance the aggregate while
+  the next member remains unchanged. Before its write, runtime checks the member
+  identity/revision/generation, exact source and the selected current aggregate;
+  changed-then-restored text is still a conflict. Original exact snapshots remain
+  the before side of each retained diff. This uses existing authority records,
+  without separate file histories, another store or an implicit rebase.
   Refresh reconciles resource authority without manufacturing a workspace revision;
   a failed refresh is explicit, not an independent last-good JSON authority.
 - Immutable uploads/snapshots have no in-place editor. `Create editable copy` or

@@ -30,7 +30,7 @@ namespace RNAssistant.Office.Tools
 
         // Validate the mutable owner and the complete candidate before a batch can
         // dispatch another target. Publication still repeats its authority guard.
-        internal void PrepareSourcePatch(ChatSession session, ResourceIntentTarget selected, string before, string candidate)
+        internal ResourceHeadState PrepareSourcePatch(ChatSession session, ResourceIntentTarget selected, string before, string candidate)
         {
             HtmlWorkspaceArtifactService.EnsureMutable(session);
             var artifact = session.Artifacts.SingleOrDefault(a => a.Id == session.ActiveHtmlArtifactId);
@@ -50,6 +50,12 @@ namespace RNAssistant.Office.Tools
                 throw new ResourceRequestException("HTML source changed or the target names a historical snapshot. Read the current file before editing.", "RESOURCE_REVISION_CHANGED", false);
             ValidateFile(file.Path, file.Kind, candidate);
             ValidateWorkspaceCapacity(workspace, file.Id, null);
+            var identity = HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
+                ChatHtmlResourceCatalog.FileMemberKey(file.Id));
+            var head = authority.Store.GetHead(authority.Scope(session, true), identity);
+            if (head?.Knowledge != HeadKnowledge.Known || head.Revision == null)
+                throw new ResourceRequestException("HTML file authority is unavailable. Reconcile its current publication before editing.", "RESOURCE_REVISION_CHANGED", false);
+            return head;
         }
 
         private static HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
