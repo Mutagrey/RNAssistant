@@ -22,6 +22,9 @@ function appendAgentRunProcess(parent, timeline, stats) {
     entry.className = "agent-transcript-entry";
     if (item.includeReasoning !== false && typeof appendMessageReasoning === "function") appendMessageReasoning(entry, item.reasoningMessage || item.message);
     var isCurrent = stats.current && activityContains(item.activity, stats.current);
+    entry.agentReconcileKey = activityTimelineKey(item.activity) + ":" + (messageId(item.message) || item.index);
+    entry.agentReconcileSignature = JSON.stringify([item.activity, item.reasoningMessage || item.message,
+      !!isCurrent, !!stats.liveFeed, !!stats.terminal, !!stats.workspace]);
     var activityContext = {
       messageId: messageId(item.message),
       index: item.index,
@@ -286,7 +289,7 @@ function groupAgentRunUpdates(steps) {
       if (!previous.marker || activityTitle(previous.marker.activity) !== "Промежуточное решение")
         previous.marker = step.marker || previous.marker;
     } else {
-      groups.push({ message: step.message, items: (step.items || []).slice(),
+      groups.push({ id: step.id, message: step.message, items: (step.items || []).slice(),
         ambient: step.ambient, marker: step.marker });
     }
   });
@@ -613,6 +616,10 @@ function renderAgentRunArticle(run) {
   updates.forEach(function (step, stepIndex) {
     var section = document.createElement("section");
     section.className = "agent-model-step";
+    section.agentReconcileKey = step.id;
+    section.agentReconcileSignature = JSON.stringify([step.message, step.items, step.ambient, step.marker,
+      stepIndex === updates.length - 1, !!run.hasLiveDraft, !!run.live, !!run.workspace,
+      runViewState && runViewState.lifecycle]);
     appendAgentStepMessage(section, step.message, step.marker);
     appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
       !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace);

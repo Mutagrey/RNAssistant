@@ -60,6 +60,45 @@ const { chromium } = require('playwright');
       const attachedLive = activeList.querySelectorAll('article.agent-run').length === 1 &&
         !!activeList.querySelector('article.agent-run.live .agent-stream-step') &&
         activeList.textContent.includes('Формирую ответ.');
+      const stableList = document.createElement('section'); document.body.appendChild(stableList);
+      const activity = (id, step) => ({ RunId: 'stable', Kind: 'tool', ToolId: 'core.read',
+        ToolCallId: id, StepId: step, StepMessage: 'Читаю ' + step,
+        Title: 'Чтение', Status: 'completed', ResultMessage: id + ' прочитан.' });
+      const stableChat = { project: { workspaceId: 'workspace' }, sessionId: 'stable-run',
+        messages: [
+          { Id: 'read-1', RunId: 'stable', Role: 'assistant', Activity: activity('read-1', 'step-1') },
+          { Id: 'read-2', RunId: 'stable', Role: 'assistant', Activity: activity('read-2', 'step-1') },
+          { Id: 'read-3', RunId: 'stable', Role: 'assistant', Activity: activity('read-3', 'step-2') }
+        ], state: { status: 'running', runId: 'stable' } };
+      RNAssistantWorkspaceChat.renderMessages(stableList, stableChat);
+      const stableArticle = stableList.querySelector('article.agent-run');
+      const stableStep = stableArticle.querySelector('.agent-model-step');
+      const stableGroup = stableStep.querySelector('.agent-action-stage');
+      stableGroup.open = true;
+      const stableEntry = stableStep.querySelector('.agent-transcript-entry');
+      stableChat.messages.push({ Id: 'read-4', RunId: 'stable', Role: 'assistant',
+        Activity: activity('read-4', 'step-3') });
+      RNAssistantWorkspaceChat.renderMessages(stableList, stableChat);
+      const stableParts = [stableArticle === stableList.querySelector('article.agent-run'),
+        stableStep === stableArticle.querySelector('.agent-model-step'),
+        stableGroup === stableArticle.querySelector('.agent-action-stage'), stableGroup.open,
+        stableEntry === stableArticle.querySelector('.agent-transcript-entry')];
+      const stableHistory = stableParts.every(Boolean);
+      stableList.remove();
+      const growingList = document.createElement('section'); document.body.appendChild(growingList);
+      const growingChat = { project: { workspaceId: 'workspace' }, sessionId: 'growing-step',
+        messages: stableChat.messages.slice(0, 2), state: { status: 'running', runId: 'stable' } };
+      RNAssistantWorkspaceChat.renderMessages(growingList, growingChat);
+      const growingGroup = growingList.querySelector('.agent-action-stage');
+      const growingEntry = growingGroup.querySelector('.agent-transcript-entry');
+      growingGroup.open = true;
+      growingChat.messages.push({ Id: 'read-extra', RunId: 'stable', Role: 'assistant',
+        Activity: activity('read-extra', 'step-1') });
+      RNAssistantWorkspaceChat.renderMessages(growingList, growingChat);
+      const stableGrowingGroup = growingGroup === growingList.querySelector('.agent-action-stage') &&
+        growingGroup.open && growingEntry === growingGroup.querySelector('.agent-transcript-entry') &&
+        growingGroup.querySelectorAll('.agent-transcript-entry').length === 3;
+      growingList.remove();
       activeChat.messages.push({ Id: 'accepted', RunId: 'active', Role: 'assistant', Content: 'Ответ готов.',
         RunViewState: { RunId: 'active', TurnId: 'turn', Lifecycle: 'completed', ExecutionHealth: 'clean',
           ModelResults: [], FailedCalls: 0, UnknownEffects: 0 } });
@@ -174,6 +213,7 @@ const { chromium } = require('playwright');
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
       return { retained, replaced, updated, reset, finished, scoped, attachedLive, attachedFinal,
+        stableHistory, stableGrowingGroup,
         oneReflection, cleanClaims, uncleanClaims, reflectionMarkdown, retainedReflection, officeReflectionMarked,
         ordered, lostOwner, terminalStays, acceptedStays, acceptedNotReplaced, zero };
     });

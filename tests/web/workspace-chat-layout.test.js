@@ -107,6 +107,36 @@ fs.mkdirSync(captures, {recursive:true});
     assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('#messages').length,
       document.querySelector('#messages').parentElement.id, document.querySelector('#messages').dataset.testIdentity]),
       [1,'workspaceChatTranscriptMount',transcriptIdentity],'project mounts the same physical transcript');
+    const projectScroll = await page.evaluate(async () => {
+      const list = document.querySelector('#messages'), button = document.querySelector('#chatScrollBottomButton');
+      const chat = { project: { workspaceId: 'scroll-workspace' }, sessionId: 'scroll-session',
+        messages: Array.from({ length: 40 }, (_, index) => ({ Id: 'scroll-' + index,
+          Role: 'user', Content: 'Сообщение ' + index + ' — ' + 'Текст для проверки прокрутки. '.repeat(8) })),
+        state: { status: 'running', runId: 'scroll-run', modelProgress: { RunId: 'scroll-run', Message: 'Начало ответа.' } } };
+      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      list.scrollTop = Math.floor((list.scrollHeight - list.clientHeight) / 3);
+      list.dispatchEvent(new Event('scroll'));
+      const top = list.scrollTop;
+      const firstVisible = Array.from(list.children).find(node => node.getBoundingClientRect().bottom > list.getBoundingClientRect().top);
+      const offset = firstVisible.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      const visible = button.classList.contains('is-visible');
+      chat.messages.push({ Id: 'scroll-later', Role: 'user', Content: 'Новое сообщение во время чтения истории.' });
+      RNAssistantWorkspaceChat.renderMessages(list, chat);
+      chat.state.modelProgress = { RunId: 'scroll-run', Message: 'Продолжение ответа, которое увеличивает высоту текущего блока. '.repeat(12) };
+      RNAssistantWorkspaceChat.paintProgress(list, chat);
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const anchored = Math.abs(list.scrollTop - top) < 3 &&
+        Math.abs(firstVisible.getBoundingClientRect().top - list.getBoundingClientRect().top - offset) < 3;
+      button.click();
+      chat.state.modelProgress.Message += ' Ещё текст после перехода вниз.'.repeat(8);
+      RNAssistantWorkspaceChat.paintProgress(list, chat);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const jumped = chatDistanceFromBottom(list) <= 2 && !button.classList.contains('is-visible');
+      RNAssistantProjectChats.render();
+      return { mounted: button.parentElement.id === 'workspaceChatTranscriptMount', visible, anchored, jumped };
+    });
+    assert.deepEqual(projectScroll, { mounted: true, visible: true, anchored: true, jumped: true },
+      'project keeps the reading position and shares the jump-to-latest control');
     assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('form#chatForm').length,
       document.querySelector('#chatForm').parentElement.id, document.querySelector('#chatForm').dataset.testIdentity]),
       [1,'workspaceChatView',composerIdentity],'project mounts the same physical composer');
@@ -123,6 +153,8 @@ fs.mkdirSync(captures, {recursive:true});
     assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
       document.querySelector('#messages').dataset.testIdentity]), ['officeChatTranscriptMount',transcriptIdentity],
       'return to Office restores its history in the same transcript');
+    assert.equal(await page.locator('#chatScrollBottomButton').evaluate(node => node.parentElement.id),
+      'officeChatTranscriptMount', 'return to Office restores the shared scroll control');
     assert.deepEqual(await page.evaluate(() => [document.querySelector('#chatForm').parentElement.id,
       document.querySelector('#chatForm').dataset.testIdentity]), ['chatDropZone',composerIdentity],
       'return to Office restores the same composer');
@@ -183,6 +215,8 @@ fs.mkdirSync(captures, {recursive:true});
     assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
       document.querySelector('#messages').dataset.testIdentity]), ['workspaceChatTranscriptMount',transcriptIdentity],
       'plugin uses the same physical transcript as Office and project chats');
+    assert.equal(await page.locator('#chatScrollBottomButton').evaluate(node => node.parentElement.id),
+      'workspaceChatTranscriptMount', 'plugin keeps the shared scroll control');
     assert.deepEqual(await dimensions('#chatForm','#messages'),office,'plugin uses shared message and composer metrics');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor();
     const frame=page.locator('#pluginPreviewMount iframe');

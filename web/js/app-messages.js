@@ -56,9 +56,9 @@ function shouldFollowChatScroll(box) {
   return chatScrollFollowing;
 }
 
-function updateChatScrollButton() {
-  if (!officeTranscriptActive()) return;
-  var box = $("messages");
+function updateChatScrollButton(box) {
+  box = box || $("messages");
+  if (box !== $("messages")) return;
   var button = $("chatScrollBottomButton");
   if (!box || !button) {
     return;
@@ -71,9 +71,8 @@ function updateChatScrollButton() {
   button.tabIndex = visible ? 0 : -1;
 }
 
-function scrollMessagesToBottom(smooth) {
-  if (!officeTranscriptActive()) return;
-  var box = $("messages");
+function scrollMessagesToBottom(smooth, box) {
+  box = box || $("messages");
   if (!box) {
     return;
   }
@@ -86,24 +85,34 @@ function scrollMessagesToBottom(smooth) {
     box.scrollTop = box.scrollHeight;
   }
   chatScrollPosition = box.scrollTop;
-  updateChatScrollButton();
+  updateChatScrollButton(box);
 }
 
-function syncChatScroll(shouldScroll, smooth) {
+function syncChatScroll(shouldScroll, smooth, box) {
+  box = box || $("messages");
   if (shouldScroll) {
-    scrollMessagesToBottom(smooth);
+    scrollMessagesToBottom(smooth, box);
   } else {
-    updateChatScrollButton();
+    updateChatScrollButton(box);
   }
 
   var interaction = chatScrollInteraction, chatId = state.activeChatId;
-  var top = $("messages").scrollTop;
-  if (shouldScroll && window.requestAnimationFrame) {
+  var session = box.dataset.session, owner = window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner();
+  var top = box.scrollTop;
+  if (shouldScroll && box === $("messages") && window.requestAnimationFrame) {
     window.requestAnimationFrame(function () {
       if (interaction === chatScrollInteraction && chatId === state.activeChatId &&
-          chatScrollFollowing && $("messages").scrollTop === top) scrollMessagesToBottom(false);
+          session === box.dataset.session && owner === (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner()) &&
+          chatScrollFollowing && box.scrollTop === top) scrollMessagesToBottom(false, box);
     });
   }
+}
+
+function resetChatScrollTracking(box) {
+  chatScrollInteraction += 1;
+  chatScrollFollowing = true;
+  chatScrollPosition = box.scrollTop;
+  updateChatScrollButton(box);
 }
 
 function bindMessageScrollControls() {
@@ -111,7 +120,6 @@ function bindMessageScrollControls() {
   var button = $("chatScrollBottomButton");
   if (box) {
     box.addEventListener("scroll", function () {
-      if (!officeTranscriptActive()) return;
       if (box.scrollTop !== chatScrollPosition) {
         chatScrollInteraction += 1;
         shouldFollowChatScroll(box);
@@ -120,7 +128,6 @@ function bindMessageScrollControls() {
       updateChatScrollButton();
     }, { passive: true });
     function interrupt(upward) {
-      if (!officeTranscriptActive()) return;
       chatScrollInteraction += 1;
       if (upward) chatScrollFollowing = false;
     }
@@ -137,7 +144,9 @@ function bindMessageScrollControls() {
         interrupt(event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home" || event.key === " " && event.shiftKey);
     });
     if (window.ResizeObserver) {
-      var resizeObserver = new window.ResizeObserver(function () { syncChatScroll(shouldFollowChatScroll(box), false); });
+      var resizeObserver = new window.ResizeObserver(function () {
+        if (box.getBoundingClientRect().height > 0) syncChatScroll(shouldFollowChatScroll(box), false, box);
+      });
       resizeObserver.observe(box);
       Array.prototype.forEach.call(box.children, function (node) { resizeObserver.observe(node, { box: "border-box" }); });
       // The scroll box keeps its size when images/viewers change message height.
@@ -176,8 +185,8 @@ function captureMessageViewport(box) {
   return snapshot;
 }
 
-function restoreMessageViewport(box, snapshot) {
-  var unit = snapshot.key && renderedMessageUnits[snapshot.key];
+function restoreMessageViewport(box, snapshot, units) {
+  var unit = snapshot.key && (units || renderedMessageUnits)[snapshot.key];
   if (unit && unit.node && unit.node.getBoundingClientRect) {
     box.scrollTop += unit.node.getBoundingClientRect().top - box.getBoundingClientRect().top - snapshot.offset;
   } else box.scrollTop = snapshot.top;
@@ -900,6 +909,7 @@ function appendSavedRunUnit(units, run, workspace, actionsSignature, key, update
         else appendAgentRunFooter(target, run.items, run.finalMessage, workspace, run.usage);
       });
     }, update);
+  units[units.length - 1].patch = function (node) { patchAgentRunArticle(node, run); };
 }
 
 function appendSavedMessageUnit(units, message, index, workspace, actionsSignature) {
@@ -1052,6 +1062,47 @@ function restoreMessageDisclosures(node, snapshot) {
   });
 }
 
+function patchAgentRunArticle(node, run) {
+  var replacement = renderAgentRunArticle(run);
+  function release(part) {
+    if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(part);
+    if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(part);
+  }
+  function reuse(selector) {
+    var prior = Object.create(null);
+    Array.prototype.forEach.call(node.querySelectorAll(selector), function (part) {
+      if (part.agentReconcileKey) prior[part.agentReconcileKey] = part;
+    });
+    Array.prototype.forEach.call(replacement.querySelectorAll(selector), function (part) {
+      var saved = prior[part.agentReconcileKey];
+      if (!saved || saved.agentReconcileSignature !== part.agentReconcileSignature) return;
+      if (part === saved) return;
+      release(part);
+      part.replaceWith(saved);
+    });
+  }
+  // Keep completed steps and calls attached while the active step changes.
+  reuse(".agent-model-step");
+  reuse(".agent-transcript-entry");
+  var priorGroups = Object.create(null);
+  Array.prototype.forEach.call(node.querySelectorAll(".agent-action-stage[data-disclosure-key]"), function (group) {
+    priorGroups[group.getAttribute("data-disclosure-key")] = group;
+  });
+  Array.prototype.forEach.call(replacement.querySelectorAll(".agent-action-stage[data-disclosure-key]"), function (group) {
+    var saved = priorGroups[group.getAttribute("data-disclosure-key")];
+    if (!saved || saved === group) return;
+    var oldChildren = Array.prototype.slice.call(saved.children);
+    saved.className = group.className;
+    saved.replaceChildren.apply(saved, Array.prototype.slice.call(group.childNodes));
+    oldChildren.forEach(release);
+    group.replaceWith(saved);
+  });
+  var oldChildren = Array.prototype.slice.call(node.children);
+  node.className = replacement.className;
+  node.replaceChildren.apply(node, Array.prototype.slice.call(replacement.childNodes));
+  oldChildren.forEach(release);
+}
+
 function reconcileMessageUnits(box, units, liveOnly, cachedUnits) {
   var previousCache = cachedUnits === undefined ? renderedMessageUnits : cachedUnits;
   var nextCache = Object.create(null);
@@ -1065,6 +1116,23 @@ function reconcileMessageUnits(box, units, liveOnly, cachedUnits) {
       unit.refreshActions(node);
     }
     if (node && unit.update) unit.update(node);
+    if (!node && cached && cached.node && unit.patch) {
+      var savedDisclosures = messageDisclosureSnapshot(cached.node);
+      var focusedSummary = document.activeElement;
+      var focusedKey = focusedSummary && focusedSummary.tagName === "SUMMARY" && cached.node.contains(focusedSummary)
+        ? messageDisclosureKey(focusedSummary.parentNode,
+          Array.prototype.indexOf.call(cached.node.querySelectorAll("details"), focusedSummary.parentNode)) : null;
+      unit.patch(cached.node);
+      restoreMessageDisclosures(cached.node, savedDisclosures);
+      if (focusedKey && !focusedSummary.isConnected) {
+        Array.prototype.some.call(cached.node.querySelectorAll("details"), function (details, index) {
+          if (messageDisclosureKey(details, index) !== focusedKey) return false;
+          details.querySelector("summary").focus({ preventScroll: true });
+          return true;
+        });
+      }
+      node = cached.node;
+    }
     if (!node) {
       var disclosures = messageDisclosureSnapshot(cached && cached.node);
       var focused = document.activeElement;
