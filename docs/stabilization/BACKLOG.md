@@ -109,6 +109,19 @@ S1a, S1b и S1c — отдельные изменения; каждый посл
 | P1 / Core context + ModelProtocol + shared usage UI | Разложить «формирование запроса» на authority/resources, skill/schema, context compile/compaction, wire build, trace CAS и HTTP wait. Сравнить actual serialized request на каждом step с уникальными message/schema/media IDs: нет дублирования; состав повторно строится только при новом model attempt или изменении authority, не при UI action/poll. На последовательных model attempts измерить повторную сборку неизменных catalog/schema/skills и переиспользовать их по identity/revision после проверки freshness. Отделить фактические API tokens от оценки и суммы по повторным попыткам. | Один request ID даёт один точный набор и одну trace запись; usage считает уникальные attempts и объясняет estimate vs provider usage. Узкие/длинные fixture и реальная модель не показывают неожиданного повторного роста. Office и Workspace используют одинаковую подпись и критерий. |
 | P1 / ModelProtocol + settings owner | Проверить отключение reflection до run и во время run. При лимите 0 схема, owned prompt и repair не предлагают reflection, а ответ с ним отклоняется до исполнения. Определить видимый момент применения переключателя во время уже отправленного запроса и проверить следующий запрос; прежняя история reflection не меняет текущую схему. | Exact request в `json_schema` и `json_object` не содержит разрешённой reflection-ветви при эффективном 0; mid-run toggle не оставляет ложное «выключено» при ещё разрешённом ответе. |
 
+Уточнение P1 storage — 2026-10-29: SQLite с `c4cf879e` индексирует заголовок,
+сессию, сообщения и артефакты, но не все потребители событий. Первый inbox replay
+читал полный JSONL ещё до этого коммита; Workspace получил тот же путь в
+`fc8399a2`. Допуски инструментов читают полный журнал на новом run;
+восстановление незавершённого tool execution и подробная trajectory тоже имеют
+свои полные чтения. Текущий inbox replay удерживает только нужные события, но
+проверяет весь источник. Число `jsonlBytes` в сводке заголовков — сумма размеров,
+а не прочитанные байты. Сначала сопоставить экранные `headerCatalog`,
+`inputJournalReplay` и `documentLockWait`: если дорог inbox, расширить существующую
+производную SQLite-проекцию точным cursor и инкрементальным обновлением без
+общей перестройки всех чатов; если каталог — убрать повторные проходы за один
+`Init`. JSONL остаётся authority; Windows-доказательства доступны только на фото.
+
 Уточнение P1 context — 2026-10-29: локальные проверки подтверждают перенос
 неизменённых admitted schemas в новый run Office и Workspace, сохранение selected
 skills и устранение дублирования аргументных схем в `json_schema`. Повторный
