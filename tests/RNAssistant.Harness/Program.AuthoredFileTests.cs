@@ -293,6 +293,21 @@ namespace RNAssistant.Harness
                 var expected = source.Replace("slow(slow(value))", "fast(value)");
                 AssertTrue(store.DocumentArtifacts.ExportBytes(session, latestRef).SequenceEqual(Encoding.UTF8.GetBytes(expected)),
                     "read-back contains only the intended edit");
+                var logicalId = latest.Id.Substring(0, latest.Id.IndexOf("_r", StringComparison.Ordinal));
+                var logical = AuthoredFileService.Identity(session, logicalId);
+                var scope = executor.ResourceAuthority.ScopeFor(session, latestRef, false);
+                var head = executor.ResourceAuthority.Store.Capture(scope).GetHead(logical).Revision;
+                var effect = new ResourceEffect("bounded-file-source", "core.patch", ResourceEffectOutcome.VerifiedChanged,
+                    targets: new[] { new ResourceTargetEffect { Target = "file: large.js", Status = ResourceTargetStatus.Changed, After = head } });
+                var invocation = new ToolInvocation { ToolId = "core.patch", ToolCallId = "bounded-file-source" };
+                var materialized = new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Verified"), resourceEffect: effect);
+                var terminal = AgentJsonProtocol.CreateToolResultMessage(invocation, materialized, int.MaxValue, ToolResultRoles.User);
+                ConversationModelSession.AddVerifiedSourceEvidence(session, executor.ResourceAuthority, executor.Payloads, terminal, invocation, materialized);
+                var delivered = terminal.ResourceEvidence.Single();
+                AssertTrue(!delivered.Complete && delivered.Coverage.End <= 32000, "large after-source is explicitly bounded");
+                AssertEqual(latest.ContentSha256, delivered.ContentSha256, "bounded evidence retains the complete file hash");
+                AssertTrue(expected.StartsWith(executor.Payloads.ReadText(delivered.Payload.ToBlobReference()), StringComparison.Ordinal),
+                    "bounded evidence contains actual verified source bytes");
                 var catalog = new ArtifactCatalogService(new DocumentAuthorityRegistry(FixturePaths.Value),
                     store.DocumentArtifacts, new ArtifactWorkingSetService(store.DocumentArtifacts,
                         new ResourceMutationJournal(FixturePaths.Value)), new ResourceAuthorityStore(FixturePaths.Value),

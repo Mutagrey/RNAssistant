@@ -634,7 +634,6 @@ namespace RNAssistant.Office.Services
                         if (!complete && count > 0 && buffer[count - 1] == '\r' && reader.Peek() == '\n') count--;
                         var text = new string(buffer, 0, count);
                         payload = PayloadRef.FromBlob(payloads.StoreText(text, "text/plain; charset=utf-8"));
-                        hash = TextPatternEngine.Sha256(text);
                         if (!complete) coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: count);
                     }
                 }
