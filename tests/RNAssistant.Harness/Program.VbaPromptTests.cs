@@ -225,8 +225,10 @@ namespace RNAssistant.Harness
                 var editingSkill = BuiltInSkillProvider.GetSkills(adapter)
                     .Single(skill => skill.Id == "skills.vba.code.editing")
                     .BodyMarkdown;
-                AssertContains(editingSkill, "@@",
-                    "VBA editing skill teaches exact patch disambiguation");
+                AssertContains(editingSkill, "Follow the current `core.patch` schema",
+                    "VBA editing skill routes patch syntax to the shared schema");
+                AssertContains((string)patch.SelectToken("properties.patch.description"), "@@",
+                    "shared patch schema teaches exact hunk syntax");
 
                 var restore = JObject.Parse(tools.Single(tool =>
                     tool.Id == ResourceMutationToolCatalog.Restore).ArgumentSchemaJson);
@@ -482,8 +484,7 @@ namespace RNAssistant.Harness
                 var store = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
                 var session = NewSession(adapter);
-                var patch = Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" +
-                    LineHunk("Debug.Print \"before\"", "Debug.Print \"after\""));
+                var patch = Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", LineHunk("Debug.Print \"before\"", "Debug.Print \"after\""))));
                 var pending = PrepareVbaNative(executor, session, patch);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome,
                     "large-module patch validates before confirmation without a whole model read");
@@ -512,8 +513,7 @@ namespace RNAssistant.Harness
                 AssertEqual(source, store.Find(adapter.HostName, adapter.DocumentKey,
                     committed.Prepared.BackupId, null).Code, "the full rollback source is retained");
 
-                var stale = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" +
-                    LineHunk("Debug.Print \"after\"", "Debug.Print \"stale\"")));
+                var stale = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", LineHunk("Debug.Print \"after\"", "Debug.Print \"stale\"")))));
                 adapter.VbaModuleCode += "\n' external edit";
                 var rejected = ToolRunResultFactory.Create(ConfirmVbaNative(stale));
                 AssertContains(rejected.DataJson, "source_changed", "late drift still refuses a large patch");
@@ -1802,7 +1802,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var command = new ToolInvocation { ToolId = "vba.module.patch" };
                 command.Arguments["moduleName"] = "Module2";
-                command.Arguments["patch"] = new JArray
+                command.Arguments["targets"] = new JArray
                 {
                     new JObject
                     {
@@ -1875,7 +1875,7 @@ namespace RNAssistant.Harness
 
                 var malformed = new ToolInvocation { ToolId = "vba.module.patch" };
                 malformed.Arguments["moduleName"] = "Module2";
-                malformed.Arguments["patch"] = "[{\"op\":\"replace\"}}trailing";
+                malformed.Arguments["targets"] = "[{\"op\":\"replace\"}}trailing";
                 var malformedResult = executor.ExecuteManual(malformed, new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName)), new AppSettings { AutoConfirmToolActions = true }, false, false);
                 AssertTrue(!malformedResult.Success, "malformed patch rejected");
                 AssertContains(malformedResult.Message,
@@ -2228,7 +2228,7 @@ namespace RNAssistant.Harness
                 AssertTrue(same.Edits.All(edit => edit.Before == edit.After), "no-op edits preserve their selected bytes");
             }
             var normalized = TextEditPlan.Patch("Sub Main()\r\n    Value = 1\r\nEnd Sub",
-                "@@ sub main()\n-value=1\n+    Value = 2\n", normalizeLine: VbaTextCanonicalizer.NormalizeVbeComparableLine);
+                EditSet(Edit("value=1", "    Value = 2", new[] { "sub main()" }, null)), normalizeLine: VbaTextCanonicalizer.NormalizeVbeComparableLine);
             AssertEqual("Sub Main()\r\n    Value = 2\r\nEnd Sub", normalized.Text,
                 "VBE formatting is matched by the shared line planner");
         }
@@ -2614,8 +2614,8 @@ namespace RNAssistant.Harness
             AssertContains(editing.BodyMarkdown, "never backslash escaping",
                 "VBA skill distinguishes JSON transport escaping from VBA string syntax");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
-            AssertContains(patch.ArgumentSchemaJson, "*** Update Target: <semantic target>",
-                "shared patch schema owns the section syntax");
+            AssertContains(patch.ArgumentSchemaJson, "Existing sources and their structured edits.",
+                "shared patch schema owns structured target syntax");
             AssertContains(editing.BodyMarkdown, "resources.move", "skill explains the strict rename intent");
             AssertTrue(editing.BodyMarkdown.IndexOf("mode=rename", StringComparison.Ordinal) < 0,
                 "skill no longer teaches the retired write branch");
@@ -2929,12 +2929,11 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 var body = LineHunk("Debug.Print \"same\"", "Debug.Print \"changed\"");
                 var ambiguous = PrepareVbaNative(executor, session,
-                    Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" + body)).Record;
+                    Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", body)))).Record;
                 AssertEqual(ToolExecutionOutcome.Error, ambiguous.Outcome, "unqualified duplicates fail before dispatch");
                 AssertContains(ambiguous.Result.DataJson, "ambiguous_context", "public diagnostic identifies ambiguity");
                 AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "ambiguity never writes");
-                var selected = Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" +
-                    body.Replace("@@\n", "@@ Sub Two()\n"));
+                var selected = Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit("Debug.Print \"same\"", "Debug.Print \"changed\"", new[] { "Sub Two()" })))));
                 var completed = ConfirmVbaNative(PrepareVbaNative(executor, session, selected));
                 AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "anchor selects the unique later block");
                 AssertEqual(source.Substring(0, source.IndexOf("Sub Two()", StringComparison.Ordinal)) +

@@ -57,7 +57,7 @@ namespace RNAssistant.Harness
                 "JSON-looking text without accepted origin is not inferred as v8 history");
 
             var rejectedPatchArguments = new Dictionary<string, object> {
-                ["patch"] = "*** Update Target: VBA module: Scene3D\n@@\nmissing diff prefix\n" };
+                ["targets"] = PatchTargets(PatchSection("VBA module: Scene3D", LineHunk("missing source", "new"))) };
             var rejectedPatchJson = JsonConvert.SerializeObject(rejectedPatchArguments);
             ResourcePatch.ValidateCall(rejectedPatchJson);
             string error;
@@ -2567,7 +2567,7 @@ namespace RNAssistant.Harness
                     LoadSkillResponse("skills.vba.code.editing") };
                 if (!tightBudget) script.AddRange(new[] {
                     schemaRead,
-                    call("core.patch", PatchArguments("VBA module: UniLoader", "@@\n-End Sub\n+End If\n+End Sub\n")),
+                    call("core.patch", PatchArguments("VBA module: UniLoader", EditSet(Edit("End Sub", "End If\nEnd Sub")))),
                     null // Generate finish after the patch result is available.
                 });
                 else script.Add(null); // Cite the refused skill load after its terminal result.
@@ -2681,7 +2681,7 @@ namespace RNAssistant.Harness
                     ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
                         "Try an invalid mixed read/write batch.", "Добавляю диагностику и обновляю заголовок.",
                         calls: new[] {
-                            new ConversationToolCall { Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", "@@\n Sub Main()\n+Debug.Print \"started\"\n End Sub\n") },
+                            new ConversationToolCall { Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Insert("Debug.Print \"started\"\n", "before", "End Sub", new[] { "Sub Main()" }, null))) },
                             new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
                                 ["target"] = "VBA module: Module1", ["representation"] = "source" } },
                             new ConversationToolCall { Name = ResourceMutationToolCatalog.Write, Arguments = new JObject {
@@ -2689,7 +2689,7 @@ namespace RNAssistant.Harness
                         })),
                     ModelProtocolWire.WriteAcceptedCall("Apply the source patch separately.",
                         "Добавляю диагностику отдельным действием.", new ConversationToolCall {
-                            Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", "@@\n Sub Main()\n+Debug.Print \"started\"\n End Sub\n") }),
+                            Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Insert("Debug.Print \"started\"\n", "before", "End Sub", new[] { "Sub Main()" }, null))) }),
                     ModelProtocolWire.WriteAcceptedCall("Read current source after the patch.",
                         "Читаю текущий модуль после записи.", new ConversationToolCall {
                             Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
@@ -3029,8 +3029,8 @@ namespace RNAssistant.Harness
                     adapter.VbaModuleCode = "Sub Main()\n" + string.Join("\n", Enumerable.Range(0, 100)
                         .Select(index => "Debug.Print \"old_" + index + "\" ' " + new string('x', 80))) + "\nEnd Sub";
                     expectedSource = adapter.VbaModuleCode.Replace("old_", "new_");
-                    patch = string.Concat(Enumerable.Range(0, 100).Select(index =>
-                        LineHunk("Debug.Print \"old_" + index + "\" ' " + new string('x', 80),
+                    patch = new TextPatch(Enumerable.Range(0, 100).Select(index =>
+                        Edit("Debug.Print \"old_" + index + "\" ' " + new string('x', 80),
                             "Debug.Print \"new_" + index + "\" ' " + new string('x', 80))));
                 }
                 var responses = new Queue<string>(new[]

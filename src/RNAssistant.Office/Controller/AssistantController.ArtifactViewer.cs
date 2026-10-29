@@ -124,13 +124,13 @@ namespace RNAssistant.Office
 
         internal string ReadRetainedPatchSource(ResourceRef exact, int maximum)
         { return ReadRetainedPatchSource(exact, maximum, null); }
-        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, string patch)
+        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch)
         { return ReadRetainedPatchFragments(exact, after, patch, null); }
         internal string ReadRetainedPatchSource(ResourceRef exact, int maximum, string workspaceId)
         { return ResourceUri.Parse(exact.Uri).Provider == "catalog"
             ? _toolExecutor.ResourceGateway.ReadRetainedCatalogText(exact, maximum)
             : PatchChangesProjection.ReadSource(_toolExecutor.ResourceGateway.Authority, exact, maximum, PatchOwnerScope(exact, workspaceId)); }
-        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, string patch, string workspaceId)
+        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch, string workspaceId)
         {
             if (ResourceUri.Parse(exact.Uri).Provider != "catalog")
                 return PatchChangesProjection.ReadFragments(_toolExecutor.ResourceGateway.Authority, exact, after, patch, PatchOwnerScope(exact, workspaceId));
@@ -138,7 +138,7 @@ namespace RNAssistant.Office
             var afterText = _toolExecutor.ResourceGateway.ReadRetainedCatalogText(after, 512000);
             using (var beforeReader = new System.IO.StringReader(beforeText))
             using (var afterReader = new System.IO.StringReader(afterText))
-                return RNAssistant.Core.Tools.TextPatch.ReadAfterFragments(afterReader, RNAssistant.Core.Tools.TextPatch.Parse(patch).Resolve(beforeReader));
+                return RNAssistant.Core.Tools.TextPatch.ReadAfterFragments(afterReader, patch.Resolve(beforeReader));
         }
 
         public RunChangesDto ReadRunChanges(RunChangesRequest request)

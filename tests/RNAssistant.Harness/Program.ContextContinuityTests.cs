@@ -600,7 +600,7 @@ namespace RNAssistant.Harness
                     "Recorded outcome.", data), role);
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", outcome);
                 var arguments = resource.Tool == "core.patch" ? new Dictionary<string, object> {
-                    { "patch", string.Join("\n", resource.Targets.Select(target => "*** Update Target: " + target + "\n@@\n-old\n+new")) } } :
+                    { "targets", PatchTargets(resource.Targets.Select(target => PatchSection(target, LineHunk("old", "new"))).ToArray()) } } :
                     new Dictionary<string, object> { { "target", resource.Targets[0] }, { "content", "HISTORICAL_BODY" } };
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                     Id = mutation.ToolCallId, Name = resource.Tool, Arguments = arguments },

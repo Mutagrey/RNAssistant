@@ -238,7 +238,7 @@ namespace RNAssistant.Harness
                         new JObject
                         {
                             ["path"] = "index.html",
-                            ["patch"] = new JArray(new JObject
+                            ["targets"] = new JArray(new JObject
                             {
                                 ["op"] = "replace",
                                 ["find"] = "native",
@@ -282,23 +282,23 @@ namespace RNAssistant.Harness
                 Func<string, string, RNAssistant.Office.Contracts.ToolRunResult> write = (path, content) => executor.ExecuteManual(
                     Command("core.write", "target", "HTML file: " + path, "content", content), tools,
                     new AppSettings { AutoConfirmToolActions = true }, false, false, session);
-                Func<string, string, ToolExecutionRecord> patch = (path, body) =>
+                Func<string, TextPatch, ToolExecutionRecord> patch = (path, body) =>
                 {
-                    var pending = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: HTML file: " + path + "\n" + body));
+                    var pending = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("HTML file: " + path, body))));
                     return pending.Record.Outcome == ToolExecutionOutcome.AwaitingConfirmation ? ConfirmVbaNative(pending) : pending.Record;
                 };
                 var source = "const first = 1;\nconst second = 2;\r\nconst third = 3;";
                 AssertTrue(write("app.js", source).Success, "mixed-newline HTML member is created through core.write");
                 var revision = session.ActiveHtmlArtifactId;
-                var failed = patch("app.js", LineHunk("const first = 1;", "const first = 4;") + LineHunk("const missing = 9;", "const missing = 10;"));
+                var failed = patch("app.js", MergeEdits(LineHunk("const first = 1;", "const first = 4;"), LineHunk("const missing = 9;", "const missing = 10;")));
                 AssertEqual(ToolExecutionOutcome.Error, failed.Outcome, "missing second hunk refuses the whole file");
                 AssertTrue(!failed.MayHaveDispatched && session.ActiveHtmlArtifactId == revision, "failed preparation cannot publish the earlier hunk");
                 var diagnostic = JsonConvert.DeserializeObject<PatchBatchResult>(failed.Result.DataJson).Targets.Single().Diagnostic;
                 AssertEqual("context_not_found", diagnostic.Code, "stable common diagnostic code");
-                AssertEqual(2, diagnostic.Hunk.Value, "the failed hunk is identified inside its target");
+                AssertEqual(2, diagnostic.Edit.Value, "the failed hunk is identified inside its target");
                 AssertEqual("refine_context", diagnostic.NextAction, "the model gets a bounded correction action");
                 AssertTrue(!failed.Result.DataJson.Contains(source), "failure does not inject the whole source into the result");
-                var corrected = patch("app.js", LineHunk("const first = 1;", "const first = 4;") + LineHunk("const second = 2;", "const second = 20;"));
+                var corrected = patch("app.js", MergeEdits(LineHunk("const first = 1;", "const first = 4;"), LineHunk("const second = 2;", "const second = 20;")));
                 AssertEqual(ToolExecutionOutcome.Ok, corrected.Outcome, "corrected original-snapshot hunks apply");
                 AssertEqual(source.Replace("first = 1", "first = 4").Replace("second = 2", "second = 20"),
                     session.HtmlWorkspace.Files.Single(file => file.Path == "app.js").Content, "mixed EOLs and EOF remain exact");
@@ -307,7 +307,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ResourceTargetStatus.Unchanged, unchanged.ResourceEffect.Targets.Single().Status, "no-op is explicit");
                 AssertEqual(sameRevision, session.ActiveHtmlArtifactId, "no-op creates no workspace revision");
                 AssertTrue(write("duplicate.js", "// a\r\n// b\n// a\r// b").Success, "repeated-line source");
-                var ambiguous = patch("duplicate.js", "@@\n-// a\n-// b\n+// c\n");
+                var ambiguous = patch("duplicate.js", EditSet(Edit("// a\n// b", "// c")));
                 var ambiguity = JsonConvert.DeserializeObject<PatchBatchResult>(ambiguous.Result.DataJson).Targets.Single().Diagnostic;
                 AssertEqual("ambiguous_context", ambiguity.Code, "newline-equivalent repeated blocks remain ambiguous");
                 AssertTrue(ambiguity.Candidates.Count >= 2 && ambiguity.Candidates.Count <= 5, "diagnostic exposes bounded candidates");

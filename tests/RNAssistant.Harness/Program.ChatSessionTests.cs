@@ -155,8 +155,8 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static string LineHunk(string before, string after)
-        { return "@@\n-" + before + "\n+" + after + "\n"; }
+        private static TextPatch LineHunk(string before, string after)
+        { return EditSet(Edit(before, after)); }
 
         private static void WorkspaceFilesGuardWrites()
         {

@@ -11,7 +11,7 @@ and full dotted references, including Workspace/default prompts. The shared Skil
 Library projection is covered by `node tests/web/skills-contract.test.js`.
 
 `universal mutations:` covers the shared public source contract: original-snapshot
-line hunks, distant/ordered anchors, overlapping/repeated text, UTF-8/BOM/CRLF/EOF and large streamed files,
+structured substring edits, before/after context chains, overlapping/repeated text, UTF-8/BOM/CRLF/EOF and large streamed files,
 shared regex/literal matching, upsert and owner routing, delivered VBA excerpts,
 confirmation collisions, stale reads, copy/move/delete/restore, retained file diffs,
 and unknown effects. Package checks cover all-before-write preparation, duplicate aliases,
@@ -27,6 +27,12 @@ policy, verified Plan after-source, editor revision guards, prompt/reference own
 routing, retained diffs and reference BOM/CRLF preservation.
 `tests/web/run-changes-layout.test.js` checks per-target inline statuses and prepared
 preview; `run-view-state.test.js` checks typed preview delivery.
+`tests/cli/structured_patch_model_compare.py` compares isolated manual/structured CLI
+builds against one pinned Ollama model using identical tasks and HTTP evidence.
+Pass `--manual`, `--structured`, `--manual-revision`, `--model`, `--output`.
+Run separately for available Qwen/DeepSeek tags; absence is an open qualification gap.
+It does not transform prompts or responses, and does not qualify native tool-calling
+or Windows/VBE. Model runs are separate from regression tests.
 `tests/cli/stabilization_smoke.py` covers multi-target confirmation across restart,
 bounded partial-source reads and intermediate reading before a dependent patch.
 `text search:`, `tool pack:`, `authored file:`, `run changes:`
@@ -44,13 +50,13 @@ paths, including restart; optional lifecycle tools are admitted before use.
 lines and unverified previews. `tests/cli/tool_name_migration_test.py` uses only temporary
 skill packages to check explicit migration with preserved originals/body/BOM.
 See the current [source tool contract](../../docs/text-mutations.md).
-Workspace owner tests use the same full-line hunks as the public contract. The
+Workspace owner tests use the same typed structured edits as the public contract. The
 retired substring writer is removed; migrated checks retain large-file no-op,
 stale/ambiguous context, invalid Unicode, post-dispatch unknown and read-back
 mismatch recovery, plus visual-selection edits against exact plugin source.
 
 The VBA/HTML model-loop scenarios in `Program.SimpleAgentTests.cs` use public
-`core.write`, compact `core.patch` and the initial Core profile. The migrated
+`core.write`, structured `core.patch` and the initial Core profile. The migrated
 checks cover closed-document local HTML, confirmation/reopen and full after-source,
 stale-source recovery, compaction, rejected mixed read/write responses, skill
 inspection/admission budgets and causal trace/journal correlation. HTML persistence

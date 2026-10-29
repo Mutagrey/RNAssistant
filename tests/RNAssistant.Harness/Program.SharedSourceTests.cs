@@ -34,9 +34,8 @@ namespace RNAssistant.Harness
                     var call = new ToolCall(Guid.NewGuid().ToString("N"), id, JsonConvert.SerializeObject(inputs));
                     return ExecuteNative(runtime, call, runtime.Describe(call));
                 };
-                var body = "*** Update Target: plan: Alpha\n@@\n-status: draft\n+status: ready\n@@ # Tasks\n-old\n+first\n" +
-                    "*** Update Target: plan: Beta\n@@ # Tasks\n-old\n+second\n";
-                var changed = execute("core.patch", new Dictionary<string, object> { ["patch"] = body });
+                var body = PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("status: draft", "status: ready"), Edit("old", "first", new[] { "# Tasks" }, null))), PatchSection("plan: Beta", EditSet(Edit("old", "second", new[] { "# Tasks" }, null))));
+                var changed = execute("core.patch", new Dictionary<string, object> { ["targets"] = body });
                 AssertEqual(ToolExecutionOutcome.Ok, changed.Outcome, "two Plan targets need no confirmation: " + changed.Result?.DataJson);
                 AssertTrue(changed.ResourceEffect.Targets.All(target => target.Status == ResourceTargetStatus.Changed), "both targets verified");
                 var a = PlanResourceToolHandler.ResolveCurrent(new ChatStore(FixturePaths.Value).DocumentArtifacts, session, "plan: Alpha");
@@ -67,21 +66,21 @@ namespace RNAssistant.Harness
                 AssertTrue(!executor.ExecuteManual(staleEditor, catalog, new AppSettings(), false, false, session).Success, "UI save pins the displayed revision");
 
                 var beforeCount = session.Artifacts.Count;
-                var refused = execute("core.patch", new Dictionary<string, object> { ["patch"] =
-                    "*** Update Target: plan: Alpha\n@@\n-first\n+bad\n*** Update Target: plan: Beta\n@@\n-missing\n+bad\n" });
+                var refused = execute("core.patch", new Dictionary<string, object> { ["targets"] =
+                    PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("first", "bad"))), PatchSection("plan: Beta", EditSet(Edit("missing", "bad")))) });
                 AssertEqual(ToolExecutionOutcome.Error, refused.Outcome, "invalid second target rejects entire package");
                 AssertTrue(!refused.MayHaveDispatched && session.Artifacts.Count == beforeCount, "no partial preparation effects");
-                var mixed = execute("core.patch", new Dictionary<string, object> { ["patch"] =
-                    "*** Update Target: plan: Alpha\n@@\n-first\n+bad\n*** Update Target: VBA module: Module1\n@@\n+x\n" });
+                var mixed = execute("core.patch", new Dictionary<string, object> { ["targets"] =
+                    PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("first", "bad"))), PatchSection("VBA module: Module1", EditSet(Insert("x\n", "end", null)))) });
                 AssertTrue(mixed.Outcome == ToolExecutionOutcome.Error && !mixed.MayHaveDispatched, "Plan mode rejects mixed owners before prepare");
-                var alias = execute("core.patch", new Dictionary<string, object> { ["patch"] =
-                    "*** Update Target: plan: Alpha\n@@\n-first\n+x\n*** Update Target: Plan: Alpha\n@@\n-first\n+y\n" });
+                var alias = execute("core.patch", new Dictionary<string, object> { ["targets"] =
+                    PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("first", "x"))), PatchSection("Plan: Alpha", EditSet(Edit("first", "y")))) });
                 AssertTrue(alias.Outcome == ToolExecutionOutcome.Error && !alias.MayHaveDispatched, "aliases reject before write");
 
                 // A body-only observation must not authorize source/header edits.
                 var observed = execute("core.read", new Dictionary<string, object> { ["target"] = "plan: Alpha", ["representation"] = "text" });
                 var callId = Guid.NewGuid().ToString("N");
-                var args = new Dictionary<string, object> { ["patch"] = "*** Update Target: plan: Alpha\n@@\n-status: ready\n+status: draft\n" };
+                var args = new Dictionary<string, object> { ["targets"] = PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("status: ready", "status: draft")))) };
                 var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = callId, Name = "core.patch", Arguments = args },
                     "Edit.", "Edit Plan.", null, ToolResultRoles.User, FixtureCallOrigin());
                 accepted.ResourceEvidence = observed.ResourceEvidence.ToList(); session.Messages.Add(accepted);
@@ -110,8 +109,7 @@ namespace RNAssistant.Harness
                     loadSettings: () => settings.Clone(), saveSettings: updated => settings = updated.Clone(), paths: paths);
                 var session = NewSession(adapter); var tools = executor.GetControllerTools().ToList();
                 var target = "skill reference: custom.guide / references/details.md";
-                var command = Command("core.patch", "patch", "*** Update Target: " + target + "\n@@ # Details\n-old\n+new\n" +
-                    "*** Update Target: prompt: chatTitlePrompt\n@@ # Title\n-old\n+new\n");
+                var command = Command("core.patch", "targets", PatchTargets(PatchSection(target, EditSet(Edit("old", "new", new[] { "# Details" }, null))), PatchSection("prompt: chatTitlePrompt", EditSet(Edit("old", "new", new[] { "# Title" }, null)))));
                 var pending = PrepareVbaNative(executor, session, command);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "catalog source edits retain confirmation: " + pending.Record.Result?.DataJson);
                 var changed = ConfirmVbaNative(pending);
@@ -125,7 +123,7 @@ namespace RNAssistant.Harness
                     AssertContains(executor.ResourceGateway.ReadRetainedCatalogText(effect.Source, 10000), "old", "retained catalog before");
                     AssertContains(executor.ResourceGateway.ReadRetainedCatalogText(effect.After, 10000), "new", "retained catalog after");
                 }
-                var stale = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: prompt: chatTitlePrompt\n@@\n-new\n+bad\n"));
+                var stale = PrepareVbaNative(executor, session, Command("core.patch", "targets", PatchTargets(PatchSection("prompt: chatTitlePrompt", EditSet(Edit("new", "bad"))))));
                 settings.ChatTitlePrompt = "external change";
                 var rejected = ConfirmVbaNative(stale);
                 AssertTrue(rejected.Outcome == ToolExecutionOutcome.Error && !rejected.MayHaveDispatched, "unpublished settings drift cannot be overwritten");
