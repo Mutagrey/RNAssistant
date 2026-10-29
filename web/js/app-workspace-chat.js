@@ -194,23 +194,8 @@
         currentPreview && !field(incomingState, "modelProgressUnavailable") &&
         (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
       incomingState.modelProgress = currentPreview;
-    var currentStart = field(current, "messageStartIndex"), incomingStart = field(incoming, "messageStartIndex");
-    var currentTotal = field(current, "messageTotalCount"), incomingTotal = field(incoming, "messageTotalCount");
-    if (Number.isSafeInteger(previousRevision) && previousRevision === nextRevision &&
-        currentStart === incomingStart && currentTotal === incomingTotal &&
-        Array.isArray(current.messages) && Array.isArray(incoming.messages) &&
-        (current.messages.length > incoming.messages.length ||
-          current.messages.length === incoming.messages.length && current.messages.some(function (message, index) {
-            return field(message, "id") !== field(incoming.messages[index], "id");
-          }))) incoming.messages = current.messages;
-    if (Number.isSafeInteger(currentStart) && Number.isSafeInteger(incomingStart) &&
-        currentStart < incomingStart && Number.isSafeInteger(currentTotal) &&
-        Number.isSafeInteger(incomingTotal) && incomingTotal >= currentTotal &&
-        Array.isArray(current.messages) && current.messages.length >= incomingStart - currentStart) {
-      incoming.messages = current.messages.slice(0, incomingStart - currentStart).concat(incoming.messages || []);
-      incoming.messageStartIndex = currentStart;
-    }
-    return incoming;
+    return window.RNAssistantConversationState.messageWindow(current, incoming,
+      Number.isSafeInteger(previousRevision) && previousRevision === nextRevision);
   }
   function prependMessages(current, page) {
     var start = field(current, "messageStartIndex"), total = field(current, "messageTotalCount");

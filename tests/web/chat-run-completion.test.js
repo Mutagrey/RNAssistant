@@ -79,6 +79,32 @@ function assertStoppedIndicator(ctx, id) {
 
 {
   const ctx = ui();
+  const accepted = { Id: "accepted", Role: "assistant", Content: "Сохранённый ответ" };
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 5,
+    messages: [accepted], messageStartIndex: 0, messageTotalCount: 1 });
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 5,
+    messages: [], messageStartIndex: 0, messageTotalCount: 1 });
+  assert.equal(ctx.state.messages[0].Id, "accepted", "same-revision sparse snapshot cannot erase an accepted answer");
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 5,
+    messages: [{ Id: "stale", Role: "assistant", Content: "Старый ответ" }],
+    messageStartIndex: 0, messageTotalCount: 1 });
+  assert.equal(ctx.state.messages[0].Id, "accepted", "same-revision mismatched snapshot cannot replace an accepted answer");
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 5,
+    messages: [{ Id: "older", Role: "user", Content: "Раннее сообщение" }, accepted],
+    messageStartIndex: 0, messageTotalCount: 2 });
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 5,
+    messages: [accepted], messageStartIndex: 1, messageTotalCount: 2 });
+  assert.deepEqual(ctx.state.messages.map(message => message.Id), ["older", "accepted"],
+    "a same-revision refresh retains the reader's earlier page");
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 6,
+    messages: [{ Id: "replacement", Role: "assistant", Content: "Новая версия" }],
+    messageStartIndex: 0, messageTotalCount: 1 });
+  assert.equal(ctx.state.messages[0].Id, "replacement", "a newer revision may replace the history window");
+  console.log("PASS completion: accepted Office messages survive delayed same-revision windows");
+}
+
+{
+  const ctx = ui();
   ctx.progress("a"); ctx.renderChatSessions();
   assert.equal(ctx.rows.a.status, "unknown", "a saved running run without a live inbox is uncertain");
   ctx.finish("a");

@@ -18,5 +18,37 @@
     return view && runId && view.runId === runId ? view.lifecycle : saved;
   }
 
-  window.RNAssistantConversationState = { status: status, lifecycle: lifecycle };
+  // A delayed snapshot at the same revision must not replace accepted history
+  // or discard pages already loaded by the reader. Both shells use this rule.
+  function messageWindow(current, incoming, sameRevision) {
+    if (!sameRevision || !current || !incoming ||
+        !Array.isArray(current.messages) || !Array.isArray(incoming.messages)) return incoming;
+    var oldStart = current.messageStartIndex, nextStart = incoming.messageStartIndex;
+    var oldTotal = current.messageTotalCount, nextTotal = incoming.messageTotalCount;
+    if (!Number.isSafeInteger(oldStart) || !Number.isSafeInteger(nextStart) ||
+        !Number.isSafeInteger(oldTotal) || !Number.isSafeInteger(nextTotal)) return incoming;
+    function id(message) { return message && (message.Id || message.id || ""); }
+    if (oldStart === nextStart && oldTotal === nextTotal &&
+        (current.messages.length > incoming.messages.length ||
+          current.messages.length === incoming.messages.length && current.messages.some(function (message, index) {
+            return id(message) !== id(incoming.messages[index]);
+          }))) {
+      incoming.messages = current.messages;
+      return incoming;
+    }
+    if (oldStart < nextStart && nextTotal >= oldTotal) {
+      var prependCount = nextStart - oldStart;
+      var overlap = Math.min(current.messages.length - prependCount, incoming.messages.length);
+      if (prependCount <= current.messages.length && overlap > 0 &&
+          current.messages.slice(prependCount, prependCount + overlap).every(function (message, index) {
+            return id(message) && id(message) === id(incoming.messages[index]);
+          })) {
+        incoming.messages = current.messages.slice(0, prependCount).concat(incoming.messages);
+        incoming.messageStartIndex = oldStart;
+      }
+    }
+    return incoming;
+  }
+
+  window.RNAssistantConversationState = { status: status, lifecycle: lifecycle, messageWindow: messageWindow };
 })();
