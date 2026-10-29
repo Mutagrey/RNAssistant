@@ -411,7 +411,7 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
             {
-                const string extensionId = "markdown.save";
+                const string extensionId = ResourceMutationToolCatalog.Copy;
                 var catalog = OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToList();
                 var store = new ChatStore(FixturePaths.Value);
                 var session = store.Create("Excel", "size-document", "Size.xlsx", "Size");
