@@ -41,7 +41,7 @@ def run_case(root, operation, restart=False):
     if operation == "replace":
         arguments["content"] = "updated"
     elif operation == "patch":
-        arguments = {"patch": "*** Update Target: app.txt\n@@\n-original\n+updated\n"}
+        arguments = {"targets": [{'target': 'app.txt', 'edits': [{'before': 'original', 'after': 'updated'}]}]}
     elif operation in ("copy", "move"):
         arguments["destination"] = "destination.txt"
     mutation = call({"replace": "core.write", "patch": "core.patch", "copy": "resources.copy", "move": "resources.move", "delete": "resources.delete"}[operation], **arguments)
@@ -96,7 +96,7 @@ def run_case(root, operation, restart=False):
         assert failure["status"] == "error", failure
         if operation == "patch":
             assert not failure["data"]["writeStarted"], failure
-            assert failure["data"]["targets"][0]["diagnostic"]["code"] == "source_changed", failure
+            assert failure["data"]["targets"][0]["diagnostic"]["code"] == "observation_required", failure
         else:
             assert failure["data"]["code"] == "source_observation_required", failure
         expected_recovery = {

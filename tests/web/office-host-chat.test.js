@@ -92,6 +92,21 @@ const buttons = context => context.list.children[0].children
   }
   console.log("PASS Office chat: failure is visible, preserves binding and allows explicit retry");
 
+  {
+    const { context } = fixture();
+    context.send = async () => {
+      const error = new Error("Создание чата PowerPoint (этап discovery): презентация недоступна.");
+      error.detail = "Request failed. See the local runtime log for details.";
+      error.code = "bridge_request_failed";
+      throw error;
+    };
+    await context.createOfficeHostChat("PowerPoint");
+    assert.match(status(context).textContent, /этап discovery.*презентация недоступна/,
+      "Office creation shows the diagnostic exception already sent by the bridge");
+    assert.doesNotMatch(status(context).textContent, /local runtime log/);
+  }
+  console.log("PASS Office chat: bridge failure shows its actionable creation stage");
+
   for (const setup of [
     context => { context.state.officeHostChatAvailable = false; },
     context => { context.state.bridgeUnavailable = true; },

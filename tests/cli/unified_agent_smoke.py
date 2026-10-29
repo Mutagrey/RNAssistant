@@ -82,7 +82,7 @@ def check(root):
 
         responses.extend([call("core.write", target="automatic.txt", content="first"),
                           call("core.read", target="automatic.txt"),
-                          call("core.patch", patch='*** Update Target: automatic.txt\n@@\n-first\n+second\n'), DONE])
+                          call("core.patch", targets=[{'target': 'automatic.txt', 'edits': [{'before': 'first', 'after': 'second'}]}]), DONE])
         automatic = run("--auto-confirm", "on")
         assert (workspace / "automatic.txt").read_text() == "second"
         assert automatic["ToolCounts"]["WriteOk"] == 2, automatic
@@ -101,7 +101,7 @@ def check(root):
         assert (workspace / "manual-second.txt").exists()
         print("PASS auto-confirm CLI: multistep, persisted policy, next-run default and pending policy after restart")
 
-        responses.extend([call("core.patch", patch='*** Update Target: automatic.txt\n@@\n-second\n+unguarded\n'), DONE])
+        responses.extend([call("core.patch", targets=[{'target': 'automatic.txt', 'edits': [{'before': 'second', 'after': 'unguarded'}]}]), DONE])
         run("--auto-confirm", "on")
         assert (workspace / "automatic.txt").read_text() == "second", "auto-confirm cannot bypass the complete-read guard"
         before = len(requests)
@@ -110,7 +110,7 @@ def check(root):
         print("PASS auto-confirm CLI: unread-file guard and invalid flag remain fail-closed")
 
         responses.extend([call("core.read", target="source.txt"),
-                          call("core.patch", patch='*** Update Target: source.txt\n@@\n-before\n+after\n'), DONE])
+                          call("core.patch", targets=[{'target': 'source.txt', 'edits': [{'before': 'before', 'after': 'after'}]}]), DONE])
         waiting = run(code=3)
         assert (workspace / "source.txt").read_text() == "before"
         cli("approve", "--session", waiting["SessionId"], "--pending", pending_id(waiting))

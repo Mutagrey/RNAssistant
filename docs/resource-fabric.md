@@ -1,6 +1,6 @@
 # Resource Fabric
 
-Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+Текущий контракт Core, structured edits и имён: [Text mutations](text-mutations.md).
 
 Status: unified direct cutover **complete host-neutral** (2026-09-07), with explicit
 unresolved Outlook source-allocation limits and open Windows gates.
@@ -223,7 +223,7 @@ The internal materialized `ReadText` path retains a one-MiB bound; this is not a
 limit on model or application text access. Selected line and UTF-16 character
 windows pin and stream strict UTF-8 sources through fixed decode buffers.
 `core.patch` streams exact UTF-8 source and result without the former 80-MiB
-whole-source ceiling; its section/hunk input has the explicit bounded contract in
+whole-source ceiling; its structured targets/edits input has the explicit bounded contract in
 [Text mutations](text-mutations.md). `core.write` stages larger text
 and verify exact read-back; an interrupted possible effect still requires explicit
 reconciliation. The selected model result is bounded by the run's configured
@@ -247,7 +247,7 @@ projection through an explicit dependency. The separate CLI result projector and
 request assembler are removed. A prior-turn read without freshly admitted authority
 is unavailable. A body omitted by the compiler, or an incomplete/stale read, cannot
 authorize a CLI overwrite. A delivered current excerpt can authorize `core.patch`
-when it contains the exact nonempty `oldText`. For a source above 1 MiB, the file
+when it contains the exact nonempty `before` and every context anchor. For a source above 1 MiB, the file
 owner scans the retained revision with fixed buffers, requires one matching
 byte/UTF-8 start, stages the result through CAS, rechecks the live source against
 the exact revision before atomic replacement, and verifies streamed read-back.
@@ -255,7 +255,7 @@ The prepared journal retains the intended result. Interrupted possible effects
 block ordinary reads and writes until explicit reconciliation; recovery inspects
 current bytes without replay or automatic rollback.
 Overlapping starts count separately. Empty, missing and ambiguous anchors return
-`invalid_patch`, `patch_not_found` and `patch_ambiguous`; external drift returns
+`invalid_edit`, `context_not_found` and `ambiguous_context`; external drift returns
 `target_conflict`. Patch leaves untouched line endings intact. `core.write`
 retains the complete-read prerequisite. `resources.copy/move/delete` accept a current
 delivered exact text window as the source guard; the file owner validates the

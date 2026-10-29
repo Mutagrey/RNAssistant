@@ -37,7 +37,8 @@ diagnostics.recordBridge({operation: 'GetProjectChat', handleMs: 980, serializeM
     {name: 'state', elapsedMs: 110}, {name: 'messages', elapsedMs: 40}]});
 diagnostics.recordHostPost({elapsedMs: 430, responseChars: 102400});
 diagnostics.recordModel({requestId: 'request-1', phase: 'sending', elapsedMs: 200,
-  preparationMs: 200, requestBytes: 1024});
+  preparationMs: 200, requestBytes: 1024,
+  contextPreparation: {totalMs: 760, authorityMs: 500, setupMs: 70, compileMs: 160, traceMs: 30}});
 assert.match(result.textContent, /Модель · request-1: ожидание заголовков/);
 diagnostics.recordModel({requestId: 'request-1', phase: 'completed', elapsedMs: 4200,
   totalMs: 4200, preparationMs: 200, responseHeadersMs: 3000, firstChunkMs: 3400,
@@ -47,6 +48,7 @@ assert.equal(result.textContent.split('Модель · request-1').length, 2,
 assert.match(result.textContent, /заголовки 2\.8 с, первые данные 400 мс/);
 assert.match(result.textContent, /Bridge · GetProjectChat: работа 980 мс, JSON 270 мс/);
 assert.match(result.textContent, /Этапы: хранилище 600 мс, состояние 110 мс, сообщения 40 мс, прочее 230 мс/);
+assert.match(result.textContent, /Формирование запроса: всего 760 мс, ресурсы 500 мс, настройка 70 мс, контекст 160 мс, запись 30 мс/);
 assert.match(result.textContent, /Office UI → WebView: 430 мс/);
 
 diagnostics.observeLongTasks();

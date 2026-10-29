@@ -621,7 +621,8 @@ confer none. CLI refreshes retained source authority across user turns before
 compilation, so unchanged prior reads can remain in context and external changes
 invalidate their bytes. Its write guards still retain only previously admitted same-run file observations
 with exact coverage. Whole-file operations require whole-text delivery; workspace
-patch accepts a delivered exact excerpt containing its anchor. Verified patch
+patch accepts structured substring edits inside delivered coverage; every used
+context/anchor line must also be delivered. Start/end insertion requires complete source. Verified patch
 after-source retains the same bounded coverage, including through approval/restart.
 This projection is neither a durable store nor a
 model field. Source deduplication reserves coverage only for a materialized body;

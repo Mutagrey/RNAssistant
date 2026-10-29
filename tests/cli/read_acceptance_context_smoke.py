@@ -40,7 +40,7 @@ def run_case(root, ending):
         call("core.read", target="app.txt"),
         call("core.read", target="app.txt"),
         call("core.read", target="other.txt"),
-        call("core.patch", patch='*** Update Target: app.txt\n@@\n-original\n+updated\n'),
+        call("core.patch", targets=[{'target': 'app.txt', 'edits': [{'before': 'original', 'after': 'updated'}]}]),
     ]
     if ending != "early":
         responses += [{"invalid_protocol": "Repair must preserve the frozen read assessment."},

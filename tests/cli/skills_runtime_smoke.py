@@ -46,7 +46,7 @@ def run_case(root):
         call("core.read", type="skill", target="workspace.extra"),
         call("core.write", target="app.txt", content="first"),
         call("core.read", target="app.txt"),
-        call("core.patch", patch='*** Update Target: app.txt\n@@\n-first\n+fixed\n'),
+        call("core.patch", targets=[{'target': 'app.txt', 'edits': [{'before': 'first', 'after': 'fixed'}]}]),
         call("core.read", target="app.txt"),
         DONE,
         # Separate-process continuation reads the same committed publication,

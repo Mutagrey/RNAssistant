@@ -550,10 +550,10 @@ function applyChatState(response, skipDraftCapture) {
   var nextChatId = hasResponseChatId
     ? (response.activeChatId || response.ActiveChatId || "")
     : previousChatId;
-  var incomingRevision = window.RNAssistantRunViewState.sessionRevision(response);
+  var incomingRevision = (window.RNAssistantRunViewState var incomingRevision = (window.RNAssistantRunViewState && window.RNAssistantRunViewState.sessionRevision) ? window.RNAssistantRunViewState.sessionRevision(response) : null;var incomingRevision = (window.RNAssistantRunViewState && window.RNAssistantRunViewState.sessionRevision) ? window.RNAssistantRunViewState.sessionRevision(response) : null; window.RNAssistantRunViewState.sessionRevision) ? window.RNAssistantRunViewState.sessionRevision(response) : null;
   var previousRevision = Object.prototype.hasOwnProperty.call(state.chatProjectionRevisions || {}, nextChatId)
     ? state.chatProjectionRevisions[nextChatId] : null;
-  if (!window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, nextChatId, incomingRevision)) {
+  if (!(window.RNAssistantRunViewState if (!(window.RNAssistantRunViewState && window.RNAssistantRunViewState.accept) || !window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, nextChatId, incomingRevision)) {if (!(window.RNAssistantRunViewState && window.RNAssistantRunViewState.accept) || !window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, nextChatId, incomingRevision)) { window.RNAssistantRunViewState.accept) || !window.RNAssistantRunViewState.accept(state.chatProjectionRevisions, nextChatId, incomingRevision)) {
     applyRevisionedChatSummaryState(response);
     return false;
   }
@@ -630,15 +630,15 @@ function applyChatState(response, skipDraftCapture) {
     var incomingTotal = response.messageTotalCount !== undefined
       ? response.messageTotalCount : response.MessageTotalCount !== undefined
         ? response.MessageTotalCount : incomingMessages.length;
-    var windowed = window.RNAssistantConversationState.messageWindow({
+    var windowed = (window.RNAssistantConversationState var windowed = (window.RNAssistantConversationState && window.RNAssistantConversationState.messageWindow) ? window.RNAssistantConversationState.messageWindow({var windowed = window.RNAssistantConversationState.messageWindow({ window.RNAssistantConversationState.messageWindow) ? window.RNAssistantConversationState.messageWindow({
       messages: state.messages, messageStartIndex: state.messageStartIndex,
       messageTotalCount: state.messageTotalCount
     }, { messages: incomingMessages, messageStartIndex: incomingStart,
       messageTotalCount: incomingTotal }, !chatChanged && !detailDeferred &&
-      Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision);
-    state.messages = windowed.messages;
-    state.messageStartIndex = windowed.messageStartIndex;
-    state.messageTotalCount = windowed.messageTotalCount;
+      Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision) : null;
+    if (windowed) state.messages = windowed.messages;
+    if (windowed) state.messageStartIndex = windowed.messageStartIndex;
+    if (windowed) state.messageTotalCount = windowed.messageTotalCount;
     if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages);
   }
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {

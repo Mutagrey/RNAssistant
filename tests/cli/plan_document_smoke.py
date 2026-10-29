@@ -52,7 +52,7 @@ def save(markdown, title="Shared plan"):
 
 
 def patch(title, before, after):
-    return "*** Update Target: plan: " + title + "\n@@\n-" + before + "\n+" + after + "\n"
+    return [{"target": "plan: " + title, "edits": [{"before": before, "after": after}]}]
 
 
 def run_case(root, role):
@@ -144,8 +144,8 @@ def run_case(root, role):
 
         changed_body = V1.replace("- Review source  ", "- Review and repair")
         _, wire = run([call(READ, target="plan: Shared plan"),
-                       call(PATCH, patch=patch("Shared plan", "- Review source  ", "- Review and repair")),
-                       call(PATCH, patch=patch("Shared plan", "status: ready", "status: draft")),
+                       call(PATCH, targets=patch("Shared plan", "- Review source  ", "- Review and repair")),
+                       call(PATCH, targets=patch("Shared plan", "status: ready", "status: draft")),
                        call(READ, target="plan: Shared plan"), DONE], session)
         assert any("CURRENT_RESOURCE_VIEW" in (m.get("content") or "") and "Review and repair" in m["content"]
                    for m in wire[2]["messages"]), "First patch after-source must reach the next call without an extra read"
@@ -154,11 +154,11 @@ def run_case(root, role):
 
         # Separate identities share the same source contract and package preparation.
         _, wire = run([save("# Other", title="Other plan"), call(READ, target="plan: Shared plan"),
-                       call(PATCH, patch=patch("Shared plan", "status: draft", "status: ready") +
+                       call(PATCH, targets=patch("Shared plan", "status: draft", "status: ready") +
                            patch("Other plan", "# Other", "# Changed other")), DONE], session)
         assert [t["status"] for t in terminal(wire[-1])["data"]["targets"]] == ["Changed", "Changed"]
         _, wire = run([call(READ, target="plan: Shared plan"), call(READ, target="plan: Other plan"),
-                       call(PATCH, patch=patch("Shared plan", "status: ready", "status: draft") +
+                       call(PATCH, targets=patch("Shared plan", "status: ready", "status: draft") +
                            patch("Other plan", "missing", "bad")),
                        call(READ, target="plan: Shared plan"), DONE], session)
         failed = terminal(wire[3])

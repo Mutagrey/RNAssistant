@@ -34,8 +34,12 @@ async function createOfficeHostChat(host) {
     state.officeHostLaunchOpen = false;
     log("Чат создан: " + host + (result.documentTitle ? " — " + result.documentTitle : "") + ".");
   } catch (error) {
+    // The bridge keeps the exception message in `error`; its generic detail is
+    // intended for other requests and would hide the Office creation failure.
+    var reason = error.code === "bridge_request_failed" && error.message
+      ? error.message : (error.detail || error.message || "неизвестная ошибка");
     state.officeHostChatError = "Не удалось открыть чат " + host + ": " +
-      (error.detail || error.message || "неизвестная ошибка");
+      reason;
     log(state.officeHostChatError, "error");
   } finally {
     state.officeHostChatPending = false;

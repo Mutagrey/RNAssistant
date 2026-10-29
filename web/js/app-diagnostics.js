@@ -82,6 +82,10 @@ var performanceDiagnostics = (function () {
         (value.error ? ", " + String(value.error).replace(/[\r\n]+/g, " ").slice(0, 160) : "") +
         (phase === "completed" || phase === "failed" || phase === "cancelled" ? "" :
           ", в этапе " + duration(Date.now() - entry.updatedAt)));
+      var context = value.contextPreparation;
+      if (context) lines.push("  Формирование запроса: всего " + duration(context.totalMs) +
+        ", ресурсы " + duration(context.authorityMs) + ", настройка " + duration(context.setupMs) +
+        ", контекст " + duration(context.compileMs) + ", запись " + duration(context.traceMs));
     });
     longTasks.slice(0, 2).forEach(function (entry) {
       lines.push("Интерфейс · долгая задача: " + duration(entry.durationMs) + " (" + entry.at + ")");
@@ -101,7 +105,7 @@ var performanceDiagnostics = (function () {
   function recordModel(value) {
     if (!value || !value.requestId) return;
     var index = model.findIndex(function (entry) { return entry.value.requestId === value.requestId; });
-    if (index >= 0) model.splice(index, 1);
+    if (index >= 0) value = Object.assign({}, model.splice(index, 1)[0].value, value);
     bounded(model, { value: value, updatedAt: Date.now() }, 12);
     render();
   }

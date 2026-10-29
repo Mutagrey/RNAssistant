@@ -31,13 +31,13 @@ def run_case(root, ending):
         call("core.skills.load", {"id": "skills.workspace.web.verify.repair"}),
         call("web.verify", {"entryPath": "index.html"}),
         call("core.read", {"target": "app.js"}),
-        call("core.patch", {'patch': "*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += increment; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n"}),
+        call("core.patch", {'targets': [{'target': 'app.js', 'edits': [{'before': "document.getElementById('plus').addEventListener('click', () => { count += increment; render(); });", 'after': "document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });"}]}]}),
         call("core.read", {"target": "app.js"}),
         call("web.verify", {"entryPath": "index.html"}),
     ]
     if ending in ("stale", "reverified"):
         responses.extend([
-            call("core.patch", {'patch': "*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1 /* revised */; render(); });\n"}),
+            call("core.patch", {'targets': [{'target': 'app.js', 'edits': [{'before': "document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });", 'after': "document.getElementById('plus').addEventListener('click', () => { count += 1 /* revised */; render(); });"}]}]}),
             call("core.read", {"target": "app.js"}),
         ])
         if ending == "reverified":
@@ -50,7 +50,7 @@ def run_case(root, ending):
     if ending == "late_edit":
         responses.extend([
             call("core.read", {"target": "app.js"}),
-            call("core.patch", {'patch': "*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += 0; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n"}),
+            call("core.patch", {'targets': [{'target': 'app.js', 'edits': [{'before': "document.getElementById('plus').addEventListener('click', () => { count += 0; render(); });", 'after': "document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });"}]}]}),
             call("core.read", {"target": "app.js"}),
         ])
     if ending in ("late_edit", "stale"):
@@ -186,7 +186,7 @@ def run_recovery_guards(root):
             tool("core.write", target="unrelated.txt", content="not a dependency"), verify,
             tool("core.read", target="app.js"), verify,
             tool("core.write", target="app.js", content=original), verify,
-            tool("core.patch", patch="*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += increment; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n"),
+            tool("core.patch", targets=[{'target': 'app.js', 'edits': [{'before': "document.getElementById('plus').addEventListener('click', () => { count += increment; render(); });", 'after': "document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });"}]}]),
             tool("core.read", target="app.js"), verify,
             {"message": "Verified repair.", "finish_from_request": True},
         ])

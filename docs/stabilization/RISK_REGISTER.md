@@ -228,6 +228,14 @@ Question tool штатно завершает текущий run как `awaitin
    ошибку API и сервер/model для фотографии, не запрашивать перенос payload.
    Не объявлять strict исправленным на пользовательском endpoint и не скрывать
    malformed schema автоматическим fallback. I26-04 относится к json_object.
+   Повторная фотография 2026-10-29: проверка роли `developer` прошла, а
+   `Agent json_schema` и `Tool result · user` получили одинаковый HTTP 500
+   `InternalServerError` примерно за 0,12–0,13 с. Второй запрос использует
+   strict-схему ответа без доступных tools, поэтому дефект схемы аргументов
+   конкретного tool это не объясняет. HTTP 500 не различает отключённую
+   поддержку формата и сбой серверного компилятора на текущей схеме. Экранный
+   контроль — повторить проверку с `json_object`; это проверит работу остальных
+   контуров, но не квалифицирует `json_schema`.
 3. **Ошибки выбора tools.** Есть подтверждённая неоднозначная внешняя схема,
    различающиеся Office/workspace selectors и незаквалифицированное качество
    реальной модели. Старый баг исчезнувших каталогов find уже исправлялся отдельно;
@@ -1692,6 +1700,11 @@ remains source-reviewed only; verify installed native/VSTO/Desktop builds on
 Windows with PowerPoint closed/open, multiple documents, modal dialogs, Save As,
 exact tools/skills after switching and return to the original Excel chat. R52's
 multi-instance attach evidence remains open. Owner: Web navigation / OfficeHosts.
+Фото 2026-10-29 показывает следующий отказ при создании PowerPoint-чата из Excel:
+панель вывела только общий `Request failed`, хотя bridge передал текст исключения
+отдельным полем. Для этого действия UI теперь показывает исходное сообщение;
+координатор добавляет этап. Конкретная причина COM/переключения по старому фото
+не установлена; нужна новая фотография экранного сообщения после обновления сборки.
 
 ## Working source links and completion evidence — 2026-10-14
 
