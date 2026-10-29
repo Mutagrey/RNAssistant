@@ -1,5 +1,16 @@
 # RNAssistant backlog
 
+## Старые fixtures истории мутаций — 2026-10-29
+
+Owner: Core context/Harness. При проверке нового пакетного `core.patch` два прежних
+сценария `context continuity: mutation receipts preserve target and outcome` и
+`context continuity: archived operations preserve accepted targets` остановились
+на retired tool contracts. Они всё ещё создают `files.create/move/patch`,
+`vba.module.write`, `html.source.patch`; нужен отдельный перенос fixtures на текущие
+public schemas. Не возвращать aliases ради тестов. Новый пакетный fixture проверяет
+сохранение всех target/status в историческом receipt, включая partial/unknown;
+эти две прежние проверки не объявляются пройденными.
+
 Здесь находится только незавершённая отложенная работа. Это не текущий план:
 рабочий baseline, приоритеты и открытое evidence находятся в [PROGRESS](PROGRESS.md),
 исторический порядок миграции — в [master plan](STABILIZATION_MASTER_PLAN.md),

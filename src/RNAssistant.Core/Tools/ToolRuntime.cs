@@ -174,10 +174,20 @@ namespace RNAssistant.Core.Tools
             // Keep the kernel's execution identity intact; preparation is runtime evidence.
             var preparedState = context.PreparedStateJson ?? preparation?.PreparedStateJson;
 
+            return await ExecuteHandlerAsync(context, policy, tool.Handler, arguments, preparedState, cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task<ToolExecutionRecord> ExecuteHandlerAsync(ToolExecutionContext context, ToolPolicy policy,
+            IToolHandler handler, IDictionary<string, object> arguments, string preparedState,
+            CancellationToken cancellationToken, Action parentDispatch = null)
+        {
             string mutationAttemptId = null;
-            admissionError = CheckDispatch(context);
-            if (admissionError != null) return Reject(context, "tool_binding_unavailable", admissionError);
-            if (policy.MayHaveSideEffects && _mutationObserver != null)
+            var registered = _registry.Lookup(context.Call.Name);
+            if (registered == null || !context.Policy.Matches(EffectivePolicy(registered)))
+                return Reject(context, "tool_policy_changed", "The captured policy changed before this target could execute.");
+            var dispatchError = CheckDispatch(context);
+            if (dispatchError != null) return Reject(context, "tool_binding_unavailable", dispatchError);
+            if (policy.MayHaveSideEffects && _mutationObserver != null && !(handler is ResourcePatchBatchHandler))
             {
                 try { mutationAttemptId = _mutationObserver.Prepare(context, arguments, preparedState); }
                 catch (ToolMutationPreparationException ex)
@@ -195,18 +205,26 @@ namespace RNAssistant.Core.Tools
             ToolHandlerContext handlerContext = null;
             handlerContext = new ToolHandlerContext(context, arguments,
                 preparedState,
-                mutationAttemptId == null ? (Action)null : () =>
-                    _mutationObserver.MarkDispatchMayHaveOccurred(mutationAttemptId), completed =>
+                () => { parentDispatch?.Invoke(); if (mutationAttemptId != null) _mutationObserver.MarkDispatchMayHaveOccurred(mutationAttemptId); }, completed =>
                     {
                         if (publicationAttempted) throw new InvalidOperationException("Mutation terminal was published twice.");
                         publicationAttempted = true;
                         publishedTerminal = CompleteMutation(mutationAttemptId, FromHandler(context, policy, handlerContext, completed), preparedState);
+                    }, executeTarget: (owner, targetArguments, state, index, token) =>
+                    {
+                        var batch = handler as ResourcePatchBatchHandler;
+                        if (batch == null || !ReferenceEquals(owner, batch.TargetHandler))
+                            throw new InvalidOperationException("Only the registered patch owner may execute a prepared target.");
+                        var child = new ToolExecutionContext(context.Call, context.Policy, context.RunId, context.TurnId,
+                            context.StepId, context.StartedUtc, context.IsConfirmed, context.RemainingToolSteps,
+                            state, context.ExpectedContentSha256, context.ExpectedTargetAbsent, index);
+                        return ExecuteHandlerAsync(child, policy, owner, targetArguments, state, token, handlerContext.MarkDispatchPossible);
                     });
             ToolExecutionRecord terminal;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var result = await tool.Handler.ExecuteAsync(handlerContext, cancellationToken).ConfigureAwait(false);
+                var result = await handler.ExecuteAsync(handlerContext, cancellationToken).ConfigureAwait(false);
                 if (result == null) throw new InvalidOperationException("Handler returned no terminal result.");
                 // Cancellation cannot discard a terminal result/effect that the
                 // handler already established. The kernel observes lifecycle next.
@@ -263,6 +281,9 @@ namespace RNAssistant.Core.Tools
             if (completed.AuthorityCommit != null &&
                 !string.Equals(completed.AuthorityCommit.Effect.Operation, context.Call.Name, StringComparison.Ordinal))
                 throw new InvalidOperationException("Direct authority commit operation differs from the accepted tool call.");
+            if (completed.ResourceEffect != null &&
+                !string.Equals(completed.ResourceEffect.Operation, context.Call.Name, StringComparison.Ordinal))
+                throw new InvalidOperationException("Aggregate effect operation differs from the accepted tool call.");
             var result = completed.Result;
             var effect = completed.Effect;
             var dispatched = handlerContext.MayHaveDispatched;
@@ -303,7 +324,7 @@ namespace RNAssistant.Core.Tools
             var record = Record(context, outcome, result, dispatched, effect,
                 awaitingUser: completed.AwaitingUser && outcome == ToolExecutionOutcome.Ok,
                 resourceEvidence: completed.ResourceEvidence, resourceReadBack: completed.ResourceReadBack,
-                recovery: completed.Recovery);
+                recovery: completed.Recovery, resourceEffect: completed.ResourceEffect);
             return completed.AuthorityCommit == null ? record : record.WithAuthorityCommit(completed.AuthorityCommit, false);
         }
 
@@ -358,7 +379,7 @@ namespace RNAssistant.Core.Tools
             string message = null, string preparedStateJson = null, string confirmationDataJson = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceEvidence> resourceEvidence = null,
             IReadOnlyList<RNAssistant.Core.Models.ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null, bool wasCancelled = false)
+            ToolRecoveryContract recovery = null, bool wasCancelled = false, RNAssistant.Core.Models.ResourceEffect resourceEffect = null)
         {
             var completed = DateTime.UtcNow;
             if (completed < context.StartedUtc) completed = context.StartedUtc;
@@ -367,7 +388,7 @@ namespace RNAssistant.Core.Tools
                 evidence: new ToolExecutionEvidence(dispatched ? ToolDispatchEvidence.MayHaveDispatched : ToolDispatchEvidence.NotDispatched, effect),
                 result: result, preparedStateJson: preparedStateJson, confirmationDataJson: confirmationDataJson,
                 resourceEvidence: resourceEvidence, resourceReadBack: resourceReadBack,
-                recovery: recovery, wasCancelled: wasCancelled);
+                recovery: recovery, wasCancelled: wasCancelled, resourceEffect: resourceEffect);
         }
 
     }

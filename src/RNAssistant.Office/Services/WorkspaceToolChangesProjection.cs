@@ -17,11 +17,20 @@ namespace RNAssistant.Office.Services
     {
         private readonly WorkspaceFileService _files;
         private readonly ChatBlobStore _payloads;
-        internal WorkspaceToolChangesProjection(WorkspaceFileService files, ChatBlobStore payloads)
-        { _files = files; _payloads = payloads; }
+        private readonly Func<ResourceRef, int, string> _officeRead;
+        private readonly Func<ResourceRef, ResourceRef, string, IReadOnlyList<TextPatchEdit>> _officeFragments;
+        internal WorkspaceToolChangesProjection(WorkspaceFileService files, ChatBlobStore payloads,
+            Func<ResourceRef, int, string> officeRead = null, Func<ResourceRef, ResourceRef, string, IReadOnlyList<TextPatchEdit>> officeFragments = null)
+        { _files = files; _payloads = payloads; _officeRead = officeRead; _officeFragments = officeFragments; }
 
         internal RunChangesDto Read(ChatSession session, string run, string call)
         {
+            var batch = PatchChangesProjection.Read(session, run, call, _payloads,
+                (reference, maximum) => ResourceUri.Parse(reference.Uri).Provider == "file" ? _files.ReadRetainedComparisonText(reference, maximum) :
+                    _officeRead != null ? _officeRead(reference, maximum) : throw new InvalidOperationException("Office comparison is unavailable."),
+                (reference, afterReference, patch) => ResourceUri.Parse(reference.Uri).Provider == "file" ? _files.ReadRetainedPatchEdits(reference, afterReference, patch, 512000) :
+                    _officeFragments != null ? _officeFragments(reference, afterReference, patch) : throw new InvalidOperationException("Office comparison is unavailable."));
+            if (batch != null) return batch;
             var result = new RunChangesDto { ChatId = session.Id, RunId = run, ToolCallId = call };
             var messages = session.Messages.Where(m => m.RunId == run && m.ToolCallId == call && m.Activity == null).ToArray();
             var accepted = messages.SingleOrDefault(m => m.AcceptedCallOrigin != null);
@@ -59,7 +68,6 @@ namespace RNAssistant.Office.Services
                 else if (before != null || terminal.ToolName == ResourceMutationToolCatalog.Write)
                 {
                     var intended = terminal.ToolName == ResourceMutationToolCatalog.Write ? args.Content :
-                        terminal.ToolName == ResourceMutationToolCatalog.Patch ? TextEditPlan.Patch(item.Before, args.Hunks).Text :
                         terminal.ToolName == ResourceMutationToolCatalog.Replace ? TextEditPlan.Replace(item.Before, args.Query, args.Replacement, args.Mode, args.MatchCase, args.ExpectedMatches).Text :
                         terminal.ToolName == ResourceMutationToolCatalog.Delete ? "" : null;
                     if (intended?.Length <= RunChangesService.MaximumSourceCharacters)
@@ -71,16 +79,7 @@ namespace RNAssistant.Office.Services
                 item.Before = item.After = item.IntendedAfter = null;
                 if (!unknown) item.Availability = ex is WorkspaceFileException file && file.Code == "file_too_large" ? "too_large" : "unavailable";
                 result.Complete = false;
-                if (!unknown && item.Availability == "too_large" && terminal.ToolName == ResourceMutationToolCatalog.Patch &&
-                    args.Hunks != null && args.Hunks.Sum(h => (long)h.OldText.Length + h.NewText.Length) <= 512000)
-                {
-                    // Accepted exact hunks + verified complete after-state are sufficient for a fragment view.
-                    // No guessed offsets and no second persisted diff representation.
-                    item.Availability = "hunks";
-                    item.Hunks = args.Hunks.Select(h => new RunTextHunkDto { Offset = -1,
-                        Removed = h.OldText.Length, Inserted = h.NewText.Length, Before = h.OldText, After = h.NewText }).ToList();
-                    result.Complete = true;
-                }
+
             }
             result.Items.Add(item);
             return result;
@@ -91,7 +90,6 @@ namespace RNAssistant.Office.Services
             public string Target { get; set; }
             public string Destination { get; set; }
             public string Content { get; set; }
-            public List<TextEditHunk> Hunks { get; set; }
             public string Query { get; set; }
             public string Replacement { get; set; }
             public string Mode { get; set; }

@@ -27,7 +27,7 @@ def fetch(url):
 
 def scripted_response(request, scenario, index):
     edit = [('core.read', {'target': 'src/reports/invoice.ts'}),
-            ('core.patch', {"target": 'src/reports/invoice.ts', "hunks": [{"oldText": 'Old invoice', "newText": 'Monthly invoice'}]})]
+            ('core.patch', {'patch': '*** Update Target: src/reports/invoice.ts\n@@\n-  return "Old invoice";\n+  return "Monthly invoice";\n'})]
     copy = [('core.read', {'target': 'assets/templates/письмо.txt'}),
             ('core.tools.read', {'id': 'resources.copy'}),
             ('resources.copy', {'target': 'assets/templates/письмо.txt', 'destination': 'exports/письмо-копия.txt'})]

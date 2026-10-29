@@ -62,7 +62,7 @@ namespace RNAssistant.Core.Tools
             return string.Join("\n", lines.Select(NormalizeVbeComparableLine).ToArray());
         }
 
-        private static string NormalizeVbeComparableLine(string line)
+        public static string NormalizeVbeComparableLine(string line)
         {
             var output = new StringBuilder();
             line = line ?? string.Empty;
@@ -77,7 +77,7 @@ namespace RNAssistant.Core.Tools
                 }
                 if (value == '\'')
                 {
-                    AppendVbeToken(output, line.Substring(index).TrimEnd());
+                    AppendVbeToken(output, line.Substring(index));
                     break;
                 }
                 if (value == '"' || value == '[')
@@ -106,6 +106,13 @@ namespace RNAssistant.Core.Tools
                 {
                     var start = index++;
                     while (index < line.Length && (char.IsLetterOrDigit(line[index]) || line[index] == '_')) index++;
+                    if (string.Equals(line.Substring(start, index - start), "Rem", StringComparison.OrdinalIgnoreCase) &&
+                        (index == line.Length || char.IsWhiteSpace(line[index])))
+                    {
+                        AppendVbeToken(output, "rem");
+                        AppendVbeToken(output, line.Substring(index));
+                        break;
+                    }
                     if (index < line.Length && "%&@!#$".IndexOf(line[index]) >= 0) index++;
                     AppendVbeToken(output, line.Substring(start, index - start).ToLowerInvariant());
                     continue;

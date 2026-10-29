@@ -90,6 +90,8 @@ namespace RNAssistant.Office.Tools
                         prepared.Operation = VbaToolCatalog.WriteModule;
                     var owner = Owner(prepared);
                     var args = Arguments(prepared, context, source?.Text, token);
+                    if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
+                        _html.PrepareSourcePatch(_session, selected, source.Text, Value(args, "content"));
                     var preparable = owner as IPreparableToolHandler;
                     if (preparable != null)
                     {
@@ -97,11 +99,15 @@ namespace RNAssistant.Office.Tools
                         if (result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok) return result;
                         prepared.OwnerState = result.PreparedStateJson;
                     }
-                    return new ToolPreparationResult(Result.Ok("Resource operation prepared."), JsonConvert.SerializeObject(prepared));
+                    return new ToolPreparationResult(Result.Ok("Resource operation prepared."), JsonConvert.SerializeObject(prepared),
+                        patchTarget: _id == ResourceMutationToolCatalog.Patch ? new PatchTargetPlan {
+                            Source = prepared.Source, SourceHash = prepared.SourceHash,
+                            EffectIdentity = PatchEffectIdentity(selected, prepared.Source),
+                            Preview = PatchPreview.From(SourcePatch(source.Text, prepared.Source, context, token).Edits) } : null);
                 }
             }
             catch (Exception ex) when (ex is ResourceRequestException || ex is InvalidDataException || ex is TextPatternException)
-            { return new ToolPreparationResult(Error(ex), recovery: Recovery(context, ex)); }
+            { return new ToolPreparationResult(Error(ex), recovery: Recovery(context, ex), patchDiagnostic: PatchDiagnostic.From(ex)); }
         }
 
         public async Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
@@ -129,6 +135,8 @@ namespace RNAssistant.Office.Tools
                     }
                     if (_id == ResourceMutationToolCatalog.Copy || _id == ResourceMutationToolCatalog.Move)
                         RequireAbsent(Value(context.Arguments, "destination"));
+                    if (_id == ResourceMutationToolCatalog.Patch && SourcePatch(source.Text, prepared.Source, context, token).Text == source.Text)
+                        return new ToolHandlerResult(Result.Ok("Source already matches the prepared patch."), ToolEffectEvidence.VerifiedNoChange);
                     return await Owner(prepared).ExecuteAsync(OwnerContext(context, prepared,
                         Arguments(prepared, context, source?.Text, token)), token).ConfigureAwait(false);
                 }
@@ -137,6 +145,14 @@ namespace RNAssistant.Office.Tools
             { return new ToolHandlerResult(context.MayHaveDispatched ? Result.Unknown(ex.Message) : Error(ex),
                 context.MayHaveDispatched ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None,
                 recovery: context.MayHaveDispatched ? null : Recovery(context, ex)); }
+        }
+
+        private ResourceIdentity PatchEffectIdentity(ResourceIntentTarget selected, ResourceRef source)
+        {
+            if (selected.Descriptor.Kind != ChatHtmlResourceCatalog.FileKind) return source.Identity;
+            return HtmlWorkspaceIdentity.MemberIdentity(_session,
+                HtmlWorkspaceIdentity.LogicalId(selected.Descriptor.Metadata["revisionArtifactId"]),
+                selected.Descriptor.Metadata["logicalMemberKey"]);
         }
 
         private ResourceIntentTarget ResolveTarget(string target)
@@ -163,8 +179,7 @@ namespace RNAssistant.Office.Tools
 
         private void RequireObservation(ToolHandlerContext context, ResourceReadResult source, bool complete)
         {
-            if (_id == ResourceMutationToolCatalog.Patch && JArray.FromObject(context.Arguments["hunks"])
-                .ToObject<List<TextEditHunk>>().Any(hunk => hunk.Boundary != null)) complete = true;
+            if (_id == ResourceMutationToolCatalog.Patch && TextPatch.Parse(Value(context.Arguments, "patch")).RequiresWholeSource) complete = true;
             var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
             if (accepted == null) return; // Manual editor has its explicit owner guard.
             var evidence = (accepted.ResourceEvidence ?? new List<ResourceEvidence>())
@@ -180,7 +195,7 @@ namespace RNAssistant.Office.Tools
             else if (evidence.Length > 0)
             {
                 if (_id != ResourceMutationToolCatalog.Patch) return;
-                var plan = TextEditPlan.Patch(source.Text, JArray.FromObject(context.Arguments["hunks"]).ToObject<List<TextEditHunk>>());
+                var plan = SourcePatch(source.Text, source.Resource.Reference, context);
                 if (plan.Edits.All(edit => evidence.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole ||
                     e.Coverage.Kind == ResourceCoverageKinds.CharacterRange && e.Coverage.Start <= edit.Offset &&
                     e.Coverage.End >= edit.Offset + edit.Before.Length))) return;
@@ -193,7 +208,6 @@ namespace RNAssistant.Office.Tools
         {
             ResourceAddress current;
             if (!ResourceUri.TryParse(source.Resource.Reference.Uri, out current) || current.Provider != "vba" || current.Segments.Count < 3) return false;
-            var hunks = JArray.FromObject(context.Arguments["hunks"]).ToObject<List<TextEditHunk>>();
             var observed = new List<Tuple<int, int>>();
             foreach (var evidence in accepted.ResourceEvidence ?? new List<ResourceEvidence>())
             {
@@ -213,7 +227,7 @@ namespace RNAssistant.Office.Tools
                     observed.Add(Tuple.Create(beginOffset, endOffset));
                 }
             }
-            var plan = TextEditPlan.Patch(source.Text, hunks);
+            var plan = SourcePatch(source.Text, source.Resource.Reference, context);
             return plan.Edits.All(edit => observed.Any(span => span.Item1 <= edit.Offset && span.Item2 >= edit.Offset + edit.Before.Length));
         }
 
@@ -236,8 +250,8 @@ namespace RNAssistant.Office.Tools
                 string existingType;
                 if (selected?.Descriptor.Metadata.TryGetValue("componentType", out existingType) == true)
                     args["componentType"] = existingType;
-                prepared.Operation = _id == ResourceMutationToolCatalog.Write ? VbaToolCatalog.WriteModule :
-                    _id == ResourceMutationToolCatalog.Patch || _id == ResourceMutationToolCatalog.Replace ? VbaToolCatalog.ApplyPatch :
+                prepared.Operation = _id == ResourceMutationToolCatalog.Write || _id == ResourceMutationToolCatalog.Patch ? VbaToolCatalog.WriteModule :
+                    _id == ResourceMutationToolCatalog.Replace ? VbaToolCatalog.ApplyPatch :
                     _id == ResourceMutationToolCatalog.Delete ? VbaToolCatalog.DeleteModule :
                     _id == ResourceMutationToolCatalog.Move ? VbaToolCatalog.RenameModule :
                     _id == ResourceMutationToolCatalog.Restore ? VbaToolCatalog.RestoreBackup : null;
@@ -311,22 +325,28 @@ namespace RNAssistant.Office.Tools
             if (_id == ResourceMutationToolCatalog.Write) content = Value(context.Arguments, "content");
             else if (_id == ResourceMutationToolCatalog.Copy && prepared.Operation == VbaToolCatalog.WriteModule) content = before;
             else if (_id == ResourceMutationToolCatalog.Patch)
-                plan = TextEditPlan.Patch(before, JArray.FromObject(context.Arguments["hunks"]).ToObject<List<TextEditHunk>>(), token);
+                plan = SourcePatch(before, prepared.Source, context, token);
             else if (_id == ResourceMutationToolCatalog.Replace)
                 plan = TextEditPlan.Replace(before, Value(context.Arguments, "query"), Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"), Count(context), token);
             if (plan != null) { content = plan.Text; args["resolvedTextEdits"] = plan.Edits; }
             if (content != null)
             {
                 args["content"] = content; args["code"] = content; args["markdown"] = content;
-                // Private owner command. Public hunks were already resolved together against the pinned source.
+                // The replace adapter still uses its private owner command. core.patch
+                // passes complete code directly to the guarded whole-module writer.
                 if (prepared.Operation == VbaToolCatalog.ApplyPatch)
                     args["patch"] = new JArray(new JObject { ["find"] = before, ["text"] = content });
-                if (prepared.Operation == HtmlWorkspaceToolCatalog.ApplyPatchToolId)
-                    args["canonicalHunks"] = JArray.FromObject(_id == ResourceMutationToolCatalog.Patch
-                        ? JArray.FromObject(context.Arguments["hunks"]).ToObject<List<TextEditHunk>>()
-                        : new List<TextEditHunk> { new TextEditHunk { OldText = before, NewText = content } });
+
             }
             return args;
+        }
+        private static TextEditPlan SourcePatch(string source, ResourceRef reference, ToolHandlerContext context,
+            CancellationToken token = default(CancellationToken))
+        {
+            ResourceAddress address;
+            var vba = reference != null && ResourceUri.TryParse(reference.Uri, out address) && address.Provider == "vba";
+            return TextEditPlan.Patch(source, Value(context.Arguments, "patch"), token,
+                vba ? (Func<string, string>)VbaTextCanonicalizer.NormalizeVbeComparableLine : null);
         }
         private IToolHandler Owner(ResourceMutationPrepared prepared)
         {

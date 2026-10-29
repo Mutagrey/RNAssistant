@@ -131,6 +131,38 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     await page.evaluate(() => { window.state.activeChatId = 'other'; window.resolveChanges(window.fixture); });
     await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 30)));
     assert.equal(await page.locator('.run-changes').count(), 0);
+    await page.evaluate(() => {
+      const output = document.getElementById('output'); output.textContent = '';
+      RNAssistantRunChanges.renderInline(output, {complete:true, items: [
+        {title:'a.js',scope:'Текст',targetStatus:'Changed',availability:'available',before:'old\n',after:'saved\n'},
+        {title:'b.bas',scope:'Текст',targetStatus:'Unknown',availability:'unverified',before:'old\n',intendedAfter:'planned\n'},
+        {title:'c.md',scope:'Текст',targetStatus:'NotStarted',availability:'not_started'},
+        {title:'d.txt',scope:'Текст',targetStatus:'Rejected',availability:'rejected'}
+      ]});
+    });
+    assert.equal(await page.locator('.inline-change').count(), 4);
+    assert.match(await page.locator('.inline-change').nth(0).textContent(), /Изменение подтверждено/);
+    assert.match(await page.locator('.inline-change').nth(1).textContent(), /Эффект неизвестен/);
+    assert.match(await page.locator('.inline-change').nth(2).textContent(), /Выполнение не начиналось/);
+    assert.match(await page.locator('.inline-change').nth(3).textContent(), /Отказ без эффекта/);
+    assert.match(await page.locator('.inline-change').nth(0).textContent(), /saved/);
+    assert.match(await page.locator('.inline-change').nth(1).textContent(), /planned/);
+    await page.evaluate(() => {
+      const output = document.getElementById('output'); output.textContent = '';
+      RNAssistantRunChanges.renderPrepared(output, {targets:[
+        {target:'a.js',preview:[{before:'old',after:'new'}]},
+        {target:'<img src=x>.bas',preview:[{before:'',after:'planned',truncated:true}]}
+      ]});
+    });
+    assert.equal(await page.locator('details.inline-change').count(), 2);
+    assert.equal(await page.locator('#output img').count(), 0);
+    await page.locator('details.inline-change').nth(1).locator('summary').click();
+    assert.match(await page.locator('#output').textContent(), /Предложенные изменения/);
+    assert.match(await page.locator('#output').textContent(), /часть подготовленного изменения/);
+    for (const width of [320, 740]) {
+      await page.setViewportSize({width, height:844});
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    }
     console.log('PASS run changes: summary, exact counts, lazy details, inert source, narrow/wide layout, stale chat');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

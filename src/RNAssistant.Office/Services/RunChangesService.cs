@@ -63,18 +63,57 @@ namespace RNAssistant.Office.Services
         {
             if (session == null || string.IsNullOrWhiteSpace(runId)) throw new ArgumentException("An exact chat/run is required.");
             var result = new RunChangesDto { ChatId = session.Id, RunId = runId, ToolCallId = toolCallId };
+            if (!string.IsNullOrEmpty(toolCallId))
+            {
+                var patch = PatchChangesProjection.Read(session, runId, toolCallId, _authority?.Payloads,
+                    (reference, maximum) => PatchChangesProjection.ReadSource(_authority, reference, maximum),
+                    (reference, after, body) => PatchChangesProjection.ReadFragments(_authority, reference, after, body));
+                if (patch != null) return patch;
+            }
             var messages = session.Messages ?? new List<ChatMessage>();
             var callMessages = new HashSet<string>(messages.Where(m => m != null && Same(m.RunId, runId) &&
                 (Same(m.ToolCallId, toolCallId) || Same(m.Activity?.ToolCallId, toolCallId)))
                 .Select(m => m.Id), StringComparer.OrdinalIgnoreCase);
             if (toolCallId != null && (string.IsNullOrWhiteSpace(toolCallId) || callMessages.Count == 0))
                 throw new ArgumentException("The exact call does not belong to this chat/run.");
+            var patchCalls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var patchArtifacts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (toolCallId == null)
+            {
+                var remainingPatch = MaximumTotalCharacters;
+                foreach (var terminal in messages.Where(m => Same(m.RunId, runId) && m.ToolName == ResourceMutationToolCatalog.Patch &&
+                    m.AcceptedCallOrigin == null && m.ToolResultProtocolVersion == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion).Take(MaximumItems))
+                {
+                    if (patchCalls.Contains(terminal.ToolCallId)) continue;
+                    var patch = PatchChangesProjection.Read(session, runId, terminal.ToolCallId, _authority?.Payloads,
+                        (reference, maximum) => PatchChangesProjection.ReadSource(_authority, reference, maximum),
+                        (reference, after, body) => PatchChangesProjection.ReadFragments(_authority, reference, after, body), remainingPatch);
+                    if (patch == null) continue;
+                    patchCalls.Add(terminal.ToolCallId);
+                    result.EvidenceFound = true; result.Complete &= patch.Complete;
+                    foreach (var item in patch.Items)
+                    {
+                        if (result.Items.Count >= MaximumItems) { result.Complete = false; break; }
+                        result.Items.Add(item);
+                        remainingPatch -= (item.Before?.Length ?? 0) + (item.After?.Length ?? 0) + (item.IntendedAfter?.Length ?? 0) +
+                            (item.Hunks?.Sum(h => h.Before.Length + h.After.Length) ?? 0);
+                    }
+                    foreach (var target in terminal.ResourceEffect?.Targets ?? new ResourceTargetEffect[0])
+                        foreach (var reference in new[] { target.Source, target.After }.Concat(
+                            (target.Effect?.Impacts ?? new ResourceImpact[0]).SelectMany(impact => new[] { impact.Before, impact.After })).Where(r => r != null))
+                        {
+                            var segments = ResourceUri.Parse(reference.Uri).Segments;
+                            for (var i = 0; i + 1 < segments.Count; i++)
+                                if (segments[i] == "artifact") patchArtifacts.Add(segments[i + 1]);
+                        }
+                }
+            }
             var all = (session.Artifacts ?? new List<ChatArtifact>()).Where(a => a != null && !string.IsNullOrEmpty(a.Id))
                 .GroupBy(a => a.Id, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() == 1)
                 .ToDictionary(g => g.Key, g => g.Single(), StringComparer.OrdinalIgnoreCase);
-            var selected = all.Values.Where(a => Same(a.RunId, runId) && IsSource(a) &&
+            var selected = all.Values.Where(a => Same(a.RunId, runId) && IsSource(a) && !patchArtifacts.Contains(a.Id) &&
                 (toolCallId == null || callMessages.Contains(a.SourceMessageId))).ToList();
-            result.EvidenceFound = selected.Count > 0;
+            result.EvidenceFound |= selected.Count > 0;
             // Collapse only linear parent chains belonging to this run. Never merge by title/time.
             var parents = new HashSet<string>(selected.Where(a => !string.IsNullOrEmpty(a.ParentArtifactId))
                 .GroupBy(a => a.ParentArtifactId, StringComparer.OrdinalIgnoreCase).Where(g => g.Count() == 1)
@@ -126,7 +165,7 @@ namespace RNAssistant.Office.Services
                 { AddGap(result, tip.Id, tip.Title, "Текст", "unavailable"); }
             }
             if (tips.Count > MaximumItems || selected.Any(a => !covered.Contains(a.Id))) result.Complete = false;
-            AddVba(result, session, runId, toolCallId);
+            AddVba(result, session, runId, toolCallId, patchCalls);
             var remaining = MaximumTotalCharacters;
             foreach (var item in result.Items)
             {
@@ -195,7 +234,7 @@ namespace RNAssistant.Office.Services
             }
         }
 
-        private void AddVba(RunChangesDto result, ChatSession session, string runId, string toolCallId)
+        private void AddVba(RunChangesDto result, ChatSession session, string runId, string toolCallId, ISet<string> patchCalls)
         {
             if (_query == null) return;
             var callRuns = (session.Messages ?? new List<ChatMessage>())
@@ -211,7 +250,7 @@ namespace RNAssistant.Office.Services
             { AddGap(result, "vba-journal", "Журнал VBA недоступен", "VBA", "unavailable"); result.Complete = false; return; }
             if (page.HasMore) result.Complete = false;
             var chains = new Dictionary<string, RunTextChangeDto>(StringComparer.OrdinalIgnoreCase);
-            foreach (var row in page.Rows.Where(r => Same(r.SessionId, session.Id) && (toolCallId == null || Same(r.ToolCallId, toolCallId))).OrderBy(r => r.FirstSequence))
+            foreach (var row in page.Rows.Where(r => !patchCalls.Contains(r.ToolCallId) && Same(r.SessionId, session.Id) && (toolCallId == null || Same(r.ToolCallId, toolCallId))).OrderBy(r => r.FirstSequence))
             {
                 string callRun;
                 if (!string.IsNullOrEmpty(row.ToolCallId) && callRuns.TryGetValue(row.ToolCallId, out callRun) && !Same(callRun, runId)) continue;

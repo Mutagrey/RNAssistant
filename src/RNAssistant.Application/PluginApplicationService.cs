@@ -837,6 +837,7 @@ namespace RNAssistant.Application
                 PendingId = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PendingId,
                 PendingTool = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.Name,
                 PendingArguments = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.Call?.ArgumentsJson,
+                PatchPreview = session.LastRun?.KernelState?.Summary?.PendingConfirmation?.PatchPreview,
                 Messages = messages.Messages, MessageStartIndex = messages.StartIndex,
                 MessageTotalCount = messages.TotalCount };
             }

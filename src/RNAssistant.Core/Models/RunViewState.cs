@@ -45,9 +45,10 @@ namespace RNAssistant.Core.Models
         public string PendingId { get; private set; }
         public string ToolCallId { get; private set; }
         public string ToolName { get; private set; }
+        public RNAssistant.Core.Tools.PatchBatchResult PatchPreview { get; private set; }
 
         [JsonConstructor]
-        public PendingConfirmationViewState(string pendingId, string toolCallId, string toolName)
+        public PendingConfirmationViewState(string pendingId, string toolCallId, string toolName, RNAssistant.Core.Tools.PatchBatchResult patchPreview = null)
         {
             if (string.IsNullOrWhiteSpace(pendingId) || string.IsNullOrWhiteSpace(toolCallId) ||
                 string.IsNullOrWhiteSpace(toolName))
@@ -55,6 +56,7 @@ namespace RNAssistant.Core.Models
             PendingId = pendingId;
             ToolCallId = toolCallId;
             ToolName = toolName;
+            PatchPreview = patchPreview;
         }
     }
 

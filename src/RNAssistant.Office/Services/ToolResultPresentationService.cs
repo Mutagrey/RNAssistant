@@ -43,7 +43,7 @@ namespace RNAssistant.Office.Services
                 ? terminal.ExecutionReference.Alias : null;
             var effect = activity.ExecutionEvidence?.Effect;
             var changes = effect == ToolEffectEvidence.VerifiedChange || effect == ToolEffectEvidence.VerifiedNoChange ||
-                effect == ToolEffectEvidence.Unknown ? _changes?.Invoke(toolCallId) : null;
+                effect == ToolEffectEvidence.Unknown || activity.ToolId == ResourceMutationToolCatalog.Patch ? _changes?.Invoke(toolCallId) : null;
             if (changes != null && (changes.EvidenceFound || !changes.Complete))
                 result.Blocks.Add(new ToolChangesBlockDto { Title = "Изменения этого шага", Complete = changes.Complete, Changes = changes });
             else if (activity.ExecutionEvidence?.Effect == ToolEffectEvidence.Unknown ||

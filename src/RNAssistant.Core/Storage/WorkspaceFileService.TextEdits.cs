@@ -17,30 +17,35 @@ namespace RNAssistant.Core.Storage
             internal long Offset;
             internal byte[] Before, After;
         }
-        public void ValidateTextEdits(WorkspaceDescriptor workspace, string path, ResourceRef expected,
-            IReadOnlyList<TextEditHunk> hunks, CancellationToken token, ResourceEvidence observed = null)
+        public List<PatchPreview> ValidateTextEdits(WorkspaceDescriptor workspace, string path, ResourceRef expected,
+            string patch, CancellationToken token, ResourceEvidence observed = null)
         {
             var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
             {
-                var edits = PlanByteEdits(stream, hunks, token);
+                var parsed = TextPatch.Parse(patch);
+                if (parsed.RequiresWholeSource && !(observed?.Complete == true && observed.Coverage.Kind == ResourceCoverageKinds.Whole))
+                    throw new TextPatternException("source_observation_required", "A context-free insertion requires complete observed source.");
+                var edits = PlanByteEdits(stream, patch, token);
                 if (observed?.Coverage.Kind == ResourceCoverageKinds.CharacterRange)
                 {
                     var start = CharacterByteOffset(stream, observed.Coverage.Start ?? 0, token);
                     var end = CharacterByteOffset(stream, observed.Coverage.End ?? 0, token);
                     if (edits.Any(edit => edit.Offset < start || edit.Offset + edit.Before.Length > end))
-                        throw new TextPatternException("source_observation_required", "Hunk coordinates must stay inside the observed source excerpt.");
+                        throw new TextPatternException("source_observation_required", "Changed lines must stay inside the observed source excerpt.");
                 }
+                return PatchPreview.From(edits.Select(e => new TextPatchEdit {
+                    Before = StrictUtf8.GetString(e.Before), After = StrictUtf8.GetString(e.After) }));
             }
         }
         public WorkspaceFileObservation ApplyTextEdits(WorkspaceDescriptor workspace, string path,
-            ResourceRef expected, IReadOnlyList<TextEditHunk> hunks, Action onDispatch = null,
+            ResourceRef expected, string patch, Action onDispatch = null,
             CancellationToken token = default(CancellationToken), string effectOperation = null)
         {
             // One staged commit, even for many hunks. Source and result are streamed; memory follows patch size.
             var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
-                return CommitTextEdits(workspace, path, expected, stream, PlanByteEdits(stream, hunks, token), onDispatch, token, effectOperation);
+                return CommitTextEdits(workspace, path, expected, stream, PlanByteEdits(stream, patch, token), onDispatch, token, effectOperation);
         }
         public WorkspaceFileObservation ReplaceMatches(WorkspaceDescriptor workspace, string path, ResourceRef expected,
             string query, string replacement, string mode, bool matchCase, int count,
@@ -118,49 +123,31 @@ namespace RNAssistant.Core.Storage
                 catch (UnauthorizedAccessException) { }
             }
         }
-        private static IReadOnlyList<ByteEdit> PlanByteEdits(Stream source, IReadOnlyList<TextEditHunk> hunks, CancellationToken token)
+        private static IReadOnlyList<ByteEdit> PlanByteEdits(Stream source, string patch, CancellationToken token)
         {
-            if (hunks == null || hunks.Count == 0 || hunks.Count > 100) throw new TextPatternException("patch_invalid", "Use 1–100 hunks.");
-            var edits = new List<ByteEdit>();
-            foreach (var hunk in hunks)
+            source.Position = 0;
+            IReadOnlyList<TextPatchEdit> resolved;
+            using (var reader = new StreamReader(source, StrictUtf8, false, 81920, true))
+                resolved = TextPatch.Parse(patch).Resolve(reader, token);
+            return resolved.Select(edit => new ByteEdit {
+                Offset = CharacterByteOffset(source, edit.Offset, token),
+                Before = EncodePatchFragment(edit.Before), After = EncodePatchFragment(edit.After)
+            }).ToList();
+        }
+        public IReadOnlyList<TextPatchEdit> ReadRetainedPatchEdits(ResourceRef before, ResourceRef after, string patch, int maximumCharacters)
+        {
+            var evidence = PublishedEvidence(before, ResourceRepresentations.Raw);
+            using (var stream = OpenRetainedStream(evidence.Payload, long.MaxValue, CancellationToken.None, null, true))
+            using (var reader = new StreamReader(stream, StrictUtf8, false, 81920, true))
             {
-                token.ThrowIfCancellationRequested();
-                if (hunk?.OldText == null || hunk.NewText == null) throw new TextPatternException("patch_invalid", "oldText and newText are required.");
-                var context = EncodePatchFragment(hunk.ContextBefore ?? "");
-                var before = EncodePatchFragment(hunk.OldText); var after = EncodePatchFragment(hunk.NewText);
-                var block = EncodePatchFragment((hunk.ContextBefore ?? "") + hunk.OldText + (hunk.ContextAfter ?? ""));
-                long offset;
-                source.Position = 0;
-                if (hunk.Boundary != null)
-                {
-                    TextEditPlan.Patch("", new[] { hunk }, token); // shared boundary validation
-                    // The UTF-8 signature stays at byte zero when inserting at the start of content.
-                    offset = hunk.Boundary == "start"
-                        ? (source.ReadByte() == 0xef && source.ReadByte() == 0xbb && source.ReadByte() == 0xbf ? 3 : 0)
-                        : source.Length;
-                }
-                else if (hunk.StartLine.HasValue || hunk.StartColumn.HasValue)
-                {
-                    offset = CoordinateByteOffset(source, hunk.StartLine ?? 0, hunk.StartColumn ?? 1, token);
-                    if (block.Length == 0 || offset < context.Length) throw new TextPatternException("patch_not_found", "The exact coordinate/context does not match.");
-                    source.Position = offset - context.Length;
-                    try { SkipExactAnchor(source, block); }
-                    catch (IOException) { throw new TextPatternException("patch_not_found", "The exact coordinate/context does not match."); }
-                }
-                else
-                {
-                    if (block.Length == 0) throw new TextPatternException("patch_invalid", "Insertion requires context or boundary.");
-                    var match = FindUniqueUtf8Anchor(source, block, source.Length, token);
-                    if (match < 0) throw new TextPatternException("patch_not_found", "The exact hunk was not found.");
-                    offset = match + context.Length;
-                }
-                edits.Add(new ByteEdit { Offset = offset, Before = before, After = after });
+                var edits = TextPatch.Parse(patch).Resolve(reader);
+                if (edits.Sum(e => (long)e.Before.Length + e.After.Length) > maximumCharacters)
+                    throw new WorkspaceFileException("file_too_large", "Retained patch fragments exceed the display budget.");
+                var result = PublishedEvidence(after, ResourceRepresentations.Raw);
+                using (var afterStream = OpenRetainedStream(result.Payload, long.MaxValue, CancellationToken.None, null, true))
+                using (var afterReader = new StreamReader(afterStream, StrictUtf8, false))
+                    return TextPatch.ReadAfterFragments(afterReader, edits);
             }
-            edits.Sort((a,b) => a.Offset.CompareTo(b.Offset));
-            for (var index = 1; index < edits.Count; index++)
-                if (edits[index].Offset == edits[index-1].Offset || edits[index].Offset < edits[index-1].Offset + edits[index-1].Before.Length)
-                    throw new TextPatternException("patch_overlap", "Hunks overlap in the original source.");
-            return edits;
         }
         private static long CharacterByteOffset(Stream source, long characters, CancellationToken token)
         {
@@ -181,36 +168,6 @@ namespace RNAssistant.Core.Storage
                 }
             }
             return bytes;
-        }
-        private static long CoordinateByteOffset(Stream source, int line, int column, CancellationToken token)
-        {
-            if (line < 1 || column < 1) throw new TextPatternException("patch_location_invalid", "Coordinates are 1-based UTF-16 positions.");
-            source.Position = 0;
-            using (var reader = new StreamReader(source, StrictUtf8, false, 81920, true))
-            {
-                int currentLine = 1, currentColumn = 1; long bytes = 0;
-                while (true)
-                {
-                    token.ThrowIfCancellationRequested();
-                    if (currentLine == line && currentColumn == column) return bytes;
-                    var c = reader.Read();
-                    if (c < 0) break;
-                    if (c == '\r' || c == '\n')
-                    {
-                        if (currentLine == line) break;
-                        bytes++; if (c == '\r' && reader.Peek() == '\n') { reader.Read(); bytes++; }
-                        currentLine++; currentColumn = 1;
-                    }
-                    else if (char.IsHighSurrogate((char)c))
-                    {
-                        if (currentLine == line && column == currentColumn + 1) break;
-                        var low = reader.Read(); if (low < 0 || !char.IsLowSurrogate((char)low)) break;
-                        bytes += 4; currentColumn += 2;
-                    }
-                    else { bytes += c < 128 ? 1 : c < 2048 ? 2 : 3; currentColumn++; }
-                }
-            }
-            throw new TextPatternException("patch_location_invalid", "Coordinate is outside the source or splits a Unicode scalar.");
         }
     }
 }

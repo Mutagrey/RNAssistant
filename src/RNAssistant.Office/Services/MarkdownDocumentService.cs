@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
         { _gateway = gateway; _artifacts = artifacts; }
 
         internal static string OperationKey(ChatSession session, ToolExecutionContext context)
-        { return "markdown_operation_" + TextPatternEngine.Sha256(JsonConvert.SerializeObject(new[] { session.Id, context.RunId, context.StepId, context.Call.Id })); }
+        { return "markdown_operation_" + TextPatternEngine.Sha256(JsonConvert.SerializeObject(new[] { session.Id, context.RunId, context.StepId, context.Call.Id + (context.TargetOrdinal.HasValue ? "#patch:" + context.TargetOrdinal.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "") })); }
         internal static ResourceIdentity OperationIdentity(ChatSession session, string key)
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, key)); }
 
@@ -37,6 +37,7 @@ namespace RNAssistant.Office.Services
                 intent.LogicalId = MarkdownDocumentIdentity.LogicalId(artifact.Id);
                 if (artifact.Kind != ChatArtifactKinds.Markdown || intent.LogicalId == null)
                     throw new InvalidDataException("This target is not an authored Markdown document. Uploaded originals are immutable; create a new document explicitly.");
+                RequireCurrentBase(session, intent, _artifacts);
             }
             if (context.DomainOperation == MarkdownDocumentToolCatalog.RestoreToolId)
             {
@@ -67,9 +68,7 @@ namespace RNAssistant.Office.Services
                 var identity = MarkdownDocumentIdentity.Identity(session, intent.LogicalId);
                 if (authority.Store.GetHead(authority.Scope(session, true), OperationIdentity(session, OperationKey(session, context))) != null)
                     throw new ToolMutationPreparationException("markdown_attempt_already_published", "This Markdown operation is already published. Recover the retained result without replaying the write.");
-                var current = artifacts.CurrentSnapshot(session, identity);
-                if (current?.Uri != intent.Base?.Uri || current?.Revision != intent.Base?.Revision)
-                    throw new ToolMutationPreparationException("RESOURCE_REVISION_CHANGED", "Markdown changed in another chat. Find and read the current document before editing.");
+                RequireCurrentBase(session, intent, artifacts);
                 if (intent.Base != null) artifacts.Read(session, intent.Base);
                 if (intent.RestoreFrom != null)
                 {
@@ -80,6 +79,14 @@ namespace RNAssistant.Office.Services
                 return new[] { new ResourceImpact(identity, ResourceImpactRelation.Exact) };
             }
             catch (InvalidDataException ex) { throw new ToolMutationPreparationException("RESOURCE_SNAPSHOT_UNAVAILABLE", ex.Message); }
+            catch (ResourceRequestException ex) { throw new ToolMutationPreparationException(ex.ErrorCode, ex.Message); }
+        }
+
+        private static void RequireCurrentBase(ChatSession session, MarkdownDocumentIntent intent, DocumentArtifactStore artifacts)
+        {
+            var current = artifacts.CurrentSnapshot(session, MarkdownDocumentIdentity.Identity(session, intent.LogicalId));
+            if (current?.Uri != intent.Base?.Uri || current?.Revision != intent.Base?.Revision)
+                throw new ResourceRequestException("Markdown changed in another chat. Find and read the current document before editing.", "RESOURCE_REVISION_CHANGED", false);
         }
 
         internal ChatArtifact Save(ChatSession session, ToolHandlerContext context)

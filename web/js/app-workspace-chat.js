@@ -356,6 +356,11 @@
     node("Control").hidden = !pending;
     node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
       (field(chat, "pendingArguments") || "") : "";
+    var preview = field(chat, "patchPreview");
+    if (pending && preview && window.RNAssistantRunChanges) {
+      node("Pending").textContent = "Предложенные изменения";
+      window.RNAssistantRunChanges.renderPrepared(node("Pending"), preview);
+    }
     var input = field(snapshot, "userInput"), set = field(input, "questionSet"), container = node("Questions");
     if (!set) { container.hidden = true; container.replaceChildren(); return; }
     window.RNAssistantQuestions.render(container, set, {

@@ -73,8 +73,7 @@ namespace RNAssistant.Harness
                 };
                 assertSource(session, original, source);
                 var patched = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch,
-                    "target", (string)JObject.Parse(created.DataJson)["target"],
-                    "hunks", new[] { new { oldText = "before", newText = "after" } }),
+                    "patch", "*** Update Target: " + (string)JObject.Parse(created.DataJson)["target"] + "\n" + "@@\n-" + source + "\n+" + source.Replace("before", "after") + "\n"),
                     tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(patched.Success, "HTML patch succeeds: " + patched.Message);
                 var latest = session.Artifacts.Single(item => item.Title == "index.html" && item.Revision == 2);
@@ -131,6 +130,18 @@ namespace RNAssistant.Harness
                     .SequenceEqual(bytes), "UTF-16 BOM and bytes survive hydration and another save");
                 assertSource(restarted, retained, uploadedText);
                 assertPromptTargets(restarted);
+                var utf16Target = executor.ResourceGateway.Find(session, "copy.htm", "document").Items.Single(item => item.Target.StartsWith("file: ", StringComparison.Ordinal)).Target;
+                var utf16Patch = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch, "patch",
+                    "*** Update Target: " + utf16Target + "\n@@\n-" + uploadedText + "\n+" + uploadedText.Replace("before", "after") + "\n"),
+                    tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                AssertTrue(utf16Patch.Success, "UTF-16 authored patch: " + utf16Patch.Message);
+                var utf16After = session.Artifacts.Single(item => item.Kind == ChatArtifactKinds.File && item.Title == "copy.htm" && item.Revision == 2);
+                var utf16Text = uploadedText.Replace("before", "after");
+                AssertTrue(store.DocumentArtifacts.ExportBytes(session, ChatResourceUri.CreateArtifactRevision(session, utf16After))
+                    .SequenceEqual(Encoding.Unicode.GetPreamble().Concat(Encoding.Unicode.GetBytes(utf16Text))), "patch preserves UTF-16 BOM, untouched bytes and absent final newline");
+                var authorityStore = new ResourceAuthorityStore(FixturePaths.Value);
+                var authority = new ResourceAuthorityService(authorityStore, authorityStore, new ResourceMutationJournal(FixturePaths.Value), new ChatBlobStore(FixturePaths.Value));
+                AssertEqual(utf16Text, PatchChangesProjection.ReadSource(authority, ChatResourceUri.CreateArtifactRevision(session, utf16After), 128000), "retained decoded after-source exists without a follow-up model read");
                 var rawPath = System.IO.Path.Combine(FixturePaths.Value.ChatBlobDirectory,
                     rawHash.Substring(0, 2), rawHash + ".blob");
                 System.IO.File.Move(rawPath, rawPath + ".held");
@@ -170,8 +181,8 @@ namespace RNAssistant.Harness
                 var copiedRef = ChatResourceUri.CreateArtifactRevision(session, copy);
                 AssertEqual(originalBytes.Length, (int)copy.ContentByteLength.Value, "copy retains exact byte length");
                 AssertTrue(store.DocumentArtifacts.ExportBytes(session, copiedRef).SequenceEqual(originalBytes), "copy preserves exact original bytes");
-                var patches = new[] { new { oldText = "slow(slow(value))", newText = "fast(value)" } };
-                var patchCommand = Command(ResourceMutationToolCatalog.Patch, "target", copyTarget, "hunks", patches);
+                var patches = "@@\n-const unique = slow(slow(value));\n+const unique = fast(value);\n";
+                var patchCommand = Command(ResourceMutationToolCatalog.Patch, "patch", "*** Update Target: " + copyTarget + "\n" + patches);
                 var patched = executor.ExecuteManual(patchCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(patched.Success, "large file patch: " + patched.Message);
                 AssertTrue(!patched.DataJson.Contains("rna://") && !patched.DataJson.Contains("\"offset\"") &&
@@ -223,7 +234,7 @@ namespace RNAssistant.Harness
                     "large file viewer pages past the small-document ceiling without enabling full copy");
                 var found = store.DocumentArtifacts.SearchTextOccurrences(session, latestRef, "fast(value)", 10, false);
                 AssertTrue(!found.ScanTruncated && found.Matches.Count == 1, "exact large-file search reaches the changed tail");
-                var nextTarget = (string)JObject.Parse(patched.DataJson)["target"];
+                var nextTarget = (string)JObject.Parse(patched.DataJson)["targets"][0]["currentTarget"];
                 var modelSearch = executor.ResourceGateway.SearchWithin(session, nextTarget, "fast(value)", 10,
                     false, System.Threading.CancellationToken.None);
                 AssertTrue(modelSearch.ScanComplete && modelSearch.Matches.Single().PartNumber > 300,
@@ -231,8 +242,7 @@ namespace RNAssistant.Harness
                 AssertTrue(executor.ResourceGateway.Outline(session, nextTarget, 1, 10).PartCount > 300,
                     "semantic outline navigates the complete authored file");
                 var ambiguous = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch,
-                    "target", nextTarget,
-                    "hunks", new[] { new { oldText = "xx", newText = "x" } }),
+                    "patch", "*** Update Target: " + nextTarget + "\n" + "@@\n-xx\n+x\n"),
                     tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(!ambiguous.Success, "ambiguous patch is refused without another revision");
                 store.Save(session);
@@ -267,8 +277,7 @@ namespace RNAssistant.Harness
                     tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(codeCopy.Success, "UTF-16 source copies without conversion");
                 var codePatch = executor.ExecuteManual(Command(ResourceMutationToolCatalog.Patch,
-                    "target", (string)JObject.Parse(codeCopy.DataJson)["target"],
-                    "hunks", new[] { new { oldText = "slow(value)", newText = "fast(value)" } }),
+                    "patch", "*** Update Target: " + (string)JObject.Parse(codeCopy.DataJson)["target"] + "\n" + "@@\n-slow(value)\n+fast(value)\n"),
                     tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(codePatch.Success, "UTF-16 source patches losslessly");
                 var codeLatest = session.Artifacts.Where(item => item.Kind == ChatArtifactKinds.File && item.Title == "unicode.cs")

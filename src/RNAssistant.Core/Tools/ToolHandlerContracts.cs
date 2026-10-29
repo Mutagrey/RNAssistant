@@ -180,11 +180,15 @@ namespace RNAssistant.Core.Tools
         Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken cancellationToken);
     }
 
+    public delegate Task<ToolExecutionRecord> PreparedTargetExecutor(IToolHandler owner,
+        IDictionary<string, object> arguments, string state, int index, CancellationToken token);
+
     public sealed class ToolHandlerContext
     {
         private int _dispatchPossible;
         private readonly Action _onDispatchPossible;
         private readonly Action<ToolHandlerResult> _onCompleted;
+        private readonly PreparedTargetExecutor _executeTarget;
         public ToolExecutionContext Execution { get; private set; }
         public IDictionary<string, object> Arguments { get; private set; }
         public string PreparedStateJson { get; private set; }
@@ -194,7 +198,7 @@ namespace RNAssistant.Core.Tools
 
         public ToolHandlerContext(ToolExecutionContext execution, IDictionary<string, object> arguments,
             string preparedStateJson = null, Action onDispatchPossible = null,
-            Action<ToolHandlerResult> onCompleted = null, string domainOperation = null)
+            Action<ToolHandlerResult> onCompleted = null, string domainOperation = null, PreparedTargetExecutor executeTarget = null)
         {
             Execution = execution ?? throw new ArgumentNullException(nameof(execution));
             Arguments = ToolArgumentNormalizer.NormalizeDictionary(arguments ?? throw new ArgumentNullException(nameof(arguments)));
@@ -202,6 +206,14 @@ namespace RNAssistant.Core.Tools
             DomainOperation = domainOperation ?? execution.Call.Name;
             _onDispatchPossible = onDispatchPossible;
             _onCompleted = onCompleted;
+            _executeTarget = executeTarget;
+        }
+
+        public Task<ToolExecutionRecord> ExecuteTargetAsync(IToolHandler owner, IDictionary<string, object> arguments,
+            string state, int index, CancellationToken token)
+        {
+            if (_executeTarget == null) throw new InvalidOperationException("Prepared targets require ToolRuntime execution.");
+            return _executeTarget(owner, arguments, state, index, token);
         }
 
         // Domain owners call this while their guard/read-back gate is still held.
@@ -239,6 +251,8 @@ namespace RNAssistant.Core.Tools
 
     public sealed class ToolPreparationResult
     {
+        public PatchTargetPlan PatchTarget { get; private set; }
+        public PatchDiagnostic PatchDiagnostic { get; private set; }
         public const int MaxPreparedStateChars = 131072;
         public const int MaxConfirmationDataChars = 32768;
 
@@ -247,8 +261,9 @@ namespace RNAssistant.Core.Tools
         public ToolRecoveryContract Recovery { get; private set; }
 
         public ToolPreparationResult(ToolResult result, string preparedStateJson = null,
-            ToolRecoveryContract recovery = null)
+            ToolRecoveryContract recovery = null, PatchTargetPlan patchTarget = null, PatchDiagnostic patchDiagnostic = null)
         {
+            PatchTarget = patchTarget; PatchDiagnostic = patchDiagnostic;
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (result.Status == ToolResultStatus.Ok && string.IsNullOrWhiteSpace(preparedStateJson))
                 throw new ArgumentException("Successful preparation requires opaque state.", nameof(preparedStateJson));
@@ -275,11 +290,12 @@ namespace RNAssistant.Core.Tools
         public IReadOnlyList<ResourceMutationReadBack> ResourceReadBack { get; private set; }
         public ToolRecoveryContract Recovery { get; private set; }
         public ResourceAuthorityCommit AuthorityCommit { get; private set; }
+        public ResourceEffect ResourceEffect { get; private set; }
 
         public ToolHandlerResult(ToolResult result, ToolEffectEvidence effect = ToolEffectEvidence.Unreported,
             bool awaitingUser = false, IEnumerable<ResourceEvidence> resourceEvidence = null,
             IEnumerable<ResourceMutationReadBack> resourceReadBack = null,
-            ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null)
+            ToolRecoveryContract recovery = null, ResourceAuthorityCommit authorityCommit = null, ResourceEffect resourceEffect = null)
         {
             Result = result ?? throw new ArgumentNullException(nameof(result));
             if (!Enum.IsDefined(typeof(ToolEffectEvidence), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
@@ -298,6 +314,7 @@ namespace RNAssistant.Core.Tools
                 authorityCommit.Effect.Outcome != ResourceEffectOutcome.Restored))
                 throw new ArgumentException("A direct authority commit requires a verified changed result.", nameof(authorityCommit));
             AuthorityCommit = authorityCommit;
+            ResourceEffect = resourceEffect;
         }
     }
 }

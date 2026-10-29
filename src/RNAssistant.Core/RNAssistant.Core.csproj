@@ -252,7 +252,8 @@
     <Compile Include="Tools\VbaPatchEngine.cs" />
     <Compile Include="Tools\TextEditPlan.cs" />
     <Compile Include="Tools\CapabilityNaming.cs" />
-    <Compile Include="Tools\TextLineEdits.cs" />
+    <Compile Include="Tools\TextPatch.cs" />
+    <Compile Include="Tools\ResourcePatchBatchHandler.cs" />
     <Compile Include="Tools\ResourceTextMatcher.cs" />
     <Compile Include="Tools\ResourceMutationToolCatalog.cs" />
     <Compile Include="Tools\VbaSourceValidator.cs" />

@@ -20,7 +20,14 @@ namespace RNAssistant.Core.Services
             var summary = run == null || run.KernelState == null ? null : run.KernelState.Summary;
             if (summary == null) return null;
 
-            var effects = CollectEffects(messages, summary.RunId, summary.TurnId);
+            var partialPatches = new HashSet<string>((messages ?? Enumerable.Empty<ChatMessage>()).Where(m =>
+                m?.RunId == summary.RunId && m.ToolName == ResourceMutationToolCatalog.Patch &&
+                !string.IsNullOrWhiteSpace(m.ToolCallId) && m.ResourceEffect?.Targets != null &&
+                m.ResourceEffect.Targets.Any(t => t.Status == ResourceTargetStatus.Changed) &&
+                m.ResourceEffect.Targets.Any(t => t.Status == ResourceTargetStatus.Rejected ||
+                    t.Status == ResourceTargetStatus.Unknown || t.Status == ResourceTargetStatus.NotStarted))
+                .Select(m => m.ToolCallId), StringComparer.Ordinal);
+            var effects = CollectEffects(messages, summary.RunId, summary.TurnId, partialPatches);
             var counts = summary.ToolCounts;
             var reportedVerified = effects.Count(value => value == ToolEffectEvidence.VerifiedChange);
             var reportedNoChange = effects.Count(value => value == ToolEffectEvidence.VerifiedNoChange);
@@ -41,7 +48,7 @@ namespace RNAssistant.Core.Services
             var pending = lifecycle != RunViewLifecycles.AwaitingConfirmation ? null : new PendingConfirmationViewState(
                 summary.PendingConfirmation.PendingId,
                 summary.PendingConfirmation.Call.Id,
-                summary.PendingConfirmation.Call.Name);
+                summary.PendingConfirmation.Call.Name, summary.PendingConfirmation.PatchPreview);
             var finish = FinishResponse(messages, summary);
 
             return new RunViewState(
@@ -51,7 +58,7 @@ namespace RNAssistant.Core.Services
                 lifecycle,
                 health,
                 counts.ReadOk,
-                verified,
+                SaturatingAdd(verified, partialPatches.Count),
                 noChange,
                 unverified,
                 failed,
@@ -123,7 +130,7 @@ namespace RNAssistant.Core.Services
         }
 
         private static IReadOnlyList<ToolEffectEvidence> CollectEffects(
-            IEnumerable<ChatMessage> messages, string runId, string turnId)
+            IEnumerable<ChatMessage> messages, string runId, string turnId, ISet<string> partialPatches)
         {
             var byCall = new Dictionary<string, ToolEffectEvidence>(StringComparer.Ordinal);
             foreach (var message in messages ?? Enumerable.Empty<ChatMessage>())
@@ -136,7 +143,10 @@ namespace RNAssistant.Core.Services
                 if (!sameRun && !sameTurn) continue;
                 CollectEffects(message.Activity, byCall);
             }
-            return byCall.Values.ToArray();
+            // Known partial changes accompany a failed/unknown call, not WriteOk.
+            // Preserve them separately without inventing an inconsistent-effect warning.
+            return byCall.Where(item => !partialPatches.Contains(item.Key) || item.Value != ToolEffectEvidence.VerifiedChange)
+                .Select(item => item.Value).ToArray();
         }
 
         private static void CollectEffects(ChatActivity activity, IDictionary<string, ToolEffectEvidence> byCall)

@@ -1,5 +1,18 @@
 # Current-to-target migration map
 
+## Compact multi-target patch — 2026-10-29
+
+Owner: Core Tools / Application Workspace / Office Tools; UI: Web.
+`core.patch` now has only `patch`, with `*** Update Target:` sections and line hunks.
+The old JSON-hunk schema, `{target, patch}` variant and bottom-up physical VBA writer
+are removed, with no callable compatibility path. One wrapper prepares all owner
+commands and preserves per-target existing journals/effects; it adds no store.
+Prepared state/confirmation/replay, model projection and per-target UI consume the
+new contract. `DomainOperation` below remains the existing temporary owner bridge.
+The VBA patch route now invokes the guarded whole-module writer directly; the
+private replace adapter does not parse public patch hunks. Workspace streams large
+UTF-8 sources; whole-source Office materialization remains an explicit limitation.
+
 ## Universal text tools — 2026-10-28
 
 Owner: Core Tools / Office Tools / Application Workspace. Public per-environment

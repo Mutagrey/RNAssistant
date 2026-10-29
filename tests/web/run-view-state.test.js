@@ -56,6 +56,11 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(runView.normalize(Object.assign(state("running-claim", "running"), {
     ModelResults: [{ Summary: "Too early", Assessment: "unverified", Evidence: [] }]
   })), null);
+  const patchPreview = {type:'rnassistant.patch',targets:[{target:'a.js',preview:[{before:'old',after:'new'}]}]};
+  const approval = runView.normalize(Object.assign(state('patch', 'awaiting_confirmation'), {
+    PendingConfirmation: {PendingId:'p',ToolCallId:'c',ToolName:'core.patch',PatchPreview:patchPreview}
+  }));
+  assert.equal(approval.pendingConfirmation.patchPreview, patchPreview, 'prepared package reaches approval without re-parsing model arguments');
   assert.equal(runView.fromMessage({ RunViewState: state("message") }).runId, "message");
   assert.equal(runView.fromChatSummary({ RunViewState: state("summary") }).runId, "summary");
   assert.equal(runView.fromMessage({ runViewState: state("wrong-case") }), null);

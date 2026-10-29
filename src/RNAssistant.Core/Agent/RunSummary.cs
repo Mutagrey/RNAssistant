@@ -55,16 +55,18 @@ namespace RNAssistant.Core.Agent
         public string StepId { get; private set; }
         public int ChargedToolSteps { get; private set; }
         public string PreparedStateJson { get; private set; }
+        public RNAssistant.Core.Tools.PatchBatchResult PatchPreview { get; private set; }
 
         internal PendingConfirmation(ToolExecutionRecord record)
             : this(record.PendingId, record.Context.Call, record.Context.Policy, record.Context.StepId,
-                record.ToolStepsConsumed, record.PreparedStateJson)
+                record.ToolStepsConsumed, record.PreparedStateJson, record.Context.Call.Name == RNAssistant.Core.Tools.ResourceMutationToolCatalog.Patch && record.ConfirmationDataJson != null
+                    ? JsonConvert.DeserializeObject<RNAssistant.Core.Tools.PatchBatchResult>(record.ConfirmationDataJson) : null)
         {
         }
 
         [JsonConstructor]
         internal PendingConfirmation(string pendingId, ToolCall call, ToolPolicySnapshot policy, string stepId,
-            int chargedToolSteps, string preparedStateJson = null)
+            int chargedToolSteps, string preparedStateJson = null, RNAssistant.Core.Tools.PatchBatchResult patchPreview = null)
         {
             if (string.IsNullOrWhiteSpace(pendingId) || string.IsNullOrWhiteSpace(stepId) || call == null || policy == null ||
                 !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) || chargedToolSteps < 1)
@@ -78,6 +80,7 @@ namespace RNAssistant.Core.Agent
             StepId = stepId;
             ChargedToolSteps = chargedToolSteps;
             PreparedStateJson = preparedStateJson;
+            PatchPreview = patchPreview;
         }
     }
 

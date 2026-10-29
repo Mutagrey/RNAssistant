@@ -26,6 +26,10 @@ namespace RNAssistant.Runtime
             if (outcome == ToolExecutionOutcome.Unknown) state = ResourceEffectOutcome.UnknownAfterDispatch;
             if (state != ResourceEffectOutcome.VerifiedChanged && state != ResourceEffectOutcome.Restored &&
                 state != ResourceEffectOutcome.UnknownAfterDispatch) return null;
+            if (toolId == ResourceMutationToolCatalog.Patch && effect?.Targets != null)
+                return new WorkspaceFileActivity { ToolId = toolId, Effect = state.Value,
+                    Targets = effect.Targets.Take(ResourcePatch.MaximumTargets).Select(t => new PatchTargetResult {
+                        Target = t.Target, Status = t.Status, WriteStarted = t.WriteStarted }).ToArray() };
             FilePresentationTarget target = null;
             try { target = JsonConvert.DeserializeObject<FilePresentationTarget>(arguments ?? "{}"); }
             catch (JsonException) { /* Missing target is explicit, never guessed from narrative. */ }

@@ -10,7 +10,7 @@ namespace RNAssistant.Core.Tools
         public const string Write = "core.write", Patch = "core.patch", Replace = "core.replace";
         public const string Move = "resources.move", Copy = "resources.copy", Delete = "resources.delete", Restore = "resources.restore";
         public static bool Owns(string id) { return id == Write || id == Patch || id == Replace || id == Move || id == Copy || id == Delete || id == Restore; }
-        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + ".resource.v1") : null; }
+        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v3" : ".resource.v1")) : null; }
 
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {
@@ -28,15 +28,11 @@ namespace RNAssistant.Core.Tools
                 }
                 else if (id == Patch)
                 {
-                    properties["hunks"] = new JObject { ["description"] = "Non-overlapping edits, all against the original observed source.", ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 100,
-                        ["items"] = Object(new JObject { ["oldText"] = String("Exact old text; empty only for insertion.", false),
-                            ["newText"] = String("Exact new text; empty deletes.", false), ["contextBefore"] = String("Unchanged adjacent text before the edit.", false),
-                            ["contextAfter"] = String("Unchanged adjacent text after the edit.", false),
-                            ["startLine"] = new JObject { ["description"] = "Exact 1-based original source line.", ["type"] = "integer", ["minimum"] = 1 },
-                            ["startColumn"] = new JObject { ["description"] = "Exact 1-based UTF-16 column; requires startLine.", ["type"] = "integer", ["minimum"] = 1 },
-                            ["boundary"] = new JObject { ["description"] = "Insert at start or end; cannot combine with context or coordinates.", ["type"] = "string", ["enum"] = new JArray("start", "end") } }, new JArray("oldText", "newText")) };
-                    required.Add("hunks");
-                    description = "Apply context hunks to one observed source snapshot. Every hunk addresses the original source, not prior hunks. Exact text and context must identify one location; use 1-based UTF-16 coordinates to disambiguate. Overlaps fail before any write. Empty oldText inserts at context or boundary; empty newText deletes. No fuzzy matching.";
+                    properties.Remove("target"); required.Clear();
+                    properties["patch"] = String("One or more sections: *** Update Target: <semantic target>, then @@ hunks. @@ <complete source line> is a distant text anchor; consecutive anchors are ordered. Prefix complete lines with -, + or a space. Optional *** End of File requires EOF. No file operations or line numbers. Example: *** Update Target: src/app.js\n@@ function next() {\n-  return 1;\n+  return 2;\n }\n");
+                    properties["patch"]["maxLength"] = ResourcePatch.MaximumPatchCharacters;
+                    required.Add("patch");
+                    description = "Patch up to 16 related existing sources. All targets and original-snapshot hunks prepare before any write; aliases of the same target, ambiguity, overlaps or stale/unobserved source fail the package. Writes are sequential, with per-target results; stop on failure/unknown, never replay or roll back the package automatically. Dependent edits require separate calls with a read between them. Live VBA alone tolerates identifier case/token spacing, preserving literals/comments. Use core.write for creation/full overwrite and resources.* for lifecycle.";
                 }
                 else if (id == Replace)
                 {

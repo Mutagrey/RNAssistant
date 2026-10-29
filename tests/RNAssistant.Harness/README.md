@@ -1,10 +1,17 @@
 # RNAssistant Harness
 
 `universal mutations:` covers the shared public source contract: original-snapshot
-hunks and overlapping/repeated text, UTF-8/BOM/CRLF and large streamed files,
+line hunks, distant/ordered anchors, overlapping/repeated text, UTF-8/BOM/CRLF/EOF and large streamed files,
 shared regex/literal matching, upsert and owner routing, delivered VBA excerpts,
 confirmation collisions, stale reads, copy/move/delete/restore, retained file diffs,
-and unknown effects. `text search:`, `tool pack:`, `authored file:`, `run changes:`
+and unknown effects. Package checks cover all-before-write preparation, duplicate aliases,
+confirmation drift, per-target rechecks, partial failure/unknown, unexecuted remainder,
+model projection, retained before/after and VBA/HTML/Markdown routing.
+`tests/web/run-changes-layout.test.js` checks per-target inline statuses and prepared
+preview; `run-view-state.test.js` checks typed preview delivery.
+`tests/cli/stabilization_smoke.py` covers multi-target confirmation across restart,
+bounded partial-source reads and intermediate reading before a dependent patch.
+`text search:`, `tool pack:`, `authored file:`, `run changes:`
 and `tool presentation:` cover their existing owners. No COM/VSTO runs are involved.
 `tests/cli/read_recovery_smoke.py` checks six production CLI refusal/read/retry
 paths, including restart; optional lifecycle tools are admitted before use.
@@ -1056,8 +1063,8 @@ survives accepted-history restoration and an unrelated verified deletion does no
 clear the target's failed call. These use scripted HTTP models, not real-model quality evidence.
 After building the CLI, `python3 -B tests/cli/stabilization_smoke.py` checks a
 five-read batch with one narration, a bounded large-file tail, refusal of whole
-replacement from partial evidence, and patch → delivered after-source → patch.
-Both mutations resume approval in fresh processes; exact mixed line endings and
+replacement from partial evidence, multi-target patch → bounded read → patch.
+Both mutations resume approval in fresh processes; per-target after-source labels, exact mixed line endings and
 Unicode outside the patch are preserved. Focused Harness filters `workspace files:
 guarded`, `resources: known VBA target`, `tool runtime: exceptions`, `skill packages:
 exact request`, `context continuity:` and `tools: html source read` cover pre-effect

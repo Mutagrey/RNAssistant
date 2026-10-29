@@ -1115,14 +1115,10 @@ namespace RNAssistant.OfficeHosts.Vba
         {
             code = PrepareLiveCodeForWrite(code);
             var count = (int)module.CountOfLines;
-            var before = count == 0 ? string.Empty : VbaTextCanonicalizer.NormalizeLiveCode((string)module.Lines[1, count]);
-            // All coordinates address the original module; bottom-up dispatch preserves them.
-            foreach (var edit in TextLineEdits.Plan(before, code.Replace("\r\n", "\n")))
-            {
-                if (edit.RemoveCount > 0) module.DeleteLines(edit.StartLine, edit.RemoveCount);
-                if (edit.Insert.Length > 0) module.InsertLines(edit.StartLine, string.Join("\r\n", edit.Insert));
-            }
-
+            // Hunks are resolved in memory. VBE can normalize code between COM calls,
+            // so write the assembled candidate once into the existing CodeModule.
+            if (count > 0) module.DeleteLines(1, count);
+            if (code.Length > 0) module.InsertLines(1, code);
         }
 
         private static string PrepareLiveCodeForWrite(string code)

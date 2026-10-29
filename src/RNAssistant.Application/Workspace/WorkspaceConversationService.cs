@@ -764,8 +764,14 @@ namespace RNAssistant.Runtime
                 item.ProtocolMessage && !string.IsNullOrWhiteSpace(item.ToolCallId)))
             {
                 ToolResultWireReadResult wire; string readError;
-                if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError) ||
-                    wire.Result.Status != ToolResultStatus.Ok) continue;
+                if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError)) continue;
+                if (fact.ToolName == ResourceMutationToolCatalog.Patch && fact.ResourceEffect?.Targets != null)
+                {
+                    changed += fact.ResourceEffect.Targets.Count(target => target.Status == ResourceTargetStatus.Changed &&
+                        target.Source?.Uri.StartsWith("rna://file/", StringComparison.Ordinal) == true);
+                    continue;
+                }
+                if (wire.Result.Status != ToolResultStatus.Ok) continue;
                 if (ResourceMutationToolCatalog.Owns(fact.ToolName) && fact.ResourceEffect?.Impacts.Any(i => i.Identity.Uri.StartsWith("rna://file/", StringComparison.Ordinal)) == true &&
                     (fact.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                         fact.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored))
@@ -1011,6 +1017,8 @@ namespace RNAssistant.Runtime
                     if (!accepted.Success) throw new InvalidOperationException("Stored workspace response is invalid: " + accepted.Error);
                     if (accepted.Response.ToolCalls.Any(call => CapabilityNaming.IsRetiredTool(call.Name)))
                         throw new InvalidOperationException("This conversation uses retired tool contracts. Start a new chat; stored history is preserved.");
+                    foreach (var call in accepted.Response.ToolCalls.Where(c => c.Name == ResourceMutationToolCatalog.Patch))
+                        ResourcePatch.ValidateCall(call.ArgumentsJson);
                     var origin = item.AcceptedCallOrigin;
                     var previous = history.LastOrDefault();
                     if (origin != null && string.IsNullOrWhiteSpace(item.RunId))
@@ -1185,7 +1193,7 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceFind, _chatAttachments));
-                Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts context hunks from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
+                Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts line diffs with @@ text anchors from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
                     " For PDF files or PDF attachments, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content." +
                     " Use type=attachment with the exact semantic target from discovery to read a visual selection; it does not authorize a source edit." +
@@ -1205,8 +1213,11 @@ namespace RNAssistant.Runtime
                 if (!workspace.ReadOnly)
                 {
                     foreach (var entry in ResourceMutationToolCatalog.GetTools())
-                        Register(registry, entries, entry, new FileHandler(files, workspace, _observed,
-                            entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered));
+                    {
+                        var handler = new FileHandler(files, workspace, _observed,
+                            entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered);
+                        Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
+                    }
                 }
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
@@ -1252,21 +1263,27 @@ namespace RNAssistant.Runtime
             {
                 var pending = _session?.LastRun?.KernelState?.Summary?.PendingConfirmation;
                 if (pending == null || !ResourceMutationToolCatalog.Owns(pending.Call.Name)) return;
-                if (((string)JObject.Parse(pending.Call.ArgumentsJson)["target"] ?? "").Contains(": ")) return;
-                var path = (string)JObject.Parse(pending.Call.ArgumentsJson)["target"];
-                if (string.IsNullOrWhiteSpace(path))
-                    throw new InvalidOperationException("Pending file mutation has no semantic path.");
-                var prepared = JsonConvert.DeserializeObject<PreparedFileState>(pending.PreparedStateJson ?? "{}");
-                if (prepared?.Version == 2)
+                if (pending.Call.Name == ResourceMutationToolCatalog.Patch)
                 {
-                    if (prepared.Path != path || prepared.ToolId != pending.Call.Name ||
-                        prepared.ArgumentsHash != TextPatternEngine.Sha256(pending.Call.ArgumentsJson) ||
-                        prepared.Source != null && (prepared.Source.Resource?.IsExact != true || prepared.Source.Payload == null))
-                        throw new InvalidOperationException("Pending file observation is incomplete or belongs to another path.");
-                    if (prepared.Source != null) _observed[path] = prepared.Source;
+                    var prepared = ResourcePatch.ReadPreparation(pending.Call.ArgumentsJson, pending.PreparedStateJson);
+                    foreach (var target in prepared.Targets)
+                        if (!target.Target.Contains(": ")) RestoreFileObservation(pending.Call, target.Target, target.State);
                     return;
                 }
-                throw new InvalidOperationException("Unsupported prepared file observation version. Read the source and request a new mutation.");
+                var path = (string)JObject.Parse(pending.Call.ArgumentsJson)["target"];
+                if ((path ?? "").Contains(": ")) return;
+                RestoreFileObservation(pending.Call, path, pending.PreparedStateJson);
+            }
+
+            private void RestoreFileObservation(ToolCall call, string path, string state)
+            {
+                if (string.IsNullOrWhiteSpace(path)) throw new InvalidOperationException("Pending file mutation has no semantic path.");
+                var prepared = JsonConvert.DeserializeObject<PreparedFileState>(state ?? "{}");
+                if (prepared?.Version != 2 || prepared.Path != path || prepared.ToolId != call.Name ||
+                    prepared.ArgumentsHash != TextPatternEngine.Sha256(call.ArgumentsJson) ||
+                    prepared.Source != null && (prepared.Source.Resource?.IsExact != true || prepared.Source.Payload == null))
+                    throw new InvalidOperationException("Pending file observation is incompatible or belongs to another call; request a new mutation.");
+                if (prepared.Source != null) _observed[path] = _delivered[path] = prepared.Source;
             }
 
             private void Register(ToolHandlerRegistry registry, List<ToolCatalogEntry> entries,
@@ -2196,7 +2213,7 @@ namespace RNAssistant.Runtime
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
                 Dictionary<string, ResourceEvidence> observed, string operation, ChatBlobStore payloads,
                 ResourceSearchObservation search, IToolHandler office = null, IReadOnlyDictionary<string, ResourceEvidence> delivered = null)
-            { _office = office; _files = files; _workspace = workspace; _observed = observed; _delivered = delivered ?? observed; _operation = operation; _payloads = payloads; _search = search; }
+            { _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _observed = observed; _delivered = delivered ?? observed; _operation = operation; _payloads = payloads; _search = search; }
 
             public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
             {
@@ -2230,18 +2247,20 @@ namespace RNAssistant.Runtime
                             }
                         }
                     }
+                    List<PatchPreview> patchPreview = null;
                     if (_operation == ResourceMutationToolCatalog.Patch)
-                        _files.ValidateTextEdits(_workspace, path, source.Resource, Hunks(context), token, source);
+                        patchPreview = _files.ValidateTextEdits(_workspace, path, source.Resource, Value(context, "patch"), token, source);
                     if (_operation == ResourceMutationToolCatalog.Replace)
                         _files.ReplaceMatches(_workspace, path, source.Resource, Value(context, "query"), Value(context, "replacement"),
                             Mode(context), Flag(context, "matchCase"), Count(context), null, token, true);
                     return Task.FromResult(new ToolPreparationResult(ToolResult.Ok("Resource source pinned."),
                         JsonConvert.SerializeObject(new PreparedFileState { Version = 2, ToolId = _operation,
                             ArgumentsHash = TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson), Path = path, Source = source,
-                            RestoreSource = _operation == ResourceMutationToolCatalog.Restore ? _files.CaptureDeletedTextVersion(_workspace, path) : null })));
+                            RestoreSource = _operation == ResourceMutationToolCatalog.Restore ? _files.CaptureDeletedTextVersion(_workspace, path) : null }),
+                        patchTarget: patchPreview == null ? null : new PatchTargetPlan { Source = source.Resource, SourceHash = source.ContentSha256, Preview = patchPreview }));
                 }
                 catch (Exception error) when (error is IOException || error is ResourceRequestException || error is TextPatternException)
-                { return Task.FromResult(new ToolPreparationResult(Failure(error), recovery: Recovery(context, error))); }
+                { return Task.FromResult(new ToolPreparationResult(Failure(error), recovery: Recovery(context, error), patchDiagnostic: PatchDiagnostic.From(error))); }
             }
 
             private bool CanUse(ResourceEvidence source, ToolHandlerContext context)
@@ -2250,9 +2269,8 @@ namespace RNAssistant.Runtime
                 if (source.Complete && source.Coverage.Kind == ResourceCoverageKinds.Whole) return true;
                 if (_operation == ResourceMutationToolCatalog.Move || _operation == ResourceMutationToolCatalog.Copy || _operation == ResourceMutationToolCatalog.Delete) return true;
                 if (_operation != ResourceMutationToolCatalog.Patch) return false;
-                var excerpt = _payloads.ReadText(source.Payload.ToBlobReference()) ?? "";
-                return Hunks(context).All(h => h.Boundary == null && (h.OldText + h.ContextBefore + h.ContextAfter).Length > 0 &&
-                    excerpt.IndexOf((h.ContextBefore ?? "") + h.OldText + (h.ContextAfter ?? ""), StringComparison.Ordinal) >= 0);
+                return source.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
+                    !TextPatch.Parse(Value(context, "patch")).RequiresWholeSource;
             }
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
@@ -2289,7 +2307,7 @@ namespace RNAssistant.Runtime
                             : _files.ReplaceText(_workspace, path, expected, Value(context, "content"), context.MarkDispatchPossible, _operation);
                     else
                         changed = _operation == ResourceMutationToolCatalog.Patch
-                            ? _files.ApplyTextEdits(_workspace, path, expected, Hunks(context), context.MarkDispatchPossible, token, effectOperation: _operation)
+                            ? _files.ApplyTextEdits(_workspace, path, expected, Value(context, "patch"), context.MarkDispatchPossible, token, effectOperation: _operation)
                             : _files.ReplaceMatches(_workspace, path, expected, Value(context, "query"), Value(context, "replacement"),
                                 Mode(context), Flag(context, "matchCase"), Count(context), context.MarkDispatchPossible, token, effectOperation: _operation);
                     path = changed.RelativePath;
@@ -2307,8 +2325,6 @@ namespace RNAssistant.Runtime
                         recovery: unknown ? null : Recovery(context, error));
                 }
             }
-            private static List<TextEditHunk> Hunks(ToolHandlerContext context)
-            { return JArray.FromObject(context.Arguments["hunks"]).ToObject<List<TextEditHunk>>(); }
             private static string Value(ToolHandlerContext context, string name)
             { object value; return context.Arguments.TryGetValue(name, out value) ? Convert.ToString(value) : ""; }
             private static string Mode(ToolHandlerContext context) { var value = Value(context, "mode"); return value.Length == 0 ? "literal" : value; }

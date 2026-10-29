@@ -50,7 +50,8 @@ namespace RNAssistant.Core.Llm
                 CompletedOperation = source.CompletedOperation == null ? null : new CompletedToolOperation {
                     ToolCallId = source.CompletedOperation.ToolCallId, ToolName = source.CompletedOperation.ToolName,
                     Status = source.CompletedOperation.Status, Message = source.CompletedOperation.Message,
-                    DataJson = source.CompletedOperation.DataJson },
+                    DataJson = source.CompletedOperation.DataJson,
+                    Targets = source.CompletedOperation.Targets.ToList() },
                 ArgumentPayload = source.ArgumentPayload,
                 AcceptedCallPayload = source.AcceptedCallPayload,
                 AcceptedCallNarration = source.AcceptedCallNarration,

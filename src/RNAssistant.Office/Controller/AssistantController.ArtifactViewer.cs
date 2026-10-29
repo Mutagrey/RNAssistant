@@ -115,6 +115,11 @@ namespace RNAssistant.Office
                 }));
         }
 
+        internal string ReadRetainedPatchSource(ResourceRef exact, int maximum)
+        { return PatchChangesProjection.ReadSource(_toolExecutor.ResourceGateway.Authority, exact, maximum); }
+        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, string patch)
+        { return PatchChangesProjection.ReadFragments(_toolExecutor.ResourceGateway.Authority, exact, after, patch); }
+
         public RunChangesDto ReadRunChanges(RunChangesRequest request)
         {
             if (request == null || string.IsNullOrWhiteSpace(request.RunId))

@@ -125,31 +125,33 @@ component, discover its retained backup and use that target. UserForms remain Co
 | Transport / raw CAS bytes | Exact stored source bytes; CAS SHA-256 is not a normalized text hash |
 | Live canonical text | `NormalizeLiveCode` / `LiveCodeSha256`: normalize real CRLF/CR to LF, remove one terminal newline; preserve other whitespace, blank lines and ownership comments |
 | Package canonical text | `NormalizePackageCode` / `PackageCodeSha256`: additionally strip recognized export headers and RNAssistant ownership markers, trim outer whitespace |
-| VBE-comparable fingerprint | `NormalizeVbeComparableCode` / `VbeComparableCodeSha256`: existing token-based comparison; quoted strings/bracketed names and apostrophe comment text remain significant; not replacement source |
+| VBE-comparable fingerprint | `NormalizeVbeComparableCode` / `VbeComparableCodeSha256`: existing token-based comparison; quoted strings/bracketed names and apostrophe/Rem comment text remain significant; not replacement source |
 | Package-comparable fingerprint | `PackageComparableCodeSha256`: package normalization followed by VBE-comparable normalization |
 
-Hunks match exact source with `oldText`/`newText`, optional adjacent context and
-1-based UTF-16 coordinates. Every hunk addresses the original source. Repeated
-matches, mismatched coordinates and overlapping edits reject the entire plan before
-confirmation/dispatch; there is no fuzzy or sequential shifted-position matching.
-Literal backslash sequences are never decoded again. Normalized fingerprints do
-not become replacement source. Whole-source validation still runs on the result.
+The public `core.patch` accepts only `{ "patch": "..." }`, with one or more
+`*** Update Target:` sections. See [Text mutations](text-mutations.md) for the
+complete grammar, EOF rules and package outcomes. Ordered `@@ <complete line>`
+anchors may be distant; they are text, never inferred procedure scopes. All hunks
+address the original source, and ambiguity/overlap rejects preparation entirely.
+Live VBA matching tolerates identifier case and token spacing but preserves quoted
+strings, bracketed names, apostrophe/Rem comments. Snapshot revision/hash checks
+remain strict. Normalized fingerprints never become replacement source.
 
-A model-visible module observation is distinct from internal guard and verification
-reads. Whole-source overwrite still requires a complete current model observation;
-one bounded resource chunk does not satisfy it. Exact patch is different: runtime
-reads and binds current live source under the document gate, then validates every
-exact hunk before confirmation/dispatch. Sequential patches therefore do not need a
-redundant whole-source read, while stale or ambiguous hunks fail with no effect.
+Whole overwrite needs complete delivered source; patch can use relevant delivered
+excerpts if every changed full line is inside their coverage. Internal reads do not
+grant model observation. Every target prepares before any write, then every target
+is checked again immediately before execution. An earlier module write may alter
+later modules: stop and report partial effects, never replay or roll back the batch.
+The existing per-target journals and read-back publications remain authoritative.
 
-Internal mutation snapshots have no configured character ceiling. Preparation,
-verification, retained after-source, restore and restart reconciliation all request
-the complete module; incomplete snapshots still fail explicitly. The complete candidate is validated before COM and retained in the journal.
-`TextLineEdits` computes physical line edits and the host applies them bottom-up.
-Unchanged lines are preserved; bounded LCS falls back to the changed middle span
-for very large comparisons. Full-module read-back still determines the outcome. Removing the former one-million-character ceiling
-does not require sending the whole module to the model or make multiple COM
-operations atomic; an uncertain partial effect remains unknown. Resource read windows and model context admission remain separate.
+Internal mutation snapshots have no configured character ceiling. The complete
+candidate is assembled in memory, validated and journaled before COM. `ReplaceCode`
+rewrites the entire existing CodeModule (DeleteLines then InsertLines); the old
+`TextLineEdits` bottom-up path is removed. Full-module read-back decides the outcome.
+A possible partial effect without verified read-back is unknown. UserForms stay
+CodeOnly. This requires real Windows/VBE qualification, including normalization
+across modules and failure between the two COM operations; host-neutral tests do
+not qualify Office. Model read windows remain separately bounded.
 
 A whole-write conflict returns complete current source up to 16,384 characters
 and a changed-span diff in typed recovery. This diagnostic text is not a published

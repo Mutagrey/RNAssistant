@@ -247,6 +247,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pendingId")] public string PendingId { get; set; }
         [JsonProperty("pendingTool")] public string PendingTool { get; set; }
         [JsonProperty("pendingArguments")] public string PendingArguments { get; set; }
+        [JsonProperty("patchPreview", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.Tools.PatchBatchResult PatchPreview { get; set; }
         [JsonProperty("cancelStatus", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceCancellationStatus? CancelStatus { get; set; }
         [JsonProperty("messages")] public IReadOnlyList<ChatMessageViewDto> Messages { get; set; }
         [JsonProperty("messageStartIndex")] public int MessageStartIndex { get; set; }

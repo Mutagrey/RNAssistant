@@ -34,6 +34,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("intendedAfter")] public string IntendedAfter { get; set; }
         [JsonProperty("intendedAfterExists")] public bool? IntendedAfterExists { get; set; }
         [JsonProperty("availability")] public string Availability { get; set; }
+        [JsonProperty("targetStatus", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.Models.ResourceTargetStatus? TargetStatus { get; set; }
         [JsonProperty("hunks", NullValueHandling = NullValueHandling.Ignore)]
         public List<RunTextHunkDto> Hunks { get; set; }
     }

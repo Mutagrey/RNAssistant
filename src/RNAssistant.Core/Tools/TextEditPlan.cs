@@ -4,22 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json;
 
 namespace RNAssistant.Core.Tools
 {
     // All coordinates belong to the original source, never to an intermediate edit.
-    public sealed class TextEditHunk
-    {
-        [JsonProperty("oldText")] public string OldText { get; set; }
-        [JsonProperty("newText")] public string NewText { get; set; }
-        [JsonProperty("contextBefore")] public string ContextBefore { get; set; }
-        [JsonProperty("contextAfter")] public string ContextAfter { get; set; }
-        [JsonProperty("startLine")] public int? StartLine { get; set; }
-        [JsonProperty("startColumn")] public int? StartColumn { get; set; }
-        [JsonProperty("boundary")] public string Boundary { get; set; }
-    }
-
     public sealed class ResolvedTextEdit
     {
         public int Offset { get; set; }
@@ -32,47 +20,26 @@ namespace RNAssistant.Core.Tools
         public string Text { get; private set; }
         public IReadOnlyList<ResolvedTextEdit> Edits { get; private set; }
 
-        public static TextEditPlan Patch(string source, IEnumerable<TextEditHunk> hunks,
-            CancellationToken cancellation = default(CancellationToken))
+        public static TextEditPlan Patch(string source, string patch,
+            CancellationToken cancellation = default(CancellationToken), Func<string, string> normalizeLine = null)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
-            var edits = new List<ResolvedTextEdit>();
-            foreach (var hunk in hunks ?? new TextEditHunk[0])
+            using (var reader = new System.IO.StringReader(source))
+                return ApplyResolved(source, TextPatch.Parse(patch).Resolve(reader, cancellation, normalizeLine)
+                    .Select(edit => new ResolvedTextEdit { Offset = checked((int)edit.Offset), Before = edit.Before, After = edit.After }), cancellation);
+        }
+
+        public static TextEditPlan ApplyResolved(string source, IEnumerable<ResolvedTextEdit> resolved,
+            CancellationToken cancellation = default(CancellationToken))
+        {
+            var edits = resolved.ToList();
+            foreach (var edit in edits)
             {
-                cancellation.ThrowIfCancellationRequested();
-                if (hunk == null || hunk.OldText == null || hunk.NewText == null)
-                    throw Error("patch_invalid", "Each hunk requires oldText and newText.");
-                var before = hunk.ContextBefore ?? "";
-                var after = hunk.ContextAfter ?? "";
-                var block = before + hunk.OldText + after;
-                int offset;
-                if (hunk.Boundary != null)
-                {
-                    if ((hunk.Boundary != "start" && hunk.Boundary != "end") || hunk.OldText.Length != 0 ||
-                        before.Length != 0 || after.Length != 0 || hunk.StartLine.HasValue || hunk.StartColumn.HasValue)
-                        throw Error("patch_invalid", "boundary=start/end is only for an insertion without coordinates or context.");
-                    offset = hunk.Boundary == "start" ? (source.StartsWith("\uFEFF", StringComparison.Ordinal) ? 1 : 0) : source.Length;
-                }
-                else if (hunk.StartLine.HasValue || hunk.StartColumn.HasValue)
-                {
-                    offset = Position(source, hunk.StartLine ?? 0, hunk.StartColumn ?? 1);
-                    if (block.Length == 0 || !Matches(source, offset - before.Length, block))
-                        throw Error("patch_not_found", "Old text and context do not match at the requested position.");
-                }
-                else
-                {
-                    if (block.Length == 0) throw Error("patch_invalid", "An insertion requires context or boundary.");
-                    var start = source.IndexOf(block, StringComparison.Ordinal);
-                    if (start < 0) throw Error("patch_not_found", "The exact hunk was not found; read the source again.");
-                    if (source.IndexOf(block, start + 1, StringComparison.Ordinal) >= 0)
-                        throw Error("patch_ambiguous", "The hunk has multiple matches; add context or exact coordinates.");
-                    offset = start + before.Length;
-                }
-                RequireScalarBoundary(source, offset);
-                RequireScalarBoundary(source, offset + hunk.OldText.Length);
-                edits.Add(new ResolvedTextEdit { Offset = offset, Before = hunk.OldText, After = hunk.NewText });
+                if (edit?.Before == null || edit.After == null || !Matches(source, edit.Offset, edit.Before))
+                    throw Error("patch_not_found", "Resolved edit no longer matches the source.");
+                RequireScalarBoundary(source, edit.Offset);
+                RequireScalarBoundary(source, edit.Offset + edit.Before.Length);
             }
-            if (edits.Count == 0) throw Error("patch_invalid", "At least one hunk is required.");
             return Apply(source, edits, cancellation);
         }
 

@@ -311,6 +311,7 @@ namespace RNAssistant.Cli
                         pendingId = pending.PendingId, toolId = pending.Call.Name,
                         path = PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
                         targetPath = pendingTarget,
+                        patchPreview = pending.PatchPreview,
                         command = "rna approve|deny --workspace <path> --session <id> --pending <id>" });
                     return 3;
                 }
@@ -724,6 +725,7 @@ namespace RNAssistant.Cli
                     pendingId = pending?.PendingId, pendingTool = pending?.Call.Name,
                     pendingPath = pending == null ? null : PendingPath(pending.Call.Name, pending.Call.ArgumentsJson),
                     pendingTargetPath = pending == null ? null : PendingTarget(pending.Call.Name, pending.Call.ArgumentsJson),
+                    patchPreview = pending?.PatchPreview,
                     userInput = result.UserInput,
                     acceptance = checkedAcceptance.State.ToString().ToLowerInvariant(),
                     expectedFiles = checkedAcceptance.ExpectedFiles,

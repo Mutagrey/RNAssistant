@@ -53,6 +53,8 @@
         reasonNode.textContent = reason;
         copy.appendChild(reasonNode);
       }
+      if (pending.patchPreview && window.RNAssistantRunChanges)
+        window.RNAssistantRunChanges.renderPrepared(copy, pending.patchPreview);
       panel.appendChild(copy);
 
       var actions = document.createElement("div");

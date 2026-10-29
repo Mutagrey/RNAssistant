@@ -30,7 +30,8 @@
     var result = {
       pendingId: text(raw, "PendingId"),
       toolCallId: text(raw, "ToolCallId"),
-      toolName: text(raw, "ToolName")
+      toolName: text(raw, "ToolName"),
+      patchPreview: raw.PatchPreview || null
     };
     if (!result.pendingId || !result.toolCallId || !result.toolName) return null;
     return Object.freeze(result);

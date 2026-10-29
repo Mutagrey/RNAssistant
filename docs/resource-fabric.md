@@ -216,8 +216,9 @@ preserves CR/LF/CRLF and Unicode; exact character coverage uses UTF-16 offsets.
 The internal materialized `ReadText` path retains a one-MiB bound; this is not a
 limit on model or application text access. Selected line and UTF-16 character
 windows pin and stream strict UTF-8 sources through fixed decode buffers.
-`core.patch` streams exact source and result, without the former 80-MiB source
-or one-MiB fragment limits. `core.write` and `core.write` stage larger text
+`core.patch` streams exact UTF-8 source and result without the former 80-MiB
+whole-source ceiling; its section/hunk input has the explicit bounded contract in
+[Text mutations](text-mutations.md). `core.write` stages larger text
 and verify exact read-back; an interrupted possible effect still requires explicit
 reconciliation. The selected model result is bounded by the run's configured
 model input budget; the compiler still checks the full request and explicitly
@@ -723,7 +724,9 @@ rename guard; observe the complete current source before retrying.
 Agent `core.write` creates a text/code file with an explicit extension;
 `resources.copy` creates an independent authored `File` from an exact complete
 uploaded or authored text source; `core.patch` replaces
-unique non-overlapping exact fragments on the selected current authored revision.
+unique non-overlapping full-line hunks on the selected current authored revision,
+using `*** Update Target:` sections in its sole `patch` argument. Every target
+prepares before writes; sequential execution retains per-target partial/unknown facts.
 Copy requires an explicit `destination` such as `file: report.md`;
 the rename does not alter the source bytes.
 Call arguments must fit model context; runtime identities remain hidden. There is

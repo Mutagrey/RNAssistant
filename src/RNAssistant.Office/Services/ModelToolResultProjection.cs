@@ -301,6 +301,15 @@ namespace RNAssistant.Office.Services
                 if (arguments != null && ToolSchemaSupport.ValidateArguments(
                     arguments, parsedSchema, false, out validationError))
                 {
+                    if (call.Name == ResourceMutationToolCatalog.Patch)
+                    {
+                        foreach (var section in ResourcePatch.Parse((string)arguments["patch"]))
+                        {
+                            if (ResourceGatewayService.IsUriLikeIntentTarget(section.Target))
+                                throw new TextPatternException("invalid_patch", "Use semantic targets in patch sections.");
+                            TextPatch.Parse(section.Body);
+                        }
+                    }
                     var semanticTargetField = SemanticTargetField(call.Name);
                     if (semanticTargetField != null &&
                         ResourceGatewayService.IsUriLikeIntentTarget(
@@ -320,7 +329,7 @@ namespace RNAssistant.Office.Services
                 error = "Stored " + call.Name + " arguments do not match the current semantic schema.";
                 return false;
             }
-            catch (JsonException)
+            catch (Exception ex) when (ex is JsonException || ex is TextPatternException)
             {
                 error = "Stored " + call.Name + " arguments are not a JSON object for the current semantic schema.";
                 return false;

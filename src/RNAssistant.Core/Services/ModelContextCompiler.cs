@@ -721,8 +721,17 @@ namespace RNAssistant.Core.Services
         private static void AddCurrentMutationSources(List<ContextAtom> atoms, ToolInteractionFrame frame)
         {
             var effect = frame.Result.ResourceEffect;
-            if (effect == null || effect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
-                effect.Outcome != ResourceEffectOutcome.Restored) return;
+            if (effect == null) return;
+            if (effect.Targets != null)
+            {
+                // A later unknown target must not erase the earlier verified sources.
+                foreach (var evidence in (frame.Result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
+                    if (effect.Targets.Any(t => (t.Status == ResourceTargetStatus.Changed || t.Status == ResourceTargetStatus.Unchanged) &&
+                        t.After?.Uri == evidence.Resource.Uri && t.After.Revision == evidence.Resource.Revision))
+                        atoms.Add(Atom("current-source", CurrentSource(frame.Result, evidence), true));
+                return;
+            }
+            if (effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored) return;
             foreach (var evidence in (frame.Result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
                 atoms.Add(Atom("current-source", CurrentSource(frame.Result, evidence), true));
         }
@@ -808,6 +817,14 @@ namespace RNAssistant.Core.Services
             var data = wire.Data as JObject;
             // Delivery warnings retain the original semantic result under tool_data.
             data = data?["tool_data"] as JObject ?? data;
+            if (result.ToolName == ResourceMutationToolCatalog.Patch && result.ResourceEffect?.Targets != null)
+            {
+                var targets = result.ResourceEffect.Targets;
+                for (var i = 0; i < targets.Count; i++)
+                    if (evidence != null && targets[i].After?.Uri == evidence.Resource.Uri && targets[i].After.Revision == evidence.Resource.Revision)
+                        return LabelText((data?["targets"] as JArray)?.ElementAtOrDefault(i)?["currentTarget"]) ?? targets[i].Target;
+                return null;
+            }
             var member = (data?["members"] as JArray ?? new JArray()).OfType<JObject>()
                 .FirstOrDefault(item => evidence != null && string.Equals(LabelText(item["uri"]),
                     evidence.Resource.Uri, StringComparison.Ordinal));
@@ -1184,7 +1201,7 @@ namespace RNAssistant.Core.Services
             // or stale source bytes can no longer count as delivered read evidence.
             var data = new JObject { ["targets"] = JArray.FromObject(OperationTargets(wire, call)),
                 ["observation"] = JObject.FromObject(observation) };
-            if (preserveDiagnostic) data["tool_data"] = wire.Data;
+            if (preserveDiagnostic || wire.Name == ResourceMutationToolCatalog.Patch) data["tool_data"] = wire.Data;
             var projected = new RNAssistant.Core.Tools.Contracts.ToolResult(wire.Result.Status, wire.Result.Message, data.ToString(Formatting.None));
             var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, projected, data);
             result.Content = result.Role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json;
@@ -1221,6 +1238,9 @@ namespace RNAssistant.Core.Services
                     LabelText(arguments?["targetPath"]) }
                 .Concat((data?["members"] as JArray ?? new JArray()).OfType<JObject>()
                     .Select(member => LabelText(member["target"]) ?? LabelText(member["path"])))
+                .Concat(wire.Name == ResourceMutationToolCatalog.Patch
+                    ? (data?["targets"] as JArray ?? new JArray()).OfType<JObject>().Select(row => LabelText(row["target"]))
+                    : Enumerable.Empty<string>())
                 .Where(target => !string.IsNullOrWhiteSpace(target)).Select(ModelResultProjection.SanitizeOperationalText)
                 .Distinct(StringComparer.Ordinal).ToList();
         }
@@ -1233,7 +1253,7 @@ namespace RNAssistant.Core.Services
                 Status = wire.Result.Status, Message = wire.Result.Message,
                 // A historical failed evaluation keeps its diagnostics/recovery;
                 // source currency must never turn it into a different error.
-                DataJson = observation == null || preserveDiagnostic
+                DataJson = observation == null || preserveDiagnostic || wire.Name == ResourceMutationToolCatalog.Patch
                     ? wire.Result.DataJson : wire.Result.Status == RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ? null :
                         ModelResultProjection.SelectFields(wire.Data,
                             "code", "hunkIndex", "field", "chartIndex", "recovery").ToString(Formatting.None),

@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Tools
             { "file.source.copy", new ToolDisplayMetadata("Копирование файла", "Копирую файл", ToolDisplayOperation.Write, new[] { "source", "name" }) },
             { "file.source.patch", new ToolDisplayMetadata("Изменение файла", "Изменяю файл", ToolDisplayOperation.Write, new[] { "target" }) },
             { "core.write", new ToolDisplayMetadata("Запись ресурса", "Записываю ресурс", ToolDisplayOperation.Write, new[] { "target" }) },
-            { "core.patch", new ToolDisplayMetadata("Изменение текста", "Изменяю текст", ToolDisplayOperation.Write, new[] { "target" }) },
+            { "core.patch", new ToolDisplayMetadata("Изменение текста", "Изменяю текст", ToolDisplayOperation.Write, new string[0]) },
             { "core.replace", new ToolDisplayMetadata("Замена совпадений", "Заменяю совпадения", ToolDisplayOperation.Write, new[] { "target" }) },
             { "resources.move", new ToolDisplayMetadata("Перемещение ресурса", "Перемещаю ресурс", ToolDisplayOperation.Write, new[] { "target", "destination" }) },
             { "resources.copy", new ToolDisplayMetadata("Копирование ресурса", "Копирую ресурс", ToolDisplayOperation.Write, new[] { "target", "destination" }) },

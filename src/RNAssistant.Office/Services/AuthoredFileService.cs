@@ -24,7 +24,7 @@ namespace RNAssistant.Office.Services
         { _gateway = gateway; _artifacts = artifacts; _payloads = payloads; }
 
         internal static string OperationKey(ChatSession session, ToolExecutionContext context)
-        { return "file_operation_" + TextPatternEngine.Sha256(JsonConvert.SerializeObject(new[] { session.Id, context.RunId, context.StepId, context.Call.Id })); }
+        { return "file_operation_" + TextPatternEngine.Sha256(JsonConvert.SerializeObject(new[] { session.Id, context.RunId, context.StepId, context.Call.Id + (context.TargetOrdinal.HasValue ? "#patch:" + context.TargetOrdinal.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "") })); }
         internal static ResourceIdentity OperationIdentity(ChatSession session, string key)
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, key)); }
         private static string LogicalId(ChatSession session, ToolExecutionContext context)
@@ -50,6 +50,7 @@ namespace RNAssistant.Office.Services
                 intent.LogicalId = SnapshotLogicalId(artifact.Id);
                 if (artifact.Kind != ChatArtifactKinds.File || intent.LogicalId == null || DocumentArtifactStore.FileEncoding(artifact) == null)
                     throw new InvalidDataException("Select a current authored text file, not an uploaded original.");
+                RequireCurrentBase(session, intent, _artifacts);
                 intent.Source = JsonConvert.DeserializeObject<AuthoredFileMetadata>(artifact.MetadataJson ?? "{}")?.Source;
                 if (operation == AuthoredFileToolCatalog.PatchToolId) ParseHunks(context.Arguments);
             }
@@ -87,12 +88,18 @@ namespace RNAssistant.Office.Services
             var identity = Identity(session, intent.LogicalId);
             if (authority.Store.GetHead(authority.Scope(session, true), OperationIdentity(session, OperationKey(session, context))) != null)
                 throw new ToolMutationPreparationException("file_attempt_already_published", "This file operation is already published.");
-            var current = artifacts.CurrentSnapshot(session, identity);
-            if (current?.Uri != intent.Base?.Uri || current?.Revision != intent.Base?.Revision)
-                throw new ToolMutationPreparationException("RESOURCE_REVISION_CHANGED", "The file changed. Find and read its current version before editing.");
+            try { RequireCurrentBase(session, intent, artifacts); }
+            catch (ResourceRequestException ex) { throw new ToolMutationPreparationException(ex.ErrorCode, ex.Message); }
             if (intent.Base != null) artifacts.Read(session, intent.Base, false);
             if (intent.Source != null) artifacts.Read(session, intent.Source, false);
             return new[] { new ResourceImpact(identity, ResourceImpactRelation.Exact) };
+        }
+
+        private static void RequireCurrentBase(ChatSession session, AuthoredFileIntent intent, DocumentArtifactStore artifacts)
+        {
+            var current = artifacts.CurrentSnapshot(session, Identity(session, intent.LogicalId));
+            if (current?.Uri != intent.Base?.Uri || current?.Revision != intent.Base?.Revision)
+                throw new ResourceRequestException("The file changed. Find and read its current version before editing.", "RESOURCE_REVISION_CHANGED", false);
         }
 
         internal AuthoredFileSave Save(ChatSession session, ToolHandlerContext context)

@@ -31,13 +31,13 @@ def run_case(root, ending):
         call("core.skills.load", {"id": "skills.workspace.web.verify.repair"}),
         call("web.verify", {"entryPath": "index.html"}),
         call("core.read", {"target": "app.js"}),
-        call("core.patch", {"target": "app.js", "hunks": [{"oldText": "count += increment", "newText": "count += 1"}]}),
+        call("core.patch", {'patch': "*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += increment; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n"}),
         call("core.read", {"target": "app.js"}),
         call("web.verify", {"entryPath": "index.html"}),
     ]
     if ending in ("stale", "reverified"):
         responses.extend([
-            call("core.patch", {"target": "app.js", "hunks": [{"oldText": "count += 1", "newText": "count += 1 /* revised */"}]}),
+            call("core.patch", {'patch': "*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1 /* revised */; render(); });\n"}),
             call("core.read", {"target": "app.js"}),
         ])
         if ending == "reverified":
@@ -50,7 +50,7 @@ def run_case(root, ending):
     if ending == "late_edit":
         responses.extend([
             call("core.read", {"target": "app.js"}),
-            call("core.patch", {"target": "app.js", "hunks": [{"oldText": "count += 0", "newText": "count += 1"}]}),
+            call("core.patch", {'patch': "*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += 0; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n"}),
             call("core.read", {"target": "app.js"}),
         ])
     if ending in ("late_edit", "stale"):
@@ -142,11 +142,11 @@ def run_case(root, ending):
         writes = [json.loads(message["content"] if message.get("role") == "tool" else message["content"].split("\n", 1)[1])
                   for message in requests[3]["messages"]
                   if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"name":"core.patch"' in message["content"]]
-        assert len(writes) == 1 and writes[0]["data"]["path"] == "app.js", writes
-        assert writes[0]["status"] == "ok" and writes[0]["data"]["changed"], writes
+        assert len(writes) == 1 and writes[0]["data"]["targets"][0]["target"] == "app.js", writes
+        assert writes[0]["status"] == "ok" and writes[0]["data"]["targets"][0]["status"] == "Changed", writes
         assert not receipts(requests[3], "core.patch"), "a recent patch remains a call/result pair"
         current_read = [message["content"] for message in requests[4]["messages"]
-                        if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"target":"app.js"' in message["content"]]
+                        if (message.get("role") == "tool" or message.get("content", "").startswith("TOOL_RESULT")) and '"target":"app.js"' in message["content"] and '"name":"core.read"' in message["content"]]
         assert len(current_read) == 1 and "count += 1" in current_read[0] and "count += increment" not in current_read[0], current_read
         saved = record(workspace, state)["Items"]
         assert len(saved) == (2 if ending == "passed" else 3) and {item["State"] for item in saved} == {"Passed", "Failed"}, saved
@@ -186,7 +186,7 @@ def run_recovery_guards(root):
             tool("core.write", target="unrelated.txt", content="not a dependency"), verify,
             tool("core.read", target="app.js"), verify,
             tool("core.write", target="app.js", content=original), verify,
-            tool("core.patch", target="app.js", hunks=[{"oldText": "count += increment", "newText": "count += 1"}]),
+            tool("core.patch", patch="*** Update Target: app.js\n@@\n-document.getElementById('plus').addEventListener('click', () => { count += increment; render(); });\n+document.getElementById('plus').addEventListener('click', () => { count += 1; render(); });\n"),
             tool("core.read", target="app.js"), verify,
             {"message": "Verified repair.", "finish_from_request": True},
         ])

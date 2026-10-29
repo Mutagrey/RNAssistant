@@ -220,15 +220,12 @@ namespace RNAssistant.Harness
 
                 var patch = JObject.Parse(tools.Single(tool =>
                     tool.Id == ResourceMutationToolCatalog.Patch).ArgumentSchemaJson);
-                var hunk = (JObject)patch.SelectToken("properties.hunks.items");
-                AssertEqual(7, ((JObject)hunk["properties"]).Properties().Count(),
-                    "VBA patch hunk contains replacement, exact context and location");
-                AssertTrue(hunk.SelectToken("properties.op") == null,
-                    "fixed replace operation belongs to runtime");
+                AssertEqual(1, ((JObject)patch["properties"]).Properties().Count(), "patch has only one text argument");
+                AssertTrue(patch.SelectToken("properties.patch.type").ToString() == "string", "patch carries target sections");
                 var editingSkill = BuiltInSkillProvider.GetSkills(adapter)
                     .Single(skill => skill.Id == "skills.vba.code.editing")
                     .BodyMarkdown;
-                AssertContains(editingSkill, "contextBefore",
+                AssertContains(editingSkill, "@@",
                     "VBA editing skill teaches exact patch disambiguation");
 
                 var restore = JObject.Parse(tools.Single(tool =>
@@ -260,12 +257,12 @@ namespace RNAssistant.Harness
                 string error;
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("patch_current", ResourceMutationToolCatalog.Patch,
-                            "{\"target\":\"VBA module: Module1\",\"hunks\":[{\"oldText\":\"old\",\"newText\":\"new\"}]}"),
+                            "{\"patch\":\"*** Update Target: VBA module: Module1\\n@@\\n-old\\n+new\\n\"}"),
                         out error),
                     "current patch history is replayable");
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("patch_context", ResourceMutationToolCatalog.Patch,
-                            "{\"target\":\"VBA module: Module1\",\"hunks\":[{\"oldText\":\"old\",\"newText\":\"new\",\"contextBefore\":\"Sub Main()\\n\",\"contextAfter\":\"\\nEnd Sub\"}]}"),
+                            "{\"patch\":\"*** Update Target: VBA module: Module1\\n@@ Sub Main()\\n-old\\n+new\\n End Sub\\n\"}"),
                         out error),
                     "context-qualified patch history is replayable");
                 AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(
@@ -273,6 +270,12 @@ namespace RNAssistant.Harness
                             "{\"target\":\"VBA module: Module1\",\"hunks\":[{\"op\":\"replace\",\"oldText\":\"old\",\"newText\":\"new\"}]}"),
                         out error),
                     "old constant-op patch history requires reset");
+                foreach (var retired in new[] {
+                    "{\"target\":\"Module1\",\"patch\":\"@@\\n-old\\n+new\\n\"}",
+                    "{\"target\":\"Module1\",\"hunks\":[{\"oldText\":\"old\",\"newText\":\"new\"}]}",
+                    "{\"patch\":\"*** Update Target: rna://vba/runtime/module\\n@@\\n-old\\n+new\\n\"}" })
+                    AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("retired", ResourceMutationToolCatalog.Patch, retired), out error), "old shapes and runtime URI targets explicitly reject without rewriting history");
+
                 AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
                         new ToolCall("rename_current", ResourceMutationToolCatalog.Move,
                             "{\"target\":\"VBA module: Old\",\"destination\":\"VBA module: New\"}"),
@@ -2658,7 +2661,7 @@ namespace RNAssistant.Harness
                 "skills.vba.userform.authoring",
                 StringComparison.OrdinalIgnoreCase));
             AssertTrue(userForm.BuiltIn && userForm.Enabled, "code-only UserForm skill is available");
-            AssertContains(userForm.Description, "entirely from source code", "catalog triggers for code-only authoring");
+            AssertContains(userForm.Description, "events generated from source", "catalog triggers for code-only authoring");
             AssertContains(userForm.BodyMarkdown, "Me.Controls.Add", "skill creates controls from source");
             AssertContains(userForm.BodyMarkdown, "Private WithEvents", "skill explains fixed control events");
             AssertContains(userForm.BodyMarkdown, "form-level Collection", "skill retains dynamic event sinks");
@@ -2680,20 +2683,20 @@ namespace RNAssistant.Harness
                 "VBA discovery fallback selects the aggregate project target");
             AssertContains(editing.BodyMarkdown, "whole reads are complete only when the source body is included",
                 "VBA skill distinguishes a successful read from source omitted by the context budget");
-            AssertContains(editing.BodyMarkdown, "one ordered `vba.module.patch` call",
-                "VBA skill batches same-snapshot hunks into one atomic mutation");
-            AssertContains(editing.BodyMarkdown, "Exact patches can use relevant excerpts",
+            AssertContains(editing.BodyMarkdown, "one `core.patch` call",
+                "VBA skill groups related original-snapshot edits");
+            AssertContains(editing.BodyMarkdown, "observed source",
                 "VBA skill does not require whole-source observation for focused patches");
-            AssertContains(editing.BodyMarkdown, "including source restored after compaction",
+            AssertContains(editing.BodyMarkdown, "Reuse current recovery/after-source",
                 "VBA skill reuses current source after compaction");
-            AssertContains(editing.BodyMarkdown, "not an Office access denial",
+            AssertContains(editing.BodyMarkdown, "source_changed",
                 "VBA skill distinguishes missing context from host access failures");
             AssertContains(editing.BodyMarkdown, "never backslash escaping",
                 "VBA skill distinguishes JSON transport escaping from VBA string syntax");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
-            AssertContains(editing.BodyMarkdown, "Follow the supplied hunk-field schema for matching, context, positions, insertion and deletion",
+            AssertContains(editing.BodyMarkdown, "*** Update Target: <semantic target>",
                 "insertions follow the current patch schema");
-            AssertContains(editing.BodyMarkdown, "vba.module.rename", "skill explains the strict rename intent");
+            AssertContains(editing.BodyMarkdown, "resources.move", "skill explains the strict rename intent");
             AssertTrue(editing.BodyMarkdown.IndexOf("mode=rename", StringComparison.Ordinal) < 0,
                 "skill no longer teaches the retired write branch");
             AssertContains(editing.BodyMarkdown, "Never imitate rename with write plus delete", "skill forbids unsafe rename emulation");

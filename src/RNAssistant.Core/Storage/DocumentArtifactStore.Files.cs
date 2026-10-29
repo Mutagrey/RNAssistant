@@ -9,7 +9,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class DocumentArtifactStore
     {
-        private const string FileTextView = "artifact-file-text-v1";
+        public const string FileTextView = "artifact-file-text-v1";
 
         public ResourceMutationReadBack RetainFileSnapshot(ChatSession session, ChatArtifact artifact,
             byte[] bytes, string attemptId, string operationKey, ResourceRef source = null)
@@ -18,14 +18,20 @@ namespace RNAssistant.Core.Storage
                 bytes.LongLength > ArtifactTransferPackage.MaximumBytes)
                 throw new InvalidDataException("A bounded authored file is required.");
             string encoding;
-            DecodeFileText(bytes, out encoding);
+            var text = DecodeFileText(bytes, out encoding);
             if (FileEncoding(artifact) != encoding)
                 throw new InvalidDataException("The file encoding does not match its retained bytes.");
             var body = PayloadRef.FromBlob(_payloads.StoreBytes(bytes, artifact.MimeType));
-            return RetainRecordPayload(session, artifact, body, AuthoredRecordView,
+            var retained = RetainRecordPayload(session, artifact, body, AuthoredRecordView,
                 "application/vnd.rnassistant.artifact-record+json", attemptId, operationKey,
                 dependencies: source == null ? null : new[] { new ResourceDependency(source, kind: "source-original") },
                 resultView: ResourceRepresentations.Raw);
+            // Keep the existing decoded-text view with the raw immutable snapshot;
+            // history can compare UTF-8/16/32 results without consulting a live head.
+            var payload = PayloadRef.FromBlob(_payloads.StoreText(text, "text/plain; charset=utf-8"));
+            _revisions.RegisterView(Scope(session), new ResourceRevisionView(retained.Revision, FileTextView,
+                body.Sha256, payload, ResourceCoverage.Whole(), new[] { body }));
+            return retained;
         }
 
         public static string FileEncoding(ChatArtifact artifact)

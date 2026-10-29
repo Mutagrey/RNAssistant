@@ -106,11 +106,12 @@ namespace RNAssistant.Core.Tools
         public string PreparedStateJson { get; private set; }
         public string ExpectedContentSha256 { get; private set; }
         public bool ExpectedTargetAbsent { get; private set; }
+        public int? TargetOrdinal { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionContext(ToolCall call, ToolPolicySnapshot policy, string runId, string turnId,
             string stepId, DateTime startedUtc, bool isConfirmed, int remainingToolSteps,
-            string preparedStateJson = null, string expectedContentSha256 = null, bool expectedTargetAbsent = false)
+            string preparedStateJson = null, string expectedContentSha256 = null, bool expectedTargetAbsent = false, int? targetOrdinal = null)
         {
             if (call == null || policy == null || !string.Equals(call.Name, policy.ToolId, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(runId) || string.IsNullOrWhiteSpace(turnId) || string.IsNullOrWhiteSpace(stepId) || remainingToolSteps < 0)
@@ -118,6 +119,8 @@ namespace RNAssistant.Core.Tools
             if (preparedStateJson != null &&
                 preparedStateJson.Length > ToolPreparationResult.MaxPreparedStateChars)
                 throw new ArgumentException("Prepared state exceeds the runtime bound.", nameof(preparedStateJson));
+            if (targetOrdinal.HasValue && (targetOrdinal.Value < 0 || targetOrdinal.Value >= ResourcePatch.MaximumTargets))
+                throw new ArgumentOutOfRangeException(nameof(targetOrdinal));
             Call = call;
             Policy = policy;
             RunId = runId;
@@ -129,6 +132,7 @@ namespace RNAssistant.Core.Tools
             PreparedStateJson = preparedStateJson;
             ExpectedContentSha256 = expectedContentSha256;
             ExpectedTargetAbsent = expectedTargetAbsent;
+            TargetOrdinal = targetOrdinal;
         }
     }
 

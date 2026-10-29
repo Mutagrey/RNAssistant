@@ -1,5 +1,34 @@
 # Stabilization progress
 
+## Компактный пакетный core.patch — 2026-10-29
+
+Owner: Core Tools / Application Workspace / Office Tools; Web — preview и лента.
+Контракт — только `{patch}` с секциями `*** Update Target:`. Дальние цепочки `@@`,
+полные строки +/-/контекста и все hunks исходного snapshot разрешаются до записи.
+Старые JSON-hunks отвергаются без удаления истории. Пакет проверяется целиком до
+подтверждения и до первой записи, затем каждая цель проверяется своим owner.
+Aliases одной цели отвергаются. Частичный эффект сохраняется по целям; отказ и
+unknown останавливают остаток без replay/rollback. История, модель, CLI и лента
+сохраняют подтверждённые результаты рядом с отказом/unknown. VBA получает полный
+код через guarded whole-module writer; bottom-up/LCS path удалён.
+
+Проверены host-neutral: 6 universal mutation, 15 ToolRuntime, 2 authored file
+(10 МиБ, UTF-16 BOM и retained after-source), 4 run changes, 3 run view,
+5 tool presentation, VBA schema/skill, включение исходников и границы зависимостей.
+CLI: пакетное подтверждение в новых процессах, частичное чтение и зависимый read/patch;
+6 сценариев refusal/read/retry; восстановление read guard после compaction для
+tool/user transport. Web: 7 run-view checks и Chrome preview/inline diff
+по целям, узкая/широкая панель и безопасный текст. Это scripted transport и fake
+Office adapters; качество Qwen/GLM/DeepSeek и реальный VBE этим не квалифицированы.
+
+Открыто: Windows/Office/WebView2, межмодульный регистр VBE, сбой между DeleteLines
+и InsertLines, CodeOnly UserForms; полный source в памяти Office artifact owners
+и общий revision HTML workspace. Подробности — [контракт](../text-mutations.md) и
+[риски](RISK_REGISTER.md#пакетный-corepatch-границы-квалификации--2026-10-29).
+Два прежних context-continuity fixture всё ещё используют retired tools и
+отклоняются до проверяемого поведения — [BACKLOG](BACKLOG.md#старые-fixtures-истории-мутаций--2026-10-29).
+Полный Harness и Office/VSTO validation не запускались.
+
 ## Общий контракт текстовых мутаций и имён — 2026-10-28
 
 Owner: Core Tools / Application Workspace / Office Tools; Library и лента — Web.

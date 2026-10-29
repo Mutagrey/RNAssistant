@@ -19,11 +19,15 @@
     count.appendChild(element("span", "run-change-removed", "−" + removed));
     parent.appendChild(count);
   }
+  function targetStatus(item) {
+    return { Prepared: "Предложено", Changed: "Изменение подтверждено", Unchanged: "Изменений не потребовалось",
+      Rejected: "Отказ без эффекта", Unknown: "Эффект неизвестен", NotStarted: "Выполнение не начиналось" }[item.targetStatus] || "";
+  }
   function availability(item) {
-    return item.availability === "unverified" ? "Точный текст результата недоступен" :
+    return targetStatus(item) || (item.availability === "unverified" ? "Точный текст результата недоступен" :
       item.availability === "hunks" ? "Проверенные фрагменты" :
       item.availability === "copied" ? "Создана точная копия" :
-      item.availability === "too_large" ? "Исходник превышает лимит сравнения" : "Исходник для сравнения недоступен";
+      item.availability === "too_large" ? "Исходник превышает лимит сравнения" : "Исходник для сравнения недоступен");
   }
   function render(parent, result) {
     parent.textContent = "";
@@ -65,8 +69,8 @@
       var renamed = item.beforeTitle && item.beforeTitle !== item.title;
       var title = renamed ? item.beforeTitle + " → " + item.title : item.title;
       labels.appendChild(element("span", "run-change-title", title || "Исходник"));
-      var action = item.availability !== "available" ? availability(item) :
-        !item.beforeExists ? "Создан" : !item.afterExists ? "Удалён" : renamed ? "Переименован" : "Изменён";
+      var action = targetStatus(item) || (item.availability !== "available" ? availability(item) :
+        !item.beforeExists ? "Создан" : !item.afterExists ? "Удалён" : renamed ? "Переименован" : "Изменён");
       labels.appendChild(element("span", "run-change-scope", item.scope + " · " + action));
       head.appendChild(labels);
       if (diff && diff.complete) counts(head, diff.added, diff.removed);
@@ -120,6 +124,7 @@
       var block = element("div", "inline-change");
       var title = item.beforeTitle && item.beforeTitle !== item.title ? item.beforeTitle + " → " + item.title : item.title;
       block.appendChild(element("div", "run-change-title", title || "Исходник"));
+      if (targetStatus(item)) block.appendChild(element("p", "run-changes-caption", targetStatus(item)));
       var preview = item.availability === "unverified" && typeof item.before === "string" && typeof item.intendedAfter === "string";
       if (preview) block.appendChild(element("p", "run-changes-caption", "Предварительный diff · результат не подтверждён"));
       if (item.availability === "available" || preview) {
@@ -135,7 +140,18 @@
     });
     if (!result.complete) parent.appendChild(element("p", "run-changes-caption", "Часть сравнений недоступна."));
   }
-  window.RNAssistantRunChanges = { render: render, renderInline: renderInline };
+  function renderPrepared(parent, preview) {
+    (preview.targets || []).forEach(function (target) {
+      var details = element("details", "inline-change");
+      details.appendChild(element("summary", "run-change-title", target.target + " · Предложенные изменения"));
+      (target.preview || []).forEach(function (part) {
+        window.RNAssistantTextDiff.renderInline(details, window.RNAssistantTextDiff.format(part.before || "", part.after || ""));
+        if (part.truncated) details.appendChild(element("p", "run-changes-caption", "Показана часть подготовленного изменения."));
+      });
+      parent.appendChild(details);
+    });
+  }
+  window.RNAssistantRunChanges = { render: render, renderInline: renderInline, renderPrepared: renderPrepared };
   window.appendRunChanges = function (parent, chatId, runId) {
     if (!chatId || !runId) return;
     // Session revision invalidates cached unknown/missing data after reconciliation.

@@ -212,6 +212,7 @@
     <Compile Include="Services\ArtifactLibraryProjectionService.cs" />
     <Compile Include="Services\RunChangesService.cs" />
     <Compile Include="Services\WorkspaceToolChangesProjection.cs" />
+    <Compile Include="Services\PatchChangesProjection.cs" />
     <Compile Include="Services\ToolResultPresentationService.cs" />
     <Compile Include="Services\ArtifactPdfViewerService.cs" />
     <Compile Include="Services\ArtifactViewerService.cs" />

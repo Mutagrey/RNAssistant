@@ -108,10 +108,10 @@ def run_case(root, recover):
                         assert read_progress(request)["remainingCompleteFileReads"] == 1
                         assert "app.js" in read_progress(request)["expectedFilesWithoutCurrentRead"]
                         assert "STRUCTURED_CONTEXT_CLAIMS" in content
-                        response = call("core.patch", target="app.js", hunks=[{"oldText": "OLD_MARKER", "newText": "UNSAFE"}])
+                        response = call("core.patch", patch="*** Update Target: app.js\n@@\n-const marker = 'OLD_MARKER';\n+const marker = 'UNSAFE';\n")
                     elif phase["after"] == 2:
                         assert (workspace / "app.js").read_text() == EXTERNAL, "Stale observation overwrote the user's edit"
-                        assert "source_observation_required" in content or "resource_conflict" in content
+                        assert "source_changed" in content
                         response = call("core.read", target="app.js") if recover else finish(request)
                     elif not recover:
                         assert phase["after"] == 3 and "completionFeedback" in content
@@ -119,7 +119,7 @@ def run_case(root, recover):
                             "The external edit requires review before I can finish.")
                     elif phase["after"] == 3:
                         assert "EXTERNAL_MARKER" in content
-                        response = call("core.patch", target="app.js", hunks=[{"oldText": "EXTERNAL_MARKER", "newText": "VERIFIED_MARKER"}])
+                        response = call("core.patch", patch="*** Update Target: app.js\n@@\n-const marker = 'EXTERNAL_MARKER';\n+const marker = 'VERIFIED_MARKER';\n")
                     elif phase["after"] == 4:
                         assert read_progress(request)["remainingCompleteFileReads"] == 1
                         response = call("core.read", target="app.js")

@@ -151,7 +151,7 @@ namespace RNAssistant.Office.Services
             return Describe(projected, artifact, false);
         }
 
-        internal ResourceDescriptor ResolveHtmlTarget(ChatSession session, string target)
+        internal ResourceDescriptor ResolveHtmlTarget(ChatSession session, string target, bool allowUniqueBase = false)
         {
             if (target == ChatHtmlResourceCatalog.CurrentWorkspaceTarget ||
                 target.Contains(" in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget))
@@ -162,8 +162,12 @@ namespace RNAssistant.Office.Services
                     throw new ResourceRequestException("The current HTML workspace is unavailable; discover or select a current workspace.", "resource_target_not_found", true);
                 if (target == ChatHtmlResourceCatalog.CurrentWorkspaceTarget)
                     return Describe(current.Session, artifact, true);
-                var member = _htmlResources.DescribeMembers(current.Session, artifact)
-                    .SingleOrDefault(item => ResourceGatewayService.IntentTarget(item) == target);
+                var members = _htmlResources.DescribeMembers(current.Session, artifact)
+                    .Where(item => ResourceGatewayService.IntentTarget(item) == target || allowUniqueBase &&
+                        ResourceGatewayService.IntentBaseTarget(item) + " in " + ChatHtmlResourceCatalog.CurrentWorkspaceTarget == target).Take(2).ToArray();
+                if (members.Length > 1)
+                    throw new ResourceRequestException("The HTML member target is ambiguous; use its exact discovered target.", "resource_target_ambiguous", true);
+                var member = members.SingleOrDefault();
                 if (member == null)
                     throw new ResourceRequestException("The current HTML member is absent or was recreated; discover its current target.", "resource_target_not_found", true);
                 return member;

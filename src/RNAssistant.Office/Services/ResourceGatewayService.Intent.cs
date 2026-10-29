@@ -377,7 +377,7 @@ namespace RNAssistant.Office.Services
                 var provider = _registry.All().OfType<ChatArtifactResourceProvider>().SingleOrDefault();
                 if (provider == null)
                     throw new ResourceRequestException("HTML resource provider is unavailable.", "RESOURCE_PROVIDER_UNAVAILABLE", false);
-                var descriptor = WithProvider(provider, session, () => provider.ResolveHtmlTarget(session, target));
+                var descriptor = WithProvider(provider, session, () => provider.ResolveHtmlTarget(session, target, allowUniqueBase));
                 var type = IntentType(descriptor);
                 return new ResourceIntentTarget { Target = target, Type = type, Scope = IntentScope(descriptor, type),
                     Descriptor = descriptor, Reference = descriptor.Reference };

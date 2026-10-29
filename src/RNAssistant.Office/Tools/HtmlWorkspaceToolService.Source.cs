@@ -5,6 +5,7 @@ using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 using RNAssistant.Office.Services;
 
@@ -120,6 +121,30 @@ namespace RNAssistant.Office.Tools
             };
         }
 
+        // Validate the mutable owner and the complete candidate before a batch can
+        // dispatch another target. Publication still repeats its authority guard.
+        internal void PrepareSourcePatch(ChatSession session, ResourceIntentTarget selected, string before, string candidate)
+        {
+            HtmlWorkspaceArtifactService.EnsureMutable(session);
+            var artifact = session.Artifacts.SingleOrDefault(a => a.Id == session.ActiveHtmlArtifactId);
+            var logicalId = HtmlWorkspaceIdentity.LogicalId(artifact?.Id);
+            var authority = _resources?.Authority;
+            if (artifact == null || logicalId == null || authority == null)
+                throw new ResourceRequestException("Select a published current HTML workspace before editing.", "html_active_revision_invalid", false);
+            var owner = new RNAssistant.Core.Storage.DocumentArtifactStore(authority.Store, authority.Revisions, authority.Payloads);
+            var current = owner.CurrentSnapshot(session, HtmlWorkspaceIdentity.Identity(session, logicalId));
+            var expected = ChatResourceUri.CreateArtifactRevision(session, artifact);
+            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var file = FindFile(workspace, selected.Descriptor.Title, false);
+            var member = ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id);
+            if (current?.Uri != expected.Uri || current.Revision != expected.Revision ||
+                selected.Reference.Uri != member.Uri || selected.Reference.Revision != member.Revision ||
+                (file.Content ?? string.Empty) != before)
+                throw new ResourceRequestException("HTML source changed or the target names a historical snapshot. Read the current file before editing.", "RESOURCE_REVISION_CHANGED", false);
+            ValidateFile(file.Path, file.Kind, candidate);
+            ValidateWorkspaceCapacity(workspace, file.Id, null);
+        }
+
         private static HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
             ChatSession session,
             IDictionary<string, object> arguments,
@@ -140,9 +165,9 @@ namespace RNAssistant.Office.Tools
                 before = file.Content ?? string.Empty;
                 StructuredTextPatchResult patch;
                 object canonical;
-                if (arguments.TryGetValue("canonicalHunks", out canonical))
+                if (arguments.TryGetValue("resolvedTextEdits", out canonical))
                 {
-                    var planned = TextEditPlan.Patch(before, JArray.FromObject(canonical).ToObject<List<TextEditHunk>>(), cancellationToken);
+                    var planned = TextEditPlan.ApplyResolved(before, JArray.FromObject(canonical).ToObject<List<ResolvedTextEdit>>(), cancellationToken);
                     patch = new StructuredTextPatchResult { Text = planned.Text };
                     patch.Steps.Add(new StructuredTextPatchStep { Op = "patch", MatchCount = planned.Edits.Count, Message = "All hunks resolved against the original snapshot." });
                 }

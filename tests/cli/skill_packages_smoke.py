@@ -71,7 +71,7 @@ def check(root):
             call("core.read", type="skill", target="fixture.report"),
             call("core.skills.load", id="fixture.report"),
             call("core.read", target="source.txt"),
-            call("core.patch", target="source.txt", hunks=[{"oldText": "total=12", "newText": "total=13"}]),
+            call("core.patch", patch='*** Update Target: source.txt\n@@\n-total=12\n+total=13\n'),
             call("core.read", target="source.txt"),
             call("core.write", target="report.txt", content="Verified total: 13\n"),
             call("core.read", target="report.txt"), DONE])
@@ -97,10 +97,10 @@ def check(root):
         assert len(requests) == prior + 1 and selected(requests[-1]) == ["SELECTED_SKILL fixture.report\n" + marker], "Follow-up must retain selection without a load call"
         assert "Verified total: 13" in json.dumps(requests[-1]), "Current report evidence survives new input and process restart"
         assert direct["ToolCounts"]["ReadOk"] == 0, direct
-        responses.extend([call("core.patch", target="source.txt", hunks=[{"oldText": "total=13", "newText": "total=14"}]), DONE])
+        responses.extend([call("core.patch", patch='*** Update Target: source.txt\n@@\n-total=13\n+total=14\n'), DONE])
         guarded = cli("run", "--session", final["SessionId"], "--message", "Check the follow-up write guard.", "--auto-confirm", "on")
         assert (workspace / "source.txt").read_text() == "total=13\n", "Carried skill must not inherit the prior turn's write guard"
-        assert guarded["ToolCounts"]["WriteOk"] == 0 and "source_observation_required" in json.dumps(requests[-1]), guarded
+        assert guarded["ToolCounts"]["WriteOk"] == 0 and "source_changed" in json.dumps(requests[-1]), guarded
         responses.append(DONE)
         cli("run", "--session", final["SessionId"], "--message", "Inspect with restricted permissions.", "--mutation-policy", "deny")
         assert not selected(requests[-1]), "Current policy must suspend an incompatible retained selection"

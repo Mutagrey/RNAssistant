@@ -383,6 +383,19 @@ namespace RNAssistant.Core.Models
         public ResourceRef Revision { get; private set; }
     }
 
+    [JsonConverter(typeof(StringEnumConverter))]
+    public enum ResourceTargetStatus { Prepared, Changed, Unchanged, Rejected, Unknown, NotStarted }
+
+    public sealed class ResourceTargetEffect
+    {
+        public string Target { get; set; }
+        public ResourceTargetStatus Status { get; set; }
+        public bool WriteStarted { get; set; }
+        public ResourceRef Source { get; set; }
+        public ResourceRef After { get; set; }
+        public ResourceEffect Effect { get; set; }
+    }
+
     public sealed class ResourceEffect
     {
         [JsonProperty("effectId", Required = Required.Always)]
@@ -395,10 +408,12 @@ namespace RNAssistant.Core.Models
         public IReadOnlyList<ResourceImpact> Impacts { get; private set; }
         [JsonProperty("verification", NullValueHandling = NullValueHandling.Ignore)]
         public string Verification { get; private set; }
+        [JsonProperty("targets", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<ResourceTargetEffect> Targets { get; private set; }
 
         [JsonConstructor]
         public ResourceEffect(string effectId, string operation, ResourceEffectOutcome outcome,
-            IEnumerable<ResourceImpact> impacts = null, string verification = null)
+            IEnumerable<ResourceImpact> impacts = null, string verification = null, IEnumerable<ResourceTargetEffect> targets = null)
         {
             if (string.IsNullOrWhiteSpace(effectId)) throw new ArgumentException("An effect id is required.", nameof(effectId));
             if (string.IsNullOrWhiteSpace(operation)) throw new ArgumentException("An operation is required.", nameof(operation));
@@ -408,6 +423,7 @@ namespace RNAssistant.Core.Models
             Outcome = outcome;
             Impacts = Array.AsReadOnly((impacts ?? new ResourceImpact[0]).ToArray());
             Verification = verification;
+            Targets = targets == null ? null : Array.AsReadOnly(targets.ToArray());
         }
     }
 

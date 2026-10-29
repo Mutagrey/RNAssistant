@@ -27,7 +27,8 @@
 .shell #tab-chat .workspace-chat-notice[data-error="true"] { color: var(--danger); }
 .shell #tab-chat .workspace-chat-control { width: calc(100% - 36px); margin: 0 auto 12px; padding: 14px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-subtle); }
 .shell #tab-chat .workspace-chat-questions { width: calc(100% - 36px); margin: 0 auto 12px; padding: 0 4px; }
-.shell #tab-chat .workspace-chat-control pre { overflow-wrap: anywhere; white-space: pre-wrap; }
+.shell #tab-chat .workspace-chat-pending { overflow-wrap: anywhere; white-space: pre-wrap; }
+.shell #tab-chat .workspace-chat-pending .inline-change { white-space: normal; margin: 8px 0; }
 .shell #tab-chat .workspace-chat-control button { margin-right: 8px; }
 .shell #tab-chat .project-chat-composer .composer-input-wrap { width: 100%; }
 .shell #tab-chat .project-chat-composer textarea { resize: none; }

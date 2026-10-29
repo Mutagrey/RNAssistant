@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
         {
             using (var hash = System.Security.Cryptography.SHA256.Create())
                 return "html_operation_" + BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(
-                    session.Id + "\n" + context.RunId + "\n" + context.StepId + "\n" + context.Call.Id))).Replace("-", "").ToLowerInvariant();
+                    session.Id + "\n" + context.RunId + "\n" + context.StepId + "\n" + context.Call.Id + (context.TargetOrdinal.HasValue ? "\npatch:" + context.TargetOrdinal.Value.ToString(System.Globalization.CultureInfo.InvariantCulture) : "")))).Replace("-", "").ToLowerInvariant();
         }
 
         internal static ResourceIdentity OperationIdentity(ChatSession session, string key)

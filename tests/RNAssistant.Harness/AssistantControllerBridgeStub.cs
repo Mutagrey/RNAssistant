@@ -610,6 +610,11 @@ namespace RNAssistant.Office
         public ToolResultPresentationDto ReadToolResultPresentation(ToolResultPresentationRequest request)
         { return new ToolResultPresentationDto { ChatId = request.ChatId, RunId = request.RunId, ToolCallId = request.ToolCallId }; }
 
+        internal string ReadRetainedPatchSource(ResourceRef reference, int maximum)
+        { throw new InvalidOperationException("No retained source in bridge stub."); }
+        internal IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef reference, ResourceRef after, string patch)
+        { throw new InvalidOperationException("No retained source in bridge stub."); }
+
         public RunChangesDto ReadRunChanges(RunChangesRequest request)
         {
             return new RunChangesDto { ChatId = request.ChatId, RunId = request.RunId };

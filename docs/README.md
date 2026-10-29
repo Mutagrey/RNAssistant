@@ -59,7 +59,7 @@ Application-владельца и срез с переключением обо�
 Owner — Core/Application; после принятия diff это исторический срез, текущие
 контракты остаются в canonical docs, следующие решения — в BACKLOG.
 
-[Text mutations](text-mutations.md) задаёт единые core.write/patch/replace, context hunks,
+[Text mutations](text-mutations.md) задаёт единые core.write/patch/replace, пакетные строковые hunks с текстовыми ориентирами,
 маршрутизацию по owner, имена tools/skills и встроенное сравнение в шаге.
 
 ## Канонические документы

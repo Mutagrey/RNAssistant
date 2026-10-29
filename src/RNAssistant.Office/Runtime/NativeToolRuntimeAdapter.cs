@@ -94,6 +94,8 @@ namespace RNAssistant.Office.Runtime
                     binding = ResourceMutationToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new OfficeResourceMutationHandler(registration.Descriptor.Id, gateway, session,
                         vbaTools, hostRuntime, htmlWorkspaceTools, authoredFiles, markdownDocuments, searchObservation);
+                    if (registration.Descriptor.Id == ResourceMutationToolCatalog.Patch)
+                        handler = new ResourcePatchBatchHandler((IPreparableToolHandler)handler);
                 }
                 else if (registration.Descriptor.Id == SkillLoadToolHandler.ToolId)
                 {

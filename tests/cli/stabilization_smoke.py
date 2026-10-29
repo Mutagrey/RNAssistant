@@ -36,8 +36,9 @@ def main():
             response("BATCH_NARRATION_ONCE", call("core.read", target="large.txt", startLine=1257, lineCount=2),
                      *(call("core.read", target=f"small{i}.txt") for i in range(4))),
             response("Attempt whole replacement from a partial read.", call("core.write", target="large.txt", content="UNSAFE")),
-            response("Patch only the observed anchor.", call("core.patch", target="large.txt", hunks=[{"oldText": "TARGET_OLD", "newText": "TARGET_NEW"}])),
-            response("Use the delivered after-source.", call("core.patch", target="large.txt", hunks=[{"oldText": "TARGET_NEW", "newText": "TARGET_FINAL"}])),
+            response("Patch related observed targets together.", call("core.patch", patch='*** Update Target: large.txt\n@@\n-TARGET_OLD\n+TARGET_NEW\n*** Update Target: small0.txt\n@@\n-small source 0\n+small updated 0\n')),
+            response("Read the changed tail before the dependent patch.", call("core.read", target="large.txt", startLine=1257, lineCount=2)),
+            response("Patch the newly observed source.", call("core.patch", patch='*** Update Target: large.txt\n@@\n-TARGET_NEW\n+TARGET_FINAL\n')),
             response("Verified patches complete."),
         ]
         requests = []
@@ -66,35 +67,36 @@ def main():
         try:
             run = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
                 "--message", "Read five files, reject whole replacement from partial source, then patch the tail twice.",
-                "--max-iterations", "6", "--max-tool-steps", "9", "--tool-result-role", "tool", "--jsonl"],
+                "--max-iterations", "7", "--max-tool-steps", "10", "--tool-result-role", "tool", "--jsonl"],
                 cwd=REPO, env=env, text=True, capture_output=True, timeout=60)
             approvals = 0
             while run.returncode == 3 and approvals < 2:
                 pending = json.loads(run.stdout.splitlines()[-1])["data"]
                 assert pending["pendingTool"] == "core.patch", pending
+                assert [row["target"] for row in pending["patchPreview"]["targets"]] == (["large.txt", "small0.txt"] if approvals == 0 else ["large.txt"]), pending
                 run = subprocess.run(["dotnet", str(CLI), "approve", "--workspace", str(workspace),
                     "--session", pending["SessionId"], "--pending", pending["pendingId"], "--jsonl"],
                     cwd=REPO, env=env, text=True, capture_output=True, timeout=60)
                 approvals += 1
             assert run.returncode == 0, (run.stdout, run.stderr)
             assert approvals == 2, approvals
-            assert len(requests) in (5, 6), (len(requests), run.stdout)
-            if len(requests) == 6:
+            assert len(requests) in (6, 7), (len(requests), run.stdout)
+            if len(requests) == 7:
                 assert "title" in json.dumps(requests[-1]).lower(), requests[-1]
             batch = requests[1]["messages"]
             assert sum("BATCH_NARRATION_ONCE" in str(m.get("content", "")) for m in batch) == 1, batch
             assert sum(m.get("role") == "tool" for m in batch) == 5, batch
             failures = [json.loads(m["content"]) for m in requests[2]["messages"] if m.get("role") == "tool"]
             assert failures[-1]["data"]["code"] == "source_observation_required", failures
-            for index, marker in [(3, "TARGET_NEW"), (4, "TARGET_FINAL")]:
-                bodies = [m["content"] for m in requests[index]["messages"] if "CURRENT_RESOURCE_VIEW" in str(m.get("content", ""))]
-                assert any(marker in body for body in bodies), (marker, requests[index])
-                assert all('"complete":false' in body for body in bodies), bodies
+            assert any("TARGET_NEW" in str(m.get("content", "")) for m in requests[4]["messages"]), requests[4]
+            delivered = [m["content"] for m in requests[3]["messages"] if "CURRENT_RESOURCE_VIEW" in str(m.get("content", ""))]
+            assert any("small0.txt" in body and "small updated 0" in body for body in delivered), delivered
             assert target.read_bytes() == original.replace("TARGET_OLD", "TARGET_FINAL").encode(), target.read_bytes()
+            assert (workspace / "small0.txt").read_text() == "small updated 0"
             assert "rna://" not in json.dumps(requests), "Runtime references leaked"
             final = json.loads(run.stdout.splitlines()[-1])["data"]
             assert final["ToolCounts"]["WriteOk"] == 2 and final["ToolCounts"]["WriteUnknown"] == 0, final
-            print("PASS five-call narrative, bounded tail read, whole-write refusal, patch → delivered after-source → patch")
+            print("PASS bounded read, whole-write refusal, batch approval across restart, per-target after-source, dependent read/patch")
         finally:
             server.shutdown()
             server.server_close()

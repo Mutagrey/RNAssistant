@@ -14,6 +14,7 @@ namespace RNAssistant.Runtime.Contracts
         public string Path { get; set; }
         public string TargetPath { get; set; }
         public bool PathsTruncated { get; set; }
+        public IReadOnlyList<PatchTargetResult> Targets { get; set; }
         [JsonConverter(typeof(StringEnumConverter))]
         public ResourceEffectOutcome Effect { get; set; }
     }

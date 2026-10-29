@@ -54,10 +54,13 @@ namespace RNAssistant.Core.Tools
     {
         public string ErrorCode { get; private set; }
 
-        public TextPatternException(string errorCode, string message)
+        public int? Hunk { get; private set; }
+        public System.Collections.Generic.IReadOnlyList<PatchCandidate> Candidates { get; private set; }
+
+        public TextPatternException(string errorCode, string message, int? hunk = null, System.Collections.Generic.IReadOnlyList<PatchCandidate> candidates = null)
             : base(message)
         {
-            ErrorCode = errorCode;
+            ErrorCode = errorCode; Hunk = hunk; Candidates = candidates;
         }
     }
 

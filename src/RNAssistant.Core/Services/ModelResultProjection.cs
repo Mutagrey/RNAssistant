@@ -163,7 +163,7 @@ namespace RNAssistant.Core.Services
         private static ToolResultMaterialization ProjectData(string name, ToolResultMaterialization source)
         {
             if (!IsResourceEvidence(name) && !IsWorkspaceMutation(name)) return GenericForModel(name, source);
-            var data = IsWorkspaceMutation(name)
+            var data = name == ResourceMutationToolCatalog.Patch ? ProjectPatchResult(source.Data) : IsWorkspaceMutation(name)
                 ? SelectFields(source.Data, "target", "path", "destination", "name", "moduleName", "newModuleName", "componentType", "vbeNormalized", "changed", "restored", "moved", "deleted", "code", "retryable")
                 : ProjectResourceData(name, source.Data);
             if (IsResourceEvidence(name)) SanitizeResourceEnvelope(data, source.Result.Resources);
@@ -172,6 +172,28 @@ namespace RNAssistant.Core.Services
                     ? SanitizeMutationMessage(source.Result.Message, source.Data) : source.Result.Message, source.Result.Resources)),
                 data.ToString(Formatting.None), new ResourceRef[0]);
             return new ToolResultMaterialization(result, source.ModelAttachments, data: data);
+        }
+
+        private static JObject ProjectPatchResult(JToken source)
+        {
+            source = source?["tool_data"] as JObject ?? source;
+            // The public DTO contains semantic targets and bounded diagnostics only.
+            // Never project the durable per-target ResourceEffect/source references.
+            var result = SelectFields(source, "type", "phase", "writeStarted", "partial", "code", "retryable");
+            Func<JToken, JObject> diagnostic = value => {
+                var item = SelectFields(value, "hunk", "code", "ownerCode", "message", "nextAction");
+                if (item["message"] != null) item["message"] = SanitizeOperationalText((string)item["message"]);
+                item["candidates"] = new JArray(((value?["candidates"] as JArray) ?? new JArray()).Take(5)
+                    .Select(candidate => SelectFields(candidate, "line", "context")));
+                return item;
+            };
+            if (source?["diagnostic"] is JObject) result["diagnostic"] = diagnostic(source["diagnostic"]);
+            result["targets"] = new JArray(((source?["targets"] as JArray) ?? new JArray()).Take(ResourcePatch.MaximumTargets).Select(target => {
+                var row = SelectFields(target, "target", "currentTarget", "status", "writeStarted");
+                if (target["diagnostic"] is JObject) row["diagnostic"] = diagnostic(target["diagnostic"]);
+                return row;
+            }));
+            return result;
         }
 
         private static bool IsWorkspaceMutation(string name)

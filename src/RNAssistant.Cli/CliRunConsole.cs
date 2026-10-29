@@ -75,8 +75,22 @@ namespace RNAssistant.Cli
             foreach (var file in acceptance.MissingFiles.Take(32)) Console.WriteLine("Missing: " + Text(file));
             if (!string.IsNullOrEmpty(acceptance.Error)) Console.WriteLine("Acceptance error: " + Text(acceptance.Error));
             if (summary.PendingConfirmation != null)
+            {
+                var patch = summary.PendingConfirmation.PatchPreview;
+                if (patch != null)
+                    foreach (var row in patch.Targets)
+                    {
+                        Console.WriteLine("Prepared target: " + Text(row.Target, 512));
+                        foreach (var hunk in row.Preview ?? new System.Collections.Generic.List<RNAssistant.Core.Tools.PatchPreview>())
+                        {
+                            foreach (var line in (hunk.Before ?? "").Split('\n')) Console.WriteLine("- " + Text(line, 320));
+                            foreach (var line in (hunk.After ?? "").Split('\n')) Console.WriteLine("+ " + Text(line, 320));
+                            if (hunk.Truncated) Console.WriteLine("  Preview truncated; inspect the exact accepted patch before approval.");
+                        }
+                    }
                 Console.WriteLine("Approval required. Resume with rna resume --workspace <path> --session " + Text(result.SessionId) +
                     ", or use approve/deny with --pending " + Text(summary.PendingConfirmation.PendingId) + ".");
+            }
             else if (result.UserInput != null)
                 Console.WriteLine("Answers required. Resume with rna resume --workspace <path> --session " + Text(result.SessionId) +
                     ", or use answer --answers-file <file>. inspect --jsonl returns the question IDs.");
@@ -84,6 +98,12 @@ namespace RNAssistant.Cli
 
         private static void File(WorkspaceFileActivity file)
         {
+            if (file.Targets != null)
+            {
+                foreach (var target in file.Targets)
+                    Console.WriteLine("  " + target.Status + ": " + Text(target.Target, 512) + "; write started: " + target.WriteStarted);
+                return;
+            }
             var state = file.Effect == ResourceEffectOutcome.UnknownAfterDispatch ? "UNKNOWN possible effect" : "Verified change";
             Console.WriteLine("  " + state + ": " + Text(file.ToolId) + " " + Text(file.Path ?? "[target unavailable]", 1024) +
                 (file.TargetPath == null ? "" : " -> " + Text(file.TargetPath, 1024)));

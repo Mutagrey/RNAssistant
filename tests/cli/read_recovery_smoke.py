@@ -41,7 +41,7 @@ def run_case(root, operation, restart=False):
     if operation == "replace":
         arguments["content"] = "updated"
     elif operation == "patch":
-        arguments["hunks"] = [{"oldText": "original", "newText": "updated"}]
+        arguments = {"patch": "*** Update Target: app.txt\n@@\n-original\n+updated\n"}
     elif operation in ("copy", "move"):
         arguments["destination"] = "destination.txt"
     mutation = call({"replace": "core.write", "patch": "core.patch", "copy": "resources.copy", "move": "resources.move", "delete": "resources.delete"}[operation], **arguments)
@@ -93,7 +93,12 @@ def run_case(root, operation, restart=False):
                   "--min-writes", "2" if restart else "1", "--max-iterations", "10", "--max-tool-steps", "10")
         assert len(requests) >= 2, (run.stdout, run.stderr)
         failure = list(results(requests[len(admission) + 1]))[-1]
-        assert failure["status"] == "error" and failure["data"]["code"] == "source_observation_required", failure
+        assert failure["status"] == "error", failure
+        if operation == "patch":
+            assert not failure["data"]["writeStarted"], failure
+            assert failure["data"]["targets"][0]["diagnostic"]["code"] == "source_changed", failure
+        else:
+            assert failure["data"]["code"] == "source_observation_required", failure
         expected_recovery = {
             "failureKind": "RejectedNoEffect", "retryPolicy": "RefreshRequired",
             "target": "app.txt", "representation": "text"}
@@ -102,7 +107,10 @@ def run_case(root, operation, restart=False):
         approvals = 0
         while run.returncode == 3 and approvals < (2 if restart else 1):
             pending = json.loads(run.stdout.splitlines()[-1])["data"]
-            assert pending["pendingPath"] == ("other.txt" if restart and approvals == 0 else "app.txt"), pending
+            if pending["pendingTool"] == "core.patch":
+                assert [row["target"] for row in pending["patchPreview"]["targets"]] == ["app.txt"], pending
+            else:
+                assert pending["pendingPath"] == ("other.txt" if restart and approvals == 0 else "app.txt"), pending
             if operation in ("copy", "move"):
                 assert pending["pendingTargetPath"] == "destination.txt", pending
             assert target.read_text() == "original", "No effect before approval"

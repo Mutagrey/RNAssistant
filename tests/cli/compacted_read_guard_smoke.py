@@ -8,6 +8,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from read_acceptance_context_smoke import CLI, REPO, DONE, call
+from conversation_transport import conversation_content, reply_to_title
 
 
 def run_case(root, role):
@@ -23,6 +24,7 @@ def run_case(root, role):
         def do_POST(self):
             try:
                 request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                if reply_to_title(self, request): return
                 requests.append(request)
                 content = "\n".join(item.get("content") or "" for item in request["messages"])
                 if "CONVERSATION_PREFIX (data to summarize" in content:
@@ -39,7 +41,7 @@ def run_case(root, role):
                                "COMPACTED_READ_SOURCE" in item["content"] for item in request["messages"]), content
                     assert not any(item["role"] == "tool" and "COMPACTED_READ_SOURCE" in
                                    (item.get("content") or "") for item in request["messages"]), "Read must be archived"
-                    response = call("core.patch", target="app.js", hunks=[{"oldText": "COMPACTED_READ_SOURCE", "newText": "VERIFIED_EDIT"}])
+                    response = call("core.patch", patch="*** Update Target: app.js\n@@\n-const marker = 'COMPACTED_READ_SOURCE';\n+const marker = 'VERIFIED_EDIT';\n")
                     phase["patched"] = True
                 else:
                     phase["step"] += 1
@@ -48,7 +50,7 @@ def run_case(root, role):
                     else:
                         response = call("core.find", query="probe-" + str(phase["step"]))
                         response["message"] = "Inspection: " + "bounded diagnostic context " * 90
-                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": json.dumps(response)}}]}).encode()
+                body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(request, response)}}]}).encode()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -79,7 +81,8 @@ def run_case(root, role):
         assert len(summaries) == 1 and phase["patched"] and phase["reread"], (phase, summaries)
         assert final["acceptance"] == "passed" and final["verifiedFileChanges"] == 1, final
         assert final["ToolCounts"]["WriteOk"] == 1 and final["ToolCounts"]["WriteUnknown"] == 0, final
-        assert "source_observation_required" not in json.dumps(requests), "Compaction revoked a delivered read"
+        failures = [m.get("content", "") for r in requests for m in r["messages"] if '"status":"error"' in str(m.get("content", ""))]
+        assert not any('"code":"source_changed"' in str(body) for body in failures), "Compaction revoked a delivered read"
         assert "rna://" not in json.dumps(requests), "Runtime evidence leaked to the model"
         print("PASS compacted read guard:", role, "restored body authorizes one verified edit without another read")
     finally:
