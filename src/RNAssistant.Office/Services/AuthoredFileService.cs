@@ -34,7 +34,7 @@ namespace RNAssistant.Office.Services
             return prefix != null && prefix.StartsWith("artifact_file_", StringComparison.Ordinal) &&
                 prefix.Length == "artifact_file_".Length + 64 ? prefix : null;
         }
-        private static ResourceIdentity Identity(ChatSession session, string logicalId)
+        internal static ResourceIdentity Identity(ChatSession session, string logicalId)
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, logicalId)); }
 
         internal AuthoredFileIntent Prepare(ChatSession session, ToolHandlerContext context, CancellationToken token)
@@ -52,9 +52,9 @@ namespace RNAssistant.Office.Services
                 intent.Source = JsonConvert.DeserializeObject<AuthoredFileMetadata>(artifact.MetadataJson ?? "{}")?.Source;
                 if (operation == AuthoredFileToolCatalog.PatchToolId)
                 {
-                    var patch = ToolArgumentReader.String(context.Arguments, "patch", "");
+                    var patch = ObservedPatch(session, context, intent.Base);
                     intent.Patch = _artifacts.PrepareFilePatch(session, intent.Base, patch, token);
-                    RequirePatchObservation(session, context, intent, TextPatch.Parse(patch).RequiresWholeSource);
+                    RequirePatchObservation(session, context, intent, patch.RequiresWholeSource);
                 }
             }
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
@@ -124,7 +124,7 @@ namespace RNAssistant.Office.Services
                 // Reconstruct from the same immutable source, including after a pending
                 // confirmation/restart. Preparation is not a retained second store.
                 var patch = _artifacts.PrepareFilePatch(session, intent.Base,
-                    ToolArgumentReader.String(context.Arguments, "patch", ""), token);
+                    ObservedPatch(session, context, intent.Base), token);
                 if (intent.Patch == null || patch.Source.Sha256 != intent.Patch.Source.Sha256 ||
                     patch.Result.Sha256 != intent.Patch.Result.Sha256 || patch.Result.ByteLength != intent.Patch.Result.ByteLength)
                     throw new ResourceRequestException("The prepared file changed. Read it again.", "source_changed", false);
@@ -209,6 +209,14 @@ namespace RNAssistant.Office.Services
                     dependencies: new[] { new ResourceDependency(retained.Revision, kind: "immutable-snapshot") }),
                 new ResourceMutationReadBack(OperationIdentity(session, key), true, "text", link.Sha256, link,
                     dependencies: new[] { new ResourceDependency(retained.Revision, kind: "operation-result") }) };
+        }
+
+        private static TextPatch ObservedPatch(ChatSession session, ToolHandlerContext context, ResourceRef reference)
+        {
+            var patch = TextPatch.FromArguments(context.Arguments);
+            var accepted = session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
+            return accepted == null ? patch : patch.WithCoverage(TextPatch.Coverage(
+                (accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e => e.Resource.Uri == reference.Uri && e.Resource.Revision == reference.Revision)));
         }
 
         private static void RequirePatchObservation(ChatSession session, ToolHandlerContext context,

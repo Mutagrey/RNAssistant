@@ -18,15 +18,15 @@ namespace RNAssistant.Core.Storage
             internal byte[] Before, After;
         }
         public List<PatchPreview> ValidateTextEdits(WorkspaceDescriptor workspace, string path, ResourceRef expected,
-            string patch, CancellationToken token, ResourceEvidence observed = null)
+            TextPatch patch, CancellationToken token, ResourceEvidence observed = null)
         {
             var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
             {
-                var parsed = TextPatch.Parse(patch);
+                var parsed = observed == null ? patch : patch.WithCoverage(TextPatch.Coverage(new[] { observed }));
                 if (parsed.RequiresWholeSource && !(observed?.Complete == true && observed.Coverage.Kind == ResourceCoverageKinds.Whole))
                     throw new TextPatternException("source_observation_required", "A context-free insertion requires complete observed source.");
-                var edits = PlanByteEdits(stream, patch, token);
+                var edits = PlanByteEdits(stream, parsed, token);
                 if (observed?.Coverage.Kind == ResourceCoverageKinds.CharacterRange)
                 {
                     var start = CharacterByteOffset(stream, observed.Coverage.Start ?? 0, token);
@@ -39,7 +39,7 @@ namespace RNAssistant.Core.Storage
             }
         }
         public WorkspaceFileObservation ApplyTextEdits(WorkspaceDescriptor workspace, string path,
-            ResourceRef expected, string patch, Action onDispatch = null,
+            ResourceRef expected, TextPatch patch, Action onDispatch = null,
             CancellationToken token = default(CancellationToken), string effectOperation = ResourceMutationToolCatalog.Patch)
         {
             // One staged commit, even for many hunks. Source and result are streamed; memory follows patch size.
@@ -62,7 +62,7 @@ namespace RNAssistant.Core.Storage
                     {
                         token.ThrowIfCancellationRequested();
                         if (text.Length + read > ResourceTextSearch.MaximumScanCharacters)
-                            throw new TextPatternException("replacement_limit_exceeded", "Source exceeds the complete search budget; use core.patch hunks.");
+                            throw new TextPatternException("replacement_limit_exceeded", "Source exceeds the complete search budget; use bounded core.patch edits.");
                         text.Append(buffer, 0, read);
                     }
                 }
@@ -123,24 +123,24 @@ namespace RNAssistant.Core.Storage
                 catch (UnauthorizedAccessException) { }
             }
         }
-        private static IReadOnlyList<ByteEdit> PlanByteEdits(Stream source, string patch, CancellationToken token)
+        private static IReadOnlyList<ByteEdit> PlanByteEdits(Stream source, TextPatch patch, CancellationToken token)
         {
             source.Position = 0;
             IReadOnlyList<TextPatchEdit> resolved;
             using (var reader = new StreamReader(source, StrictUtf8, false, 81920, true))
-                resolved = TextPatch.Parse(patch).Resolve(reader, token);
+                resolved = patch.Resolve(reader, token);
             return resolved.Select(edit => new ByteEdit {
                 Offset = CharacterByteOffset(source, edit.Offset, token),
                 Before = EncodePatchFragment(edit.Before), After = EncodePatchFragment(edit.After)
             }).ToList();
         }
-        public IReadOnlyList<TextPatchEdit> ReadRetainedPatchEdits(ResourceRef before, ResourceRef after, string patch, int maximumCharacters)
+        public IReadOnlyList<TextPatchEdit> ReadRetainedPatchEdits(ResourceRef before, ResourceRef after, TextPatch patch, int maximumCharacters)
         {
             var evidence = PublishedEvidence(before, ResourceRepresentations.Raw);
             using (var stream = OpenRetainedStream(evidence.Payload, long.MaxValue, CancellationToken.None, null, true))
             using (var reader = new StreamReader(stream, StrictUtf8, false, 81920, true))
             {
-                var edits = TextPatch.Parse(patch).Resolve(reader);
+                var edits = patch.Resolve(reader);
                 if (edits.Sum(e => (long)e.Before.Length + e.After.Length) > maximumCharacters)
                     throw new WorkspaceFileException("file_too_large", "Retained patch fragments exceed the display budget.");
                 var result = PublishedEvidence(after, ResourceRepresentations.Raw);

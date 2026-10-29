@@ -28,7 +28,7 @@ namespace RNAssistant.Office.Tools
                 var intent = _service.Prepare(_session, context, cancellationToken);
                 return Task.FromResult(new ToolPreparationResult(RuntimeResult.Ok("File intent prepared."), JsonConvert.SerializeObject(intent),
                     patchTarget: intent.Patch == null ? null : new PatchTargetPlan { Source = intent.Base,
-                        SourceHash = intent.Patch.Source.Sha256, EffectIdentity = intent.Base.Identity,
+                        SourceHash = intent.Patch.Source.Sha256, EffectIdentity = AuthoredFileService.Identity(_session, intent.LogicalId),
                         Preview = PatchPreview.From(intent.Patch.Edits) }));
             }
             catch (TextPatternException error) { return Task.FromResult(new ToolPreparationResult(RuntimeResult.Error(error.Message), patchDiagnostic: PatchDiagnostic.From(error))); }

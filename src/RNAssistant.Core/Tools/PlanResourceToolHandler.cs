@@ -112,7 +112,7 @@ namespace RNAssistant.Core.Tools
                 {
                     var content = Value(context.Arguments, "content");
                     if (context.Execution.Call.Name == ResourceMutationToolCatalog.Patch)
-                    { edits = TextEditPlan.Patch(before, Value(context.Arguments, "patch"), token); content = edits.Text; }
+                    { edits = TextEditPlan.Patch(before, TextPatch.FromArguments(context.Arguments), token); content = edits.Text; }
                     command.Content = PlanSourceDocument.Parse(content);
                     var sameTitle = _resolve(PlanSourceDocument.Target(command.Content.Title));
                     if (sameTitle != null && PlanDocumentService.PlanId(sameTitle) != command.PlanId)
@@ -202,9 +202,11 @@ namespace RNAssistant.Core.Tools
                 (e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision ||
                  e.Dependencies.Any(d => d.Kind == "immutable-snapshot" && d.Resource.Uri == source.Resource.Reference.Uri &&
                     d.Resource.Revision == source.Resource.Reference.Revision))).ToArray();
+            if (context.Execution.Call.Name == ResourceMutationToolCatalog.Patch)
+                context.Arguments["edits"] = TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(evidence));
             var patch = context.Execution.Call.Name == ResourceMutationToolCatalog.Patch
-                ? TextEditPlan.Patch(source.Text, Value(context.Arguments, "patch")) : null;
-            whole |= patch != null && TextPatch.Parse(Value(context.Arguments, "patch")).RequiresWholeSource;
+                ? TextEditPlan.Patch(source.Text, TextPatch.FromArguments(context.Arguments)) : null;
+            whole |= patch != null && TextPatch.FromArguments(context.Arguments).RequiresWholeSource;
             if (evidence.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)) return;
             long covered = 0;
             foreach (var item in evidence.Where(e => e.Coverage.Kind == ResourceCoverageKinds.CharacterRange).OrderBy(e => e.Coverage.Start))

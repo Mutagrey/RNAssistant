@@ -55,6 +55,7 @@ namespace RNAssistant.Harness
             var tests = new List<HarnessTest>
             {
                 Test("universal mutations: exact original hunks", UniversalHunksUseOriginalSnapshot),
+                Test("universal mutations: published patch examples apply", UniversalPatchSchemaExamplesApply),
                 Test("universal mutations: streamed file and shared matcher", UniversalFileHunksStageOnce),
                 Test("universal mutations: public Office routing", UniversalOfficeRoutesToOwners),
                 Test("universal mutations: HTML member guards", UniversalHtmlBatchPinsMembers),

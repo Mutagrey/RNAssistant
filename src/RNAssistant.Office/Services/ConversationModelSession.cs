@@ -572,16 +572,21 @@ namespace RNAssistant.Office.Services
                     .Select(item => item.After)
                 : effect.Outcome == ResourceEffectOutcome.VerifiedChanged || effect.Outcome == ResourceEffectOutcome.Restored
                     ? effect.Impacts.Select(item => item.After) : Enumerable.Empty<ResourceRef>();
-            foreach (var exact in verified.Where(item => item?.IsExact == true)
+            foreach (var verifiedReference in verified.Where(item => item?.IsExact == true)
                 .GroupBy(item => item.Uri + "\n" + item.Revision, StringComparer.Ordinal).Select(group => group.First()))
             {
+                var exact = verifiedReference;
                 var provider = ResourceUri.Parse(exact.Uri).Provider;
                 if (provider == "state")
                 {
                     var planSource = new DocumentArtifactStore(authority.Store, authority.Revisions, payloads)
                         .ReadPlanSourceEvidence(session, exact);
-                    if (planSource != null) message.ResourceEvidence.Add(planSource);
-                    continue;
+                    if (planSource != null) { message.ResourceEvidence.Add(planSource); continue; }
+                    var sourceScope = authority.ScopeFor(session, exact, false);
+                    var authoredHead = authority.Store.Capture(sourceScope).GetHead(exact.Identity);
+                    if (authoredHead?.Knowledge != HeadKnowledge.Known || authoredHead.Revision.Revision != exact.Revision) continue;
+                    exact = authority.AuthoredSourceSnapshot(sourceScope, exact);
+                    provider = ResourceUri.Parse(exact.Uri).Provider;
                 }
                 var vba = provider == "vba";
                 ChatArtifact artifact = null;
@@ -591,7 +596,7 @@ namespace RNAssistant.Office.Services
                     if (ChatResourceUri.TryGetArtifactId(session, exact, out artifactId))
                         artifact = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
                             item != null && item.Id == artifactId &&
-                            (item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.PlanDocument));
+                            (item.Kind == ChatArtifactKinds.Markdown || item.Kind == ChatArtifactKinds.PlanDocument || item.Kind == ChatArtifactKinds.File));
                 }
                 if (!vba && artifact == null) continue;
                 var scope = authority.ScopeFor(session, exact, vba);
@@ -600,25 +605,43 @@ namespace RNAssistant.Office.Services
                 if (head?.Knowledge != HeadKnowledge.Known ||
                     head.Revision.Uri != exact.Uri || head.Revision.Revision != exact.Revision) continue;
                 var revision = authority.Revisions.GetRevision(scope, exact);
-                var view = vba ? authority.Revisions.GetView(scope, exact, ResourceRepresentations.Source) : null;
-                var payload = vba ? view?.Payload : revision?.Payload;
-                var coverage = vba ? view?.Coverage : ResourceCoverage.Whole();
+                var file = artifact?.Kind == ChatArtifactKinds.File;
+                var view = vba || file ? authority.Revisions.GetView(scope, exact, file ? DocumentArtifactStore.FileTextView : ResourceRepresentations.Source) : null;
+                var payload = vba || file ? view?.Payload : revision?.Payload;
+                var coverage = vba || file ? view?.Coverage : ResourceCoverage.Whole();
                 if (payload == null || coverage?.Kind != ResourceCoverageKinds.Whole) continue;
                 var dependencies = (revision?.Dependencies ?? new ResourceDependency[0]).ToList();
                 if (artifact != null)
                 {
                     var logical = artifact.Kind == ChatArtifactKinds.Markdown
                         ? MarkdownDocumentIdentity.Identity(session, MarkdownDocumentIdentity.LogicalId(artifact.Id))
-                        : DocumentArtifactStore.PlanIdentity(session, DocumentArtifactStore.PlanIdFromArtifact(artifact));
+                        : file ? verifiedReference.Identity : DocumentArtifactStore.PlanIdentity(session, DocumentArtifactStore.PlanIdFromArtifact(artifact));
                     var logicalHead = frozen.GetHead(logical);
                     if (logicalHead?.Knowledge != HeadKnowledge.Known) continue;
                     dependencies.Add(new ResourceDependency(logicalHead.Revision, kind: "current-authored-source"));
                 }
+                var complete = true;
+                var hash = vba || file ? view.ContentSha256 : revision.ContentSha256;
+                if (file && payload.ByteLength > 32000)
+                {
+                    using (var stream = payloads.OpenVerifiedRead(payload.ToBlobReference(), long.MaxValue, CancellationToken.None))
+                    using (var reader = new System.IO.StreamReader(stream, new System.Text.UTF8Encoding(false, true), false))
+                    {
+                        var buffer = new char[32000];
+                        var count = reader.ReadBlock(buffer, 0, buffer.Length);
+                        complete = reader.Peek() < 0;
+                        if (!complete && count > 0 && char.IsHighSurrogate(buffer[count - 1])) count--;
+                        if (!complete && count > 0 && buffer[count - 1] == '\r' && reader.Peek() == '\n') count--;
+                        var text = new string(buffer, 0, count);
+                        payload = PayloadRef.FromBlob(payloads.StoreText(text, "text/plain; charset=utf-8"));
+                        hash = TextPatternEngine.Sha256(text);
+                        if (!complete) coverage = new ResourceCoverage(ResourceCoverageKinds.CharacterRange, start: 0, end: count);
+                    }
+                }
                 message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
                     scope, exact, vba ? ResourceRepresentations.Source : ResourceRepresentations.Text,
-                    ResourceCoverage.Whole(), true, frozen.Generation, payload, dependencies,
-                    immutable: artifact != null,
-                    contentSha256: vba ? view.ContentSha256 : revision.ContentSha256));
+                    coverage, complete, frozen.Generation, payload, dependencies,
+                    immutable: artifact != null, contentSha256: hash));
             }
 
             if (!HtmlWorkspaceToolCatalog.Owns(command.ToolId) ||

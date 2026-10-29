@@ -209,6 +209,7 @@ namespace RNAssistant.OfficeHosts
                             });
                             documentPrepared = true;
                         }
+                        stage = "discovery";
                         var targets = dispatcher.Invoke(() => OfficeTargetEnumerator.ListOpenTargets(host, _ => application)
                             .Where(item => host != "Outlook" || (outlookMailbox
                                 ? !string.IsNullOrWhiteSpace(item.StoreId)
@@ -216,6 +217,7 @@ namespace RNAssistant.OfficeHosts
                             .ToArray());
                         if (targets.Length > 0)
                         {
+                            stage = "target";
                             target = dispatcher.Invoke(() => SelectTarget(host, targets, outlookMailbox, application));
                             if (host == "Outlook" && !outlookMailbox &&
                                 string.IsNullOrWhiteSpace(target.EntryId) &&
@@ -228,9 +230,10 @@ namespace RNAssistant.OfficeHosts
                                     target.Hwnd != 0 ? target.Hwnd : ActiveWindowHwnd(host, application));
                                 return null;
                             });
-                            stage = "chat";
+                            stage = "binding";
                             using (var controller = new AssistantController(adapter))
                             {
+                                stage = "chat";
                                 var state = controller.CreatePersistentChat("Новый чат");
                                 RuntimeLog.Info("Office chat creation completed. Host=" + host +
                                     ", elapsedMs=" + timer.ElapsedMilliseconds);
@@ -258,8 +261,15 @@ namespace RNAssistant.OfficeHosts
                 {
                     RuntimeLog.Error("Office chat creation failed. Host=" + host +
                         ", stage=" + stage + ", elapsedMs=" + timer.ElapsedMilliseconds, ex);
-                    adapter.Dispose();
-                    throw;
+                    try { adapter.Dispose(); }
+                    catch (Exception cleanupError)
+                    { RuntimeLog.Error("Office chat adapter cleanup failed. Host=" + host, cleanupError); }
+                    var cause = ex.GetBaseException();
+                    var detail = ex.Message;
+                    if (cause != ex && !string.Equals(cause.Message, detail, StringComparison.Ordinal))
+                        detail += " Причина: " + cause.Message;
+                    throw new InvalidOperationException(
+                        "Создание чата " + host + " (этап " + stage + "): " + detail, ex);
                 }
             });
         }

@@ -4,9 +4,28 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using Newtonsoft.Json;
+using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Tools
 {
+    [JsonObject(MemberSerialization.OptIn)]
+    public sealed class TextEditIntent
+    {
+        [JsonProperty("op", NullValueHandling = NullValueHandling.Ignore)] public string Op { get; set; }
+        [JsonProperty("before", NullValueHandling = NullValueHandling.Ignore)] public string Before { get; set; }
+        [JsonProperty("after", NullValueHandling = NullValueHandling.Ignore)] public string After { get; set; }
+        [JsonProperty("text", NullValueHandling = NullValueHandling.Ignore)] public string Text { get; set; }
+        [JsonProperty("position", NullValueHandling = NullValueHandling.Ignore)] public string Position { get; set; }
+        [JsonProperty("anchor", NullValueHandling = NullValueHandling.Ignore)] public string Anchor { get; set; }
+        [JsonProperty("context", NullValueHandling = NullValueHandling.Ignore)] public TextEditContext Context { get; set; }
+    }
+    [JsonObject(MemberSerialization.OptIn)]
+    public sealed class TextEditContext
+    {
+        [JsonProperty("before", NullValueHandling = NullValueHandling.Ignore)] public string[] Before { get; set; }
+        [JsonProperty("after", NullValueHandling = NullValueHandling.Ignore)] public string[] After { get; set; }
+    }
     public sealed class TextPatchEdit
     {
         public long Offset { get; internal set; }
@@ -15,156 +34,270 @@ namespace RNAssistant.Core.Tools
         public string After { get; internal set; }
     }
 
-    // A patch body for one source. No paths, language scopes or model-owned revisions.
-    // Matching is streamed and all hunks address the same original snapshot.
+    // Typed intents share one streaming resolver. No model offsets or diff parser.
     public sealed class TextPatch
     {
-        private sealed class Hunk
+        private readonly IReadOnlyList<TextEditIntent> _edits;
+        internal IReadOnlyList<TextEditIntent> Intents => _edits;
+        private readonly IReadOnlyList<Tuple<long, long>> _coverage;
+        public bool RequiresWholeSource => _edits.Any(e => e.Op == "insert" && (e.Position == "start" || e.Position == "end"));
+        public TextPatch(IEnumerable<TextEditIntent> edits, IEnumerable<Tuple<long, long>> coverage = null)
         {
-            internal readonly List<string> Anchors = new List<string>();
-            internal readonly List<string> Lines = new List<string>();
-            internal bool EndOfFile;
-        }
-        private sealed class SourceLine
-        {
-            internal long Offset, Length, Number;
-            internal string Text, Key, Ending;
-            internal long End => Offset + Length + Ending.Length;
-            internal string Raw => Text + Ending;
-        }
-        private sealed class Match
-        {
-            internal Hunk Hunk;
-            internal string[] Anchors, Old;
-            internal int[] Prefix;
-            internal int AnchorIndex, Count;
-            internal long AnchorEnd;
-            internal readonly List<SourceLine> Pending = new List<SourceLine>();
-            internal readonly List<PatchCandidate> Locations = new List<PatchCandidate>();
-            internal SourceLine[] Candidate;
-        }
-        private readonly List<Hunk> _hunks;
-        private TextPatch(List<Hunk> hunks) { _hunks = hunks; }
-        public bool RequiresWholeSource => _hunks.Any(h => h.Lines.All(l => l[0] == '+'));
-
-        public static TextPatch Parse(string patch)
-        {
-            if (string.IsNullOrWhiteSpace(patch)) throw Error("invalid_patch", "patch must contain a diff body starting with @@.");
-            var lines = patch.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-            var hunks = new List<Hunk>();
-            Hunk current = null;
-            for (var i = 0; i < lines.Length; i++)
+            _edits = (edits ?? Enumerable.Empty<TextEditIntent>()).ToArray();
+            _coverage = coverage?.OrderBy(r => r.Item1).ToArray();
+            if (_edits.Count == 0 || _edits.Count > 100) throw Error("invalid_edit", "Use 1 to 100 edits per target.");
+            for (var i = 0; i < _edits.Count; i++)
             {
-                var line = lines[i];
-                if (line == "@@" || line.StartsWith("@@ ", StringComparison.Ordinal))
-                {
-                    if (current == null || current.Lines.Count > 0)
-                    {
-                        current = new Hunk(); hunks.Add(current);
-                        if (hunks.Count > 100) throw Error("invalid_patch", "Use at most 100 hunks.");
-                    }
-                    if (line.Length > 3)
-                    {
-                        current.Anchors.Add(line.Substring(3));
-                        if (current.Anchors.Count > 100) throw Error("invalid_patch", "Too many anchors in one hunk.");
-                    }
-                    continue;
-                }
-                if (line.Length == 0)
-                {
-                    // Blank separators are allowed only between hunks or at the end.
-                    var next = i + 1;
-                    while (next < lines.Length && lines[next].Length == 0) next++;
-                    if (next == lines.Length || lines[next] == "@@" || lines[next].StartsWith("@@ ", StringComparison.Ordinal)) continue;
-                    throw Error("invalid_patch", "Prefix an unchanged empty line with a space.", current == null ? (int?)null : hunks.Count);
-                }
-                if (current == null) throw Error("invalid_patch", "Use @@, followed by context, -old and +new lines; omit file headers.");
-                if (line == "*** End of File" && current.Lines.Count > 0 && !current.EndOfFile)
-                { current.EndOfFile = true; continue; }
-                if (current.EndOfFile || (line[0] != ' ' && line[0] != '+' && line[0] != '-'))
-                    throw Error("invalid_patch", "Invalid patch line " + (i + 1) + "; use a space, + or - prefix.", hunks.Count);
-                current.Lines.Add(line);
+                var e = _edits[i];
+                if (e == null) throw Error("invalid_edit", "An edit must be an object.", i + 1);
+                var insert = e.Op == "insert";
+                if (insert ? e.Before != null || e.After != null || string.IsNullOrEmpty(e.Text) ||
+                    !(e.Position == "before" || e.Position == "after" || e.Position == "start" || e.Position == "end") ||
+                    ((e.Position == "before" || e.Position == "after") ? e.Anchor == null : e.Anchor != null) :
+                    (e.Op != null && e.Op != "replace") || string.IsNullOrEmpty(e.Before) || e.After == null ||
+                    e.Text != null || e.Position != null || e.Anchor != null)
+                    throw Error("invalid_edit", "Use before/after for replacement, or op=insert with text and position (anchor for before/after).", i + 1);
+                var anchors = (e.Context?.Before ?? new string[0]).Concat(e.Context?.After ?? new string[0]).Concat(e.Anchor == null ? new string[0] : new[] { e.Anchor }).ToArray();
+                if (anchors.Length > 201 || anchors.Any(a => a == null || a.IndexOfAny(new[] { '\r', '\n' }) >= 0))
+                    throw Error("invalid_edit", "Context and anchor entries must be complete single lines.", i + 1);
+                foreach (var s in anchors.Concat(new[] { e.Before, e.After, e.Text }).Where(s => s != null)) ValidateUnicode(s, i + 1);
             }
-            if (hunks.Count == 0) throw Error("invalid_patch", "Each hunk must contain an addition or deletion.");
-            for (var i = 0; i < hunks.Count; i++)
-                if (!hunks[i].Lines.Any(l => l[0] == '+' || l[0] == '-'))
-                    throw Error("invalid_patch", "Each hunk must contain an addition or deletion.", i + 1);
-            return new TextPatch(hunks);
+        }
+        public TextPatch WithCoverage(IEnumerable<Tuple<long, long>> coverage) { return new TextPatch(_edits, coverage); }
+        public static IReadOnlyList<Tuple<long, long>> Coverage(IEnumerable<ResourceEvidence> evidence)
+        {
+            var items = (evidence ?? Enumerable.Empty<ResourceEvidence>()).ToArray();
+            if (items.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)) return null;
+            return items.Where(e => e.Coverage.Kind == ResourceCoverageKinds.CharacterRange && e.Coverage.Start.HasValue && e.Coverage.End.HasValue)
+                .Select(e => Tuple.Create(e.Coverage.Start.Value, e.Coverage.End.Value)).ToArray();
+        }
+        public static TextPatch FromArguments(IDictionary<string, object> arguments)
+        {
+            object value;
+            if (arguments.TryGetValue("edits", out value) && value is TextPatch) return (TextPatch)value;
+            throw Error("invalid_edit", "Missing typed target edits.");
+        }
+        private bool Covered(long start, long end)
+        {
+            if (_coverage == null) return true;
+            var cursor = start;
+            foreach (var range in _coverage)
+            {
+                if (range.Item1 > cursor) break;
+                if (range.Item2 >= cursor) { cursor = range.Item2; if (cursor >= end) return true; }
+            }
+            return false;
+        }
+        private static string Logical(string text) { return text.Replace("\r\n", "\n").Replace('\r', '\n'); }
+        private static void ValidateUnicode(string text, int edit)
+        {
+            for (var i = 0; i < text.Length; i++)
+                if (char.IsHighSurrogate(text[i]))
+                { if (++i == text.Length || !char.IsLowSurrogate(text[i])) throw Error("invalid_edit", "Text splits a Unicode scalar.", edit); }
+                else if (char.IsLowSurrogate(text[i]) || text[i] == '\0') throw Error("invalid_edit", "Text contains an invalid scalar or NUL.", edit);
+        }
+        private struct Unit
+        {
+            internal char Value;
+            internal long Offset, Line;
+            internal int Width;
+            internal string Ending;
+        }
+        private sealed class Candidate
+        {
+            internal long Offset, End, Line, EligibleAfter;
+            internal string Before, Newline;
+        }
+        private sealed class Line
+        {
+            internal long Offset, End, Number;
+            internal string Text, Ending;
+        }
+        private sealed class State
+        {
+            internal TextEditIntent Intent;
+            internal string Pattern;
+            internal int[] Prefix;
+            internal Unit[] Ring;
+            internal long Seen;
+            internal int Matched, BeforeIndex;
+            internal bool Unobserved;
+            internal long BeforeEnd;
+            internal string[] BeforeAnchors, AfterAnchors, CanonicalLines;
+            internal readonly Queue<Line> Lines = new Queue<Line>();
+            internal List<Candidate>[] Exact, Canonical;
+        }
+        private static List<Candidate>[] Buckets(int n)
+        { return Enumerable.Range(0, n + 1).Select(i => new List<Candidate>(2)).ToArray(); }
+        private static void Add(List<Candidate> bucket, Candidate candidate)
+        {
+            if (bucket.Count < 2 && !bucket.Any(c => c.Offset == candidate.Offset && c.End == candidate.End)) bucket.Add(candidate);
+        }
+        private State CreateState(TextEditIntent intent, Func<string, string> key)
+        {
+            var pattern = Logical(intent.Before ?? "");
+            var prefix = new int[pattern.Length];
+            for (var i = 1; i < pattern.Length; i++)
+            {
+                var j = prefix[i - 1];
+                while (j > 0 && pattern[i] != pattern[j]) j = prefix[j - 1];
+                if (pattern[i] == pattern[j]) j++;
+                prefix[i] = j;
+            }
+            var before = (intent.Context?.Before ?? new string[0]).Select(key).ToArray();
+            var after = (intent.Context?.After ?? new string[0]).Select(key).ToArray();
+            return new State { Intent = intent, Pattern = pattern, Prefix = prefix, Ring = new Unit[pattern.Length],
+                BeforeAnchors = before, AfterAnchors = after, Exact = Buckets(after.Length), Canonical = Buckets(after.Length),
+                CanonicalLines = pattern.Length == 0 ? new string[0] : (pattern.EndsWith("\n", StringComparison.Ordinal) ? pattern.Substring(0, pattern.Length - 1) : pattern).Split('\n').Select(key).ToArray() };
         }
 
-        // The owner may supply a documented line equivalence (live VBA only).
-        // Text that does not participate in a match is never retained in memory.
         public IReadOnlyList<TextPatchEdit> Resolve(TextReader reader, CancellationToken token = default(CancellationToken),
             Func<string, string> normalizeLine = null)
         {
             if (reader == null) throw new ArgumentNullException(nameof(reader));
             Func<string, string> key = normalizeLine ?? (s => s);
-            var states = _hunks.Select(h => CreateMatch(h, key)).ToArray();
-            var keys = new HashSet<string>(states.SelectMany(s => s.Old.Concat(s.Anchors)), StringComparer.Ordinal);
-            var maxLength = _hunks.SelectMany(h => h.Anchors.Concat(h.Lines.Where(l => l[0] != '+').Select(l => l.Substring(1))))
-                .Select(l => l.Length).DefaultIfEmpty(0).Max();
-            // Nonmatching very long lines are counted and skipped, not buffered.
-            var limit = (long)maxLength + (normalizeLine == null ? 0 : 65536);
-            long offset = 0, number = 0;
-            if (reader.Peek() == '\uFEFF') { reader.Read(); offset++; }
-            SourceLine last = null;
-            var newline = "\n";
+            var states = _edits.Select(e => CreateState(e, key)).ToArray();
+            var lineLimit = _edits.SelectMany(e => (e.Context?.Before ?? new string[0]).Concat(e.Context?.After ?? new string[0])
+                .Concat(e.Anchor == null ? new string[0] : new[] { e.Anchor }).Concat(Logical(e.Before ?? "").Split('\n'))).Select(s => s.Length).DefaultIfEmpty().Max() + (normalizeLine == null ? 0 : 65536);
+            long offset = 0, number = 1, lineStart = 0;
+            if (reader.Peek() == '\uFEFF') { reader.Read(); offset = lineStart = 1; }
+            var start = offset;
+            var lineText = new StringBuilder();
+            var firstNewline = "\n";
             var sawNewline = false;
-            SourceLine line;
-            while ((line = ReadLine(reader, offset, ++number, limit, token)) != null)
+            var lastNewline = "";
+            foreach (var s in states.Where(s => s.Intent.Position == "start" && s.BeforeAnchors.Length == 0))
+                Add(s.Exact[0], new Candidate { Offset = start, End = start, Line = 1, Before = "", EligibleAfter = start });
+            int c;
+            while ((c = reader.Read()) >= 0)
             {
-                token.ThrowIfCancellationRequested();
-                offset = line.End;
-                if (!sawNewline && line.Ending.Length > 0) { newline = line.Ending; sawNewline = true; }
-                line.Key = line.Text == null ? null : key(line.Text);
-                if (line.Key == null || !keys.Contains(line.Key)) { line.Key = null; line.Text = null; }
+                if ((offset & 4095) == 0) token.ThrowIfCancellationRequested();
+                var ending = "";
+                var width = 1;
+                if (c == '\r' || c == '\n')
+                {
+                    ending = ((char)c).ToString();
+                    if (c == '\r' && reader.Peek() == '\n') { reader.Read(); width = 2; ending = "\r\n"; }
+                    c = '\n';
+                    if (!sawNewline) { firstNewline = ending; sawNewline = true; }
+                    lastNewline = ending;
+                }
+                var unit = new Unit { Value = (char)c, Offset = offset, Width = width, Line = number, Ending = ending };
                 foreach (var state in states)
                 {
-                    if (state.Hunk.EndOfFile) { state.Count = 0; state.Candidate = null; state.Locations.Clear(); }
-                    if (state.AnchorIndex == state.Anchors.Length && line.Number > state.AnchorEnd && state.Old.Length > 0)
+                    if (state.Pattern.Length == 0) continue;
+                    state.Ring[(int)(state.Seen++ % state.Ring.Length)] = unit;
+                    while (state.Matched > 0 && state.Pattern[state.Matched] != c) state.Matched = state.Prefix[state.Matched - 1];
+                    if (state.Pattern[state.Matched] == c) state.Matched++;
+                    if (state.Matched == state.Pattern.Length)
                     {
-                        while (state.Pending.Count > 0 && line.Key != state.Old[state.Pending.Count])
+                        var begin = state.Ring[(int)((state.Seen - state.Pattern.Length) % state.Ring.Length)];
+                        if (!Covered(begin.Offset, offset + width)) state.Unobserved = true;
+                        if (state.Exact[0].Count < 2 && state.BeforeIndex == state.BeforeAnchors.Length && begin.Offset >= state.BeforeEnd && Covered(begin.Offset, offset + width))
                         {
-                            var keep = state.Prefix[state.Pending.Count - 1];
-                            state.Pending.RemoveRange(0, state.Pending.Count - keep);
+                            var raw = new StringBuilder();
+                            string local = null;
+                            for (var n = state.Seen - state.Pattern.Length; n < state.Seen; n++)
+                            {
+                                var part = state.Ring[(int)(n % state.Ring.Length)];
+                                if (part.Ending.Length > 0) { raw.Append(part.Ending); if (local == null) local = part.Ending; }
+                                else raw.Append(part.Value);
+                            }
+                            Add(state.Exact[0], new Candidate { Offset = begin.Offset, End = offset + width, Line = begin.Line,
+                                Before = raw.ToString(), Newline = local, EligibleAfter = offset + width });
                         }
-                        if (line.Key == state.Old[state.Pending.Count]) state.Pending.Add(line);
-                        if (state.Pending.Count == state.Old.Length)
-                        {
-                            if (state.Count == 0) state.Candidate = state.Pending.ToArray();
-                            if (state.Count < int.MaxValue) state.Count++;
-                            if (state.Locations.Count < 5) state.Locations.Add(new PatchCandidate { Line = state.Pending[0].Number, Context = PatchDiagnostic.Limit(state.Pending[0].Text, 160) });
-                            var keep = state.Prefix[state.Pending.Count - 1];
-                            state.Pending.RemoveRange(0, state.Pending.Count - keep);
-                        }
+                        state.Matched = state.Prefix[state.Matched - 1];
                     }
-                    // Anchors are ordered complete source lines, strictly before the block.
-                    if (state.AnchorIndex < state.Anchors.Length && line.Key == state.Anchors[state.AnchorIndex])
-                    { state.AnchorIndex++; state.AnchorEnd = line.Number; }
                 }
-                last = line;
+                offset += width;
+                if (ending.Length > 0)
+                {
+                    FinishLine(states, new Line { Offset = lineStart, End = offset, Number = number,
+                        Text = offset - width - lineStart <= lineLimit ? lineText.ToString() : null, Ending = ending }, key, normalizeLine != null);
+                    number++; lineStart = offset; lineText.Clear();
+                }
+                else if (offset - lineStart <= lineLimit) lineText.Append((char)c);
             }
-            var edits = new List<TextPatchEdit>();
+            if (offset > lineStart)
+                FinishLine(states, new Line { Offset = lineStart, End = offset, Number = number,
+                    Text = offset - lineStart <= lineLimit ? lineText.ToString() : null, Ending = "" }, key, normalizeLine != null);
+            var result = new List<TextPatchEdit>();
             for (var i = 0; i < states.Length; i++)
             {
-                var state = states[i];
-                if (state.Old.Length == 0 && state.AnchorIndex == state.Anchors.Length && (last == null || state.Hunk.EndOfFile))
-                { state.Count = 1; state.Candidate = new SourceLine[0]; }
-                if (state.Old.Length == 0 && last != null && !state.Hunk.EndOfFile &&
-                    state.AnchorIndex == state.Anchors.Length)
-                    throw Error("invalid_patch", "Hunk " + (i + 1) +
-                        ": an @@ anchor alone does not locate an insertion. Add *** End of File to append, or include an unchanged context line at the insertion point.", i + 1);
-                if (state.Count == 0) throw Error("context_not_found", "Hunk " + (i + 1) + ": anchors or old/context lines were not found. Read the current source. A context-free insertion needs an empty source or *** End of File.", i + 1);
-                if (state.Count != 1) throw Error("ambiguous_context", "Hunk " + (i + 1) + ": multiple matches at original lines " + string.Join(", ", state.Locations.Select(c => c.Line)) + ". Add @@ anchors or unchanged context.", i + 1, state.Locations);
-                AddEdits(edits, state, offset, last, newline, i + 1);
+                token.ThrowIfCancellationRequested();
+                var s = states[i];
+                if (s.Intent.Position == "end" && s.BeforeIndex == s.BeforeAnchors.Length)
+                    Add(s.Exact[0], new Candidate { Offset = offset, End = offset, Line = number, Before = "", Newline = lastNewline });
+                if (RequiresWholeSource && !Covered(start, offset)) throw Error("observation_required", "Boundary insertion requires complete delivered source.", i + 1);
+                var candidates = s.Exact[s.AfterAnchors.Length];
+                if (candidates.Count == 0) candidates = s.Canonical[s.AfterAnchors.Length];
+                if (candidates.Count == 0) throw Error((s.Unobserved || _coverage != null && _coverage.Count == 0) ? "observation_required" : "context_not_found", "No edit location in delivered source. Read current source and refine context.", i + 1);
+                if (candidates.Count > 1) throw Error("ambiguous_context", "Multiple edit locations. Add surrounding complete lines.", i + 1,
+                    candidates.Select(m => new PatchCandidate { Line = m.Line, Context = PatchDiagnostic.Limit(m.Before, 160) }).ToArray());
+                var match = candidates[0];
+                var newline = string.IsNullOrEmpty(match.Newline) ? firstNewline : match.Newline;
+                result.Add(new TextPatchEdit { Hunk = i + 1, Offset = match.Offset, Before = match.Before,
+                    After = s.Intent.Op != "insert" && Logical(match.Before) == Logical(s.Intent.After) ? match.Before :
+                        Logical(s.Intent.Op == "insert" ? s.Intent.Text : s.Intent.After).Replace("\n", newline) });
             }
-            edits.Sort((a, b) => a.Offset.CompareTo(b.Offset));
-            for (var i = 1; i < edits.Count; i++)
-                if (edits[i].Offset == edits[i - 1].Offset || edits[i].Offset < edits[i - 1].Offset + edits[i - 1].Before.Length)
-                    throw Error("overlap", "Hunks overlap in the original source.", edits[i].Hunk);
-            return edits.AsReadOnly();
+            result.Sort((a, b) => a.Offset.CompareTo(b.Offset));
+            for (var i = 1; i < result.Count; i++)
+                if (result[i].Offset == result[i - 1].Offset || result[i].Offset < result[i - 1].Offset + result[i - 1].Before.Length)
+                    throw Error("overlap", "Edits overlap in the original source.", result[i].Hunk);
+            return result.AsReadOnly();
         }
-
+        private void FinishLine(State[] states, Line line, Func<string, string> key, bool canonical)
+        {
+            var lineKey = line.Text == null ? null : key(line.Text);
+            var observed = Covered(line.Offset, line.End);
+            foreach (var s in states)
+            {
+                if (!observed && (s.BeforeAnchors.Contains(lineKey) || s.AfterAnchors.Contains(lineKey) || s.Intent.Anchor != null && key(s.Intent.Anchor) == lineKey)) s.Unobserved = true;
+                foreach (var buckets in new[] { s.Exact, s.Canonical })
+                {
+                    foreach (var bucket in buckets)
+                        foreach (var candidate in bucket)
+                            if (candidate.Newline == null && candidate.End > line.Offset && candidate.End <= line.End) candidate.Newline = line.Ending;
+                    for (var n = s.AfterAnchors.Length - 1; n >= 0; n--)
+                    {
+                        if (!observed || lineKey != s.AfterAnchors[n]) continue;
+                        for (var k = buckets[n].Count - 1; k >= 0; k--)
+                        {
+                            var candidate = buckets[n][k];
+                            if (candidate.EligibleAfter > line.Offset) continue;
+                            Add(buckets[n + 1], candidate); buckets[n].RemoveAt(k);
+                        }
+                    }
+                }
+                if (s.Intent.Op == "insert" && s.Intent.Anchor != null && observed && lineKey == key(s.Intent.Anchor) &&
+                    s.BeforeIndex == s.BeforeAnchors.Length && line.Offset >= s.BeforeEnd)
+                {
+                    var at = s.Intent.Position == "before" ? line.Offset : line.End;
+                    if (Covered(at, at)) Add(s.Exact[0], new Candidate { Offset = at, End = at, Line = line.Number,
+                        Before = "", Newline = line.Ending, EligibleAfter = line.End });
+                }
+                if (canonical && s.CanonicalLines.Length > 0)
+                {
+                    s.Lines.Enqueue(line);
+                    if (s.Lines.Count > s.CanonicalLines.Length) s.Lines.Dequeue();
+                    if (s.Lines.Count == s.CanonicalLines.Length && s.BeforeIndex == s.BeforeAnchors.Length &&
+                        s.Lines.Peek().Offset >= s.BeforeEnd && s.Canonical[0].Count < 2)
+                    {
+                        var lines = s.Lines.ToArray();
+                        var end = s.Pattern.EndsWith("\n", StringComparison.Ordinal) ? line.End : line.End - line.Ending.Length;
+                        if ((!s.Pattern.EndsWith("\n", StringComparison.Ordinal) || line.Ending.Length > 0) && Covered(lines[0].Offset, end) &&
+                            lines.Select((l, n) => l.Text != null && key(l.Text) == s.CanonicalLines[n]).All(b => b))
+                        {
+                            var raw = string.Concat(lines.Select((l, n) => l.Text + (n < lines.Length - 1 || s.Pattern.EndsWith("\n", StringComparison.Ordinal) ? l.Ending : "")));
+                            Add(s.Canonical[0], new Candidate { Offset = lines[0].Offset, End = end, Line = lines[0].Number, Before = raw,
+                                Newline = lines.FirstOrDefault(l => l.Ending.Length > 0)?.Ending, EligibleAfter = end });
+                        }
+                    }
+                }
+                if (observed && s.BeforeIndex < s.BeforeAnchors.Length && lineKey == s.BeforeAnchors[s.BeforeIndex])
+                { s.BeforeIndex++; s.BeforeEnd = line.End; }
+            }
+        }
         // Read actual changed fragments from the retained verified after-source. This
         // bounded display helper never substitutes intended bytes for missing evidence.
         public static IReadOnlyList<TextPatchEdit> ReadAfterFragments(TextReader reader, IReadOnlyList<TextPatchEdit> edits)
@@ -196,69 +329,7 @@ namespace RNAssistant.Core.Tools
             return actual.AsReadOnly();
         }
 
-        private static Match CreateMatch(Hunk hunk, Func<string, string> key)
-        {
-            var old = hunk.Lines.Where(l => l[0] != '+').Select(l => key(l.Substring(1))).ToArray();
-            var prefix = new int[old.Length];
-            for (var i = 1; i < old.Length; i++)
-            {
-                var j = prefix[i - 1];
-                while (j > 0 && old[i] != old[j]) j = prefix[j - 1];
-                if (old[i] == old[j]) j++;
-                prefix[i] = j;
-            }
-            return new Match { Hunk = hunk, Anchors = hunk.Anchors.Select(key).ToArray(), Old = old, Prefix = prefix };
-        }
-
-        private static SourceLine ReadLine(TextReader reader, long offset, long number, long limit, CancellationToken token)
-        {
-            if (reader.Peek() < 0) return null;
-            var text = new StringBuilder();
-            long length = 0;
-            string ending = "";
-            int c;
-            while ((c = reader.Read()) >= 0)
-            {
-                if ((length & 4095) == 0) token.ThrowIfCancellationRequested();
-                if (c == '\r' || c == '\n')
-                {
-                    ending = ((char)c).ToString();
-                    if (c == '\r' && reader.Peek() == '\n') { reader.Read(); ending = "\r\n"; }
-                    break;
-                }
-                if (++length <= limit) text.Append((char)c);
-            }
-            return new SourceLine { Offset = offset, Number = number, Length = length,
-                Text = length <= limit ? text.ToString() : null, Ending = ending };
-        }
-
-        private static void AddEdits(List<TextPatchEdit> edits, Match match, long end, SourceLine last, string defaultNewline, int hunk)
-        {
-            var source = match.Candidate;
-            var oldIndex = 0;
-            for (var i = 0; i < match.Hunk.Lines.Count;)
-            {
-                if (match.Hunk.Lines[i][0] == ' ') { oldIndex++; i++; continue; }
-                var offset = oldIndex < source.Length ? source[oldIndex].Offset : source.Length > 0 ? source[source.Length - 1].End : end;
-                var newline = oldIndex < source.Length && source[oldIndex].Ending.Length > 0 ? source[oldIndex].Ending :
-                    oldIndex > 0 && source[oldIndex - 1].Ending.Length > 0 ? source[oldIndex - 1].Ending : defaultNewline;
-                var before = new StringBuilder();
-                var added = new List<string>();
-                while (i < match.Hunk.Lines.Count && match.Hunk.Lines[i][0] != ' ')
-                {
-                    var change = match.Hunk.Lines[i++];
-                    if (change[0] == '-') before.Append(source[oldIndex++].Raw);
-                    else added.Add(change.Substring(1));
-                }
-                var after = string.Join(newline, added);
-                if (added.Count > 0)
-                {
-                    if (offset == end && before.Length == 0 && last != null && last.Ending.Length == 0) after = newline + after;
-                    if (offset + before.Length < end || last == null || last.Ending.Length > 0) after += newline;
-                }
-                edits.Add(new TextPatchEdit { Hunk = hunk, Offset = offset, Before = before.ToString(), After = after });
-            }
-        }
-        private static TextPatternException Error(string code, string message, int? hunk = null, IReadOnlyList<PatchCandidate> candidates = null) { return new TextPatternException(code, message, hunk, candidates); }
+        private static TextPatternException Error(string code, string message, int? hunk = null, IReadOnlyList<PatchCandidate> candidates = null)
+        { return new TextPatternException(code, message, hunk, candidates); }
     }
 }

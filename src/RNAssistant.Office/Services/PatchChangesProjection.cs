@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Services
     internal static class PatchChangesProjection
     {
         internal static RunChangesDto Read(ChatSession session, string run, string call, ChatBlobStore payloads,
-            Func<ResourceRef, int, string> read, Func<ResourceRef, ResourceRef, string, IReadOnlyList<TextPatchEdit>> fragments, int maximumCharacters = 512000)
+            Func<ResourceRef, int, string> read, Func<ResourceRef, ResourceRef, TextPatch, IReadOnlyList<TextPatchEdit>> fragments, int maximumCharacters = 512000)
         {
             var messages = session.Messages.Where(m => m.RunId == run && m.ToolCallId == call && m.Activity == null).ToArray();
             var terminal = messages.LastOrDefault(m => m.AcceptedCallOrigin == null && m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
@@ -37,7 +37,7 @@ namespace RNAssistant.Office.Services
                 {
                     var parsed = ConversationResponseHistoryReader.Read(AcceptedCallPayloadService.Hydrate(accepted, payloads));
                     if (parsed.Success && parsed.Response.ToolCalls.Count == 1)
-                        sections = ResourcePatch.Parse(JsonConvert.DeserializeObject<PatchArguments>(parsed.Response.ToolCalls[0].ArgumentsJson).Patch);
+                        sections = ResourcePatch.Parse(parsed.Response.ToolCalls[0].ArgumentsJson);
                 }
                 catch (Exception ex) when (ex is JsonException || ex is TextPatternException || ex is IOException) { }
             }
@@ -95,7 +95,6 @@ namespace RNAssistant.Office.Services
             result.Complete = result.Items.All(i => i.Availability != "unavailable");
             return result;
         }
-        private sealed class PatchArguments { public string Patch { get; set; } }
         private static ResourceRevisionView View(ResourceAuthorityService authority, ResourceRef exact, ResourceAuthorityScopeId ownerScope = null)
         {
             if (authority == null || exact?.IsExact != true) throw new InvalidOperationException("Exact retained source is unavailable.");
@@ -103,6 +102,7 @@ namespace RNAssistant.Office.Services
             var document = address.Provider == "state" ? address.Segments[1] : address.Segments[0];
             var scope = ownerScope ?? (address.Provider == "state" ? new ResourceAuthorityScopeId(address.Segments[0], document) :
                 ResourceAuthorityScopeId.Document(new DocumentAuthorityId(document)));
+            exact = authority.AuthoredSourceSnapshot(scope, exact);
             authority.RequirePublished(authority.Store.Capture(scope), exact);
             // An observed excerpt can coexist with the owner's complete retained
             // view. It must not mask that exact snapshot in the user-facing diff.
@@ -120,13 +120,13 @@ namespace RNAssistant.Office.Services
             if (text == null || text.Length > maximum) throw new InvalidOperationException("Source exceeds the comparison budget.");
             return text;
         }
-        internal static IReadOnlyList<TextPatchEdit> ReadFragments(ResourceAuthorityService authority, ResourceRef exact, ResourceRef after, string patch, ResourceAuthorityScopeId scope = null)
+        internal static IReadOnlyList<TextPatchEdit> ReadFragments(ResourceAuthorityService authority, ResourceRef exact, ResourceRef after, TextPatch patch, ResourceAuthorityScopeId scope = null)
         {
             var view = View(authority, exact, scope);
             using (var stream = authority.Payloads.OpenVerifiedRead(view.Payload.ToBlobReference(), long.MaxValue, CancellationToken.None))
             using (var reader = new StreamReader(stream, new UTF8Encoding(false, true), false))
             {
-                var edits = TextPatch.Parse(patch).Resolve(reader);
+                var edits = patch.Resolve(reader);
                 if (edits.Sum(e => (long)e.Before.Length + e.After.Length) > 512000)
                     throw new InvalidOperationException("Fragments exceed the comparison budget.");
                 var afterView = View(authority, after, scope);

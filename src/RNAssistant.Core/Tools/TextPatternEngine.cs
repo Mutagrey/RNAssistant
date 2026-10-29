@@ -55,6 +55,7 @@ namespace RNAssistant.Core.Tools
         public string ErrorCode { get; private set; }
 
         public int? Hunk { get; private set; }
+        public int? TargetIndex { get; internal set; }
         public System.Collections.Generic.IReadOnlyList<PatchCandidate> Candidates { get; private set; }
 
         public TextPatternException(string errorCode, string message, int? hunk = null, System.Collections.Generic.IReadOnlyList<PatchCandidate> candidates = null)

@@ -305,7 +305,7 @@ namespace RNAssistant.Office.Services
                 {
                     if (call.Name == ResourceMutationToolCatalog.Patch)
                     {
-                        if (ResourcePatch.HasUriLikeTarget((string)arguments["patch"]))
+                        if (ResourcePatch.HasUriLikeTarget(arguments.ToString(Newtonsoft.Json.Formatting.None)))
                         {
                             error = "Stored core.patch contains a URI target instead of a semantic target.";
                             return false;

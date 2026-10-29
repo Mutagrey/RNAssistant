@@ -125,6 +125,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("requestBytes", NullValueHandling = NullValueHandling.Ignore)]
         public long? RequestBytes { get; set; }
 
+        [JsonProperty("contextPreparation", NullValueHandling = NullValueHandling.Ignore)]
+        public ContextPreparationTimingDto ContextPreparation { get; set; }
+
         [JsonProperty("statusCode", NullValueHandling = NullValueHandling.Ignore)]
         public int? StatusCode { get; set; }
 
@@ -149,9 +152,36 @@ namespace RNAssistant.Office.Contracts
                 FirstChunkMs = source.FirstChunkMs,
                 TotalMs = source.TotalMs,
                 RequestBytes = source.RequestBytes,
+                ContextPreparation = ContextPreparationTimingDto.From(source.ContextPreparation),
                 StatusCode = source.StatusCode,
                 FailureKind = source.FailureKind.HasValue ? source.FailureKind.Value.ToString() : null,
                 Error = source.Error
+            };
+        }
+    }
+
+    public sealed class ContextPreparationTimingDto
+    {
+        [JsonProperty("totalMs")]
+        public long TotalMs { get; set; }
+        [JsonProperty("authorityMs")]
+        public long AuthorityMs { get; set; }
+        [JsonProperty("setupMs")]
+        public long SetupMs { get; set; }
+        [JsonProperty("compileMs")]
+        public long CompileMs { get; set; }
+        [JsonProperty("traceMs")]
+        public long TraceMs { get; set; }
+
+        public static ContextPreparationTimingDto From(LlmContextPreparationTiming source)
+        {
+            return source == null ? null : new ContextPreparationTimingDto
+            {
+                TotalMs = source.TotalMs,
+                AuthorityMs = source.AuthorityMs,
+                SetupMs = source.SetupMs,
+                CompileMs = source.CompileMs,
+                TraceMs = source.TraceMs
             };
         }
     }

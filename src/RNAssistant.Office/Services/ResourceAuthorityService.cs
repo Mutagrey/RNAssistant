@@ -29,6 +29,22 @@ namespace RNAssistant.Office.Services
         internal IResourceRevisionStore Revisions { get { return _revisions; } }
         internal ChatBlobStore Payloads { get { return _payloads; } }
 
+        // Authored logical heads retain a typed immutable-snapshot dependency;
+        // their own payload is a link, never document source text.
+        internal ResourceRef AuthoredSourceSnapshot(ResourceAuthorityScopeId scope, ResourceRef exact)
+        {
+            var address = ResourceUri.Parse(exact.Uri);
+            if (address.Provider != "state" || address.Segments.Count != 3 ||
+                !(address.Segments[2].StartsWith("artifact_md_", StringComparison.Ordinal) ||
+                  address.Segments[2].StartsWith("artifact_file_", StringComparison.Ordinal))) return exact;
+            RequirePublished(Store.Capture(scope), exact);
+            var snapshots = Revisions.GetRevision(scope, exact)?.Dependencies.Where(d => d.Kind == "immutable-snapshot").ToArray();
+            if (snapshots == null || snapshots.Length != 1 || snapshots[0].Resource.IsExact != true)
+                throw new InvalidOperationException("Verified authored source snapshot is unavailable or ambiguous.");
+            RequirePublished(Store.Capture(scope), snapshots[0].Resource);
+            return snapshots[0].Resource;
+        }
+
         internal long[] PublicationOrder(ResourceAuthoritySnapshot snapshot, ResourceRef exact, ChatSession session = null)
         {
             if (exact?.IsExact != true) return null;

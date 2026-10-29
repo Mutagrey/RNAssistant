@@ -20,12 +20,12 @@ namespace RNAssistant.Core.Tools
         public string Text { get; private set; }
         public IReadOnlyList<ResolvedTextEdit> Edits { get; private set; }
 
-        public static TextEditPlan Patch(string source, string patch,
+        public static TextEditPlan Patch(string source, TextPatch patch,
             CancellationToken cancellation = default(CancellationToken), Func<string, string> normalizeLine = null)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             using (var reader = new System.IO.StringReader(source))
-                return ApplyResolved(source, TextPatch.Parse(patch).Resolve(reader, cancellation, normalizeLine)
+                return ApplyResolved(source, patch.Resolve(reader, cancellation, normalizeLine)
                     .Select(edit => new ResolvedTextEdit { Offset = checked((int)edit.Offset), Before = edit.Before, After = edit.After }), cancellation);
         }
 

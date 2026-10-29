@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
@@ -10,7 +11,7 @@ namespace RNAssistant.Core.Tools
         public const string Write = "core.write", Patch = "core.patch", Replace = "core.replace";
         public const string Move = "resources.move", Copy = "resources.copy", Delete = "resources.delete", Restore = "resources.restore";
         public static bool Owns(string id) { return id == Write || id == Patch || id == Replace || id == Move || id == Copy || id == Delete || id == Restore; }
-        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v3" : ".resource.v1")) : null; }
+        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v4" : ".resource.v1")) : null; }
 
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {
@@ -29,10 +30,38 @@ namespace RNAssistant.Core.Tools
                 else if (id == Patch)
                 {
                     properties.Remove("target"); required.Clear();
-                    properties["patch"] = String("One or more sections: *** Update Target: <semantic target>, then @@ hunks. @@ <complete source line> is a distant text anchor; consecutive anchors are ordered. Prefix complete lines with -, + or a space. Anchors are text, not scope boundaries. For start insertion include the first unchanged line. Context-free insertion requires fully observed empty source or *** End of File (append); empty-source inserts end in LF. Existing final-newline state is preserved; use core.write to control it. Optional *** End of File requires EOF. No file operations or line numbers. Example: *** Update Target: src/app.js\n@@ function next() {\n-  return 1;\n+  return 2;\n }\n");
-                    properties["patch"]["maxLength"] = ResourcePatch.MaximumPatchCharacters;
-                    required.Add("patch");
-                    description = "Patch up to 16 related existing sources. Within ONE call, every hunk matches the same original snapshot; earlier hunks do not change the input for later hunks. The NEXT call starts from the updated source: use verified after-source delivered in current context, or core.read first. Copy minus/context lines from that current source, preserve earlier edits outside this change, and reverse a confirmed edit only deliberately to meet the task. Never rebuild a follow-up patch from an older read. If unsure what changed, read the target instead of guessing. All targets prepare before any write; duplicate aliases, ambiguity, overlaps or stale/unobserved source reject the package. Writes are sequential; inspect per-target results, and reconcile failure/unknown before retrying. Never replay or roll back the whole package automatically. Dependent edits need separate calls and current-source observation between them. Verification confirms text was saved, not that program logic is correct. VBA tolerates identifier case/token spacing, preserving literals/comments. Use core.write for creation/full overwrite and resources.* for lifecycle.";
+                    var lines = new JObject { ["type"] = "array", ["maxItems"] = 100, ["items"] = new JObject { ["type"] = "string", ["pattern"] = "^[^\\r\\n]*$" } };
+                    var context = Object(new JObject { ["before"] = lines.DeepClone(), ["after"] = lines.DeepClone() }, new JArray());
+                    var replace = Object(new JObject { ["op"] = new JObject { ["type"] = "string", ["enum"] = new JArray("replace") },
+                        ["before"] = String("Exact nonempty substring or multiline fragment from delivered current source."),
+                        ["after"] = String("Replacement text; empty deletes. Include intended line separators explicitly.", false),
+                        ["context"] = context.DeepClone() }, new JArray("before", "after"));
+                    var insert = Object(new JObject { ["op"] = new JObject { ["type"] = "string", ["enum"] = new JArray("insert") },
+                        ["text"] = String("Inserted text. Include separators explicitly; none are added automatically."),
+                        ["position"] = new JObject { ["type"] = "string", ["enum"] = new JArray("before", "after") },
+                        ["anchor"] = String("Complete source line, excluding its EOL. before inserts at its start; after inserts after its EOL (or EOF).", false),
+                        ["context"] = context.DeepClone() }, new JArray("op", "text", "position", "anchor"));
+                    var boundary = Object(new JObject { ["op"] = new JObject { ["type"] = "string", ["enum"] = new JArray("insert") },
+                        ["text"] = String("Inserted text, including intended separators."),
+                        ["position"] = new JObject { ["type"] = "string", ["enum"] = new JArray("start", "end") },
+                        ["context"] = context.DeepClone() }, new JArray("op", "text", "position"));
+                    properties["targets"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = ResourcePatch.MaximumTargets,
+                        ["items"] = Object(new JObject { ["target"] = String("Exact existing semantic target; never URI/revision/hash."),
+                            ["edits"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 100,
+                                ["items"] = new JObject { ["anyOf"] = new JArray(replace, insert, boundary) } } }, new JArray("target", "edits")) };
+                    DescribePatchProperties(properties);
+                    required.Add("targets");
+                    description = "Patch existing sources with structured edits, at most 262144 JSON characters. Read current source first or use delivered verified after-source. " +
+                        "Replace uses before/after (optional op=replace); insert uses op=insert, text, position and anchor for before/after. " +
+                        "Context before/after arrays are ordered complete lines with gaps allowed, strictly outside the edit/anchor; they are not language scopes. " +
+                        "Exactly one edit location is required; multiple anchor chains to it are allowed. Empty lines are literal anchors. " +
+                        "LF/CRLF/CR match as logical separators; new separators use local EOL. Unaffected bytes and BOM stay unchanged. " +
+                        "Start/end insertion requires complete delivered source. All edits match the same original snapshot; dependent edits need separate calls. " +
+                        "VBA whole-line canonical matching is allowed only if exact matching fails; substrings remain exact. " +
+                        "All targets prepare before writes. Aliases, overlaps, stale or unobserved source reject the package. Writes are sequential and stop on failure. " +
+                        "Wait for TOOL_RESULT and inspect each target: Changed is verified; Unchanged made no edit; Rejected/NotStarted were not applied; Unknown needs inspection. " +
+                        "Never replay/rollback the package automatically. Text read-back does not prove program logic. Use core.write for creation/overwrite and resources.* for lifecycle.";
+
                 }
                 else if (id == Replace)
                 {
@@ -60,7 +89,23 @@ namespace RNAssistant.Core.Tools
                     ArgumentSchemaJson = Object(properties, required).ToString(Formatting.None),
                     BuiltIn = true, Enabled = true, AgentCanRun = true, MutatesLocalState = true,
                     Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, (id == Write || id == Patch ? new[] { "agent", "plan" } : new[] { "agent" }), 1),
-                    RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = "1" };
+                    RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = id == Patch ? "2" : "1" };
+            }
+        }
+
+        private static void DescribePatchProperties(JObject properties)
+        {
+            foreach (var property in properties.Properties())
+            {
+                var schema = (JObject)property.Value;
+                if (schema["description"] == null)
+                    schema["description"] = property.Name == "targets" ? "Existing sources and their structured edits." :
+                        property.Name == "edits" ? "Edits against one original snapshot." :
+                        property.Name == "context" ? "Optional ordered complete source lines surrounding the edit or insertion anchor." :
+                        property.Name == "op" ? "Edit operation." : property.Name == "position" ? "Insertion boundary." :
+                        "Ordered complete source lines, allowing gaps; empty strings are literal empty lines.";
+                foreach (var child in schema.DescendantsAndSelf().OfType<JObject>().Where(o => o["properties"] is JObject).ToArray())
+                    DescribePatchProperties((JObject)child["properties"]);
             }
         }
 

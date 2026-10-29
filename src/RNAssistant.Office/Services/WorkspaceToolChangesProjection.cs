@@ -18,9 +18,9 @@ namespace RNAssistant.Office.Services
         private readonly WorkspaceFileService _files;
         private readonly ChatBlobStore _payloads;
         private readonly Func<ResourceRef, int, string> _officeRead;
-        private readonly Func<ResourceRef, ResourceRef, string, IReadOnlyList<TextPatchEdit>> _officeFragments;
+        private readonly Func<ResourceRef, ResourceRef, TextPatch, IReadOnlyList<TextPatchEdit>> _officeFragments;
         internal WorkspaceToolChangesProjection(WorkspaceFileService files, ChatBlobStore payloads,
-            Func<ResourceRef, int, string> officeRead = null, Func<ResourceRef, ResourceRef, string, IReadOnlyList<TextPatchEdit>> officeFragments = null)
+            Func<ResourceRef, int, string> officeRead = null, Func<ResourceRef, ResourceRef, TextPatch, IReadOnlyList<TextPatchEdit>> officeFragments = null)
         { _files = files; _payloads = payloads; _officeRead = officeRead; _officeFragments = officeFragments; }
 
         internal RunChangesDto Read(ChatSession session, string run, string call)

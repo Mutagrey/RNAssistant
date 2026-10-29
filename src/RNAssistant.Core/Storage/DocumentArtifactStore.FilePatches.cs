@@ -20,14 +20,14 @@ namespace RNAssistant.Core.Storage
 
     public sealed partial class DocumentArtifactStore
     {
-        public FilePatchPreparation PrepareFilePatch(ChatSession session, ResourceRef reference, string patch,
+        public FilePatchPreparation PrepareFilePatch(ChatSession session, ResourceRef reference, TextPatch patch,
             CancellationToken token = default(CancellationToken))
         {
             var artifact = Read(session, reference, false);
             var encoding = FileEncoding(artifact);
             if (encoding == null) throw new InvalidDataException("Select an authored text file.");
             var source = FilePayload(artifact);
-            var parsed = TextPatch.Parse(patch);
+            var parsed = patch;
             try
             {
                 List<TextPatchEdit> edits;

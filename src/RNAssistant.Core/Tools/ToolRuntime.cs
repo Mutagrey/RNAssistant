@@ -103,7 +103,7 @@ namespace RNAssistant.Core.Tools
                 try
                 {
                     planOnly = context.Call.Name == ResourceMutationToolCatalog.Patch
-                        ? ResourcePatch.Parse(Convert.ToString(arguments["patch"])).All(section => PlanSourceDocument.IsTarget(section.Target))
+                        ? ResourcePatch.Parse(context.Call.ArgumentsJson).All(section => PlanSourceDocument.IsTarget(section.Target))
                         : PlanSourceDocument.IsTarget(Convert.ToString(arguments["target"]));
                 }
                 catch (TextPatternException error) { return Reject(context, error.ErrorCode, error.Message); }

@@ -53,6 +53,13 @@ namespace RNAssistant.Office.Services
                     preparedRequest = await PrepareRequestAsync(request, cancellationToken).ConfigureAwait(false);
                 }
                 var requestMs = contextTimer.ElapsedMilliseconds - authorityMs - sessionMs;
+                preparedRequest.Options.ContextPreparation = new LlmContextPreparationTiming
+                {
+                    TotalMs = contextTimer.ElapsedMilliseconds,
+                    AuthorityMs = authorityMs,
+                    SetupMs = sessionMs,
+                    CompileMs = requestMs
+                };
                 if (contextTimer.ElapsedMilliseconds >= 500)
                     RuntimeLog.Info("Model context timing: authority=" + authorityMs +
                         "ms, session=" + sessionMs + "ms, request=" + requestMs + "ms.");

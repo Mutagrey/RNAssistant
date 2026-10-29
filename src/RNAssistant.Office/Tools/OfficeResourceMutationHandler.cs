@@ -110,11 +110,11 @@ namespace RNAssistant.Office.Tools
                         var result = await preparable.PrepareAsync(OwnerContext(context, prepared, args), token).ConfigureAwait(false);
                         if (result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
                         {
-                            if (filePatch && result.PatchDiagnostic?.Code == "source_changed")
+                            if (filePatch && (result.PatchDiagnostic?.Code == "source_changed" || result.PatchDiagnostic?.Code == "observation_required"))
                                 return new ToolPreparationResult(result.Result, recovery: new ToolRecoveryContract(
                                     ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                                     selected.Reference.Identity, ResourceRepresentations.Text, target,
-                                    readScope: TextPatch.Parse(Value(args, "patch")).RequiresWholeSource
+                                    readScope: TextPatch.FromArguments(args).RequiresWholeSource
                                         ? ToolRecoveryReadScope.Whole : ToolRecoveryReadScope.RelevantLines), patchDiagnostic: result.PatchDiagnostic);
                             return result;
                         }
@@ -214,6 +214,13 @@ namespace RNAssistant.Office.Tools
 
         private ResourceIdentity PatchEffectIdentity(ResourceIntentTarget selected, ResourceRef source)
         {
+            if (selected.Descriptor.Kind == ChatArtifactKinds.Markdown)
+            {
+                string owner, artifactId; int revision;
+                if (!ChatResourceUri.TryParseArtifactRevision(source, out owner, out artifactId, out revision))
+                    throw new InvalidDataException("Markdown patch source has no exact snapshot identity.");
+                return MarkdownDocumentIdentity.Identity(_session, MarkdownDocumentIdentity.LogicalId(artifactId));
+            }
             if (selected.Descriptor.Kind != ChatHtmlResourceCatalog.FileKind) return source.Identity;
             return HtmlWorkspaceIdentity.MemberIdentity(_session,
                 HtmlWorkspaceIdentity.LogicalId(selected.Descriptor.Metadata["revisionArtifactId"]),
@@ -244,7 +251,7 @@ namespace RNAssistant.Office.Tools
 
         private void RequireObservation(ToolHandlerContext context, ResourceReadResult source, bool complete)
         {
-            if (_id == ResourceMutationToolCatalog.Patch && TextPatch.Parse(Value(context.Arguments, "patch")).RequiresWholeSource) complete = true;
+            if (_id == ResourceMutationToolCatalog.Patch && TextPatch.FromArguments(context.Arguments).RequiresWholeSource) complete = true;
             var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
             if (accepted == null) return; // Manual editor has its explicit owner guard.
             var evidence = (accepted.ResourceEvidence ?? new List<ResourceEvidence>())
@@ -265,15 +272,16 @@ namespace RNAssistant.Office.Tools
                     e.Coverage.Kind == ResourceCoverageKinds.CharacterRange && e.Coverage.Start <= edit.Offset &&
                     e.Coverage.End >= edit.Offset + edit.Before.Length))) return;
             }
-            if (!complete && _id == ResourceMutationToolCatalog.Patch && CurrentVbaExcerptCoversHunks(accepted, source, context)) return;
+            if (!complete && _id == ResourceMutationToolCatalog.Patch && CurrentVbaExcerptRanges(accepted, source.Text, source.Resource.Reference).Count > 0)
+            { SourcePatch(source.Text, source.Resource.Reference, context); return; }
             throw new ResourceRequestException(complete ? "core.write requires complete current source in model context; read it first." : "Read the current source before changing it.", "source_observation_required", false);
         }
 
-        private bool CurrentVbaExcerptCoversHunks(ChatMessage accepted, ResourceReadResult source, ToolHandlerContext context)
+        private List<Tuple<long, long>> CurrentVbaExcerptRanges(ChatMessage accepted, string text, ResourceRef reference)
         {
+            var observed = new List<Tuple<long, long>>();
             ResourceAddress current;
-            if (!ResourceUri.TryParse(source.Resource.Reference.Uri, out current) || current.Provider != "vba" || current.Segments.Count < 3) return false;
-            var observed = new List<Tuple<int, int>>();
+            if (!ResourceUri.TryParse(reference.Uri, out current) || current.Provider != "vba" || current.Segments.Count < 3) return observed;
             foreach (var evidence in accepted.ResourceEvidence ?? new List<ResourceEvidence>())
             {
                 ResourceAddress address; int first, end;
@@ -283,18 +291,16 @@ namespace RNAssistant.Office.Tools
                     !int.TryParse(address.Segments[3], out first) || !int.TryParse(address.Segments[4], out end)) continue;
                 var excerpt = _gateway.ReadObservedText(evidence);
                 if (excerpt == null) continue;
-                var lines = source.Text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+                var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
                 var live = string.Join("\n", lines.Skip(first - 1).Take(end - first));
                 if (VbaTextCanonicalizer.NormalizeLiveCode(excerpt) == VbaTextCanonicalizer.NormalizeLiveCode(live))
                 {
-                    var beginOffset = TextEditPlan.Position(source.Text, first, 1);
-                    var endOffset = end > lines.Length ? source.Text.Length : TextEditPlan.Position(source.Text, end, 1);
-                    observed.Add(Tuple.Create(beginOffset, endOffset));
+                    var beginOffset = TextEditPlan.Position(text, first, 1);
+                    var endOffset = end > lines.Length ? text.Length : TextEditPlan.Position(text, end, 1);
+                    observed.Add(Tuple.Create((long)beginOffset, (long)endOffset));
                 }
             }
-            if (observed.Count == 0) return false;
-            var plan = SourcePatch(source.Text, source.Resource.Reference, context);
-            return plan.Edits.All(edit => observed.Any(span => span.Item1 <= edit.Offset && span.Item2 >= edit.Offset + edit.Before.Length));
+            return observed;
         }
 
         private void Route(ResourceMutationPrepared prepared, ResourceIntentTarget selected, IDictionary<string, object> input)
@@ -419,7 +425,7 @@ namespace RNAssistant.Office.Tools
             var args = new Dictionary<string, object>(prepared.RoutingArguments);
             if (prepared.Operation == AuthoredFileToolCatalog.PatchToolId)
             {
-                args["patch"] = Value(context.Arguments, "patch");
+                args["edits"] = TextPatch.FromArguments(context.Arguments);
                 return args;
             }
             string content = null;
@@ -439,12 +445,21 @@ namespace RNAssistant.Office.Tools
             }
             return args;
         }
-        private static TextEditPlan SourcePatch(string source, ResourceRef reference, ToolHandlerContext context,
+        private TextEditPlan SourcePatch(string source, ResourceRef reference, ToolHandlerContext context,
             CancellationToken token = default(CancellationToken))
         {
             ResourceAddress address;
             var vba = reference != null && ResourceUri.TryParse(reference.Uri, out address) && address.Provider == "vba";
-            return TextEditPlan.Patch(source, Value(context.Arguments, "patch"), token,
+            var patch = TextPatch.FromArguments(context.Arguments);
+            var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
+            if (accepted != null)
+            {
+                var ranges = TextPatch.Coverage((accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e =>
+                    e.Resource.Uri == reference.Uri && e.Resource.Revision == reference.Revision));
+                if (ranges != null && vba) ranges = ranges.Concat(CurrentVbaExcerptRanges(accepted, source, reference)).ToArray();
+                patch = patch.WithCoverage(ranges);
+            }
+            return TextEditPlan.Patch(source, patch, token,
                 vba ? (Func<string, string>)VbaTextCanonicalizer.NormalizeVbeComparableLine : null);
         }
         private IToolHandler Owner(ResourceMutationPrepared prepared)
@@ -468,7 +483,7 @@ namespace RNAssistant.Office.Tools
         private ToolRecoveryContract Recovery(ToolHandlerContext context, Exception error)
         {
             var code = (error as ResourceRequestException)?.ErrorCode;
-            if (code == "source_observation_required" || code == "target_conflict" || code == "replacement_search_required")
+            if (code == "source_observation_required" || code == "observation_required" || code == "target_conflict" || code == "replacement_search_required")
             {
                 try
                 {
