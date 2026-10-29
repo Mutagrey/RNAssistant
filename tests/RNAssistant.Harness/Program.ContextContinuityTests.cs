@@ -1067,7 +1067,7 @@ namespace RNAssistant.Harness
                 "{\"target\":\"Excel range: Sheet!A62:B85\",\"representation\":\"records\",\"complete\":false,\"table\":{\"rows\":[{\"id\":7,\"revision\":\"business value\"}],\"columns\":[{\"key\":\"id\"}]}}"));
             rows.ResourceEvidence.Add(new ResourceEvidence("rows", scope, source, "records",
                 new ResourceCoverage(ResourceCoverageKinds.RecordRange, start: 61, end: 84, path: "$", fields: new[] { "id", "revision" }), false, 1));
-            var mutation = ContinuityResult("write_done", "html.source.write", ToolResult.Ok("Saved and read back."));
+            var mutation = ContinuityResult("write_done", "core.write", ToolResult.Ok("Saved and read back."));
             mutation.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.VerifiedChanged);
             var checkpoint = new ContextCheckpoint { ThroughMessageId = mutation.Id, Claims = new List<StructuredContextClaim> {
                 new StructuredContextClaim { ClaimId = "c", Kind = "interpretation", Text = "Continue.",
@@ -1112,7 +1112,7 @@ namespace RNAssistant.Harness
             AssertTrue(!removedRequest.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")),
                 "a previously restored body cannot survive removal in the next frozen request");
             AssertContains(skill.Content, "KEEP_COMPLETE_BODY", "removal does not rewrite historical observations");
-            var oversized = ContinuityResult("large_receipt", "vba.module.write",
+            var oversized = ContinuityResult("large_receipt", "core.write",
                 ToolResult.Error(new string('x', 24000)));
             session.Messages.Add(ContinuityCall(oversized)); session.Messages.Add(oversized);
             checkpoint.ThroughMessageId = oversized.Id;
@@ -1126,9 +1126,9 @@ namespace RNAssistant.Harness
             AssertEqual(0, evictedRequest.Receipt.HydratedPayloads, "omitted bodies do not read CAS");
             AssertTrue(!evictedRequest.Messages.Any(m => (m.Content ?? "").Contains("KEEP_COMPLETE_BODY")), "eviction cannot silently retain bytes");
             AssertContains(string.Join("\n", evictedRequest.Messages.Select(m => m.Content)), "not missing resources", "body absence is distinct from resource absence");
-            var pending = ContinuityResult("uncertain", "files.patch", ToolResult.Unknown("Inspect before retry."));
+            var pending = ContinuityResult("uncertain", "core.patch", ToolResult.Unknown("Inspect before retry."));
             pending.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Unknown);
-            pending.ResourceEffect = new ResourceEffect("unknown", "files.patch", ResourceEffectOutcome.UnknownAfterDispatch);
+            pending.ResourceEffect = new ResourceEffect("unknown", "core.patch", ResourceEffectOutcome.UnknownAfterDispatch);
             session.Messages.Add(ContinuityCall(pending)); session.Messages.Add(pending);
             checkpoint.ThroughMessageId = pending.Id;
             var pinned = ContextWorkingSet.Restore(session, active, 0);
@@ -1139,7 +1139,7 @@ namespace RNAssistant.Harness
                 null, new ToolCatalogEntry[0], new AppSettings(), 1, workingSet: pinned); }
             catch (PromptBudgetExceededException) { exhausted = true; }
             AssertTrue(exhausted, "mandatory receipts cannot be silently dropped to fit a request");
-            var neededRead = ContinuityResult("needs_refresh", "files.patch", ToolResult.Error("Read first."));
+            var neededRead = ContinuityResult("needs_refresh", "core.patch", ToolResult.Error("Read first."));
             skill.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Ok);
             neededRead.ExecutionProgress = new ToolExecutionProgress(ToolExecutionOutcome.Error,
                 new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,

@@ -176,10 +176,11 @@ namespace RNAssistant.Core.Services
 
         private static JObject ProjectPatchResult(JToken source)
         {
-            source = source?["tool_data"] as JObject ?? source;
+            source = (source as JObject)?["tool_data"] as JObject ?? source;
+            var patch = source as JObject;
             // The public DTO contains semantic targets and bounded diagnostics only.
             // Never project the durable per-target ResourceEffect/source references.
-            var result = SelectFields(source, "type", "phase", "writeStarted", "partial", "code", "retryable");
+            var result = SelectFields(patch, "type", "phase", "writeStarted", "partial", "code", "retryable");
             Func<JToken, JObject> diagnostic = value => {
                 var item = SelectFields(value, "hunk", "code", "ownerCode", "message", "nextAction");
                 if (item["message"] != null) item["message"] = SanitizeOperationalText((string)item["message"]);
@@ -187,8 +188,8 @@ namespace RNAssistant.Core.Services
                     .Select(candidate => SelectFields(candidate, "line", "context")));
                 return item;
             };
-            if (source?["diagnostic"] is JObject) result["diagnostic"] = diagnostic(source["diagnostic"]);
-            result["targets"] = new JArray(((source?["targets"] as JArray) ?? new JArray()).Take(ResourcePatch.MaximumTargets).Select(target => {
+            if (patch?["diagnostic"] is JObject) result["diagnostic"] = diagnostic(patch["diagnostic"]);
+            result["targets"] = new JArray(((patch?["targets"] as JArray) ?? new JArray()).Take(ResourcePatch.MaximumTargets).Select(target => {
                 var row = SelectFields(target, "target", "currentTarget", "status", "writeStarted");
                 if (target["diagnostic"] is JObject) row["diagnostic"] = diagnostic(target["diagnostic"]);
                 return row;
