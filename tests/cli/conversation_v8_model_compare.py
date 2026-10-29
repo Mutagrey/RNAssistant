@@ -260,7 +260,7 @@ class CaptureServer(ThreadingHTTPServer):
             super().handle_error(request, client_address)
 
 
-def run_case(name, dll, task_name, task, output, origin, model):
+def run_case(name, dll, task_name, task, output, origin, model, response_mode="json_schema"):
     workspace, state, captures = (output / part for part in ("workspace", "state", "http"))
     workspace.mkdir(parents=True)
     state.mkdir()
@@ -279,7 +279,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
                "--context-tokens", "32768", "--max-iterations", str(task["iterations"]),
                "--max-tool-steps", str(task["tool_steps"]), "--expect-files", ",".join(task["expected"]),
                "--min-reads", str(task["min_reads"]), "--min-writes", str(task["min_writes"]),
-               "--auto-confirm", "on", "--response-mode", "json_schema",
+               "--auto-confirm", "on", "--response-mode", response_mode,
                "--instruction-role", "developer", "--tool-result-role", "user",
                "--reasoning-mode", "reasoning_effort", "--thinking", "off", "--jsonl"]
     env = dict(os.environ, RNA_STATE_ROOT=str(state), RNA_MODEL=model,
@@ -336,7 +336,7 @@ def run_case(name, dll, task_name, task, output, origin, model):
     citations = [citation for claim in claims for citation in claim.get("evidence", []) if isinstance(citation, str)]
     external_success = all(exact.values()) and all(unchanged.values())
     readback_met = (terminal.get("completeFileReads") or 0) >= task["min_reads"]
-    summary = {"variant": name, "request_policy": proxy.request_policy, "task": task_name,
+    summary = {"variant": name, "request_policy": proxy.request_policy, "response_mode": response_mode, "task": task_name,
                "dll_sha256": sha256(dll.read_bytes()),
                "exit": exit_code, "seconds": round(time.monotonic() - started, 2),
                "external_exact_files": exact, "external_inputs_unchanged": unchanged,

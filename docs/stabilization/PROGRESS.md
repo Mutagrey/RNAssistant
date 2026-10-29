@@ -14,9 +14,30 @@ after-source. Целевые host-neutral Harness, CLI и Web
 до v2. Предварительный Qwen 27B probe дал точный файл после трёх ручных patch
 вызовов, но run закончился по лимиту итераций; structured run истёк по времени
 после чтения без patch. Qwen 9B в обоих вариантах остановилась на reflection limit,
-GPT OSS — на усечённом ответе до инструмента. Сравнительная модельная оценка
-остаётся открытой; DeepSeek локально отсутствует. Реальная Windows/Office/WebView2
+GPT OSS — на усечённом ответе до инструмента. Сравнение Qwen/DeepSeek
+остаётся открытым; DeepSeek локально отсутствует. Реальная Windows/Office/WebView2
 квалификация также открыта. Контракт — [Text mutations](../text-mutations.md).
+
+## Gemma cloud `core.patch` probe — 2026-10-30
+
+Один прогон каждого задания с `gemma4:31b-cloud` (digest `ef09f235533c`),
+Workspace CLI, `json_object`, 32768 context tokens, максимум 10 итераций и tool
+steps. Сравнивались manual `26bca835` и v2 `02c5b8fc` с одинаковыми заданиями.
+
+| Задание | Manual: точный файл / run / patch вызовы | V2: точный файл / run / patch вызовы |
+| --- | --- | --- |
+| Повторяющийся фрагмент и пустые строки | да / Failed / 4 | да / Completed / 2 |
+| Кавычки, путь и вставка | нет / Failed / 3 | да / Completed / 1 |
+| Два файла одним patch | нет / Failed / 3 | да / Completed / 1 |
+| Длинный файл | да / Completed / 1 | да / Completed / 1 |
+
+Для длинного файла benchmark исправлен: задание требует ограниченное чтение,
+поэтому acceptance не требует полного `core.read`. Оба варианта получили verified
+write; следующий скомпилированный запрос v2 содержал точный after-source с
+`TARGET = 2`. В режиме `json_schema` Gemma cloud дважды завершилась
+`ProtocolExhausted` до инструментов: ответы содержали native tool calls или
+невалидный для v8 текст. Вывод ограничен одним прогоном на задание и этим
+Workspace transport; Windows/Office и DeepSeek evidence остаются открытыми.
 
 ## Patch, неизвестный эффект и схемы — 2026-10-29
 

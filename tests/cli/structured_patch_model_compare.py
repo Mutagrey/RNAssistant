@@ -14,12 +14,12 @@ def tasks():
     repeated = "# First\nvalue = 1\n\n# Second\nvalue = 1\n\n# Last\nvalue = 1\n"
     quoted = 'Sub Run()\n    Debug.Print "C:\\temp\\report.txt"\n    Debug.Print "keep"\nEnd Sub\n'
     long_source = ''.join('unchanged_%04d = 0\n' % i for i in range(1800)) + 'TARGET = 1\n'
-    def task(initial, expected, goal):
-        return dict(initial=initial, expected=expected, min_reads=1, min_writes=1,
+    def task(initial, expected, goal, min_reads=1, after_edit=None):
+        return dict(initial=initial, expected=expected, min_reads=min_reads, min_writes=1,
                     iterations=10, tool_steps=10, prompt=goal +
                     ' Read the current files first. Make edits using only core.patch; use its advertised schema. '
-                    'Do not use core.write, core.replace or executable tools. Preserve all other text and line endings. '
-                    'Read the edited file(s) back and report the verified result.')
+                    'Do not use core.write, core.replace or executable tools. Preserve all other text and line endings. ' +
+                    (after_edit or 'Read the edited file(s) back and report the verified result.'))
     return {
         'repeated_empty': task({'a.txt': repeated}, {'a.txt': repeated.replace('# Second\nvalue = 1', '# Second\nvalue = 2')},
                                'In a.txt change value = 1 to value = 2 only in the Second section.'),
@@ -28,7 +28,8 @@ def tasks():
         'multi_target': task({'a.txt': 'alpha = 1\n', 'b.txt': 'beta = 1\n'}, {'a.txt': 'alpha = 2\n', 'b.txt': 'beta = 3\n'},
                             'In a.txt change alpha from 1 to 2; in b.txt change beta from 1 to 3. Use one core.patch call for both targets.'),
         'long_source': task({'a.txt': long_source}, {'a.txt': long_source.replace('TARGET = 1', 'TARGET = 2')},
-                           'In a.txt change only the final line TARGET = 1 to TARGET = 2. Read a bounded excerpt near the end, not the entire file.'),
+                            'In a.txt change only the final line TARGET = 1 to TARGET = 2. Read a bounded excerpt near the end, not the entire file.',
+                            min_reads=0, after_edit='Inspect verified after-source from the patch result; if insufficient, read a bounded excerpt near the end before reporting the result.'),
     }
 
 
@@ -42,10 +43,12 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--tasks', default=','.join(tasks()))
     parser.add_argument('--repeats', type=int, default=1)
+    parser.add_argument('--response-mode', choices=('json_schema', 'json_object'), default='json_schema')
     args = parser.parse_args()
     digest = model_digest(args.origin, args.model)
     args.output.mkdir(parents=True, exist_ok=False)
     manifest = dict(model=args.model, digest=digest, origin=args.origin, manual_revision=args.manual_revision,
+                    response_mode=args.response_mode,
                     builds={name: binary_hashes(path) for name, path in [('manual', args.manual), ('structured', args.structured)]},
                     limits=dict(context=32768, iterations=10, tool_steps=10),
                     limitation='Workspace structured-response transport; no native tool-call, VBE, stale concurrency or cross-model qualification.')
@@ -58,7 +61,8 @@ def main():
             for variant, binary in pair:
                 task = tasks()[name]
                 folder = args.output / ('%02d-%s-%s' % (repeat, name, variant))
-                summary = run_case(variant, binary.resolve(), name, task, folder, args.origin, args.model)
+                summary = run_case(variant, binary.resolve(), name, task, folder, args.origin, args.model,
+                                   args.response_mode)
                 # The reused runner treats initial files as immutable inputs. These tasks intentionally edit them.
                 correct = all(summary['external_exact_files'].values())
                 summary['external_artifact_success'] = correct
