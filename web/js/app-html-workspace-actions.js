@@ -167,12 +167,18 @@
       return options.applyPlanRefresh(planId, response, chatId);
     }
 
+    function planSource(title, markdown, status) {
+      return "---\ntitle: " + JSON.stringify(title) + "\nstatus: " + (status || "draft") + "\n---\n" + markdown;
+    }
+
     async function savePlan(selection, chatId) {
       var plan = options.validatePlanDraft(selection.item);
+      if (!plan.expectedRevisionArtifactId) throw new Error("Откройте текущую версию плана перед сохранением.");
       var result = await options.send("runTool", {
         chatId: chatId,
-        toolId: "plan.document.save",
-        arguments: { title: plan.title, markdown: plan.markdown, status: "draft" },
+        toolId: "core.write",
+        arguments: { target: "plan: " + plan.title, content: planSource(plan.title, plan.markdown) },
+        sourceGuard: { expectedArtifactId: plan.expectedRevisionArtifactId },
         dryRun: false
       });
       if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не сохранён."));
@@ -247,19 +253,26 @@
       request = request || {};
       if (state.bridgeUnavailable || !request.planId || Number(request.revision || 0) < 1 ||
           planMutationPending) return false;
+      var chatId = state.activeChatId;
+      var head = (state.artifacts || []).filter(function (artifact) {
+        return same(value(artifact, "Id", "id", ""), request.expectedRevisionArtifactId);
+      })[0];
+      if (!head || !same(state.activePlanDocumentArtifactId, request.expectedRevisionArtifactId)) return false;
       planMutationPending = true;
       try {
         var label = "v" + Number(request.revision || 1);
         var warning = (state.htmlWorkspaceDirty ? "Несохранённые изменения будут отброшены.\n\n" : "") +
           "Восстановить " + label + " как новую версию плана? Историческая ревизия останется неизменной.";
         if (!window.confirm(warning)) return false;
-        var chatId = state.activeChatId;
+        if (state.activeChatId !== chatId || !same(state.activePlanDocumentArtifactId, request.expectedRevisionArtifactId)) return false;
         var result = await options.send("runTool", {
           chatId: chatId,
-          toolId: "plan.document.restore",
+          toolId: "resources.restore",
           arguments: {
+            target: "plan: " + value(head, "Title", "title", ""),
             version: Number(request.revision)
           },
+          sourceGuard: { expectedArtifactId: request.expectedRevisionArtifactId },
           dryRun: false
         });
         if (!toolSucceeded(result)) throw new Error(toolMessage(result, "Ревизия плана не восстановлена."));
@@ -449,15 +462,18 @@
     async function createPlan() {
       if (state.bridgeUnavailable || detailUnavailable()) return;
       var chatId = state.activeChatId;
+      var title = window.prompt("Название нового плана (для отдельного плана укажите новое название):", "Новый план");
+      if (!title || !title.trim() || state.activeChatId !== chatId) return;
+      title = title.trim();
       try {
         var result = await options.send("runTool", {
           chatId: chatId,
-          toolId: "plan.document.save",
+          toolId: "core.write",
           arguments: {
-            title: "Новый план",
-            markdown: "# Новый план\n\nОпишите цель, решения, этапы и проверку.",
-            status: "draft"
+            target: "plan: " + title,
+            content: planSource(title, "# " + title + "\n\nОпишите цель, решения, этапы и проверку.")
           },
+          sourceGuard: { createOnly: true },
           dryRun: false
         });
         if (!toolSucceeded(result)) throw new Error(toolMessage(result, "План не создан."));
@@ -517,29 +533,9 @@
       state.htmlWorkspaceRefreshPending = true;
       options.render();
       try {
-        var targets = name ? [name] : [""];
-        if (!name && policy === "on_preview" &&
-            typeof options.refreshableDataNames === "function") {
-          targets = options.refreshableDataNames("on_preview") || [];
-        }
-        var failure = null;
-        for (var index = 0; index < targets.length; index += 1) {
-          var args = {};
-          if (targets[index]) args.name = targets[index];
-          var result = await options.send("runTool", {
-            chatId: chatId,
-            toolId: "html.data.refresh",
-            arguments: args,
-            dryRun: false
-          });
-          if (!toolSucceeded(result) && !failure) failure = result;
-        }
         if (state.activeChatId !== chatId) return;
         if (!options.applyWorkspaceResponse(await options.send("getHtmlWorkspace", { chatId: chatId }), chatId)) return;
-        if (failure) {
-          throw new Error(toolMessage(failure, "Данные обновлены частично."));
-        }
-        options.log(toolMessage(result, "Данные HTML обновлены."));
+        options.log("Предпросмотр перезагружен; привязки head прочитают текущие данные при открытии.");
       } catch (error) {
         options.log(error.detail || error.message, "error");
         if (interactive) window.alert(error.message || "Данные HTML не обновлены.");

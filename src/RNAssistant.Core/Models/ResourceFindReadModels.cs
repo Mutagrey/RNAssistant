@@ -426,12 +426,12 @@ namespace RNAssistant.Core.Models
         {
             if (!Result.Complete || Result.Resource?.Reference?.IsExact != true ||
                 Result.Coverage?.Kind != ResourceCoverageKinds.Whole ||
-                Result.Representation != ResourceRepresentations.Text || Result.Text == null ||
+                (Result.Representation != ResourceRepresentations.Text && Result.Representation != ResourceRepresentations.Source) || Result.Text == null ||
                 Result.Offset != 0 || Result.ReturnedCharacters != Result.Text.Length ||
                 Result.TotalCharacters != Result.Text.Length ||
                 Result.CompleteViewPayload == null || string.IsNullOrWhiteSpace(Result.ContentSha256) ||
                 !Evidence.Any(item => item != null && item.Complete &&
-                    item.View == ResourceRepresentations.Text &&
+                    item.View == Result.Representation &&
                     item.Coverage?.Kind == ResourceCoverageKinds.Whole &&
                     item.Resource?.Uri == Result.Resource.Reference.Uri &&
                     item.Resource.Revision == Result.Resource.Reference.Revision &&

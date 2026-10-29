@@ -11,6 +11,24 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class DocumentArtifactStore
     {
+        public ResourceEvidence ReadPlanSourceEvidence(ChatSession session, ResourceRef exact)
+        {
+            if (exact?.IsExact != true) return null;
+            var scope = PlanScope(session);
+            var address = ResourceUri.Parse(exact.Uri);
+            if (address.Provider != "state" || address.Segments.Count != 3 || address.Segments[0] != scope.Kind ||
+                address.Segments[1] != scope.Id || !address.Segments[2].StartsWith("plan_doc_", StringComparison.Ordinal)) return null;
+            var snapshot = _authority.Capture(scope);
+            var head = snapshot.GetHead(exact.Identity);
+            if (head?.Knowledge != HeadKnowledge.Known || head.Revision.Revision != exact.Revision) return null;
+            var source = _revisions.GetView(scope, exact, ResourceRepresentations.Source);
+            if (source?.Payload == null || source.Coverage?.Kind != ResourceCoverageKinds.Whole) return null;
+            var revision = _revisions.GetRevision(scope, exact);
+            return new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), scope, exact,
+                ResourceRepresentations.Source, ResourceCoverage.Whole(), true, snapshot.Generation,
+                source.Payload, revision.Dependencies, contentSha256: source.ContentSha256);
+        }
+
         public static ResourceAuthorityScopeId PlanScope(ChatSession session)
         {
             if (!string.IsNullOrWhiteSpace(session?.DocumentAuthorityId)) return Scope(session);
@@ -102,6 +120,12 @@ namespace RNAssistant.Core.Storage
             if (_payloads.ReadText(retained.Payload.ToBlobReference()) != (artifact.InlineText ?? string.Empty))
                 throw new InvalidDataException("The retained Plan body failed exact read-back.");
             var exact = retained.Revision;
+            if (!removed)
+            {
+                var source = PayloadRef.FromBlob(_payloads.StoreText(PlanSourceDocument.Serialize(artifact), "text/plain"));
+                _revisions.RegisterView(scope, new ResourceRevisionView(exact, ResourceRepresentations.Source,
+                    source.Sha256, source, ResourceCoverage.Whole()));
+            }
             var link = PayloadRef.FromBlob(_payloads.StoreText(JsonConvert.SerializeObject(exact), "application/json"));
             return new[] {
                 retained,

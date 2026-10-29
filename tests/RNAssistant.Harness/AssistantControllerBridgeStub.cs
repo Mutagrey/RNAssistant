@@ -613,9 +613,9 @@ namespace RNAssistant.Office
         public ToolResultPresentationDto ReadToolResultPresentation(ToolResultPresentationRequest request)
         { return new ToolResultPresentationDto { ChatId = request.ChatId, RunId = request.RunId, ToolCallId = request.ToolCallId }; }
 
-        internal string ReadRetainedPatchSource(ResourceRef reference, int maximum)
+        internal string ReadRetainedPatchSource(ResourceRef reference, int maximum, string workspaceId = null)
         { throw new InvalidOperationException("No retained source in bridge stub."); }
-        internal IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef reference, ResourceRef after, string patch)
+        internal IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef reference, ResourceRef after, string patch, string workspaceId = null)
         { throw new InvalidOperationException("No retained source in bridge stub."); }
 
         public RunChangesDto ReadRunChanges(RunChangesRequest request)
@@ -922,7 +922,7 @@ namespace RNAssistant.Office
             return new { deleted = true };
         }
 
-        public ToolRunResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, string chatId, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken))
+        public ToolRunResult RunTool(string toolId, IDictionary<string, object> arguments, bool dryRun, string chatId, Action<string, string> progress = null, CancellationToken cancellationToken = default(CancellationToken), ToolSourceGuardDto sourceGuard = null)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (RunToolEntered != null) RunToolEntered.Set();

@@ -39,22 +39,12 @@ namespace RNAssistant.Office.Tools
 
             yield return Projection(
                 UpsertToolId,
-                "Mutates settings: Create or update one custom skill core. Omitted fields are preserved; references use their dedicated operations.",
+                "Mutates settings: Create or update one custom skill core. Omitted fields are preserved; references use core.write/patch and resources.delete with skill reference: targets.",
                 SchemaFor(UpsertToolId), "skills_upsert");
             yield return Projection(
                 DeleteToolId,
                 "Mutates settings: Delete one complete custom skill by exact id.",
                 SchemaFor(DeleteToolId), "skills_delete");
-            yield return Projection(
-                ReferenceUpsertToolId,
-                "Mutates settings: Create or replace one direct references/*.md file in an existing custom skill.",
-                SchemaFor(ReferenceUpsertToolId),
-                "skills_reference_upsert");
-            yield return Projection(
-                ReferenceDeleteToolId,
-                "Mutates settings: Delete one exact direct Markdown reference from an existing custom skill.",
-                SchemaFor(ReferenceDeleteToolId),
-                "skills_reference_delete");
         }
 
         internal static string SchemaFor(string toolId)

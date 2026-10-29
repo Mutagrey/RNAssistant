@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Tools
         {
             return "Workspace: Bind a source target returned by core.find or a binding's sourceTarget. " +
                 "The workspace stores only a canonical resource reference, view and head/exact policy. " +
-                "HTML workspace and HTML data targets describe the workspace/binding, not its source values; never bind them. html_data_write already creates a text binding. " +
+                "HTML workspace and HTML data targets describe the workspace/binding, not its source values; never bind them. html.data.write already creates a text binding. " +
                 "For Excel chart/report data, bind an Excel range, table, or name target with table; an Excel search scope is discovery output, not a tabular data source. " +
                 "For an uploaded spreadsheet file, bind its original file target with raw and parse bounded bytes locally with the HTML skill's XLSX vendor; this does not replace live Excel range authority. " +
                 "Page code opens RN.resources.open(name) and consumes bounded read/stream batches. " +
@@ -35,7 +35,7 @@ namespace RNAssistant.Office.Tools
             if (target.Type == "HTML workspace" || target.Type == "HTML data")
                 throw new ResourceRequestException(
                     "This target describes an HTML workspace or an existing binding, not source values. " +
-                    "html_data_write already binds JSON: use RN.resources.open(name). To change its view, read the HTML data target as text and bind its sourceTarget instead.",
+                    "html.data.write already binds JSON: use RN.resources.open(name). To change its view, read the HTML data target as text and bind its sourceTarget instead.",
                     "html_binding_target_invalid", false);
             var view = ToolArgumentReader.String(arguments, "view", "text");
             if (view == "records")
@@ -78,21 +78,6 @@ namespace RNAssistant.Office.Tools
             HtmlWorkspaceArtifactService.CaptureCurrent(session, "HTML resource binding: " + name);
             return WorkspaceResult(session, "HTML resource bound: " + name + ".",
                 WorkspaceMutationData(session, "data", name, target.Descriptor), HtmlWorkspaceEffect.VerifiedChange);
-        }
-
-        private HtmlWorkspaceToolOutcome RefreshDataSources(ChatSession session,
-            IDictionary<string, object> arguments, Action markDispatchPossible, CancellationToken cancellationToken)
-        {
-            RequireGateway();
-            var name = ToolArgumentReader.String(arguments, "name", string.Empty);
-            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-            var targets = string.IsNullOrWhiteSpace(name) ? workspace.DataSources :
-                new List<HtmlWorkspaceDataSource> { FindDataSource(workspace, name) };
-            foreach (var source in targets) ReadBinding(session, source.Binding, cancellationToken);
-            // A read may observe source drift; only source authority publishes it.
-            // No workspace payload/status refresh and no new workspace revision.
-            return WorkspaceResult(session, "Resource bindings resolved. Reopen handles to read their current revisions.",
-                WorkspaceMutationData(session, "data", name), HtmlWorkspaceEffect.VerifiedNoChange);
         }
 
         private HtmlWorkspaceToolOutcome FreezeDataSource(ChatSession session,

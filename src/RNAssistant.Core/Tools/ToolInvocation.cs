@@ -26,6 +26,9 @@ namespace RNAssistant.Core.Tools
         [JsonIgnore]
         public bool ExpectedTargetAbsent { get; set; }
 
+        [JsonIgnore]
+        public string ExpectedArtifactId { get; set; }
+
         public ToolInvocation()
         {
             Arguments = new Dictionary<string, object>(

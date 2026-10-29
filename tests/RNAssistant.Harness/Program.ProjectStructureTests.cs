@@ -749,9 +749,9 @@ namespace RNAssistant.Harness
                 File.Exists(Path.Combine(coreRoot, "Tools",
                     "PlanDocumentToolCatalog.cs")) &&
                 File.Exists(Path.Combine(coreRoot, "Tools",
-                    "PlanDocumentToolHandler.cs")) &&
+                    "PlanResourceToolHandler.cs")) &&
                 File.Exists(Path.Combine(coreRoot, "Services", "PlanDocumentService.cs")) &&
-                File.Exists(Path.Combine(officeRoot, "Tools", "OfficePlanDocumentToolHandler.cs")) &&
+                !File.Exists(Path.Combine(officeRoot, "Tools", "OfficePlanDocumentToolHandler.cs")) &&
                 !File.Exists(Path.Combine(officeRoot, "Services", "PlanDocumentService.cs")) &&
                 !File.Exists(Path.Combine(officeRoot, "Tools", "PlanDocumentToolHandler.cs")) &&
                 !File.Exists(Path.Combine(officeRoot, "Tools",

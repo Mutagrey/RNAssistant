@@ -59,8 +59,8 @@ def check(root):
 
     try:
         denied_tools = cli("env", "--mutation-policy", "deny")["capabilities"]
-        assert "core.write" not in denied_tools and "web.verify" not in denied_tools
-        assert "plan.document.save" in denied_tools
+        assert "web.verify" not in denied_tools
+        assert "core.write" in denied_tools and "core.patch" in denied_tools
         responses.append(DONE)
         direct = run()
         assert len(requests) == 1 and direct["reason"] == "model_finish", direct
@@ -129,7 +129,7 @@ def check(root):
         assert not (workspace / "blocked.txt").exists()
         print("PASS unified CLI: injected write under Deny never dispatches")
 
-        responses.extend([call("plan.document.save", title="Plan", markdown="# Plan\n\nRead, then implement.", status="ready"), DONE])
+        responses.extend([call("core.write", target="plan: Plan", content='---\ntitle: "Plan"\nstatus: ready\n---\n# Plan\n\nRead, then implement.'), DONE])
         plan = run("--mode", "plan", "--mutation-policy", "deny", "--auto-confirm", "on")
         assert plan["reason"] == "model_finish", plan
         responses.append(DONE)

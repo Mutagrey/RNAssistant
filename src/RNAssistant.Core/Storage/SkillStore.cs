@@ -273,7 +273,11 @@ namespace RNAssistant.Core.Storage
                     return false;
                 }
 
-                StorageFileSystem.WriteAllTextAtomic(path, value, new UTF8Encoding(false));
+                var preserveBom = false;
+                if (File.Exists(path))
+                    using (var source = File.OpenRead(path))
+                        preserveBom = source.ReadByte() == 0xef && source.ReadByte() == 0xbb && source.ReadByte() == 0xbf;
+                StorageFileSystem.WriteAllTextAtomic(path, value, new UTF8Encoding(preserveBom));
                 var refreshed = LoadReferences(skill.StoragePath);
                 metadata = refreshed == null ? null : refreshed.FirstOrDefault(item => item != null &&
                     string.Equals(item.Path, normalizedPath, StringComparison.OrdinalIgnoreCase));

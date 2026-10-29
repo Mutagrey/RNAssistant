@@ -14,9 +14,11 @@ namespace RNAssistant.Office.Tools
             new ToolBinding("prompts.save.intent.v1");
 
         private readonly PromptSettingsService _service;
+        private readonly string _sourceHash;
 
-        internal PromptSaveToolHandler(PromptSettingsService service)
+        internal PromptSaveToolHandler(PromptSettingsService service, string sourceHash = null)
         {
+            _sourceHash = sourceHash;
             _service = service ?? throw new ArgumentNullException(nameof(service));
         }
 
@@ -25,7 +27,7 @@ namespace RNAssistant.Office.Tools
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var preparation = _service.PrepareSave(context.Arguments);
+            var preparation = _service.PrepareSave(context.Arguments, _sourceHash);
             var result = PromptToolProjection.Result(preparation.Outcome);
             return Task.FromResult(new ToolPreparationResult(
                 result, preparation.Outcome.Status == PromptOutcomeStatus.Ok

@@ -2540,7 +2540,7 @@ namespace RNAssistant.Harness
                     AssertTrue(saved.Success, "save Markdown revision: " + saved.Message);
                     target = (string)JObject.Parse(saved.DataJson)["target"];
                     if (first == null) first = executor.ResourceGateway.ResolveIntentTarget(session, target).Reference;
-                    saved = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId, "title", "Repeated Plan",
+                    saved = executor.ExecuteManual(PlanWriteCommand( "title", "Repeated Plan",
                         "markdown", "# Plan revision " + revision, "status", "draft"), tools, new AppSettings(), false, false, session);
                     AssertTrue(saved.Success, "save Plan revision: " + saved.Message);
                 }

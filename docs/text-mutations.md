@@ -203,11 +203,42 @@ replacement символы `$1` буквальны, в regex — стандар�
 | HTML data binding | delete по точному target; содержимое/связи остаются структурированными `html.data.*` |
 | Authored text/code file | write/patch/replace/copy; patch потоковый, encoding/BOM сохраняет owner; исходный upload неизменяем, для редактирования нужна копия |
 | Markdown document | write/patch/replace/restore; restore принимает номер версии |
+| Plan | write/patch/delete/restore; target `plan: <уникальное название>`, numbered history и существующий journal |
+| Prompt template | write/patch/replace по обнаруженному `prompt: <key>`; defaults неизменяемы, текущий field и publication проверяются до записи |
+| Custom skill reference | write/patch/replace/delete; `skill reference: <id> / references/<name>.md`, package revision guard; built-ins неизменяемы, UTF-8 BOM/CRLF сохраняются |
 
 Неподдержанная операция возвращает явный отказ до dispatch. Generic tools не
-эмулируют перенос комбинацией copy+delete. Plan, task list, tool/skill package,
-prompt settings и ячейки/объекты Office сохраняют специализированные операции:
+эмулируют перенос комбинацией copy+delete. Task list, tool/skill package
+и ячейки/объекты Office сохраняют специализированные операции:
 их контракт включает структуру, ownership или отдельную execution authority.
+
+Plan source — проекция прежнего owner, без второго store:
+
+```text
+---
+title: "Название в виде JSON-строки"
+status: draft
+---
+# Полный Markdown
+```
+
+Обязательны четыре строки header, непустой body и status `draft` либо `ready`.
+`core.write` создаёт отсутствующее название или заменяет полностью наблюдённый
+source существующего плана. Другое название создаёт отдельный план; изменение title
+в header переименовывает выбранный. Коллизии названий, включая restore, отвергаются.
+`core.read` по Plan по умолчанию возвращает source; `representation=text` — только
+body, который не разрешает изменение header. Workspace принимает `plan:` также
+без `type`; discovery использует `type=plan`. UI передаёт отдельный runtime guard
+показанной ревизии, а кнопка создания требует отсутствия цели; это не аргументы модели.
+
+В Plan/Ask/Deny разрешены только `core.write/patch`, у которых все цели — Plan,
+через exact built-in handler/binding. Смешанный пакет с файлом/VBA отвергается до
+подготовки. `resources.delete/restore` остаются Agent lifecycle с обычной policy.
+Task List остаётся структурированным `task.list.set`. Изменения reference/prompt
+публикуют текущий aggregate catalog: следующая цель того же каталога может стать
+устаревшей после первой записи; нет автоматического rebase. Для зависимых правок
+нужны отдельные вызовы с чтением. `html.data.refresh` удалён: UI перечитывает
+workspace, актуальные live bindings открываются существующим runtime.
 
 VBA использует тот же формат, с токенным сопоставлением регистра идентификаторов
 и безопасных пробелов между токенами. Строковые литералы, bracketed names,

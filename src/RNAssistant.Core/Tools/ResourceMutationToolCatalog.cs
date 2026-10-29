@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Tools
                     properties["content"] = String("Complete content. Existing source requires a complete current observation.", false);
                     properties["resourceType"] = new JObject { ["description"] = "Optional creation kind; VBA component type is resolved by the owner.", ["type"] = "string", ["enum"] = new JArray("text", "StdModule", "ClassModule", "MSForm") };
                     required.Add("content");
-                    description = "Create missing text/source or replace completely observed existing source. Runtime pins existence and revision; concurrent changes fail without overwrite. Use core.patch for partial edits. VBA, files and authored sources share this contract.";
+                    description = "Create missing text/source or replace completely observed existing source. Runtime pins existence and revision; concurrent changes fail without overwrite. Use core.patch for partial edits. VBA, files and authored sources share this contract. " + RNAssistant.Core.Services.PlanSourceDocument.Instructions;
                 }
                 else if (id == Patch)
                 {
@@ -59,7 +59,7 @@ namespace RNAssistant.Core.Tools
                 yield return new ToolCatalogEntry { Id = id, Name = id, Host = "Common", Description = description,
                     ArgumentSchemaJson = Object(properties, required).ToString(Formatting.None),
                     BuiltIn = true, Enabled = true, AgentCanRun = true, MutatesLocalState = true,
-                    Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, new[] { "agent" }, 1),
+                    Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, (id == Write || id == Patch ? new[] { "agent", "plan" } : new[] { "agent" }), 1),
                     RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = "1" };
             }
         }

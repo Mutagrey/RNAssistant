@@ -684,7 +684,7 @@ namespace RNAssistant.Office.WebView
                                 runTool.DryRun,
                                 runTool.ChatId,
                                 (phase, message) => ReportProgress(id, phase, message),
-                                cancellationToken),
+                                cancellationToken, runTool.SourceGuard),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ConfirmAgentTool:

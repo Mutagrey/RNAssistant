@@ -457,7 +457,7 @@ namespace RNAssistant.Office.Services
             {
                 var snapshot = _authority.CaptureMany(new[] { scope }).Get(scope);
                 var impacts = RNAssistant.Core.Tools.PlanDocumentToolCatalog.Owns(operation)
-                    ? PreparePlan(context, arguments)
+                    ? PreparePlan(context, arguments, operation, route == null ? null : PlanResourcePrepared.Read(preparedStateJson).Command)
                     : RNAssistant.Office.Tools.MarkdownDocumentToolCatalog.Owns(operation)
                         ? MarkdownDocumentService.PreparePublication(_session, context, preparedStateJson,
                             new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), _authority)
@@ -492,9 +492,9 @@ namespace RNAssistant.Office.Services
             lock (_sync) _attempts[attemptId] = next;
         }
 
-        private IReadOnlyList<ResourceImpact> PreparePlan(ToolExecutionContext context, IDictionary<string, object> arguments)
-        { return PlanDocumentPublication.Prepare(_session, context, arguments,
-            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads)); }
+        private IReadOnlyList<ResourceImpact> PreparePlan(ToolExecutionContext context, IDictionary<string, object> arguments, string operation, PlanResourceCommand command)
+        { return PlanDocumentPublication.Prepare(_session, context,
+            new DocumentArtifactStore(_authority.Store, _authority.Revisions, _payloads), operation, command); }
 
         public ResourceAuthorityCommit Complete(string attemptId, ToolExecutionRecord record, string preparedStateJson = null)
         {

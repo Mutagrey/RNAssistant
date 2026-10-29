@@ -1879,7 +1879,7 @@ namespace RNAssistant.Harness
                     () => HtmlWorkspaceToolService.UpsertFile(session, "index.html", "html", "<p>one</p>", true));
                 executor.MutateLocalResources(session, "common.html_workspace_bind_data", null,
                     () => HtmlWorkspaceToolService.UpsertDataSource(session, "data", "{\"count\":1}"));
-                var planResult = executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                var planResult = executor.ExecuteManual(PlanWriteCommand(
                     "title", "Plan", "markdown", "# Plan", "status", "draft"),
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), new AppSettings(), false, false, session);
                 AssertTrue(planResult.Success, "Plan uses its native document publication owner");
@@ -2846,7 +2846,7 @@ namespace RNAssistant.Harness
                     new JObject { ["target"] = "VBA module: Module1", ["text"] = "OBSOLETE_BODY" + new string('x', 20000) }.ToString(), new[] { r1 }),
                     resourceEvidence: new[] { evidence }), int.MaxValue, "tool");
             var call = new ChatMessage { Role = "assistant", ProtocolMessage = true, ToolCallId = "call1", ToolName = command.ToolId,
-                ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> { new RNAssistant.Core.Llm.LlmToolCall { Id = "call1", Name = command.ToolId, Type = "function", ArgumentsJson = "{}" } } };
+                ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> { new RNAssistant.Core.Llm.LlmToolCall { Id = "call1", Name = command.ToolId, Type = "function", ArgumentsJson = "{\"target\":\"VBA module: Module1\"}" } } };
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
                 new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Known(r2, 2) }) }),
                 "tools1", new SkillCatalogSnapshot(null), new SchemaRegistrySnapshot(null), 2);
@@ -2957,9 +2957,12 @@ namespace RNAssistant.Harness
             WithTempPaths(paths =>
             {
                 var payloads = new ChatBlobStore(paths);
-                var diagnostic = "CURRENT_RECOVERY_SOURCE_" + new string('x', 16000);
+                var diagnostic = "CURRENT_RECOVERY_SOURCE_" + new string('x', 300);
                 var mutationCall = new ChatMessage { Role = "assistant", ProtocolMessage = true,
-                    ToolCallId = "failed-patch", ToolName = "vba.module.patch",
+                    ToolCallId = "failed-patch", ToolName = "core.patch",
+                    ToolCalls = new List<RNAssistant.Core.Llm.LlmToolCall> { new RNAssistant.Core.Llm.LlmToolCall {
+                        Id = "failed-patch", Name = "core.patch", Type = "function",
+                        ArgumentsJson = PatchArguments("VBA module: Module1", LineHunk("old", "new")).ToString() } },
                     ResourceEvidence = new List<ResourceEvidence> { evidence } };
                 var mutationTool = new ToolCatalogEntry { Id = mutationCall.ToolName,
                     Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, false, false, new[] { "agent" }) };
@@ -2968,10 +2971,11 @@ namespace RNAssistant.Harness
                     var failure = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
                             ToolCallId = mutationCall.ToolCallId, ToolId = mutationCall.ToolName },
                         new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Error("Patch rejected.", new JObject {
-                            ["code"] = "vba_patch_ambiguous", ["hunkIndex"] = 2, ["matchCount"] = 3,
-                            ["locations"] = new JArray(new JObject { ["startLine"] = 12, ["startColumn"] = 5 }),
-                            ["locationsComplete"] = false,
-                            ["details"] = diagnostic }.ToString())), int.MaxValue, role);
+                            ["type"] = "rnassistant.patch", ["phase"] = "preparation", ["writeStarted"] = false,
+                            ["targets"] = new JArray(new JObject { ["target"] = "VBA module: Module1", ["status"] = "Rejected",
+                                ["diagnostic"] = new JObject { ["code"] = "ambiguous_context", ["hunk"] = 2,
+                                    ["candidates"] = new JArray(new JObject { ["line"] = 12, ["context"] = "old" }),
+                                    ["nextAction"] = "refine_context", ["message"] = diagnostic } }) }.ToString())), int.MaxValue, role);
                     failure.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(failure.Content, "application/json"));
                     var compact = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
                             ToolCallId = mutationCall.ToolCallId, ToolId = mutationCall.ToolName },
@@ -2986,16 +2990,14 @@ namespace RNAssistant.Harness
                     AssertEqual(mutationCall.ToolCallId, (string)frameData["tool_call_id"],
                         "completed mutation keeps the runtime call/result correlation");
                     AssertEqual("error", (string)frameData["status"], "actual failure status survives projection");
-                    AssertEqual("vba_patch_ambiguous", (string)frameData["data"]?["code"],
-                        "failure retains the real patch recovery code in " + role);
-                    AssertEqual(3, (int)frameData["data"]["matchCount"], "ambiguous locations retain their count");
-                    AssertEqual(12, (int)frameData["data"]["locations"][0]["startLine"],
-                        "semantic patch coordinates survive mutation folding and runtime-evidence sanitization");
-                    AssertEqual(diagnostic, (string)frameData["data"]["details"],
-                        "archived mutation diagnostics are delivered completely within the request budget");
+                    var actualDiagnostic = frameData["data"]["targets"][0]["diagnostic"];
+                    AssertEqual("ambiguous_context", (string)actualDiagnostic["code"], "patch recovery remains typed in " + role);
+                    AssertEqual(2, (int)actualDiagnostic["hunk"], "failure keeps its target-local hunk");
+                    AssertEqual(12, (int)actualDiagnostic["candidates"][0]["line"], "candidate line survives folding");
+                    AssertEqual(diagnostic, (string)actualDiagnostic["message"], "bounded archived diagnostic is delivered completely");
                     RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(
                         authority, new ChatMessage[0], new[] { mutationCall, failure }, null,
-                        new[] { mutationTool }, new AppSettings(), 1024));
+                        new[] { mutationTool }, new AppSettings(), 128));
                 }
             });
             var oversizedCommand = new ToolInvocation
@@ -3027,7 +3029,7 @@ namespace RNAssistant.Harness
                         Id = "call2",
                         Name = oversizedCommand.ToolId,
                         Type = "function",
-                        ArgumentsJson = "{}"
+                        ArgumentsJson = "{\"target\":\"VBA module: Module1\"}"
                     }
                 }
             };

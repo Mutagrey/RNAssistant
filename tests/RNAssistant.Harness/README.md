@@ -4,7 +4,7 @@
 union and per-host tool/skill IDs from isolated stores (JS off/on, Workspace and
 plugin source additions; conditional browser ID is source-declared). It does not
 call a model, browser or Office. The [2026-10-29 inventory](../../docs/audits/capability-inventory-2026-10-29.md)
-compares 91 → 78 public IDs, with 16 skills and the 10-tool initial Core profile.
+compares 91 → 78 → 71 public IDs, with 16 skills and the 10-tool initial Core profile.
 `tools: catalog merges visible tools`, `tools: VBA facade is common across hosts`
 and `settings: built-in skill references` check current publication, shared schemas
 and full dotted references, including Workspace/default prompts. The shared Skill
@@ -17,6 +17,9 @@ confirmation collisions, stale reads, copy/move/delete/restore, retained file di
 and unknown effects. Package checks cover all-before-write preparation, duplicate aliases,
 confirmation drift, per-target rechecks, partial failure/unknown, unexecuted remainder,
 model projection, retained before/after and VBA/HTML/Markdown/authored-file routing.
+`shared source:` checks Plan header/body edits, all-target preparation and mode
+policy, verified Plan after-source, editor revision guards, prompt/reference owner
+routing, retained diffs and reference BOM/CRLF preservation.
 `tests/web/run-changes-layout.test.js` checks per-target inline statuses and prepared
 preview; `run-view-state.test.js` checks typed preview delivery.
 `tests/cli/stabilization_smoke.py` covers multi-target confirmation across restart,
@@ -1138,9 +1141,10 @@ retry after a verified change of the refused list's exact logical state,
 identity-free model results and no credit toward file-write acceptance. It uses
 scripted HTTP, not real-model qualification.
 `python3 -B tests/cli/plan_document_smoke.py` verifies shared Markdown Plans with
-workspace authority in native-tool and user transport: exact whitespace and
-versions, current/historical evidence, frozen selection in read batches, restart,
-discovery/selection across chats, stale-write rejection, duplicate titles, restore/tombstone, workspace isolation,
+workspace authority in native-tool and user transport: shared core.write/patch
+source headers, sequential and batched edits, refusal before any write, exact
+whitespace and versions, current/historical evidence, restart, discovery across
+chats, stale-write rejection, restore/tombstone and workspace isolation,
 prepared/published/uncertain crash states and no file-write credit. It uses scripted
 HTTP through the production CLI. For shared owner changes also run the focused
 `plan mode:`, `plan document:`, `document Plan:` and `artifact working set:` harness

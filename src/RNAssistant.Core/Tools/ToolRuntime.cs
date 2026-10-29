@@ -76,8 +76,7 @@ namespace RNAssistant.Core.Tools
                 return Reject(context, "permission_denied", "The run policy forbids this operation before preparation or dispatch.");
             if (!policy.AllowedModes.Contains(_mode, StringComparer.Ordinal))
                 return Reject(context, "tool_mode_denied", "The tool is not allowed in this conversation mode.");
-            if (policy.RequiresConfirmation && !_allowsConfirmation)
-                return Reject(context, "confirmation_not_allowed", "This conversation mode cannot authorize confirmation-required tools.");
+
 
             Dictionary<string, object> arguments;
             try
@@ -95,6 +94,22 @@ namespace RNAssistant.Core.Tools
             {
                 return Reject(context, "invalid_arguments", ex.Message);
             }
+
+            var planSourceTool = ConversationRunPolicy.IsPlanSourceTool(context.Call.Name, tool.Registration.Binding) &&
+                (tool.Handler is IPlanSourceToolHandler || (tool.Handler as ResourcePatchBatchHandler)?.TargetHandler is IPlanSourceToolHandler);
+            var planOnly = false;
+            if (planSourceTool)
+            {
+                try
+                {
+                    planOnly = context.Call.Name == ResourceMutationToolCatalog.Patch
+                        ? ResourcePatch.Parse(Convert.ToString(arguments["patch"])).All(section => PlanSourceDocument.IsTarget(section.Target))
+                        : PlanSourceDocument.IsTarget(Convert.ToString(arguments["target"]));
+                }
+                catch (TextPatternException error) { return Reject(context, error.ErrorCode, error.Message); }
+            }
+            if (!planOnly && policy.RequiresConfirmation && (!_allowsConfirmation || _runPolicy != null && !_runPolicy.AllowsConfirmation))
+                return Reject(context, "confirmation_not_allowed", "Only Plan source edits are allowed here. Other or mixed targets require an agent run with mutation permission.");
 
             if (cancellationToken.IsCancellationRequested) return NotDispatched(context, "Cancelled before handler dispatch.");
             var preparable = tool.Handler as IPreparableToolHandler;
@@ -147,7 +162,7 @@ namespace RNAssistant.Core.Tools
                     return Reject(context, "tool_preparation_failed", ex.Message);
                 }
             }
-            if (policy.RequiresConfirmation && !context.IsConfirmed && !_autoConfirm)
+            if (policy.RequiresConfirmation && !planOnly && !context.IsConfirmed && !_autoConfirm)
             {
                 if (_pendingRegistrar == null) return Reject(context, "confirmation_unavailable", "No confirmation registrar is available.");
                 try
@@ -217,7 +232,7 @@ namespace RNAssistant.Core.Tools
                             throw new InvalidOperationException("Only the registered patch owner may execute a prepared target.");
                         var child = new ToolExecutionContext(context.Call, context.Policy, context.RunId, context.TurnId,
                             context.StepId, context.StartedUtc, context.IsConfirmed, context.RemainingToolSteps,
-                            state, context.ExpectedContentSha256, context.ExpectedTargetAbsent, index);
+                            state, context.ExpectedContentSha256, context.ExpectedTargetAbsent, index, context.ExpectedArtifactId);
                         return ExecuteHandlerAsync(child, policy, owner, targetArguments, state, token, handlerContext.MarkDispatchPossible);
                     });
             ToolExecutionRecord terminal;

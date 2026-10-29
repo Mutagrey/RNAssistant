@@ -44,6 +44,7 @@ namespace RNAssistant.Office.Tools
             // observed revision from discovery. Internal pages pin the first read.
             var reference = selected.Descriptor.Mutable ? new ResourceRef(selected.Reference.Uri) : selected.Reference;
             var representation = ToolArgumentReader.String(context.Arguments, "representation", "auto");
+            if (representation == "auto" && selected.Descriptor.Kind == ChatArtifactKinds.PlanDocument) representation = "source";
             // The workspace root has a structure view, but its file members have
             // source. A model may carry the root's view over to an exact file target.
             // Negotiate this one read explicitly; the result still reports source.

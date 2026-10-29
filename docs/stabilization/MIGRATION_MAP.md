@@ -39,8 +39,9 @@ Owner: Core Tools / Office Tools / Application Workspace. Public per-environment
 source registrations are removed. `core.write/patch/replace` and optional resource
 lifecycle tools route to the existing owners; no retired name can dispatch.
 The private `DomainOperation` bridge in OfficeResourceMutationHandler is temporary:
-VBA/HTML/Markdown/authored-file handlers still consume their owner command arguments.
-Removal gate: migrate these four owner entrypoints to typed prepared resource commands,
+VBA/HTML/Markdown/authored-file/prompt/skill-reference handlers still consume their owner command arguments.
+Plan source already uses typed `PlanResourceCommand` through its existing publication owner.
+Removal gate: migrate the remaining owner entrypoints to typed prepared resource commands,
 then remove private string routing without changing accepted ToolCall, policy, journal
 or read-back. This bridge is not a compatibility layer for old chats or model calls.
 Current semantics and explicit custom-dependency migration: [Text mutations](../text-mutations.md).

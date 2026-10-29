@@ -461,7 +461,7 @@ namespace RNAssistant.Office.Services
                     indexed.Resource = Describe(session, artifact, false);
                     return new ResourceReadSelection { Result = indexed, ResourceRefs = new[] { exactReference } };
                 }
-                var body = ReadText(session, artifact, int.MaxValue);
+                var body = ReadRepresentation(session, artifact, representation);
                 if (body == null)
                     throw new ResourceRequestException("The exact text representation is unavailable.", "RESOURCE_SNAPSHOT_UNAVAILABLE", false);
                 var starts = new List<int> { 0 };
@@ -485,7 +485,7 @@ namespace RNAssistant.Office.Services
                     Result = new ResourceReadResult
                     {
                         Resource = Describe(session, artifact, false), Representation = representation,
-                        ContentSha256 = TextRepresentationSha256(artifact, partOriginal), Text = body.Substring(start, endPart - start),
+                        ContentSha256 = representation == "source" && artifact.Kind == ChatArtifactKinds.PlanDocument ? RNAssistant.Core.Tools.TextPatternEngine.Sha256(body) : TextRepresentationSha256(artifact, partOriginal), Text = body.Substring(start, endPart - start),
                         Offset = start, ReturnedCharacters = endPart - start, TotalCharacters = body.Length,
                         PartNumber = request.PartNumber, PartCount = partCount, Complete = false,
                         SourceComplete = partSourceComplete, Truncated = true, RawContentIncluded = true,
@@ -553,7 +553,7 @@ namespace RNAssistant.Office.Services
                 return new ResourceReadSelection { Result = indexed, ResourceRefs = new[] { exactReference } };
             }
 
-            var content = ReadText(session, artifact, int.MaxValue);
+            var content = ReadRepresentation(session, artifact, representation);
             if (content == null)
             {
                 throw new InvalidOperationException(
@@ -575,7 +575,7 @@ namespace RNAssistant.Office.Services
                 {
                     Resource = Describe(session, artifact, false),
                     Representation = representation,
-                    ContentSha256 = TextRepresentationSha256(artifact, FindExactAttachment(session, artifact)),
+                    ContentSha256 = representation == "source" && artifact.Kind == ChatArtifactKinds.PlanDocument ? RNAssistant.Core.Tools.TextPatternEngine.Sha256(content) : TextRepresentationSha256(artifact, FindExactAttachment(session, artifact)),
                     Offset = offset,
                     ReturnedCharacters = length,
                     TotalCharacters = content.Length,
@@ -736,6 +736,7 @@ namespace RNAssistant.Office.Services
                 representations.Add(ResourceRepresentations.Structure);
             }
             else if (HasTextHint(artifact, attachment)) representations.Add("text");
+            if (artifact.Kind == ChatArtifactKinds.PlanDocument) representations.Add(ResourceRepresentations.Source);
             if (IsModelMedia(attachment)) representations.Add("media");
             var result = new ResourceDescriptor
             {
@@ -805,6 +806,7 @@ namespace RNAssistant.Office.Services
                 ChatArtifactKinds.HtmlWorkspace,
                 StringComparison.OrdinalIgnoreCase);
             if (value == ResourceRepresentations.Metadata) return value;
+            if (artifact.Kind == ChatArtifactKinds.PlanDocument && (value == "source" || value.Length == 0 || value == "auto")) return "source";
             if (htmlWorkspace && (value.Length == 0 || value == "auto" || value == ResourceRepresentations.Structure))
             {
                 return ResourceRepresentations.Structure;
@@ -821,6 +823,13 @@ namespace RNAssistant.Office.Services
             if (HasTextHint(artifact, FindExactAttachment(session, artifact))) return "text";
             if (IsModelMedia(FindExactAttachment(session, artifact))) return "media";
             return "metadata";
+        }
+
+        private string ReadRepresentation(ChatSession session, ChatArtifact artifact, string representation)
+        {
+            if (representation == ResourceRepresentations.Source && artifact.Kind == ChatArtifactKinds.PlanDocument)
+                return PlanSourceDocument.Serialize(ReadDocumentArtifact(session, ChatResourceUri.CreateArtifactRevision(session, artifact)));
+            return ReadText(session, artifact, int.MaxValue);
         }
 
         private string ReadText(ChatSession session, ChatArtifact artifact, int maxChars)

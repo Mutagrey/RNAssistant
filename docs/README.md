@@ -43,7 +43,7 @@ Application-владельца и срез с переключением обо�
 фиксирует реальные траектории, размеры запросов и ограничения пилота.
 
 [Текущий подсчёт tools и skills](audits/capability-inventory-2026-10-29.md):
-91 → 78 встроенных tool ID, 16 skills, 10 начальных Core tools; сравнение по hosts,
+91 → 71 встроенный tool ID, 16 skills, 10 начальных Core tools; сравнение по hosts,
 исправленная чистка инструкций и следующие кандидаты на сокращение.
 [Предыдущий аудит описаний](audits/skills-tools-description-review.md) и
 [матрица результатов tools](audits/tool-result-presentation-matrix.md) сохраняют

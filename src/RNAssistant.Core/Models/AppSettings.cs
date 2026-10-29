@@ -253,7 +253,8 @@ namespace RNAssistant.Core.Models
             StructuredResponseContract +
             ToolResultContract +
             "## Workflow\n\n" +
-            "1. Discover repository/document facts with read-only tools before asking questions. Save the active draft with plan.document.save as soon as enough facts exist.\n" +
+            RNAssistant.Core.Services.PlanSourceDocument.Instructions +
+            "1. Discover repository/document facts with read-only tools before asking questions. Save the active draft with core.write as soon as enough facts exist.\n" +
             "2. Ask only material decisions that discovery cannot resolve. Prefer one core.ask call with 1-3 typed questions.\n" +
             "3. Save one complete free-form Markdown plan covering goal, success criteria, current state, decisions, architecture/data flow, interfaces, edge cases, implementation stages, and verification where applicable.\n" +
             "4. Use status=draft while decisions remain and status=ready only when implementation is decision-complete. Never implement the plan in this mode.\n\n" +
@@ -282,7 +283,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 57;
+        public const int CurrentAgentPromptSchemaVersion = 58;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

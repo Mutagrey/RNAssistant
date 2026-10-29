@@ -93,7 +93,7 @@ namespace RNAssistant.Office.Runtime
                 {
                     binding = ResourceMutationToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new OfficeResourceMutationHandler(registration.Descriptor.Id, gateway, session,
-                        vbaTools, hostRuntime, htmlWorkspaceTools, authoredFiles, markdownDocuments, searchObservation);
+                        vbaTools, hostRuntime, htmlWorkspaceTools, authoredFiles, markdownDocuments, searchObservation, promptTools, skillAuthoring);
                     if (registration.Descriptor.Id == ResourceMutationToolCatalog.Patch)
                         handler = new ResourcePatchBatchHandler((IPreparableToolHandler)handler);
                 }
@@ -247,13 +247,6 @@ namespace RNAssistant.Office.Runtime
                     binding = AuthoredFileToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new AuthoredFileToolHandler(authoredFiles, session);
                 }
-                else if (PlanDocumentToolCatalog.Owns(
-                    registration.Descriptor.Id))
-                {
-                    binding = PlanDocumentToolHandler.BindingFor(registration.Descriptor.Id);
-                    handler = new OfficePlanDocumentToolHandler(
-                        registration.Descriptor.Id, session);
-                }
                 else if (TaskListToolCatalog.Owns(
                     registration.Descriptor.Id))
                 {
@@ -283,15 +276,6 @@ namespace RNAssistant.Office.Runtime
                         registration.Descriptor.Id, capabilityTools,
                         discoveryCatalog, skillCatalog, session, manualRun);
                 }
-                else if (PromptToolCatalog.Owns(
-                    registration.Descriptor.Id))
-                {
-                    if (promptTools == null)
-                        throw new InvalidOperationException(
-                            "Prompt handler dependencies are unavailable.");
-                    binding = PromptSaveToolHandler.Binding;
-                    handler = new PromptSaveToolHandler(promptTools);
-                }
                 else if (ToolAuthoringCatalog.Owns(
                     registration.Descriptor.Id))
                 {
@@ -302,8 +286,7 @@ namespace RNAssistant.Office.Runtime
                     handler = new ToolAuthoringMutationToolHandler(
                         registration.Descriptor.Id, toolAuthoring);
                 }
-                else if (SkillAuthoringCatalog.Owns(
-                    registration.Descriptor.Id))
+                else if (registration.Descriptor.Id == SkillAuthoringCatalog.UpsertToolId || registration.Descriptor.Id == SkillAuthoringCatalog.DeleteToolId)
                 {
                     if (skillAuthoring == null)
                         throw new InvalidOperationException(
@@ -364,13 +347,12 @@ namespace RNAssistant.Office.Runtime
                 OutlookToolIds.Owns(toolId) || VbaToolCatalog.Owns(toolId) ||
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
-                MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) || PlanDocumentToolCatalog.Owns(toolId) ||
+                MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) ||
                 TaskListToolCatalog.Owns(toolId) ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||
-                PromptToolCatalog.Owns(toolId) ||
                 ToolAuthoringCatalog.Owns(toolId) ||
-                SkillAuthoringCatalog.Owns(toolId);
+                toolId == SkillAuthoringCatalog.UpsertToolId || toolId == SkillAuthoringCatalog.DeleteToolId;
         }
 
         internal bool Handles(string exactToolId)
@@ -437,7 +419,8 @@ namespace RNAssistant.Office.Runtime
             var context = new ToolExecutionContext(call, policy, runId, turnId,
                 string.IsNullOrWhiteSpace(command.RuntimeStepId) ? identity : command.RuntimeStepId,
                 DateTime.UtcNow, confirmed, remainingSteps,
-                expectedContentSha256: command.ExpectedContentSha256, expectedTargetAbsent: command.ExpectedTargetAbsent);
+                expectedContentSha256: command.ExpectedContentSha256, expectedTargetAbsent: command.ExpectedTargetAbsent,
+                expectedArtifactId: command.ExpectedArtifactId);
             var record = ExecuteAsync(context, token).GetAwaiter().GetResult();
             var materialized = TakeMaterialization(record);
             return ToolRunResultFactory.Create(record, materialized);

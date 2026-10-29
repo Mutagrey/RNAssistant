@@ -283,7 +283,7 @@ namespace RNAssistant.Office.Services
         {
             var activity = message.Activity;
             if (activity == null || string.IsNullOrWhiteSpace(activity.ToolId) ||
-                !activity.ToolId.StartsWith("plan.document.", StringComparison.OrdinalIgnoreCase) ||
+                !activity.ToolId.StartsWith("plan.document.", StringComparison.OrdinalIgnoreCase) && !RNAssistant.Core.Tools.ResourceMutationToolCatalog.Owns(activity.ToolId) ||
                 string.IsNullOrWhiteSpace(activity.DataJson)) return;
             try
             {

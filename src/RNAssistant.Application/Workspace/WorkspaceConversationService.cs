@@ -1221,19 +1221,16 @@ namespace RNAssistant.Runtime
                     Register(registry, entries, "web.verify", "Load an immutable local HTML/CSS/JS snapshot in an isolated browser; check asset/runtime errors and any functional checks fixed by the accepted task contract.",
                         Schema("entryPath", true), false,
                         new WebVerifierHandler(webHost.Create(_resources, webSnapshots, workspace), session?.Id, acceptance?.WebChecks), requiresConfirmation: true, independentRead: false, executesCode: true);
-                if (!workspace.ReadOnly)
                 {
                     foreach (var entry in ResourceMutationToolCatalog.GetTools())
                     {
                         var handler = new FileHandler(files, workspace, _observed,
-                            entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered);
+                            entry.Id, payloads, searchObservation, office?.Tools?.FirstOrDefault(item => item.Entry.Id == entry.Id)?.Handler, _delivered, _plans.Handler(_delivered));
                         Register(registry, entries, entry, entry.Id == ResourceMutationToolCatalog.Patch ? (IToolHandler)new ResourcePatchBatchHandler(handler) : handler);
                     }
                 }
                 Register(registry, entries, UserQuestionToolCatalog.GetTools().Single(), new UserQuestionToolHandler());
                 Register(registry, entries, TaskListToolCatalog.GetTools().Single(), new TaskListToolHandler(TaskListToolCatalog.SetToolId, session));
-                foreach (var entry in PlanDocumentToolCatalog.GetTools())
-                    Register(registry, entries, entry, new PlanDocumentToolHandler(entry.Id, session));
                 if (extraTools != null) foreach (var contribution in extraTools) Register(registry, entries, contribution.Entry, contribution.Handler);
                 if (office?.Tools != null) foreach (var contribution in office.Tools)
                     if (!entries.Any(item => item.Id == contribution.Entry.Id)) Register(registry, entries, contribution.Entry, contribution.Handler);
@@ -1455,7 +1452,8 @@ namespace RNAssistant.Runtime
                 ((JArray)schema["required"]).Add("type");
                 if (!find)
                 {
-                    properties["target"]["description"] = "Exact unique Plan title from discovery; omit or null for the selected active plan. A current read selects that exact revision for later guarded saves.";
+                    properties["target"]["description"] = "Exact plan: target from discovery; omit for the selected plan. Source (default) includes title/status; text is the Markdown body only.";
+                    properties["representation"] = new JObject { ["type"] = "string", ["enum"] = new JArray("source", "text") };
                     properties["version"] = new JObject { ["type"] = "integer", ["minimum"] = 1,
                         ["description"] = "Optional user-visible historical version; a historical read never changes the selected plan." };
                     return TextReadSelectorAlternatives(schema, maximumFileReadCharacters);
@@ -1807,6 +1805,10 @@ namespace RNAssistant.Runtime
                 // Freeze guards for this model request. A sibling read/write result has not yet reached the model.
                 _delivered.Clear();
                 foreach (var item in _observed) _delivered.Add(item.Key, item.Value);
+                // Non-file owners match exact evidence, not filesystem paths. This also includes
+                // verified after-sources, but only after the compiler actually delivered their bodies.
+                foreach (var item in delivered.Where(e => ResourceUri.Parse(e.Resource.Uri).Provider != "file"))
+                    _delivered["resource:" + item.EvidenceId] = item;
             }
 
             // Normalize durable accepted facts without changing their causal order.
@@ -1929,7 +1931,7 @@ namespace RNAssistant.Runtime
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical messages and calls are not current source. Reuse included current reads or verified after-source; read missing or stale source before editing. " +
                     (_mode.AllowsSkills ? "Use task.list.set for useful progress tracking and durable findings. " +
-                    "RUNTIME_CONTEXT.active_plan contains selected Plan metadata only; read its body with core.read type=plan. Save the complete Markdown with plan.document.save; use startNew only for a different task. " +
+                    "RUNTIME_CONTEXT.active_plan contains selected Plan metadata only; read its source with core.read type=plan. " + PlanSourceDocument.Instructions +
                     "Reuse RUNTIME_CONTEXT.active_task_list. Its statuses assess progress, not file effects; closing it is optional. " +
                     "Ask material decisions through core.ask after discovery; never answer for the user. " +
                     "Load a missing applicable skill with core.skills.load; reuse current SELECTED_SKILL. Complete instructions and tools arrive next request. " +
@@ -2083,7 +2085,7 @@ namespace RNAssistant.Runtime
                         ToolName = record.Context.Call.Name, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                         Content = WireResult(record),
                         ExecutionProgress = ToolExecutionProgress.Capture(record),
-                        ResourceEvidence = record.ResourceEvidence.ToList(), ResourceEffect = record.ResourceEffect,
+                        ResourceEvidence = record.ResourceEvidence.Concat(_plans.SourceEvidence(record.ResourceEffect)).ToList(), ResourceEffect = record.ResourceEffect,
                         ResourceRefs = record.Result?.Resources.ToList() ?? new List<ResourceRef>(),
                         RunId = fact.Summary.RunId
                     });
@@ -2210,7 +2212,7 @@ namespace RNAssistant.Runtime
             public ResourceRef RestoreSource { get; set; }
         }
 
-        internal sealed class FileHandler : IManagedMutationToolHandler, IPreparableToolHandler
+        internal sealed class FileHandler : IPlanSourceToolHandler, IPreparableToolHandler
         {
             private readonly WorkspaceFileService _files;
             private readonly WorkspaceDescriptor _workspace;
@@ -2220,14 +2222,17 @@ namespace RNAssistant.Runtime
             private readonly string _operation;
             private readonly ResourceSearchObservation _search;
             private readonly IToolHandler _office;
+            private readonly PlanResourceToolHandler _plan;
             private bool IsOffice(ToolHandlerContext context) { return Value(context, "target").Contains(": "); }
             public FileHandler(WorkspaceFileService files, WorkspaceDescriptor workspace,
                 Dictionary<string, ResourceEvidence> observed, string operation, ChatBlobStore payloads,
-                ResourceSearchObservation search, IToolHandler office = null, IReadOnlyDictionary<string, ResourceEvidence> delivered = null)
-            { _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _observed = observed; _delivered = delivered ?? observed; _operation = operation; _payloads = payloads; _search = search; }
+                ResourceSearchObservation search, IToolHandler office = null, IReadOnlyDictionary<string, ResourceEvidence> delivered = null, PlanResourceToolHandler plan = null)
+            { _plan = plan; _office = (office as ResourcePatchBatchHandler)?.TargetHandler ?? office; _files = files; _workspace = workspace; _observed = observed; _delivered = delivered ?? observed; _operation = operation; _payloads = payloads; _search = search; }
 
             public Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
             {
+                if (PlanSourceDocument.IsTarget(Value(context, "target")) && _plan != null) return _plan.PrepareAsync(context, token);
+                if (_workspace.ReadOnly) return Task.FromResult(new ToolPreparationResult(ToolResult.Error("This workspace is read-only; only Plan source edits are available.")));
                 if (IsOffice(context) && _office is IPreparableToolHandler preparable) return preparable.PrepareAsync(context, token);
                 try
                 {
@@ -2286,6 +2291,8 @@ namespace RNAssistant.Runtime
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
             {
+                if (PlanSourceDocument.IsTarget(Value(context, "target")) && _plan != null) return _plan.ExecuteAsync(context, token);
+                if (_workspace.ReadOnly) return Task.FromResult(new ToolHandlerResult(ToolResult.Error("This workspace is read-only."), ToolEffectEvidence.None));
                 if (IsOffice(context) && _office != null) return _office.ExecuteAsync(context, token);
                 try
                 {

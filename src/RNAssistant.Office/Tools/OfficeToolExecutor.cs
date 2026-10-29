@@ -162,8 +162,6 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools,
                 ToolAuthoringCatalog.GetTools(_toolAuthoringService, false));
             RegisterControllerTools(controllerTools,
-                PromptToolCatalog.GetTools(_promptSettingsService));
-            RegisterControllerTools(controllerTools,
                 ResourceToolCatalog.GetControllerTools());
             RegisterControllerTools(controllerTools, new[] {
                 ControllerToolCatalogEntry.CreateReadProjection(JsToolHandler.Descriptor,
@@ -173,8 +171,6 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });
-            RegisterControllerTools(controllerTools,
-                PlanDocumentToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, ResourceMutationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
                 UserQuestionToolCatalog.GetTools());

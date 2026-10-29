@@ -156,6 +156,14 @@ namespace RNAssistant.Office.Tools
                     "invalid_skill_reference", false);
             }
 
+            var preserveBom = false;
+            if (existing != null)
+            {
+                string oldText, readError; SkillReferenceMetadata metadata;
+                if (!_skillStore.TryReadReference(current, existing.Path, out oldText, out metadata, out readError))
+                    return SkillAuthoringOutcome.Error(readError, null, "source_changed", false);
+                preserveBom = metadata.ByteLength == SkillStore.ComputeReferenceByteLength(oldText) + 3;
+            }
             intended = Clone(current);
             if (existing != null) normalizedPath = existing.Path;
             intended.References.RemoveAll(item => item != null &&
@@ -164,8 +172,8 @@ namespace RNAssistant.Office.Tools
             intended.References.Add(new SkillReferenceMetadata
             {
                 Path = normalizedPath,
-                ByteLength = SkillStore.ComputeReferenceByteLength(content),
-                Revision = SkillStore.ComputeReferenceRevision(content)
+                ByteLength = SkillStore.ComputeReferenceByteLength(content) + (preserveBom ? 3 : 0),
+                Revision = SkillStore.ComputeReferenceRevision((preserveBom ? "\uFEFF" : "") + content)
             });
             referencePath = normalizedPath;
             operation = existing == null

@@ -17,84 +17,30 @@ namespace RNAssistant.Core.Services
         {
             using (var hash = System.Security.Cryptography.SHA256.Create())
                 return "plan_doc_" + BitConverter.ToString(hash.ComputeHash(System.Text.Encoding.UTF8.GetBytes(
-                    session.Id + "\n" + context.RunId + "\n" + context.StepId))).Replace("-", "").ToLowerInvariant();
+                    session.Id + "\n" + context.RunId + "\n" + context.StepId + "\n" + context.TargetOrdinal))).Replace("-", "").ToLowerInvariant();
         }
 
-        public PlanDocumentMutation Save(
-            ChatSession session,
-            string title,
-            string markdown,
-            string status,
-            Action beforeMutation,
-            string creationId,
-            bool startNew = false)
+        public PlanDocumentMutation ApplyResource(ChatSession session, string operation,
+            PlanResourceCommand command, Action beforeMutation, string creationId)
         {
             RequireSession(session);
-            if (string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
-                return Create(session, title, markdown, status, beforeMutation, creationId, false);
-
-            var current = FindActive(session);
-            var planId = PlanId(current);
-            if (current == null || string.IsNullOrWhiteSpace(planId))
+            if (command == null) throw new ArgumentNullException(nameof(command));
+            if (operation == PlanDocumentToolCatalog.SaveToolId)
             {
-                return PlanDocumentMutation.Fail(
-                    "The active Plan revision is unavailable or ambiguous; reset the chat before saving.",
-                    "plan_active_revision_invalid",
-                    false);
+                if (command.Content == null) throw new InvalidOperationException("Plan content is missing.");
+                return command.Source == null
+                    ? Create(session, command.Content.Title, command.Content.Markdown, command.Content.Status, beforeMutation, creationId)
+                    : Update(session, command.PlanId, command.ArtifactId, command.Content.Title, true,
+                        command.Content.Markdown, command.Content.Status, beforeMutation);
             }
-            if (startNew)
-                return Create(session, title, markdown, status, beforeMutation, creationId, true);
-            return Update(session, planId, current.Id, title, true,
-                markdown, status, beforeMutation);
-        }
-
-        public PlanDocumentMutation RestoreVersion(
-            ChatSession session,
-            int version,
-            Action beforeMutation)
-        {
-            RequireSession(session);
-            var current = FindActive(session);
-            var planId = PlanId(current);
-            if (current == null || string.IsNullOrWhiteSpace(planId))
-            {
-                return PlanDocumentMutation.Fail(
-                    "This chat has no unambiguous active Plan to restore.",
-                    "plan_not_found",
-                    false);
-            }
-            var revisions = OrderedRevisions(session, planId);
-            if (!HasLinearCurrentHead(revisions, current)) return LineageConflict();
-            var sources = revisions.Where(item =>
-                    item.Revision == version && !IsTombstone(item))
-                .Take(2)
-                .ToList();
-            if (sources.Count != 1)
-            {
-                return PlanDocumentMutation.Fail(
-                    "Plan version not found: " + version,
-                    "plan_revision_not_found",
-                    false);
-            }
-            return Restore(session, planId, current.Id, sources[0].Id,
-                beforeMutation);
-        }
-
-        public PlanDocumentMutation DeleteActive(
-            ChatSession session,
-            Action beforeMutation)
-        {
-            RequireSession(session);
-            var current = FindActive(session);
-            var planId = PlanId(current);
-            if (current == null || string.IsNullOrWhiteSpace(planId))
-            {
-                return PlanDocumentMutation.Fail(
-                    "This chat has no unambiguous active Plan to remove.",
-                    "plan_not_found",
-                    false);
-            }
-            return Delete(session, planId, current.Id, beforeMutation);
+            if (command.Source == null) throw new InvalidOperationException("An existing Plan is required.");
+            if (operation == PlanDocumentToolCatalog.DeleteToolId)
+                return Delete(session, command.PlanId, command.ArtifactId, beforeMutation);
+            if (operation != PlanDocumentToolCatalog.RestoreToolId) throw new InvalidOperationException("Unsupported Plan operation.");
+            var source = OrderedRevisions(session, command.PlanId).SingleOrDefault(item =>
+                item.Revision == command.RestoreVersion && !IsTombstone(item));
+            if (source == null) return PlanDocumentMutation.Fail("Plan version is unavailable.", "plan_revision_not_found", false);
+            return Restore(session, command.PlanId, command.ArtifactId, source.Id, beforeMutation);
         }
 
         private PlanDocumentMutation Create(
@@ -103,18 +49,9 @@ namespace RNAssistant.Core.Services
             string markdown,
             string status,
             Action beforeMutation,
-            string creationId,
-            bool startNew)
+            string creationId)
         {
             RequireSession(session);
-            if (!startNew && !string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId))
-            {
-                return PlanDocumentMutation.Fail(
-                    "This chat already has an active plan document; update it instead.",
-                    "plan_already_exists",
-                    false);
-            }
-
             var planId = RequiredTrimmed(creationId, "runtimePlanId", 128);
             var normalizedTitle = RequiredTrimmed(title, "title", 200);
             var exactMarkdown = RequiredMarkdown(markdown);
@@ -325,7 +262,7 @@ namespace RNAssistant.Core.Services
             {
                 session.Artifacts = session.Artifacts ?? new List<ChatArtifact>();
                 session.Artifacts.Add(tombstone);
-                session.ActivePlanDocumentArtifactId = null;
+                if (session.ActivePlanDocumentArtifactId == current.Id) session.ActivePlanDocumentArtifactId = null;
             });
 
             return PlanDocumentMutation.OkRemoval(
@@ -473,17 +410,10 @@ namespace RNAssistant.Core.Services
 
         private static ChatArtifact FindCurrent(ChatSession session, string planId)
         {
-            var current = FindActive(session);
-            return current != null && string.Equals(PlanId(current), planId, StringComparison.OrdinalIgnoreCase)
-                ? current
-                : null;
-        }
-
-        private static ChatArtifact FindActive(ChatSession session)
-        {
-            return UniqueArtifacts(session).FirstOrDefault(item =>
-                string.Equals(item.Id, session.ActivePlanDocumentArtifactId, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(item.Kind, ChatArtifactKinds.PlanDocument, StringComparison.OrdinalIgnoreCase));
+            // Publication hydrates this exact lineage from its owning authority.
+            // Selection is UI state and must not retarget a multi-Plan package.
+            var latest = Revisions(session, planId).OrderByDescending(item => item.Revision).Take(2).ToArray();
+            return latest.Length > 0 && (latest.Length == 1 || latest[0].Revision > latest[1].Revision) ? latest[0] : null;
         }
 
         private static IEnumerable<ChatArtifact> Revisions(ChatSession session, string planId)

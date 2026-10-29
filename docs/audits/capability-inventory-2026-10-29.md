@@ -10,17 +10,17 @@ Owner: Core/Office catalogs, Application Workspace; проверка — Harness
 
 | Каталог | До | Сейчас | Разница |
 |---|---:|---:|---:|
-| Excel | 60 | 54 | -6 |
-| Word | 52 | 46 | -6 |
-| PowerPoint | 52 | 46 | -6 |
-| Outlook | 42 | 41 | -1 |
-| Workspace | 18 | 18 | +0 |
-| Объединение всех встроенных ID | 91 | 78 | −13 |
+| Excel | 60 | 47 | −13 |
+| Word | 52 | 39 | −13 |
+| PowerPoint | 52 | 39 | −13 |
+| Outlook | 42 | 34 | −8 |
+| Workspace | 18 | 15 | −3 |
+| Объединение всех встроенных ID | 91 | 71 | −20 |
 
 Office-строки показаны с выключенным `EnableAgentJavaScript` (default). Включение
 добавляет один `js.run` на каждом Office host. Доступный browser добавляет
 `web.verify`; source workspace зарегистрированного plugin — `plugins.check/apply`.
-Все три условных семейства уже учтены в объединении **78**, складывать строки
+Все три условных семейства уже учтены в объединении **71**, складывать строки
 таблицы нельзя. Начальный `CallableToolProfile.Core()` содержит **10** доступных
 Core tools; lifecycle и специализированные tools подключаются через schema/skill.
 Mode, policy, host и exact binding продолжают ограничивать выполнение.
@@ -45,7 +45,11 @@ Workspace — 4; общие определения входят в нескол�
 
 Дополнительно появился `core.replace`: это counted literal/regex replacement,
 а прежний `files.replace` был полной перезаписью и перешёл в `core.write`.
-Итог: **91 − 20 + 6 + 1 = 78** (на 13, примерно 14% меньше).
+Первый этап: **91 − 20 + 6 + 1 = 78**. Продолжение удалило ещё 7 public ID:
+`plan.document.save/restore/delete`, `prompts.save`, `skills.reference.upsert/delete`,
+`html.data.refresh`. Итог: **71**, на 20 (22%) меньше исходных 91. Plan, prompt и
+reference source теперь используют общие tools и прежних владельцев. Task List
+остаётся типизированным; HTML live bindings обновляются при открытии handle.
 Ещё **66** tools только переименованы по dotted convention; **5** ID не менялись.
 Все 86 прежних заменённых имён отсутствуют в публичном каталоге; это не 86 удалённых возможностей.
 В [карте миграции](../tool-name-migration.json) нет unmapped старых public tools.
@@ -72,15 +76,10 @@ Workspace — 4; общие определения входят в нескол�
 
 ## Что имеет смысл сократить дальше
 
-1. **`plan.document.save/restore/delete` → общий ресурс Plan**: потенциально ещё −3 ID.
-   Owner — существующий WorkspacePlanService/Office Plan owner. Сначала semantic
-   resolution, наблюдение текущего тела, история, startNew и policy exception для
-   режима Plan; затем переключить consumers и удалить старые registrations.
-   Простая переадресация на файловую запись потеряет эту семантику. Это предложение, не выполненное сокращение.
-2. **Приватный `DomainOperation` bridge → typed owner commands**: меньше строковой
-   маршрутизации и приватных argument dictionaries, без изменения 78 публичных ID.
+1. **Приватный `DomainOperation` bridge → typed owner commands**: меньше строковой
+   маршрутизации и приватных argument dictionaries, без изменения 71 публичного ID.
    Removal gate уже зафиксирован в [MIGRATION_MAP](../stabilization/MIGRATION_MAP.md#universal-text-tools--2026-10-28).
-3. **Закончить owner/integration fixtures** со старыми private/public ожиданиями.
+2. **Закончить owner/integration fixtures** со старыми private/public ожиданиями.
    Не удалять проверки unknown, journal или recovery ради зелёного полного Harness;
    текущий объём — в [BACKLOG](../stabilization/BACKLOG.md#интеграционные-fixtures-после-перехода-на-core-tools--2026-10-28).
 
@@ -118,16 +117,14 @@ CodeOnly UserForms и качество инструкций на Qwen/GLM/DeepSe
 |---|---:|---|
 | core | 10 | `core.ask`, `core.find`, `core.patch`, `core.read`, `core.replace`, `core.search`, `core.skills.load`, `core.tools.read`, `core.tools.search`, `core.write` |
 | excel | 16 | `excel.cells.find`, `excel.cells.replace`, `excel.chart.delete`, `excel.chart.upsert`, `excel.chat.chart.create`, `excel.columns.summarize`, `excel.inspect`, `excel.range.clear`, `excel.range.filter`, `excel.range.format`, `excel.range.sort`, `excel.range.write`, `excel.rows.columns.delete`, `excel.sheet.add`, `excel.sheet.rename`, `excel.table.add` |
-| html | 7 | `html.assets.import`, `html.assets.list`, `html.assets.publish`, `html.data.bind`, `html.data.freeze`, `html.data.refresh`, `html.data.write` |
+| html | 6 | `html.assets.import`, `html.assets.list`, `html.assets.publish`, `html.data.bind`, `html.data.freeze`, `html.data.write` |
 | js | 1 | `js.run` |
 | office | 1 | `office.macro.run` |
 | outlook | 4 | `outlook.archive.index`, `outlook.draft.create`, `outlook.mail.search`, `outlook.mail.update` |
-| plan | 3 | `plan.document.delete`, `plan.document.restore`, `plan.document.save` |
 | plugins | 2 | `plugins.apply`, `plugins.check` |
 | powerpoint | 8 | `powerpoint.object.add`, `powerpoint.objects.list`, `powerpoint.slide.add`, `powerpoint.slide.duplicate`, `powerpoint.slide.move`, `powerpoint.text.replace`, `powerpoint.text.search`, `powerpoint.text.set` |
-| prompts | 1 | `prompts.save` |
 | resources | 9 | `resources.copy`, `resources.delete`, `resources.derive`, `resources.mapping.publish`, `resources.move`, `resources.outline`, `resources.restore`, `resources.schema.draft`, `resources.schema.publish` |
-| skills | 4 | `skills.delete`, `skills.reference.delete`, `skills.reference.upsert`, `skills.upsert` |
+| skills | 2 | `skills.delete`, `skills.upsert` |
 | task | 1 | `task.list.set` |
 | tools | 2 | `tools.delete`, `tools.upsert` |
 | web | 1 | `web.verify` |
@@ -151,3 +148,12 @@ CodeOnly UserForms и качество инструкций на Qwen/GLM/DeepSe
 - `skills.workspace.files`
 - `skills.workspace.plugin.authoring`
 - `skills.workspace.web.verify.repair`
+
+Продолжение подсчёта: `--capability-inventory /tmp/rna-capabilities-final.json`
+подтвердило 71 tool / 16 skills на текущем diff, включая все условные семейства.
+`resources.outline` и `html.assets.list` сохранены: первое даёт координаты/навигацию,
+второе — состав asset package, это не эквивалент общего поиска текста.
+Library группирует только по первому сегменту, полный ID остаётся видимым.
+Карта миграции обновляет только structured dependencies по явному запуску;
+старые arguments и bodies требуют ручного пересмотра. Для бывшего refresh
+`core.read` означает новое чтение; отдельной операции refresh больше нет.

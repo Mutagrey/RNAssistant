@@ -140,7 +140,7 @@ namespace RNAssistant.Core.Services
         public static void RemovePlanRuntimeState(string name, JToken data)
         {
             var root = data as JObject;
-            if (!PlanDocumentToolCatalog.Owns(name) || root == null) return;
+            if (root == null || !PlanDocumentToolCatalog.Owns(name) && !(ResourceMutationToolCatalog.Owns(name) && PlanSourceDocument.IsTarget((string)root["target"]))) return;
             if (root["revision"] != null && root["version"] == null) root["version"] = root["revision"].DeepClone();
             foreach (var key in new[] { "planId", "artifactId", "revision", "restoredFromArtifactId", "referencingMessageIds" }) root.Remove(key);
         }
@@ -164,7 +164,7 @@ namespace RNAssistant.Core.Services
         {
             if (!IsResourceEvidence(name) && !IsWorkspaceMutation(name)) return GenericForModel(name, source);
             var data = name == ResourceMutationToolCatalog.Patch ? ProjectPatchResult(source.Data) : IsWorkspaceMutation(name)
-                ? SelectFields(source.Data, "target", "path", "destination", "name", "moduleName", "newModuleName", "componentType", "vbeNormalized", "changed", "restored", "moved", "deleted", "code", "retryable")
+                ? SelectFields(source.Data, "target", "path", "destination", "name", "moduleName", "newModuleName", "componentType", "vbeNormalized", "version", "status", "removed", "removedRevisions", "changed", "restored", "moved", "deleted", "code", "retryable")
                 : ProjectResourceData(name, source.Data);
             if (IsResourceEvidence(name)) SanitizeResourceEnvelope(data, source.Result.Resources);
             var result = new ToolResult(source.Result.Status,

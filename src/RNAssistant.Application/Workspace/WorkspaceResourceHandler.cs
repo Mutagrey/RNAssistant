@@ -42,7 +42,7 @@ namespace RNAssistant.Runtime
             try
             {
                 var type = Value(context, "type");
-                if (string.IsNullOrEmpty(type)) type = "file";
+                if (string.IsNullOrEmpty(type)) type = !_find && PlanSourceDocument.IsTarget(Value(context, "target")) ? "plan" : "file";
                 if (type == "office")
                 {
                     if (_office == null) throw Error("No Office document is bound to this run.", "RESOURCE_PROVIDER_UNAVAILABLE");
@@ -197,8 +197,8 @@ namespace RNAssistant.Runtime
                 {
                     var versionText = Value(context, "version");
                     read = _plans.Read(target, string.IsNullOrEmpty(versionText) ? (int?)null : int.Parse(versionText, System.Globalization.CultureInfo.InvariantCulture),
-                        _maximumTextReadCharacters, startLine, lineCount, startChar, charCount);
-                    target = read.Result.Resource.Title;
+                        _maximumTextReadCharacters, startLine, lineCount, startChar, charCount, Value(context, "representation"));
+                    target = PlanSourceDocument.Target(read.Result.Resource.Title);
                 }
                 else
                 {

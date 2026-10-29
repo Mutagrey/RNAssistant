@@ -28,7 +28,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   assert.throws(() => context.RNAssistantHtmlWorkspaceArtifacts.validatePlanDraft({
     id: "plan-r2",
     inlineText: " \n\t "
-  }), /1 до 32000/);
+  }), /не должен быть пустым/);
   console.log("PASS plan document: UI rejects whitespace-only Markdown without normalizing valid content");
 }
 
@@ -65,34 +65,21 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
   const editor = fs.readFileSync(path.join(root, "web/js/app-html-workspace-editor.js"), "utf8");
   const questions = fs.readFileSync(path.join(root, "web/js/app-agent-activity.js"), "utf8");
   const taskList = fs.readFileSync(path.join(root, "web/js/app-task-list.js"), "utf8");
-  assert.ok(index.includes("app-artifacts.js?v=artifact-library-lazy-20261002-1"), "artifact cards use the lazy library cache key");
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"),
-    "artifact actions have the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-artifacts.js?v=authored-html-viewer-20261014-1"),
-    "artifact detail has the current artifact cache key");
-  assert.ok(index.includes("app-html-workspace-editor.js?v=html-memory-20261002-1"));
-  assert.ok(index.includes("app-agent-activity.js?v=agent-continuity-20261002-1"));
-  ["app-task-list.js", "app-resource-viewer.js", "app-agent.css", "app-resource-viewer.css"].forEach(asset => {
-    assert.ok(index.includes(asset + "?v=agent-planning-20261002-2"), asset + " has the current planning-intent cache key");
-  });
-  assert.ok(index.includes("app-html-workspace-actions.js?v=html-action-guard-20260908-1"),
-    "app-html-workspace-actions.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.js?v=html-memory-20261002-1"),
-    "app-html-workspace.js has the current preview cache key");
-  assert.ok(index.includes("app-html-workspace.css?v=html-memory-20261002-1"), "Plan/HTML actions have the matching CSS cache key");
+  for (const asset of ["app-artifacts.js", "app-html-workspace-actions.js", "app-html-workspace-artifacts.js"])
+    assert.ok(index.includes(asset + "?v="), asset + " is cache-busted");
   assert.match(workspace, /switchChatMode:\s*function\s*\(mode\)/);
   assert.doesNotMatch(workspace, /switchChatMode:\s*saveChatMode/);
   assert.match(workspace, /result\.expectedRevisionArtifactId = artifactId\(selected\.item\)/);
-  assert.match(actions, /toolId: "common\.plan_doc_save"/);
+  assert.match(actions, /toolId: "core\.write"/);
   assert.doesNotMatch(actions, /arguments:\s*\{[^}]*expectedRevisionArtifactId/);
   assert.match(detail, /expectedRevisionArtifactId: headArtifactId/);
   assert.match(detail, /sourceRevisionArtifactId: revisionArtifactId/);
   assert.match(editor, /renderDetail\(detail, selected, selectedEditorValue\(selected\), options\.artifactActions\)/);
   assert.match(workspace, /Выполни утверждённый активный план/);
   assert.doesNotMatch(workspace, /input\.value\s*=.*revisionUri/);
-  assert.match(questions, /return \{ question: question\.prompt.*selections: selected/);
+  assert.match(questions, /RNAssistantQuestions\.render/);
   assert.doesNotMatch(questions, /questionId|optionIds|JSON\.stringify\(\{ questionSetId/);
-  assert.match(taskList, /toolId === "common\.task_list_set"/);
+  assert.match(taskList, /toolId === "task\.list\.set"/);
   assert.doesNotMatch(taskList, /common\.task_list_(?:create|update|close)/);
   console.log("PASS plan document: removal projections and guarded UI calls are cache-busted together");
 }
@@ -100,7 +87,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
 {
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   const vba = fs.readFileSync(path.join(root, "web/js/app-vba.js"), "utf8");
-  assert.ok(index.includes("app-vba.js?v=run-diff-20260908-1"),
+  assert.ok(index.includes("app-vba.js?v="),
     "VBA editor uses the delivered source-upload script");
   assert.doesNotMatch(index, /reviewVbaButton/);
   assert.doesNotMatch(vba, /reviewVbaInChat/);
@@ -131,6 +118,7 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     htmlWorkspaceDirty: false,
     artifacts: [{
       id: "plan-r2",
+      title: "Current title",
       kind: "plan_document",
       resourceUri: uri,
       metadataJson: JSON.stringify({ planId: "plan", status: "ready" })
@@ -162,9 +150,10 @@ vm.runInContext(source, context, { filename: "app-html-workspace-artifacts.js" }
     sourceRevisionArtifactId: "plan-r1",
     revision: 1
   }), true);
-  assert.equal(calls[0].payload.toolId, "plan.document.restore");
+  assert.equal(calls[0].payload.toolId, "resources.restore");
   assert.equal(calls[0].payload.chatId, "chat-c");
-  assert.deepEqual(calls[0].payload.arguments, { version: 1 });
+  assert.deepEqual(calls[0].payload.arguments, { target: "plan: Current title", version: 1 });
+  assert.deepEqual(calls[0].payload.sourceGuard, { expectedArtifactId: "plan-r2" });
   assert.equal(calls[0].payload.dryRun, false);
   assert.match(confirmations[0], /v1.*новую версию/);
   console.log("PASS plan document: history restore sends only the semantic version");

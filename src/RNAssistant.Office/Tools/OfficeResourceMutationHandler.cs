@@ -38,7 +38,7 @@ namespace RNAssistant.Office.Tools
         }
     }
 
-    internal sealed class OfficeResourceMutationHandler : IPreparableToolHandler, IManagedMutationToolHandler
+    internal sealed class OfficeResourceMutationHandler : IPreparableToolHandler, IPlanSourceToolHandler
     {
         private readonly string _id;
         private readonly ResourceGatewayService _gateway;
@@ -49,10 +49,12 @@ namespace RNAssistant.Office.Tools
         private readonly AuthoredFileService _files;
         private readonly MarkdownDocumentService _markdown;
         private readonly ResourceSearchObservation _search;
+        private readonly PromptSettingsService _prompts;
+        private readonly SkillAuthoringService _skills;
         internal OfficeResourceMutationHandler(string id, ResourceGatewayService gateway, ChatSession session,
             VbaToolExecutor vba, HostRuntime host, HtmlWorkspaceToolService html, AuthoredFileService files,
-            MarkdownDocumentService markdown, ResourceSearchObservation search)
-        { _id = id; _gateway = gateway; _session = session; _vba = vba; _host = host; _html = html; _files = files; _markdown = markdown; _search = search; }
+            MarkdownDocumentService markdown, ResourceSearchObservation search, PromptSettingsService prompts = null, SkillAuthoringService skills = null)
+        { _id = id; _gateway = gateway; _session = session; _vba = vba; _host = host; _html = html; _files = files; _markdown = markdown; _search = search; _prompts = prompts; _skills = skills; }
 
         public async Task<ToolPreparationResult> PrepareAsync(ToolHandlerContext context, CancellationToken token)
         {
@@ -64,6 +66,15 @@ namespace RNAssistant.Office.Tools
                     var prepared = new ResourceMutationPrepared { ToolId = _id, Target = target,
                         ArgumentsHash = TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson),
                         RoutingArguments = new Dictionary<string, object>() };
+                    if (PlanSourceDocument.IsTarget(target))
+                    {
+                        var result = await PlanOwner().PrepareAsync(context, token).ConfigureAwait(false);
+                        if (result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok) return result;
+                        var plan = PlanResourcePrepared.Read(result.PreparedStateJson);
+                        prepared.Operation = plan.Operation;
+                        prepared.OwnerState = result.PreparedStateJson;
+                        return new ToolPreparationResult(result.Result, JsonConvert.SerializeObject(prepared), patchTarget: result.PatchTarget);
+                    }
                     ResourceIntentTarget selected = null;
                     try { selected = ResolveTarget(target); }
                     catch (ResourceRequestException ex) when (_id == ResourceMutationToolCatalog.Write &&
@@ -135,6 +146,9 @@ namespace RNAssistant.Office.Tools
                     if (prepared.ToolId != _id || prepared.Target != Value(context.Arguments, "target") ||
                         prepared.ArgumentsHash != TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson))
                         throw new InvalidDataException("Prepared resource intent does not match this call.");
+                    if (PlanDocumentToolCatalog.Owns(prepared.Operation))
+                        return await PlanOwner().ExecuteAsync(new ToolHandlerContext(context.Execution, context.Arguments,
+                            prepared.OwnerState, context.MarkDispatchPossible, result => context.Complete(result)), token).ConfigureAwait(false);
                     ResourceReadResult source = null;
                     if (prepared.Source != null)
                     {
@@ -179,6 +193,23 @@ namespace RNAssistant.Office.Tools
             { return new ToolHandlerResult(context.MayHaveDispatched ? Result.Unknown(ex.Message) : Error(ex),
                 context.MayHaveDispatched ? ToolEffectEvidence.Unknown : ToolEffectEvidence.None,
                 recovery: context.MayHaveDispatched ? null : Recovery(context, ex)); }
+        }
+
+        private PlanResourceToolHandler PlanOwner()
+        {
+            var authority = _gateway.Authority;
+            var owner = new RNAssistant.Core.Storage.DocumentArtifactStore(authority.Store, authority.Revisions, authority.Payloads);
+            return new PlanResourceToolHandler(_session, owner,
+                target => PlanResourceToolHandler.ResolveCurrent(owner, _session, target), (context, source, whole) =>
+                {
+                    var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
+                    if (accepted != null) PlanResourceToolHandler.RequireObservation(context, source, whole,
+                        accepted.ResourceEvidence ?? new List<ResourceEvidence>());
+                    else if (!_session.Artifacts.Any(artifact => artifact.Kind == ChatArtifactKinds.PlanDocument &&
+                        ChatResourceUri.CreateArtifactRevision(_session, artifact).Uri == source.Resource.Reference.Uri &&
+                        ChatResourceUri.CreateArtifactRevision(_session, artifact).Revision == source.Resource.Reference.Revision))
+                        throw new ResourceRequestException("The editor's Plan revision is stale. Read the current Plan before saving.", "source_changed", false);
+                });
         }
 
         private ResourceIdentity PatchEffectIdentity(ResourceIntentTarget selected, ResourceRef source)
@@ -320,6 +351,36 @@ namespace RNAssistant.Office.Tools
                     _id == ResourceMutationToolCatalog.Delete ? HtmlWorkspaceToolCatalog.DeleteToolId : null;
                 if (_id == ResourceMutationToolCatalog.Delete) args["target"] = args["path"];
             }
+            else if (selected?.Descriptor.Kind == "prompt")
+            {
+                if (_prompts == null || !_prompts.CanUse) throw new InvalidDataException("Prompt settings are unavailable.");
+                if (_id != ResourceMutationToolCatalog.Write && _id != ResourceMutationToolCatalog.Patch && _id != ResourceMutationToolCatalog.Replace)
+                    throw new InvalidDataException("Prompt templates support source edits only.");
+                prepared.Operation = PromptToolCatalog.SaveToolId;
+                args["promptKey"] = ResourceUri.Parse(selected.Reference.Uri).Segments[1];
+            }
+            else if (selected?.Descriptor.Kind == "skill-reference" || selected == null && target.StartsWith("skill reference: ", StringComparison.Ordinal))
+            {
+                if (_skills == null || !_skills.CanUse) throw new InvalidDataException("Skill authoring is unavailable.");
+                string skillId, path;
+                if (selected != null)
+                {
+                    var address = ResourceUri.Parse(selected.Reference.Uri);
+                    skillId = address.Segments[1]; path = "references/" + address.Segments[3];
+                }
+                else
+                {
+                    var parts = target.Substring(17).Split(new[] { " / " }, StringSplitOptions.None);
+                    if (parts.Length != 2) throw new InvalidDataException("Use skill reference: <custom skill ID> / references/<name>.md.");
+                    skillId = parts[0]; path = parts[1];
+                    var skill = ResolveTarget("skill: " + skillId);
+                    if (skill.Descriptor.Kind != "skill") throw new InvalidDataException("An existing custom skill is required.");
+                }
+                prepared.Operation = _id == ResourceMutationToolCatalog.Delete ? SkillAuthoringCatalog.ReferenceDeleteToolId :
+                    _id == ResourceMutationToolCatalog.Write || _id == ResourceMutationToolCatalog.Patch || _id == ResourceMutationToolCatalog.Replace ? SkillAuthoringCatalog.ReferenceUpsertToolId : null;
+                args["id"] = skillId; args["referencePath"] = path;
+                if (_id != ResourceMutationToolCatalog.Delete) args["mode"] = selected == null ? "createOnly" : "updateOnly";
+            }
             else if (selected?.Descriptor.Kind == ChatArtifactKinds.Markdown || target.StartsWith("note: ", StringComparison.Ordinal))
             {
                 prepared.Operation = _id == ResourceMutationToolCatalog.Write || _id == ResourceMutationToolCatalog.Patch || _id == ResourceMutationToolCatalog.Replace
@@ -368,10 +429,12 @@ namespace RNAssistant.Office.Tools
                 plan = SourcePatch(before, prepared.Source, context, token);
             else if (_id == ResourceMutationToolCatalog.Replace)
                 plan = TextEditPlan.Replace(before, Value(context.Arguments, "query"), Value(context.Arguments, "replacement"), Mode(context), Flag(context, "matchCase"), Count(context), token);
-            if (plan != null) { content = plan.Text; args["resolvedTextEdits"] = plan.Edits; }
+            if (plan != null) { content = plan.Text; if (!PromptToolCatalog.Owns(prepared.Operation) && !SkillAuthoringCatalog.Owns(prepared.Operation)) args["resolvedTextEdits"] = plan.Edits; }
             if (content != null)
             {
-                args["content"] = content; args["code"] = content; args["markdown"] = content;
+                if (PromptToolCatalog.Owns(prepared.Operation)) args["value"] = content;
+                else if (prepared.Operation == SkillAuthoringCatalog.ReferenceUpsertToolId) args["referenceMarkdown"] = content;
+                else { args["content"] = content; args["code"] = content; args["markdown"] = content; }
             }
             return args;
         }
@@ -386,6 +449,8 @@ namespace RNAssistant.Office.Tools
         private IToolHandler Owner(ResourceMutationPrepared prepared)
         {
             var operation = prepared.Operation;
+            if (PromptToolCatalog.Owns(operation)) return new PromptSaveToolHandler(_prompts, prepared.SourceHash);
+            if (SkillAuthoringCatalog.Owns(operation)) return new SkillAuthoringToolHandler(operation, _skills, prepared.SourceHash);
             if (VbaToolCatalog.Owns(operation)) return new VbaToolHandler(operation, _vba, _host, _session, prepared.OwnerSourceHash);
             if (HtmlWorkspaceToolCatalog.Owns(operation)) return new HtmlWorkspaceToolHandler(operation, _session, _html);
             if (AuthoredFileToolCatalog.Owns(operation)) return new AuthoredFileToolHandler(_files, _session);

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Runtime
@@ -19,7 +20,7 @@ namespace RNAssistant.Runtime
             _officeToolIds = new HashSet<string>(officeToolIds ?? Enumerable.Empty<string>(), System.StringComparer.Ordinal); }
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
         {
-            _current = PlanDocumentToolCatalog.Owns(context.Call.Name) ? (IToolMutationObserver)_plans :
+            _current = ResourceMutationToolCatalog.Owns(context.Call.Name) && arguments.ContainsKey("target") && PlanSourceDocument.IsTarget(System.Convert.ToString(arguments["target"])) ? (IToolMutationObserver)_plans :
                 _office != null && _officeToolIds.Contains(context.Call.Name) &&
                     (!ResourceMutationToolCatalog.Owns(context.Call.Name) || arguments.ContainsKey("target") && System.Convert.ToString(arguments["target"]).Contains(": ")) ? _office : _tasks;
             return _current.Prepare(context, arguments, preparedStateJson);

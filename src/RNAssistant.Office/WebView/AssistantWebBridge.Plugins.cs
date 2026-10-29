@@ -77,7 +77,8 @@ namespace RNAssistant.Office.WebView
                             presentationRequest.WorkspaceId, presentationRequest.SessionId);
                         var presentationPayloads = new ChatBlobStore(_controller.StoragePaths);
                         var workspaceChanges = new WorkspaceToolChangesProjection(new WorkspaceFileService(_controller.StoragePaths), presentationPayloads,
-                            _controller.ReadRetainedPatchSource, _controller.ReadRetainedPatchFragments);
+                            (reference, maximum) => _controller.ReadRetainedPatchSource(reference, maximum, presentationSession.WorkspaceId),
+                            (reference, after, patch) => _controller.ReadRetainedPatchFragments(reference, after, patch, presentationSession.WorkspaceId));
                         var presentation = new ToolResultPresentationService(call => workspaceChanges.Read(presentationSession,
                             presentationRequest.RunId, call), presentationPayloads)
                             .Read(presentationSession, presentationRequest.RunId, presentationRequest.ToolCallId);

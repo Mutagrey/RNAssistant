@@ -89,9 +89,9 @@ namespace RNAssistant.Harness
             AssertEqual(0, preparable.PrepareCalls, "deny precedes preparation even with forged confirmation");
             AssertEqual(0, preparable.ExecuteCalls, "deny precedes dispatch");
             var fake = new RuntimeTestHandler();
-            var id = PlanDocumentToolCatalog.SaveToolId;
+            var id = ResourceMutationToolCatalog.Write;
             registry.Register(new ToolRegistration(new ToolDescriptor(id, "fake", RuntimeEmptySchema),
-                Policy(ToolEffect.Write, ToolVerification.Tool), PlanDocumentToolHandler.BindingFor(id), "fake"), fake);
+                Policy(ToolEffect.Write, ToolVerification.Tool), ResourceMutationToolCatalog.BindingFor(id), "fake"), fake);
             call = new ToolCall("fakecall", id, "{}");
             await runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 5), CancellationToken.None);
             AssertEqual(0, fake.Calls, "a forged planning binding cannot use the exception");
@@ -103,9 +103,9 @@ namespace RNAssistant.Harness
             foreach (var automatic in new[] { false, true })
             {
                 var policy = ConversationRunPolicy.For("plan", permission, automatic);
-                var entries = policy.SelectTools(PlanDocumentToolCatalog.GetTools().Concat(TaskListToolCatalog.GetTools()));
-                AssertEqual(2, entries.Count, "only save and task-list update are planning exceptions");
-                AssertTrue(entries.All(entry => !entry.RequiresConfirmation), "planning exceptions need no approval");
+                var entries = policy.SelectTools(ResourceMutationToolCatalog.GetTools().Concat(TaskListToolCatalog.GetTools()));
+                AssertEqual(3, entries.Count, "only source tools with target-gated Plan access and task-list update are exposed");
+                AssertTrue(!entries.Single(entry => entry.Id == TaskListToolCatalog.SetToolId).RequiresConfirmation, "task list needs no approval; generic source tools remain conditional on their targets");
                 var code = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent", "plan" }, executesCode: true);
                 AssertTrue(!policy.Allows("web.verify", code, new ToolBinding("browser")), "Plan cannot execute read-producing code");
                 AssertTrue(!ConversationRunPolicy.For("agent", MutationPolicy.Deny, automatic).Allows("web.verify", code, new ToolBinding("browser")), "Deny cannot execute read-producing code");

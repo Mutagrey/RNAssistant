@@ -12,15 +12,16 @@ namespace RNAssistant.Office.Tools
     {
         private readonly string _toolId;
         private readonly SkillAuthoringService _service;
+        private readonly string _sourceHash;
 
         internal SkillAuthoringToolHandler(
-            string toolId, SkillAuthoringService service)
+            string toolId, SkillAuthoringService service, string sourceHash = null)
         {
             if (!SkillAuthoringCatalog.Owns(toolId))
                 throw new ArgumentException(
                     "An exact skill authoring id is required.",
                     nameof(toolId));
-            _toolId = toolId;
+            _toolId = toolId; _sourceHash = sourceHash;
             _service = service ?? throw new ArgumentNullException(
                 nameof(service));
         }
@@ -52,7 +53,7 @@ namespace RNAssistant.Office.Tools
         {
             cancellationToken.ThrowIfCancellationRequested();
             var preparation = _service.PrepareMutation(
-                _toolId, context.Arguments);
+                _toolId, context.Arguments, _sourceHash);
             return Task.FromResult(new ToolPreparationResult(
                 Result(preparation.Outcome),
                 preparation.Outcome.Status ==

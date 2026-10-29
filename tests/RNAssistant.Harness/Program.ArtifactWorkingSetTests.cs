@@ -33,7 +33,7 @@ namespace RNAssistant.Harness
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(paths));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var a = NewSession(adapter);
-                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                AssertTrue(executor.ExecuteManual(PlanWriteCommand(
                     "title", "Lost metadata Plan", "markdown", "# Exact retained body", "status", "draft"),
                     tools, new AppSettings(), false, false, a).Success, "publish recovery subject");
                 var artifact = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
@@ -132,7 +132,7 @@ namespace RNAssistant.Harness
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, new ResourceMutationJournal(FixturePaths.Value));
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var a = NewSession(adapter);
-                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                AssertTrue(executor.ExecuteManual(PlanWriteCommand(
                     "title", "Working set Plan", "markdown", "# First body", "status", "draft"),
                     tools, new AppSettings(), false, false, a).Success, "create shared Plan");
                 var first = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
@@ -147,7 +147,7 @@ namespace RNAssistant.Harness
                 ChatResourceReferenceService.RestoreActivePlanDocumentFromMessages(b);
                 ChatResourceReferenceService.PruneUnreachable(b);
                 AssertEqual(first.Id, b.ActivePlanDocumentArtifactId, "explicit selection survives history editing without source messages");
-                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                AssertTrue(executor.ExecuteManual(PlanWriteCommand(
                     "title", "Working set Plan", "markdown", "# Continued in B", "status", "ready"),
                     tools, new AppSettings(), false, false, b).Success, "selected Plan can be continued through native runtime");
                 var current = b.Artifacts.Single(item => item.Id == b.ActivePlanDocumentArtifactId);
@@ -190,12 +190,12 @@ namespace RNAssistant.Harness
                 var links = new ArtifactWorkingSetService(chats.DocumentArtifacts, journal);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var a = NewSession(adapter);
-                executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId, "title", "Race Plan", "markdown", "# First", "status", "draft"),
+                executor.ExecuteManual(PlanWriteCommand( "title", "Race Plan", "markdown", "# First", "status", "draft"),
                     tools, new AppSettings(), false, false, a);
                 var b = NewSession(adapter);
                 b.DocumentAuthorityId = a.DocumentAuthorityId;
                 var first = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Single();
-                executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId, "title", "Race Plan", "markdown", "# Second", "status", "ready"),
+                executor.ExecuteManual(PlanWriteCommand( "title", "Race Plan", "markdown", "# Second", "status", "ready"),
                     tools, new AppSettings(), false, false, a);
                 RuntimeThrows<InvalidOperationException>(() => links.Change(b, LinkRequest(b, first.ResourceUri, false), chats.Save));
                 AssertEqual(0, b.Artifacts.Count, "stale picker cannot silently choose a newer Plan");
@@ -233,11 +233,11 @@ namespace RNAssistant.Harness
                 var a = NewSession(adapter);
                 executor.BindResourceAuthority(a);
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                AssertTrue(executor.ExecuteManual(PlanWriteCommand(
                     "title", "Delete plan", "markdown", "# First", "status", "draft"),
                     tools, new AppSettings(), false, false, a).Success, "publish Plan");
                 var oldPlan = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
-                AssertTrue(executor.ExecuteManual(Command(PlanDocumentToolCatalog.SaveToolId,
+                AssertTrue(executor.ExecuteManual(PlanWriteCommand(
                     "title", "Delete plan", "markdown", "# Second", "status", "draft"),
                     tools, new AppSettings(), false, false, a).Success, "revise Plan");
                 var plan = a.Artifacts.Single(item => item.Id == a.ActivePlanDocumentArtifactId);
@@ -292,9 +292,13 @@ namespace RNAssistant.Harness
                     {
                         var command = artifact.Kind == ChatArtifactKinds.HtmlWorkspace
                             ? Command("html.source.write", "path", "deleted.css", "content", "body{}")
-                            : Command(PlanDocumentToolCatalog.SaveToolId, "title", "Resurrection", "markdown", "# Refused", "status", "draft");
+                            : PlanWriteCommand("title", artifact.Title, "markdown", "# Refused", "status", "draft");
+                        // The editor pins the displayed revision. A new semantic title is an
+                        // intentional create, not an update of the formerly selected Plan.
+                        if (artifact.Kind == ChatArtifactKinds.PlanDocument) command.ExpectedArtifactId = artifact.Id;
                         AssertTrue(!executor.ExecuteManual(command, tools, new AppSettings(), false, false, b).Success,
                             "stale writer cannot recreate a removed logical resource");
+                        AssertEqual(generation, authority.Capture(scope).Generation, "stale editor cannot republish removal");
                     }
                     AssertTrue(chats.DocumentArtifacts.Read(a, exact, false) != null, "historical record remains exact");
                     AssertTrue(!chats.DocumentArtifacts.InspectCurrentMetadata(a).Items.Any(item => item.Id == artifact.Id), "model discovery omits removal");

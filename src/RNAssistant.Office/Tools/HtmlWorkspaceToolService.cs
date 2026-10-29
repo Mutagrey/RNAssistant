@@ -111,14 +111,6 @@ namespace RNAssistant.Office.Tools
                             cancellationToken), cancellationToken);
                 }
                 if (string.Equals(toolId,
-                    HtmlWorkspaceToolCatalog.RefreshDataToolId,
-                    StringComparison.Ordinal))
-                {
-                    return WithAutomaticPreflight(session,
-                        RefreshDataSources(session, arguments, mark,
-                            cancellationToken), cancellationToken);
-                }
-                if (string.Equals(toolId,
                     HtmlWorkspaceToolCatalog.FreezeDataToolId,
                     StringComparison.Ordinal))
                 {

@@ -1256,8 +1256,8 @@ reader are removed without alias. Old accepted calls fail explicit model-history
 validation, without automatic conversion or deletion of user history.
 The Prompts UI uses the same publication through the source transport below.
 
-The exact Agent-only native `common.prompts_save` accepts one enumerated `promptKey`
-plus its complete `value` and requires confirmation; role values are validated as
+Prompt edits use Agent-only `core.write/patch/replace` with an exact discovered
+`prompt: <key>` target and require confirmation; role values are validated as
 `developer`, `system`, or `user`. Preparation binds that field to its current hash;
 confirmation rejects changed pre-state before dispatch, preserves unrelated settings,
 marks the storage boundary, then verifies the supplied value by read-back. An already
@@ -1619,10 +1619,11 @@ non-dispatch are runtime controls/evidence,
 not inferred from prose or `data.code`. Known outcome/evidence is saved before
 optional projection; projection failure cannot erase a known effect or authorize retry.
 
-R61/11O4 splits that family into exact core `common.skills_upsert/delete` and
-reference `common.skills_reference_upsert/delete` intents; mixed core/reference
-arguments are not replayable. Prompt schema 21 was that authoring boundary; current
-prompt schema is 29. Existing custom text and older markers are preserved until
+R61/11O4 separated package-core and reference intents. Public package authoring now
+uses `skills.upsert/delete`; reference edits use shared source tools through the
+same owner. Mixed core/reference arguments are not replayable. Prompt schema 21
+was the original authoring boundary; the current source-contract schema is 58.
+Existing custom text and older markers are preserved until
 explicit review/reset. Built-in prompt authoring requires only model call
 name/arguments and assigns IDs to runtime (R31); matching `status=ok` alone does not
 prove that a document changed.

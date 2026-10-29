@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Общие source tools — 2026-10-29
+
+Owner: Core Plan/source owners, Application Workspace, Office tools.
+Plan перешёл на `core.write/patch` с заголовком title/status и Markdown body,
+жизненный цикл — `resources.delete/restore`. Prompt и custom skill reference
+редактируются общими source tools через прежних владельцев. Удалены семь публичных
+ID, включая `html.data.refresh`: каталог 78 → 71, skills — 16, начальных Core — 10.
+Task List остаётся типизированным `task.list.set`. Plan after-source включает полный
+header; редактор проверяет показанную версию и защищает создание от совпадения названий.
+
+Host-neutral: shared source (2), Plan, artifact working set (4), ToolRuntime (15),
+source-budget, включение production sources и границы зависимостей. CLI Plan smoke
+прошёл для tool/user transport с последовательным/пакетным patch, отказом до записи,
+restore/delete и recovery; целевые Web проверки Plan и HTML actions прошли.
+Windows/Office/WebView2 delivery остаётся открытым; Office/VSTO не запускались.
+
 ## Компактный пакетный core.patch — 2026-10-29
 
 Owner: Core Tools / Application Workspace / Office Tools; Web — preview и лента.

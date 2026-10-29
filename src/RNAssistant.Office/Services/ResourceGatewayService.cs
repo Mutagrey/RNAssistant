@@ -95,6 +95,25 @@ namespace RNAssistant.Office.Services
         {
         }
 
+        // Comparison reads derive a member from its retained catalog publication, never current settings/files.
+        internal string ReadRetainedCatalogText(ResourceRef exact, int maximum)
+        {
+            if (exact?.IsExact != true) throw new InvalidOperationException("An exact retained catalog source is required.");
+            var provider = ProviderFor(exact.Uri) as CatalogResourceProvider;
+            if (provider == null) throw new InvalidOperationException("A catalog source is required.");
+            var text = new System.Text.StringBuilder();
+            string cursor = null;
+            do
+            {
+                var page = provider.Read(null, new ResourceReadRequest { Reference = exact, Representation = "text", Cursor = cursor, MaxChars = 32000 }).Result;
+                if (page.Text == null || page.TotalCharacters > maximum || text.Length + page.Text.Length > maximum)
+                    throw new InvalidOperationException("Catalog source exceeds the comparison budget.");
+                text.Append(page.Text); cursor = page.NextCursor;
+                if (!page.Complete && cursor == null) throw new InvalidOperationException("Incomplete retained catalog source.");
+            } while (cursor != null);
+            return text.ToString();
+        }
+
         internal ChatArtifact ResolveArtifact(ChatSession session, string resourceUri)
         {
             var provider = ProviderFor(resourceUri) as ChatArtifactResourceProvider;

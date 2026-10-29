@@ -598,14 +598,25 @@ namespace RNAssistant.Office.Services
         internal static void AddVerifiedSourceEvidence(ChatSession session, ResourceAuthorityService authority,
             ChatBlobStore payloads, ChatMessage message, ToolInvocation command, ToolResultMaterialization result)
         {
-            if (authority == null || payloads == null || result.ResourceEffect == null ||
-                result.ResourceEffect.Outcome != ResourceEffectOutcome.VerifiedChanged &&
-                result.ResourceEffect.Outcome != ResourceEffectOutcome.Restored) return;
-
-            foreach (var impact in result.ResourceEffect.Impacts.Where(item => item?.After?.IsExact == true))
+            if (authority == null || payloads == null || result.ResourceEffect == null) return;
+            var effect = result.ResourceEffect;
+            // The package outcome may be unknown even though earlier targets were verified.
+            var verified = effect.Targets != null
+                ? effect.Targets.Where(item => item.Status == ResourceTargetStatus.Changed || item.Status == ResourceTargetStatus.Unchanged)
+                    .Select(item => item.After)
+                : effect.Outcome == ResourceEffectOutcome.VerifiedChanged || effect.Outcome == ResourceEffectOutcome.Restored
+                    ? effect.Impacts.Select(item => item.After) : Enumerable.Empty<ResourceRef>();
+            foreach (var exact in verified.Where(item => item?.IsExact == true)
+                .GroupBy(item => item.Uri + "\n" + item.Revision, StringComparer.Ordinal).Select(group => group.First()))
             {
-                var exact = impact.After;
                 var provider = ResourceUri.Parse(exact.Uri).Provider;
+                if (provider == "state")
+                {
+                    var planSource = new DocumentArtifactStore(authority.Store, authority.Revisions, payloads)
+                        .ReadPlanSourceEvidence(session, exact);
+                    if (planSource != null) message.ResourceEvidence.Add(planSource);
+                    continue;
+                }
                 var vba = provider == "vba";
                 ChatArtifact artifact = null;
                 if (!vba && provider == "chat")
@@ -644,7 +655,8 @@ namespace RNAssistant.Office.Services
                     contentSha256: vba ? view.ContentSha256 : revision.ContentSha256));
             }
 
-            if (!HtmlWorkspaceToolCatalog.Owns(command.ToolId)) return;
+            if (!HtmlWorkspaceToolCatalog.Owns(command.ToolId) ||
+                effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored) return;
             var current = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
                 item != null && item.Id == session.ActiveHtmlArtifactId &&
                 item.Kind == ChatArtifactKinds.HtmlWorkspace);

@@ -271,9 +271,9 @@ legacy result conversion are deleted. 11K2 gives the existing Skills UI one stri
 versioned package/result bridge, explicit per-package revision guards and the same
 service owner; controller-to-`SkillStore` mutation, raw catalog reconcile and
 unversioned/PascalCase response fallback are removed. R61/11O4 splits model-facing
-core `common.skills_upsert/delete` from
-`common.skills_reference_upsert/delete`, so no accepted call mixes package-core and
-reference scope.
+package core from reference scope, so no accepted call mixes them. Public package
+tools are `skills.upsert/delete`; reference source now routes through shared
+`core.write/patch/replace` and `resources.delete` to the same owner.
 
 11T10 completes the mandatory existing-tool route. The Tools UI uses lowercase
 `rnassistant.toolLibrary`/mutation v1 DTOs with exact revision guards and the same

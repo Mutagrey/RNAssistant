@@ -16,15 +16,16 @@ execution from approval. An accepted Agent/Ask run may grant automatic approval
 through the user's captured `AutoConfirmToolActions` setting; the tool's effect,
 verification, code classification and confirmation requirement stay unchanged.
 ToolRuntime applies Ask/Deny and Plan independently of
-catalog visibility, before preparation and dispatch. Only built-in Plan save and
-Task List handlers receive the documented planning exception.
+catalog visibility, before preparation and dispatch. Only exact built-in handlers
+for Plan-only `core.write/patch` and Task List receive the planning exception.
+Mixed Plan/file/Office packages are rejected; Plan delete/restore retain Agent policy.
 
 ## Request exposure through skills
 
 Core `ToolDescriptor` and published `ToolCatalogEntry` carry `Exposure` (`Direct`
 or `Skill`) and `ContractVersion`. Both participate in the exact registration
 fingerprint with schema, policy and binding. Core/direct discovery remains usable
-without a skill. Specialized HTML workspace and skill/tool/prompt authoring tools,
+without a skill. Specialized HTML workspace and skill/tool package authoring tools,
 and CLI browser verification, are exposed through declared skill dependencies.
 
 `core.skills.load` is a direct bootstrap call in Agent and Plan. The loader
@@ -168,6 +169,11 @@ Library строит вложенные группы по всем сегмен�
 у skills префикс `skills.` служит типом, а не лишней группой. Core идёт первым.
 Статусы Core / Подключён / По запросу / Недоступен берутся из текущего каталога
 и уже существующего Inspector Arsenal; название группы не выдаёт authority.
+
+Plan, prompt templates and custom skill reference text use the shared source
+tools and existing domain owners; see [Text mutations](text-mutations.md).
+Retired Plan/prompt/reference-write and HTML refresh IDs fail accepted-history
+validation explicitly. Existing history is preserved, without aliases or fallback.
 
 Office publishes `core.find/read/search + resources.outline` as direct, read-only
 semantic resource tools. Search accepts one target or a scoped VBA/HTML collection with literal/regex matching;

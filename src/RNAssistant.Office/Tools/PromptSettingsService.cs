@@ -60,12 +60,14 @@ namespace RNAssistant.Office.Tools
         }
 
         internal PromptSavePreparation PrepareSave(
-            IDictionary<string, object> arguments)
+            IDictionary<string, object> arguments, string sourceHash = null)
         {
             var validation = ValidateSave(arguments);
             if (validation != null)
                 return new PromptSavePreparation(validation);
             var source = _loadSettings() ?? new AppSettings();
+            if (sourceHash != null && TextPatternEngine.Sha256((string)JObject.FromObject(ToPayload(source))[PromptKey(arguments)]) != sourceHash)
+                return new PromptSavePreparation(PromptToolOutcome.Error("Published prompt differs from settings. Refresh and read the target before editing.", null, "source_changed", false));
             var fields = SuppliedFields(arguments);
             var intended = Apply(source, arguments);
             var beforeHash = ToolArgumentReader.CanonicalSha256(

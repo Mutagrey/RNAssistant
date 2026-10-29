@@ -65,16 +65,21 @@ namespace RNAssistant.Core.Services
         }
         public static bool IsPlanningArtifact(string id, ToolBinding binding)
         {
-            return binding != null && (
-                id == PlanDocumentToolCatalog.SaveToolId && binding.HandlerId == PlanDocumentToolHandler.BindingFor(id).HandlerId && string.IsNullOrEmpty(binding.EntryPoint) ||
-                id == TaskListToolCatalog.SetToolId && binding.HandlerId == TaskListToolHandler.BindingFor(id).HandlerId && string.IsNullOrEmpty(binding.EntryPoint));
+            return binding != null && id == TaskListToolCatalog.SetToolId &&
+                binding.HandlerId == TaskListToolHandler.BindingFor(id).HandlerId && string.IsNullOrEmpty(binding.EntryPoint);
+        }
+        public static bool IsPlanSourceTool(string id, ToolBinding binding)
+        {
+            return (id == ResourceMutationToolCatalog.Write || id == ResourceMutationToolCatalog.Patch) &&
+                binding != null && binding.HandlerId == ResourceMutationToolCatalog.BindingFor(id).HandlerId &&
+                string.IsNullOrEmpty(binding.EntryPoint);
         }
         public bool Allows(string id, ToolPolicy policy, ToolBinding binding)
         {
             if (policy == null || policy.Effect == ToolEffect.Unclassified) return false;
             if (!policy.AllowedModes.Contains(Mode, StringComparer.Ordinal)) return false;
             return (!policy.MayHaveSideEffects && !policy.ExecutesCode && !policy.RequiresConfirmation) ||
-                IsPlanningArtifact(id, binding) || AllowsConfirmation;
+                IsPlanningArtifact(id, binding) || IsPlanSourceTool(id, binding) || AllowsConfirmation;
         }
         public ToolPolicy EffectiveToolPolicy(string id, ToolPolicy policy, ToolBinding binding)
         {

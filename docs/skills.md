@@ -252,10 +252,10 @@ The editor labels built-ins as read-only and offers an editable copy after the
 core text has loaded. The copy has a distinct id; the original keeps its
 published id.
 
-Agent-side authoring uses four exact Agent-only native intents: core
-`skills.upsert/delete` and reference
-`skills.reference.upsert/delete`. Their schemas cannot mix core and
-reference fields and use a versioned result contract. Preparation
+Agent-side package authoring uses `skills.upsert/delete`; reference text uses
+`core.write/patch/replace` and `resources.delete` with a semantic skill-reference
+target. Their schemas cannot mix package-core metadata and reference fields.
+The existing owner and versioned publication/result contract are shared. Preparation
 binds the accepted arguments and complete current package revision; confirmation
 rejects stale state before dispatch, and read-back distinguishes verified change,
 verified no-change and unknown effect. Direct UI Save/Delete is an explicit manual

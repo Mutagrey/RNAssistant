@@ -12,7 +12,7 @@ namespace RNAssistant.Office.Tools
         private const int PreparedContractVersion = 1;
 
         internal SkillAuthoringPreparation PrepareMutation(
-            string toolId, IDictionary<string, object> arguments)
+            string toolId, IDictionary<string, object> arguments, string sourceHash = null)
         {
             if (_skillStore == null)
             {
@@ -33,6 +33,13 @@ namespace RNAssistant.Office.Tools
                 out intended, out operation, out referencePath);
             if (error != null) return new SkillAuthoringPreparation(error);
 
+            if (sourceHash != null)
+            {
+                string text, readError; SkillReferenceMetadata metadata;
+                if (current == null || !_skillStore.TryReadReference(current, referencePath, out text, out metadata, out readError) ||
+                    TextPatternEngine.Sha256(text) != sourceHash)
+                    return new SkillAuthoringPreparation(SkillAuthoringOutcome.Error("Published reference differs from the package. Refresh and read the target before editing.", null, "source_changed", false));
+            }
             var id = ToolArgumentReader.String(arguments, "id", string.Empty);
             var beforeRevision = StateRevision(current);
             var intendedRevision = StateRevision(intended);

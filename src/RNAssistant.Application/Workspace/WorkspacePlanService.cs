@@ -53,16 +53,16 @@ namespace RNAssistant.Runtime
 
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
         {
-            if (!PlanDocumentToolCatalog.Owns(context.Call.Name)) throw new InvalidOperationException("An exact Plan tool is required.");
+            var prepared = PlanResourcePrepared.Read(preparedStateJson);
             if (_attempt != null) throw new InvalidOperationException("A Plan mutation is already active.");
             _lease = _journal.AcquireScope(Scope, true);
             try
             {
                 ReconcileUnderLease();
                 var snapshot = _authority.Capture(Scope);
-                var impacts = PlanDocumentPublication.Prepare(_session, context, arguments, _owner);
+                var impacts = PlanDocumentPublication.Prepare(_session, context, _owner, prepared.Operation, prepared.Command);
                 _operationKey = PlanDocumentService.CreationId(_session, context);
-                _attempt = _journal.Prepare(Scope, context.Call.Name, impacts[0].Identity,
+                _attempt = _journal.Prepare(Scope, prepared.Operation, impacts[0].Identity,
                     snapshot.GetHead(impacts[0].Identity)?.Revision?.Revision,
                     PayloadRef.FromBlob(_payloads.StoreText(context.Call.ArgumentsJson, "application/json")), intendedImpacts: impacts);
                 return _attempt.AttemptId;
@@ -107,6 +107,29 @@ namespace RNAssistant.Runtime
         private void Release()
         { _attempt = null; _operationKey = null; _lease?.Dispose(); _lease = null; }
 
+        internal PlanResourceToolHandler Handler(IReadOnlyDictionary<string, ResourceEvidence> delivered)
+        {
+            return new PlanResourceToolHandler(_session, _owner, Resolve,
+                (context, source, whole) => PlanResourceToolHandler.RequireObservation(context, source, whole, delivered.Values));
+        }
+
+        private ChatArtifact Resolve(string target)
+        { return PlanResourceToolHandler.ResolveCurrent(_owner, _session, target); }
+
+        internal IEnumerable<ResourceEvidence> SourceEvidence(ResourceEffect effect)
+        {
+            if (effect == null) yield break;
+            var verified = effect.Targets != null
+                ? effect.Targets.Where(t => t.Status == ResourceTargetStatus.Changed || t.Status == ResourceTargetStatus.Unchanged).Select(t => t.After)
+                : effect.Outcome == ResourceEffectOutcome.VerifiedChanged || effect.Outcome == ResourceEffectOutcome.Restored
+                    ? effect.Impacts.Select(i => i.After) : Enumerable.Empty<ResourceRef>();
+            foreach (var exact in verified)
+            {
+                var source = _owner.ReadPlanSourceEvidence(_session, exact);
+                if (source != null) yield return source;
+            }
+        }
+
         internal ResourceFindPage Find(string query)
         {
             using (_journal.AcquireScope(Scope, true))
@@ -123,7 +146,7 @@ namespace RNAssistant.Runtime
                 foreach (var artifact in matches.Take(50))
                 {
                     var descriptor = Describe(artifact, false);
-                    result.Items.Add(new ResourceFindCandidate { Target = artifact.Title, Title = artifact.Title,
+                    result.Items.Add(new ResourceFindCandidate { Target = PlanSourceDocument.Target(artifact.Title), Title = artifact.Title,
                         Type = "plan", Scope = "workspace", MimeType = artifact.MimeType, Mutable = true,
                         ByteLength = artifact.ContentByteLength, Representations = descriptor.Representations.ToList(),
                         Description = "Version " + artifact.Revision + ", " + PlanDocumentService.Status(artifact),
@@ -136,8 +159,11 @@ namespace RNAssistant.Runtime
         }
 
         internal ResourceReadObservation Read(string target, int? version, int maximumCharacters = int.MaxValue,
-            int? startLine = null, int? lineCount = null, int? startChar = null, int? charCount = null)
+            int? startLine = null, int? lineCount = null, int? startChar = null, int? charCount = null, string representation = "source")
         {
+            if (PlanSourceDocument.IsTarget(target)) target = target.Substring(6);
+            if (string.IsNullOrEmpty(representation) || representation == "auto") representation = "source";
+            if (representation != "source" && representation != "text") throw Error("resource_representation_unavailable", "Plans support source or text.");
             using (_journal.AcquireScope(Scope, true))
             {
                 ReconcileUnderLease();
@@ -170,17 +196,19 @@ namespace RNAssistant.Runtime
                     throw Error("read_too_large", "The Plan exceeds the complete read bound.");
                 var frozen = _authority.Capture(Scope);
                 var logical = frozen.GetHead(DocumentArtifactStore.PlanIdentity(_session, planId));
-                var payload = _authority.GetRevision(Scope, reference).Payload;
+                var body = representation == "source" ? PlanSourceDocument.Serialize(artifact) : artifact.InlineText;
+                var payload = representation == "source" ? PayloadRef.FromBlob(_payloads.StoreText(body, "text/plain")) : _authority.GetRevision(Scope, reference).Payload;
+                _authority.RegisterView(Scope, new ResourceRevisionView(reference, representation, payload.Sha256, payload, ResourceCoverage.Whole()));
                 var evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), Scope, reference,
-                    "text", ResourceCoverage.Whole(), true, frozen.Generation, payload,
+                    representation, ResourceCoverage.Whole(), true, frozen.Generation, payload,
                     version.HasValue ? null : new[] { new ResourceDependency(logical.Revision, kind: "current-plan") },
                     immutable: version.HasValue, contentSha256: payload.Sha256);
-                var result = new ResourceReadResult { Resource = Describe(artifact, version.HasValue), Representation = "text",
-                    Text = artifact.InlineText, Complete = true, Coverage = ResourceCoverage.Whole(),
-                    ReturnedCharacters = artifact.InlineText.Length, TotalCharacters = artifact.InlineText.Length,
+                var result = new ResourceReadResult { Resource = Describe(artifact, version.HasValue), Representation = representation,
+                    Text = body, Complete = true, Coverage = ResourceCoverage.Whole(),
+                    ReturnedCharacters = body.Length, TotalCharacters = body.Length,
                     RawContentIncluded = true, CompleteViewPayload = payload, ContentSha256 = payload.Sha256 };
                 var observation = new ResourceReadObservation(result, new[] { evidence }).SelectTextWindow(maximumCharacters,
-                    body => PayloadRef.FromBlob(_payloads.StoreText(body, "text/markdown")), startLine, lineCount, startChar, charCount);
+                    excerpt => PayloadRef.FromBlob(_payloads.StoreText(excerpt, "text/plain")), startLine, lineCount, startChar, charCount);
                 if (!version.HasValue)
                 {
                     // Selection is chat state, not a source mutation or a new authority.
@@ -229,7 +257,7 @@ namespace RNAssistant.Runtime
                 Provider = "chat", Kind = "plan", Title = artifact.Title, Mutable = !historical,
                 ByteLength = artifact.ContentByteLength, ContentSha256 = artifact.ContentSha256,
                 Tracking = historical ? "snapshot" : "current", Coverage = ResourceCoverage.Whole() };
-            descriptor.Representations.Add("metadata"); descriptor.Representations.Add("text");
+            descriptor.Representations.Add("metadata"); descriptor.Representations.Add("source"); descriptor.Representations.Add("text");
             descriptor.Metadata["version"] = artifact.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture);
             descriptor.Metadata["historical"] = historical.ToString();
             return descriptor;

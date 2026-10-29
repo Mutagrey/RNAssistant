@@ -370,7 +370,6 @@
     <Compile Include="Tools\MarkdownDocumentToolHandler.cs" />
     <Compile Include="Tools\AuthoredFileToolCatalog.cs" />
     <Compile Include="Tools\AuthoredFileToolHandler.cs" />
-    <Compile Include="Tools\OfficePlanDocumentToolHandler.cs" />
     <Compile Include="Tools\ToolSafetyPolicy.cs" />
     <Compile Include="Tools\VbaToolExecutor.cs" />
     <Compile Include="Tools\VbaToolExecutor.Native.cs" />

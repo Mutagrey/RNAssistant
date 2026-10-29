@@ -255,7 +255,8 @@ namespace RNAssistant.Office
             bool dryRun,
             string chatId,
             Action<string, string> progress = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken),
+            ToolSourceGuardDto sourceGuard = null)
         {
             if (string.IsNullOrWhiteSpace(chatId))
             {
@@ -280,6 +281,16 @@ namespace RNAssistant.Office
             foreach (var pair in arguments ?? new Dictionary<string, object>())
             {
                 command.Arguments[pair.Key] = pair.Value;
+            }
+            if (sourceGuard != null)
+            {
+                object target;
+                if ((toolId != ResourceMutationToolCatalog.Write && toolId != ResourceMutationToolCatalog.Restore) ||
+                    !command.Arguments.TryGetValue("target", out target) || !RNAssistant.Core.Services.PlanSourceDocument.IsTarget(Convert.ToString(target)) ||
+                    sourceGuard.CreateOnly && (toolId != ResourceMutationToolCatalog.Write || sourceGuard.ExpectedArtifactId != null))
+                    return ToolRunResult.Error("The editor source guard does not match this operation.", null, "invalid_source_guard", false);
+                command.ExpectedTargetAbsent = sourceGuard.CreateOnly;
+                command.ExpectedArtifactId = sourceGuard.ExpectedArtifactId;
             }
 
             ReportProgress(progress, dryRun ? "checking" : "executing", (dryRun ? "Проверяю tool: " : "Исполняю tool: ") + toolId);
@@ -349,12 +360,11 @@ namespace RNAssistant.Office
 
         private static bool IsSessionArtifactTool(string toolId)
         {
-            return string.Equals(toolId, HtmlWorkspaceToolCatalog.WriteFileToolId, StringComparison.OrdinalIgnoreCase) ||
+            return ResourceMutationToolCatalog.Owns(toolId) || string.Equals(toolId, HtmlWorkspaceToolCatalog.WriteFileToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.WriteDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.ApplyPatchToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.DeleteToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.BindDataToolId, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(toolId, HtmlWorkspaceToolCatalog.RefreshDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, HtmlWorkspaceToolCatalog.FreezeDataToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, TaskListToolCatalog.SetToolId, StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(toolId, PlanDocumentToolCatalog.SaveToolId, StringComparison.OrdinalIgnoreCase) ||

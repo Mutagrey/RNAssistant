@@ -96,12 +96,13 @@ namespace RNAssistant.Office.Services
             return result;
         }
         private sealed class PatchArguments { public string Patch { get; set; } }
-        private static ResourceRevisionView View(ResourceAuthorityService authority, ResourceRef exact)
+        private static ResourceRevisionView View(ResourceAuthorityService authority, ResourceRef exact, ResourceAuthorityScopeId ownerScope = null)
         {
             if (authority == null || exact?.IsExact != true) throw new InvalidOperationException("Exact retained source is unavailable.");
             var address = ResourceUri.Parse(exact.Uri);
             var document = address.Provider == "state" ? address.Segments[1] : address.Segments[0];
-            var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(document));
+            var scope = ownerScope ?? (address.Provider == "state" ? new ResourceAuthorityScopeId(address.Segments[0], document) :
+                ResourceAuthorityScopeId.Document(new DocumentAuthorityId(document)));
             authority.RequirePublished(authority.Store.Capture(scope), exact);
             // An observed excerpt can coexist with the owner's complete retained
             // view. It must not mask that exact snapshot in the user-facing diff.
@@ -111,24 +112,24 @@ namespace RNAssistant.Office.Services
             if (view == null) throw new InvalidOperationException("Complete retained text is unavailable.");
             return view;
         }
-        internal static string ReadSource(ResourceAuthorityService authority, ResourceRef exact, int maximum)
+        internal static string ReadSource(ResourceAuthorityService authority, ResourceRef exact, int maximum, ResourceAuthorityScopeId scope = null)
         {
-            var view = View(authority, exact);
+            var view = View(authority, exact, scope);
             if (view.Payload.ByteLength > maximum * 4L) throw new InvalidOperationException("Source exceeds the comparison budget.");
             var text = authority.Payloads.ReadText(view.Payload.ToBlobReference());
             if (text == null || text.Length > maximum) throw new InvalidOperationException("Source exceeds the comparison budget.");
             return text;
         }
-        internal static IReadOnlyList<TextPatchEdit> ReadFragments(ResourceAuthorityService authority, ResourceRef exact, ResourceRef after, string patch)
+        internal static IReadOnlyList<TextPatchEdit> ReadFragments(ResourceAuthorityService authority, ResourceRef exact, ResourceRef after, string patch, ResourceAuthorityScopeId scope = null)
         {
-            var view = View(authority, exact);
+            var view = View(authority, exact, scope);
             using (var stream = authority.Payloads.OpenVerifiedRead(view.Payload.ToBlobReference(), long.MaxValue, CancellationToken.None))
             using (var reader = new StreamReader(stream, new UTF8Encoding(false, true), false))
             {
                 var edits = TextPatch.Parse(patch).Resolve(reader);
                 if (edits.Sum(e => (long)e.Before.Length + e.After.Length) > 512000)
                     throw new InvalidOperationException("Fragments exceed the comparison budget.");
-                var afterView = View(authority, after);
+                var afterView = View(authority, after, scope);
                 using (var afterStream = authority.Payloads.OpenVerifiedRead(afterView.Payload.ToBlobReference(), long.MaxValue, CancellationToken.None))
                 using (var afterReader = new StreamReader(afterStream, new UTF8Encoding(false, true), false))
                     return TextPatch.ReadAfterFragments(afterReader, edits);

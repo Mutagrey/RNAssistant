@@ -178,7 +178,7 @@ namespace RNAssistant.Office.Services
                     return false;
                 case "plan.document.create":
                 case "plan.document.update":
-                    error = "Public Plan create/update calls were replaced by plan.document.save in 11O2.";
+                    error = "Public Plan create/update calls were replaced by core.write/patch. Start a new chat; history is preserved.";
                     return false;
                 case "task.list.create":
                 case "task.list.update":
@@ -254,8 +254,8 @@ namespace RNAssistant.Office.Services
                 case PlanDocumentToolCatalog.SaveToolId:
                 case PlanDocumentToolCatalog.RestoreToolId:
                 case PlanDocumentToolCatalog.DeleteToolId:
-                    schema = PlanDocumentToolCatalog.SchemaFor(call.Name);
-                    break;
+                    error = "Plan tools were replaced by core.write/patch and resources.delete/restore. Start a new chat; history is preserved.";
+                    return false;
                 case TaskListToolCatalog.SetToolId:
                     schema = TaskListToolCatalog.Schema();
                     break;
@@ -266,24 +266,26 @@ namespace RNAssistant.Office.Services
                     schema = HtmlWorkspaceToolService.BindSchema();
                     break;
                 case HtmlWorkspaceToolCatalog.RefreshDataToolId:
-                    schema = HtmlWorkspaceToolCatalog.RefreshSchema();
-                    break;
+                    error = "html.data.refresh was retired; reopen RN.resources handles or read sourceTarget. History is preserved.";
+                    return false;
                 case HtmlWorkspaceToolCatalog.FreezeDataToolId:
                     schema = HtmlWorkspaceToolCatalog.FreezeSchema();
                     break;
                 case PromptToolCatalog.SaveToolId:
-                    schema = PromptToolCatalog.SchemaFor(call.Name);
-                    break;
+                    error = "Prompt edits use core.write/patch with a prompt: target. Start a new chat; history is preserved.";
+                    return false;
                 case ToolAuthoringCatalog.UpsertToolId:
                 case ToolAuthoringCatalog.DeleteToolId:
                     schema = ToolAuthoringCatalog.SchemaFor(call.Name);
                     break;
                 case SkillAuthoringCatalog.UpsertToolId:
                 case SkillAuthoringCatalog.DeleteToolId:
-                case SkillAuthoringCatalog.ReferenceUpsertToolId:
-                case SkillAuthoringCatalog.ReferenceDeleteToolId:
                     schema = SkillAuthoringCatalog.SchemaFor(call.Name);
                     break;
+                case SkillAuthoringCatalog.ReferenceUpsertToolId:
+                case SkillAuthoringCatalog.ReferenceDeleteToolId:
+                    error = "Skill references use core.write/patch and resources.delete. Start a new chat; history is preserved.";
+                    return false;
                 case VbaToolCatalog.RunMacro:
                     schema = VbaToolCatalog.SchemaFor(call.Name);
                     break;
@@ -389,7 +391,7 @@ namespace RNAssistant.Office.Services
                 ModelResultProjection.RemoveQuestionRuntimeState(name, token);
                 return;
             }
-            if (PlanDocumentToolCatalog.Owns(name))
+            if (PlanDocumentToolCatalog.Owns(name) || ResourceMutationToolCatalog.Owns(name))
             {
                 ModelResultProjection.RemovePlanRuntimeState(name, token);
                 return;

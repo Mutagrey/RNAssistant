@@ -530,6 +530,18 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("dryRun")]
         public bool DryRun { get; set; }
+
+        [JsonProperty("sourceGuard")]
+        public ToolSourceGuardDto SourceGuard { get; set; }
+    }
+
+    public sealed class ToolSourceGuardDto
+    {
+        [JsonProperty("expectedArtifactId")]
+        public string ExpectedArtifactId { get; set; }
+
+        [JsonProperty("createOnly")]
+        public bool CreateOnly { get; set; }
     }
 
     public sealed class PendingAgentToolPayload : ChatPayload

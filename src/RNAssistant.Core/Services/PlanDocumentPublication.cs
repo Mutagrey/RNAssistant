@@ -14,23 +14,20 @@ namespace RNAssistant.Core.Services
     public static class PlanDocumentPublication
     {
         public static IReadOnlyList<ResourceImpact> Prepare(ChatSession session, ToolExecutionContext context,
-            IDictionary<string, object> arguments, DocumentArtifactStore owner)
+            DocumentArtifactStore owner, string operation, PlanResourceCommand command)
         {
-            if (session == null || !PlanDocumentToolCatalog.Owns(context.Call.Name))
+            if (session == null || command == null || !PlanDocumentToolCatalog.Owns(operation))
                 throw new InvalidOperationException("A bound session and exact Plan tool are required.");
             try
             {
                 var operationKey = PlanDocumentService.CreationId(session, context);
                 if (owner.FindPlanOperation(session, operationKey) != null)
                     throw new ToolMutationPreparationException("plan_attempt_already_published", "This Plan operation is already published; recover its exact result without replay.");
-                var candidates = session.Artifacts.Where(item => item.Id == session.ActivePlanDocumentArtifactId).Take(2).ToArray();
-                if (candidates.Length > 1) throw new ToolMutationPreparationException("plan_active_revision_invalid", "The selected Plan is ambiguous.");
-                var selected = candidates.SingleOrDefault();
-                var intent = PlanDocumentArguments.Read(arguments);
+                var selected = command.Source == null ? null : owner.Read(session, command.Source, false);
                 string planId;
-                if (string.IsNullOrWhiteSpace(session.ActivePlanDocumentArtifactId) || context.Call.Name == PlanDocumentToolCatalog.SaveToolId && intent.StartNew)
+                if (command.Source == null)
                 {
-                    if (context.Call.Name != PlanDocumentToolCatalog.SaveToolId)
+                    if (operation != PlanDocumentToolCatalog.SaveToolId)
                         throw new ToolMutationPreparationException("plan_not_found", "Select a current Plan before restoring or removing it.");
                     planId = operationKey;
                     if (owner.CurrentPlan(session, planId) != null)
@@ -44,9 +41,9 @@ namespace RNAssistant.Core.Services
                     var current = owner.CurrentPlan(session, planId);
                     var expected = ChatResourceUri.CreateArtifactRevision(session, selected);
                     if (current == null || current.Uri != expected.Uri || current.Revision != expected.Revision)
-                        throw new ToolMutationPreparationException("stale_plan_revision", "The selected Plan changed. Read and select its current revision before editing; this write was not dispatched.");
+                        throw new ToolMutationPreparationException("source_changed", "The selected Plan changed. Read and select its current revision before editing; this write was not dispatched.");
                     var history = owner.PlanHistory(session, planId, false).ToList();
-                    var bodyVersion = context.Call.Name == PlanDocumentToolCatalog.RestoreToolId ? intent.Version : selected.Revision;
+                    var bodyVersion = operation == PlanDocumentToolCatalog.RestoreToolId ? command.RestoreVersion : selected.Revision;
                     for (var index = 0; index < history.Count; index++)
                         if (history[index].Revision == bodyVersion)
                             history[index] = owner.Read(session, ChatResourceUri.CreateArtifactRevision(session, history[index]));
@@ -118,6 +115,10 @@ namespace RNAssistant.Core.Services
                             dependencies: captured.Dependencies));
                     revisions.RegisterView(attempt.ScopeId, new ResourceRevisionView(exact, captured.View,
                         captured.ContentSha256, captured.Payload, captured.Coverage, captured.Parts));
+                    var sourceSnapshot = captured.Dependencies.SingleOrDefault(dependency => dependency.Kind == "immutable-snapshot")?.Resource;
+                    var source = sourceSnapshot == null ? null : revisions.GetView(attempt.ScopeId, sourceSnapshot, ResourceRepresentations.Source);
+                    if (source != null) revisions.RegisterView(attempt.ScopeId, new ResourceRevisionView(exact,
+                        ResourceRepresentations.Source, source.ContentSha256, source.Payload, ResourceCoverage.Whole()));
                     after = ResourceHeadState.Known(exact, snapshot.Generation + 1);
                 }
                 else after = ResourceHeadState.Unknown(identity, snapshot.Generation + 1, "mutation:" + attempt.AttemptId);

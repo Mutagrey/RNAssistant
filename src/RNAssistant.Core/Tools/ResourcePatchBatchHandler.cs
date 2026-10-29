@@ -315,6 +315,12 @@ namespace RNAssistant.Core.Tools
                     var source = prepared.Targets[i].Plan.Source;
                     effects[i].After = status == ResourceTargetStatus.Unchanged ? source :
                         completed.ResourceEffect?.Impacts.FirstOrDefault(impact => impact.Relation == ResourceImpactRelation.Exact && impact.Identity.Equals(prepared.Targets[i].Plan.EffectIdentity ?? source.Identity))?.After;
+                    if (status == ResourceTargetStatus.Changed && effects[i].After == null && ResourceUri.Parse(source.Uri).Provider == "catalog")
+                    {
+                        var root = new ResourceIdentity(ResourceUri.Create("catalog", ResourceUri.Parse(source.Uri).Segments[0]));
+                        var published = completed.ResourceEffect?.Impacts.FirstOrDefault(impact => impact.Identity.Equals(root))?.After;
+                        if (published != null) effects[i].After = new ResourceRef(source.Uri, published.Revision);
+                    }
                     if (status == ResourceTargetStatus.Changed && effects[i].After == null && completed.Result != null)
                     {
                         var provider = ResourceUri.Parse(source.Uri).Provider;
