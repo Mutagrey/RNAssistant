@@ -1,48 +1,44 @@
-function appendAgentJsonViewer(parent, label, text, className, open) {
-  if (!text) return;
-
-  var details = document.createElement("details");
-  details.className = className || "agent-data";
-  details.open = !!open;
-  var summary = document.createElement("summary");
-  summary.textContent = label;
-  var host = document.createElement("div");
-  host.className = "agent-json-viewer";
-  details.appendChild(summary);
-  details.appendChild(host);
-  var controller = null;
-
-  function mount() {
-    if (controller) return;
+function mountAgentJsonContent(host, text) {
+  if (!text) return function () {};
+  var viewer = document.createElement("div");
+  viewer.className = "agent-json-viewer";
+  host.appendChild(viewer);
+  try {
     if (!window.RNAssistantViewerRegistry || !window.RNAssistantViewerRegistry.has("json")) {
       throw new Error("JSON viewer is unavailable.");
     }
-    controller = window.RNAssistantViewerRegistry.mount("json", host, {
+    var controller = window.RNAssistantViewerRegistry.mount("json", viewer, {
       text: String(text),
       completeness: "full",
       mode: "tree",
-      onCopy: window.copyTextResult
+      compact: true,
+      limits: { maxRawRenderChars: 750000, maxPrettyChars: 4000000 },
+      onCopy: window.copyTextResult,
+      onStatus: function (message, kind) {
+        viewer.classList.toggle("is-json-clean", kind === "ok");
+      }
     });
+    var toolbar = viewer.querySelector(".rn-json-toolbar");
+    var expand = document.createElement("button");
+    expand.type = "button";
+    expand.className = "agent-json-expand";
+    expand.textContent = "Весь текст";
+    expand.setAttribute("aria-expanded", "false");
+    expand.addEventListener("click", function () {
+      var open = viewer.classList.toggle("is-expanded");
+      host.classList.toggle("is-expanded-json", open);
+      controller.setMode(open ? "pretty" : "tree");
+      expand.textContent = open ? "Свернуть" : "Весь текст";
+      expand.setAttribute("aria-expanded", String(open));
+    });
+    toolbar.appendChild(expand);
+  } catch (error) {
+    host.removeChild(viewer);
+    throw error;
   }
-
-  function unmount() {
-    if (!controller) return;
-    window.RNAssistantViewerRegistry.unmount(host);
-    controller = null;
-  }
-
-  details.addEventListener("toggle", function () {
-    if (details.open) mount();
-    else unmount();
-  });
-  parent.appendChild(details);
-  if (details.open) mount();
-}
-
-function appendArgumentsData(parent, text) {
-  appendAgentJsonViewer(parent, "Аргументы вызова", text, "agent-data agent-arguments", false);
-}
-
-function appendActivityData(parent, label, text) {
-  appendAgentJsonViewer(parent, label, text, "agent-data", false);
+  return function () {
+    host.classList.remove("is-expanded-json");
+    window.RNAssistantViewerRegistry.unmount(viewer);
+    host.removeChild(viewer);
+  };
 }

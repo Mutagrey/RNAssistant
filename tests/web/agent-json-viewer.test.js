@@ -23,6 +23,11 @@ class Element {
   }
   get firstElementChild() { return this.childNodes[0] || null; }
   appendChild(child) { child.parentNode = this; this.childNodes.push(child); return child; }
+  insertBefore(child, before) {
+    if (!before) return this.appendChild(child);
+    const index = this.childNodes.indexOf(before);
+    child.parentNode = this; this.childNodes.splice(index, 0, child); return child;
+  }
   removeChild(child) { this.childNodes.splice(this.childNodes.indexOf(child), 1); child.parentNode = null; return child; }
   replaceChildren(...children) { this.childNodes.forEach(child => { child.parentNode = null; }); this.childNodes = []; children.forEach(child => this.appendChild(child)); }
   setAttribute(name, value) { this.attributes[name] = String(value); }
@@ -70,15 +75,10 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
 (async function () {
   const exact = '{"dup":9007199254740993123456789,"dup":"</script><img onerror=1>","arguments":{"html":"<main>full</main>"}}';
   const parent = new Element("div");
-  context.appendArgumentsData(parent, exact);
-  const details = parent.firstElementChild;
-  const host = details.childNodes[1];
-  assert.equal(details.open, false);
-  assert.equal(host.childNodes.length, 0, "collapsed details do not create viewer DOM");
-  details.open = true; details.dispatch("toggle");
+  const cleanup = context.mountAgentJsonContent(parent, exact);
+  const host = parent.firstElementChild;
   assert.ok(host.firstElementChild.classList.contains("rn-json-viewer"));
   assert.match(host.textContent, /повтор 1\/2/, "tree is the default");
-  button(host, "Дерево").click();
   assert.match(host.textContent, /повтор 1\/2/);
   assert.match(host.textContent, /9007199254740993123456789/);
   assert.match(host.textContent, /<\/script><img onerror=1>/);
@@ -87,19 +87,18 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(copied.at(-1), exact);
   console.log("PASS agent JSON viewer: arguments use exact bounded shared viewer");
 
-  details.open = false; details.dispatch("toggle");
-  assert.equal(host.childNodes.length, 0, "collapse destroys mounted tree");
-  details.open = true; details.dispatch("toggle");
-  button(host, "Дерево").click();
-  assert.match(host.textContent, /повтор 2\/2/);
-  console.log("PASS agent JSON viewer: collapsed activity data releases and remounts lazy DOM");
+  cleanup();
+  assert.equal(parent.childNodes.length, 0, "closed tab destroys mounted tree");
+  const cleanupAgain = context.mountAgentJsonContent(parent, exact);
+  assert.match(parent.textContent, /повтор 2\/2/);
+  cleanupAgain();
+  console.log("PASS agent JSON viewer: switched tab releases and remounts lazy DOM");
 
   const invalidParent = new Element("div");
-  context.appendActivityData(invalidParent, "Данные результата", '{"html":"unfinished');
-  const invalidDetails = invalidParent.firstElementChild;
-  invalidDetails.open = true; invalidDetails.dispatch("toggle");
-  assert.match(invalidDetails.textContent, /Позиция:/);
-  assert.match(invalidDetails.textContent, /unfinished/);
+  const cleanupInvalid = context.mountAgentJsonContent(invalidParent, '{"html":"unfinished');
+  assert.match(invalidParent.textContent, /Позиция:/);
+  assert.match(invalidParent.textContent, /unfinished/);
+  cleanupInvalid();
   console.log("PASS agent JSON viewer: invalid result remains raw without repair");
 
   context.navigator.clipboard.writeText = () => Promise.reject(new Error("denied"));

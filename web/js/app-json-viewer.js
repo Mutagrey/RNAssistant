@@ -627,7 +627,7 @@
       var exact = raw(sourceDocument, node);
       var visible = exact;
       if (visible.length > limits.maxInlineStringChars) {
-        visible = visible.slice(0, limits.maxInlineStringChars) + "… [" + exact.length + " chars]";
+        visible = visible.slice(0, limits.maxInlineStringChars) + "… [" + exact.length + " символов]";
       }
       row.appendChild(element("span", "rn-json-value rn-json-" + node.type, visible));
       appendNodeActions(row, node, sourceDocument);

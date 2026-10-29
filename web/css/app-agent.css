@@ -118,7 +118,7 @@
 }
 
 .agent-model-step {
-  display: grid; gap: 8px; min-width: 0;
+  display: grid; gap: 6px; min-width: 0;
 }
 .agent-run-actions.has-actions {
   padding: 0; border: 0;
@@ -163,7 +163,7 @@
 
 .agent-run-process {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -181,7 +181,7 @@
 
 .agent-transcript-entry {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -321,7 +321,7 @@
 }
 
 .agent-activity-mark {
-  display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: var(--ink-muted);
+  display: grid; place-items: center; flex: 0 0 16px; width: 16px; height: 16px; margin-top: 2px; color: var(--muted);
 }
 
 .agent-activity-mark svg {
@@ -361,20 +361,50 @@
 .agent-activity-detail-body {
   display: grid; min-width: 0; gap: 8px; margin: 5px 0 10px 22px; padding: 11px 13px; border: 1px solid var(--line); border-radius: var(--radius-sm, 10px); background: var(--surface-subtle); color: var(--ink); overflow-wrap: anywhere;
 }
+.agent-activity.kind-tool .agent-activity-detail-body {
+  display: block; margin: 4px 0 9px 22px; padding: 0; border: 0; background: transparent;
+}
+.agent-tool-card {
+  box-sizing: border-box; min-width: 0; padding: 9px 12px 11px; border: 1px solid var(--line);
+  border-radius: var(--radius-sm, 10px); background: var(--surface); color: var(--ink); container-type: inline-size;
+}
+.agent-tool-card-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px; min-width: 0; }
+.agent-tool-message { min-width: 0; color: var(--ink-muted); font-size: 12px; line-height: 1.45; }
+.agent-tool-message > span { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-tool-message.is-expanded > span { display: block; }
+.agent-tool-message-more { display: block; margin: 2px 0 0; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; cursor: pointer; }
+.agent-tool-tabs { display: inline-flex; justify-self: end; gap: 2px; max-width: 100%; min-width: 0; overflow-x: auto; padding: 2px; border-radius: 7px; background: var(--surface-subtle); scrollbar-width: thin; }
+.agent-tool-tab { flex: none; min-height: 26px; padding: 4px 8px; border: 0; border-radius: 5px; background: transparent; color: var(--ink-muted); font: 11px/1.35 var(--font); white-space: nowrap; cursor: pointer; }
+.agent-tool-tab:hover { color: var(--ink); background: var(--surface-hover); }
+.agent-tool-tab.active { color: var(--ink); background: var(--surface); box-shadow: 0 1px 3px #172e4217; font-weight: 600; }
+.agent-tool-tab:focus-visible, .agent-tool-message-more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+.agent-tool-tab[hidden] { display: none; }
+.agent-tool-panels { min-width: 0; margin-top: 8px; }
+.agent-tool-panel { min-width: 0; max-height: min(440px, 60vh); overflow: auto; font-size: 12px; line-height: 1.5; }
+.agent-tool-panel[hidden] { display: none; }
+.agent-tool-panel.is-expanded-json { max-height: none; overflow: visible; }
+.agent-tool-card .tool-result-preview { margin: 0; }
+.agent-tool-card .tool-result-preview + .tool-result-preview { margin-top: 11px; }
+.agent-tool-card .tool-result-preview-body { max-height: none; margin: 0; overflow: visible; }
+.agent-tool-card .tool-result-preview pre { margin: 0; padding: 9px 11px; border-radius: 6px; background: var(--code); color: var(--code-text); font: 12px/1.55 var(--font-mono, Consolas, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+.agent-tool-card .tool-result-preview.has-source > summary { display: flex; align-items: baseline; gap: 7px; list-style: none; color: var(--ink-muted); font-size: 12px; font-weight: 500; }
+.agent-tool-card .tool-result-preview.has-source > summary::-webkit-details-marker { display: none; }
+.agent-tool-card .tool-result-preview.has-source > summary::before { content: ""; flex: 0 0 5px; width: 5px; height: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); }
+.agent-tool-card .tool-result-preview.has-source[open] > summary::before { transform: rotate(45deg); }
+.agent-tool-card .tool-result-preview.has-source > .tool-result-preview-body { margin-top: 8px; }
+.agent-tool-card .tool-result-block-title { margin-bottom: 5px; color: var(--ink-muted); font-size: 11px; font-weight: 600; }
+.agent-tool-card .tool-result-note { margin: 4px 0 7px; }
+.agent-tool-card .inline-change + .inline-change { margin-top: 12px; }
+@container (max-width: 470px) {
+  .agent-tool-card-header { grid-template-columns: minmax(0, 1fr); gap: 7px; }
+  .agent-tool-card-header.has-message .agent-tool-tabs { grid-row: 2; }
+}
 
 .agent-activity-result {
   white-space: pre-wrap;
   color: var(--muted);
   font-size: .9286rem;
   line-height: 1.55;
-  overflow-wrap: anywhere;
-}
-
-.agent-activity-tool-id {
-  color: var(--muted);
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: 12px;
-  line-height: 1.4;
   overflow-wrap: anywhere;
 }
 
@@ -868,9 +898,9 @@
 .agent-work-count { font-size: 11px; white-space: nowrap; color: var(--ink-muted); }
 .agent-work-count::before { content: "·"; margin-right: 6px; }
 .agent-work-spinner { display: block; width: 12px; height: 12px; border: 1.5px solid var(--line-strong); border-top-color: var(--accent); border-right-color: var(--accent); border-radius: 50%; }
-.agent-activity-caption { font-size: 11px; padding-left: 4px; }
+.agent-activity-caption { font-size: 11px; }
 .agent-activity-object { min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
-.agent-activity-object::before { content: "·"; margin-right: 6px; color: var(--ink-muted); }
+.agent-activity-object::before { content: none; }
 .agent-activity-detail-body > .agent-activity-target { display: block; color: var(--ink-muted); font-size: 11px; white-space: pre-wrap; }
 .agent-activity.presentation-failed .agent-activity-mark { color: var(--danger); }
 .agent-activity:is(.presentation-warning, .presentation-unknown, .presentation-partial) .agent-activity-mark { color: var(--warning); }

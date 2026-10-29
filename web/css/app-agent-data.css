@@ -1,15 +1,70 @@
-.agent-data {
-  margin-top: 3px;
-}
-
-.agent-data > summary {
-  cursor: pointer;
-  color: #344054;
-  font-weight: var(--label-font-weight);
-}
-
 .agent-json-viewer {
-  margin-top: 6px;
+  min-width: 0;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact {
+  max-height: min(340px, 48vh);
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+}
+
+.agent-json-viewer.is-expanded .rn-json-viewer.is-compact {
+  max-height: none;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-toolbar {
+  gap: 5px;
+  padding: 0 0 7px;
+  border: 0;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-body {
+  border-radius: 6px;
+  background: var(--code);
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-modes {
+  margin-right: auto;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-row {
+  padding-right: 8px;
+  background: transparent;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-children {
+  margin-left: 16px;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-closing-row {
+  display: flex;
+}
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-count,
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-node-actions,
+.agent-json-viewer.is-json-clean .rn-json-status {
+  display: none;
+}
+
+.agent-json-expand {
+  min-height: 26px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-muted);
+  font: 11px var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.agent-json-expand:hover { background: var(--surface-hover); color: var(--ink); }
+.agent-json-expand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+
+.agent-json-viewer .rn-json-viewer.is-compact .rn-json-text {
+  padding: 9px 11px;
+  line-height: 1.55;
 }
 
 .agent-copy-button {

@@ -381,8 +381,7 @@ html[data-theme="dark"] .agent-run-history-content {
   border-left-color: var(--line);
 }
 
-html[data-theme="dark"] .agent-activity-result,
-html[data-theme="dark"] .agent-activity-tool-id {
+html[data-theme="dark"] .agent-activity-result {
   color: var(--ink-muted);
 }
 
@@ -391,10 +390,6 @@ html[data-theme="dark"] .agent-activity-caption.status-warning,
 html[data-theme="dark"] .agent-activity-caption.status-partial,
 html[data-theme="dark"] .agent-run-history-state.status-warning {
   color: var(--warning);
-}
-
-html[data-theme="dark"] .agent-data > summary {
-  color: var(--text);
 }
 
 html[data-theme="dark"] .model-capability-header,

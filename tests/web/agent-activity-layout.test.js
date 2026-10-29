@@ -130,7 +130,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       })));
       assert.ok(bounds.every(row => row.scroll <= row.width + 1), "action rows fit the narrow chat");
       assert.ok(bounds.every(row => row.targetOverflow !== "ellipsis"), "semantic targets remain visible");
-      assert.equal(new Set(bounds[0].colors).size, 1, "action, target, icon and outcome use one muted color");
+      assert.equal(new Set(bounds[0].colors.filter(Boolean)).size, 1, "completed action and icon use one muted color");
       assert.notEqual(bounds[4].colors[2], bounds[4].colors[0], "error remains distinct");
       assert.ok(bounds[4].text.includes("Лист уже существует"), "failed action shows its readable outcome");
       assert.notEqual(bounds[5].colors[2], bounds[5].colors[0], "unknown effect stands out from the muted action");
@@ -138,10 +138,10 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.notEqual(bounds[5].colors[2], bounds[8].colors[2], "unknown effect is distinct from a hard failure");
       assert.equal(bounds[6].colors[2], bounds[5].colors[2], "incomplete reads use the same warning color");
       assert.ok(bounds[0].text.includes("Загружено") && !bounds[0].text.includes("private-id"));
-      assert.ok(bounds[2].text.includes("Получено строк: 120"));
+      assert.ok(bounds[2].text.includes("Прочитано") && bounds[2].text.includes("строк: 120"));
       assert.ok(bounds[0].text.includes("excel.range.write"), "capability identity is visible without opening details");
       assert.ok(bounds[3].text.includes("Продажи!B2:D121"), "mutation receipt includes its target beside the verified outcome");
-      assert.ok(bounds[9].text.includes("Чтение навыка") && bounds[9].text.includes("excel-analysis"));
+      assert.ok(bounds[9].text.includes("Загружено") && bounds[9].text.includes("excel-analysis"));
       assert.ok(bounds[10].text.includes("vba-edit") && bounds[9].text !== bounds[10].text, "skill calls are distinguishable while collapsed");
       assert.ok(bounds[11].text.includes("Изучаю") && bounds[11].text.includes("references/formulas.md"), "attempt target is visible before a result exists");
       assert.ok(bounds[7].text.includes("квартал!A1:F180"), "running attempt retains the complete semantic target");
@@ -231,33 +231,33 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator(".agent-activity-row").first().click();
     assert.equal(await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).count(), 0);
     assert.equal(await page.locator(".agent-activity-context-note").count(), 0);
-    assert.equal(await page.locator("#actions .agent-activity-tool-id").first().textContent(), "core.tools.read");
-    assert.match(await page.locator("#actions").textContent(), /Код ошибки: excel_sheet_already_exists/);
-    assert.equal(await page.locator("#actions .agent-activity-result").first().textContent(), "Loaded catalogRevision=private-id");
+    assert.equal(await page.locator("#actions .agent-activity-tool-id").count(), 0,
+      "the expanded card does not repeat the tool ID");
+    assert.match(await page.locator("#actions .agent-tool-card").first().textContent(), /Loaded catalogRevision=private-id/,
+      "the retained tool message is immediately visible in the card");
+    assert.match(await page.locator("#actions .agent-activity-row").nth(4).textContent(), /Лист уже существует/);
     await page.evaluate(() => {
       const host = document.createElement("div"); host.id = "previews"; document.querySelector("main").appendChild(host);
-      RNAssistantToolResultPresentation.render(host, { blocks: [
+      RNAssistantToolResultPresentation.renderCompact(host, [
         { kind: "list", title: "Список", complete: false, items: Array.from({ length: 45 }, (_, i) => ({ title: "Запись " + i, detail: "<img src=x onerror=alert(1)>" })) },
         { kind: "table", title: "Таблица", complete: true, columns: ["Значение"], rows: [["ДлинноеЗначение".repeat(60)]] },
         { kind: "text_changes", title: "Изменения этого шага", complete: true, changes: { toolCallId: "call", complete: true, evidenceFound: true, items: [
           { title: "Module1", before: "old\n", after: "new\n", beforeExists: true, afterExists: true, availability: "available" }
         ] } }
-      ] });
+      ]);
     });
-    assert.equal(await page.locator("#previews > details").count(), 3, "typed blocks select independent renderers");
+    assert.equal(await page.locator("#previews > .tool-result-preview").count(), 3, "typed blocks select independent renderers");
     assert.equal(await page.locator("#previews .tool-result-item").count(), 20);
     await page.locator("#previews button").first().click();
     assert.equal(await page.locator("#previews .tool-result-item").count(), 40);
     await page.locator("#previews .tool-result-item summary").first().click();
     assert.equal(await page.locator("#previews img").count(), 0, "preview strings remain inert");
     assert.match(await page.locator("#previews").innerText(), /Показана доступная часть/);
-    await page.locator("#previews .run-changes-summary").click();
-    await page.locator("#previews .run-change-file-summary").click();
-    await page.locator("#previews .vba-diff-line.add").waitFor();
-    assert.equal(await page.locator("#previews .vba-diff-line.add").count(), 1);
+    await page.locator("#previews .inline-diff-line.add").waitFor();
+    assert.equal(await page.locator("#previews .inline-diff-line.add").count(), 1);
     await page.evaluate(() => {
       const host = document.createElement("div"); host.id = "resource-previews"; document.querySelector("main").appendChild(host);
-      RNAssistantToolResultPresentation.render(host, { blocks: [
+      RNAssistantToolResultPresentation.renderCompact(host, [
         { kind: "text", title: "Содержимое", complete: true, text: "Выручка за квартал: 120 000 ₽.",
           source: { reference: "R5@v1", target: "Отчёт.pdf", view: "text", pageIndex: 1,
             coverage: { kind: "character-range", address: "pdf-page:1", start: 4, end: 32 }, excerpt: "Выручка за квартал" },
@@ -267,7 +267,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
           note: "Бинарное содержимое не включено в эту карточку. Просмотр доступен в ресурсах чата." },
         { kind: "text", title: "Сравнение", complete: true,
           text: "Подтверждено отсутствие изменений. Сохранённое сравнение для этого вызова недоступно." }
-      ] });
+      ]);
       host.querySelectorAll("details").forEach(node => { node.open = true; });
     });
     assert.match(await page.locator("#resource-previews .tool-source-caption").first().innerText(), /R5@v1 — Отчёт.pdf, страница 2, символы \[4, 32\)/);

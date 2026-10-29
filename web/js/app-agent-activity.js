@@ -15,7 +15,14 @@ function renderActivityNode(activity, nested, current, context) {
     details.setAttribute("data-disclosure-key", "activity:" + activityTimelineKey(activity) + (status === "failed" ? ":failed" : ""));
     details.open = false;
     details.appendChild(renderActivityRow(activity, current, true, context));
-    appendActivityDetailsContent(details, activity, context);
+    if (activityToolId(activity)) {
+      var built = false;
+      details.addEventListener("toggle", function () {
+        if (!details.open || built) return;
+        built = true;
+        appendActivityDetailsContent(details, activity, context);
+      });
+    } else appendActivityDetailsContent(details, activity, context);
     node.appendChild(details);
   } else {
     node.appendChild(renderActivityRow(activity, current, false, context));
@@ -77,6 +84,11 @@ function renderActivityRow(activity, current, expandable, context) {
   var comment = activityCommentText(activity);
   var time = activityTimeText(context);
   var presentation = activityPresentationState(activity);
+  var resultText = context && context.terminal && isActiveTimelineStatus(status) ? "Остановлено" : activityDisplayResult(activity);
+  if (activityToolId(activity) && status === "completed" && presentation !== "unknown") {
+    var completed = activityCompletedRowCopy(activity, resultText);
+    if (completed) { title = completed.title; resultText = completed.result; }
+  }
   if (context && context.terminal && isActiveTimelineStatus(status)) presentation = "cancelled";
   var hideIcon = (context && context.hideIcon) ||
     ["reasoning", "step", "compaction"].indexOf(activityKind(activity)) >= 0 ||
@@ -84,7 +96,7 @@ function renderActivityRow(activity, current, expandable, context) {
   row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment") +
     (hideIcon ? " is-status-label" : "") +
     (context && context.liveFeed && activity === context.currentActivity && status === "running" ? " is-live-current" : "");
-  row.title = [title, comment, agentStatusLabel(presentation), time].filter(Boolean).join(" · ");
+  row.title = [title, comment, resultText, agentStatusLabel(presentation), time].filter(Boolean).join(" · ");
 
   if (!hideIcon) {
     var mark = document.createElement("span");
@@ -111,7 +123,6 @@ function renderActivityRow(activity, current, expandable, context) {
     target.textContent = comment;
     copy.appendChild(target);
   }
-  var resultText = context && context.terminal && isActiveTimelineStatus(status) ? "Остановлено" : activityDisplayResult(activity);
   if (resultText && resultText !== title && resultText !== comment) {
     var resultLine = document.createElement("span");
     resultLine.className = "agent-activity-caption status-" + presentation;
@@ -129,6 +140,33 @@ function renderActivityRow(activity, current, expandable, context) {
     copy.appendChild(caret);
   }
   return row;
+}
+
+function activityCompletedRowCopy(activity, result) {
+  var evidence = activityValue(activity, "ExecutionEvidence", "executionEvidence", null);
+  var effect = activityValue(evidence, "Effect", "effect", "");
+  if (effect === "VerifiedChange" || effect === "VerifiedNoChange") return { title: result, result: "" };
+  var operation = activityOperation(activity);
+  if (operation === "read") {
+    var read = activityReadSummary(activity);
+    if (read) {
+      var readCopy = activityReadPresentation(read);
+      return { title: readCopy.rowTitle, result: readCopy.rowDetail };
+    }
+    if (result === "Прочитано") return { title: result, result: "" };
+  }
+  if (operation === "search") {
+    var summary = activityTypedResultSummary(activity);
+    var count = activityValue(summary, "ReturnedItems", "returnedItems", null);
+    if (Number.isSafeInteger(count) && count >= 0) return { title: "Найдено", result: "элементов: " + count +
+      (activityValue(summary, "Complete", "complete", true) === false ||
+        activityValue(summary, "Partial", "partial", false) === true ? " · неполный список" : "") };
+    if (result === "Поиск завершён") return { title: result, result: "" };
+  }
+  if (operation === "learn" && (result === "Загружено" || result === "Загружена часть описания"))
+    return { title: result, result: "" };
+  if (operation === "check" && result === "Проверка завершена") return { title: "Проверено", result: "" };
+  return null;
 }
 
 function activityOperation(activity) {
@@ -220,19 +258,36 @@ function activityReadSummary(activity) {
 }
 
 function activityReadCaption(summary) {
+  return activityReadPresentation(summary).caption;
+}
+
+function activityReadPresentation(summary) {
   var representation = activityValue(summary, "Representation", "representation", "");
   var rows = activityValue(summary, "ReturnedRows", "returnedRows", null);
   var characters = activityValue(summary, "ReturnedCharacters", "returnedCharacters", null);
-  var caption;
-  if (Number.isSafeInteger(rows) && rows >= 0) caption = "Получено строк: " + rows;
-  else if (representation === "media") caption = activityValue(summary, "HydratedForNextModelStep", "hydratedForNextModelStep", false)
-    ? "Медиа подготовлено для следующего запроса модели" : "Получены сведения о медиа";
-  else if (representation === "metadata") caption = "Получены сведения · содержимое не загружено";
-  else {
+  var caption = "", rowTitle = "Прочитано", rowDetail = "";
+  if (Number.isSafeInteger(rows) && rows >= 0) {
+    caption = "Получено строк: " + rows; rowDetail = "строк: " + rows;
+  } else if (representation === "media") {
+    caption = activityValue(summary, "HydratedForNextModelStep", "hydratedForNextModelStep", false)
+      ? "Медиа подготовлено для следующего запроса модели" : "Получены сведения о медиа";
+    rowTitle = caption;
+  } else if (representation === "metadata") {
+    caption = "Получены сведения · содержимое не загружено";
+    rowTitle = "Получены сведения"; rowDetail = "содержимое не загружено";
+  } else {
     caption = { text: "Получен текст", source: "Получен исходный код", structure: "Получена структура" }[representation] || "Прочитано";
-    if (Number.isSafeInteger(characters) && characters >= 0) caption += " · символов: " + characters;
+    rowDetail = { text: "текст", source: "исходный код", structure: "структура" }[representation] || "";
+    if (Number.isSafeInteger(characters) && characters >= 0) {
+      caption += " · символов: " + characters;
+      rowDetail += (rowDetail ? " · " : "") + "символов: " + characters;
+    }
   }
-  return caption + (activityValue(summary, "Complete", "complete", true) === false ? " · часть данных" : "");
+  if (activityValue(summary, "Complete", "complete", true) === false) {
+    caption += " · часть данных";
+    rowDetail += (rowDetail ? " · " : "") + "часть данных";
+  }
+  return { caption: caption, rowTitle: rowTitle, rowDetail: rowDetail };
 }
 
 function activityResultCaption(activity) {
@@ -405,13 +460,19 @@ function activityDisplayResult(activity) {
       html_source_observation_required: "Нужно прочитать текущий HTML",
       tool_effect_uncertain: "Результат не подтверждён — нужна проверка"
     };
-    var failure = Object.prototype.hasOwnProperty.call(errors, code) ? errors[code]
-      : (dispatch === "NotDispatched" ? "Не удалось начать действие" : "Действие завершилось с ошибкой");
-    return code ? failure + " · " + code : failure;
+    if (Object.prototype.hasOwnProperty.call(errors, code)) return errors[code];
+    var message = String(activityResultMessage(activity) || "").replace(/\s+/g, " ").trim();
+    if (message) return message.length > 160 ? message.slice(0, 157) + "…" : message;
+    return code ? "Ошибка: " + code : dispatch === "NotDispatched" ? "Ошибка запуска" : "Ошибка выполнения";
   }
   if (!activityToolId(activity)) return activityResultMessage(activity);
   if (effect === "VerifiedNoChange") return "Без изменений";
-  if (effect === "VerifiedChange") return "Изменения подтверждены";
+  if (effect === "VerifiedChange") {
+    var toolId = activityToolId(activity);
+    if (activityOperation(activity) === "delete") return "Удалено";
+    if (activityOperation(activity) === "export") return "Экспортировано";
+    return toolId === "core.write" || /\.write$/.test(toolId) ? "Записано" : "Изменено";
+  }
   if (status !== "completed") return "Статус пока неизвестен";
   var resultCaption = activityResultCaption(activity);
   if (resultCaption) return resultCaption;
@@ -507,36 +568,189 @@ function createAgentCopyButton(label, text) {
   return button;
 }
 
+function appendToolActivityCard(parent, activity, context, disclosure, outcome) {
+  var card = document.createElement("div");
+  card.className = "agent-tool-card";
+  var header = document.createElement("div");
+  header.className = "agent-tool-card-header";
+  var message = activityResultMessage(activity);
+  if (message && message.trim() && message.trim() !== outcome) {
+    var messageWrap = document.createElement("div");
+    messageWrap.className = "agent-tool-message";
+    var messageText = document.createElement("span");
+    messageText.textContent = message.trim();
+    messageWrap.appendChild(messageText);
+    if (message.length > 180 || message.indexOf("\n") >= 0) {
+      var more = document.createElement("button");
+      more.type = "button";
+      more.className = "agent-tool-message-more";
+      more.textContent = "Показать всё";
+      more.setAttribute("aria-expanded", "false");
+      more.addEventListener("click", function () {
+        var expanded = messageWrap.classList.toggle("is-expanded");
+        more.textContent = expanded ? "Свернуть" : "Показать всё";
+        more.setAttribute("aria-expanded", String(expanded));
+      });
+      messageWrap.appendChild(more);
+    }
+    header.appendChild(messageWrap);
+    header.classList.add("has-message");
+  }
+  var tabs = document.createElement("div");
+  tabs.className = "agent-tool-tabs";
+  tabs.setAttribute("role", "tablist");
+  tabs.setAttribute("aria-label", "Данные вызова");
+  header.appendChild(tabs);
+  card.appendChild(header);
+  var panels = document.createElement("div");
+  panels.className = "agent-tool-panels";
+  card.appendChild(panels);
+  parent.appendChild(card);
+  var entries = {}, active = "";
+  function addTab(key, label, render, disposable) {
+    if (entries[key]) return entries[key];
+    var button = document.createElement("button");
+    button.type = "button";
+    button.className = "agent-tool-tab";
+    button.textContent = label;
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", "false");
+    button.tabIndex = -1;
+    button.addEventListener("click", function () { selectTab(key); });
+    tabs.appendChild(button);
+    var panel = document.createElement("div");
+    panel.className = "agent-tool-panel";
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-label", label);
+    panel.hidden = true;
+    panels.appendChild(panel);
+    entries[key] = { button: button, panel: panel, render: render, disposable: !!disposable, mounted: false, cleanup: null };
+    return entries[key];
+  }
+  function release(entry) {
+    if (!entry || !entry.mounted) return;
+    if (entry.cleanup) entry.cleanup();
+    entry.cleanup = null;
+    entry.mounted = false;
+  }
+  function mount(entry) {
+    if (!entry || entry.mounted || typeof entry.render !== "function") return;
+    entry.cleanup = entry.render(entry.panel) || null;
+    entry.mounted = true;
+  }
+  function selectTab(key) {
+    if (!entries[key] || entries[key].button.hidden) return;
+    if (active && active !== key && entries[active].disposable) release(entries[active]);
+    active = key;
+    Object.keys(entries).forEach(function (name) {
+      var selected = name === key;
+      entries[name].button.classList.toggle("active", selected);
+      entries[name].button.setAttribute("aria-selected", String(selected));
+      entries[name].button.tabIndex = selected ? 0 : -1;
+      entries[name].panel.hidden = !selected;
+    });
+    mount(entries[key]);
+  }
+  tabs.addEventListener("keydown", function (event) {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+    var names = Object.keys(entries).filter(function (key) { return !entries[key].button.hidden; });
+    var index = names.indexOf(active);
+    var next = names[(index + (event.key === "ArrowRight" ? 1 : names.length - 1)) % names.length];
+    if (!next) return;
+    event.preventDefault();
+    selectTab(next);
+    entries[next].button.focus();
+  });
+
+  var result = addTab("result", "Результат", null, false);
+  var argumentsJson = activityArgumentsJson(activity);
+  if (argumentsJson) addTab("arguments", "Аргументы", function (panel) {
+    return mountAgentJsonContent(panel, argumentsJson);
+  }, true);
+  var resultSlot = document.createElement("div");
+  resultSlot.className = "agent-tool-result-content";
+  result.panel.appendChild(resultSlot);
+  function showResponse(target, response) {
+    var blocks = response.blocks || [];
+    var normal = blocks.filter(function (block) { return block.kind !== "text_changes"; });
+    var changes = blocks.filter(function (block) { return block.kind === "text_changes"; });
+    var raw = response.rawJson || "";
+    release(result);
+    result.button.hidden = false;
+    if (normal.length) result.render = function () {
+      window.RNAssistantToolResultPresentation.renderCompact(target, normal);
+    };
+    else if (raw) result.render = function () {
+      target.textContent = "";
+      return mountAgentJsonContent(target, raw);
+    };
+    else result.render = function () { target.textContent = "Сохранённое содержимое результата недоступно."; };
+    result.disposable = !normal.length && !!raw;
+    if (changes.length) {
+      var changeTab = addTab("changes", "Изменения", null, false);
+      release(changeTab);
+      changeTab.panel.textContent = "";
+      changeTab.button.hidden = false;
+      changeTab.render = function (panel) {
+        changes.forEach(function (block) {
+          if (!block.changes) return;
+          if (!(block.changes.items || []).length && block.changes.complete && block.changes.evidenceFound)
+            panel.textContent = "Изменений нет.";
+          else window.RNAssistantRunChanges.renderInline(panel, block.changes);
+        });
+      };
+      if (active === "changes") mount(changeTab);
+    } else if (entries.changes) entries.changes.button.hidden = true;
+    if (raw && normal.length) {
+      var jsonTab = addTab("json", "JSON", null, true);
+      release(jsonTab);
+      jsonTab.button.hidden = false;
+      jsonTab.render = function (panel) { return mountAgentJsonContent(panel, raw); };
+      if (active === "json") mount(jsonTab);
+    } else if (entries.json) entries.json.button.hidden = true;
+    if (changes.length && !normal.length && !raw) {
+      result.button.hidden = true;
+      selectTab("changes");
+    } else if (active === "result") mount(result);
+    else if (entries[active] && entries[active].button.hidden) selectTab("result");
+  }
+  var loading = typeof appendToolResultPreview === "function" &&
+    appendToolResultPreview(resultSlot, activity, context, disclosure, showResponse);
+  if (!loading) {
+    var local = activityDataJson(activity);
+    result.render = local ? function () { return mountAgentJsonContent(resultSlot, local); }
+      : function () { resultSlot.textContent = activityStatus(activity) === "running" ? "Ожидаю результат…" : "Содержимое результата недоступно."; };
+    result.disposable = !!local;
+  }
+  selectTab("result");
+  disclosure.addEventListener("toggle", function () {
+    if (disclosure.open) {
+      if (active === "arguments" || !loading) mount(entries[active]);
+      return;
+    }
+    Object.keys(entries).forEach(function (key) {
+      if (entries[key].disposable) release(entries[key]);
+    });
+  });
+}
+
 function appendActivityDetailsContent(node, activity, context) {
   var children = activityChildren(activity);
 
   var body = document.createElement("div");
   body.className = "agent-activity-detail-body";
+  var toolId = activityToolId(activity);
   var outcome = activityDisplayResult(activity);
-  if (outcome && !activityDetailTexts(activity, context).length) {
+  if (!toolId && outcome && !activityDetailTexts(activity, context).length) {
     var summary = document.createElement("p"); summary.className = "agent-activity-detail-summary";
     summary.textContent = outcome; body.appendChild(summary);
   }
   var target = activityCommentText(activity);
-  if (target) {
+  if (target && !toolId) {
     var source = document.createElement("code");
     source.className = "agent-activity-target";
     source.textContent = target;
     body.appendChild(source);
-  }
-
-  if (activityToolId(activity)) {
-    var tool = document.createElement("div");
-    tool.className = "agent-activity-tool-id";
-    tool.textContent = activityToolId(activity);
-    body.appendChild(tool);
-    var code = activityValue(activity, "ErrorCode", "errorCode", "");
-    if (code) {
-      var errorCode = document.createElement("div");
-      errorCode.className = "agent-activity-tool-id";
-      errorCode.textContent = "Код ошибки: " + code;
-      body.appendChild(errorCode);
-    }
   }
 
   if (children.length && !(context && context.liveFeed)) {
@@ -548,21 +762,19 @@ function appendActivityDetailsContent(node, activity, context) {
     body.appendChild(childList);
   }
 
+  if (toolId) {
+    appendToolActivityCard(body, activity, context, node, outcome);
+    appendActivityErrorActions(body, activity, context);
+    node.appendChild(body);
+    return;
+  }
+
   activityDetailTexts(activity, context).forEach(function (text) {
     var result = document.createElement("div");
     result.className = "agent-activity-result";
     result.textContent = (activityToolId(activity) ? "" : "Диагностика:\n") + text;
     body.appendChild(result);
   });
-  var hasResultPreview = typeof appendToolResultPreview === "function" &&
-    appendToolResultPreview(body, activity, context, node);
-  if (typeof appendArgumentsData === "function") {
-    appendArgumentsData(body, activityArgumentsJson(activity));
-  }
-  if (!hasResultPreview && typeof appendActivityData === "function") {
-    appendActivityData(body, "Результат", activityDataJson(activity));
-  }
-
   appendActivityErrorActions(body, activity, context);
   node.appendChild(body);
 }

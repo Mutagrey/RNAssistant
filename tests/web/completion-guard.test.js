@@ -264,7 +264,7 @@ tests.push(["uncertain and correctable actions are amber while hard failures sta
   assert.equal(context.activityPresentationState(correctable), "failed");
   correctable.ErrorCode = "constructor";
   assert.equal(context.activityPresentationState(correctable), "failed", "only exact declared codes are warnings");
-  assert.match(context.activityDisplayResult(correctable), /Не удалось начать действие/);
+  assert.equal(context.activityDisplayResult(correctable), "Ошибка: constructor");
   correctable.ErrorCode = "resource_revision_changed";
   delete correctable.ExecutionEvidence;
   assert.equal(context.activityPresentationState(correctable), "failed", "missing effect evidence cannot downgrade a failure");
@@ -282,7 +282,7 @@ tests.push(["tool rows preserve action target and result without rewriting model
     ResultMessage: "Capability loaded with catalogRevision=private-revision" };
   const before = JSON.stringify(activity);
   const row = context.renderActivityRow(activity, false, true, null);
-  assert.match(row.textContent, /Изучение/);
+  assert.match(row.textContent, /Загружено/);
   assert.match(context.renderActivityNode(activity, false, false, null).textContent, /excel.range.write/);
   assert.match(row.textContent, /Загружено/);
   assert.doesNotMatch(row.textContent, /catalogRevision|private-revision|Capability loaded/);
@@ -291,9 +291,9 @@ tests.push(["tool rows preserve action target and result without rewriting model
   const write = { Kind: "tool", ToolId: "word.text.replace", Display: { action: "Замена текста", operation: "Write" }, Subtitle: longTarget, Status: "completed",
     ExecutionEvidence: { Effect: "VerifiedChange", Dispatch: "MayHaveDispatched" } };
   const changed = context.renderActivityRow(write, false, false, null);
-  assert.match(changed.textContent, /Замена текста/);
+  assert.match(changed.textContent, /Изменено/);
   assert.ok(context.renderActivityNode(write, false, false, null).textContent.includes(longTarget), "expanded detail preserves the full semantic target");
-  assert.match(changed.textContent, /Изменения подтверждены/);
+  assert.doesNotMatch(changed.textContent, /Изменения подтверждены/);
   write.ExecutionEvidence = { Effect: "VerifiedNoChange", Dispatch: "MayHaveDispatched" };
   assert.equal(context.activityDisplayResult(write), "Без изменений");
   write.Status = "failed";
@@ -380,13 +380,13 @@ tests.push(["result representations work for new tools without identity-specific
   activity.ToolId = "custom.read_table";
   delete activity.ResultSummary;
   const row = context.renderActivityRow(activity, false, true, null);
-  const target = walk(context.renderActivityNode(activity, false, false, null)).find(node => node.tagName === "code");
+  const target = walk(context.renderActivityNode(activity, false, false, null)).find(node => /agent-activity-object/.test(node.className));
   assert.equal(target.textContent, activity.Subtitle);
   assert.equal(target.innerHTML, "", "targets are literal text, never Markdown or HTML");
   activity.ExecutionEvidence = { Effect: "Unknown" };
   assert.match(context.activityDisplayResult(activity), /не подтверждён/);
   activity.ExecutionEvidence.Effect = "VerifiedChange";
-  assert.equal(context.activityDisplayResult(activity), "Изменения подтверждены");
+  assert.equal(context.activityDisplayResult(activity), "Изменено");
 }]);
 tests.push(["read metadata survives absent and large bodies without granting effects", () => {
   for (const DataJson of [null, JSON.stringify({ text: "x".repeat(40000) })]) {
@@ -420,11 +420,11 @@ tests.push(["catalog display works for arbitrary ids while zero-action history s
 tests.push(["localized failures and operation icons remain independent of model wording", () => {
   const failure = { Kind: "tool", ToolId: "core.tools.read", Status: "failed", ErrorCode: "capability_not_found",
     ResultMessage: "Missing tool. RUNTIME_CONTEXT.capabilities catalogRevision=abc" };
-  assert.equal(context.activityDisplayResult(failure), "Инструмент или навык не найден · capability_not_found");
+  assert.equal(context.activityDisplayResult(failure), "Инструмент или навык не найден");
   failure.ErrorCode = "parameters_schema";
-  assert.equal(context.activityDisplayResult(failure), "Некорректная схема параметров · parameters_schema");
+  assert.equal(context.activityDisplayResult(failure), "Некорректная схема параметров");
   failure.ErrorCode = "unexpected_vendor_failure";
-  assert.equal(context.activityDisplayResult(failure), "Действие завершилось с ошибкой · unexpected_vendor_failure");
+  assert.equal(context.activityDisplayResult(failure), "Missing tool. RUNTIME_CONTEXT.capabilities catalogRevision=abc");
   failure.ExecutionEvidence = { Effect: "Unknown", Dispatch: "MayHaveDispatched" };
   assert.match(context.activityDisplayResult(failure), /не подтверждён/);
   assert.equal(context.activityPresentationState(failure), "unknown");

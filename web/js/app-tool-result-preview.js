@@ -73,29 +73,33 @@
       else window.RNAssistantRunChanges.renderInline(body, block.changes);
     }
   };
-  function render(parent, response) {
+  function renderCompact(parent, blocks) {
     parent.textContent = "";
-    if (response.executionReference || response.action) parent.appendChild(node("p", "tool-result-note tool-result-receipt",
-      [response.executionReference, response.action || "Результат инструмента", response.target].filter(Boolean).join(" · ")));
-    (response.blocks || []).forEach(function (block) {
+    (blocks || []).forEach(function (block) {
       var renderer = renderers[block.kind];
       if (typeof renderer !== "function" || !Object.prototype.hasOwnProperty.call(renderers, block.kind)) {
-        parent.appendChild(node("p", "tool-result-note", "Этот вид представления недоступен. Данные — в JSON ниже.")); return;
+        parent.appendChild(node("p", "tool-result-note", "Этот вид представления недоступен. Откройте JSON результата."));
+        return;
       }
-      var card = node("details", "tool-result-preview"); card.open = !block.source;
-      var heading = node("summary", block.source ? "tool-source-caption" : "", block.source ? sourceLabel(block.source) : block.title);
-      if (block.source) heading.title = "Развернуть сохранённый фрагмент результата";
-      card.appendChild(heading);
+      var source = !!block.source && (blocks || []).length > 1;
+      var card = node(source ? "details" : "section", "tool-result-preview" + (source ? " has-source" : ""));
+      if (source) {
+        card.appendChild(node("summary", "tool-source-caption", sourceLabel(block.source)));
+      } else if ((blocks || []).length > 1 && block.title && block.title !== "Содержимое") {
+        card.appendChild(node("div", "tool-result-block-title", block.title));
+      }
       if (block.note) card.appendChild(node("p", "tool-result-note", block.note));
       if (!block.complete && block.kind !== "text_changes")
-        card.appendChild(node("p", "tool-result-note", "Показана доступная часть результата. Подробности — в JSON ниже."));
-      var body = node("div", "tool-result-preview-body"); card.appendChild(body);
-      renderer(body, block); parent.appendChild(card);
+        card.appendChild(node("p", "tool-result-note", "Показана доступная часть результата. Полные данные — во вкладке JSON, если они сохранены."));
+      var body = node("div", "tool-result-preview-body");
+      card.appendChild(body);
+      renderer(body, block);
+      parent.appendChild(card);
     });
-    if (response.rawJson) appendActivityData(parent, "Результат JSON", response.rawJson);
   }
-  window.RNAssistantToolResultPresentation = { render: render, sourceLabel: sourceLabel };
+  window.RNAssistantToolResultPresentation = { renderCompact: renderCompact, sourceLabel: sourceLabel };
   window.appendToolResultPreview = function (parent, activity, context, disclosure, renderResponse) {
+    if (typeof renderResponse !== "function") throw new Error("A tool result renderer is required.");
     var workspace = !!(context && context.workspace);
     var owner = workspace && window.RNAssistantChatInspector ? window.RNAssistantChatInspector.target() : null;
     var scopeOwner = owner && owner.owner;
@@ -136,7 +140,7 @@
         if (!response || response.chatId !== chatId || response.runId !== runId || response.toolCallId !== toolCallId ||
             workspace && response.workspaceId !== workspaceId)
           throw new Error("Mismatched presentation source.");
-        (renderResponse || render)(slot, response);
+        renderResponse(slot, response);
       }).catch(function () {
         if (ticket !== generation || !active()) return;
         requestId = null; slot.textContent = "";

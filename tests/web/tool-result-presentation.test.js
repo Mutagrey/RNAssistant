@@ -14,11 +14,6 @@ const { chromium } = require("playwright");
       window.activityToolCallId = a => a.ToolCallId;
       window.messageRunId = m => m.RunId;
       window.requests = []; window.cancelled = [];
-      window.appendActivityData = (parent, label, text) => {
-        const details = document.createElement("details"), summary = document.createElement("summary"), pre = document.createElement("pre");
-        details.className = "canonical-json"; summary.textContent = label; pre.textContent = text;
-        details.append(summary, pre); parent.appendChild(details);
-      };
       window.send = (type, payload) => {
         let resolve; const promise = new Promise(done => { resolve = done; }); promise.requestId = String(requests.length);
         requests.push({ type, payload, resolve }); return promise;
@@ -27,7 +22,8 @@ const { chromium } = require("playwright");
     });
     await page.addScriptTag({ content: fs.readFileSync(path.join(__dirname, "../../web/js/app-tool-result-preview.js"), "utf8") });
     await page.evaluate(() => {
-      appendToolResultPreview(document.getElementById("preview"), { ToolCallId: "call", RunId: "run" }, null, document.getElementById("step"));
+      window.renderPreview = (target, response) => RNAssistantToolResultPresentation.renderCompact(target, response.blocks);
+      appendToolResultPreview(document.getElementById("preview"), { ToolCallId: "call", RunId: "run" }, null, document.getElementById("step"), renderPreview);
     });
     assert.equal(await page.evaluate(() => requests.length), 0, "collapsed card performs no fetch");
     await page.locator("#step > summary").click();
@@ -58,16 +54,16 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#raw").textContent(), "Результат JSONraw source", "presentation never rewrites original results");
     await page.evaluate(() => {
       const card = document.createElement("div"); card.id = "source-captions"; document.body.appendChild(card);
-      RNAssistantToolResultPresentation.render(card, { executionReference: "E7", action: "Чтение", target: "src/A.cs", rawJson: '{"business":{"ref":"R999"}}', blocks: [
+      RNAssistantToolResultPresentation.renderCompact(card, [
         { kind: "text", title: "Содержимое", complete: false, text: "искомый текст\nfull retained slice", source: {
           reference: "R3@v1", target: "src/A.cs", view: "text", coverage: { kind: "line-range", start: 42, end: 43 },
           excerpt: "искомый текст", excerptTruncated: false } },
         { kind: "list", title: "Совпадения", complete: true, items: [{ title: "src/B.cs", detail: "другое совпадение", source: {
           target: "src/B.cs", line: 17, excerpt: "<img src=x onerror=alert(1)>" } }] }
-      ] });
+      ]);
     });
-    assert.equal(await page.locator("#source-captions > p").textContent(), "E7 · Чтение · src/A.cs");
-    assert.equal(await page.locator("#source-captions .canonical-json pre").textContent(), '{"business":{"ref":"R999"}}', "arbitrary result data remains available as inert canonical JSON");
+    assert.equal(await page.locator("#source-captions > p").count(), 0,
+      "the compact content does not repeat the call title or receipt");
     const sourceHeading = page.locator("#source-captions .tool-source-caption").first();
     assert.equal(await sourceHeading.textContent(), "R3@v1 — src/A.cs, строка 42: «искомый текст»");
     assert.equal(await sourceHeading.evaluate(node => node.parentNode.open), false, "source body starts collapsed behind the caption");
@@ -85,12 +81,11 @@ const { chromium } = require("playwright");
       kind: "page-range", start: 1, end: 2 } })), "report.pdf, страница 2", "single PDF page uses a singular caption");
     assert.equal(await page.evaluate(() => RNAssistantToolResultPresentation.sourceLabel({ target: "report.pdf", coverage: {
       kind: "page-range", start: 2, end: 4 } })), "report.pdf, страницы 3–4", "PDF range is one-based with exclusive end preserved");
-    await page.evaluate(() => RNAssistantToolResultPresentation.render(document.getElementById("source-captions"), { blocks: [{
+    await page.evaluate(() => RNAssistantToolResultPresentation.renderCompact(document.getElementById("source-captions"), [{
       kind: "text", title: "Медиа", complete: true, source: { target: "photo.png", view: "media" },
       note: "<img src=x onerror=alert(1)> Подготовка не подтверждает отправку.", text: "Сохранены сведения о медиа."
-    }] }));
-    await page.locator("#source-captions > details > summary").click();
-    assert.match(await page.locator("#source-captions").innerText(), /photo.png · медиа/);
+    }]));
+    assert.match(await page.locator("#source-captions").innerText(), /Сохранены сведения о медиа/);
     assert.equal(await page.locator("#source-captions img").count(), 0, "typed block notes remain inert text");
     assert.equal(await page.evaluate(() => requests.length), 4, "expanding a retained media receipt never rereads the live resource");
     await page.locator("#source-captions").evaluate(node => node.remove());
@@ -153,7 +148,7 @@ const { chromium } = require("playwright");
       details.innerHTML = '<summary>Шаг workspace</summary><div id="workspace-preview"></div>';
       document.body.appendChild(details);
       appendToolResultPreview(document.getElementById("workspace-preview"),
-        { ToolCallId: "workspace-call", RunId: "workspace-run" }, { workspace: true }, details);
+        { ToolCallId: "workspace-call", RunId: "workspace-run" }, { workspace: true }, details, renderPreview);
     });
     await page.locator("#workspace-result > summary").click();
     await page.waitForFunction(() => requests.length === 8);
