@@ -472,6 +472,7 @@ function applyInitState(init) {
   renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);
   renderChatSessions();
+  renderChatSessions();
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }

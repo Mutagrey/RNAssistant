@@ -10,7 +10,7 @@ function sortedChatSessions(chats) {
 }
 
 function renderChatSessions() {
-  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  
   var select = $("chatSessionSelect");
   if (!select) {
     return;
@@ -1047,7 +1047,7 @@ function lastModelUsage() {
 }
 
 function renderContextMeter() {
-  if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
+  
   var summary = $("contextMeterSummary");
   var meter = $("contextMeter");
   if (!summary || !meter) {
