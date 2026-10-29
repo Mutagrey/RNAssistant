@@ -66,13 +66,16 @@ def main():
                 summary.pop('satisfied_claim_without_external_artifact', None)
                 summary['unexpected_final_mutation'] = any(not summary['external_inputs_unchanged'][p] and
                     not summary['external_exact_files'][p] for p in task['initial'])
-                summary['patch_calls'] = (summary.get('tool_counts') or {}).get('core.patch', 0)
+                events = [json.loads(line) for line in (folder / 'stdout.jsonl').read_text().splitlines() if line.strip()]
+                summary['patch_calls'] = sum(event.get('type') == 'tool.started' and
+                    (event.get('data') or {}).get('ToolId') == 'core.patch' for event in events)
                 summary['extra_patch_calls'] = max(0, summary['patch_calls'] - 1)
                 summary['first_patch_final_correct'] = correct and summary['patch_calls'] == 1
                 (folder / 'summary.json').write_text(json.dumps(summary, ensure_ascii=False, indent=2) + '\n')
                 summaries.append(summary)
                 (args.output / 'summary.json').write_text(json.dumps(summaries, ensure_ascii=False, indent=2) + '\n')
-                print(variant, name, 'correct=' + str(correct), 'patches=' + str(summary['patch_calls']), 'seconds=' + str(summary['seconds']), flush=True)
+                print(variant, name, 'correct=' + str(correct), 'lifecycle=' + str(summary['lifecycle']),
+                      'patches=' + str(summary['patch_calls']), 'seconds=' + str(summary['seconds']), flush=True)
 
 
 if __name__ == '__main__':

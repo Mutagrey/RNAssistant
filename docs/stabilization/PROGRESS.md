@@ -11,8 +11,12 @@ Owner: Core Tools, Application Workspace, Office source owners. Публичны
 применение Deny к read-only workspace и hash ограниченного authored-file
 after-source. Целевые host-neutral Harness, CLI и Web
 проверки проходят; широкие старые VBA/HTML/context-continuity fixtures уже падали
-до v2. Сравнение Qwen/DeepSeek и реальная Windows/Office/WebView2 квалификация
-остаются открытыми. Контракт — [Text mutations](../text-mutations.md).
+до v2. Предварительный Qwen 27B probe дал точный файл после трёх ручных patch
+вызовов, но run закончился по лимиту итераций; structured run истёк по времени
+после чтения без patch. Qwen 9B в обоих вариантах остановилась на reflection limit,
+GPT OSS — на усечённом ответе до инструмента. Сравнительная модельная оценка
+остаётся открытой; DeepSeek локально отсутствует. Реальная Windows/Office/WebView2
+квалификация также открыта. Контракт — [Text mutations](../text-mutations.md).
 
 ## Patch, неизвестный эффект и схемы — 2026-10-29
 
