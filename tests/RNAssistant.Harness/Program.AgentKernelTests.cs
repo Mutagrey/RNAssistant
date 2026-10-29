@@ -127,6 +127,47 @@ namespace RNAssistant.Harness
             AssertEqual(RunLifecycle.Running, rejection.Summary.Lifecycle, "rejection is durable nonterminal evidence");
             AssertEqual(unmet, rejection.Summary.AssistantMessage, "evidence records unmet requirements instead of a success claim");
             AssertEqual(2, f.Store.Events.Count(e => e.Kind == AgentRunEventKind.ResponseAccepted), "only read and final completion are accepted");
+            await KernelPartialFinishRecheck();
+        }
+
+        private static async Task KernelPartialFinishRecheck()
+        {
+            var premature = new AgentResponseDraft(ConversationResponse.FinishAction,
+                "I found fixable defects and will correct them next.", "The review is incomplete.",
+                results: new[] { new ConversationResultClaim("Source reviewed; fixes remain.",
+                    new[] { "call_1" }, ConversationAssessment.PartiallySatisfied) },
+                outcome: ConversationOutcome.Partial);
+            var f = new KernelFixture(KernelResponse(KernelCall("read")), premature,
+                KernelResponse(KernelCall("write")), KernelResponse());
+            var result = await f.RunAsync();
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "a feasible next action continues in the same run after partial finish recheck");
+            AssertEqual(4, result.Summary.IterationsUsed, "recheck consumes one bounded model iteration");
+            AssertEqual(2, f.Tools.Calls.Count, "read and subsequent fix each execute once");
+            AssertEqual(ModelProtocolWire.PartialFinishRecheckGuidance, f.Model.Requests[2].CompletionFeedback,
+                "model receives a concrete choice to act or explain the obstacle");
+            AssertEqual(0, f.Model.Requests[2].AcceptedMessages.Count(m => m.Action == ConversationResponse.FinishAction),
+                "premature partial is not accepted as final history");
+            AssertEqual(1, f.Store.Events.Count(e => e.Summary.Reason == "partial_finish_recheck"),
+                "recheck has a visible durable boundary");
+            AssertEqual(ConversationOutcome.Completed,
+                result.AcceptedMessages.Single(m => m.Action == ConversationResponse.FinishAction).Outcome.Value,
+                "the final model assessment follows the corrective tool result");
+
+            foreach (var limits in new[] { new AgentRunLimits(3, 3), new AgentRunLimits(2, 3),
+                new AgentRunLimits(3, 1) })
+            {
+                var honest = new KernelFixture(KernelResponse(KernelCall("read")), premature, premature);
+                var stopped = await honest.RunAsync(limits: limits);
+                AssertEqual(RunLifecycle.Completed, stopped.Summary.Lifecycle,
+                    "an honest partial remains a valid terminal answer");
+                AssertEqual(ConversationOutcome.Partial,
+                    stopped.AcceptedMessages.Single(m => m.Action == ConversationResponse.FinishAction).Outcome.Value,
+                    "partial assessment is retained when no further action follows");
+                AssertEqual(limits.MaxIterations == 3 && limits.MaxToolSteps == 3 ? 3 : 2,
+                    honest.Model.Requests.Count, "recheck never exceeds remaining iteration or tool budget");
+                AssertEqual(1, honest.Tools.Calls.Count, "recheck does not replay the earlier read");
+            }
         }
 
         private static async Task KernelCompletionRejectionStops()

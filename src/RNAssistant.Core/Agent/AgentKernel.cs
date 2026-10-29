@@ -94,11 +94,16 @@ namespace RNAssistant.Core.Agent
                 return await FinishAsync(state, RunLifecycle.Failed, "restored_no_progress",
                     "The checkpoint already exhausted its no-progress allowance.").ConfigureAwait(false);
             string completionFeedback = state.ReflectionFeedbackIssued ? ReflectionLimitFeedback(state) : null;
+            var partialFinishRechecked = false;
             while (state.Iterations < state.Limits.MaxIterations)
             {
                 if (cancellationToken.IsCancellationRequested)
                     return await FinishAsync(state, RunLifecycle.Cancelled, "cancelled", "Run cancelled.").ConfigureAwait(false);
-                if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false)) completionFeedback = null;
+                if (await TakeInputAsync(state, cancellationToken).ConfigureAwait(false))
+                {
+                    completionFeedback = null;
+                    partialFinishRechecked = false;
+                }
                 state.Iterations++;
                 var stepId = state.RunId + ":" + state.Iterations;
                 await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.ModelStepStarted, state.Summary(), stepId)).ConfigureAwait(false);
@@ -210,6 +215,18 @@ namespace RNAssistant.Core.Agent
                         completionFeedback = admission.Code + ": " + admission.Message;
                         await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
                             state.Summary(reason: "completion_requirements_unmet", message: completionFeedback), stepId)).ConfigureAwait(false);
+                        continue;
+                    }
+                    // Reconsider a partial claim once without interpreting free-form reason text.
+                    // Keep the available terminal answer when another step cannot fit.
+                    if (response.Outcome == ConversationOutcome.Partial && state.AcceptedIds.Count > 0 &&
+                        !partialFinishRechecked && state.Iterations < state.Limits.MaxIterations &&
+                        state.ToolSteps < state.Limits.MaxToolSteps)
+                    {
+                        partialFinishRechecked = true;
+                        completionFeedback = ModelProtocolWire.PartialFinishRecheckGuidance;
+                        await AppendAsync(state, new AgentRunEvent(AgentRunEventKind.SummaryChanged,
+                            state.Summary(reason: "partial_finish_recheck", message: completionFeedback), stepId)).ConfigureAwait(false);
                         continue;
                     }
                     if (_input != null && !_input.TryCloseInput()) continue;

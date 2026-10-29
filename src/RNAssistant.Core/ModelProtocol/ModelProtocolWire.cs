@@ -19,6 +19,12 @@ namespace RNAssistant.Core.ModelProtocol
             "Report concrete obstacles and unfinished outcomes honestly; unverified does not waive required inspection. " +
             "Do not ask the user to verify state that available read tools can inspect.";
 
+        public const string PartialFinishRecheckGuidance =
+            "The proposed finish with outcome=partial was not accepted yet. Reassess the unfinished task against the available tools and permissions. " +
+            "If a feasible authorized step remains, choose execute now and wait for its result; ask indispensable questions through the question tool. " +
+            "If no feasible step remains, finish with outcome=partial and state the concrete obstacle and unfinished result. " +
+            "Do not repeat accepted calls or claim that a read proves an unperformed change.";
+
         public const string FinishGuidance =
             "finish is a final assertion and answer, never a question, request for approval, offer to continue or promise of future work. " +
             "Required outcome is the model's task assessment: completed (all results satisfied), partial (some achieved and some incomplete work: partially_satisfied or a mix), " +
@@ -26,7 +32,9 @@ namespace RNAssistant.Core.ModelProtocol
             "reason briefly explains why finishing is justified now; message must be nonblank and give the actual answer/result, a concise explanation and any unfinished work or verification limits. " +
             "For a simple direct answer, one clear sentence is enough. Use the user's language. " +
             "Outcome and result assessments are model claims; runtime checks evidence independently. " +
-            "If indispensable user input is needed, choose execute with the available question tool. Continue feasible authorized work before finishing.";
+            "If indispensable user input is needed, choose execute with the available question tool. " +
+            "After finding a fixable defect, take the next authorized action and continue feasible work before finishing. " +
+            "For partial or unable_to_complete, explain the concrete obstacle to further work.";
 
         private const string ReflectionInstruction =
             "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. ";

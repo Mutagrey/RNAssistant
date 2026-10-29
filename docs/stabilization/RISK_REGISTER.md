@@ -1,5 +1,20 @@
 # Stabilization risk register
 
+## Преждевременный finish/partial после VBA-анализа — 2026-10-29
+
+Фото Windows показывает завершённый ответ модели (`Termination=Completed`): после
+чтения модулей она выбрала `action=finish`, `outcome=partial`, хотя в `reason`
+назвала следующий шаг — исправить найденные ошибки. Это валидный terminal v8;
+текст намерения сам по себе не вызывает следующий tool. Owner: Core AgentKernel /
+ModelProtocol. Первый admitted partial после tool calls теперь получает одну
+ограниченную перепроверку в том же run, если остались model/tool бюджеты; модель
+должна выполнить доступный шаг либо явно объяснить препятствие и подтвердить
+partial. Повторный partial и исчерпанный бюджет остаются честным terminal.
+Scripted host-neutral regression проверяет продолжение, отсутствие accepted
+преждевременного final и сохранение повторного partial или ответа на последнем
+бюджетном шаге. Реальная Windows/
+Office/WebView2 траектория и качество конкретной модели остаются открытыми.
+
 ## Пакетный core.patch: границы квалификации — 2026-10-29
 
 Owner: Core Tools / Application Workspace / Office Tools; Web — представление.

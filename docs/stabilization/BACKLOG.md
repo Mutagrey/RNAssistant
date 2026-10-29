@@ -23,6 +23,11 @@ Owner: Harness / Core Tools / Office Tools. Полный набор не зап�
 Не возвращать старые aliases ради fixtures. После переноса запускать только
 затронутые сценарии. Два основных catalog fixtures, полные dotted references и
 Skill Library init уже переключены и проверены; см. [аудит](../audits/capability-inventory-2026-10-29.md).
+В текущем незавершённом рабочем дереве отдельно падают два `completion guard:
+confirmation preserves ...` (не достигнут ожидаемый pending) и `agent:
+characterization completed after write error` (ошибка индекса в fixture).
+Они не доходят до перепроверки `finish/partial`; сверить tool admission и
+ожидаемые шаги этих Office mock сценариев после текущих изменений каталога.
 
 ## Восстановление рабочих сценариев чата — 2026-10-26
 

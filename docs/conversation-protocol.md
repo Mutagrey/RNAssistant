@@ -17,6 +17,8 @@ terminal evidence, effects and explicit task acceptance. Accepted finish ends th
 run, but does not establish whole-task success. Questions go through
 `common.questions_ask`. The exact shape, correction and reflection-limit behavior
 are owned by the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md).
+An admitted `finish/partial` after tool calls gets one bounded reconsideration while
+run budgets remain; `finish` is never itself a request to continue.
 
 - Agent is the default behavior, without a mode selector in the UI.
 - The single **Plan** toggle in the composer `+` menu stays active until disabled.

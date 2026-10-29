@@ -39,6 +39,13 @@ fixed Markdown headings are required. Necessary questions use `execute` with
 The question/answer distinction is a semantic model instruction; punctuation is
 not an admission rule (quoted questions and source code can contain `?`).
 
+After accepted calls, a first admitted `finish/partial` receives one bounded
+recheck when model iterations and tool steps remain. The draft is not accepted into
+history; runtime asks the model to execute feasible authorized work or explain the
+concrete obstacle and repeat the honest partial finish. A repeated partial finish
+is accepted. Exhausted limits do not replace an available partial answer with a
+limit failure. This check does not infer task success or authorize tool effects.
+
 `outcome` is required only on finish and is the **model's claim**, independent of
 runtime lifecycle, effect health and task verification. Results assess requested
 task outcomes, not a list of incidental successful discovery operations.
