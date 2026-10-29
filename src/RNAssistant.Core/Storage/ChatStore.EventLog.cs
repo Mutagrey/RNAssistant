@@ -61,6 +61,13 @@ namespace RNAssistant.Core.Storage
             string path, long startByteOffset, SessionEvent previousEvent,
             Action<SessionEvent> projectionVisitor)
         {
+            return ReadEventLog(path, startByteOffset, previousEvent, projectionVisitor, null);
+        }
+
+        private EventLogReadResult ReadEventLog(
+            string path, long startByteOffset, SessionEvent previousEvent,
+            Action<SessionEvent> projectionVisitor, Func<SessionEvent, bool> retainEvent)
+        {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
             var result = new EventLogReadResult();
             var protector = Protection();
@@ -72,12 +79,12 @@ namespace RNAssistant.Core.Storage
                 previousEvent, protector,
                 (sessionEvent, line) =>
                 {
-                    if (projectionVisitor == null)
+                    if (projectionVisitor == null && (retainEvent == null || retainEvent(sessionEvent)))
                     {
                         HydrateEventData(sessionEvent, protector);
                         result.Events.Add(sessionEvent);
                     }
-                    else if (IsProjectionEvent(sessionEvent))
+                    else if (projectionVisitor != null && IsProjectionEvent(sessionEvent))
                     {
                         HydrateEventData(sessionEvent, protector);
                         projectionVisitor(sessionEvent);

@@ -141,6 +141,13 @@ namespace RNAssistant.Harness
                 var accepted = events.Read(session, SessionEventReadMode.RequireComplete).First(e => e.Type == SessionEventTypes.ConversationInputChanged);
                 AssertEqual("first", events.ReadPayload(session, accepted), "immutable text body is CAS-backed");
                 AssertTrue(accepted.Data["Input"]["Text"].Type == Newtonsoft.Json.Linq.JTokenType.Null, "body is not duplicated in metadata");
+                store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new { Marker = "unrelated diagnostic" }, "diagnostic body", "text/plain", "run", "turn", "step");
+                var inputFacts = events.Read(session, SessionEventReadMode.RequireCompleteInputJournal);
+                AssertTrue(inputFacts.All(fact => fact.Type == SessionEventTypes.ConversationInputChanged ||
+                    fact.Type == SessionEventTypes.SessionCommit), "inbox replay retains only inputs and commits");
+                AssertEqual(2, new ConversationInputJournal(events).Read(session).Count,
+                    "filtered replay still restores the accepted inputs");
                 inbox.Update(session, new ConversationInputUpdate { InputId = "b", ExpectedRevision = 1, Text = "edited" }, "edit");
                 AssertEqual("a", inbox.TakeNext(session).Id, "FIFO claim");
                 var delivered = new ChatMessage { Id = "a", Role = "user", Content = "first" };

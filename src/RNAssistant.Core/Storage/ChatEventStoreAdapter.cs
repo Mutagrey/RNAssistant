@@ -49,6 +49,8 @@ namespace RNAssistant.Core.Storage
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (mode == SessionEventReadMode.RequireComplete)
                 return _store.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
+            if (mode == SessionEventReadMode.RequireCompleteInputJournal)
+                return _store.ReadCompleteInputJournalEvents(session.Host, session.DocumentKey, session.Id);
             if (mode != SessionEventReadMode.Validated)
                 throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unsupported event read mode.");
             return _store.ReadEvents(session.Host, session.DocumentKey, session.Id);

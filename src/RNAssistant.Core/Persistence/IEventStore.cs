@@ -277,7 +277,8 @@ namespace RNAssistant.Core.Persistence
     public enum SessionEventReadMode
     {
         Validated = 1,
-        RequireComplete = 2
+        RequireComplete = 2,
+        RequireCompleteInputJournal = 3
     }
 
     public interface IEventStore

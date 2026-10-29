@@ -32,7 +32,7 @@ namespace RNAssistant.Core.Services
             long? upToSequence = null)
         {
             if (upToSequence < 0) throw new ArgumentOutOfRangeException(nameof(upToSequence));
-            var facts = _events.Read(session, SessionEventReadMode.RequireComplete)
+            var facts = _events.Read(session, SessionEventReadMode.RequireCompleteInputJournal)
                 .Where(fact => !upToSequence.HasValue || fact.Sequence <= upToSequence.Value).ToArray();
             var records = facts.Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged).Select(fact =>
                 {
