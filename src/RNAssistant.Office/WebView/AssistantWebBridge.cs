@@ -189,6 +189,9 @@ namespace RNAssistant.Office.WebView
                     if (needsExclusiveBinding) _hostSwitchPending = true;
                 }
                 var timer = Stopwatch.StartNew();
+                var stageTimings = new List<BridgeStageTimingDto>();
+                Action<string, long> reportStage = (name, elapsedMs) =>
+                    stageTimings.Add(new BridgeStageTimingDto { Name = name, ElapsedMs = elapsedMs });
                 var payload = request.Payload ?? JValue.CreateNull();
                 if (type != BridgeOperationId.Init && !string.Equals(request.BridgeToken, _bridgeToken, StringComparison.Ordinal))
                 {
@@ -238,7 +241,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
                     case BridgeOperationId.BeginProjectChatFileUpload: case BridgeOperationId.WriteProjectChatFileChunk:
                     case BridgeOperationId.CompleteProjectChatFileUpload: case BridgeOperationId.CancelProjectChatFileUpload:
-                        responsePayload = await HandlePluginAsync(id, type, payload, cancellationToken).ConfigureAwait(false);
+                        responsePayload = await HandlePluginAsync(id, type, payload, cancellationToken, reportStage).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetWorkspaceState:
                         responsePayload = await RunBridgeWorkAsync(_workspaces.ReadState, cancellationToken).ConfigureAwait(false);
@@ -342,7 +345,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.GetChatState:
                         var getChat = Payload<ChatPayload>(payload);
                         responsePayload = await RunBridgeWorkAsync(
-                            () => _controller.GetChatDetail(getChat.ChatId),
+                            () => _controller.GetChatDetail(getChat.ChatId, reportStage),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetPreviousChatMessages:
@@ -383,15 +386,17 @@ namespace RNAssistant.Office.WebView
                         var selectChat = Payload<ChatPayload>(payload);
                         if (OfficeChatSelectionRequested == null)
                             responsePayload = await RunBridgeWorkAsync(
-                                () => _controller.SelectChat(selectChat.ChatId, shell => ReportChatSelection(id, shell)),
+                                () => _controller.SelectChat(selectChat.ChatId, shell => ReportChatSelection(id, shell), reportStage),
                                 cancellationToken).ConfigureAwait(false);
                         else
                         {
                             // Selecting a chat on the bound document does not replace the
                             // controller or the document session captured by an active run.
+                            var currentDocumentStartMs = timer.ElapsedMilliseconds;
                             var currentDocumentChat = await RunBridgeWorkAsync(
                                 () => _controller.TrySelectCurrentDocumentChat(selectChat.ChatId),
                                 cancellationToken).ConfigureAwait(false);
+                            reportStage("currentDocument", timer.ElapsedMilliseconds - currentDocumentStartMs);
                             if (currentDocumentChat != null)
                             {
                                 responsePayload = currentDocumentChat;
@@ -404,8 +409,10 @@ namespace RNAssistant.Office.WebView
                                     throw new BridgeSwitchBusyException();
                                 _hostSwitchPending = true;
                             }
+                            var hostSwitchStartMs = timer.ElapsedMilliseconds;
                             var selectedOfficeChat = await Task.Run(() => OfficeChatSelectionRequested(
                                 selectChat.ChatId), cancellationToken).ConfigureAwait(false);
+                            reportStage("hostSwitch", timer.ElapsedMilliseconds - hostSwitchStartMs);
                             if (selectedOfficeChat == null ||
                                 !string.Equals(selectedOfficeChat.ChatId, selectChat.ChatId, StringComparison.Ordinal) ||
                                 string.IsNullOrWhiteSpace(selectedOfficeChat.Host) ||
@@ -958,7 +965,8 @@ namespace RNAssistant.Office.WebView
                         {
                             Type = "bridgeTiming",
                             Payload = new BridgeTimingDto { RequestId = id, Operation = type.ToString(),
-                                HandleMs = handleMs, SerializeMs = serializeMs, ResponseChars = serialized.Length }
+                                HandleMs = handleMs, SerializeMs = serializeMs, ResponseChars = serialized.Length,
+                                Stages = stageTimings.Count == 0 ? null : stageTimings.ToArray() }
                         }));
                     }
                     catch { /* Timing is advisory; it cannot fail the chat response. */ }

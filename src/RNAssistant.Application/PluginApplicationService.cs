@@ -819,17 +819,27 @@ namespace RNAssistant.Application
             }
         }
 
-        public ProjectChatStateDto ProjectChat(ProjectChatRequest request)
+        public ProjectChatStateDto ProjectChat(ProjectChatRequest request, Action<string, long> reportStage = null)
         {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             using (PluginStore.AcquireRuntimeUse(_paths))
             {
+            var leaseMs = timer.ElapsedMilliseconds;
+            ReportChatReadStage(reportStage, "lease", leaseMs);
             if (request == null || string.IsNullOrWhiteSpace(request.SessionId))
                 throw new PluginException("project_chat_invalid", "A project chat is required.");
             var workspace = RequireProjectWorkspace(request.WorkspaceId);
+            var workspaceMs = timer.ElapsedMilliseconds;
+            ReportChatReadStage(reportStage, "workspace", workspaceMs - leaseMs);
             var session = Conversations.RefreshSession(workspace, request.SessionId);
+            var loadMs = timer.ElapsedMilliseconds;
+            ReportChatReadStage(reportStage, "load", loadMs - workspaceMs);
             if (session == null) throw new PluginException("project_chat_missing", "The chat is not in this workspace.");
             var snapshot = Conversations.ReadState(workspace, session);
+            var stateMs = timer.ElapsedMilliseconds;
+            ReportChatReadStage(reportStage, "state", stateMs - loadMs);
             var messages = PresentWorkspaceWindow(workspace, session, session.Messages.Count);
+            ReportChatReadStage(reportStage, "messages", timer.ElapsedMilliseconds - stateMs);
             return new ProjectChatStateDto { Project = ProjectChatProject(workspace), SessionId = session.Id,
                 InputReceipt = request.ReceiptRequestId == null ? null :
                     Conversations.ReadInputReceipt(session, request.ReceiptRequestId),
@@ -841,6 +851,12 @@ namespace RNAssistant.Application
                 Messages = messages.Messages, MessageStartIndex = messages.StartIndex,
                 MessageTotalCount = messages.TotalCount };
             }
+        }
+
+        private static void ReportChatReadStage(Action<string, long> reportStage, string name, long elapsedMs)
+        {
+            try { reportStage?.Invoke(name, elapsedMs); }
+            catch { /* Diagnostic timing cannot interrupt chat delivery. */ }
         }
 
         // Scoped canonical session read for the shared, disposable tool-result presentation.

@@ -24,6 +24,10 @@ var performanceDiagnostics = (function () {
   }
   function duration(value) { return value !== null && value !== undefined && Number.isFinite(Number(value))
     ? formatDiagnosticDuration(value) : "—"; }
+  var bridgeStageLabels = { lease: "доступ к плагинам", workspace: "проект",
+    load: "хранилище", state: "состояние", messages: "сообщения",
+    selection: "выбор", preview: "предпросмотр", currentDocument: "текущий документ",
+    hostSwitch: "смена Office host" };
   function render() {
     if (!visible()) return;
     var root = $("performanceDiagnosticsResults");
@@ -42,6 +46,19 @@ var performanceDiagnostics = (function () {
     bridge.slice(0, 4).forEach(function (entry) {
       lines.push("Bridge · " + entry.operation + ": работа " + duration(entry.handleMs) +
         ", JSON " + duration(entry.serializeMs) + ", ответ " + Math.round(entry.responseChars / 1024) + " КБ");
+      if (Array.isArray(entry.stages) && entry.stages.length) {
+        var stages = entry.stages.slice(0, 8).map(function (stage) {
+          var name = Object.prototype.hasOwnProperty.call(bridgeStageLabels, stage.name)
+            ? bridgeStageLabels[stage.name] : String(stage.name || "этап");
+          return name + " " + duration(stage.elapsedMs);
+        });
+        var covered = entry.stages.reduce(function (sum, stage) {
+          var elapsed = Number(stage.elapsedMs);
+          return sum + (Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0);
+        }, 0);
+        if (entry.handleMs - covered >= 100) stages.push("прочее " + duration(entry.handleMs - covered));
+        lines.push("  Этапы: " + stages.join(", "));
+      }
     });
     hostPosts.slice(0, 2).forEach(function (entry) {
       lines.push("Office UI → WebView: " + duration(entry.elapsedMs) +

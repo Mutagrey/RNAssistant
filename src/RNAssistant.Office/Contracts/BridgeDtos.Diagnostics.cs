@@ -52,6 +52,18 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("responseChars")]
         public int ResponseChars { get; set; }
+
+        [JsonProperty("stages", NullValueHandling = NullValueHandling.Ignore)]
+        public IReadOnlyList<BridgeStageTimingDto> Stages { get; set; }
+    }
+
+    public sealed class BridgeStageTimingDto
+    {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("elapsedMs")]
+        public long ElapsedMs { get; set; }
     }
 
     public sealed class HostPostTimingMessage

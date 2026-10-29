@@ -122,7 +122,8 @@ namespace RNAssistant.Office
             LastChatId = chatId;
             return ChatState(null, chatId);
         }
-        public ChatStateResponse GetChatDetail(string chatId) { return GetChatState(chatId); }
+        public ChatStateResponse GetChatDetail(string chatId, Action<string, long> reportStage = null)
+        { reportStage?.Invoke("load", 0); return GetChatState(chatId); }
         public ChatMessagePageDto GetPreviousChatMessages(string chatId, int beforeIndex)
         {
             LastChatId = chatId;
@@ -190,9 +191,11 @@ namespace RNAssistant.Office
             LastDocumentHost = host;
             return ChatState(title, documentKey);
         }
-        public ChatStateResponse SelectChat(string chatId, Action<ChatStateResponse> selected = null)
+        public ChatStateResponse SelectChat(string chatId, Action<ChatStateResponse> selected = null,
+            Action<string, long> reportStage = null)
         {
             NavigationWork?.Invoke();
+            reportStage?.Invoke("load", 0);
             selected?.Invoke(new ChatStateResponse { ActiveChatId = chatId, DetailDeferred = true });
             return ChatState(null, chatId);
         }

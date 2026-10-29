@@ -25,7 +25,8 @@ namespace RNAssistant.Office.WebView
                     _plugins.Conversations.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
             }
         }
-        private Task<object> HandlePluginAsync(string id, BridgeOperationId operation, JToken payload, CancellationToken token)
+        private Task<object> HandlePluginAsync(string id, BridgeOperationId operation, JToken payload, CancellationToken token,
+            Action<string, long> reportStage)
         {
             if(Plugins==null)throw new PluginException("plugins_unavailable","Plugin host is unavailable.");
             return Task.Run(async ()=> {
@@ -68,7 +69,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CreateProjectChat: return Plugins.CreateProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.ForkProjectChat: return Plugins.ForkProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectChatMessage: return Plugins.DeleteProjectChatMessage(Payload<ProjectChatRequest>(payload));
-                    case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload));
+                    case BridgeOperationId.GetProjectChat: return Plugins.ProjectChat(Payload<ProjectChatRequest>(payload), reportStage);
                     case BridgeOperationId.GetPreviousProjectChatMessages: return Plugins.ProjectChatMessages(Payload<ProjectChatHistoryRequest>(payload));
                     case BridgeOperationId.GetProjectToolResultPresentation:
                         var presentationRequest = Payload<ProjectToolResultPresentationRequest>(payload);

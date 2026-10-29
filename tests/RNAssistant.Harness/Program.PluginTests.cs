@@ -851,6 +851,11 @@ namespace RNAssistant.Harness
                         "opening source development keeps an empty workspace empty");
                     var first = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId }); firstId = first.SessionId;
                     AssertEqual(item.SourceWorkspaceId, first.Project.WorkspaceId, "source chat uses the common workspace identity");
+                    var readStages = new System.Collections.Generic.List<string>();
+                    service.ProjectChat(new ProjectChatRequest { WorkspaceId = item.SourceWorkspaceId, SessionId = firstId },
+                        (name, elapsedMs) => { AssertTrue(elapsedMs >= 0, "chat timing stage is nonnegative"); readStages.Add(name); });
+                    AssertEqual("lease,workspace,load,state,messages", string.Join(",", readStages),
+                        "project chat reports the full read path without changing the response");
                     var workspace = new WorkspaceStore(paths).OpenConnected(item.SourceWorkspaceId);
                     var session = service.Conversations.GetSession(workspace, firstId);
                     var message = new ChatMessage { Role = "user", Content = "Первое обсуждение плагина" };

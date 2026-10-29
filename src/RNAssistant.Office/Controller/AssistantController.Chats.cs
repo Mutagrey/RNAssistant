@@ -353,17 +353,20 @@ namespace RNAssistant.Office
             return LoadChatDetail(chatId, true);
         }
 
-        public ChatStateResponse GetChatDetail(string chatId)
+        public ChatStateResponse GetChatDetail(string chatId, Action<string, long> reportStage = null)
         {
-            return LoadChatDetail(chatId, false);
+            return LoadChatDetail(chatId, false, reportStage);
         }
 
-        private ChatStateResponse LoadChatDetail(string chatId, bool includeCatalog)
+        private ChatStateResponse LoadChatDetail(string chatId, bool includeCatalog,
+            Action<string, long> reportStage = null)
         {
             var timer = Stopwatch.StartNew();
             var session = LoadAddressedSession(chatId);
             var loadMs = timer.ElapsedMilliseconds;
+            ReportChatReadStage(reportStage, "load", loadMs);
             var response = ChatState(session, includeCatalog);
+            ReportChatReadStage(reportStage, "state", timer.ElapsedMilliseconds - loadMs);
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat detail timing: load=" + loadMs + "ms, projection=" +
@@ -444,26 +447,39 @@ namespace RNAssistant.Office
             }
         }
 
-        public ChatStateResponse SelectChat(string chatId, Action<ChatStateResponse> selected = null)
+        public ChatStateResponse SelectChat(string chatId, Action<ChatStateResponse> selected = null,
+            Action<string, long> reportStage = null)
         {
             var timer = Stopwatch.StartNew();
             var session = LoadSession(chatId);
             var loadMs = timer.ElapsedMilliseconds;
+            ReportChatReadStage(reportStage, "load", loadMs);
             _chatSessions.SetActiveSession(session);
             var selectionMs = timer.ElapsedMilliseconds - loadMs;
+            ReportChatReadStage(reportStage, "selection", selectionMs);
             if (selected != null)
             {
                 try { selected(ChatSelectionState(session)); }
                 catch (Exception ex) { RNAssistant.Office.Diagnostics.RuntimeLog.Error("Chat selection preview failed.", ex); }
             }
+            var previewMs = timer.ElapsedMilliseconds - loadMs - selectionMs;
+            if (selected != null) ReportChatReadStage(reportStage, "preview", previewMs);
             var response = ChatState(session, false);
+            var stateMs = timer.ElapsedMilliseconds - loadMs - selectionMs - previewMs;
+            ReportChatReadStage(reportStage, "state", stateMs);
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat select timing: load=" + loadMs + "ms, selection=" + selectionMs +
-                    "ms, projection=" + (timer.ElapsedMilliseconds - loadMs - selectionMs) +
+                    "ms, preview=" + previewMs + "ms, projection=" + stateMs +
                     "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) +
                     ", artifacts=" + (session.Artifacts == null ? 0 : session.Artifacts.Count) + ".");
             return response;
+        }
+
+        private static void ReportChatReadStage(Action<string, long> reportStage, string name, long elapsedMs)
+        {
+            try { reportStage?.Invoke(name, elapsedMs); }
+            catch { /* Diagnostic timing cannot interrupt chat delivery. */ }
         }
 
         public ChatStateResponse TrySelectCurrentDocumentChat(string chatId)
