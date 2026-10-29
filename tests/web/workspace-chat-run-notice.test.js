@@ -97,7 +97,7 @@ const root = path.resolve(__dirname, '../..');
         owner + ': terminal kernel state unlocks a new request');
       assert.equal((await page.locator('#messages').textContent()).includes('Unaccepted draft after failure.'), false,
         owner + ': terminal kernel state suppresses stale model preview');
-      await page.locator('#messages .workspace-reflection-step').getByText('Inspect the exact source first.').waitFor();
+      await page.locator('#messages .agent-reflection-step').getByText('Inspect the exact source first.').waitFor();
       await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
       assert.equal(await page.locator('#messages').getByText('core.read').count() > 0, true,
         owner + ': saved tool activity uses the common message renderer');

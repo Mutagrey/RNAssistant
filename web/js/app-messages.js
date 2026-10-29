@@ -410,7 +410,9 @@ function appendMessageFooter(node, message, index, activity, options) {
   var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
     (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
-    copyChatMessage(activity ? activityText(activity) : messageContent(message));
+    copyChatMessage(message.ReflectionDecision
+      ? agentReflectionText(message.ReflectionDecision, messageContent(message))
+      : activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
   }));
   if (!activity) appendMessageInspectorAction(actions, message);
@@ -576,6 +578,12 @@ function renderMessageArticle(message, index, options) {
   if (messageRole(message) === "assistant") node.setAttribute("aria-label",
     message.ReflectionDecision ? "Промежуточное решение агента" : "Ответ агента");
   var activity = messageActivity(message);
+  if (message.ReflectionDecision && activityKind(activity) === "step") {
+    if (typeof appendMessageReasoning === "function") appendMessageReasoning(node, message);
+    appendAcceptedResponseDetails(node, message, window.RNAssistantRunViewState.fromMessage(message));
+    appendMessageFooter(node, message, index, activity, options);
+    return node;
+  }
   if (activity) {
     if (activityKind(activity) === "compaction" && activityStatus(activity) === "completed") {
       return renderCompactionArticle(message, activity);
@@ -632,16 +640,7 @@ function appendWorkspaceRunOutcome(node, message, runView) {
 
 function appendAcceptedResponseDetails(node, message, runView) {
   if (message.ReflectionDecision) {
-    var step = document.createElement("div"); step.className = "workspace-reflection-step";
-    var title = document.createElement("strong"); title.textContent = "Промежуточное решение";
-    var decision = document.createElement("span"); decision.textContent = message.ReflectionDecision;
-    step.append(title, decision);
-    var commentary = messageContent(message).trim();
-    if (commentary && commentary !== message.ReflectionDecision.trim()) {
-      var messageText = document.createElement("span"); messageText.textContent = commentary;
-      step.appendChild(messageText);
-    }
-    node.appendChild(step);
+    appendAgentReflectionStep(node, message.ReflectionDecision, messageContent(message));
   }
   var claimsInRunNotice = runNoticeIncludesModelResults(runView);
   var results = runView && runView.modelResults.length ? runView.modelResults.map(function (item) {

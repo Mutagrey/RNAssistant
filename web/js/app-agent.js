@@ -228,8 +228,47 @@ function groupAgentRunSteps(timeline) {
   return steps;
 }
 
-function appendAgentStepMessage(parent, text) {
+function agentReflectionText(decision, commentary) {
+  decision = String(decision || "").trim();
+  commentary = String(commentary || "").trim();
+  return decision && commentary && decision !== commentary
+    ? decision + "\n\n" + commentary : decision || commentary;
+}
+
+function appendAgentReflectionStep(parent, decision, commentary) {
+  var text = agentReflectionText(decision, commentary);
+  if (!text) return;
+  var step = document.createElement("div");
+  step.className = "agent-reflection-step";
+  step.setAttribute("aria-label", "Промежуточное решение агента");
+  var label = document.createElement("div");
+  label.className = "agent-reflection-label";
+  if (window.RNAssistantIcons) {
+    var icon = document.createElement("span");
+    icon.className = "agent-reflection-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = window.RNAssistantIcons.render("bulb");
+    label.appendChild(icon);
+  }
+  var title = document.createElement("strong");
+  title.textContent = "Промежуточное решение";
+  label.appendChild(title);
+  step.appendChild(label);
+  var body = document.createElement("div");
+  body.className = "agent-reflection-body markdown";
+  body.innerHTML = markdown(text);
+  step.appendChild(body);
+  parent.appendChild(step);
+  enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: text });
+}
+
+function appendAgentStepMessage(parent, text, marker) {
   text = String(text || "").trim();
+  if (marker && (activityTitle(marker.activity) === "Промежуточное решение" ||
+      marker.message && marker.message.ReflectionDecision)) {
+    appendAgentReflectionStep(parent, marker.message && marker.message.ReflectionDecision || text, text);
+    return;
+  }
   if (!text) return;
   var message = document.createElement("div");
   message.className = "agent-step-message markdown";
@@ -247,7 +286,8 @@ function groupAgentRunUpdates(steps) {
     if (previous && silent) {
       previous.items = previous.items.concat(step.items || []);
       previous.ambient = step.ambient;
-      previous.marker = step.marker || previous.marker;
+      if (!previous.marker || activityTitle(previous.marker.activity) !== "Промежуточное решение")
+        previous.marker = step.marker || previous.marker;
     } else {
       groups.push({ message: step.message, items: (step.items || []).slice(),
         ambient: step.ambient, marker: step.marker });
@@ -424,7 +464,7 @@ function appendAgentRunOverview(parent, steps, timeline, stats) {
       if (!historyItems.length && !String(step.message || "").trim()) return;
       var section = document.createElement("section");
       section.className = "agent-model-step agent-model-step-history";
-      appendAgentStepMessage(section, step.message);
+      appendAgentStepMessage(section, step.message, step.marker);
       appendLiveAgentStep(section, { items: historyItems }, false, true, true, true, stats.workspace);
       content.appendChild(section);
     });
@@ -576,7 +616,7 @@ function renderAgentRunArticle(run) {
   updates.forEach(function (step, stepIndex) {
     var section = document.createElement("section");
     section.className = "agent-model-step";
-    appendAgentStepMessage(section, step.message);
+    appendAgentStepMessage(section, step.message, step.marker);
     appendLiveAgentStep(section, step, stepIndex === updates.length - 1, run.hasLiveDraft, false,
       !run.live && runViewState && ["failed", "cancelled", "completed"].indexOf(runViewState.lifecycle) >= 0, run.workspace);
     if (section.childNodes.length) process.appendChild(section);

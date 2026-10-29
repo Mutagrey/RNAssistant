@@ -671,13 +671,15 @@
 .agent-model-results small { color: var(--muted); }
 .agent-run-effect-facts { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .workspace-chat-activity { width: calc(100% - 36px); max-width: 100%; margin: 0 auto 10px; }
-.workspace-reflection-step {
+.agent-reflection-step {
   color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;
 }
-.workspace-reflection-step strong { font-size: 11px; font-weight: 500; }
-.workspace-reflection-step strong::after { content: " · "; }
-.workspace-reflection-step span { white-space: pre-wrap; }
-.workspace-reflection-step span + span { display: block; margin-top: 3px; }
+.agent-reflection-label { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.agent-reflection-label strong { font-size: 11px; font-weight: 500; }
+.agent-reflection-icon { display: inline-flex; flex: 0 0 14px; }
+.agent-reflection-icon svg { width: 14px; height: 14px; }
+.agent-reflection-body.markdown > :first-child { margin-top: 0; }
+.agent-reflection-body.markdown > :last-child { margin-bottom: 0; }
 @media (max-width: 620px) { .chat-run-notice { width: calc(100% - 16px); } }
 
 .chat-toast { position: fixed; z-index: 100; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 12px 19px; border-radius: 8px; background: var(--ink); color: var(--surface); box-shadow: var(--shadow); font-size: 12px; overflow-wrap: anywhere; }

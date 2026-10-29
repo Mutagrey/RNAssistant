@@ -21,12 +21,12 @@ const { chromium } = require('playwright');
       const first = { Id: 'reflection', RunId: 'run', Role: 'assistant', Content: '', ReflectionDecision: 'Read the procedure.', ReasoningContent: 'Accepted reasoning.' };
       const chat = { sessionId: 'progress-test', project: { workspaceId: 'workspace' }, messages: [first], state: { status: 'running', runId: 'run' } };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
-      const saved = list.querySelector('.reasoning-block'), step = list.querySelector('.workspace-reflection-step');
+      const saved = list.querySelector('.reasoning-block'), step = list.querySelector('.agent-reflection-step');
       const summary = saved.querySelector('summary'); saved.open = true; summary.focus();
       chat.state.modelProgress = { RunId: 'run', StepId: 'step-2', AttemptId: 'a', Message: 'Preview text.', Reasoning: 'New reasoning.' };
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const live = list.querySelector('.agent-stream-step');
-      const retained = saved === list.querySelector('.reasoning-block') && step === list.querySelector('.workspace-reflection-step') && document.activeElement === summary && saved.open;
+      const retained = saved === list.querySelector('.reasoning-block') && step === list.querySelector('.agent-reflection-step') && document.activeElement === summary && saved.open;
       first.ReasoningContent = 'Revised accepted reasoning.';
       RNAssistantWorkspaceChat.renderMessages(list, chat);
       const revised = list.querySelector('.reasoning-block');
@@ -86,15 +86,45 @@ const { chromium } = require('playwright');
               StartedUtc: '2026-10-25T00:00:00Z' } }],
         state: { status: 'completed' }
       });
-      const reflectionSteps = reflectionList.querySelectorAll('.workspace-reflection-step');
+      const reflectionSteps = reflectionList.querySelectorAll('.agent-reflection-step');
       const reflectionArticles = Array.from(reflectionList.querySelectorAll('article.message'))
-        .filter(article => article.querySelector('.workspace-reflection-step'));
+        .filter(article => article.querySelector('.agent-reflection-step'));
       const oneReflection = reflectionSteps.length === 2 &&
-        reflectionArticles.every(article => !article.querySelector('.markdown') &&
+        reflectionArticles.every(article => !!article.querySelector('.agent-reflection-body.markdown') &&
+          !!article.querySelector('.agent-reflection-icon') &&
           !!article.querySelector('.message-footer')) &&
         reflectionSteps[0].textContent.split('Проверю источник.').length === 2 &&
         reflectionSteps[1].textContent.includes('Сначала нужен точный источник.') &&
         reflectionSteps[1].textContent.includes('Отвечу после чтения.');
+      const runReflectionList = document.createElement('section');
+      const acceptedReflection = { Id: 'accepted-reflection', RunId: 'reflection-run', Role: 'assistant',
+        Content: 'Проверю **источник**.', ReflectionDecision: 'Нужно *точное* чтение.',
+        Activity: { Kind: 'step', RunId: 'reflection-run', StepId: 'reflection-step',
+          StepMessage: 'Проверю **источник**.', Title: 'Промежуточное решение', Status: 'completed' } };
+      const runReflection = { project: { workspaceId: 'workspace' }, sessionId: 'run-reflection',
+        messages: [acceptedReflection], state: { status: 'running', runId: 'reflection-run' } };
+      RNAssistantWorkspaceChat.renderMessages(runReflectionList, runReflection);
+      const activeReflection = runReflectionList.querySelector('.agent-reflection-step');
+      const reflectionMarkdown = !!activeReflection &&
+        !!activeReflection.querySelector('.agent-reflection-body strong') &&
+        !!activeReflection.querySelector('.agent-reflection-body em') &&
+        activeReflection.textContent.includes('Нужно точное чтение.') &&
+        activeReflection.textContent.includes('Проверю источник.');
+      runReflection.messages.push({ Id: 'reflection-final', RunId: 'reflection-run', Role: 'assistant',
+        Content: 'Готово.', RunViewState: { RunId: 'reflection-run', TurnId: 'turn',
+          Lifecycle: 'completed', ExecutionHealth: 'clean' } });
+      runReflection.state = { status: 'completed', runId: 'reflection-run' };
+      RNAssistantWorkspaceChat.renderMessages(runReflectionList, runReflection);
+      const retainedReflection = !!runReflectionList.querySelector('.agent-reflection-step') &&
+        runReflectionList.textContent.includes('Нужно точное чтение.');
+      runReflectionList.remove();
+      const officeActivity = { Kind: 'step', RunId: 'office-run', StepId: 'office-step',
+        StepMessage: 'Сначала прочитаю **модуль**.', Title: 'Промежуточное решение', Status: 'completed' };
+      const officeReflection = renderAgentRunArticle({ live: true, items: [{ index: 0,
+        message: { Id: 'office-reflection', RunId: 'office-run', Role: 'assistant', Activity: officeActivity },
+        activity: officeActivity }] });
+      const officeReflectionMarked = !!officeReflection.querySelector('.agent-reflection-icon') &&
+        officeReflection.querySelector('.agent-reflection-body strong')?.textContent === 'модуль';
       const cleanFinish = Array.from(reflectionList.querySelectorAll('article.message'))
         .find(article => article.textContent.includes('Готово.'));
       const cleanClaims = !!cleanFinish && !cleanFinish.querySelector('.message-outcome') &&
@@ -144,7 +174,7 @@ const { chromium } = require('playwright');
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
       return { retained, replaced, updated, reset, finished, scoped, attachedLive, attachedFinal,
-        oneReflection, cleanClaims, uncleanClaims,
+        oneReflection, cleanClaims, uncleanClaims, reflectionMarkdown, retainedReflection, officeReflectionMarked,
         ordered, lostOwner, terminalStays, acceptedStays, acceptedNotReplaced, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);
