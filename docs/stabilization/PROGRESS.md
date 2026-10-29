@@ -27,6 +27,12 @@ Owner: Core ModelContextCompiler / Office ConversationModelSession.
 видит результат предыдущего patch и сохраняет остальные изменения. Реальная
 Windows/Office/VBE траектория и качество живых моделей остаются открытыми.
 
+## Плоские группы Library — 2026-10-29
+
+Owner: Web Library. Tools и skills группируются только по первому namespace;
+полные ID сохранены. Host-neutral `universal-tools.test.js` прошёл; реальный
+WebView2 не проверялся.
+
 ## Компактный пакетный core.patch — 2026-10-29
 
 Owner: Core Tools / Application Workspace / Office Tools; Web — preview и лента.

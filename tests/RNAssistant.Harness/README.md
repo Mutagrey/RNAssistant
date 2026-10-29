@@ -39,9 +39,9 @@ before/after views remain available after a partial model read. The two
 schemas, preserve per-target outcomes and the lifecycle destination through restart.
 `tests/cli/read_recovery_smoke.py` checks six production CLI refusal/read/retry
 paths, including restart; optional lifecycle tools are admitted before use.
-`tests/web/universal-tools.test.js` and `universal-tools-browser.test.js` cover
-nested namespace groups and inline diff pagination, safe text, long lines and
-unverified previews. `tests/cli/tool_name_migration_test.py` uses only temporary
+`tests/web/universal-tools.test.js` checks grouping by the first namespace only;
+`universal-tools-browser.test.js` covers inline diff pagination, safe text, long
+lines and unverified previews. `tests/cli/tool_name_migration_test.py` uses only temporary
 skill packages to check explicit migration with preserved originals/body/BOM.
 See the current [source tool contract](../../docs/text-mutations.md).
 Workspace owner tests use the same full-line hunks as the public contract. The

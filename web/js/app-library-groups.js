@@ -8,7 +8,7 @@
     var parts = String(id || '').split('.').filter(Boolean);
     if (kind === 'skills' && parts[0] === 'skills') parts.shift();
     parts.pop();
-    return parts.length ? parts : ['other'];
+    return [parts.length ? parts[0] : 'other'];
   }
   function category(id) {
     var key = path(id)[0]; return { key: key, title: names[key] || key };

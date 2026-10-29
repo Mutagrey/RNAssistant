@@ -164,8 +164,8 @@ separate owners, stores, version rules and model transports:
 
 ## Current implementation
 
-Library строит вложенные группы по всем сегментам до имени действия:
-`html.data.write` → HTML → data → write. Tools и skills имеют отдельные корни;
+Library строит один уровень групп по первому сегменту:
+`html.data.write` → HTML → `html.data.write`. Tools и skills имеют отдельные корни;
 у skills префикс `skills.` служит типом, а не лишней группой. Core идёт первым.
 Статусы Core / Подключён / По запросу / Недоступен берутся из текущего каталога
 и уже существующего Inspector Arsenal; название группы не выдаёт authority.

@@ -31,9 +31,11 @@ context.window.RNAssistantRunChanges.renderInline(root, { complete: true, items:
 assert(root.children[0].children.some(node => node.textContent.includes('результат не подтверждён')));
 assert(!root.children.some(node => node.tagName === 'details'), 'no nested full diff component in a step');
 const groups = context.window.RNAssistantLibraryGroups;
-const tree = groups.tree([{ value: { Id: 'html.data.read' } }, { value: { Id: 'core.write' } }], 'tools', row => ({ kind: 'leaf', title: row.value.Id }), () => true);
+const tree = groups.tree(['html.data.read', 'html.assets.import', 'core.write', 'excel.range.write'].map(Id => ({ value: { Id } })), 'tools', row => ({ kind: 'leaf', title: row.value.Id }), () => true);
 assert.equal(tree[0].title, 'Core');
-assert.equal(tree[1].children[0].title, 'data');
-assert.equal(tree[1].children[0].children[0].title, 'html.data.read');
+const html = tree.find(group => group.title === 'HTML');
+assert.equal(html.children.map(row => row.title).join(','), 'html.assets.import,html.data.read');
+assert(tree.every(group => group.children.every(row => row.kind === 'leaf')), 'only one namespace grouping level');
 assert.equal(groups.path('skills.excel.reporting', 'skills').join('.'), 'excel');
-console.log('PASS universal tools: bounded inert inline diff, unknown effect and dotted namespace tree');
+assert.equal(groups.path('skills.vba.code.editing', 'skills').join('.'), 'vba');
+console.log('PASS universal tools: bounded inert inline diff, unknown effect and first-namespace groups');

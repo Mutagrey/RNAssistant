@@ -422,7 +422,7 @@ confirmation.
 
 ## Target Skill Library UX
 
-Skills remain in Library, grouped by type and then by nested dot namespaces
+Skills remain in Library, grouped by type and then by the first dot namespace only
 (`skills.vba.*`, `skills.html.*`, etc.); the initial `skills` segment is omitted
 inside the skill section. Built-in IDs follow the shared naming contract;
 existing custom package IDs are not rewritten automatically.
