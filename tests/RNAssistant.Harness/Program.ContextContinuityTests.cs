@@ -449,7 +449,7 @@ namespace RNAssistant.Harness
         private static void ContextContinuityKeepsArchivedTargets()
         {
             foreach (var role in new[] { "user", "developer", "tool" })
-            foreach (var tool in new[] { "files.create", "files.move" })
+            foreach (var tool in new[] { "core.write", "resources.move" })
             foreach (var externalized in new[] { false, true })
             WithTempPaths(paths =>
             {
@@ -457,8 +457,8 @@ namespace RNAssistant.Harness
                 var chats = new ChatStore(paths);
                 var result = ContinuityResult("target", tool, ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
                 result.ResourceEffect = new ResourceEffect("effect", "write", ResourceEffectOutcome.FailedNoEffect);
-                var arguments = new Dictionary<string, object> { { "relativePath", "index.html" } };
-                arguments.Add(tool == "files.move" ? "targetPath" : "text", tool == "files.move" ? "archive/index.html" : new string('x', 10000));
+                var arguments = new Dictionary<string, object> { { "target", "index.html" } };
+                arguments.Add(tool == "resources.move" ? "destination" : "content", tool == "resources.move" ? "archive/index.html" : new string('x', 10000));
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                     Id = result.ToolCallId, Name = tool, Arguments = arguments }, "Attempted write.",
                     "Try the requested write.", null, role, FixtureCallOrigin("target"));
@@ -480,7 +480,7 @@ namespace RNAssistant.Harness
                 var compiled = new ModelContextCompiler(blobs).Compile(authority, new ChatMessage[0], active,
                     null, new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
                 var receipt = compiled.Messages.Single(item => item.CompletedOperation != null);
-                AssertEqual(tool == "files.move" ? "index.html,archive/index.html" : "index.html",
+                AssertEqual(tool == "resources.move" ? "index.html,archive/index.html" : "index.html",
                     string.Join(",", receipt.CompletedOperation.Targets), "accepted targets survive checkpoint and restart without result path fields");
                 AssertEqual(ToolResultStatus.Error, receipt.CompletedOperation.Status, "target restoration never changes the outcome");
                 AssertContains(receipt.CompletedOperation.DataJson, "target_exists", "the original failure remains visible");
@@ -578,10 +578,9 @@ namespace RNAssistant.Harness
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 "pack", new SkillCatalogSnapshot(null), null, 1);
             foreach (var resource in new[] {
-                new { Tool = "vba.module.write", Data = "{\"moduleName\":\"NormalizeReport\",\"source\":\"HISTORICAL_BODY\"}",
-                    Targets = new[] { "VBA module: NormalizeReport" } },
-                new { Tool = "files.patch", Data = "{\"path\":\"app.js\",\"changed\":true}", Targets = new[] { "app.js" } },
-                new { Tool = "html.source.patch", Data = "{\"members\":[{\"target\":\"HTML file: index.html\"},{\"target\":\"HTML file: app.js\"}],\"source\":\"HISTORICAL_BODY\"}",
+                new { Tool = "core.write", Targets = new[] { "VBA module: NormalizeReport" } },
+                new { Tool = "core.patch", Targets = new[] { "app.js" } },
+                new { Tool = "core.patch",
                     Targets = new[] { "HTML file: index.html", "HTML file: app.js" } } })
             foreach (var role in new[] { "user", "developer", "tool" })
             foreach (var outcome in new[] { ResourceEffectOutcome.VerifiedChanged, ResourceEffectOutcome.VerifiedNoChange,
@@ -589,11 +588,26 @@ namespace RNAssistant.Harness
             {
                 var status = outcome == ResourceEffectOutcome.FailedNoEffect ? ToolResultStatus.Error :
                     outcome == ResourceEffectOutcome.UnknownAfterDispatch ? ToolResultStatus.Unknown : ToolResultStatus.Ok;
+                var patchStatus = outcome == ResourceEffectOutcome.VerifiedChanged ? ResourceTargetStatus.Changed :
+                    outcome == ResourceEffectOutcome.VerifiedNoChange ? ResourceTargetStatus.Unchanged :
+                    outcome == ResourceEffectOutcome.FailedNoEffect ? ResourceTargetStatus.Rejected : ResourceTargetStatus.Unknown;
+                var data = resource.Tool == "core.patch" ? JsonConvert.SerializeObject(new PatchBatchResult {
+                    Phase = "execution", WriteStarted = status != ToolResultStatus.Error,
+                    Targets = resource.Targets.Select(target => new PatchTargetResult {
+                        Target = target, Status = patchStatus, WriteStarted = status != ToolResultStatus.Error }).ToList() }) :
+                    JsonConvert.SerializeObject(new { target = resource.Targets[0], source = "HISTORICAL_BODY" });
                 var mutation = ContinuityResult("mutation", resource.Tool, new ToolResult(status,
-                    "Recorded outcome.", resource.Data), role);
+                    "Recorded outcome.", data), role);
                 mutation.ResourceEffect = new ResourceEffect("effect", "write", outcome);
+                var arguments = resource.Tool == "core.patch" ? new Dictionary<string, object> {
+                    { "patch", string.Join("\n", resource.Targets.Select(target => "*** Update Target: " + target + "\n@@\n-old\n+new")) } } :
+                    new Dictionary<string, object> { { "target", resource.Targets[0] }, { "content", "HISTORICAL_BODY" } };
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = mutation.ToolCallId, Name = resource.Tool, Arguments = arguments },
+                    "", "Edit the requested source.", null, role, FixtureCallOrigin(mutation.ToolCallId));
+                call.RunId = mutation.RunId;
                 var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
-                var immediate = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation },
+                var immediate = compiler.Compile(authority, new ChatMessage[0], new[] { call, mutation },
                     null, new ToolCatalogEntry[0], new AppSettings(), 10000);
                 ToolResultWireReadResult wire; string error;
                 AssertTrue(ToolResultHistoryReader.TryRead(immediate.Messages.Last(), out wire, out error), "recent receipt remains a result");
@@ -605,7 +619,7 @@ namespace RNAssistant.Harness
                         SourceRoles = new List<string> { "assistant" }, SourceMessageIds = new List<string> { mutation.Id } } } };
                 var session = new ChatSession { ActiveContextCheckpointId = checkpoint.Id,
                     ContextCheckpoints = new List<ContextCheckpoint> { checkpoint },
-                    Messages = new List<ChatMessage> { ContinuityCall(mutation), mutation } };
+                    Messages = new List<ChatMessage> { call, mutation } };
                 var active = ContextCompactionService.BuildActiveWindow(session);
                 AssertTrue(!active.Any(m => m.Id == mutation.Id), "fixture actually compacts the original mutation");
                 var restored = ContextWorkingSet.Restore(session, active, 6000);

@@ -1234,8 +1234,7 @@ namespace RNAssistant.Core.Services
                 var response = ConversationResponseJson.Read(call.Content);
                 if (response.Success) arguments = response.Response.ToolCalls.FirstOrDefault(item => item.Name == wire.Name)?.Arguments;
             }
-            return new[] { RootTargetLabel(data), RootTargetLabel(arguments), LabelText(arguments?["relativePath"]),
-                    LabelText(arguments?["targetPath"]) }
+            return new[] { RootTargetLabel(data), RootTargetLabel(arguments), LabelText(arguments?["destination"]) }
                 .Concat((data?["members"] as JArray ?? new JArray()).OfType<JObject>()
                     .Select(member => LabelText(member["target"]) ?? LabelText(member["path"])))
                 .Concat(wire.Name == ResourceMutationToolCatalog.Patch
