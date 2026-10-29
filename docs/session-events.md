@@ -532,6 +532,11 @@ answer; transient drafts are never an additional durable message.
 A saved completed/failed/cancelled run suppresses late draft replay immediately,
 without waiting for the inbox's idle snapshot. The next runtime `RunId` establishes
 its own projection even when its first progress event is only a reset or delta.
+The selected Office chat uses its newer detail `RunViewState` over an older catalog
+entry for the same run. Project/plugin controls, observer and live output use the
+matching kernel `RunViewState` lifecycle over a stale shell status. An equal-revision
+Workspace read cannot replace a terminal run with a running projection or remove
+already accepted messages from the same bounded page.
 
 Transient progress is scoped by chat and runtime `RunId`: the first event for a new
 run clears the preceding run's live activities, stream and reasoning even when an

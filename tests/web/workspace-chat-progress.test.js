@@ -118,11 +118,34 @@ const { chromium } = require('playwright');
       const lostOwner = RNAssistantWorkspaceChat.latestSnapshot(newer, { project: { workspaceId: 'workspace' },
         sessionId: 'progress-test', messages: [], state: { status: 'running', runId: 'run', revision: 5,
           modelProgressUnavailable: true } }).state.modelProgress == null;
+      const terminal = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test',
+        messages: [{ Id: 'accepted', Role: 'assistant', Content: 'Accepted answer.' }],
+        messageStartIndex: 0, messageTotalCount: 1,
+        state: { status: 'running', runId: 'run', revision: 6, runViewState: {
+          RunId: 'run', TurnId: 'turn', Lifecycle: 'completed', ExecutionHealth: 'clean',
+          GoalVerification: 'not_assessed', ModelResults: [], SuccessfulReads: 0, VerifiedWrites: 0,
+          NoChangeWrites: 0, UnverifiedWrites: 0, FailedCalls: 0, UnknownEffects: 0 } } };
+      const delayed = { project: { workspaceId: 'workspace' }, sessionId: 'progress-test',
+        messages: [], messageStartIndex: 0, messageTotalCount: 1,
+        state: { status: 'running', runId: 'run', revision: 6 } };
+      const terminalStays = RNAssistantWorkspaceChat.latestSnapshot(terminal, delayed) === terminal;
+      const acceptedStays = RNAssistantWorkspaceChat.latestSnapshot({ project: terminal.project,
+        sessionId: terminal.sessionId, messages: terminal.messages, messageStartIndex: 0,
+        messageTotalCount: 1, state: { status: 'completed', runId: 'run', revision: 7 } },
+      { project: terminal.project, sessionId: terminal.sessionId, messages: [], messageStartIndex: 0,
+        messageTotalCount: 1, state: { status: 'completed', runId: 'run', revision: 7 } }).messages.length === 1;
+      const acceptedNotReplaced = RNAssistantWorkspaceChat.latestSnapshot({ project: terminal.project,
+        sessionId: terminal.sessionId, messages: terminal.messages, messageStartIndex: 0,
+        messageTotalCount: 1, state: { status: 'completed', runId: 'run', revision: 7 } },
+      { project: terminal.project, sessionId: terminal.sessionId,
+        messages: [{ Id: 'other', Role: 'assistant', Content: 'Different message.' }],
+        messageStartIndex: 0, messageTotalCount: 1,
+        state: { status: 'completed', runId: 'run', revision: 7 } }).messages[0].Id === 'accepted';
       const settings = state.settings; settings.MaxConsecutiveReflections = 0; renderSettings();
       const zero = document.getElementById('maxConsecutiveReflectionsInput').value === '0';
       return { retained, replaced, updated, reset, finished, scoped, attachedLive, attachedFinal,
         oneReflection, cleanClaims, uncleanClaims,
-        ordered, lostOwner, zero };
+        ordered, lostOwner, terminalStays, acceptedStays, acceptedNotReplaced, zero };
     });
     for (const [name, passed] of Object.entries(checks)) assert.equal(passed, true, name);
     for (const owner of ['project', 'plugin']) {

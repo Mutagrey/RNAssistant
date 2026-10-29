@@ -41,7 +41,12 @@ const root = path.resolve(__dirname, '../..');
           };
           const result = await original(type, payload);
           if ((type === 'getProjectChat' || type === 'getPluginChat') && result && result.state) {
-            result.state.status = 'failed';
+            // A stale shell status/preview must not revive a terminal kernel fact.
+            result.state.status = 'running';
+            result.state.runId = 'failed-run';
+            result.state.canSteer = false;
+            result.state.modelProgress = { runId: 'failed-run', sequence: 8,
+              message: 'Unaccepted draft after failure.' };
             result.state.revision = 5;
             result.messageStartIndex = 2;
             result.messageTotalCount = 8;
@@ -85,6 +90,13 @@ const root = path.resolve(__dirname, '../..');
       await page.waitForFunction(() => document.querySelector('#workspaceChatNotice').textContent ===
         'Работа остановлена. Не удалось получить ответ от сервиса модели.');
       assert.equal(await notice.getAttribute('data-error'), 'true', owner + ': terminal failure is an alert');
+      assert.equal(await page.locator('#stopButton').isVisible(), false,
+        owner + ': terminal kernel state hides Stop despite stale shell status');
+      await page.locator('#chatInput').fill('Новый запрос');
+      assert.equal(await page.locator('#sendButton').isEnabled(), true,
+        owner + ': terminal kernel state unlocks a new request');
+      assert.equal((await page.locator('#messages').textContent()).includes('Unaccepted draft after failure.'), false,
+        owner + ': terminal kernel state suppresses stale model preview');
       await page.locator('#messages .workspace-reflection-step').getByText('Inspect the exact source first.').waitFor();
       await page.locator('#messages .agent-model-results').getByText('Chart absent', { exact: false }).waitFor();
       assert.equal(await page.locator('#messages').getByText('core.read').count() > 0, true,

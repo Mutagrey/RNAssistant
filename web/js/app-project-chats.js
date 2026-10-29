@@ -12,7 +12,7 @@
       notice(statusText()); render();
       var nextTitle = active && active.state && field(active.state, "title", "Title");
       if (previousTitle && nextTitle && previousTitle !== nextTitle &&
-          field(active.state, "status", "Status") !== "running") {
+          window.RNAssistantWorkspaceChat.runStatus(active.state) !== "running") {
         var pid = projectId(), sid = currentId();
         refreshCatalog(function () { return projectId() === pid && currentId() === sid; })
           .then(function (refreshed) { if (refreshed && projectId() === pid && currentId() === sid) render(); })
@@ -93,6 +93,7 @@
     uploadTarget.workspaceId === projectId() && uploadTarget.sessionId === currentId(); }
   function field(value, lower, upper) { return value && (value[lower] !== undefined ? value[lower] : value[upper]); }
   function runState() { return active && active.state; }
+  function runStatus(state) { return window.RNAssistantWorkspaceChat.runStatus(state || runState()); }
   function notice(text, error) {
     noticeText = text || ""; noticeError = !!error;
     if (!ownsView()) return;
@@ -167,32 +168,33 @@
   function statusText() {
     var state = active && active.state;
     if (!state) return "";
+    var status = runStatus(state);
     var runNotice = window.RNAssistantWorkspaceChat.runNotice(active);
     if (runNotice) return runNotice.title + ". " + runNotice.text;
     if (active.pendingId) return "Нужно подтвердить действие агента.";
     if (state.userInput) return "Нужен ваш ответ.";
     if (field(state, "interruptedEffectPossible", "InterruptedEffectPossible")) return "Возможное изменение требует проверки. Не повторяйте действие автоматически.";
-    if (field(state, "status", "Status") === "running")
+    if (status === "running")
       return window.RNAssistantConversationState.status(
         !field(state, "modelProgressUnavailable"), true, false).label + "…";
-    if (field(state, "status", "Status") === "interrupted") return "Выполнение прервано. Проверьте ход работы перед новым запросом.";
+    if (status === "interrupted") return "Выполнение прервано. Проверьте ход работы перед новым запросом.";
     return "";
   }
   function chatRunStatus(entry, chat) {
     return entry.workspaceId === projectId() && chat.Id === currentId() && runState()
-      ? field(runState(), "status", "Status") : chat.RunStatus;
+      ? runStatus() : window.RNAssistantConversationState.lifecycle(chat.RunStatus);
   }
-  function runBlocksDeletion(status) { return status === "running" || status === "awaitingconfirmation"; }
+  function runBlocksDeletion(status) { return status === "running" || status === "awaiting_confirmation"; }
   function historyBlocked(entry) {
     return (entry.chats || []).some(function (chat) { return runBlocksDeletion(chatRunStatus(entry, chat)); }) ||
-      entry.workspaceId === projectId() && !!currentId() && runBlocksDeletion(field(runState(), "status", "Status"));
+      entry.workspaceId === projectId() && !!currentId() && runBlocksDeletion(runStatus());
   }
   function renderTree() {
     var root = el("Tree"), selected = currentId(), needle = query.trim().toLocaleLowerCase("ru");
     var pluginSource = window.RNAssistantPlugins && window.RNAssistantPlugins.sourceWorkspaceId();
     var selectedRun = runState();
     var key = JSON.stringify([catalogRevision, selectedWorkspaceId, selected, needle, pluginSource,
-      field(selectedRun, "status", "Status"), field(selectedRun, "title", "Title"),
+      runStatus(selectedRun), field(selectedRun, "title", "Title"),
       field(selectedRun, "modelProgressUnavailable", "ModelProgressUnavailable")]);
     if (key === treeRenderKey && root.firstChild) return;
     treeRenderKey = key;
@@ -254,6 +256,7 @@
   function updateControls() {
     var pluginBusy = !!(window.RNAssistantPlugins && window.RNAssistantPlugins.isChatBusy());
     var selectedBusy = chatBusy() || selectedUploadBusy();
+    var status = runStatus();
     el("ConnectionCancel").textContent = connectionRequest ? "Скрыть" : "Отмена";
     el("ConnectionCancel").title = connectionRequest ? "Операция продолжится; проект появится в дереве." : "";
     el("New").disabled = catalogBusy || !project() || !project().available || pluginBusy;
@@ -262,15 +265,15 @@
     el("ConnectionSubmit").disabled = catalogBusy;
     if (!ownsView()) return;
     if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
-      !active || !!active.pendingId || field(runState(), "status", "Status") === "running");
+      !active || !!active.pendingId || status === "running");
     var target = active && active.sessionId ? { workspaceId: projectId(), sessionId: currentId() } : null;
     var draft = target && window.RNAssistantChatDrafts.readWorkspace(target);
     var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
     el("Send").disabled = window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
       !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
-      !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || field(runState(), "status", "Status") === "running" &&
+      !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || status === "running" &&
         (!field(runState(), "canSteer", "CanSteer") || hasAttachments);
-    var steering = field(runState(), "status", "Status") === "running" && field(runState(), "canSteer", "CanSteer");
+    var steering = status === "running" && field(runState(), "canSteer", "CanSteer");
     el("Input").placeholder = steering ? "Уточните текущую задачу…" :
       window.RNAssistantWorkspaceChat.owner() === "plugin" ? "Опишите изменение плагина" : "Спросите о проекте…";
     el("Send").title = steering ? (hasAttachments ? "Уточнение доступно без новых вложений" : "Уточнить текущую задачу") : "Отправить";
@@ -300,7 +303,7 @@
     el("Stop").disabled = cancelBusy();
     var messages = el("Messages");
     var emptyOptions = null;
-    if (!active || (!(active.messages || []).length && field(runState(), "status", "Status") !== "running")) {
+    if (!active || (!(active.messages || []).length && runStatus() !== "running")) {
       var suggestions = [];
       if (project() && active) {
         [["Сравнить периоды", "Сравни сентябрь с августом и выдели главное."],
@@ -663,7 +666,7 @@
           (active.messages || []).some(function (item) { return item.Id === message.Id; }) &&
           !window.RNAssistantWorkspaceChat.readOnly(active) && !chatBusy() &&
           !active.pendingId && !window.RNAssistantWorkspaceChat.currentMessageEdit() &&
-          !runBlocksDeletion(String(field(runState(), "status", "Status") || "").toLowerCase()) &&
+          !runBlocksDeletion(runStatus()) &&
           (name !== "edit" || String(field(message, "role", "Role") || "").toLowerCase() === "user");
       },
       messageAction: async function (action) {
@@ -697,7 +700,7 @@
         var target = { workspaceId: pid, sessionId: sid }, edit = window.RNAssistantWorkspaceChat.currentMessageEdit();
         var draftVersion = edit ? null : composer.draftVersion();
         var request = composer.prepareInput(target, text, edit,
-          field(runState(), "status", "Status") === "running" ? runState() : null);
+          runStatus() === "running" ? runState() : null);
         submitProjectInput(target, request,
           function () { return window.RNAssistantChatDrafts.flushWorkspace(target); }, function () {
             if (edit) composer.acceptedEdit(target, request);
@@ -720,7 +723,7 @@
             runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
           if (projectId() === pid && currentId() === sid) {
             active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); render();
-            notice(result.cancelStatus === "Requested" && field(result.state, "status", "Status") === "running"
+            notice(result.cancelStatus === "Requested" && runStatus(result.state) === "running"
               ? "Отмена запрошена…" : statusText());
           }
         } catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }

@@ -119,10 +119,16 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   const ui = vm.createContext({});
   ui.window = ui;
   vm.runInContext(source, ui, { filename: "app-run-view-state.js" });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-utils.js"), "utf8"), ui,
+    { filename: "app-utils.js" });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-conversation-state.js"), "utf8"), ui,
+    { filename: "app-conversation-state.js" });
   ui.state = {
     activeChatId: "chat-a", activeRunViewState: null, chatProjectionRevisions: {},
-    chats: [], messages: [], artifacts: [], tools: [{ Id: "tool-new" }], skills: [], chatStateApplyVersion: 0
+    chats: [], messages: [], artifacts: [], tools: [{ Id: "tool-new" }], skills: [], chatStateApplyVersion: 0,
+    activeSends: {}, chatRuns: {}, chatInboxes: {}
   };
+  ui.RNAssistantNavigationTree = { icon: () => "" };
   ui.$ = () => null;
   ["renderMessages", "renderContext", "renderContextMeter", "renderModelControls"].forEach(name => {
     ui[name] = () => {};
@@ -145,9 +151,22 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.equal(ui.applyChatState(stale), false);
   assert.equal(ui.state.messages[0].Content, "new", "late detail cannot replace newer transcript");
   assert.equal(ui.state.activeRunViewState.runId, "run-new", "late detail cannot replace newer outcome");
+  assert.equal(ui.RNAssistantConversationState.lifecycle("running", "run-new", ui.state.activeRunViewState), "completed",
+    "kernel terminal state outranks the shell status for the same run");
+  assert.equal(ui.RNAssistantConversationState.lifecycle("running", "run-next", ui.state.activeRunViewState), "running",
+    "a previous run cannot change the next run's status");
   assert.equal(ui.state.chats[0].Revision, 7, "late catalog cannot regress the visible chat summary");
   assert.equal(ui.state.chats[1].Id, "chat-new", "late catalog cannot remove a chat created after its snapshot");
   assert.equal(ui.state.tools[0].Id, "tool-new", "unversioned global catalogs are not accepted from a stale response");
+  const olderRunning = { Id: "chat-a", Title: "Chat A", Revision: 6,
+    RunViewState: state("run-new", "running") };
+  const selectedNode = ui.chatTreeNode(olderRunning);
+  assert.equal(selectedNode.status, "", "selected terminal detail outranks an older running catalog entry");
+  assert.equal(selectedNode.actions[1].disabled, false, "an older running catalog does not block chat actions");
+  const differentRun = ui.chatTreeNode({ Id: "chat-a", Title: "Chat A", Revision: 8,
+    RunViewState: state("run-next", "running") });
+  assert.equal(differentRun.status, "unknown", "a newer run keeps its own status");
+  assert.equal(differentRun.actions[1].disabled, true, "the next run still protects chat actions");
   const transcript = ui.state.messages;
   assert.equal(ui.applyChatPreferenceStateForChat({ chatId: "chat-a", sessionRevision: 8,
     model: "model-new", mode: "agent", reasoningEnabled: true }, "chat-a"), true);

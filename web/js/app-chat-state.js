@@ -920,6 +920,9 @@ function chatDocumentTreeNode(documentItem, query) {
 function chatTreeNode(chat) {
   var id = chatId(chat);
   var persistedRun = chatSummaryRunViewState(chat);
+  var selectedRun = id === state.activeChatId ? state.activeRunViewState : null;
+  if (selectedRun && (!persistedRun || selectedRun.runId === persistedRun.runId))
+    persistedRun = selectedRun;
   var inbox = (state.chatInboxes || {})[id];
   var terminalRun = persistedRun && persistedRun.lifecycle !== "running";
   var queuedWork = !!(inbox && inbox.running && (!terminalRun || (inbox.items || []).length));

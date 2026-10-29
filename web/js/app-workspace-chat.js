@@ -164,6 +164,10 @@
     if (sessionId) selectedSessions.set(workspaceId, sessionId); else selectedSessions.delete(workspaceId);
   }
   function field(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
+  function runStatus(snapshot) {
+    return window.RNAssistantConversationState.lifecycle(field(snapshot, "status"), field(snapshot, "runId"),
+      window.RNAssistantRunViewState.normalize(field(snapshot, "runViewState")));
+  }
   function readOnly(snapshot) { return !!field(field(snapshot, "state"), "readOnly"); }
   function runNotice(snapshot) {
     if (readOnly(snapshot)) return { title: "Чат доступен только для чтения", text: "Старый протокол. Создайте новый чат для продолжения.", warning: false };
@@ -179,14 +183,26 @@
     if (Number.isSafeInteger(previousRevision) && (!Number.isSafeInteger(nextRevision) || nextRevision < previousRevision))
       return current;
     var currentState = field(current, "state"), incomingState = field(incoming, "state");
+    var currentStatus = runStatus(currentState), incomingStatus = runStatus(incomingState);
+    if (Number.isSafeInteger(previousRevision) && previousRevision === nextRevision &&
+        field(currentState, "runId") && field(currentState, "runId") === field(incomingState, "runId") &&
+        ["completed", "failed", "cancelled"].indexOf(currentStatus) >= 0 &&
+        incomingStatus === "running") return current;
     var currentPreview = field(currentState, "modelProgress"), incomingPreview = field(incomingState, "modelProgress");
-    if (previousRevision === nextRevision && field(currentState, "status") === "running" &&
-        field(incomingState, "status") === "running" && field(currentState, "runId") === field(incomingState, "runId") &&
+    if (previousRevision === nextRevision && currentStatus === "running" &&
+        incomingStatus === "running" && field(currentState, "runId") === field(incomingState, "runId") &&
         currentPreview && !field(incomingState, "modelProgressUnavailable") &&
         (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
       incomingState.modelProgress = currentPreview;
     var currentStart = field(current, "messageStartIndex"), incomingStart = field(incoming, "messageStartIndex");
     var currentTotal = field(current, "messageTotalCount"), incomingTotal = field(incoming, "messageTotalCount");
+    if (Number.isSafeInteger(previousRevision) && previousRevision === nextRevision &&
+        currentStart === incomingStart && currentTotal === incomingTotal &&
+        Array.isArray(current.messages) && Array.isArray(incoming.messages) &&
+        (current.messages.length > incoming.messages.length ||
+          current.messages.length === incoming.messages.length && current.messages.some(function (message, index) {
+            return field(message, "id") !== field(incoming.messages[index], "id");
+          }))) incoming.messages = current.messages;
     if (Number.isSafeInteger(currentStart) && Number.isSafeInteger(incomingStart) &&
         currentStart < incomingStart && Number.isSafeInteger(currentTotal) &&
         Number.isSafeInteger(incomingTotal) && incomingTotal >= currentTotal &&
@@ -218,7 +234,7 @@
     return { select: function (snapshot, pending) {
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
       var observe = !!(workspaceId && sessionId &&
-        (pending || field(field(snapshot, "state"), "status") === "running"));
+        (pending || runStatus(field(snapshot, "state")) === "running"));
       selected = snapshot;
       if (!target || target.workspaceId !== workspaceId || target.sessionId !== sessionId) {
         if (target || workspaceId && sessionId) ++generation;
@@ -240,7 +256,7 @@
         if (field(payload, "cursor") !== field(state, "cursor")) observer.refresh();
         return;
       }
-      if (!preview || !state || field(state, "status") !== "running" ||
+      if (!preview || !state || runStatus(state) !== "running" ||
           field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
       var existing = field(state, "modelProgress");
       if (existing && field(existing, "sequence") >= field(preview, "sequence")) return;
@@ -263,13 +279,13 @@
     chat = chat || { messages: [], state: {} };
     var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     var following = changed || list.scrollHeight - list.scrollTop - list.clientHeight < 64;
-    var snapshot = field(chat, "state"), live = field(snapshot, "modelProgress");
-    if (field(snapshot, "status") !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
+    var snapshot = field(chat, "state"), status = runStatus(snapshot), live = field(snapshot, "modelProgress");
+    if (status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
     var start = field(chat, "messageStartIndex") || 0;
     var messages = chat.messages || [];
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && canMessageAction("fork", actionMessage, 0);
-    var signature = JSON.stringify([chat.messages || [], live, field(snapshot, "pendingInputs"), field(snapshot, "status"), start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
+    var signature = JSON.stringify([chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
     if (!changed && list._chatSignature === signature) return;
     var scroll = list.scrollTop, height = list.scrollHeight;
     var oldStart = changed ? null : Number(list.dataset.startIndex);
@@ -325,7 +341,7 @@
       });
     }
     (field(snapshot, "pendingInputs") || []).forEach(function (pending) {
-      var waiting = field(snapshot, "status") === "running" && pending.RunId === field(snapshot, "runId");
+      var waiting = status === "running" && pending.RunId === field(snapshot, "runId");
       appendMessageUnit(units, "input:" + pending.Id, JSON.stringify([pending, waiting]), function () {
         var article = document.createElement("article"); article.className = "message user pending inbox-message";
         article.dataset.inputId = pending.Id;
@@ -354,7 +370,7 @@
     var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", field(chat, "sessionId") || ""]);
     var entry = list && list._workspaceEntries && list._workspaceEntries["live:workspace-model"];
     if (!entry || !entry.node || entry.node.parentNode !== list || list.dataset.session !== key ||
-        list._workspaceLiveRunId !== runId || field(snapshot, "status") !== "running" ||
+        list._workspaceLiveRunId !== runId || runStatus(snapshot) !== "running" ||
         field(preview, "runId") !== runId) return false;
     var section = entry.node.querySelector(".agent-stream-step");
     if (!section) return false;
@@ -367,7 +383,7 @@
   function renderWorkspaceControls(chat, submitQuestions) {
     if (activeOwner === "office") return;
     var snapshot = field(chat, "state") || {}, pending = field(chat, "pendingId");
-    node("Stop").hidden = field(snapshot, "status") !== "running";
+    node("Stop").hidden = runStatus(snapshot) !== "running";
     node("Control").hidden = !pending;
     node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
       (field(chat, "pendingArguments") || "") : "";
@@ -397,8 +413,8 @@
     }
     function showOfficeContext(snapshot) {
       if (activeOwner !== "project") { form.title = ""; return; }
-      var office = field(snapshot, "office"), status = String(field(snapshot, "status") || "").toLowerCase();
-      var activeRun = status === "running" || status === "awaitingconfirmation", pinned = office && activeRun;
+      var office = field(snapshot, "office"), status = runStatus(snapshot);
+      var activeRun = status === "running" || status === "awaiting_confirmation", pinned = office && activeRun;
       form.title = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
         activeRun ? "Office: документ не привязан" : "Office: при отправке";
     }
@@ -526,7 +542,7 @@
     currentMessageEdit: currentMessageEdit,
     composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
-    snapshot: function () { return dispatch("snapshot"); },
+    snapshot: function () { return dispatch("snapshot"); }, runStatus: runStatus,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     latestSnapshot: latestSnapshot, prependMessages: prependMessages,
     createRunObserver: createRunObserver, paintProgress: paintProgress,
