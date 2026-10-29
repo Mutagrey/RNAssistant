@@ -44,6 +44,11 @@ whole-module writer. HTML пакет проверяет существующие
 10 VBA mutation/journal проверок, large-module safety, line contract и anchors;
 5 Workspace/plugin проверок переведены на hunks. Включение исходников и границы
 зависимостей проходят. Оставшиеся старые интеграционные fixtures учтены в BACKLOG.
+Model-loop продолжение: 16 сценариев `Program.SimpleAgentTests.cs` переведены на
+публичные Core tools и прошли. Проверены confirmation/reopen, полный after-source,
+stale-read recovery, compaction, unknown с последующим чтением модуля/проекта,
+causal trace/journal, Core/skill admission и полный HTML в user/native transport
+через CAS/replay. В этом срезе runtime не менялся; live модели и Office не проверялись.
 Полный Harness и Office/VSTO validation не запускались.
 
 ## Общий контракт текстовых мутаций и имён — 2026-10-28

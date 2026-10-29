@@ -14,12 +14,12 @@
 
 ## Интеграционные fixtures после перехода на Core tools — 2026-10-28
 
-Owner: Harness / Core Tools / Office Tools. Новые focused проверки общего контракта
-проходят, но полный набор не запускался. В `Program.SimpleAgentTests.cs` остались
-scripted model calls и assertions для `html.source.write`, `vba.module.*`;
-в других owner suites также есть обращения к приватным source-командам через
-public catalog. Перенести модельные сценарии на `core.*`/`resources.*` и actual
-Core/admission profile; низкоуровневые owner tests явно отделить от public API.
+Owner: Harness / Core Tools / Office Tools. Полный набор не запускался. В catalog
+и owner suites (`Program.ToolStoreTests.cs`, `Program.VbaPromptTests.cs`,
+`Program.ResourceGatewayTests.cs` и других) остаются expectations удалённых имён
+и обращения к приватным source-командам через public catalog. Перенести оставшиеся
+модельные сценарии на `core.*`/`resources.*` и actual Core/admission profile;
+низкоуровневые owner tests явно отделить от public API.
 Не возвращать старые aliases ради fixtures. После переноса запускать только
 затронутые сценарии. Известный отдельный stale Skill Library assertion — ниже.
 

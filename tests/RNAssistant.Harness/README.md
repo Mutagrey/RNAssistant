@@ -31,6 +31,19 @@ retired substring writer is removed; migrated checks retain large-file no-op,
 stale/ambiguous context, invalid Unicode, post-dispatch unknown and read-back
 mismatch recovery, plus visual-selection edits against exact plugin source.
 
+The VBA/HTML model-loop scenarios in `Program.SimpleAgentTests.cs` use public
+`core.write`, compact `core.patch` and the initial Core profile. The migrated
+checks cover closed-document local HTML, confirmation/reopen and full after-source,
+stale-source recovery, compaction, rejected mixed read/write responses, skill
+inspection/admission budgets and causal trace/journal correlation. HTML persistence
+checks run with user/native tool-result transport, discover the exact member through
+`core.find`, then read before repeating a complete write; accepted arguments and
+runtime IDs survive CAS/replay without rewriting source bytes. Unknown VBA writes
+inspect both the module and affected project membership before finishing while
+retaining the unknown result and one dispatch. These are scripted model responses
+with fake Office adapters, not live-model or VBE qualification. Other catalog/owner
+fixtures still need migration; see [BACKLOG](../../docs/stabilization/BACKLOG.md#интеграционные-fixtures-после-перехода-на-core-tools--2026-10-28).
+
 `workspace: failed read activity` verifies a real failed tool outcome remains failed
 with its semantic target after persistence; accepted-history checks cover shared
 display metadata and summaries. `tools: validates save metadata` covers skill

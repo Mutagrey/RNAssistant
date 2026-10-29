@@ -654,8 +654,8 @@ namespace RNAssistant.Harness
                 {
                     LoadSkillResponse("skills.html.workspace.authoring"),
                     ModelProtocolWire.WriteAcceptedCall("Create the local HTML file.", "Создаю локальный HTML.",
-                        new ConversationToolCall { Name = "html.source.write",
-                            Arguments = new JObject { ["path"] = "index.html", ["content"] = "<main>Offline</main>" } }),
+                        new ConversationToolCall { Name = "core.write",
+                            Arguments = new JObject { ["target"] = "HTML file: index.html", ["content"] = "<main>Offline</main>" } }),
                     null
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -664,7 +664,7 @@ namespace RNAssistant.Harness
                     calls.Add(messages.ToList());
                     var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
                         "The local HTML write has a terminal result.", "Локальный HTML готов.",
-                        "The requested HTML file was created.", "html.source.write");
+                        "The requested HTML file was created.", "core.write");
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
 
@@ -691,12 +691,12 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"office_tools_available\":false", "Office availability in prompt");
                 AssertTrue(prompt.IndexOf("\"vba_project_target\":", StringComparison.Ordinal) < 0,
                     "closed document exposes no directly readable live VBA project target");
-                AssertContains(prompt, "\"id\":\"html.source.write\"",
-                    "exact local HTML capability remains discoverable");
-                AssertTrue(prompt.IndexOf("\"name\":\"html.source.write\"", StringComparison.OrdinalIgnoreCase) < 0,
-                    "local HTML schema is not injected before discovery");
-                AssertContains(FlattenSimple(calls[1]), "\"name\":\"html.source.write\"",
-                    "exact local HTML schema is available after read");
+                AssertContains(prompt, "\"name\":\"core.write\"",
+                    "universal local writes are part of the initial Core profile");
+                AssertTrue(prompt.IndexOf("html.source.write", StringComparison.Ordinal) < 0,
+                    "retired HTML source tools are absent from the model surface");
+                AssertContains(FlattenSimple(calls[1]), "\"name\":\"core.write\"",
+                    "selecting the HTML skill retains the universal write schema");
                 AssertTrue(prompt.IndexOf("excel.read_range", StringComparison.OrdinalIgnoreCase) < 0,
                     "Office tools omitted for a closed document");
                 AssertContains(prompt, "html.data.bind",
@@ -1196,27 +1196,32 @@ namespace RNAssistant.Harness
                             Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     LoadSkillResponse("skills.vba.code.editing"),
                     ModelProtocolWire.WriteAcceptedCall("Apply the requested module source.", "Обновляю модуль.",
-                        new ConversationToolCall { Name = VbaToolCatalog.WriteModule,
-                            Arguments = new JObject { ["moduleName"] = "Module1", ["code"] = intended } }),
+                        new ConversationToolCall { Name = ResourceMutationToolCatalog.Write,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["content"] = intended } }),
                     ModelProtocolWire.WriteAcceptedCall("Inspect after the unverified write.",
                         "Проверяю модуль после неподтверждённой записи.",
                         new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
                             Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
+                    ModelProtocolWire.WriteAcceptedCall("Inspect the affected project membership after the unverified write.", "Проверяю состав проекта.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle),
+                                ["representation"] = "structure" } }),
                     "__FINISH__"
                 });
                 var requests = new List<IReadOnlyList<ChatMessage>>();
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
                 {
                     requests.Add(messages.ToList());
+                    AssertTrue(responses.Count > 0, "unexpected recovery request: " + messages.Last().Content);
                     var response = responses.Dequeue();
                     if (response == "__FINISH__")
                     {
                         var evidence = session.Messages.Where(item => item.RunId == session.LastRun.RunId &&
                             item.AcceptedCallOrigin != null &&
-                            (item.ToolName == VbaToolCatalog.WriteModule ||
+                            (item.ToolName == ResourceMutationToolCatalog.Write ||
                              item.ToolName == ResourceToolCatalog.ReadToolId))
                             .Select(item => item.ExecutionReference.Alias).ToArray();
-                        AssertEqual(3, evidence.Length, "finish cites the write and before/after reads");
+                        AssertEqual(4, evidence.Length, "finish cites the write, source reads and project inspection");
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the divergent effect honestly.", "Модуль Module1 обновлён.",
                             results: new[] { new ConversationResultClaim("Module source is divergent.",
@@ -1230,13 +1235,13 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 var write = result.ToolResults.Select(item => JObject.FromObject(item))
-                    .Single(item => (string)item["toolId"] == "vba.module.write");
+                    .Single(item => (string)item["toolId"] == "core.write");
                 AssertEqual(false, (bool)write["success"], "unverified effect is not a successful tool result");
                 AssertEqual("unknown", (string)write["status"], "typed manual projection preserves unknown status");
                 AssertEqual("vba_mutation_unknown", (string)write["errorCode"], "real journal classified the divergent effect");
                 AssertEqual(false, (bool)write["retryable"], "unknown write cannot be retried automatically");
                 var activityData = session.Messages.Where(message => message.Activity != null &&
-                    message.Activity.ToolId == "vba.module.write")
+                    message.Activity.ToolId == "core.write")
                     .Select(message => message.Activity.DataJson).Last();
                 var writeData = JObject.Parse(activityData);
                 AssertTrue(writeData["journalStatus"] == null,
@@ -1249,7 +1254,7 @@ namespace RNAssistant.Harness
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "unknown write is dispatched once");
                 AssertContains(FlattenSimple(requests.Last()), "\"status\":\"unknown\"", "model receives the unknown tool result");
                 AssertContains(FlattenSimple(requests.Last()), "Final VBA state is unknown", "model receives the exact verification warning");
-                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "loop completion is independent of execution health: " + result.AssistantText);
                 AssertRunViewState(result, session, "unknown", 0, 0, 1);
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completed is accepted after inspecting the unknown write");
                 AssertContains(result.AssistantText, "состояние 1 операций записи осталось неизвестным",
@@ -1288,15 +1293,24 @@ namespace RNAssistant.Harness
                 var validResponses = new List<string>
                 {
                     LoadSkillResponse("skills.vba.code.editing"),
+                    ModelProtocolWire.WriteAcceptedCall("Read the source before the guarded write.", "Read module.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     ModelProtocolWire.WriteAcceptedCall("Apply the requested module source.", "Update module.",
-                        new ConversationToolCall { Name = VbaToolCatalog.WriteModule,
-                            Arguments = new JObject { ["moduleName"] = "Module1", ["code"] = intended } })
+                        new ConversationToolCall { Name = ResourceMutationToolCatalog.Write,
+                            Arguments = new JObject { ["target"] = "VBA module: Module1", ["content"] = intended } })
                 };
                 if (outcome == "unknown")
+                {
                     validResponses.Add(ModelProtocolWire.WriteAcceptedCall(
                         "Inspect the current source after the unverified write.", "Inspect module.",
                         new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
                             Arguments = new JObject { ["target"] = "VBA module: Module1", ["representation"] = "source" } }));
+                    validResponses.Add(ModelProtocolWire.WriteAcceptedCall("Inspect affected project membership.", "Inspect project.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId,
+                            Arguments = new JObject { ["target"] = VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle),
+                                ["representation"] = "structure" } }));
+                }
                 validResponses.Add("__FINISH__");
                 var responses = new Queue<string>(Enumerable.Repeat("REJECTED_TRACE_SENTINEL", invalidAttempts)
                     .Concat(validResponses));
@@ -1315,21 +1329,22 @@ namespace RNAssistant.Harness
                         Type = "request", RequestId = requestId, Purpose = "agent",
                         PayloadJson = "{\"fake_transport\":true}", PayloadContentType = "application/json"
                     });
+                    AssertTrue(responses.Count > 0, "unexpected trace recovery request: " + messages.Last().Content);
                     var content = responses.Dequeue();
                     if (content == "__FINISH__")
                     {
                         var evidence = session.Messages.Where(item => item.RunId == "trace-run" &&
                             item.AcceptedCallOrigin != null &&
-                            (item.ToolName == VbaToolCatalog.WriteModule ||
+                            (item.ToolName == ResourceMutationToolCatalog.Write ||
                              outcome == "unknown" && item.ToolName == ResourceToolCatalog.ReadToolId))
                             .Select(item => item.ExecutionReference.Alias).ToArray();
-                        AssertEqual(outcome == "unknown" ? 2 : 1, evidence.Length,
+                        AssertEqual(outcome == "unknown" ? 4 : 1, evidence.Length,
                             "finish cites the accepted write and any required inspection");
                         content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the observed write outcome.", "The write outcome is recorded.",
                             results: new[] { new ConversationResultClaim("Module write assessment", evidence,
                                 outcome == "ok" ? ConversationAssessment.Satisfied :
-                                outcome == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied) }, outcome: ConversationOutcome.Partial);
+                                outcome == "unknown" ? ConversationAssessment.Unverified : ConversationAssessment.NotSatisfied) }, outcome: outcome == "ok" ? ConversationOutcome.Completed : ConversationOutcome.UnableToComplete);
                     }
                     rawByAttempt.Add(options.TraceModelAttemptId, content);
                     options.TraceSink(new LlmTraceRecord
@@ -1353,10 +1368,10 @@ namespace RNAssistant.Harness
                 var requests = events.Where(item => item.Type == SessionEventTypes.LlmRequest).ToList();
                 var rejected = events.Where(item => item.Type == SessionEventTypes.AgentResponseRejected).ToList();
                 var accepted = events.Where(item => item.Type == "model.response.accepted").ToList();
-                var acceptedSteps = outcome == "unknown" ? 4 : 3;
+                var acceptedSteps = outcome == "unknown" ? 6 : 4;
                 AssertEqual(invalidAttempts + acceptedSteps, requestCount, "trace introduces no retry or model request");
                 AssertEqual(invalidAttempts, rejected.Count, "every rejected attempt has a diagnostic event");
-                AssertEqual(acceptedSteps, accepted.Count, "only valid skill/write/inspection/final responses are accepted");
+                AssertEqual(acceptedSteps, accepted.Count, "only valid skill/read/write/inspection/final responses are accepted");
                 AssertEqual(requestCount, requests.Select(item => (string)item.Data["ModelAttemptId"]).Distinct().Count(),
                     "each completion attempt has a distinct id");
                 AssertTrue(requests.All(item => !string.IsNullOrWhiteSpace((string)item.Data["ModelAttemptId"])), "attempt ids exist");
@@ -1371,7 +1386,7 @@ namespace RNAssistant.Harness
                     AssertTrue(request.Sequence < verdict.Sequence, "prepared request precedes parser verdict");
                 }
                 var acceptedCall = session.Messages.Single(message => message.Role == "assistant" &&
-                    message.ToolName == "vba.module.write" && message.AcceptedCallOrigin != null);
+                    message.ToolName == "core.write" && message.AcceptedCallOrigin != null);
                 var callId = acceptedCall.ToolCallId;
                 var acceptedWrite = accepted.Single(item => (string)item.Data["ModelAttemptId"] == acceptedCall.AcceptedCallOrigin.ModelAttemptId);
                 AssertTrue(accepted.All(item => !((JArray)item.Data["ToolCallIds"]).Any()), "protocol verdict never assigns execution IDs");
@@ -1904,7 +1919,9 @@ namespace RNAssistant.Harness
                 {
                     request = messages.ToList();
                     requestOptions = options;
-                    return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Готово.\",\"action\":\"done\",\"tool_calls\":[]}" });
+                    return Task.FromResult(new LlmCompletionResult { Content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                        "Describe the available editing surface.", "Доступен общий набор инструментов.",
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
                 };
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var promptSettings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema };
@@ -1926,30 +1943,26 @@ namespace RNAssistant.Harness
                 AssertContains(prompt, "\"name\":\"core.find\"", "semantic resource discovery exposed");
                 AssertContains(prompt, "\"name\":\"core.read\"", "resource reads exposed");
                 AssertTrue(prompt.IndexOf("\"name\":\"common.resources_list\"", StringComparison.Ordinal) < 0 &&
-                    prompt.IndexOf("\"name\":\"common.resources_resolve\"", StringComparison.Ordinal) < 0 &&
-                    prompt.IndexOf("\"name\":\"core.search\"", StringComparison.Ordinal) < 0,
+                    prompt.IndexOf("\"name\":\"common.resources_resolve\"", StringComparison.Ordinal) < 0,
                     "retired resource transport tools are absent");
                 AssertContains(prompt, "\"name\":\"core.tools.search\"", "unified capability search exposed");
                 AssertContains(prompt, "\"name\":\"core.tools.read\"", "unified exact capability loading exposed");
-                AssertContains(prompt, "\"id\":\"vba.module.patch\"", "exact VBA mutation id is in compact catalog");
                 AssertContains(prompt, "\"id\":\"skills.vba.code.editing\"", "exact VBA skill id is in compact catalog");
                 AssertTrue(prompt.IndexOf("\"id\":\"common.vba_inspect\"", StringComparison.Ordinal) < 0,
                     "invented VBA capability id is absent from the authoritative catalog");
                 var callableNames = ResponseSchemaCallNames(requestOptions.ResponseSchemaJson)
                     .ToList();
-                AssertTrue(!callableNames.Contains("vba.module.patch", StringComparer.OrdinalIgnoreCase) &&
-                    !callableNames.Contains("vba.module.write", StringComparer.OrdinalIgnoreCase),
-                    "VBA editing mutations require a selected skill before they are callable");
-                foreach (var optionalId in new[]
-                {
-                    "vba.module.restore", "vba.module.rename",
-                    "vba.module.delete", "office.macro.run"
-                })
+                foreach (var coreId in new[] { "core.find", "core.read", "core.search", "core.write", "core.patch", "core.replace" })
+                    AssertTrue(callableNames.Contains(coreId, StringComparer.Ordinal), "Core source tool is immediately callable: " + coreId);
+                foreach (var retiredId in new[] { "vba.module.write", "vba.module.patch", "vba.module.restore",
+                    "vba.module.rename", "vba.module.delete", "html.source.write" })
+                    AssertTrue(!tools.Any(tool => tool.Id == retiredId) && !callableNames.Contains(retiredId),
+                        "retired owner tools have no public registration: " + retiredId);
+                foreach (var optionalId in new[] { "resources.restore", "resources.move", "resources.delete", "office.macro.run" })
                 {
                     AssertTrue(!callableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
-                        "explicit VBA intent is not callable before exact admission: " + optionalId);
-                    AssertContains(prompt, "\"id\":\"" + optionalId + "\"",
-                        "compact catalog keeps the exact optional VBA intent discoverable");
+                        "optional lifecycle/execution tool needs admission: " + optionalId);
+                    AssertContains(prompt, "\"id\":\"" + optionalId + "\"", "optional tool remains discoverable");
                 }
                 AssertTrue(prompt.IndexOf("\"name\":\"common.vba_create_module\"", StringComparison.Ordinal) < 0,
                     "redundant create alias is hidden from the model");
@@ -2354,11 +2367,11 @@ namespace RNAssistant.Harness
                     if (step == 1)
                         response = LoadSkillResponse("skills.vba.code.editing");
                     else if (phase == 0 && step == 2)
-                        response = call(VbaToolCatalog.WriteModule, new JObject {
-                            ["moduleName"] = module, ["code"] = source, ["mode"] = "createOnly" });
+                        response = call(ResourceMutationToolCatalog.Write, new JObject {
+                            ["target"] = "VBA module: " + module, ["content"] = source });
                     else if (phase == 0 && step == 3)
                     {
-                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
+                        AssertEqual("ok", (string)LastToolResult(messages, ResourceMutationToolCatalog.Write)["status"],
                             "creation has verified source before the next read");
                         response = call(ResourceToolCatalog.ReadToolId, new JObject {
                             ["target"] = "VBA module: " + module, ["representation"] = "source" });
@@ -2370,7 +2383,7 @@ namespace RNAssistant.Harness
                         AssertEqual(source, (string)read["data"]["text"], "whole source preserves exact CRLF bytes");
                         response = ScriptedVerifiedFinish(session, "The module was created and read back.",
                             "Created and read.", "The module source was created and read.",
-                            VbaToolCatalog.WriteModule, ResourceToolCatalog.ReadToolId);
+                            ResourceMutationToolCatalog.Write, ResourceToolCatalog.ReadToolId);
                     }
                     else if (phase == 1 && step == 2)
                     {
@@ -2383,16 +2396,16 @@ namespace RNAssistant.Harness
                         AssertEqual("ok", (string)read["status"], "current source can be read after compaction");
                         AssertEqual(source, (string)read["data"]["text"],
                             "the complete current source is restored by an explicit read");
-                        response = call(VbaToolCatalog.WriteModule, new JObject {
-                            ["moduleName"] = module, ["code"] = after, ["mode"] = "updateOnly" });
+                        response = call(ResourceMutationToolCatalog.Write, new JObject {
+                            ["target"] = "VBA module: " + module, ["content"] = after });
                     }
                     else if (phase == 1 && step == 4)
                     {
-                        AssertEqual("ok", (string)LastToolResult(messages, VbaToolCatalog.WriteModule)["status"],
+                        AssertEqual("ok", (string)LastToolResult(messages, ResourceMutationToolCatalog.Write)["status"],
                             "explicit current source read authorizes the whole-module edit");
                         response = ScriptedVerifiedFinish(session, "The module update completed.",
                             "Updated.", "The module source was updated.",
-                            ResourceToolCatalog.ReadToolId, VbaToolCatalog.WriteModule);
+                            ResourceToolCatalog.ReadToolId, ResourceMutationToolCatalog.Write);
                     }
                     else throw new InvalidOperationException("Unexpected VBA context recovery step: " + phase + "/" + step);
                     return Task.FromResult(new LlmCompletionResult { Content = response });
@@ -2462,8 +2475,8 @@ namespace RNAssistant.Harness
                         new ConversationToolCall { Name = name, Arguments = arguments });
                 var read = call(ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = "VBA module: UniLoader", ["representation"] = "source" });
-                var write = call("vba.module.write",
-                    new JObject { ["moduleName"] = "UniLoader", ["code"] = after, ["mode"] = "updateOnly" });
+                var write = call("core.write",
+                    new JObject { ["target"] = "VBA module: UniLoader", ["content"] = after });
                 var responses = new Queue<string>(new[] { read, LoadSkillResponse("skills.vba.code.editing"),
                     write, read, write, null });
                 var requests = 0;
@@ -2473,7 +2486,7 @@ namespace RNAssistant.Harness
                     if (requests == 3) adapter.SetVbaModule("UniLoader", before.Replace("before", "external"), "StdModule");
                     if (requests == 4)
                     {
-                        var failed = LastToolResult(messages.ToList(), "vba.module.write");
+                        var failed = LastToolResult(messages.ToList(), "core.write");
                         AssertEqual("error", (string)failed["status"], "external drift rejects the first whole write");
                         AssertEqual("RefreshRequired", (string)failed["data"]["recovery"]["retryPolicy"],
                             "small diagnostic source still requires a canonical read");
@@ -2484,7 +2497,7 @@ namespace RNAssistant.Harness
                     var scriptedResponse = responses.Dequeue();
                     if (scriptedResponse == null)
                     {
-                        var applied = session.Messages.Last(item => item.ToolName == "vba.module.write" &&
+                        var applied = session.Messages.Last(item => item.ToolName == "core.write" &&
                             item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
                         scriptedResponse = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "The refreshed write completed.", "Изменение подтверждено.",
@@ -2520,7 +2533,7 @@ namespace RNAssistant.Harness
                 Func<string, JObject, string> call = (name, arguments) =>
                     ModelProtocolWire.WriteAcceptedCall("Perform the next VBA inspection step.", "",
                         new ConversationToolCall { Name = name, Arguments = arguments });
-                var schemaRead = call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "vba.module.patch" });
+                var schemaRead = call(CapabilityToolCatalog.ReadToolId, new JObject { ["id"] = "core.patch" });
                 var script = new List<string> {
                     call(ResourceToolCatalog.ReadToolId, new JObject {
                         ["target"] = VbaResourceProvider.ProjectSemanticTarget(adapter.DocumentTitle), ["representation"] = "structure" }),
@@ -2529,8 +2542,7 @@ namespace RNAssistant.Harness
                     LoadSkillResponse("skills.vba.code.editing") };
                 if (!tightBudget) script.AddRange(new[] {
                     schemaRead,
-                    call("vba.module.patch", new JObject { ["moduleName"] = "UniLoader", ["patch"] = new JArray(
-                        new JObject { ["find"] = "End Sub", ["text"] = "End If\nEnd Sub" }) }),
+                    call("core.patch", PatchArguments("VBA module: UniLoader", "@@\n-End Sub\n+End If\n+End Sub\n")),
                     null // Generate finish after the patch result is available.
                 });
                 else script.Add(null); // Cite the refused skill load after its terminal result.
@@ -2541,8 +2553,7 @@ namespace RNAssistant.Harness
                     requests++;
                     AssertTrue(responses.Count > 0, "schema inspection must not trigger a repair loop");
                     var callable = session.LastContextReceipt.Arsenal.Tools.Select(tool => tool.Id).ToArray();
-                    AssertEqual(!tightBudget && requests >= 5, callable.Contains("vba.module.patch"),
-                        "only skill selection exposes patch on the next request");
+                    AssertTrue(callable.Contains("core.patch"), "universal patch is callable before and after skill selection");
                     if (requests == 1)
                         AssertTrue(FlattenSimple(messages).Contains("Inspect the bound project before asking"),
                             "source discovery guidance is present before a skill is selected");
@@ -2550,10 +2561,11 @@ namespace RNAssistant.Harness
                     {
                         var read = LastToolResult(messages.ToList(), CapabilityToolCatalog.ReadToolId);
                         AssertEqual("ok", (string)read["status"], "schema inspection succeeds before and after selection");
-                        AssertContains(read.ToString(), "skills.vba.code.editing", "inspection identifies the real selecting skill");
-                        AssertEqual("skill-tool", (string)read["data"]["kind"], "inspection returns bounded selection guidance");
-                        AssertTrue(read["data"]["descriptor"] == null && read["data"]["loaded"] == null,
-                            "discovery neither duplicates selected schemas nor claims admission");
+                        AssertEqual("tool-schema", (string)read["data"]["kind"], "Core inspection returns its current schema");
+                        AssertEqual("core.patch", (string)read["data"]["id"], "inspection names the universal tool");
+                        AssertTrue(read["data"]["loadSkill"] == null,
+                            "inspecting a Core tool never requires a language-specific selecting skill");
+                        AssertTrue(callable.Contains("core.patch"), "the actual callable schema already contains the inspected Core tool");
                         AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "inspection grants no mutation");
                     }
                     if (tightBudget && requests == 5)
@@ -2570,7 +2582,7 @@ namespace RNAssistant.Harness
                         if (!tightBudget)
                             scriptedResponse = ScriptedVerifiedFinish(session, "The patch completed.",
                                 "Исходник исправлен; компиляция Office не проверялась.",
-                                "The VBA source was patched.", "vba.module.patch");
+                                "The VBA source was patched.", "core.patch");
                         else
                         {
                             var refused = session.Messages.Last(item => item.ToolName == SkillLoadToolHandler.ToolId &&
@@ -2638,30 +2650,29 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("skills.vba.code.editing"),
+                    ModelProtocolWire.WriteAcceptedCall("Read the source used by all planned edits.", "Читаю исходный модуль.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                            ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
                         "Try an invalid mixed read/write batch.", "Добавляю диагностику и обновляю заголовок.",
                         calls: new[] {
-                            new ConversationToolCall { Name = "vba.module.patch", Arguments = new JObject {
-                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject {
-                                    ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" }) } },
+                            new ConversationToolCall { Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", "@@\n Sub Main()\n+Debug.Print \"started\"\n End Sub\n") },
                             new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
                                 ["target"] = "VBA module: Module1", ["representation"] = "source" } },
-                            new ConversationToolCall { Name = VbaToolCatalog.WriteModule, Arguments = new JObject {
-                                ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + before, ["mode"] = "updateOnly" } }
+                            new ConversationToolCall { Name = ResourceMutationToolCatalog.Write, Arguments = new JObject {
+                                ["target"] = "VBA module: Module1", ["content"] = "' Version 2\n" + before } }
                         })),
                     ModelProtocolWire.WriteAcceptedCall("Apply the source patch separately.",
                         "Добавляю диагностику отдельным действием.", new ConversationToolCall {
-                            Name = "vba.module.patch", Arguments = new JObject {
-                                ["moduleName"] = "Module1", ["patch"] = new JArray(new JObject {
-                                    ["find"] = "Sub Main()", ["text"] = "Sub Main()\nDebug.Print \"started\"" }) } }),
+                            Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", "@@\n Sub Main()\n+Debug.Print \"started\"\n End Sub\n") }),
                     ModelProtocolWire.WriteAcceptedCall("Read current source after the patch.",
                         "Читаю текущий модуль после записи.", new ConversationToolCall {
                             Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
                                 ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     ModelProtocolWire.WriteAcceptedCall("Write the title against the fresh source.",
                         "Сохраняю заголовок вместе с прочитанной диагностикой.", new ConversationToolCall {
-                            Name = VbaToolCatalog.WriteModule, Arguments = new JObject {
-                                ["moduleName"] = "Module1", ["code"] = "' Version 2\n" + patched, ["mode"] = "updateOnly" } }),
+                            Name = ResourceMutationToolCatalog.Write, Arguments = new JObject {
+                                ["target"] = "VBA module: Module1", ["content"] = "' Version 2\n" + patched } }),
                     null
                 });
                 var modelRequests = 0;
@@ -2670,13 +2681,13 @@ namespace RNAssistant.Harness
                 {
                     modelRequests++;
                     sourceRequests.Add(messages.ToList());
-                    if (modelRequests == 3)
+                    if (modelRequests == 4)
                     {
                         AssertEqual(before, adapter.VbaModuleCode, "rejected batch performs no VBA mutation");
                         AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                             "protocol repair precedes every dispatch");
                     }
-                    if (modelRequests == 4)
+                    if (modelRequests == 5)
                     {
                         AssertEqual(patched, adapter.VbaModuleCode, "first singleton patch is applied before read");
                         AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only the patch dispatched");
@@ -2685,7 +2696,7 @@ namespace RNAssistant.Harness
                     }
                     var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
                         "Both VBA mutations have terminal results.", "Проверка завершена.",
-                        "The patch and module write completed.", "vba.module.patch", VbaToolCatalog.WriteModule);
+                        "The patch and module write completed.", "core.patch", ResourceMutationToolCatalog.Write);
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
@@ -2693,15 +2704,15 @@ namespace RNAssistant.Harness
                     session, NewContext(adapter), new AppSettings { AutoConfirmToolActions = true },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
-                AssertEqual(6, modelRequests, "both mutations reach their next model decision");
+                AssertEqual(7, modelRequests, "both mutations reach their next model decision");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model completes after both writes");
                 AssertEqual(patched,
-                    (string)LastToolResult(sourceRequests[4], ResourceToolCatalog.ReadToolId)["data"]["text"],
+                    (string)LastToolResult(sourceRequests[5], ResourceToolCatalog.ReadToolId)["data"]["text"],
                     "next model decision sees the changed VBA source through its exact read");
-                AssertEqual("ok", (string)LastToolResult(sourceRequests.Last(), VbaToolCatalog.WriteModule)["status"],
+                AssertEqual("ok", (string)LastToolResult(sourceRequests.Last(), ResourceMutationToolCatalog.Write)["status"],
                     "the write's superseded input observation cannot turn its verified result into an error");
                 var writes = result.ToolResults.Select(item => JObject.FromObject(item))
-                    .Where(item => (string)item["toolId"] == "vba.module.write").ToList();
+                    .Where(item => (string)item["toolId"] == "core.write").ToList();
                 AssertEqual(1, writes.Count, "rejected batch contributes no accepted write result");
                 AssertEqual("ok", (string)writes[0]["status"], "fresh response can use delivered source evidence");
                 AssertEqual("' Version 2\n" + patched, adapter.VbaModuleCode, "new write retains diagnostic code");
@@ -2986,22 +2997,26 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode =
                     "Sub Main()\nDebug.Print \"old\"\nEnd Sub";
-                var patch = new JArray(new JObject { ["find"] = "\"old\"", ["text"] = "\"new\"" });
+                var patch = LineHunk("Debug.Print \"old\"", "Debug.Print \"new\"");
                 var expectedSource = "Sub Main()\nDebug.Print \"new\"\nEnd Sub";
                 if (!externalDrift)
                 {
                     adapter.VbaModuleCode = "Sub Main()\n" + string.Join("\n", Enumerable.Range(0, 100)
-                        .Select(index => "Debug.Print \"old_" + index + "\"")) + "\nEnd Sub";
+                        .Select(index => "Debug.Print \"old_" + index + "\" ' " + new string('x', 80))) + "\nEnd Sub";
                     expectedSource = adapter.VbaModuleCode.Replace("old_", "new_");
-                    patch = new JArray(Enumerable.Range(0, 100).Select(index => new JObject {
-                        ["find"] = "\"old_" + index + "\"", ["text"] = "\"new_" + index + "\"" }));
+                    patch = string.Concat(Enumerable.Range(0, 100).Select(index =>
+                        LineHunk("Debug.Print \"old_" + index + "\" ' " + new string('x', 80),
+                            "Debug.Print \"new_" + index + "\" ' " + new string('x', 80))));
                 }
                 var responses = new Queue<string>(new[]
                 {
                     LoadSkillResponse("skills.vba.code.editing"),
+                    ModelProtocolWire.WriteAcceptedCall("Read the source before preparing the patch.", "Читаю модуль.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                            ["target"] = "VBA module: Module1", ["representation"] = "source" } }),
                     ModelProtocolWire.WriteAcceptedCall("Apply the requested VBA patch.", "Обновляю VBA.",
-                        new ConversationToolCall { Name = "vba.module.patch",
-                            Arguments = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }),
+                        new ConversationToolCall { Name = "core.patch",
+                            Arguments = PatchArguments("VBA module: Module1", patch) }),
                     "__FINISH__"
                 });
                 var calls = new List<IReadOnlyList<ChatMessage>>();
@@ -3013,14 +3028,14 @@ namespace RNAssistant.Harness
                     if (response == "__FINISH__")
                     {
                         var callId = messages.Single(message => message.Role == "assistant" &&
-                            message.ToolName == "vba.module.patch" &&
-                            message.AcceptedCallOrigin != null).ToolCallId;
+                            message.ToolName == "core.patch" &&
+                            message.AcceptedCallOrigin != null).ExecutionReference.Alias;
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the confirmed patch outcome.",
                             externalDrift ? "Изменение отклонено как устаревшее." : "Изменение сохранено.",
                             results: new[] { new ConversationResultClaim(
                                 externalDrift ? "The patch was rejected after source drift." : "The patch was applied.",
-                                new[] { callId }, externalDrift ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Partial);
+                                new[] { callId }, externalDrift ? ConversationAssessment.NotSatisfied : ConversationAssessment.Satisfied) }, outcome: externalDrift ? ConversationOutcome.UnableToComplete : ConversationOutcome.Completed);
                     }
                     return Task.FromResult(new LlmCompletionResult
                         { Content = response });
@@ -3055,7 +3070,7 @@ namespace RNAssistant.Harness
                     message.Activity.ToolCallId == pending.Call.Id).Activity;
                 var preview = activity.ResultPayload == null ? activity.DataJson :
                     executor.Payloads.ReadText(activity.ResultPayload.ToBlobReference());
-                AssertContains(preview, "operations",
+                AssertContains(preview, "rnassistant.patch",
                     "confirmation activity carries the prepared preview");
                 AssertTrue(!string.IsNullOrWhiteSpace(
                         activity.ConfirmationCatalogSha256),
@@ -3082,9 +3097,9 @@ namespace RNAssistant.Harness
 
                 if (!externalDrift)
                 {
-                    AssertEqual(3, calls.Count, "confirmation reaches exactly one next model decision");
+                    AssertEqual(4, calls.Count, "confirmation reaches exactly one next model decision");
                     AssertEqual(AgentResponseStatuses.Completed, final.ResponseStatus, "confirmed mutation completes");
-                    var terminal = loaded.Messages.Last(message => message.ToolName == "vba.module.patch" &&
+                    var terminal = loaded.Messages.Last(message => message.ToolName == "core.patch" &&
                         message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant");
                     ToolResultWireReadResult terminalWire;
                     string terminalError;
@@ -3098,8 +3113,8 @@ namespace RNAssistant.Harness
                     AssertContains(afterSource.Content, expectedSource,
                         "the first request after confirmation contains complete changed source");
                     AssertContains(afterSource.Content, "VBA module: Module1", "archival keeps the source associated with its target");
-                    AssertTrue(loaded.Messages.Any(message => message.ToolName == "vba.module.patch" &&
-                        message.ResultPayload != null), "large patch result exercises CAS archival");
+                    AssertTrue(loaded.Messages.Any(message => message.ToolName == "core.patch" &&
+                        AcceptedCallPayloadService.IsExternalizedCall(message)), "large patch arguments exercise CAS archival");
                     var frame = calls.Last().SingleOrDefault(message =>
                         message.ToolCallId == terminal.ToolCallId &&
                         message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
@@ -3122,7 +3137,7 @@ namespace RNAssistant.Harness
                     "1 операций записи завершились ошибкой",
                     "failed confirmed write remains explicit in the user-visible result");
                 AssertContains(FlattenSimple(calls.Last()),
-                    "The VBA module changed after the source was inspected",
+                    "source_changed",
                     "confirmed execution exposes the guarded stale-state outcome without runtime internals");
                 AssertContains(adapter.VbaModuleCode, "external",
                     "stale confirmed call does not overwrite live VBA");
@@ -3262,15 +3277,19 @@ namespace RNAssistant.Harness
                 var rawWrite = ModelProtocolWire.WriteAcceptedCall("Save the complete HTML body.",
                     "Save complete HTML.", new ConversationToolCall
                     {
-                        Name = HtmlWorkspaceToolCatalog.WriteFileToolId,
+                        Name = ResourceMutationToolCatalog.Write,
                         Arguments = new JObject
                         {
-                            ["path"] = "report.html", ["content"] = html
+                            ["target"] = "HTML file: report.html", ["content"] = html
                         }
                     });
                 var responses = new Queue<string>(new[]
                 {
-                    LoadSkillResponse("skills.html.workspace.authoring"), rawWrite, rawWrite, null
+                    LoadSkillResponse("skills.html.workspace.authoring"), rawWrite,
+                    ModelProtocolWire.WriteAcceptedCall("Find the newly created member before reading it.", "Find HTML.",
+                        new ConversationToolCall { Name = ResourceToolCatalog.FindToolId, Arguments = new JObject {
+                            ["query"] = "report.html", ["scope"] = "html" } }),
+                    "__READ_HTML__", rawWrite, null
                 });
                 var requestCount = 0;
                 var session = NewSession(adapter);
@@ -3279,19 +3298,41 @@ namespace RNAssistant.Harness
                     requestCount++;
                     AssertTrue(!messages.Any(message => (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
                         "execution identity never triggers regeneration of HTML");
+                    if (requestCount == 3 || requestCount == 6)
+                    {
+                        var written = LastToolResult(messages, ResourceMutationToolCatalog.Write);
+                        AssertEqual("ok", (string)written["status"], "HTML write at request " + requestCount + ": " + (string)written["message"]);
+                    }
+                    if (requestCount == 5)
+                    {
+                        var read = LastToolResult(messages, ResourceToolCatalog.ReadToolId);
+                        AssertEqual("ok", (string)read["status"], "HTML reread: " + (string)read["message"]);
+                        AssertEqual(html, (string)read["data"]["text"], "HTML reread returns the complete current text");
+                    }
                     var scriptedResponse = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
                         "Both HTML writes completed.", "Done.", "The complete HTML was saved.",
-                        HtmlWorkspaceToolCatalog.WriteFileToolId, HtmlWorkspaceToolCatalog.WriteFileToolId);
+                        ResourceMutationToolCatalog.Write, ResourceMutationToolCatalog.Write);
+                    if (scriptedResponse == "__READ_HTML__")
+                    {
+                        var found = LastToolResult(messages, ResourceToolCatalog.FindToolId);
+                        AssertEqual("ok", (string)found["status"], "new HTML member is discoverable");
+                        var target = (string)found["data"]["items"].Single(item =>
+                            ((string)item["target"] ?? "").StartsWith("HTML file: ", StringComparison.Ordinal))["target"];
+                        AssertTrue(!string.IsNullOrWhiteSpace(target), "discovery returns the exact readable HTML member target");
+                        scriptedResponse = ModelProtocolWire.WriteAcceptedCall("Read the current HTML before repeating the write.", "Read HTML.",
+                            new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
+                                ["target"] = target, ["representation"] = "source" } });
+                    }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
                 });
                 var result = service.ExecuteWithApprovalsAsync(ChatModes.Agent, "Save complete HTML.", session, NewContext(adapter),
                     new AppSettings { AutoConfirmToolActions = true, MaxAgentFormatRetries = 1,
                         ToolResultRole = resultRole, ContextWindowOverrideTokens = 131072 },
                     OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
-                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "valid calls complete without repair");
-                AssertEqual(4, requestCount, "two independently accepted writes require no extra model attempt");
+                AssertEqual(RunViewLifecycles.Completed, result.RunViewState.Lifecycle, "valid calls complete without repair: " + result.AssistantText);
+                AssertEqual(6, requestCount, "skill, two writes, discovery and source read complete without repair");
                 var accepted = session.Messages.Where(message => message.Role == "assistant" &&
-                    message.ToolName == HtmlWorkspaceToolCatalog.WriteFileToolId && message.AcceptedCallOrigin != null).ToList();
+                    message.ToolName == ResourceMutationToolCatalog.Write && message.AcceptedCallOrigin != null).ToList();
                 AssertEqual(2, accepted.Count, "identical payloads are not deduplicated or rejected as ID collisions");
                 AssertEqual(2, accepted.Select(message => message.ToolCallId).Distinct().Count(), "repeated writes have distinct runtime IDs");
                 foreach (var message in accepted)
