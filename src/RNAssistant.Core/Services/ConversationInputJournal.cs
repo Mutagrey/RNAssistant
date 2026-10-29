@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Tools;
@@ -31,9 +32,9 @@ namespace RNAssistant.Core.Services
             long? upToSequence = null)
         {
             if (upToSequence < 0) throw new ArgumentOutOfRangeException(nameof(upToSequence));
-            var records = _events.Read(session, SessionEventReadMode.RequireComplete)
-                .Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged &&
-                    (!upToSequence.HasValue || fact.Sequence <= upToSequence.Value)).Select(fact =>
+            var facts = _events.Read(session, SessionEventReadMode.RequireComplete)
+                .Where(fact => !upToSequence.HasValue || fact.Sequence <= upToSequence.Value).ToArray();
+            var records = facts.Where(fact => fact.Type == SessionEventTypes.ConversationInputChanged).Select(fact =>
                 {
                     var change = fact.Data.ToObject<ConversationInputEvent>();
                     if (change == null) throw new InvalidOperationException("Invalid conversation input event.");
@@ -51,9 +52,61 @@ namespace RNAssistant.Core.Services
                 .Where(message => message != null && message.Id != null && appliedIds.Contains(message.Id))
                 .ToLookup(message => message.Id, StringComparer.Ordinal);
             foreach (var input in applied)
-                if (!HasPersistedUserMessage(input, messages[input.Id]))
+                if (messages[input.Id].Any()) HasPersistedUserMessage(input, messages[input.Id]);
+            var inputBySequence = records.ToDictionary(record => record.Event.Sequence,
+                record => record.Change.Input);
+            // Check delivery at its event cursor; a later history rewrite may remove the message.
+            var persisted = new Dictionary<string, PersistedInputMessage>(StringComparer.Ordinal);
+            foreach (var fact in facts)
+            {
+                if (fact.Type == SessionEventTypes.SessionCommit)
+                {
+                    var operations = fact.Data?["Operations"] as JArray;
+                    foreach (var operation in operations ?? new JArray())
+                    {
+                        var type = (string)operation["Type"];
+                        var data = operation["Data"];
+                        if (type == SessionOperationTypes.MessageRemove)
+                        {
+                            var id = (string)data?["Id"];
+                            if (id != null) persisted.Remove(id);
+                        }
+                        else if (type == SessionOperationTypes.UserMessageAppended ||
+                            type == SessionOperationTypes.MessageUpdated ||
+                            type == SessionOperationTypes.AssistantMessageAppended ||
+                            type == SessionOperationTypes.ToolCallRecorded ||
+                            type == SessionOperationTypes.ToolResultRecorded ||
+                            type == SessionOperationTypes.ToolExecutionStarted ||
+                            type == SessionOperationTypes.ToolExecutionFinished)
+                        {
+                            var value = data?["Value"];
+                            var id = (string)value?["Id"];
+                            if (id != null && appliedIds.Contains(id))
+                                persisted[id] = new PersistedInputMessage {
+                                    Role = (string)value["Role"], ProtocolMessage = (bool?)value["ProtocolMessage"] == true,
+                                    RunId = (string)value["RunId"] };
+                        }
+                    }
+                }
+                if (fact.Type != SessionEventTypes.ConversationInputChanged) continue;
+                var input = inputBySequence[fact.Sequence];
+                if (input?.Status != ConversationInputStatus.Applied) continue;
+                PersistedInputMessage message;
+                if (!persisted.TryGetValue(input.Id, out message) || message.Role != "user" ||
+                    message.ProtocolMessage || input.AcceptedRunId != null && message.RunId != input.AcceptedRunId)
+                    throw new InvalidOperationException("Applied input has no persisted user message; inspect the conversation without replaying input.");
+            }
+            foreach (var input in applied)
+                if (persisted.ContainsKey(input.Id) != messages[input.Id].Any())
                     throw new InvalidOperationException("Applied input has no persisted user message; inspect the conversation without replaying input.");
             return records;
+        }
+
+        private sealed class PersistedInputMessage
+        {
+            internal string Role;
+            internal bool ProtocolMessage;
+            internal string RunId;
         }
 
         // Missing is recoverable only through explicit input resume. A colliding

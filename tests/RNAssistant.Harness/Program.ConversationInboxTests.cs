@@ -169,6 +169,15 @@ namespace RNAssistant.Harness
                     "replay retains the original request fingerprint across edits");
                 recovered.Resume(session);
                 AssertEqual("edited", recovered.TakeNext(session).Text, "edit survives replay");
+                session.Messages.Remove(delivered);
+                store.Commit(session, ConversationCommit.RewriteHistory(new[] { delivered.Id }, session.Messages));
+                var reloaded = store.Load(session.Id);
+                var afterDelete = new ConversationInboxService(events);
+                AssertEqual(ConversationInputStatus.Applied,
+                    afterDelete.Snapshot(reloaded, new[] { "a" }).Receipts.Single().Status,
+                    "history deletion retains the original applied receipt without breaking chat reads");
+                AssertEqual(0, afterDelete.ReadUndelivered(reloaded).Count(input => input.Id == "a"),
+                    "deleted applied input is not replayed");
                 var shadow = InboxInput("shadow", "second", InputDelivery.Queue);
                 shadow.OperationId = "b";
                 shadow.RequestFingerprint = InboxInput("b", "second", InputDelivery.Queue).RequestFingerprint;

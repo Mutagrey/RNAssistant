@@ -650,9 +650,11 @@ persistence serialization. The inbox never concurrently edits the run's message 
 Only the run owner projects consumed user messages. A claim precedes delivery;
 `applied` follows durable user-message persistence. After interruption, explicit
 resume reconciles claimed IDs against persisted messages and never reruns an already
-recorded input. Shared replay refuses an `applied` event without exactly one
-persisted, ordinary user message matching its input ID and accepted run (when set);
-a colliding non-user/duplicate ID is not delivery evidence. Office resume uses the
+recorded input. Shared replay checks that the matching ordinary user message was
+persisted before each `applied` transition. A later explicit `message.remove` from a
+history edit or deletion may remove it from the current chat without invalidating
+the original receipt; missing messages without that removal still fail. A colliding
+non-user/duplicate ID is not delivery evidence. Office resume uses the
 same check before resolving `delivering` and before writing `applied`. Restart
 pauses retained input independently of the last saved pause flag. Replay rejects
 one operation ID assigned to multiple inputs or changes to an
