@@ -22,11 +22,20 @@ tool/user transport. Web: 7 run-view checks и Chrome preview/inline diff
 Office adapters; качество Qwen/GLM/DeepSeek и реальный VBE этим не квалифицированы.
 
 Открыто: Windows/Office/WebView2, межмодульный регистр VBE, сбой между DeleteLines
-и InsertLines, CodeOnly UserForms; полный source в памяти Office artifact owners
-и общий revision HTML workspace. Подробности — [контракт](../text-mutations.md) и
+и InsertLines, CodeOnly UserForms; полный source в памяти Markdown/HTML aggregates
+и непотоковых authored-file mutations; общий revision HTML workspace.
+Подробности — [контракт](../text-mutations.md) и
 [риски](RISK_REGISTER.md#пакетный-corepatch-границы-квалификации--2026-10-29).
-Два прежних context-continuity fixture всё ещё используют retired tools и
-отклоняются до проверяемого поведения — [BACKLOG](BACKLOG.md#старые-fixtures-истории-мутаций--2026-10-29).
+Продолжение: authored-file patch, candidate и полный read-back переведены на потоковый
+путь существующего CAS с сохранением UTF-8/16/32/BOM. Два context-continuity fixture
+переведены на текущие schemas и проходят; receipts сохраняют также `destination`
+у `resources.move`, без возврата retired aliases.
+Дополнительно проверены 3 authored-file сценария: подготовка 10 МиБ выделяет менее
+8 МиБ, весь public patch/read-back — менее 20 МиБ; mixed EOL/EOF, UTF-8/16/32,
+частичное наблюдение, no-op и stale confirmation. Общие universal/run-changes
+проверки и включение исходников/границы зависимостей проходят. Пакет объединяет
+VBA/HTML/Markdown/authored-file owners; diff после частичного чтения использует
+полный retained snapshot, не расширяя model observation.
 Полный Harness и Office/VSTO validation не запускались.
 
 ## Общий контракт текстовых мутаций и имён — 2026-10-28

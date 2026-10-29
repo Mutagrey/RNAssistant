@@ -18,6 +18,29 @@ The existing Resource Fabric ingestion, CAS,
 document defines the user-visible lifecycle, viewers and mutation rules; it does not
 introduce another artifact transport or store.
 
+## Streamed authored-file patches — 2026-10-29
+
+`core.patch` routes authored text/code files to `AuthoredFileService` and the existing
+`DocumentArtifactStore`/CAS. Resolution reads metadata; patch matching, candidate
+construction and full read-back use bounded buffers. Strict UTF-8, UTF-16 and UTF-32
+preserve BOM, unchanged bytes, mixed line endings and final-newline presence. The
+old private find/replace-fragment path is removed. Partial observations authorize
+only their changed ranges; context-free insertions require complete observation.
+
+Preparation stages the candidate without publishing a revision. Confirmation still
+checks the current logical head; execution reconstructs the candidate from the same
+immutable source and checks its prepared hash/length. The existing mutation journal
+and publication barrier retain the raw result and decoded UTF-8 view after full
+read-back. Unknown effects retain their existing classification. A no-op publishes
+no new snapshot. The compact timeline can read exact before/after fragments from
+the retained views, including UTF-16/32 files.
+An observed excerpt does not mask the owner's complete retained view in that diff;
+this does not expand the source range delivered to the model.
+
+The source may be scanned several times and temporary disk grows with its size.
+Other authored-file mutations and Markdown/HTML aggregates still materialize source;
+this is not constant-memory qualification of all artifact operations or real Office.
+
 ## Workspace CLI web verification and preview — 2026-10-08
 
 The development CLI has a separate `verify` command and optional `web.verify`

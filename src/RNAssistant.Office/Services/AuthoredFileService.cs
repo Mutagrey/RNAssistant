@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Threading;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
@@ -14,8 +14,6 @@ namespace RNAssistant.Office.Services
 {
     internal sealed class AuthoredFileService
     {
-        internal const int MaximumInlineCharacters = int.MaxValue;
-        private const int MaximumHunks = int.MaxValue;
         private readonly ResourceGatewayService _gateway;
         private readonly DocumentArtifactStore _artifacts;
         private readonly ChatBlobStore _payloads;
@@ -39,7 +37,7 @@ namespace RNAssistant.Office.Services
         private static ResourceIdentity Identity(ChatSession session, string logicalId)
         { return new ResourceIdentity(ResourceUri.Create("state", "document", session.DocumentAuthorityId, logicalId)); }
 
-        internal AuthoredFileIntent Prepare(ChatSession session, ToolHandlerContext context)
+        internal AuthoredFileIntent Prepare(ChatSession session, ToolHandlerContext context, CancellationToken token)
         {
             var operation = context.DomainOperation;
             var intent = new AuthoredFileIntent { LogicalId = LogicalId(session, context.Execution) };
@@ -52,7 +50,12 @@ namespace RNAssistant.Office.Services
                     throw new InvalidDataException("Select a current authored text file, not an uploaded original.");
                 RequireCurrentBase(session, intent, _artifacts);
                 intent.Source = JsonConvert.DeserializeObject<AuthoredFileMetadata>(artifact.MetadataJson ?? "{}")?.Source;
-                if (operation == AuthoredFileToolCatalog.PatchToolId) ParseHunks(context.Arguments);
+                if (operation == AuthoredFileToolCatalog.PatchToolId)
+                {
+                    var patch = ToolArgumentReader.String(context.Arguments, "patch", "");
+                    intent.Patch = _artifacts.PrepareFilePatch(session, intent.Base, patch, token);
+                    RequirePatchObservation(session, context, intent, TextPatch.Parse(patch).RequiresWholeSource);
+                }
             }
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
             {
@@ -102,13 +105,14 @@ namespace RNAssistant.Office.Services
                 throw new ResourceRequestException("The file changed. Find and read its current version before editing.", "RESOURCE_REVISION_CHANGED", false);
         }
 
-        internal AuthoredFileSave Save(ChatSession session, ToolHandlerContext context)
+        internal AuthoredFileSave Save(ChatSession session, ToolHandlerContext context, CancellationToken token)
         {
             var intent = Intent(context.PreparedStateJson);
             var operation = context.DomainOperation;
             ChatArtifact parent = null;
             ChatArtifact source = null;
-            byte[] bytes;
+            byte[] bytes = null;
+            PayloadRef staged = null;
             string name;
             string encoding;
             string mime;
@@ -116,38 +120,22 @@ namespace RNAssistant.Office.Services
             if (operation == AuthoredFileToolCatalog.PatchToolId)
             {
                 parent = _artifacts.Read(session, intent.Base, false);
-                bytes = _artifacts.ExportBytes(session, intent.Base);
-                var text = DocumentArtifactStore.DecodeFileText(bytes, out encoding);
-                if (encoding != DocumentArtifactStore.FileEncoding(parent))
-                    throw new InvalidDataException("The current file encoding is unavailable.");
-                var hunks = ParseHunks(context.Arguments);
-                var resolved = new List<AuthoredFileResolvedHunk>();
-                foreach (var hunk in hunks)
-                {
-                    var offset = text.IndexOf(hunk.Find, StringComparison.Ordinal);
-                    if (offset < 0 || text.IndexOf(hunk.Find, offset + 1, StringComparison.Ordinal) >= 0)
-                        throw new InvalidDataException("Each patch fragment must occur exactly once in the pinned file.");
-                    resolved.Add(new AuthoredFileResolvedHunk { Offset = offset, Find = hunk.Find, Replace = hunk.Replace });
-                }
-                resolved.Sort((a, b) => a.Offset.CompareTo(b.Offset));
-                for (var i = 1; i < resolved.Count; i++)
-                    if (resolved[i].Offset < resolved[i - 1].Offset + resolved[i - 1].Find.Length)
-                        throw new InvalidDataException("Patch fragments overlap.");
-                var edited = new StringBuilder(text.Length);
-                var copiedThrough = 0;
-                foreach (var hunk in resolved)
-                {
-                    edited.Append(text, copiedThrough, hunk.Offset - copiedThrough);
-                    edited.Append(hunk.Replace);
-                    copiedThrough = hunk.Offset + hunk.Find.Length;
-                }
-                edited.Append(text, copiedThrough, text.Length - copiedThrough);
-                bytes = DocumentArtifactStore.EncodeFileText(edited.ToString(), encoding);
-                name = parent.Title;
-                mime = parent.MimeType;
-                changes.AddRange(resolved.Select(h => new AuthoredFileChange {
-                    Offset = h.Offset, Removed = h.Find.Length, Inserted = h.Replace.Length,
-                    Before = Preview(h.Find), After = Preview(h.Replace) }));
+                RequireCurrentBase(session, intent, _artifacts);
+                // Reconstruct from the same immutable source, including after a pending
+                // confirmation/restart. Preparation is not a retained second store.
+                var patch = _artifacts.PrepareFilePatch(session, intent.Base,
+                    ToolArgumentReader.String(context.Arguments, "patch", ""), token);
+                if (intent.Patch == null || patch.Source.Sha256 != intent.Patch.Source.Sha256 ||
+                    patch.Result.Sha256 != intent.Patch.Result.Sha256 || patch.Result.ByteLength != intent.Patch.Result.ByteLength)
+                    throw new ResourceRequestException("The prepared file changed. Read it again.", "source_changed", false);
+                if (patch.Result.Sha256 == patch.Source.Sha256)
+                    return new AuthoredFileSave { Artifact = parent, Changes = changes, Unchanged = true };
+                staged = patch.Result;
+                encoding = DocumentArtifactStore.FileEncoding(parent);
+                name = parent.Title; mime = parent.MimeType;
+                changes.AddRange(patch.Edits.Select(edit => new AuthoredFileChange {
+                    Offset = edit.Offset, Removed = edit.Before.Length, Inserted = edit.After.Length,
+                    Before = Preview(edit.Before), After = Preview(edit.After) }));
             }
             else if (operation == AuthoredFileToolCatalog.UpdateToolId)
             {
@@ -180,7 +168,7 @@ namespace RNAssistant.Office.Services
                 name = RequireName(ToolArgumentReader.String(context.Arguments, "name", ""));
                 mime = Mime(name);
             }
-            var staged = _payloads.StoreBytes(bytes, mime);
+            if (staged == null) staged = PayloadRef.FromBlob(_payloads.StoreBytes(bytes, mime));
             var revision = checked((parent?.Revision ?? 0) + 1);
             var artifact = new ChatArtifact {
                 Id = ChatResourceUri.CreateSnapshotId(intent.LogicalId, revision), Revision = revision,
@@ -207,13 +195,13 @@ namespace RNAssistant.Office.Services
             var reference = record.Result.Resources.Single();
             var artifact = session.Artifacts.Single(item => ChatResourceUri.CreateArtifactRevisionUri(session, item) == reference.Uri);
             if (SnapshotLogicalId(artifact.Id) != intent.LogicalId || artifact.Kind != ChatArtifactKinds.File ||
-                !artifact.ContentByteLength.HasValue || artifact.ContentByteLength > int.MaxValue)
+                !artifact.ContentByteLength.HasValue)
                 throw new InvalidDataException("File read-back does not match the prepared intent.");
-            var bytes = payloads.ReadBytes(new ChatBlobReference { Sha256 = artifact.ContentSha256,
-                ByteLength = artifact.ContentByteLength.Value, ContentType = artifact.MimeType });
-            if (bytes == null) throw new InvalidDataException("The exact edited file is unavailable.");
+            var payload = new PayloadRef(artifact.ContentSha256, artifact.ContentByteLength.Value, artifact.MimeType);
+            if (intent.Patch != null && (payload.Sha256 != intent.Patch.Result.Sha256 || payload.ByteLength != intent.Patch.Result.ByteLength))
+                throw new InvalidDataException("The written file differs from its prepared patch.");
             var key = OperationKey(session, record.Context);
-            var retained = owner.RetainFileSnapshot(session, artifact, bytes, attempt.AttemptId, key, intent.Source);
+            var retained = owner.RetainFileSnapshot(session, artifact, payload, attempt.AttemptId, key, intent.Source);
             var link = PayloadRef.FromBlob(payloads.StoreText(JsonConvert.SerializeObject(retained.Revision), "application/json"));
             ArtifactWorkingSet.Set(session, artifact, false);
             return new[] { retained,
@@ -223,19 +211,26 @@ namespace RNAssistant.Office.Services
                     dependencies: new[] { new ResourceDependency(retained.Revision, kind: "operation-result") }) };
         }
 
-        private static List<AuthoredFileHunk> ParseHunks(IDictionary<string, object> arguments)
+        private static void RequirePatchObservation(ChatSession session, ToolHandlerContext context,
+            AuthoredFileIntent intent, bool whole)
         {
-            object value;
-            if (arguments == null || !arguments.TryGetValue("patches", out value) || value == null)
-                throw new InvalidDataException("Provide bounded exact patch fragments.");
-            List<AuthoredFileHunk> hunks;
-            try { hunks = JsonConvert.DeserializeObject<List<AuthoredFileHunk>>(JsonConvert.SerializeObject(value)); }
-            catch (JsonException error) { throw new InvalidDataException("Patch fragments have an invalid shape.", error); }
-            if (hunks == null || hunks.Count < 1 || hunks.Count > MaximumHunks ||
-                hunks.Any(h => h == null || string.IsNullOrEmpty(h.Find) || h.Replace == null || h.Find == h.Replace) ||
-                hunks.Sum(h => (long)h.Find.Length + h.Replace.Length) > MaximumInlineCharacters)
-                throw new InvalidDataException("Use one or more exact nonempty patch fragments.");
-            return hunks;
+            var accepted = session.Messages.FirstOrDefault(message => message.AcceptedCallOrigin != null &&
+                message.ToolCallId == context.Execution.Call.Id);
+            if (accepted == null) return; // Manual editor uses the same current-head guard.
+            var evidence = (accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(item =>
+                item.Resource.Uri == intent.Base.Uri && item.Resource.Revision == intent.Base.Revision).ToArray();
+            if (evidence.Any(item => item.Complete && item.Coverage.Kind == ResourceCoverageKinds.Whole)) return;
+            var ranges = evidence.Where(item => item.Coverage.Kind == ResourceCoverageKinds.CharacterRange).ToArray();
+            if (!whole && ranges.Length > 0 && intent.Patch.Edits.All(edit => ranges.Any(item =>
+                item.Coverage.Start <= edit.Offset && item.Coverage.End >= edit.Offset + edit.Before.Length))) return;
+            if (whole)
+            {
+                long covered = 0;
+                foreach (var item in ranges.OrderBy(item => item.Coverage.Start))
+                    if (item.Coverage.Start <= covered && item.Coverage.End.HasValue) covered = Math.Max(covered, item.Coverage.End.Value);
+                if (covered == intent.Patch.SourceCharacters && ranges.Any(item => item.Complete && item.Coverage.End == covered)) return;
+            }
+            throw new ResourceRequestException("Read the current file and all changed lines before patching it.", "source_observation_required", false);
         }
 
         private static string RequireName(string name)
@@ -263,12 +258,6 @@ namespace RNAssistant.Office.Services
         private static string Preview(string text)
         { return text.Length <= 240 ? text : text.Substring(0, 240); }
 
-        private sealed class AuthoredFileResolvedHunk
-        {
-            internal int Offset;
-            internal string Find;
-            internal string Replace;
-        }
     }
 
     internal sealed class AuthoredFileIntent
@@ -277,15 +266,11 @@ namespace RNAssistant.Office.Services
         public ResourceRef Base { get; set; }
         public ResourceRef Source { get; set; }
         public string Name { get; set; }
-    }
-    internal sealed class AuthoredFileHunk
-    {
-        [JsonProperty("find")] public string Find { get; set; }
-        [JsonProperty("replace")] public string Replace { get; set; }
+        public FilePatchPreparation Patch { get; set; }
     }
     internal sealed class AuthoredFileChange
     {
-        [JsonProperty("offset")] public int Offset { get; set; }
+        [JsonProperty("offset")] public long Offset { get; set; }
         [JsonProperty("removed")] public int Removed { get; set; }
         [JsonProperty("inserted")] public int Inserted { get; set; }
         [JsonProperty("before")] public string Before { get; set; }
@@ -300,6 +285,7 @@ namespace RNAssistant.Office.Services
     internal sealed class AuthoredFileSave
     {
         internal ChatArtifact Artifact { get; set; }
+        internal bool Unchanged { get; set; }
         internal List<AuthoredFileChange> Changes { get; set; }
     }
 }

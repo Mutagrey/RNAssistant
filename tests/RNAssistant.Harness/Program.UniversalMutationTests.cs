@@ -143,14 +143,17 @@ namespace RNAssistant.Harness
                 AssertTrue(classUpdate.Success, "existing type is resolved by owner: " + classUpdate.Message);
                 AssertTrue(!catalog.Any(t => t.Id.StartsWith("vba.module.") || t.Id.StartsWith("html.source.") || t.Id.StartsWith("file.source.")), "source owners are not public tools");
                 AssertEqual(10, CallableToolProfile.Core().Select(catalog).Count, "all hosts use the same compact core");
+                AssertTrue(executor.ExecuteManual(Command("core.write", "target", "file: report.txt", "content", "before"), catalog, settings, false, true, session).Success,
+                    "authored file joins the same prepared package");
                 var mixed = Command("core.patch", "patch", "*** Update Target: VBA module: Klass\n@@\n-Public Value As String\n+Public Value As Boolean\n" +
                     "*** Update Target: HTML file: index.html\n@@\n-<main>after</main>\n+<main>verified</main>\n" +
-                    "*** Update Target: note: review.md\n@@\n+# Complete\n");
+                    "*** Update Target: note: review.md\n@@\n+# Complete\n" +
+                    "*** Update Target: file: report.txt\n@@\n-before\n+after\n");
                 var mixedPending = PrepareVbaNative(executor, session, mixed);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, mixedPending.Record.Outcome, "mixed owners prepare together: " + mixedPending.Record.Result?.DataJson);
                 var mixedResult = ConfirmVbaNative(mixedPending);
                 AssertEqual(ToolExecutionOutcome.Ok, mixedResult.Outcome, "mixed owners publish sequentially: " + mixedResult.Result.DataJson);
-                AssertEqual(3, mixedResult.ResourceEffect.Targets.Count, "each owner keeps its own effect");
+                AssertEqual(4, mixedResult.ResourceEffect.Targets.Count, "each owner keeps its own effect");
                 var acceptedMixed = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = mixedResult.Context.Call.Id, Name = "core.patch",
                     Arguments = mixed.Arguments }, "Edit.", "Related edits.", null, ToolResultRoles.User, FixtureCallOrigin());
                 var terminalMixed = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = mixedResult.Context.Call.Id, ToolId = "core.patch" }, mixedResult.Result, ToolResultRoles.User);
@@ -162,9 +165,9 @@ namespace RNAssistant.Harness
                 var presentation = PatchChangesProjection.Read(session, mixedResult.Context.RunId, mixedResult.Context.Call.Id, payloads,
                     (reference, maximum) => PatchChangesProjection.ReadSource(authority, reference, maximum),
                     (reference, after, body) => PatchChangesProjection.ReadFragments(authority, reference, after, body));
-                AssertTrue(presentation.Items.Count == 3 && presentation.Items.All(i => i.Availability == "available" && i.After != null), "retained VBA/HTML/Markdown read-back is visible per target");
+                AssertTrue(presentation.Items.Count == 4 && presentation.Items.All(i => i.Availability == "available" && i.After != null), "retained VBA/HTML/Markdown/authored-file read-back is visible per target");
                 var runView = new RunChangesService(a => a.InlineText, null, null, authority).Read(session, mixedResult.Context.RunId);
-                AssertEqual(3, runView.Items.Count, "run-wide presentation does not repeat patch artifacts");
+                AssertEqual(4, runView.Items.Count, "run-wide presentation does not repeat patch artifacts");
                 AssertContains(presentation.Items[0].After, "Boolean", "VBA display uses actual saved read-back");
                 var exactHtml = executor.ResourceGateway.Find(session, "index.html", "html").Items.First(item => item.Target.StartsWith("HTML file: ")).Target;
                 var duplicate = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: HTML file: index.html\n@@\n-<main>verified</main>\n+<main>changed</main>\n" +

@@ -42,7 +42,7 @@ namespace RNAssistant.Office.Contracts
     public sealed class RunTextHunkDto
     {
         [JsonProperty("version")] public int Version { get; set; }
-        [JsonProperty("offset")] public int Offset { get; set; }
+        [JsonProperty("offset")] public long Offset { get; set; }
         [JsonProperty("removed")] public int Removed { get; set; }
         [JsonProperty("inserted")] public int Inserted { get; set; }
         [JsonProperty("before")] public string Before { get; set; }

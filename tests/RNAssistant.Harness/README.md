@@ -6,13 +6,19 @@ shared regex/literal matching, upsert and owner routing, delivered VBA excerpts,
 confirmation collisions, stale reads, copy/move/delete/restore, retained file diffs,
 and unknown effects. Package checks cover all-before-write preparation, duplicate aliases,
 confirmation drift, per-target rechecks, partial failure/unknown, unexecuted remainder,
-model projection, retained before/after and VBA/HTML/Markdown routing.
+model projection, retained before/after and VBA/HTML/Markdown/authored-file routing.
 `tests/web/run-changes-layout.test.js` checks per-target inline statuses and prepared
 preview; `run-view-state.test.js` checks typed preview delivery.
 `tests/cli/stabilization_smoke.py` covers multi-target confirmation across restart,
 bounded partial-source reads and intermediate reading before a dependent patch.
 `text search:`, `tool pack:`, `authored file:`, `run changes:`
 and `tool presentation:` cover their existing owners. No COM/VSTO runs are involved.
+`authored file:` additionally checks streamed preparation allocation for a 10 MiB
+source, UTF-8/16/32 BOMs, mixed EOLs/astral characters/EOF, partial observation,
+unchanged results and confirmation invalidation after a competing write. Retained
+before/after views remain available after a partial model read. The two
+`context continuity:` mutation-receipt/archived-target cases use current public
+schemas, preserve per-target outcomes and the lifecycle destination through restart.
 `tests/cli/read_recovery_smoke.py` checks six production CLI refusal/read/retry
 paths, including restart; optional lifecycle tools are admitted before use.
 `tests/web/universal-tools.test.js` and `universal-tools-browser.test.js` cover

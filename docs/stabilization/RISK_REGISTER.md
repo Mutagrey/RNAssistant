@@ -9,10 +9,11 @@ Owner: Core Tools / Application Workspace / Office Tools; Web — предста
 HTML использует общую версию workspace: запись одного файла может сделать следующую
 подготовленную цель устаревшей. Нужны отдельные вызовы с новым чтением; guard сохранён.
 
-Потоковая память ограничена размером patch для Workspace UTF-8. Authored files,
-Markdown и HTML в Office пока материализуют полный source; 10 МиБ проверены,
-но верхняя граница пиковой памяти не квалифицирована. Это ограничение существующих
-owners, не новый store; перенос их записи на потоковую обработку остаётся открытым.
+Workspace UTF-8 и authored-file patch используют потоковую обработку; authored-file
+read-back и retained decoded view также не требуют полного тела в памяти.
+Markdown/HTML aggregates и остальные authored-file mutations всё ещё материализуют
+source. Подготовка/проверка patch требует нескольких проходов и временного диска;
+это не квалификация произвольных размеров или всех artifact операций.
 
 Windows x64 / Office x64 / WebView2: проверить реальное изменение регистра других
 модулей VBE, full DeleteLines/InsertLines, сбой между ними с journal/read-back и

@@ -78,6 +78,12 @@ excerpt does not activate its instructions. Internal complete snapshots, CAS,
 search and whole-module VBA replacement do not become model observations by
 being materialized locally. A partial read never grants whole-source evidence.
 
+Authored-file `core.patch` now streams matching, candidate construction and complete
+read-back through the existing artifact owner/CAS (2026-10-29). Metadata resolution
+does not hydrate the body. UTF-8/16/32 raw bytes and the retained decoded view share
+the same publication; observed character ranges remain separate from that internal
+complete snapshot. Other typed artifact mutation paths below still materialize text.
+
 The former source ceilings are removed from VBA/editor, Word/PowerPoint/Outlook
 captures, HTML sources and local assets, document text indexes, authored text,
 Markdown/Plans, prompts, tool/skill source and their uploads/downloads. Project

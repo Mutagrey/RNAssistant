@@ -69,8 +69,9 @@ namespace RNAssistant.Office.Tools
                         (ex.ErrorCode == "RESOURCE_NOT_FOUND" || ex.ErrorCode == "resource_not_found" || ex.ErrorCode == "resource_target_not_found")) { }
                     if (selected != null && context.Execution.ExpectedTargetAbsent)
                         throw new InvalidDataException("The requested new resource already exists.");
-                    var source = selected == null ? null : Read(selected.Reference, token);
-                    prepared.Source = source?.Resource.Reference;
+                    var filePatch = _id == ResourceMutationToolCatalog.Patch && selected?.Descriptor.Kind == ChatArtifactKinds.File;
+                    var source = selected == null || filePatch ? null : Read(selected.Reference, token);
+                    prepared.Source = filePatch ? selected.Reference : source?.Resource.Reference;
                     prepared.SourceHash = source == null ? null : TextPatternEngine.Sha256(source.Text);
                     prepared.OwnerSourceHash = source == null ? null : VbaTextCanonicalizer.LiveCodeSha256(source.Text);
                     if (source != null)
@@ -93,17 +94,32 @@ namespace RNAssistant.Office.Tools
                     if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
                         _html.PrepareSourcePatch(_session, selected, source.Text, Value(args, "content"));
                     var preparable = owner as IPreparableToolHandler;
+                    PatchTargetPlan filePlan = null;
                     if (preparable != null)
                     {
                         var result = await preparable.PrepareAsync(OwnerContext(context, prepared, args), token).ConfigureAwait(false);
-                        if (result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok) return result;
+                        if (result.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok)
+                        {
+                            if (filePatch && result.PatchDiagnostic?.Code == "source_changed")
+                                return new ToolPreparationResult(result.Result, recovery: new ToolRecoveryContract(
+                                    ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
+                                    selected.Reference.Identity, ResourceRepresentations.Text, target,
+                                    readScope: TextPatch.Parse(Value(args, "patch")).RequiresWholeSource
+                                        ? ToolRecoveryReadScope.Whole : ToolRecoveryReadScope.RelevantLines), patchDiagnostic: result.PatchDiagnostic);
+                            return result;
+                        }
                         prepared.OwnerState = result.PreparedStateJson;
+                        if (filePatch)
+                        {
+                            filePlan = result.PatchTarget ?? throw new InvalidDataException("The file patch has no prepared source.");
+                            prepared.SourceHash = filePlan.SourceHash;
+                        }
                     }
                     return new ToolPreparationResult(Result.Ok("Resource operation prepared."), JsonConvert.SerializeObject(prepared),
-                        patchTarget: _id == ResourceMutationToolCatalog.Patch ? new PatchTargetPlan {
+                        patchTarget: filePlan ?? (_id == ResourceMutationToolCatalog.Patch ? new PatchTargetPlan {
                             Source = prepared.Source, SourceHash = prepared.SourceHash,
                             EffectIdentity = PatchEffectIdentity(selected, prepared.Source),
-                            Preview = PatchPreview.From(SourcePatch(source.Text, prepared.Source, context, token).Edits) } : null);
+                            Preview = PatchPreview.From(SourcePatch(source.Text, prepared.Source, context, token).Edits) } : null));
                 }
             }
             catch (Exception ex) when (ex is ResourceRequestException || ex is InvalidDataException || ex is TextPatternException)
@@ -124,6 +140,13 @@ namespace RNAssistant.Office.Tools
                     if (prepared.Source != null)
                     {
                         var selected = ResolveTarget(prepared.Target);
+                        if (prepared.Operation == AuthoredFileToolCatalog.PatchToolId)
+                        {
+                            if (selected.Reference.Uri != prepared.Source.Uri || selected.Reference.Revision != prepared.Source.Revision)
+                                throw new ResourceRequestException("Resource changed after preparation; read it again.", "target_conflict", false);
+                            return await Owner(prepared).ExecuteAsync(OwnerContext(context, prepared,
+                                Arguments(prepared, context, null, token)), token).ConfigureAwait(false);
+                        }
                         source = Read(selected.Reference, token);
                         if (source.Resource.Reference.Uri != prepared.Source.Uri || source.Resource.Reference.Revision != prepared.Source.Revision ||
                             TextPatternEngine.Sha256(source.Text) != prepared.SourceHash)
@@ -304,7 +327,8 @@ namespace RNAssistant.Office.Tools
                 _id == ResourceMutationToolCatalog.Copy && selected?.Descriptor.Kind == ChatArtifactKinds.Attachment)
             {
                 prepared.Operation = _id == ResourceMutationToolCatalog.Write ? (selected == null ? AuthoredFileToolCatalog.CreateToolId : AuthoredFileToolCatalog.UpdateToolId) :
-                    _id == ResourceMutationToolCatalog.Patch || _id == ResourceMutationToolCatalog.Replace ? AuthoredFileToolCatalog.UpdateToolId :
+                    _id == ResourceMutationToolCatalog.Patch ? AuthoredFileToolCatalog.PatchToolId :
+                    _id == ResourceMutationToolCatalog.Replace ? AuthoredFileToolCatalog.UpdateToolId :
                     _id == ResourceMutationToolCatalog.Copy ? AuthoredFileToolCatalog.CopyToolId : null;
                 args["target"] = selected?.Target ?? target; args["name"] = selected?.Descriptor.Title ?? target.Substring(6);
                 if (_id == ResourceMutationToolCatalog.Copy)
@@ -320,6 +344,11 @@ namespace RNAssistant.Office.Tools
         private IDictionary<string, object> Arguments(ResourceMutationPrepared prepared, ToolHandlerContext context, string before, CancellationToken token)
         {
             var args = new Dictionary<string, object>(prepared.RoutingArguments);
+            if (prepared.Operation == AuthoredFileToolCatalog.PatchToolId)
+            {
+                args["patch"] = Value(context.Arguments, "patch");
+                return args;
+            }
             string content = null;
             TextEditPlan plan = null;
             if (_id == ResourceMutationToolCatalog.Write) content = Value(context.Arguments, "content");

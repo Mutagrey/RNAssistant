@@ -147,9 +147,16 @@ prepared state до 128 Ki символов, confirmation data до 32 Ki. Пр�
 UTF-8 сканируется потоково, результат пишется во временный файл; память зависит
 от patch и совпавших фрагментов, не размера файла. Поиск пропускает слишком длинные
 несовпадающие строки без их накопления. Преобразование координат в байтовые offsets
-может перечитывать source для каждого edit: время растёт с числом edits. Office
-owners пока материализуют authored/Markdown/HTML source целиком; их пиковая память
-растёт с размером источника, потоковый путь для них остаётся открытым ограничением.
+может перечитывать source для каждого edit: время растёт с числом edits.
+Authored-файлы Office также патчатся потоково через `DocumentArtifactStore`:
+строгие UTF-8/16/32, исходный BOM, смешанные EOL и отсутствие final newline
+сохраняются. Подготовленный кандидат находится в существующем CAS; перед записью
+owner повторно проверяет head и восстанавливает тот же результат по исходному
+snapshot, сверяя hash/длину. История и полный read-back используют тот же CAS и
+retained decoded view. Память зависит от patch и буферов, временный диск — от файла;
+несколько проходов по источнику остаются ценой подготовки/проверки.
+Markdown/HTML aggregates в Office и `core.write/replace/resources.copy` authored-файлов
+пока материализуют полный source. Их пиковая память растёт с размером источника.
 VBA требует полного кода в памяти для проверки и целой записи CodeModule.
 
 ## Поиск и массовая замена
@@ -177,7 +184,7 @@ replacement символы `$1` буквальны, в regex — стандар�
 | Live VBA | write/patch/replace/copy/move/delete/restore; copy/rename только в текущем проекте, ограничения типов/ownership сохранены; UserForms только CodeOnly |
 | HTML workspace file | write/patch/replace/delete; существующий workspace snapshot и preflight; file move/copy/restore через этот контракт пока не поддержаны |
 | HTML data binding | delete по точному target; содержимое/связи остаются структурированными `html.data.*` |
-| Authored text/code file | write/patch/replace/copy; encoding/BOM сохраняет owner; исходный upload неизменяем, для редактирования нужна копия |
+| Authored text/code file | write/patch/replace/copy; patch потоковый, encoding/BOM сохраняет owner; исходный upload неизменяем, для редактирования нужна копия |
 | Markdown document | write/patch/replace/restore; restore принимает номер версии |
 
 Неподдержанная операция возвращает явный отказ до dispatch. Generic tools не

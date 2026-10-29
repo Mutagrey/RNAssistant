@@ -103,9 +103,12 @@ namespace RNAssistant.Office.Services
             var document = address.Provider == "state" ? address.Segments[1] : address.Segments[0];
             var scope = ResourceAuthorityScopeId.Document(new DocumentAuthorityId(document));
             authority.RequirePublished(authority.Store.Capture(scope), exact);
-            var view = authority.Revisions.GetView(scope, exact, ResourceRepresentations.Source) ?? authority.Revisions.GetView(scope, exact, ResourceRepresentations.Text) ??
-                authority.Revisions.GetView(scope, exact, DocumentArtifactStore.FileTextView);
-            if (view?.Payload == null || view.Coverage.Kind != ResourceCoverageKinds.Whole) throw new InvalidOperationException("Complete retained text is unavailable.");
+            // An observed excerpt can coexist with the owner's complete retained
+            // view. It must not mask that exact snapshot in the user-facing diff.
+            var view = new[] { ResourceRepresentations.Source, ResourceRepresentations.Text, DocumentArtifactStore.FileTextView }
+                .Select(kind => authority.Revisions.GetView(scope, exact, kind))
+                .FirstOrDefault(candidate => candidate?.Payload != null && candidate.Coverage.Kind == ResourceCoverageKinds.Whole);
+            if (view == null) throw new InvalidOperationException("Complete retained text is unavailable.");
             return view;
         }
         internal static string ReadSource(ResourceAuthorityService authority, ResourceRef exact, int maximum)

@@ -7,6 +7,8 @@ using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Agent;
+using Newtonsoft.Json;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -155,6 +157,84 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void AuthoredFilePatchEncodingsAndGuards()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                session.DocumentAuthorityId = DocumentAuthorityId.Create().Id;
+                var store = new ChatStore(FixturePaths.Value);
+                var ingestion = new ChatResourceIngestionService(new AttachmentStore(FixturePaths.Value), store.DocumentArtifacts);
+                var tools = executor.GetControllerTools().ToList();
+                var codecs = new Encoding[] { new UTF8Encoding(false, true), new UTF8Encoding(true, true),
+                    new UnicodeEncoding(false, true, true), new UnicodeEncoding(true, true, true),
+                    new UTF32Encoding(false, true, true), new UTF32Encoding(true, true, true) };
+                const string source = "prefix 😀\r\nold = 1\nunchanged\r\ntail";
+                Func<ToolInvocation, IEnumerable<ResourceEvidence>, VbaPendingExecution> prepare = (command, evidence) =>
+                {
+                    command.ToolCallId = "file_" + Guid.NewGuid().ToString("N");
+                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                        Id = command.ToolCallId, Name = command.ToolId, Arguments = command.Arguments },
+                        "Edit.", "Change the observed lines.", null, ToolResultRoles.User, FixtureCallOrigin("run-vba-native:1"));
+                    accepted.RunId = "run-vba-native";
+                    accepted.ResourceEvidence = evidence.ToList(); session.Messages.Add(accepted);
+                    return PrepareVbaNative(executor, session, command);
+                };
+                for (var i = 0; i < codecs.Length; i++)
+                {
+                    var codec = codecs[i];
+                    var name = "original" + i + ".txt";
+                    var draft = ingestion.Stage(session, name, "text/plain", codec.GetPreamble().Concat(codec.GetBytes(source)).ToArray());
+                    var message = new ChatMessage { Role = "user", Attachments = ingestion.LoadDrafts(session, new[] { draft.Id }).ToList() };
+                    session.Messages.Add(message); ingestion.CommitAndLink(session, message, session.Messages.Count - 1);
+                    var originalTarget = executor.ResourceGateway.Find(session, name, "document").Items.Single().Target;
+                    var copy = executor.ExecuteManual(Command("resources.copy", "target", originalTarget, "destination", "file: code" + i + ".txt"),
+                        tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                    AssertTrue(copy.Success, "copy encoding " + i + ": " + copy.Message);
+                    var target = (string)JObject.Parse(copy.DataJson)["target"];
+                    var exact = executor.ResourceGateway.ResolveIntentTarget(session, target).Reference;
+                    var excerpt = executor.ResourceGateway.ReadCharacters(session, exact, "text", source.IndexOf("old", StringComparison.Ordinal), 8).Result;
+                    var evidence = executor.ResourceGateway.Evidence(session, excerpt).ToArray();
+                    var body = "*** Update Target: " + target + "\n@@ prefix 😀\n-old = 1\n+new = 22\n";
+                    var unseen = prepare(Command("core.patch", "patch", body + "@@\n-tail\n+changed\n"), evidence).Record;
+                    AssertTrue(unseen.Outcome == ToolExecutionOutcome.Error && !unseen.MayHaveDispatched,
+                        "unobserved second hunk rejects the whole file: " + unseen.Result.DataJson);
+                    AssertEqual(ToolRetryPolicy.RefreshRequired, unseen.Recovery.RetryPolicy, "partial file refusal requires a fresh relevant read");
+                    AssertTrue(store.DocumentArtifacts.ExportBytes(session, exact).SequenceEqual(codec.GetPreamble().Concat(codec.GetBytes(source))),
+                        "preparation never changes the original snapshot");
+                    var pending = prepare(Command("core.patch", "patch", body), evidence);
+                    AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "observed range prepares: " + pending.Record.Result?.DataJson);
+                    var result = ConfirmVbaNative(pending);
+                    AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "prepared streamed patch executes: " + result.Result.DataJson);
+                    var after = result.ResourceEffect.Targets.Single().After;
+                    var expected = source.Replace("old = 1", "new = 22");
+                    AssertTrue(store.DocumentArtifacts.ExportBytes(session, after).SequenceEqual(codec.GetPreamble().Concat(codec.GetBytes(expected))),
+                        "UTF-8/16/32, BOM, mixed EOLs, astral characters and absent final newline stay exact: " + i);
+                    var authorityStore = new ResourceAuthorityStore(FixturePaths.Value);
+                    var authority = new ResourceAuthorityService(authorityStore, authorityStore, new ResourceMutationJournal(FixturePaths.Value), new ChatBlobStore(FixturePaths.Value));
+                    AssertEqual(source, PatchChangesProjection.ReadSource(authority, exact, 1000), "partial observation does not hide the retained before-source from the diff");
+                    AssertEqual(expected, PatchChangesProjection.ReadSource(authority, after, 1000), "diff reads the verified after-source in every encoding");
+                    var fragments = PatchChangesProjection.ReadFragments(authority, exact, after, "@@ prefix 😀\n-old = 1\n+new = 22\n");
+                    AssertContains(string.Concat(fragments.Select(edit => edit.After)), "new = 22", "compact diff fragments come from the actual retained result");
+                    var currentTarget = JsonConvert.DeserializeObject<PatchBatchResult>(result.Result.DataJson).Targets.Single().CurrentTarget;
+                    AssertTrue(!string.IsNullOrWhiteSpace(currentTarget), "confirmed patch returns the next semantic target");
+                    var noop = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: " + currentTarget + "\n@@\n-new = 22\n+new = 22\n"));
+                    var unchanged = ConfirmVbaNative(noop);
+                    AssertEqual(ResourceTargetStatus.Unchanged, unchanged.ResourceEffect.Targets.Single().Status, "no-op retains its explicit status");
+                    if (i == 0)
+                    {
+                        var stale = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: " + currentTarget + "\n@@\n-new = 22\n+new = 3\n"));
+                        var external = executor.ExecuteManual(Command("core.write", "target", currentTarget, "content", expected + " external"),
+                            tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                        AssertTrue(external.Success, "another writer changes the current head");
+                        var refused = ConfirmVbaNative(stale);
+                        AssertTrue(refused.Outcome == ToolExecutionOutcome.Error && !refused.MayHaveDispatched,
+                            "a changed head invalidates confirmation before any patch write");
+                    }
+                }
+            });
+        }
+
         private static void AuthoredFileLargeCopyPatch()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Word"), (executor, adapter) =>
@@ -182,9 +262,17 @@ namespace RNAssistant.Harness
                 AssertEqual(originalBytes.Length, (int)copy.ContentByteLength.Value, "copy retains exact byte length");
                 AssertTrue(store.DocumentArtifacts.ExportBytes(session, copiedRef).SequenceEqual(originalBytes), "copy preserves exact original bytes");
                 var patches = "@@\n-const unique = slow(slow(value));\n+const unique = fast(value);\n";
+                var allocationStart = GC.GetAllocatedBytesForCurrentThread();
+                var preparation = store.DocumentArtifacts.PrepareFilePatch(session, copiedRef, patches);
+                var allocated = GC.GetAllocatedBytesForCurrentThread() - allocationStart;
+                AssertTrue(allocated < 8L * 1024 * 1024, "10 MiB patch preparation uses bounded buffers; allocated " + allocated);
+                AssertEqual((long)source.Length, preparation.SourceCharacters, "streamed coverage counts decoded characters");
                 var patchCommand = Command(ResourceMutationToolCatalog.Patch, "patch", "*** Update Target: " + copyTarget + "\n" + patches);
+                var callAllocations = GC.GetTotalAllocatedBytes(true);
                 var patched = executor.ExecuteManual(patchCommand, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                var callBytes = GC.GetTotalAllocatedBytes(true) - callAllocations;
                 AssertTrue(patched.Success, "large file patch: " + patched.Message);
+                AssertTrue(callBytes < 20L * 1024 * 1024, "public patch/confirmation/read-back avoid whole source allocation; allocated " + callBytes);
                 AssertTrue(!patched.DataJson.Contains("rna://") && !patched.DataJson.Contains("\"offset\"") &&
                     !patched.DataJson.Contains("\"version\""),
                     "model result keeps exact references and coordinates private");

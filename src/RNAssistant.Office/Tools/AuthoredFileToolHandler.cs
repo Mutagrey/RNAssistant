@@ -25,9 +25,13 @@ namespace RNAssistant.Office.Tools
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                var intent = _service.Prepare(_session, context);
-                return Task.FromResult(new ToolPreparationResult(RuntimeResult.Ok("File intent prepared."), JsonConvert.SerializeObject(intent)));
+                var intent = _service.Prepare(_session, context, cancellationToken);
+                return Task.FromResult(new ToolPreparationResult(RuntimeResult.Ok("File intent prepared."), JsonConvert.SerializeObject(intent),
+                    patchTarget: intent.Patch == null ? null : new PatchTargetPlan { Source = intent.Base,
+                        SourceHash = intent.Patch.Source.Sha256, EffectIdentity = intent.Base.Identity,
+                        Preview = PatchPreview.From(intent.Patch.Edits) }));
             }
+            catch (TextPatternException error) { return Task.FromResult(new ToolPreparationResult(RuntimeResult.Error(error.Message), patchDiagnostic: PatchDiagnostic.From(error))); }
             catch (ResourceRequestException error) { return Rejected(error.ErrorCode, error.Message); }
             catch (InvalidDataException error) { return Rejected("file_intent_invalid", error.Message); }
         }
@@ -37,7 +41,9 @@ namespace RNAssistant.Office.Tools
             cancellationToken.ThrowIfCancellationRequested();
             using (DocumentAccessGate.BeginOperation())
             {
-                var saved = _service.Save(_session, context);
+                var saved = _service.Save(_session, context, cancellationToken);
+                if (saved.Unchanged)
+                    return Task.FromResult(new ToolHandlerResult(RuntimeResult.Ok("Source already matches the prepared patch."), ToolEffectEvidence.VerifiedNoChange));
                 var artifact = saved.Artifact;
                 var descriptor = new ResourceDescriptor { Kind = artifact.Kind, Title = artifact.Title, CreatedUtc = artifact.CreatedUtc };
                 descriptor.Metadata["authoredFile"] = "true";
@@ -58,7 +64,7 @@ namespace RNAssistant.Office.Tools
         {
             return Task.FromResult(new ToolPreparationResult(RuntimeResult.Error(message,
                 JsonConvert.SerializeObject(new AuthoredFileError { Code = code })), null,
-                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan)));
+                new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan), patchDiagnostic: PatchDiagnostic.Create(code, message)));
         }
     }
 

@@ -1061,6 +1061,7 @@ namespace RNAssistant.Harness
                 Test("shared Markdown: lifecycle and competing chats", SharedMarkdownLifecycle),
                 Test("authored file: 10 MiB copy and guarded patch", AuthoredFileLargeCopyPatch),
                 Test("authored file: HTML viewer and revision history", AuthoredHtmlViewerReadsRetainedRevisions),
+                Test("authored file: streamed encodings and observation guards", AuthoredFilePatchEncodingsAndGuards),
                 Test("shared Markdown: agent execution and replay", SharedMarkdownKernelReplay),
                 Test("shared Markdown: prepared guards and batch identity", SharedMarkdownPreparedGuards),
                 Test("shared Markdown: publication survives failed chat link", SharedMarkdownFailedLink),

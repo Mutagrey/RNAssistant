@@ -1242,7 +1242,7 @@ namespace RNAssistant.Office.Services
                 int revision;
                 originals = ChatResourceUri.TryParseArtifactRevision(new ResourceRef(exactUri), out owner, out id, out revision) &&
                     owner == session.DocumentAuthorityId
-                    ? new[] { _documentArtifacts.Read(session, ChatResourceUri.ArtifactSnapshot(new ResourceRef(exactUri))) }
+                    ? new[] { _documentArtifacts.Read(session, ChatResourceUri.ArtifactSnapshot(new ResourceRef(exactUri)), false) }
                     : new ChatArtifact[0];
             }
             return new ChatSession

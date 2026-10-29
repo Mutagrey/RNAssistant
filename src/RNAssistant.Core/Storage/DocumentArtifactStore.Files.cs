@@ -12,23 +12,19 @@ namespace RNAssistant.Core.Storage
         public const string FileTextView = "artifact-file-text-v1";
 
         public ResourceMutationReadBack RetainFileSnapshot(ChatSession session, ChatArtifact artifact,
-            byte[] bytes, string attemptId, string operationKey, ResourceRef source = null)
+            PayloadRef body, string attemptId, string operationKey, ResourceRef source = null)
         {
-            if (artifact == null || artifact.Kind != ChatArtifactKinds.File || bytes == null ||
-                bytes.LongLength > ArtifactTransferPackage.MaximumBytes)
-                throw new InvalidDataException("A bounded authored file is required.");
-            string encoding;
-            var text = DecodeFileText(bytes, out encoding);
-            if (FileEncoding(artifact) != encoding)
-                throw new InvalidDataException("The file encoding does not match its retained bytes.");
-            var body = PayloadRef.FromBlob(_payloads.StoreBytes(bytes, artifact.MimeType));
+            if (artifact?.Kind != ChatArtifactKinds.File || body == null ||
+                body.Sha256 != artifact.ContentSha256 || body.ByteLength != artifact.ContentByteLength)
+                throw new InvalidDataException("File read-back does not match its staged payload.");
+            // Full verified read-back and decoding, with bounded buffers even for large files.
+            var payload = RetainDecodedFile(body, FileEncoding(artifact));
             var retained = RetainRecordPayload(session, artifact, body, AuthoredRecordView,
                 "application/vnd.rnassistant.artifact-record+json", attemptId, operationKey,
                 dependencies: source == null ? null : new[] { new ResourceDependency(source, kind: "source-original") },
                 resultView: ResourceRepresentations.Raw);
             // Keep the existing decoded-text view with the raw immutable snapshot;
             // history can compare UTF-8/16/32 results without consulting a live head.
-            var payload = PayloadRef.FromBlob(_payloads.StoreText(text, "text/plain; charset=utf-8"));
             _revisions.RegisterView(Scope(session), new ResourceRevisionView(retained.Revision, FileTextView,
                 body.Sha256, payload, ResourceCoverage.Whole(), new[] { body }));
             return retained;
@@ -108,12 +104,7 @@ namespace RNAssistant.Core.Storage
                 _payloads.HasVerifiedReference(raw.ToBlobReference()) &&
                 _payloads.HasVerifiedReference(view.Payload.ToBlobReference()))
                 return view.Payload;
-            var bytes = _payloads.ReadBytes(raw.ToBlobReference());
-            if (bytes == null) throw new InvalidDataException("The exact file bytes are unavailable.");
-            string encoding;
-            var text = DecodeFileText(bytes, out encoding);
-            if (encoding != FileEncoding(artifact)) throw new InvalidDataException("The file encoding changed.");
-            var payload = PayloadRef.FromBlob(_payloads.StoreText(text, "text/plain; charset=utf-8"));
+            var payload = RetainDecodedFile(raw, FileEncoding(artifact));
             if (view == null)
                 _revisions.RegisterView(scope, new ResourceRevisionView(reference, FileTextView,
                     raw.Sha256, payload, ResourceCoverage.Whole(), new[] { raw }));

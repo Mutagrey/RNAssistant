@@ -11,7 +11,10 @@ Prepared state/confirmation/replay, model projection and per-target UI consume t
 new contract. `DomainOperation` below remains the existing temporary owner bridge.
 The VBA patch route now invokes the guarded whole-module writer directly; the
 private replace adapter does not parse public patch hunks. Workspace streams large
-UTF-8 sources; whole-source Office materialization remains an explicit limitation.
+UTF-8 sources. Authored-file patches now stream UTF-8/16/32 through the existing
+artifact owner/CAS; its old private find/replace-hunk parser is removed. Metadata
+resolution and full file read-back no longer hydrate complete bodies. Markdown/HTML
+aggregates and other authored-file mutations still materialize their source.
 
 ## Universal text tools — 2026-10-28
 
