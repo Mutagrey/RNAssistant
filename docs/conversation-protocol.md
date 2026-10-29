@@ -723,6 +723,9 @@ not bytes sent in the first request. The inspector adds them only in its budget
 line and remaining-capacity calculation. Full artifacts and historical attachments
 are shown as local resource sizes; only their model-visible representations, often
 compact references, count toward the next request.
+The chat run footer sums provider usage attached to accepted responses in that run;
+it is not one request's context size and does not claim usage from rejected repair
+or transport attempts whose response was never accepted.
 
 ### Model context window
 

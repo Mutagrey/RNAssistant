@@ -636,8 +636,9 @@ function appendAgentRunFooter(node, items, finalMessage, workspace, usage) {
   var usageText = typeof messageUsageText === "function" && usage ? messageUsageText(usage) : "";
   var meta = document.createElement("span");
   meta.className = usageText ? "message-usage" : "message-count";
-  meta.textContent = usageText || agentCountText(items.length + (finalMessage ? 1 : 0),
+  meta.textContent = usageText ? "За запуск: " + usageText : agentCountText(items.length + (finalMessage ? 1 : 0),
     "сообщение", "сообщения", "сообщений");
+  if (usageText) meta.title = "Сумма usage принятых ответов модели за запуск; размер одного запроса показан в контексте модели.";
   footerMeta.appendChild(meta);
 
   var actions = document.createElement("div");

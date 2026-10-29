@@ -155,7 +155,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator('#messages .agent-run > .message-footer .message-inspect-action').count(), 2,
       "each project response has one work-history button in its footer");
     assert.equal(await page.locator('#messages .agent-run').last().locator('.message-usage').textContent(),
-      "19\u202f850 токенов · вход 19\u202f000 · ответ 850",
+      "За запуск: 19\u202f850 токенов · вход 19\u202f000 · ответ 850",
       "project feed sums saved accepted answers with grouped digits");
     await footerButton(0).click();
     assert.match(await page.locator(".chat-inspector-step").textContent(), /Предыдущий запуск/);
@@ -220,7 +220,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator('#messages .agent-run > .message-footer .message-inspect-action').count(), 2,
       "plugin responses use the shared run-footer control");
     assert.equal(await page.locator('#messages .agent-run').last().locator('.message-usage').textContent(),
-      "19\u202f850 токенов · вход 19\u202f000 · ответ 850",
+      "За запуск: 19\u202f850 токенов · вход 19\u202f000 · ответ 850",
       "plugin feed uses the same saved usage and formatting");
     await page.evaluate(() => { window.previewFrame = document.querySelector("#pluginPreviewMount iframe"); window.previewDocument = previewFrame.contentDocument; });
     await page.locator("#chatInput").fill("Черновик плагина");

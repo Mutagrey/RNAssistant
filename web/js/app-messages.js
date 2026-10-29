@@ -377,7 +377,8 @@ function appendMessageFooter(node, message, index, activity, options) {
   if (usage || message.Failed) {
     var usageNode = document.createElement("span");
     usageNode.className = "message-usage";
-    usageNode.textContent = message.Failed ? "Не отправлено" : usage;
+    usageNode.textContent = message.Failed ? "Не отправлено" : options.usage ? "За запуск: " + usage : usage;
+    if (options.usage) usageNode.title = "Сумма usage принятых ответов модели за запуск; размер одного запроса показан в контексте модели.";
     meta.appendChild(usageNode);
   }
   var runViewState = messageRunViewState(message);

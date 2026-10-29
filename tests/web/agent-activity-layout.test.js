@@ -115,7 +115,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#full-run .agent-final-step").evaluate(node => getComputedStyle(node).borderTopWidth), "1px",
         "the separator appears only before the final answer");
       assert.equal(await page.locator("#usage-run .message-usage").textContent(),
-        "29\u202f602 токенов · вход 28\u202f023 · ответ 1\u202f579",
+        "За запуск: 29\u202f602 токенов · вход 28\u202f023 · ответ 1\u202f579",
         "the run footer sums accepted provider answers once and groups digits");
       assert.equal(await page.locator("#footer-assistant .message-usage").textContent(),
         "1\u202f234\u202f567 токенов", "a standalone answer uses the same number format");
