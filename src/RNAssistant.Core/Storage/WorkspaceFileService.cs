@@ -458,25 +458,6 @@ namespace RNAssistant.Core.Storage
                     false, whole.AuthorityGeneration, payload, whole.Dependencies, contentSha256: whole.ContentSha256) };
         }
 
-        // A streamed patch has no whole in-memory text. Project its verified
-        // after-revision through the retained raw source, preserving the commit.
-        public WorkspaceFileObservation SelectPatchResultRange(WorkspaceDescriptor workspace,
-            WorkspaceFileObservation changed, int start, int length)
-        {
-            if (changed?.Reference == null)
-                throw new ArgumentException("An exact patch result is required.");
-            if (start < 0 || start > MaximumWindowTextCharacters ||
-                length < ResourceReadRequest.MinimumCharacters || length > ResourceReadRequest.MaximumCharacters)
-                throw new ArgumentOutOfRangeException(nameof(length));
-            RequireExactPath(workspace, changed.RelativePath, changed.Reference);
-            var raw = PublishedEvidence(changed.Reference, ResourceRepresentations.Raw);
-            var selected = ReadTextWindow(workspace, changed.RelativePath,
-                new TextWindow(start, length, false, ResourceReadRequest.MaximumCharacters, true),
-                default(CancellationToken), new WorkspaceFileSnapshot(changed.RelativePath, raw));
-            selected.AuthorityCommit = changed.AuthorityCommit;
-            return selected;
-        }
-
         public WorkspaceFileObservation ReadBytes(WorkspaceDescriptor workspace, string relativePath)
         { return ReadContent(workspace, relativePath, true); }
 
@@ -1147,7 +1128,7 @@ namespace RNAssistant.Core.Storage
                     Observe(scope, id, before);
                     throw new WorkspaceFileException("target_conflict", "File changed outside RNAssistant since the accepted read.");
                 }
-                var updated = operation == "files.patch" ? text : PreserveLineEndings(text, beforeText);
+                var updated = PreserveLineEndings(text, beforeText);
                 // UTF-8 decoding retains U+FEFF. A whole-file replacement from a
                 // model usually omits it, so preserve the source BOM explicitly.
                 if (before.Length >= 3 && before[0] == 0xef && before[1] == 0xbb && before[2] == 0xbf &&
@@ -1176,37 +1157,6 @@ namespace RNAssistant.Core.Storage
                     finally { if (File.Exists(temp)) File.Delete(temp); }
                 }, path, effectOperation: effectOperation);
             }
-        }
-
-        public WorkspaceFileObservation PatchExact(WorkspaceDescriptor workspace, string relativePath,
-            ResourceRef expected, string oldText, string newText, Action onDispatch = null)
-        {
-            if (string.IsNullOrEmpty(oldText)) throw new WorkspaceFileException("invalid_patch", "Exact patch anchor is required.");
-            var largeReplacement = TextByteLength(newText) > MaximumTextBytes;
-            if (expected != null && expected.IsExact)
-            {
-                var address = ResourceUri.Parse(expected.Uri);
-                if (address.Provider == "file" && address.Segments.Count == 1 &&
-                    (largeReplacement ||
-                     _authority.GetRevision(Scope(address.Segments[0]), expected)?.Payload?.ByteLength > MaximumTextBytes))
-                    return PatchLargeExact(workspace, relativePath, expected, oldText, newText, onDispatch);
-            }
-            var observed = ReadText(workspace, relativePath);
-            if (expected == null || observed.Reference.Revision != expected.Revision)
-                throw new WorkspaceFileException("target_conflict", "File changed since the accepted read.");
-            var first = observed.Text.IndexOf(oldText, StringComparison.Ordinal);
-            if (first < 0)
-                throw new WorkspaceFileException("patch_not_found", "Patch anchor does not match the current source; correct oldText.");
-            if (observed.Text.IndexOf(oldText, first + 1, StringComparison.Ordinal) >= 0)
-                throw new WorkspaceFileException("patch_ambiguous", "Patch anchor has multiple starts; use a unique larger anchor.");
-            try
-            {
-                return ReplaceTextCore(workspace, relativePath, expected,
-                    observed.Text.Substring(0, first) + (newText ?? string.Empty) + observed.Text.Substring(first + oldText.Length),
-                    null, "files.patch", onDispatch);
-            }
-            catch (WorkspaceFileException error) when (error.Code == "file_too_large")
-            { return PatchLargeExact(workspace, relativePath, expected, oldText, newText, onDispatch); }
         }
 
         // Resolves an interrupted attempt by inspecting current bytes. The effect

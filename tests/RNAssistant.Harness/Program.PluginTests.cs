@@ -530,28 +530,25 @@ namespace RNAssistant.Harness
                             var sourceWorkspace = new WorkspaceStore(paths).Open(plugin.SourceRoot, false, true);
                             var files = new WorkspaceFileService(paths);
                             var source = files.ReadText(sourceWorkspace, "index.html");
-                            var anchor = "<button id=\"run\">Проверить команду</button>";
+                            var anchor = source.Text.Split('\n').Single(line => line.Contains("<button id=\"run\">Проверить команду</button>")).TrimEnd('\r');
                             var published = new PluginStore(paths).ReadRelease(
                                 new PluginReleaseIdentity(plugin.PluginId, plugin.ReleaseId));
                             var retainedHtml = Encoding.UTF8.GetString(new PluginStore(paths).ReadFile(published, "index.html"));
                             AssertTrue(accepted.Selection.Attributes["id"] == "run" &&
                                 retainedHtml == source.Text && source.Text.Contains(anchor),
                                 "accepted DOM evidence is checked against one real source anchor and the retained release");
-                            AssertEqual("patch_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
-                                files.PatchExact(sourceWorkspace, "index.html", source.Reference,
-                                    "id=\"", "id=\"other-")).Code,
-                                "an ambiguous source anchor refuses the annotated edit");
+                            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() =>
+                                files.ApplyTextEdits(sourceWorkspace, "index.html", source.Reference, LineHunk("id=\"", "id=\"other-"))).ErrorCode,
+                                "a partial-line anchor refuses the annotated edit");
                             AssertEqual(source.Reference.Revision, files.ReadText(sourceWorkspace, "index.html").Reference.Revision,
-                                "ambiguous refusal leaves plugin source unchanged");
-                            var changed = files.PatchExact(sourceWorkspace, "index.html", source.Reference, anchor,
-                                "<button id=\"run\">Выполнить команду</button>");
+                                "invalid context leaves plugin source unchanged");
+                            var changed = files.ApplyTextEdits(sourceWorkspace, "index.html", source.Reference, LineHunk(anchor, anchor.Replace("Проверить команду", "Выполнить команду")));
                             AssertTrue(changed.Text.Contains("Выполнить команду") &&
                                 files.ReadText(sourceWorkspace, "index.html").Text.Contains("Выполнить команду") &&
                                 service.Check(plugin.PluginId).HasChanges,
                                 "existing guarded patch verifies real plugin source and produces a checked candidate");
                             AssertEqual("target_conflict", RuntimeThrows<WorkspaceFileException>(() =>
-                                files.PatchExact(sourceWorkspace, "index.html", source.Reference, anchor,
-                                    "<button id=\"run\">Устаревшая правка</button>")).Code,
+                                files.ApplyTextEdits(sourceWorkspace, "index.html", source.Reference, LineHunk(anchor, anchor.Replace("Проверить команду", "Устаревшая правка")))).Code,
                                 "a stale source read cannot overwrite the verified annotation edit");
                             var bounded = new WorkspaceResourceHandler(null, null, () => null,
                                 new System.Collections.Generic.Dictionary<string, ResourceEvidence>(), false, null, 64,

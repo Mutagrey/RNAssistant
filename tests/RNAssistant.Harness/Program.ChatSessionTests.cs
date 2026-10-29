@@ -155,29 +155,32 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static string LineHunk(string before, string after)
+        { return "@@\n-" + before + "\n+" + after + "\n"; }
+
         private static void WorkspaceFilesGuardWrites()
         {
             WithTempPaths(paths =>
             {
                 var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
                 var files = new WorkspaceFileService(paths);
-                var overlapping = files.CreateText(workspace, "overlap.txt", "aaaa");
+                var overlapping = files.CreateText(workspace, "overlap.txt", "aaa\naaa");
                 var dispatched = false;
                 try
                 {
-                    files.PatchExact(workspace, "overlap.txt", overlapping.Reference, "aaa", "b", () => dispatched = true);
+                    files.ApplyTextEdits(workspace, "overlap.txt", overlapping.Reference, LineHunk("aaa", "b"), () => dispatched = true);
                     throw new Exception("Overlapping anchor was accepted.");
                 }
-                catch (WorkspaceFileException ex)
-                { AssertEqual("patch_ambiguous", ex.Code, "distinct overlapping starts are ambiguous"); }
+                catch (TextPatternException ex)
+                { AssertEqual("ambiguous_context", ex.ErrorCode, "repeated complete lines are ambiguous"); }
                 AssertTrue(!dispatched, "ambiguous patch never reaches the effect boundary");
-                AssertEqual("aaaa", File.ReadAllText(Path.Combine(workspace.RootPath, "overlap.txt")), "ambiguous patch preserves bytes");
+                AssertEqual("aaa\naaa", File.ReadAllText(Path.Combine(workspace.RootPath, "overlap.txt")), "ambiguous patch preserves bytes");
                 var mixed = files.CreateText(workspace, "mixed.txt", "first\r\nTARGET\nlast\r尾😀");
                 var excerpt = files.ReadTextLines(workspace, "mixed.txt", 2, 1);
                 AssertEqual("TARGET\n", excerpt.Text, "line slicing preserves exact terminators");
                 AssertTrue(!excerpt.Evidence.Complete && excerpt.Evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "line selection cannot authorize whole replacement");
-                var mixedPatch = files.PatchExact(workspace, "mixed.txt", excerpt.Reference, "TARGET", "UPDATED");
+                var mixedPatch = files.ApplyTextEdits(workspace, "mixed.txt", excerpt.Reference, LineHunk("TARGET", "UPDATED"));
                 AssertEqual("first\r\nUPDATED\nlast\r尾😀", mixedPatch.Text, "patch preserves untouched mixed newlines and Unicode");
                 AssertTrue(mixedPatch.Evidence != null && mixedPatch.Evidence.Resource.Revision == mixedPatch.Reference.Revision,
                     "verified mutation supplies exact after-source evidence");
@@ -202,10 +205,10 @@ namespace RNAssistant.Harness
                 try { files.CreateText(workspace, "dashboard/app.js", "overwrite"); }
                 catch (WorkspaceFileException ex) { exists = ex.Code == "target_exists"; }
                 AssertTrue(exists, "create never overwrites");
-                var patched = files.PatchExact(workspace, "dashboard/app.js", first.Reference, "value = 1", "value = 2");
+                var patched = files.ApplyTextEdits(workspace, "dashboard/app.js", first.Reference, LineHunk("const value = 1;", "const value = 2;"));
                 AssertEqual("const value = 2;\r\n", patched.Text, "exact patch and CRLF");
                 AssertTrue(patched.Reference.Revision != first.Reference.Revision, "content revision is new");
-                AssertEqual("files.patch", patched.AuthorityCommit.Effect.Operation,
+                AssertEqual("core.patch", patched.AuthorityCommit.Effect.Operation,
                     "patch publication retains the exact operation id");
                 var unchanged = files.ReplaceText(workspace, "dashboard/app.js", patched.Reference, patched.Text);
                 AssertEqual(patched.Reference.Revision, unchanged.Reference.Revision, "same bytes are a no-op");
@@ -562,16 +565,15 @@ namespace RNAssistant.Harness
                 using (var output = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
                 {
                     output.SetLength(anchorOffset + 16);
-                    output.Position = anchorOffset;
-                    var marker = Encoding.UTF8.GetBytes("TAG_OLD");
+                    output.Position = anchorOffset - 1;
+                    var marker = Encoding.UTF8.GetBytes("\nTAG_OLD\n");
                     output.Write(marker, 0, marker.Length);
                 }
                 var observed = files.ReadTextCharacters(workspace, "beyond-cap.txt", anchorOffset, 16);
                 AssertTrue(observed.Text.StartsWith("TAG_OLD", StringComparison.Ordinal) &&
                     observed.SourceByteLength > 80L * 1024 * 1024,
                     "bounded read reaches beyond the former source cap");
-                var changed = files.PatchExact(workspace, "beyond-cap.txt", observed.Reference,
-                    "TAG_OLD", "TAG_NEW");
+                var changed = files.ApplyTextEdits(workspace, "beyond-cap.txt", observed.Reference, LineHunk("TAG_OLD", "TAG_NEW"));
                 AssertTrue(changed.AuthorityCommit != null &&
                     files.ReadTextCharacters(workspace, "beyond-cap.txt", anchorOffset, 16)
                         .Text.StartsWith("TAG_NEW", StringComparison.Ordinal),
@@ -606,8 +608,7 @@ namespace RNAssistant.Harness
                     "identical staged replacement does not invent a change");
                 files.CreateText(workspace, "grow.txt", "marker");
                 var seed = files.ReadModelText(workspace, "grow.txt", 128);
-                var grown = files.PatchExact(workspace, "grow.txt", seed.Reference,
-                    "marker", new string('g', WorkspaceFileService.MaximumTextBytes + 1));
+                var grown = files.ApplyTextEdits(workspace, "grow.txt", seed.Reference, LineHunk("marker", new string('g', WorkspaceFileService.MaximumTextBytes + 1)));
                 AssertTrue(grown.AuthorityCommit != null &&
                     files.ReadTextCharacters(workspace, "grow.txt", WorkspaceFileService.MaximumTextBytes, 1)
                         .Text == "g", "a patch can grow a small file beyond one MiB");
@@ -768,25 +769,21 @@ namespace RNAssistant.Harness
                 var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "project"));
                 var files = new WorkspaceFileService(paths);
                 var provider = new WorkspaceFileResourceProvider(files, workspace);
-                var prefix = new string('x', 81919);
-                var body = prefix + "TAG_OLD" + new string('y', 2 * 1024 * 1024) + "\r\n尾\uD83D\uDE00\n";
+                var prefix = new string('x', 81918) + "\n";
+                var body = prefix + "TAG_OLD\r\n" + new string('y', 2 * 1024 * 1024) + "\r\n尾\uD83D\uDE00\n";
                 var path = Path.Combine(workspace.RootPath, "large.txt");
                 File.WriteAllText(path, body, new UTF8Encoding(false, true));
                 var observed = provider.ReadCharacters("large.txt", prefix.Length - 4, 128);
                 var refusedDispatch = false;
-                AssertEqual("patch_not_found", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
-                        "NOT_PRESENT", "x", () => refusedDispatch = true)).Code,
+                AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() =>
+                    files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("NOT_PRESENT", "x"), () => refusedDispatch = true)).ErrorCode,
                     "an absent large-source anchor is refused before dispatch");
                 AssertEqual("encoding_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
-                        "TAG_OLD", "\uD800",
-                        () => refusedDispatch = true)).Code,
+                    files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("TAG_OLD", "\uD800"), () => refusedDispatch = true)).Code,
                     "invalid Unicode replacement is refused before dispatch");
                 AssertTrue(!refusedDispatch, "invalid large patch arguments never dispatch");
                 var dispatched = false;
-                var changed = files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
-                    "TAG_OLD", "TAG_新\uD83D\uDE00", () => dispatched = true);
+                var changed = files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("TAG_OLD", "TAG_新\uD83D\uDE00"), () => dispatched = true);
                 AssertTrue(dispatched && changed.AuthorityCommit != null && changed.Text == null &&
                     changed.Reference.Revision != observed.Result.Resource.Reference.Revision,
                     "streamed patch publishes a new exact revision without a whole text body");
@@ -794,9 +791,9 @@ namespace RNAssistant.Harness
                     "unique anchor crossing the stream buffer is changed without touching other bytes");
                 AssertEqual((long)Encoding.UTF8.GetByteCount(body.Replace("TAG_OLD", "TAG_新\uD83D\uDE00")),
                     changed.SourceByteLength.Value, "read-back reports the exact UTF-8 result length");
-                var after = files.SelectPatchResultRange(workspace, changed, prefix.Length - 4, 128);
+                var after = files.ReadTextCharacters(workspace, "large.txt", prefix.Length - 4, 128);
                 AssertTrue(after.Text.Contains("TAG_新\uD83D\uDE00") && !after.Evidence.Complete &&
-                    after.AuthorityCommit.CommitId == changed.AuthorityCommit.CommitId &&
+                    after.Reference.Revision == changed.Reference.Revision &&
                     after.Evidence.Coverage.Kind == ResourceCoverageKinds.CharacterRange,
                     "verified large patch delivers only an exact after-source excerpt");
                 AssertEqual(EvidenceState.Current, new EvidenceStateReducer().Reduce(after.Evidence,
@@ -804,47 +801,41 @@ namespace RNAssistant.Harness
                     "the partial after-source belongs to the published current revision");
                 var staleDispatched = false;
                 AssertEqual("target_conflict", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.PatchExact(workspace, "large.txt", observed.Result.Resource.Reference,
-                        "TAG_OLD", "STALE", () => staleDispatched = true)).Code,
+                    files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("TAG_OLD", "STALE"), () => staleDispatched = true)).Code,
                     "a prior exact revision cannot patch the new source");
                 AssertTrue(!staleDispatched, "stale patch fails before dispatch");
                 var current = provider.ReadCharacters("large.txt", prefix.Length - 4, 128);
                 var noopDispatched = false;
-                var same = files.PatchExact(workspace, "large.txt", current.Result.Resource.Reference,
-                    "TAG_新\uD83D\uDE00", "TAG_新\uD83D\uDE00", () => noopDispatched = true);
+                var same = files.ApplyTextEdits(workspace, "large.txt", current.Result.Resource.Reference, LineHunk("TAG_新\uD83D\uDE00", "TAG_新\uD83D\uDE00"), () => noopDispatched = true);
                 AssertTrue(!noopDispatched && same.Reference.Revision == current.Result.Resource.Reference.Revision,
                     "a large no-op patch leaves the revision and file intact");
                 var expanded = new string('z', WorkspaceFileService.MaximumTextBytes + 1);
-                var expandedResult = files.PatchExact(workspace, "large.txt", current.Result.Resource.Reference,
-                    "TAG_新\uD83D\uDE00", expanded);
+                var expandedResult = files.ApplyTextEdits(workspace, "large.txt", current.Result.Resource.Reference, LineHunk("TAG_新\uD83D\uDE00", expanded));
                 AssertTrue(expandedResult.Reference.Revision != current.Result.Resource.Reference.Revision &&
                     File.ReadAllText(path).Contains(expanded),
                     "a streamed patch accepts a replacement larger than one MiB");
 
                 var duplicatePath = Path.Combine(workspace.RootPath, "duplicate.txt");
-                File.WriteAllText(duplicatePath, new string('q', 2 * 1024 * 1024) + "aaaaa");
+                File.WriteAllText(duplicatePath, new string('q', 2 * 1024 * 1024 - 1) + "\naaa\naaa");
                 var duplicate = provider.ReadCharacters("duplicate.txt", 2 * 1024 * 1024, 128);
                 var duplicateDispatched = false;
-                AssertEqual("patch_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.PatchExact(workspace, "duplicate.txt", duplicate.Result.Resource.Reference,
-                        "aaa", "b", () => duplicateDispatched = true)).Code,
-                    "overlapping anchor starts are ambiguous across the complete large source");
+                AssertEqual("ambiguous_context", RuntimeThrows<TextPatternException>(() =>
+                    files.ApplyTextEdits(workspace, "duplicate.txt", duplicate.Result.Resource.Reference, LineHunk("aaa", "b"), () => duplicateDispatched = true)).ErrorCode,
+                    "repeated full lines are ambiguous across the complete large source");
                 AssertTrue(!duplicateDispatched, "ambiguous large patch never dispatches");
                 using (var drift = new FileStream(duplicatePath, FileMode.Open, FileAccess.Write))
                     drift.WriteByte((byte)'Z');
                 AssertEqual("target_conflict", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.PatchExact(workspace, "duplicate.txt", duplicate.Result.Resource.Reference,
-                        "aaaaa", "b", () => duplicateDispatched = true)).Code,
+                    files.ApplyTextEdits(workspace, "duplicate.txt", duplicate.Result.Resource.Reference, LineHunk("aaaaa", "b"), () => duplicateDispatched = true)).Code,
                     "external drift is rejected against the accepted exact revision");
                 AssertTrue(!duplicateDispatched, "drifted large patch never dispatches");
 
                 var unknownPath = Path.Combine(workspace.RootPath, "unknown.txt");
-                File.WriteAllText(unknownPath, new string('m', 2 * 1024 * 1024) + "REPLACE_ME");
+                File.WriteAllText(unknownPath, new string('m', 2 * 1024 * 1024 - 1) + "\nREPLACE_ME");
                 var unknownRead = provider.ReadCharacters("unknown.txt", 2 * 1024 * 1024, 128);
                 files.FaultPoint = stage => { if (stage == "after-dispatch") throw new IOException("interrupted patch"); };
                 AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.PatchExact(workspace, "unknown.txt", unknownRead.Result.Resource.Reference,
-                        "REPLACE_ME", "REPLACED")).Code,
+                    files.ApplyTextEdits(workspace, "unknown.txt", unknownRead.Result.Resource.Reference, LineHunk("REPLACE_ME", "REPLACED"))).Code,
                     "interrupted large patch reports an unknown effect");
                 var restarted = new WorkspaceFileService(paths);
                 AssertEqual("unresolved_previous_effect", RuntimeThrows<WorkspaceFileException>(() =>
@@ -862,7 +853,7 @@ namespace RNAssistant.Harness
                     "explicit recovery resolves the large patch journal attempt");
 
                 var mismatchPath = Path.Combine(workspace.RootPath, "mismatch.txt");
-                File.WriteAllText(mismatchPath, new string('m', 2 * 1024 * 1024) + "SOURCE");
+                File.WriteAllText(mismatchPath, new string('m', 2 * 1024 * 1024 - 1) + "\nSOURCE");
                 var mismatchRead = new WorkspaceFileResourceProvider(restarted, workspace)
                     .ReadCharacters("mismatch.txt", 2 * 1024 * 1024, 128);
                 restarted.FaultPoint = stage =>
@@ -872,8 +863,7 @@ namespace RNAssistant.Harness
                         output.WriteByte((byte)'Z');
                 };
                 AssertEqual("effect_unknown", RuntimeThrows<WorkspaceFileException>(() =>
-                    restarted.PatchExact(workspace, "mismatch.txt", mismatchRead.Result.Resource.Reference,
-                        "SOURCE", "TARGET")).Code,
+                    restarted.ApplyTextEdits(workspace, "mismatch.txt", mismatchRead.Result.Resource.Reference, LineHunk("SOURCE", "TARGET"))).Code,
                     "a mismatched streamed read-back never reports verified success");
                 var mismatchRecovery = new WorkspaceFileService(paths).ReconcileUncertain(workspace, "mismatch.txt");
                 AssertEqual(WorkspaceRecoveryOutcome.UnknownAfterDispatch, mismatchRecovery.Outcome,

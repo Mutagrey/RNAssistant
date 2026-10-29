@@ -16,6 +16,12 @@ artifact owner/CAS; its old private find/replace-hunk parser is removed. Metadat
 resolution and full file read-back no longer hydrate complete bodies. Markdown/HTML
 aggregates and other authored-file mutations still materialize their source.
 
+Workspace's retired substring writer (`PatchExact`/`PatchLargeExact`) and its
+private unique-anchor scan/result-range helper are removed. The file owner uses
+`ApplyTextEdits`; shared streaming byte-copy and source/read-back verification
+remain in the current text-edit/stream-write paths. Owner and plugin fixtures now
+use full-line hunks, including large-source ambiguity, stale reads and recovery.
+
 ## Universal text tools — 2026-10-28
 
 Owner: Core Tools / Office Tools / Application Workspace. Public per-environment

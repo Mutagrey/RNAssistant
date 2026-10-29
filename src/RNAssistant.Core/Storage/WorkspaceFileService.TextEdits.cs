@@ -40,7 +40,7 @@ namespace RNAssistant.Core.Storage
         }
         public WorkspaceFileObservation ApplyTextEdits(WorkspaceDescriptor workspace, string path,
             ResourceRef expected, string patch, Action onDispatch = null,
-            CancellationToken token = default(CancellationToken), string effectOperation = null)
+            CancellationToken token = default(CancellationToken), string effectOperation = ResourceMutationToolCatalog.Patch)
         {
             // One staged commit, even for many hunks. Source and result are streamed; memory follows patch size.
             var snapshot = AcceptedStreamedTextSource(workspace, path, expected);
@@ -169,5 +169,42 @@ namespace RNAssistant.Core.Storage
             }
             return bytes;
         }
+        private static byte[] EncodePatchFragment(string value)
+        {
+            try
+            {
+                return StrictUtf8.GetBytes(value);
+            }
+            catch (EncoderFallbackException)
+            { throw new WorkspaceFileException("encoding_ambiguous", "Patch fragments must be valid UTF-8 text."); }
+        }
+
+        private static void CopyExactly(Stream input, Stream output, long count, CancellationToken token = default(CancellationToken))
+        {
+            var buffer = new byte[81920];
+            while (count > 0)
+            {
+                token.ThrowIfCancellationRequested();
+                var read = input.Read(buffer, 0, (int)Math.Min(buffer.Length, count));
+                if (read == 0) throw new IOException("Retained source ended during patch preparation.");
+                output.Write(buffer, 0, read);
+                count -= read;
+            }
+        }
+
+        private static void SkipExactAnchor(Stream input, byte[] anchor)
+        {
+            var buffer = new byte[81920];
+            var offset = 0;
+            while (offset < anchor.Length)
+            {
+                var count = input.Read(buffer, 0, Math.Min(buffer.Length, anchor.Length - offset));
+                if (count == 0) throw new IOException("Retained anchor ended during patch preparation.");
+                for (var i = 0; i < count; i++)
+                    if (buffer[i] != anchor[offset + i]) throw new IOException("Retained anchor changed during patch preparation.");
+                offset += count;
+            }
+        }
+
     }
 }

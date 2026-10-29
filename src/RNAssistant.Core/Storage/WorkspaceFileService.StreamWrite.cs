@@ -391,5 +391,30 @@ namespace RNAssistant.Core.Storage
                 { if (!dispatched) { _journal.AbandonBeforeDispatch(attempt.AttemptId); throw; } throw new WorkspaceFileException("effect_unknown", "Directory creation is uncertain. " + error.Message); }
             }
         }
+        private static void VerifyLargePatchSource(string path, ResourceRevisionMetadata revision)
+        {
+            using (var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                81920, FileOptions.SequentialScan))
+            {
+                if (source.Length != revision.Payload.ByteLength)
+                    throw new WorkspaceFileException("target_conflict", "File changed since the accepted read.");
+                long length;
+                if (ChatBlobStore.HashFile(source, out length, CancellationToken.None, null) != revision.ContentSha256)
+                    throw new WorkspaceFileException("target_conflict", "File changed since the accepted read.");
+            }
+        }
+
+        private static void VerifyLargePatchReadBack(string path, PayloadRef payload)
+        {
+            using (var source = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read,
+                81920, FileOptions.SequentialScan))
+            {
+                if (source.Length != payload.ByteLength)
+                    throw new WorkspaceFileException("read_back_mismatch", "File length differs from prepared bytes.");
+                long length;
+                if (ChatBlobStore.HashFile(source, out length, CancellationToken.None, null) != payload.Sha256)
+                    throw new WorkspaceFileException("read_back_mismatch", "File does not match prepared bytes.");
+            }
+        }
     }
 }

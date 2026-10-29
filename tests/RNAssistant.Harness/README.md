@@ -26,6 +26,10 @@ nested namespace groups and inline diff pagination, safe text, long lines and
 unverified previews. `tests/cli/tool_name_migration_test.py` uses only temporary
 skill packages to check explicit migration with preserved originals/body/BOM.
 See the current [source tool contract](../../docs/text-mutations.md).
+Workspace owner tests use the same full-line hunks as the public contract. The
+retired substring writer is removed; migrated checks retain large-file no-op,
+stale/ambiguous context, invalid Unicode, post-dispatch unknown and read-back
+mismatch recovery, plus visual-selection edits against exact plugin source.
 
 `workspace: failed read activity` verifies a real failed tool outcome remains failed
 with its semantic target after persistence; accepted-history checks cover shared
