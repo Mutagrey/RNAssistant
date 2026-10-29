@@ -273,16 +273,32 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     assert.match(await page.locator("#resource-previews .tool-source-caption").first().innerText(), /R5@v1 — Отчёт.pdf, страница 2, символы \[4, 32\)/);
     await page.evaluate(() => {
-      const host = document.createElement("div"); host.id = "reflection-preview";
+      const host = document.createElement("article"); host.id = "reflection-preview"; host.className = "message assistant";
       document.querySelector("main").appendChild(host);
+      const message = document.createElement("div"); message.className = "agent-step-message markdown";
+      message.textContent = "Сначала прочитаю модуль."; host.appendChild(message);
+      host.appendChild(renderActivityNode({ Kind: "tool", ToolId: "core.read", Status: "completed",
+        Subtitle: "Module1", Display: { Action: "Чтение", Operation: "Read" } }, false, false, null));
       appendAgentReflectionStep(host, "Проверю **модуль**.");
     });
-    assert.equal(await page.locator("#reflection-preview").innerText(), "Проверю модуль.",
+    assert.match(await page.locator("#reflection-preview").innerText(), /Проверю модуль\./,
       "reflection renders as message text without a visible title");
     assert.equal(await page.locator("#reflection-preview .agent-reflection-icon").count(), 1);
     assert.equal(await page.locator("#reflection-preview .agent-reflection-icon svg").count(), 1);
-    assert.equal(await page.locator("#reflection-preview .agent-reflection-step").evaluate(node =>
-      getComputedStyle(node).display), "grid", "icon and Markdown share one message row");
+    const alignment = await page.locator("#reflection-preview").evaluate(node => ({
+      message: node.querySelector(".agent-step-message").getBoundingClientRect().left,
+      tool: node.querySelector(".agent-activity-copy").getBoundingClientRect().left,
+      reflection: node.querySelector(".agent-reflection-body").getBoundingClientRect().left,
+      toolIcon: node.querySelector(".agent-activity-mark").getBoundingClientRect().left,
+      reflectionIcon: node.querySelector(".agent-reflection-icon").getBoundingClientRect().left,
+      toolColor: getComputedStyle(node.querySelector(".agent-activity-name")).color,
+      reflectionColor: getComputedStyle(node.querySelector(".agent-reflection-body")).color
+    }));
+    assert.ok(Math.abs(alignment.message - alignment.tool) < 1 && Math.abs(alignment.message - alignment.reflection) < 1,
+      "tool and reflection text align with assistant messages");
+    assert.ok(Math.abs(alignment.toolIcon - alignment.reflectionIcon) < 1,
+      "tool and reflection icons share the same gutter");
+    assert.equal(alignment.reflectionColor, alignment.toolColor, "reflection uses the muted action color");
     assert.equal(await page.locator("#resource-previews").innerText().then(text => text.includes("Показана доступная часть результата")), false,
       "a complete selected PDF slice is not labelled as a truncated UI preview");
     for (const theme of ["light", "dark"]) {
@@ -291,6 +307,27 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.ok(await page.locator("#previews").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "previews fit narrow " + theme + " theme");
       assert.ok(await page.locator("#resource-previews").evaluate(el => el.scrollWidth <= el.clientWidth + 1), "PDF/media notes fit narrow " + theme + " theme");
     }
+    await page.evaluate(() => {
+      const list = document.createElement("div"); list.id = "narrow-feed"; list.className = "messages";
+      list.style.cssText = "box-sizing:border-box;width:300px;height:180px";
+      const article = document.createElement("article"); article.className = "message assistant";
+      const run = document.createElement("div"); run.className = "agent-run-wrap";
+      const message = document.createElement("div"); message.className = "agent-step-message markdown";
+      message.textContent = "Сообщение"; run.appendChild(message);
+      run.appendChild(renderActivityNode({ Kind: "tool", ToolId: "core.read", Status: "completed",
+        Subtitle: "Module1", Display: { Action: "Чтение", Operation: "Read" } }, false, false, null));
+      appendAgentReflectionStep(run, "Проверю модуль."); article.appendChild(run); list.appendChild(article);
+      document.querySelector("main").appendChild(list);
+    });
+    const narrow = await page.locator("#narrow-feed").evaluate(node => ({
+      edge: node.getBoundingClientRect().left,
+      message: node.querySelector(".agent-step-message").getBoundingClientRect().left,
+      tool: node.querySelector(".agent-activity-copy").getBoundingClientRect().left,
+      reflection: node.querySelector(".agent-reflection-body").getBoundingClientRect().left,
+      icon: node.querySelector(".agent-reflection-icon").getBoundingClientRect().left
+    }));
+    assert.ok(narrow.icon >= narrow.edge && Math.abs(narrow.message - narrow.tool) < 1 &&
+      Math.abs(narrow.message - narrow.reflection) < 1, "narrow chat keeps icons visible and text aligned");
     if (process.env.RESULT_DETAILS_SCREENSHOT) await page.locator("#resource-previews").screenshot({ path: process.env.RESULT_DETAILS_SCREENSHOT });
     await page.evaluate(() => {
       const view = { RunId: "sparse", TurnId: "sparse", Lifecycle: "running", ExecutionHealth: "unknown",

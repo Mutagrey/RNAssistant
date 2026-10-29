@@ -128,6 +128,39 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#failed .agent-tool-tab.active").innerText(), "Результат");
     assert.equal(await page.locator("#failed .agent-tool-panel:visible").innerText(), "Файл занят другим процессом.",
       "failure details open on the full tool message, with JSON available separately");
+    assert.equal(await page.locator("#read .agent-tool-more:visible").count(), 0,
+      "short source does not gain an extra disclosure");
+    await page.evaluate(() => {
+      const node = renderActivityNode({ Kind: "tool", RunId: "run", ToolCallId: "long-read",
+        ToolId: "core.read", Status: "completed", Subtitle: "large.bas",
+        Display: { Action: "Чтение", Operation: "Read" },
+        ResultSummary: { Kind: "resource-read", Representation: "source", ReturnedCharacters: 12000, Complete: true }
+      }, false, false, { renderInlineArtifacts: false, terminal: true });
+      node.id = "long-read"; document.getElementById("feed").appendChild(node);
+    });
+    await page.locator("#long-read > details > summary").click();
+    await page.waitForFunction(() => requests.length === 4);
+    await page.evaluate(() => requests[3].resolve({ chatId: "chat", runId: "run", toolCallId: "long-read",
+      blocks: [{ kind: "text", title: "Содержимое", complete: true,
+        text: Array.from({ length: 80 }, (_, i) => "Debug.Print " + i).join("\n"),
+        source: { reference: "R2@v1", target: "large.bas", view: "source" } }] }));
+    await page.locator("#long-read .agent-tool-more:visible").waitFor();
+    const collapsed = await page.locator("#long-read .agent-tool-panel:visible").evaluate(node =>
+      ({ height: node.clientHeight, full: node.scrollHeight }));
+    assert.ok(collapsed.height <= 181 && collapsed.full > collapsed.height,
+      "long source starts as a compact preview");
+    if (process.env.TOOL_CARD_LONG_SCREENSHOT)
+      await page.locator("#long-read .agent-tool-card").screenshot({ path: process.env.TOOL_CARD_LONG_SCREENSHOT });
+    await page.locator("#long-read .agent-tool-more").click();
+    const expanded = await page.locator("#long-read .agent-tool-panel:visible").evaluate(node =>
+      ({ height: node.clientHeight, full: node.scrollHeight, overflow: getComputedStyle(node).overflowY }));
+    assert.ok(expanded.height > collapsed.height && expanded.height <= 540 &&
+      expanded.full > expanded.height && expanded.overflow === "auto",
+      "expanded source grows to a bounded scroll area");
+    if (process.env.TOOL_CARD_LONG_EXPANDED_SCREENSHOT)
+      await page.locator("#long-read .agent-tool-card").screenshot({ path: process.env.TOOL_CARD_LONG_EXPANDED_SCREENSHOT });
+    await page.locator("#long-read .agent-tool-more").click();
+    assert.equal(await page.locator("#long-read .agent-tool-more").innerText(), "Показать полностью");
     for (const width of [740, 360]) {
       await page.setViewportSize({ width, height: 700 });
       assert.ok(await page.locator("#read .agent-tool-card").evaluate(node => node.scrollWidth <= node.clientWidth + 1),

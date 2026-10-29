@@ -593,8 +593,43 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
   var panels = document.createElement("div");
   panels.className = "agent-tool-panels";
   card.appendChild(panels);
+  var more = document.createElement("button");
+  more.type = "button";
+  more.className = "agent-tool-more";
+  more.textContent = "Показать полностью";
+  more.hidden = true;
+  more.setAttribute("aria-expanded", "false");
+  card.appendChild(more);
   parent.appendChild(card);
-  var entries = {}, active = "";
+  var entries = {}, active = "", collapsibleResult = false, measurePending = false;
+  function scheduleOverflow() {
+    if (measurePending) return;
+    measurePending = true;
+    requestAnimationFrame(function () {
+      measurePending = false;
+      if (!card.isConnected || !disclosure.open) return;
+      var entry = entries[active];
+      if (!entry || active !== "changes" && (active !== "result" || !collapsibleResult)) {
+        more.hidden = true;
+        return;
+      }
+      var panel = entry.panel;
+      var longContent = panel.scrollHeight > 181;
+      panel.classList.toggle("is-collapsible", longContent);
+      if (!longContent) panel.classList.remove("is-expanded");
+      more.hidden = !longContent;
+      more.textContent = panel.classList.contains("is-expanded") ? "Свернуть" : "Показать полностью";
+      more.setAttribute("aria-expanded", String(panel.classList.contains("is-expanded")));
+    });
+  }
+  more.addEventListener("click", function () {
+    var entry = entries[active];
+    if (!entry) return;
+    var expanded = entry.panel.classList.toggle("is-expanded");
+    if (!expanded) entry.panel.scrollTop = 0;
+    more.textContent = expanded ? "Свернуть" : "Показать полностью";
+    more.setAttribute("aria-expanded", String(expanded));
+  });
   function addTab(key, label, render, disposable) {
     if (entries[key]) return entries[key];
     var button = document.createElement("button");
@@ -628,6 +663,7 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
   }
   function selectTab(key) {
     if (!entries[key] || entries[key].button.hidden) return;
+    if (active && active !== key) entries[active].panel.classList.remove("is-expanded");
     if (active && active !== key && entries[active].disposable) release(entries[active]);
     active = key;
     Object.keys(entries).forEach(function (name) {
@@ -638,6 +674,7 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
       entries[name].panel.hidden = !selected;
     });
     mount(entries[key]);
+    scheduleOverflow();
   }
   tabs.addEventListener("keydown", function (event) {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
@@ -674,6 +711,7 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
     var normal = blocks.filter(function (block) { return block.kind !== "text_changes"; });
     var changes = blocks.filter(function (block) { return block.kind === "text_changes"; });
     var raw = response.rawJson || "";
+    collapsibleResult = normal.length > 0 || failed;
     if (changes.length && toolTarget === activityToolId(activity)) {
       var changedItems = changes.reduce(function (items, block) {
         return items.concat(block.changes && block.changes.items || []);
@@ -723,11 +761,13 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
     if (changes.length && active === "result" && !failed) selectTab("changes");
     else if (active === "result") mount(result);
     else if (entries[active] && entries[active].button.hidden) selectTab("result");
+    scheduleOverflow();
   }
   var loading = typeof appendToolResultPreview === "function" &&
     appendToolResultPreview(resultContent, activity, context, disclosure, showResponse);
   if (!loading) {
     var local = activityDataJson(activity);
+    collapsibleResult = failed && !!message;
     result.render = local ? function () { return mountAgentJsonContent(resultContent, local); }
       : function () { resultContent.textContent = activityStatus(activity) === "running" ? "Ожидаю результат…" :
           message ? "" : "Содержимое результата недоступно."; };
@@ -737,6 +777,7 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
   disclosure.addEventListener("toggle", function () {
     if (disclosure.open) {
       if (active === "arguments" || !loading) mount(entries[active]);
+      scheduleOverflow();
       return;
     }
     Object.keys(entries).forEach(function (key) {
