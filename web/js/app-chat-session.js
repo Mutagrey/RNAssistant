@@ -471,6 +471,7 @@ function applyInitState(init) {
   renderSettings();
   renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);
+  renderChatSessions();
   if (init.quickAction) {
     runQuickAction(init.quickAction);
   }
@@ -652,7 +653,10 @@ async function synchronizeChatState(force) {
   var stateApplyVersion = state.chatStateApplyVersion || 0;
   state.chatSyncPromise = (async function () {
     try {
-      var response = await send("listChats", {});
+      var response = await Promise.race([
+      send("listChats", {}),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Sync timeout")), 5000))
+    ]);
       var current = { activeChatId: state.activeChatId, chats: state.chats, documents: state.documents };
       if (!state.chatNavigationPending && navigationVersion === state.chatNavigationVersion &&
           stateApplyVersion === state.chatStateApplyVersion &&
