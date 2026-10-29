@@ -33,7 +33,8 @@ assert.equal(fixture.completed.state.Status, 'completed');
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
     await page.evaluate(data => {
-      window.lifetimeRequest = null; window.lifetimeCompleted = false; window.lifetimePolls = 0;
+      window.lifetimeRequest = null; window.lifetimeCompleted = false;
+      window.lifetimeTitle = false; window.lifetimePolls = 0;
       const original = chrome.webview.postMessage;
       function snapshot() {
         const native = lifetimeCompleted ? data.completed : data.terminal.payload;
@@ -41,6 +42,11 @@ assert.equal(fixture.completed.state.Status, 'completed');
           value === native.sessionId ? lifetimeRequest.payload.sessionId :
           value === native.project.workspaceId ? lifetimeRequest.payload.workspaceId : value);
         if (result.inputReceipt) result.inputReceipt.RequestId = lifetimeRequest.payload.input.requestId;
+        if (lifetimeTitle) {
+          result.state.Title = 'Название после завершения';
+          result.state.Revision = (result.state.Revision || result.state.revision || 0) + 1;
+          result.state.Cursor = 'title-notification';
+        }
         return result;
       }
       chrome.webview.postMessage = request => {
@@ -61,15 +67,45 @@ assert.equal(fixture.completed.state.Status, 'completed');
     assert.equal(await page.locator('#chatInput').inputValue(), '', 'durable admission clears the submitted draft');
     assert.equal(await page.evaluate(() => RNAssistantProjectChats.snapshot().state.Status), 'running');
     await page.locator('#chatInput').fill('Новый черновик');
-    assert.equal(await page.locator('#sendButton').isEnabled(), false, 'early receipt does not start a second writer');
-    await page.waitForFunction(() => lifetimePolls > 0);
+    assert.equal(await page.locator('#sendButton').isEnabled(), true,
+      'the current run still accepts an exact-run clarification');
+    const readsAfterAdmission = await page.evaluate(() => lifetimePolls);
+    await page.waitForTimeout(1500);
+    assert.equal(await page.evaluate(() => lifetimePolls), readsAfterAdmission,
+      'a locally observed run does not reread the entire chat every 1.2 seconds');
     assert.equal(await page.evaluate(() => Object.values(state.pending).filter(item => item.type === 'submitProjectChat').length), 0,
       'model wait has no outstanding submit request or its idle timeout');
-    await page.evaluate(() => { lifetimeCompleted = true; });
+    await page.evaluate(() => {
+      lifetimeCompleted = true;
+      const snapshot = RNAssistantProjectChats.snapshot();
+      lifetimeDeliver({type:'progress', id:lifetimeRequest.id, payload:{
+        workspaceId:lifetimeRequest.payload.workspaceId,
+        sessionId:lifetimeRequest.payload.sessionId,
+        runId:snapshot.state.RunId || snapshot.state.runId,
+        phase:'session_changed', cursor:'terminal-notification'
+      }});
+    });
     await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.Status === 'completed');
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Новый черновик', 'terminal polling leaves a newer draft alone');
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Новый черновик', 'terminal notification leaves a newer draft alone');
     assert.equal(await page.locator('#sendButton').isEnabled(), true, 'terminal state unlocks submission');
+    const readsBeforeTitle = await page.evaluate(() => lifetimePolls);
+    await page.evaluate(() => {
+      lifetimeTitle = true;
+      const current = RNAssistantProjectChats.snapshot();
+      lifetimeDeliver({type:'progress', id:lifetimeRequest.id, payload:{
+        workspaceId:lifetimeRequest.payload.workspaceId,
+        sessionId:lifetimeRequest.payload.sessionId,
+        runId:current.state.RunId || current.state.runId,
+        phase:'session_changed', cursor:'title-notification'
+      }});
+    });
+    await page.locator('#projectChatTitle').getByText('Название после завершения').waitFor();
+    assert.equal(await page.evaluate(() => lifetimePolls), readsBeforeTitle + 1,
+      'durable title notice refreshes the selected idle chat once');
+    await page.waitForTimeout(2200);
+    assert.equal(await page.evaluate(() => lifetimePolls), readsBeforeTitle + 1,
+      'idle title update leaves no full-chat title polling timer');
     assert.deepEqual(errors, []);
-    console.log('PASS workspace run lifetime: native admission, no pending submit during model wait, polling completion and draft retention');
+    console.log('PASS workspace run lifetime: native admission, push completion/title without full polling and draft retention');
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => {console.error(error); process.exitCode = 1;});

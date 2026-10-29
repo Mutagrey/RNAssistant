@@ -143,6 +143,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("inputReceipt", NullValueHandling = NullValueHandling.Ignore)]
         public WorkspaceInputReceipt InputReceipt { get; set; }
 
+        [JsonProperty("cursor", NullValueHandling = NullValueHandling.Ignore)]
+        public string Cursor { get; set; }
+
         [JsonProperty("chatId")]
         public string ChatId { get; set; }
 

@@ -109,6 +109,10 @@ namespace RNAssistant.Harness
                         try
                         {
                             AssertTrue(entered.Wait(5000), "model request starts");
+                            AssertTrue(wire.Select(JObject.Parse).Any(item =>
+                                (string)item["type"] == "modelDiagnostics" &&
+                                (string)item["payload"]?["phase"] == "sending"),
+                                "Workspace model HTTP stage reaches the real bridge before its response");
                             AssertTrue(pending.Wait(5000), "submit returns while the model response is still held");
                             terminal = JObject.Parse(pending.GetAwaiter().GetResult());
                             AssertTrue((bool)terminal["ok"], "admission succeeds");
@@ -334,6 +338,13 @@ namespace RNAssistant.Harness
                                     (string)item["payload"]?["sessionId"] == project.SessionId &&
                                     (long)item["payload"]?["modelProgress"]?["Sequence"] > sourcePreview.Last().ModelProgress.Sequence),
                                     "project bridge delivers ordered model preview for the exact workspace/session");
+                                AssertTrue(progressMessages.Select(JObject.Parse).Any(item =>
+                                    (string)item["payload"]?["phase"] == "session_changed" &&
+                                    (string)item["payload"]?["workspaceId"] == workspaceId &&
+                                    (string)item["payload"]?["sessionId"] == project.SessionId &&
+                                    (string)item["payload"]?["runId"] == projectReply.State.RunId &&
+                                    (string)item["payload"]?["cursor"] == projectReply.State.Cursor),
+                                    "terminal kernel commit notifies the exact workspace chat after submit admission");
                             }
                         }
                         server.GetAwaiter().GetResult();

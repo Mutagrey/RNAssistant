@@ -382,6 +382,14 @@
   margin-top: 6px;
 }
 
+.performance-diagnostics-results {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text);
+}
+
 .model-connection-metrics > div {
   display: flex;
   gap: 6px;

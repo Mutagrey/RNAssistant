@@ -447,7 +447,21 @@ if (window.chrome && window.chrome.webview) {
       failBridgeTransport(response, null);
       return;
     }
-    if (response && response.type === "modelDiagnostics") return;
+    if (response && response.type === "modelDiagnostics") {
+      if (window.RNAssistantPerformanceDiagnostics)
+        window.RNAssistantPerformanceDiagnostics.recordModel(response.payload);
+      return;
+    }
+    if (response && response.type === "bridgeTiming") {
+      if (window.RNAssistantPerformanceDiagnostics)
+        window.RNAssistantPerformanceDiagnostics.recordBridge(response.payload);
+      return;
+    }
+    if (response && response.type === "hostPostTiming") {
+      if (window.RNAssistantPerformanceDiagnostics)
+        window.RNAssistantPerformanceDiagnostics.recordHostPost(response.payload);
+      return;
+    }
     if (response && response.type === "resourceChanged") {
       if (typeof handleResourceAuthorityChanged === "function") handleResourceAuthorityChanged(response);
       return;

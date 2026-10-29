@@ -208,23 +208,38 @@
     return current;
   }
   function createRunObserver(read, changed, failed, progressChanged) {
-    var target = null, selected = null, generation = 0;
+    var target = null, selected = null, generation = 0, lastPushAt = 0, polling = false;
     var observer = window.RNAssistantConversationObserver.create({
       current: function () { return target ? { workspaceId: target.workspaceId,
         sessionId: target.sessionId, generation: generation } : null; },
-      read: read, changed: changed, failed: failed, autoStart: true
+      read: read, changed: changed, failed: failed, interval: 10000,
+      shouldPoll: function () { return !lastPushAt || Date.now() - lastPushAt >= 30000; }
     });
     return { select: function (snapshot, pending) {
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
-      var observe = workspaceId && sessionId && (pending || field(field(snapshot, "state"), "status") === "running");
+      var observe = !!(workspaceId && sessionId &&
+        (pending || field(field(snapshot, "state"), "status") === "running"));
       selected = snapshot;
-      if (observe && target && target.workspaceId === workspaceId && target.sessionId === sessionId) return;
-      if (target || observe) ++generation;
-      target = observe ? { workspaceId: workspaceId, sessionId: sessionId } : null;
+      if (!target || target.workspaceId !== workspaceId || target.sessionId !== sessionId) {
+        if (target || workspaceId && sessionId) ++generation;
+        target = workspaceId && sessionId ? { workspaceId: workspaceId, sessionId: sessionId } : null;
+        lastPushAt = 0;
+      }
+      if (polling !== observe) {
+        polling = observe;
+        if (polling) observer.start(); else observer.stop();
+      }
     }, acceptProgress: function (payload) {
       if (!target || target.workspaceId !== field(payload, "workspaceId") ||
           target.sessionId !== field(payload, "sessionId")) return;
       var preview = field(payload, "modelProgress"), state = field(selected, "state");
+      if (field(state, "runId") && field(payload, "runId") &&
+          field(state, "runId") !== field(payload, "runId")) return;
+      lastPushAt = Date.now();
+      if (field(payload, "phase") === "session_changed") {
+        if (field(payload, "cursor") !== field(state, "cursor")) observer.refresh();
+        return;
+      }
       if (!preview || !state || field(state, "status") !== "running" ||
           field(state, "runId") !== field(preview, "runId")) { observer.refresh(); return; }
       var existing = field(state, "modelProgress");
@@ -503,23 +518,6 @@
     };
     return sharedComposer;
   }
-  function watchTitle(snapshot, read, complete) {
-    if (!field(field(snapshot, "state"), "titleGenerationPending")) return function () {};
-    var stopped = false, timer = null, attempts = 0;
-    function stop() { stopped = true; if (timer) clearTimeout(timer); }
-    async function tick() {
-      if (stopped) return;
-      try {
-        var latest = await read();
-        if (stopped) return;
-        if (!field(field(latest, "state"), "titleGenerationPending")) { stop(); complete(latest); return; }
-      } catch (_) { /* The chat can be reopened after a transient read failure. */ }
-      if (++attempts >= 65) { stop(); return; }
-      timer = setTimeout(tick, 2000);
-    }
-    timer = setTimeout(tick, 2000);
-    return stop;
-  }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
     registerActions: registerActions, bindActions: bindActions,
@@ -530,7 +528,7 @@
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
     snapshot: function () { return dispatch("snapshot"); },
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
-    watchTitle: watchTitle, latestSnapshot: latestSnapshot, prependMessages: prependMessages,
+    latestSnapshot: latestSnapshot, prependMessages: prependMessages,
     createRunObserver: createRunObserver, paintProgress: paintProgress,
     acceptProgress: function (payload) { dispatch("progress", payload); },
     readOnly: readOnly, runNotice: runNotice };

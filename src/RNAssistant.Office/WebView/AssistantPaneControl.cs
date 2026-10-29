@@ -32,6 +32,7 @@ namespace RNAssistant.Office.WebView
         private PluginWebViewHost _pluginHost;
         public TabularWebViewExecutor TabularExecutor { get; private set; }
         private Stopwatch _initialNavigationTimer;
+        private DateTime _lastSlowPostReportUtc;
         private string _trustedDocumentUri;
         private bool _webContentWantsKeyboard;
         private volatile bool _resourcesDisposed;
@@ -757,8 +758,23 @@ namespace RNAssistant.Office.WebView
                 var timer = Stopwatch.StartNew();
                 _webView.CoreWebView2.PostWebMessageAsJson(json);
                 if (timer.ElapsedMilliseconds >= 250)
+                {
                     RuntimeLog.Info("WebView post timing: elapsed=" + timer.ElapsedMilliseconds +
                         "ms, chars=" + (json == null ? 0 : json.Length) + ".");
+                    var now = DateTime.UtcNow;
+                    if (now - _lastSlowPostReportUtc >= TimeSpan.FromSeconds(5))
+                    {
+                        _lastSlowPostReportUtc = now;
+                        try
+                        {
+                            _webView.CoreWebView2.PostWebMessageAsJson(JsonConvert.SerializeObject(
+                                new HostPostTimingMessage { Type = "hostPostTiming",
+                                    Payload = new HostPostTimingDto { ElapsedMs = timer.ElapsedMilliseconds,
+                                        ResponseChars = json == null ? 0 : json.Length } }));
+                        }
+                        catch { /* A timing notice cannot change the delivered response. */ }
+                    }
+                }
             }
         }
 

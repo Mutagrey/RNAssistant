@@ -46,6 +46,12 @@ concurrent append into a missing chat. The lock is released before model/user wa
 projection reads, trace appends and saves report stage timings without chat content. An
 indexed cold read still materializes all messages needed by an active conversation;
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
+The Help screen also keeps a bounded, memory-only timing view for the current pane:
+UI navigation queue/bridge/render, slow bridge handle/JSON, slow Office UI WebView
+posts, model HTTP phases and supported JavaScript long tasks. No timer or chat read
+is started by opening this view. The HTTP preparation number begins in `LlmClient`;
+it does not include earlier Application context compilation. Bridge handle time
+still combines storage, host gating and orchestration until measured separately.
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
 Workspace older-history reads use the same bounded SQLite window through the exact
@@ -739,7 +745,7 @@ the input. The request-scoped UI callback clears only the matching draft version
 after the matching receipt is confirmed, without waiting for model completion. Repeated
 receipts cannot clear a later draft; background receipts never alter the Office
 composer. Missing/mismatched/unconfirmed receipts retain the draft and request ID.
-On open/navigation and ordinary run polling, `getProjectChat.receiptRequestId`
+On open/navigation and recovery reconciliation, `getProjectChat.receiptRequestId`
 asks for the one unresolved input. The typed `inputReceipt` is read from the
 existing input journal through the session's exact event revision. A read-only
 observer never combines a newer `Applied` event with an older message snapshot;
@@ -768,6 +774,20 @@ tries to acquire the lease.
 Explicit `cancelProjectChat` still addresses the exact run/cursor. Progress is an
 observer: a closed or throwing bridge cannot abort execution. The UI follows the
 canonical snapshot/progress independently of the completed submit request.
+After each persisted kernel fact, the Workspace bridge forwards an exact
+workspace/session/run/cursor change notice. It carries no inferred lifecycle:
+the UI reads the canonical snapshot once and the kernel projection decides whether
+the run is still active. Model preview remains a separate leaf update. A locally
+observed run no longer loads its full chat every 1.2 seconds; an opened
+run without a connected push source is reconciled every 10 seconds, and a
+silent/lost source is checked after 30 seconds without push. An idle chat has no
+observer timer. A recreated pane can therefore recover terminal state without
+resubmitting input or relying on the old bridge request.
+The selected idle chat keeps its address for saved change notices without starting
+a timer. Smart title generation runs after terminal; its committed title publishes
+the same scoped cursor notice, which refreshes that chat and its catalog. The old
+two-second full-chat title watcher is removed. A manually renamed or deselected
+chat cannot receive an obsolete generated title in the visible projection.
 
 Application shutdown refuses new workers, cancels existing workers and awaits
 their drain before releasing plugin results; the pane's drain includes this owner.

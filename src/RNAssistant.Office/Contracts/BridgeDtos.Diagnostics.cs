@@ -14,6 +14,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("kind")]
         public string Kind { get; set; }
 
+        [JsonProperty("queueMs")]
+        public int QueueMs { get; set; }
+
         [JsonProperty("bridgeMs")]
         public int BridgeMs { get; set; }
 
@@ -22,6 +25,51 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("messages")]
         public int Messages { get; set; }
+    }
+
+    public sealed class BridgeTimingMessage
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; }
+
+        [JsonProperty("payload")]
+        public BridgeTimingDto Payload { get; set; }
+    }
+
+    public sealed class BridgeTimingDto
+    {
+        [JsonProperty("requestId")]
+        public string RequestId { get; set; }
+
+        [JsonProperty("operation")]
+        public string Operation { get; set; }
+
+        [JsonProperty("handleMs")]
+        public long HandleMs { get; set; }
+
+        [JsonProperty("serializeMs")]
+        public long SerializeMs { get; set; }
+
+        [JsonProperty("responseChars")]
+        public int ResponseChars { get; set; }
+    }
+
+    public sealed class HostPostTimingMessage
+    {
+        [JsonProperty("type")]
+        public string Type { get; set; }
+
+        [JsonProperty("payload")]
+        public HostPostTimingDto Payload { get; set; }
+    }
+
+    public sealed class HostPostTimingDto
+    {
+        [JsonProperty("elapsedMs")]
+        public long ElapsedMs { get; set; }
+
+        [JsonProperty("responseChars")]
+        public int ResponseChars { get; set; }
     }
 
     public sealed class ModelRequestDiagnosticsMessage

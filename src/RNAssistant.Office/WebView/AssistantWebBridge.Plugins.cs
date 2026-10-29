@@ -12,7 +12,19 @@ namespace RNAssistant.Office.WebView
 {
     public sealed partial class AssistantWebBridge
     {
-        public PluginApplicationService Plugins { get; set; }
+        private PluginApplicationService _plugins;
+        public PluginApplicationService Plugins
+        {
+            get { return _plugins; }
+            set
+            {
+                if (_plugins?.Conversations != null)
+                    _plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+                _plugins = value;
+                if (_plugins?.Conversations != null)
+                    _plugins.Conversations.ModelRequestDiagnostics += ReportModelRequestDiagnostics;
+            }
+        }
         private Task<object> HandlePluginAsync(string id, BridgeOperationId operation, JToken payload, CancellationToken token)
         {
             if(Plugins==null)throw new PluginException("plugins_unavailable","Plugin host is unavailable.");
@@ -102,14 +114,16 @@ namespace RNAssistant.Office.WebView
         private void ReportWorkspaceProgress(string id, ProjectChatRequest request, WorkspaceRunEvent progress)
         {
             if (_disposed || _postMessageJson == null || progress == null ||
-                progress.ModelProgress == null && progress.Receipt == null) return;
+                progress.ModelProgress == null && progress.Receipt == null && progress.Cursor == null) return;
             _postMessageJson(Newtonsoft.Json.JsonConvert.SerializeObject(new ProgressMessage
             {
                 Type = "progress", Id = id,
                 Payload = new ProgressPayload { WorkspaceId = request.WorkspaceId, SessionId = request.SessionId,
-                    Phase = progress.Receipt == null ? "model_progress" : "input_receipt",
-                    RunId = progress.Receipt?.RunId ?? progress.ModelProgress?.RunId,
-                    ModelProgress = progress.ModelProgress, InputReceipt = progress.Receipt }
+                    Phase = progress.Receipt != null ? "input_receipt" :
+                        progress.ModelProgress != null ? "model_progress" : "session_changed",
+                    RunId = progress.Receipt?.RunId ?? progress.ModelProgress?.RunId ?? progress.Summary?.RunId,
+                    ModelProgress = progress.ModelProgress, InputReceipt = progress.Receipt,
+                    Cursor = progress.Cursor }
             }));
         }
     }

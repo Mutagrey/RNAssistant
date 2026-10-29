@@ -308,12 +308,13 @@ namespace RNAssistant.Office.WebView
                                 string.Equals(clientTiming.Kind, "chatNavigation", StringComparison.Ordinal) ||
                                 string.Equals(clientTiming.Kind, "skillSource", StringComparison.Ordinal)) &&
                             clientTiming.BridgeMs >= 0 && clientTiming.BridgeMs <= 600000 &&
+                            clientTiming.QueueMs >= 0 && clientTiming.QueueMs <= 600000 &&
                             clientTiming.RenderMs >= 0 && clientTiming.RenderMs <= 600000 &&
                             clientTiming.Messages >= 0 && clientTiming.Messages <= 100000 &&
-                            clientTiming.BridgeMs + clientTiming.RenderMs >=
+                            clientTiming.QueueMs + clientTiming.BridgeMs + clientTiming.RenderMs >=
                                 (string.Equals(clientTiming.Kind, "startup", StringComparison.Ordinal) ? 500 : 250))
                             RuntimeLog.Info("WebView render timing: kind=" + clientTiming.Kind +
-                                ", bridge=" + clientTiming.BridgeMs + "ms, render=" +
+                                ", queue=" + clientTiming.QueueMs + "ms, bridge=" + clientTiming.BridgeMs + "ms, render=" +
                                 clientTiming.RenderMs + "ms, messages=" + clientTiming.Messages + ".");
                         responsePayload = null;
                         break;
@@ -940,14 +941,28 @@ namespace RNAssistant.Office.WebView
                 var handleMs = timer.ElapsedMilliseconds;
                 var serialized = Success(id, responsePayload);
                 var serializeMs = timer.ElapsedMilliseconds - handleMs;
-                if ((type == BridgeOperationId.Init &&
+                var slowChatResponse = (type == BridgeOperationId.Init &&
                         handleMs + serializeMs >= 500) ||
                     ((handleMs + serializeMs >= 250) && (type == BridgeOperationId.SubmitChatInput ||
                         type == BridgeOperationId.GetChatState ||
-                        type == BridgeOperationId.SelectChat ||
-                        type == BridgeOperationId.ListChats)))
+                        type == BridgeOperationId.SelectChat || type == BridgeOperationId.ListChats ||
+                        type == BridgeOperationId.GetProjectChat || type == BridgeOperationId.GetProjectChats ||
+                        type == BridgeOperationId.SubmitProjectChat));
+                if (slowChatResponse)
+                {
                     RuntimeLog.Info("Bridge response timing: type=" + type + ", handle=" + handleMs +
                         "ms, serialize=" + serializeMs + "ms, chars=" + serialized.Length + ".");
+                    try
+                    {
+                        _postMessageJson?.Invoke(JsonConvert.SerializeObject(new BridgeTimingMessage
+                        {
+                            Type = "bridgeTiming",
+                            Payload = new BridgeTimingDto { RequestId = id, Operation = type.ToString(),
+                                HandleMs = handleMs, SerializeMs = serializeMs, ResponseChars = serialized.Length }
+                        }));
+                    }
+                    catch { /* Timing is advisory; it cannot fail the chat response. */ }
+                }
                 return serialized;
             }
             catch (OperationCanceledException ex)
@@ -1015,6 +1030,8 @@ namespace RNAssistant.Office.WebView
             }
             _controller.StopInboxWorkers();
             _controller.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
+            if (Plugins?.Conversations != null)
+                Plugins.Conversations.ModelRequestDiagnostics -= ReportModelRequestDiagnostics;
             _controller.ResourceAuthorityChanged -= ReportResourceChanged;
             lock (_resourceChangesSync)
             {
