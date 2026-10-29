@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
@@ -54,6 +55,30 @@ namespace RNAssistant.Harness
             var unmarked = AgentTranscript.CreateAssistantMessage(V8Envelope(), null, null, AgentResponseStatuses.Refused);
             AssertTrue(!ConversationResponseHistoryReader.Read(unmarked).Success,
                 "JSON-looking text without accepted origin is not inferred as v8 history");
+
+            var rejectedPatchArguments = new Dictionary<string, object> {
+                ["patch"] = "*** Update Target: VBA module: Scene3D\n@@\nmissing diff prefix\n" };
+            var rejectedPatchJson = JsonConvert.SerializeObject(rejectedPatchArguments);
+            ResourcePatch.ValidateCall(rejectedPatchJson);
+            string error;
+            AssertTrue(ModelToolResultProjection.ValidateAcceptedCall(
+                    new ToolCall("patch_rejected", ResourceMutationToolCatalog.Patch, rejectedPatchJson), out error),
+                "rejected patch syntax does not make current-schema history incompatible");
+            var rejectedCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                Id = "patch_rejected", Name = ResourceMutationToolCatalog.Patch, Arguments = rejectedPatchArguments },
+                "Trying an edit.", "Apply the requested source change.", null, ToolResultRoles.User, FixtureCallOrigin());
+            var rejectedResult = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                ToolCallId = "patch_rejected", ToolId = ResourceMutationToolCatalog.Patch },
+                RNAssistant.Core.Tools.Contracts.ToolResult.Error("Patch rejected before any write."), ToolResultRoles.User);
+            ConversationProtocolContext.EnsureCurrentHistory(new ChatSession {
+                Messages = new List<ChatMessage> { rejectedCall, rejectedResult } });
+            AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("patch_old",
+                    ResourceMutationToolCatalog.Patch, "{\"target\":\"VBA module: Scene3D\",\"hunks\":[]}"), out error),
+                "retired patch argument shape still requires explicit reset");
+            AssertTrue(!ModelToolResultProjection.ValidateAcceptedCall(new ToolCall("patch_uri",
+                    ResourceMutationToolCatalog.Patch,
+                    "{\"patch\":\"*** Update Target: rna://vba/module\\n@@\\n-old\\n+new\\n\"}"), out error),
+                "runtime URI patch targets remain outside the semantic contract");
         }
 
         private static void ConversationHistoryRejectsAmbiguousRecords()

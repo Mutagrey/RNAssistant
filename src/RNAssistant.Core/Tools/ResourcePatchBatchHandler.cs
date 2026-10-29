@@ -171,7 +171,25 @@ namespace RNAssistant.Core.Tools
             string error;
             if (!ToolSchemaSupport.ValidateArguments(args, Newtonsoft.Json.Linq.JObject.Parse(schema), false, out error))
                 throw new TextPatternException("invalid_patch", "Stored core.patch uses an incompatible contract. Start a new chat; stored history is preserved.");
-            foreach (var section in Parse((string)args["patch"])) TextPatch.Parse(section.Body);
+            if (HasUriLikeTarget((string)args["patch"]))
+                throw new TextPatternException("invalid_patch", "Stored core.patch contains a URI target instead of a semantic target.");
+        }
+        // A rejected patch body remains valid history. Runtime preparation owns
+        // syntax checks before dispatch; history checks only model-facing shape.
+        public static bool HasUriLikeTarget(string patch)
+        {
+            using (var reader = new StringReader(patch ?? string.Empty))
+            {
+                string line;
+                while ((line = reader.ReadLine()) != null)
+                {
+                    if (!line.StartsWith("*** Update Target: ", StringComparison.Ordinal)) continue;
+                    var target = line.Substring(19).Trim();
+                    if (target.StartsWith("rna:", StringComparison.OrdinalIgnoreCase) || target.Contains("://"))
+                        return true;
+                }
+            }
+            return false;
         }
         internal static IDictionary<string, object> Arguments(ResourcePatchSection section)
         { return new Dictionary<string, object> { ["target"] = section.Target, ["patch"] = section.Body }; }
