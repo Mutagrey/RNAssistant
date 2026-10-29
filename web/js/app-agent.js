@@ -205,7 +205,12 @@ function groupAgentRunSteps(timeline) {
 
     if (kind === "step") {
       // Live markers can arrive after the same step was admitted from saved calls.
-      if (stepId && seenSteps[stepId]) return;
+      if (stepId && seenSteps[stepId]) {
+        var existingStep = seenSteps[stepId];
+        existingStep.marker = item;
+        if (!existingStep.message) existingStep.message = stepMessage || activityTitle(activity);
+        return;
+      }
       if (!current || !stepId || current.id !== stepId) {
         startStep(stepId, stepMessage || activityTitle(activity));
       } else if (!current.message) {

@@ -72,6 +72,11 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.match(runView.failureReasonLabel("ReflectionDisabled"), /Рефлексия отключена.*корректировка не запрашивалась/);
   assert.match(runView.failureReasonLabel("repeated_tool_no_progress"), /отклонённые действия/);
   assert.equal(runView.runNotice(runView.normalize(state("completed"))), null);
+  const completedUnknown = runView.normalize(Object.assign(state("completed-unknown"), {
+    ExecutionHealth: "unknown", UnknownEffects: 1, UnverifiedWrites: 1
+  }));
+  assert.equal(runView.runNotice(completedUnknown), null,
+    "the completed answer already carries its typed unknown-effect warning");
   const claimedCreate = runView.normalize(Object.assign(state("claimed-create"), {
     Reason: "model_finish", ModelOutcome: "completed",
     ModelResults: [{ Summary: "script.js created", Assessment: "satisfied", Evidence: ["E1"] }]

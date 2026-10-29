@@ -1,5 +1,28 @@
 # Stabilization progress
 
+## Patch, неизвестный эффект и схемы — 2026-10-29
+
+Owner: Core Agent/Tools, Office и Workspace model session, Web timeline.
+`core.patch` не выдаёт `Changed/ok`, если для изменённой цели нет exact
+after-state: результат становится `unknown` без подстановки соседнего ресурса.
+Непрозрачный макрос без typed цели может завершить run с честным `unknown` без
+невыполнимого требования инспекции; повтор внутри run возможен только через новое
+явное подтверждение, авто-повтор остаётся запрещён. Бюджетный отказ больше не
+сбрасывает уже допущенные схемы в Office и Workspace. Повторное уведомление в
+composer после завершённого run убрано; обновление notice и поздний marker
+сохраняют порядок шагов. Host-neutral: целевые universal mutation, kernel,
+tool-pack и Workspace admission проверки, Web run-view/timeline. Фото пользователя
+подтверждает повторные попытки правки `DrawPoly`, но не устанавливает фактическое
+состояние live VBE; Windows/Office/WebView2 evidence остаётся открытым.
+Дополнительные фото показывают два отказа **до записи**: `vba_code_invalid`
+для буквального `\"` в VBA source и `context_not_found` для Module1. Видимый
+фрагмент второго patch начинается с ориентира `</RNAssistantTool>`, но полный
+аргумент не виден: отсутствовал ли сам ориентир или EOF-маркер, не установлено.
+Чистая вставка с найденным `@@` ориентиром без EOF теперь получает `invalid_patch`
+с объяснением про `*** End of File`; тест проверяет append после VBA-маркера.
+Inline-сравнение перестало повторять «Отказ без эффекта» дважды.
+Live VBE пока не квалифицирован.
+
 ## Общие source tools — 2026-10-29
 
 Owner: Core Plan/source owners, Application Workspace, Office tools.

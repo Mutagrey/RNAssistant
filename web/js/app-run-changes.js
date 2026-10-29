@@ -135,7 +135,7 @@
           block.appendChild(element("p", "run-changes-caption", "@@ " + (hunk.offset >= 0 ? "символ " + hunk.offset : "фрагмент " + (index + 1)) + " · −" + hunk.removed + " / +" + hunk.inserted + " @@"));
           window.RNAssistantTextDiff.renderInline(block, window.RNAssistantTextDiff.format(hunk.before || "", hunk.after || ""));
         });
-      } else block.appendChild(element("p", "run-changes-caption", availability(item)));
+      } else if (!targetStatus(item)) block.appendChild(element("p", "run-changes-caption", availability(item)));
       parent.appendChild(block);
     });
     if (!result.complete) parent.appendChild(element("p", "run-changes-caption", "Часть сравнений недоступна."));

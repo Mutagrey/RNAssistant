@@ -145,6 +145,8 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
     assert.match(await page.locator('.inline-change').nth(1).textContent(), /Эффект неизвестен/);
     assert.match(await page.locator('.inline-change').nth(2).textContent(), /Выполнение не начиналось/);
     assert.match(await page.locator('.inline-change').nth(3).textContent(), /Отказ без эффекта/);
+    assert.equal((await page.locator('.inline-change').nth(3).textContent()).split('Отказ без эффекта').length - 1, 1,
+      'a rejected patch shows its status once');
     assert.match(await page.locator('.inline-change').nth(0).textContent(), /saved/);
     assert.match(await page.locator('.inline-change').nth(1).textContent(), /planned/);
     await page.evaluate(() => {

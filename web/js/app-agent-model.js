@@ -174,12 +174,7 @@ function recordActivityTimeline(items, activity) {
     if (activityToolCallId(copy) && !isActiveTimelineStatus(existingStatus) && isActiveTimelineStatus(nextStatus)) return existing;
     if (activityToolCallId(copy) || activityKind(copy) === "step" || isActiveTimelineStatus(existingStatus) ||
         (existingStatus === nextStatus && activityResultMessage(existing) === activityResultMessage(copy))) {
-      if (activityKind(copy) === "notice" && i < items.length - 1) {
-        items.splice(i, 1);
-        items.push(copy);
-      } else {
-        items[i] = copy;
-      }
+      items[i] = copy;
       return copy;
     }
     break;

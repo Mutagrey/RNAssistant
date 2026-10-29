@@ -210,11 +210,13 @@
 
   function runNotice(viewState) {
     if (!viewState) return null;
-    if (viewState.executionHealth === "unknown" && viewState.unknownEffects > 0)
-      return { title: "Результат изменений не подтверждён",
-        text: "Проверьте фактическое состояние перед повторной записью.", warning: true };
     if (viewState.lifecycle === "failed")
       return { title: "Работа остановлена", text: failureReasonLabel(viewState.reason), warning: false };
+    // Completed runs already show the typed outcome beside the answer. Repeating
+    // the same generic warning in the composer obscures the next user message.
+    if (viewState.lifecycle !== "completed" && viewState.executionHealth === "unknown" && viewState.unknownEffects > 0)
+      return { title: "Результат действия неизвестен",
+        text: "Проверьте фактическое состояние перед повторной записью.", warning: true };
     return null;
   }
 
