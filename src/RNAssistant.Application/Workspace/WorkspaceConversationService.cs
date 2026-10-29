@@ -1221,7 +1221,7 @@ namespace RNAssistant.Runtime
                     new WorkspaceResourceHandler(_resources.Select("file"), _skillPublications, () => _skills, _observed, true, _plans,
                         maximumFileReadCharacters,
                         office?.ResourceFind, _chatAttachments));
-                Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts line diffs with @@ text anchors from an observed excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
+                Register(registry, entries, "core.read", (_mode.AllowsSkills ? "Read a UTF-8 file (default type=file, target is its workspace-relative path) or published skill instructions (type=skill, target is the skill ID). referencePath belongs only to a listed skill reference. For a workspace Plan use type=plan, omit target for the selected plan or supply an exact unique title. Optional version reads history without selecting it; a current read selects its exact revision. File text delivery follows this run's model input budget; Plans and published skill sources use the same budget and excerpt selectors; reading an excerpt does not activate a skill. For large files use startLine and positive lineCount, or zero-based UTF-16 startChar and charCount for a long single line; each slice observes the current version. core.patch accepts structured substring edits and full-line context from a delivered excerpt of a UTF-8 source. No partial skill activation." : "Read UTF-8 text by workspace-relative target. File text delivery follows this run's model input budget; use startLine/positive lineCount or zero-based UTF-16 startChar/charCount for bounded excerpts of files.") +
                     " For VBA files, procedure selects a unique procedure by name; optional procedureKind=sub/function/property-get/property-let/property-set disambiguates accessors. Do not combine with line/character selectors." +
                     " For PDF files or PDF attachments, representation=text with startPage/pageCount reads consecutive complete pages within the model budget; nextPageIndex continues the range. Use pageIndex with optional startChar/charCount for a long page. Extracted text may omit visual or scanned content." +
                     " Use type=attachment with the exact semantic target from discovery to read a visual selection; it does not authorize a source edit." +
@@ -1556,7 +1556,9 @@ namespace RNAssistant.Runtime
 
             public async Task<AgentModelResult> SendAsync(AgentModelRequest request, CancellationToken cancellationToken)
             {
+                var contextTimer = System.Diagnostics.Stopwatch.StartNew();
                 var authority = CaptureModelAuthority(cancellationToken);
+                var authorityMs = contextTimer.ElapsedMilliseconds;
                 EnsureCallableSet();
                 var admission = _callable.PreparePending((tools, state) => CanAdmitTools(authority, request, tools, state));
                 if (admission != null)
@@ -1568,6 +1570,7 @@ namespace RNAssistant.Runtime
                 }
                 _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _callable.Tools, request.StepId, _settings);
                 var preparation = PrepareRequest(_skillSurface);
+                var setupMs = contextTimer.ElapsedMilliseconds - authorityMs;
                 ModelContextSnapshot snapshot;
                 try
                 {
@@ -1596,6 +1599,7 @@ namespace RNAssistant.Runtime
                     catch (PromptBudgetExceededException remaining)
                     { return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, remaining.Message); }
                 }
+                var compileMs = contextTimer.ElapsedMilliseconds - authorityMs - setupMs;
                 var options = preparation.Options;
                 options.ReasoningEnabled = _session.ReasoningEnabled;
                 options.TraceStepId = request.StepId;
@@ -1611,6 +1615,14 @@ namespace RNAssistant.Runtime
                 _modelTrace.Configure(options);
                 _session.LastContextReceipt = receipt;
                 _chats.Commit(_session, new ConversationCommit());
+                options.ContextPreparation = new LlmContextPreparationTiming
+                {
+                    TotalMs = contextTimer.ElapsedMilliseconds,
+                    AuthorityMs = authorityMs,
+                    SetupMs = setupMs,
+                    CompileMs = compileMs,
+                    TraceMs = contextTimer.ElapsedMilliseconds - authorityMs - setupMs - compileMs
+                };
                 var result = await _protocol.GetResponseAsync(preparation.CreateRequest(snapshot, _catalog,
                     notice => _compiler.CompileRepair(snapshot, notice)),
                     ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
@@ -2275,7 +2287,7 @@ namespace RNAssistant.Runtime
                     }
                     List<PatchPreview> patchPreview = null;
                     if (_operation == ResourceMutationToolCatalog.Patch)
-                        patchPreview = _files.ValidateTextEdits(_workspace, path, source.Resource, Value(context, "patch"), token, source);
+                        patchPreview = _files.ValidateTextEdits(_workspace, path, source.Resource, TextPatch.FromArguments(context.Arguments), token, source);
                     if (_operation == ResourceMutationToolCatalog.Replace)
                         _files.ReplaceMatches(_workspace, path, source.Resource, Value(context, "query"), Value(context, "replacement"),
                             Mode(context), Flag(context, "matchCase"), Count(context), null, token, true);
@@ -2296,7 +2308,7 @@ namespace RNAssistant.Runtime
                 if (_operation == ResourceMutationToolCatalog.Move || _operation == ResourceMutationToolCatalog.Copy || _operation == ResourceMutationToolCatalog.Delete) return true;
                 if (_operation != ResourceMutationToolCatalog.Patch) return false;
                 return source.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
-                    !TextPatch.Parse(Value(context, "patch")).RequiresWholeSource;
+                    !TextPatch.FromArguments(context.Arguments).RequiresWholeSource;
             }
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)
@@ -2335,7 +2347,7 @@ namespace RNAssistant.Runtime
                             : _files.ReplaceText(_workspace, path, expected, Value(context, "content"), context.MarkDispatchPossible, _operation);
                     else
                         changed = _operation == ResourceMutationToolCatalog.Patch
-                            ? _files.ApplyTextEdits(_workspace, path, expected, Value(context, "patch"), context.MarkDispatchPossible, token, effectOperation: _operation)
+                            ? _files.ApplyTextEdits(_workspace, path, expected, TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(new[] { _delivered[path] })), context.MarkDispatchPossible, token, effectOperation: _operation)
                             : _files.ReplaceMatches(_workspace, path, expected, Value(context, "query"), Value(context, "replacement"),
                                 Mode(context), Flag(context, "matchCase"), Count(context), context.MarkDispatchPossible, token, effectOperation: _operation);
                     path = changed.RelativePath;
@@ -2362,7 +2374,7 @@ namespace RNAssistant.Runtime
             {
                 var code = error is WorkspaceFileException file ? file.Code : error is ResourceRequestException resource ? resource.ErrorCode :
                     error is TextPatternException pattern ? pattern.ErrorCode : null;
-                if (code == "source_observation_required" || code == "target_conflict" || code == "replacement_search_required")
+                if (code == "source_observation_required" || code == "observation_required" || code == "target_conflict" || code == "replacement_search_required")
                 {
                     try
                     {
