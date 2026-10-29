@@ -37,6 +37,8 @@ namespace RNAssistant.Harness
 
         public static int Main(string[] args)
         {
+            if (args != null && args.Length == 2 && args[0] == "--capability-inventory")
+                return CapabilityInventory(args[1]);
             if (args != null && args.Length == 4 && args[0] == "--workspace-profile-live")
                 return WorkspaceToolProfileDiagnostic(args[1], args[2], args[3]);
             if (args != null && args.Length == 2 && args[0] == "--resource-workflow-live")

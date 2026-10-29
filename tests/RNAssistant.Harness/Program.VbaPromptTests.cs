@@ -2600,19 +2600,22 @@ namespace RNAssistant.Harness
                 "VBA discovery fallback selects the aggregate project target");
             AssertContains(editing.BodyMarkdown, "whole reads are complete only when the source body is included",
                 "VBA skill distinguishes a successful read from source omitted by the context budget");
-            AssertContains(editing.BodyMarkdown, "one `core.patch` call",
-                "VBA skill groups related original-snapshot edits");
-            AssertContains(editing.BodyMarkdown, "observed source",
+            var patch = ResourceMutationToolCatalog.GetTools().Single(tool => tool.Id == ResourceMutationToolCatalog.Patch);
+            AssertContains(editing.BodyMarkdown, "Follow the current `core.patch` schema",
+                "VBA skill delegates common patch rules to the always-present Core schema");
+            AssertContains(patch.Description, "related existing sources",
+                "shared patch schema groups related original-snapshot edits");
+            AssertContains(editing.BodyMarkdown, "Exact patches can use relevant excerpts",
                 "VBA skill does not require whole-source observation for focused patches");
-            AssertContains(editing.BodyMarkdown, "Reuse current recovery/after-source",
+            AssertContains(editing.BodyMarkdown, "Reuse included recovery/after-source",
                 "VBA skill reuses current source after compaction");
-            AssertContains(editing.BodyMarkdown, "source_changed",
-                "VBA skill distinguishes missing context from host access failures");
+            AssertContains(patch.Description, "stale/unobserved source fail the package",
+                "shared patch schema describes pre-write conflicts");
             AssertContains(editing.BodyMarkdown, "never backslash escaping",
                 "VBA skill distinguishes JSON transport escaping from VBA string syntax");
             AssertContains(editing.BodyMarkdown, "never creates a missing module", "patch remains existing-only");
-            AssertContains(editing.BodyMarkdown, "*** Update Target: <semantic target>",
-                "insertions follow the current patch schema");
+            AssertContains(patch.ArgumentSchemaJson, "*** Update Target: <semantic target>",
+                "shared patch schema owns the section syntax");
             AssertContains(editing.BodyMarkdown, "resources.move", "skill explains the strict rename intent");
             AssertTrue(editing.BodyMarkdown.IndexOf("mode=rename", StringComparison.Ordinal) < 0,
                 "skill no longer teaches the retired write branch");

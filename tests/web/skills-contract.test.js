@@ -118,12 +118,33 @@ function library(skills) {
   assert.equal(/StoragePath|storagePath|response\s*\|\|\s*\[\]/.test(source), false);
   assert.match(source, /expectedPackageRevision/);
   assert.match(source, /skillLibraryMutationRequestType/);
-  assert.match(chatSessionSource,
-    /state\.skills\s*=\s*skillLibraryItemsFromContract\(init\.skills\)/);
+  assert.match(chatSessionSource, /applyChatState\(init\)/);
+  assert.match(chatStateSource, /applyLibraryCatalogState\(response\)/);
   assert.match(chatStateSource,
     /skillLibraryItemsFromContract\(response\.skills\)/);
   assert.doesNotMatch(chatStateSource, /response\.Skills/);
   console.log("PASS skill contract: shipped UI has no path identity or unversioned response fallback");
 }
 
-console.log("OK 4/4");
+{
+  vm.runInContext(chatStateSource, context, { filename: "app-chat-state.js" });
+  context.state.skills = [];
+  context.state.selectedSkillIndex = -1;
+  context.state.skillLibraryDirty = false;
+  assert.equal(context.applyLibraryCatalogState({ skills: library([item("skills.workspace.files", "6".repeat(64))]) }), true);
+  assert.equal(context.state.skills[0].Id, "skills.workspace.files");
+  context.state.selectedSkillIndex = 0;
+  context.applyLibraryCatalogState({ skills: library([
+    item("skills.chat.visualization", "7".repeat(64)), item("skills.workspace.files", "8".repeat(64), "Updated")
+  ]) });
+  assert.equal(context.state.selectedSkillIndex, 1, "selection follows identity after catalog refresh");
+  assert.equal(context.state.skills[1].Description, "Updated");
+  const accepted = context.state.skills;
+  assert.equal(context.applyLibraryCatalogState({}), false);
+  assert.equal(context.state.skills, accepted, "unrelated chat updates do not clear the catalog");
+  assert.throws(() => context.applyLibraryCatalogState({ skills: [] }), /typed Skill Library/);
+  assert.equal(context.state.skills, accepted, "invalid legacy payload cannot replace accepted state");
+  console.log("PASS skill contract: shared chat projection applies typed catalogs and retains selection");
+}
+
+console.log("OK 5/5");

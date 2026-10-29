@@ -1,6 +1,12 @@
 # Tool Library and capability truth
 
 Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+Текущий [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
+78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
+включая условные и manual-only записи. Начальный профиль модели — 10 доступных
+Core tools. Private owner commands и динамические пользовательские tools в эти
+78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
+предметными правилами без копирования всего контракта.
 
 Conversation permission composition is owned by
 [ConversationRunPolicy](conversation-protocol.md#unified-agent-audit-and-cutover-2026-10-13).

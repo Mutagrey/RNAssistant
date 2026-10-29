@@ -658,75 +658,54 @@ namespace RNAssistant.Harness
 
         private static void BuiltInSkillReferencesResolveToCatalogs()
         {
-            WithTempPaths(delegate(AppDataPaths paths)
+            var inventory = CaptureCapabilityInventory();
+            var toolIds = new HashSet<string>(inventory.UniqueTools, StringComparer.Ordinal);
+            var skillIds = new HashSet<string>(inventory.UniqueSkills, StringComparer.Ordinal);
+            Action<string, string> assertReferences = (owner, text) =>
             {
-                var toolIds = new HashSet<string>(StringComparer.Ordinal);
-                var skillIds = new HashSet<string>(StringComparer.Ordinal);
-                IReadOnlyList<SkillDefinition> commonSkills = null;
-                foreach (var host in new[] { "Excel", "Word", "PowerPoint", "Outlook" })
+                foreach (Match match in Regex.Matches(text ?? string.Empty,
+                    @"(?<!RN\.)\b(?:common|core|skills|resources|html|files|vba|office|js|tools|prompts|task|plan|web|plugins|excel|word|powerpoint|outlook)\.[a-z0-9_]+(?:\.[a-z0-9_]+)*\b",
+                    RegexOptions.CultureInvariant))
                 {
-                    var adapter = FakeOfficeAdapter.ForHost(host);
-                    var settings = new AppSettings();
-                    var executor = new OfficeToolExecutor(
-                        adapter,
-                        new VbaJournalStore(paths),
-                        new SkillStore(paths),
-                        new ToolStore(paths),
-                        () => settings,
-                        value => settings = value,
-                        paths);
-                    toolIds.UnionWith(OfficeToolCatalog.ForHost(host).Select(tool => tool.Id));
-                    toolIds.UnionWith(executor.GetControllerTools().Select(tool => tool.Id));
-
-                    var skills = BuiltInSkillProvider.GetSkills(adapter);
-                    AssertEqual(skills.Count, skills.Select(skill => skill.Id).Distinct(StringComparer.Ordinal).Count(),
-                        host + " built-in skill ids are unique");
-                    foreach (var skill in skills)
-                    {
-                        AssertTrue(!string.IsNullOrWhiteSpace(skill.Description), skill.Id + " has a description");
-                        AssertTrue(!string.IsNullOrWhiteSpace(skill.BodyMarkdown), skill.Id + " has a body");
-                        AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
-                            skill.Id + " does not teach the retired result flag");
-                        skillIds.Add(skill.Id);
-                    }
-                    if (commonSkills == null)
-                        commonSkills = skills.Where(skill => string.Equals(skill.Host, "Common", StringComparison.Ordinal)).ToArray();
+                    var following = text.Substring(match.Index + match.Length);
+                    if (following.StartsWith(".*", StringComparison.Ordinal) || following.StartsWith("*", StringComparison.Ordinal))
+                        continue;
+                    AssertTrue(toolIds.Contains(match.Value) || skillIds.Contains(match.Value),
+                        owner + " references cataloged capability " + match.Value);
                 }
-
-                Action<string, string> assertReferences = (owner, text) =>
-                {
-                    foreach (Match match in Regex.Matches(text ?? string.Empty,
-                        @"\b(?:common|excel|word|powerpoint|outlook)\.[a-z0-9_]+\b",
-                        RegexOptions.CultureInvariant))
-                    {
-                        if (match.Index + match.Length < text.Length && text[match.Index + match.Length] == '*')
-                            continue;
-                        AssertTrue(toolIds.Contains(match.Value) || skillIds.Contains(match.Value),
-                            owner + " references cataloged capability " + match.Value);
-                    }
-                };
-
-                foreach (var skill in commonSkills ?? new SkillDefinition[0])
-                    assertReferences(skill.Id, skill.BodyMarkdown);
-
-                var root = FindHarnessRepositoryRoot();
-                foreach (var relativePath in new[]
-                {
-                    "src/RNAssistant.Office/Services/ExcelBuiltInSkillProvider.cs",
-                    "src/RNAssistant.OfficeHosts/WordAdapter.cs",
-                    "src/RNAssistant.OfficeHosts/PowerPointAdapter.cs",
-                    "src/RNAssistant.OfficeHosts/OutlookAdapter.cs"
-                })
-                {
-                    var source = File.ReadAllText(Path.Combine(root,
-                        relativePath.Replace('/', Path.DirectorySeparatorChar)));
-                    assertReferences(relativePath, source);
-                    AssertContains(source, "## Definition of done",
-                        relativePath + " defines evidence-based completion");
-                    AssertContains(source, "Exact loaded tool schemas remain authoritative",
-                        relativePath + " keeps argument authority in current schemas");
-                }
-            });
+            };
+            var definitions = new[] { "Excel", "Word", "PowerPoint", "Outlook" }
+                .SelectMany(host => BuiltInSkillProvider.GetSkills(FakeOfficeAdapter.ForHost(host)))
+                .Concat(WorkspaceSkillProvider.GetSkills()).ToArray();
+            foreach (var skill in definitions)
+            {
+                AssertTrue(skill.Id.StartsWith("skills.", StringComparison.Ordinal) &&
+                    !skill.Id.StartsWith("skills.skills.", StringComparison.Ordinal), "one skills namespace: " + skill.Id);
+                AssertTrue(!string.IsNullOrWhiteSpace(skill.Description), skill.Id + " has a description");
+                AssertTrue(!string.IsNullOrWhiteSpace(skill.BodyMarkdown), skill.Id + " has a body");
+                AssertTrue(skill.BodyMarkdown.IndexOf("TOOL_RESULT ok=true", StringComparison.OrdinalIgnoreCase) < 0,
+                    skill.Id + " does not teach the retired result flag");
+                assertReferences(skill.Id, skill.BodyMarkdown);
+            }
+            var root = FindHarnessRepositoryRoot();
+            // Fake Word/PowerPoint/Outlook host skills are minimal: inspect the shipped instructions too.
+            foreach (var relativePath in new[]
+            {
+                "src/RNAssistant.Core/Models/AppSettings.cs",
+                "src/RNAssistant.Office/Services/ExcelBuiltInSkillProvider.cs",
+                "src/RNAssistant.OfficeHosts/WordAdapter.cs",
+                "src/RNAssistant.OfficeHosts/PowerPointAdapter.cs",
+                "src/RNAssistant.OfficeHosts/OutlookAdapter.cs"
+            })
+            {
+                var source = File.ReadAllText(Path.Combine(root,
+                    relativePath.Replace('/', Path.DirectorySeparatorChar)));
+                assertReferences(relativePath, source);
+                if (relativePath.EndsWith("AppSettings.cs", StringComparison.Ordinal)) continue;
+                AssertContains(source, "## Definition of done", relativePath + " defines evidence-based completion");
+                AssertContains(source, "Exact loaded tool schemas remain authoritative",
+                    relativePath + " keeps argument authority in current schemas");
+            }
         }
 
         private static void SettingsNormalizeInvalidNumericValues()

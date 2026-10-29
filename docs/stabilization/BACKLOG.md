@@ -14,14 +14,15 @@
 
 ## Интеграционные fixtures после перехода на Core tools — 2026-10-28
 
-Owner: Harness / Core Tools / Office Tools. Полный набор не запускался. В catalog
+Owner: Harness / Core Tools / Office Tools. Полный набор не запускался. В оставшихся catalog
 и owner suites (`Program.ToolStoreTests.cs`, `Program.VbaPromptTests.cs`,
 `Program.ResourceGatewayTests.cs` и других) остаются expectations удалённых имён
 и обращения к приватным source-командам через public catalog. Перенести оставшиеся
 модельные сценарии на `core.*`/`resources.*` и actual Core/admission profile;
 низкоуровневые owner tests явно отделить от public API.
 Не возвращать старые aliases ради fixtures. После переноса запускать только
-затронутые сценарии. Известный отдельный stale Skill Library assertion — ниже.
+затронутые сценарии. Два основных catalog fixtures, полные dotted references и
+Skill Library init уже переключены и проверены; см. [аудит](../audits/capability-inventory-2026-10-29.md).
 
 ## Восстановление рабочих сценариев чата — 2026-10-26
 
@@ -432,14 +433,6 @@ Owner: bootstrap `prototypes/ui/index.html` / `app.js`. При серийном 
 вне автоматизированного browser-сеанса пока не установлены. Проверить загрузку
 зависимостей и ответы локального сервера отдельно от изменений визуального стиля.
 Это наблюдение прототипа, не evidence сбоя production WebView2.
-
-## Устаревшая проверка Skill Library init — 2026-10-19
-
-Owner: `tests/web/skills-contract.test.js`. Выборочный запуск проходит первые три
-проверки, затем требует прямое `state.skills = skillLibraryItemsFromContract(init.skills)`
-в `app-chat-session.js`. Этой строки нет и на неизменённом `HEAD`; текущая загрузка
-проходит через `applyChatState`/`applyLibraryCatalogState`. Сверить assertion с
-действующим путём и сохранить negative controls в отдельной правке теста.
 
 ## CLI smoke fixtures lag current admission contracts — 2026-10-14
 

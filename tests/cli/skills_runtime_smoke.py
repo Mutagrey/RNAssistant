@@ -34,11 +34,11 @@ def run_case(root):
     install(state, "workspace.extra", "Workspace", "WORKSPACE_HOST_BODY")
     install(state, "excel.hidden", "Excel", "OFFICE_ONLY_BODY")
     install(state, "common.disabled", "Common", "DISABLED_BODY", enabled=False)
-    install(state, "skills.skills.workspace.files", "Common", "SHADOWED_BUILTIN_BODY")
+    install(state, "skills.workspace.files", "Common", "SHADOWED_BUILTIN_BODY")
     requests, server_errors = [], []
     responses = [
         call("core.find", type="skill"),
-        call("core.read", type="skill", target="skills.skills.workspace.files"),
+        call("core.read", type="skill", target="skills.workspace.files"),
         call("core.read", type="skill", target="common.example"),
         # A skill with the same semantic name does not authorize a file edit.
         call("core.write", target="common.example", content="UNSAFE_REPLACEMENT"),
@@ -107,7 +107,7 @@ def run_case(root):
         assert (workspace / "app.txt").read_text() == "fixed"
         assert (workspace / "common.example").read_text() == "ORIGINAL_FILE_BYTES"
         initial = text_at(0)
-        for target in ("skills.skills.workspace.files", "common.example", "workspace.extra"):
+        for target in ("skills.workspace.files", "common.example", "workspace.extra"):
             assert target in initial, target
         for hidden in ("PUBLISHED_CORE_MARKER", "WORKSPACE_HOST_BODY", "OFFICE_ONLY_BODY", "DISABLED_BODY",
                        "SHADOWED_BUILTIN_BODY", "WORKSPACE_FILE_IS_NOT_INSTALLED_INSTRUCTIONS", "excel.hidden", "common.disabled"):
@@ -136,7 +136,7 @@ def run_case(root):
         assert "UNPUBLISHED_CORE_DRIFT" not in json.dumps(requests)
         assert "UNPUBLISHED_REFERENCE_DRIFT" not in json.dumps(requests)
         for read_only in (False, True):
-            responses.extend([call("core.skills.load", id="skills.skills.workspace.files" if read_only else "skills.workspace.web.verify.repair"), DONE])
+            responses.extend([call("core.skills.load", id="skills.workspace.files" if read_only else "skills.workspace.web.verify.repair"), DONE])
             env["RNA_BROWSER_EXECUTABLE"] = "/missing/chromium"
             hidden = run(*(["--read-only"] if read_only else []), iterations="2")
             assert hidden.returncode == 5, (hidden.stdout, hidden.stderr)
@@ -144,7 +144,7 @@ def run_case(root):
             metadata, _ = json.JSONDecoder().raw_decode(prompt.split("Available skill metadata: ", 1)[1])
             ids = {item["target"] for item in metadata["items"]}
             # Discovery retains unavailable metadata; admission owns capability refusal.
-            assert "skills.workspace.web.verify.repair" in ids and "skills.skills.workspace.files" in ids, ids
+            assert "skills.workspace.web.verify.repair" in ids and "skills.workspace.files" in ids, ids
             assert "Required tool unavailable" in text_at(len(requests) - 1)
             assert "SELECTED_SKILL workspace." not in text_at(len(requests) - 1)
         print("PASS CLI skills: shared publication, metadata/body separation, host/enabled/shadow filtering, "

@@ -51,6 +51,15 @@ causal trace/journal, Core/skill admission и полный HTML в user/native t
 через CAS/replay. В этом срезе runtime не менялся; live модели и Office не проверялись.
 Полный Harness и Office/VSTO validation не запускались.
 
+Чистка каталога: проверено сравнение до/после объединения — 91 → 78 встроенных ID,
+10 начальных Core tools, 16 skills. Исправлен двойной префикс workspace skill;
+общие правила patch сосредоточены в schema, VBA/Workspace guidance сокращены.
+Два catalog fixtures переведены на Core, проверка ссылок охватывает полные dotted
+ID и default prompts, Skill Library init fixture использует текущий shared projection.
+6 целевых Harness и 5 Web проверок прошли в host-neutral режиме; текущий C# срез
+проверялся отдельно от параллельной незавершённой bridge-правки.
+[Подсчёт, очистка и предложения](../audits/capability-inventory-2026-10-29.md).
+
 ## Общий контракт текстовых мутаций и имён — 2026-10-28
 
 Owner: Core Tools / Application Workspace / Office Tools; Library и лента — Web.
@@ -69,7 +78,7 @@ Chrome проверил Inspector и inline diff в узкой панели, д�
 Дополнительно прошли 3 проверки native VBA/schema/большого модуля и проверки
 границ зависимостей/включения source files. Public history проверяет общую schema;
 операционные сообщения не выдают runtime IDs/hash из owner result.
-Известный старый assertion `skills-contract.test.js` остаётся в BACKLOG.
+Старый assertion `skills-contract.test.js` исправлен в чистке каталога 2026-10-29 выше.
 Часть старых integration fixtures ещё требует переноса с private source IDs на
 общий API; полный Harness не объявляется пройденным (см. BACKLOG).
 

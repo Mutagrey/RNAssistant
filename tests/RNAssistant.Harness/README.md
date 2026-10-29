@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+`--capability-inventory /tmp/rna-capabilities.json` writes the built-in catalog
+union and per-host tool/skill IDs from isolated stores (JS off/on, Workspace and
+plugin source additions; conditional browser ID is source-declared). It does not
+call a model, browser or Office. The [2026-10-29 inventory](../../docs/audits/capability-inventory-2026-10-29.md)
+compares 91 → 78 public IDs, with 16 skills and the 10-tool initial Core profile.
+`tools: catalog merges visible tools`, `tools: VBA facade is common across hosts`
+and `settings: built-in skill references` check current publication, shared schemas
+and full dotted references, including Workspace/default prompts. The shared Skill
+Library projection is covered by `node tests/web/skills-contract.test.js`.
+
 `universal mutations:` covers the shared public source contract: original-snapshot
 line hunks, distant/ordered anchors, overlapping/repeated text, UTF-8/BOM/CRLF/EOF and large streamed files,
 shared regex/literal matching, upsert and owner routing, delivered VBA excerpts,
@@ -56,8 +66,9 @@ roles, exact canonical read vs unrelated activity preview, scoped R resolution,
 missing CAS, ambiguity, Error/Unknown, unbound search captions and tree presentation.
 `tool-result-presentation.test.js` checks inert captions and exact slice disclosure;
 `model-context-layout.test.js` checks actual-request captions and chat layout.
-The [result matrix](../../docs/audits/tool-result-presentation-matrix.md) inventories
-all 91 static IDs without claiming real Office execution for every handler.
+The historical [result matrix](../../docs/audits/tool-result-presentation-matrix.md)
+records the earlier 91 static IDs and presentation paths; current counts are in
+the inventory above. Neither claims real Office execution for every handler.
 
 `model refs:` checks typed E/R labels, canonical/raw preservation, all result roles,
 atomic allocation and stale writers, failed commits, restart/removal, resource versions

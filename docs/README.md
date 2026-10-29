@@ -42,11 +42,12 @@ Application-владельца и срез с переключением обо�
 [Парное сравнение broad/compact профилей](audits/tool-profile-comparison.md)
 фиксирует реальные траектории, размеры запросов и ограничения пилота.
 
-[Таблица всех встроенных skills/tools и пересмотр описаний](audits/skills-tools-description-review.md)
-содержит сравнение семейств и следующие этапы объединения.
-
-[Матрица результатов tools и подписей источников](audits/tool-result-presentation-matrix.md)
-перечисляет 91 статический ID, model/storage/UI paths, проверенные инварианты и gaps.
+[Текущий подсчёт tools и skills](audits/capability-inventory-2026-10-29.md):
+91 → 78 встроенных tool ID, 16 skills, 10 начальных Core tools; сравнение по hosts,
+исправленная чистка инструкций и следующие кандидаты на сокращение.
+[Предыдущий аудит описаний](audits/skills-tools-description-review.md) и
+[матрица результатов tools](audits/tool-result-presentation-matrix.md) сохраняют
+исторический каталог из 91 ID, model/storage/UI paths и прежние gaps.
 
 Согласованный [план Tools](proposals/tools-architecture-plan.md) и
 [аудит встроенного каталога](audits/tools-architecture-current-state.md) описывают

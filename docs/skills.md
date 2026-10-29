@@ -24,6 +24,15 @@ authority.
 
 ## Current implementation
 
+There are 16 unique built-in skill IDs across Office and Workspace; host catalogs
+overlap and custom packages are counted separately. The current Workspace files ID
+is `skills.workspace.files`. The accidental `skills.skills.workspace.files` name
+is not an alias: stale selections must explicitly load the current package;
+user history and custom package files remain untouched. Common patch syntax and
+boundary rules belong to the always-present Core schema. Workspace/VBA guidance
+retains source observation and domain-specific behavior without duplicating the
+whole patch contract. Counts and remaining cleanup: [inventory](audits/capability-inventory-2026-10-29.md).
+
 Built-in skills are supplied by the application and host adapter. Custom skills are
 stored under `%AppData%/RNAssistant/skills/<host>/<skill>/` as one `SKILL.md` plus
 up to 64 direct UTF-8 supporting files under `references/`, `scripts/` and `assets/`.

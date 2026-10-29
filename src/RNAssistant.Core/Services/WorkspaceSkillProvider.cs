@@ -5,7 +5,7 @@ namespace RNAssistant.Core.Services
 {
     public static class WorkspaceSkillProvider
     {
-        public const string FilesId = "skills.skills.workspace.files";
+        public const string FilesId = "skills.workspace.files";
         public const string WebId = "skills.workspace.web.verify.repair";
         public const string PluginId = "skills.workspace.plugin.authoring";
 
@@ -20,7 +20,7 @@ Use for tasks that create, inspect or edit real workspace files.
 
 1. Identify the required files and completion checks. Use core.find for an unfamiliar directory (recursive/glob selectors are available), and core.search for literal or regex content across scope=workspace; choose the scope and depth yourself. Search snippets are not source-read authorization; known relative paths can be read directly with core.read (type=file).
 2. Before editing, reuse current source already included from a read or verified after-state; read missing/stale source. core.write creates a missing path or replaces a completely observed existing file; runtime guards existence and revision. Use core.patch for focused edits.
-3. core.patch accepts only a patch string. Each target begins with *** Update Target: <semantic target>; @@ starts a hunk, @@ followed by a complete source line adds a distant anchor. Prefix full lines with -, + or a space. Consecutive anchors form an ordered chain, not a function scope; repeated matches require more context. All hunks address the original snapshot. For a start insertion include the first unchanged line; for an end insertion use *** End of File. Context-free insertion needs complete observed source (empty or EOF). Existing final-newline state is preserved; core.write controls full rewrites. Group related independent edits in one call; if an edit depends on a prior result, use separate calls with an intermediate read. All targets prepare before any write; execution is sequential, not atomic. Inspect every target result after failure: confirmed changes remain, unknown requires reconciliation, and the remainder may not have started. Never replay a package automatically. Use core.search then core.replace for an explicitly counted literal/regex replacement. The file owner streams large source and result; core.write requires complete current source and a deliberate whole-file change.
+3. Follow the current core.patch schema for section/hunk syntax, anchors, insertion boundaries and per-target outcomes. Copy context from observed source, disambiguate with more context and reconcile unknown effects before another write. Use core.search then core.replace for an explicitly counted literal/regex replacement. The file owner streams large source and result; core.write requires complete current source and a deliberate whole-file change.
 4. Verify the changed behavior with the available task checks. A write read-back confirms bytes, not application behavior. A skill read supplies instructions, not file source or mutation permission.
 5. Reuse current verified after-state for final source assessment. If RUNTIME_CONTEXT.readAcceptance is present, complete its remaining exact final-file reads and expected paths; later writes invalidate those reads, and browser checks or skill reads do not satisfy them. Report only verified outcomes and explicit remaining limitations.
 
@@ -28,7 +28,7 @@ Keep all paths relative to the selected workspace. Respect the available tool ca
                 Skill(WebId, "Local web verify and repair",
                     "Build or repair a local multi-file HTML/CSS/JS app, run browser checks, fix failures and meet explicit final-read acceptance when present.",
 @"# Local web verify and repair
-Use for a local HTML/CSS/JS application when web.verify and file mutation tools are available. Load skills.skills.workspace.files with core.skills.load for source inspection and guarded file edits.
+Use for a local HTML/CSS/JS application when web.verify and file mutation tools are available. Load skills.workspace.files with core.skills.load for source inspection and guarded file edits.
 
 1. Keep HTML, CSS and JS in real workspace files with local relative assets. When the task requires offline operation, use no CDN, external requests or dependencies.
 2. For an existing broken app, run web.verify before editing when reproducing the failure will guide the fix; reuse relevant current failure evidence when available. A clear source defect can be corrected directly. For a new app, create its files first. Verify the resulting app with web.verify and its entryPath.
@@ -38,7 +38,7 @@ Use for a local HTML/CSS/JS application when web.verify and file mutation tools 
                 Skill(PluginId, "Plugin authoring and SVG icon",
                     "Build or edit a local plugin source package, including changes requested through visual annotations, and draw its SVG icon.",
 @"# Plugin authoring and SVG icon
-Use only in the source workspace of a plugin with plugin.json. Load skills.skills.workspace.files for exact source reads and mutations. Read README.md, plugin.json and the relevant current files before editing. Preserve existing behavior and declarations while changing the requested feature.
+Use only in the source workspace of a plugin with plugin.json. Load skills.workspace.files for exact source reads and mutations. Read README.md, plugin.json and the relevant current files before editing. Preserve existing behavior and declarations while changing the requested feature.
 
 For an icon brief, draw the icon yourself as a complete static SVG document in icon.svg. Give it a viewBox fitting the artwork tightly with a small safety margin, without a large empty canvas; the host sizes it to 24 pixels while preserving the aspect ratio. Colors, fills, strokes, gradients, transforms, SVG styles and local defs/references are supported and preserved. Use currentColor only for a theme-colored design. Keep it compact and legible at 20 px. Do not include scripts, event handlers, animation, foreignObject, external resources or raster images. No image-generation model is needed. Set plugin.json icon to icon.svg and include icon.svg in files; update an existing icon through an exact source read and file patch/replace. The default puzzle icon remains until a validated SVG is published.
 

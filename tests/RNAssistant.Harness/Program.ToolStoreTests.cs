@@ -265,7 +265,8 @@ namespace RNAssistant.Harness
                 var catalog = new ToolCatalogService(adapter, executor).GetVisibleTools();
 
                 AssertTrue(HasTool(catalog, "excel.sheet.add"), "built-in tool visible");
-                AssertTrue(HasTool(catalog, "vba.module.patch"), "common controller VBA tool visible");
+                AssertTrue(HasTool(catalog, "core.patch"), "shared patch tool visible");
+                AssertTrue(!HasTool(catalog, "vba.module.patch"), "private VBA patch is not a public tool");
                 AssertTrue(HasTool(catalog, "core.read"), "common built-in tool visible");
                 AssertTrue(HasTool(catalog, "excel.custom"), "host custom tool visible");
                 AssertTrue(!HasTool(catalog, "word.hidden"), "other host custom tool hidden");
@@ -284,9 +285,16 @@ namespace RNAssistant.Harness
                     AssertTrue(HasTool(tools, ResourceToolCatalog.ReadToolId) &&
                         HasTool(tools, ResourceToolCatalog.FindToolId),
                         host + " exposes shared resource reads");
-                    AssertTrue(HasTool(tools, "vba.module.write"), host + " exposes common VBA upsert");
-                    AssertTrue(HasTool(tools, "vba.module.rename"), host + " exposes common VBA rename");
-                    AssertTrue(HasTool(tools, "vba.module.patch"), host + " exposes common VBA patch");
+                    var mutations = ResourceMutationToolCatalog.GetTools().ToArray();
+                    foreach (var mutation in mutations)
+                    {
+                        var published = tools.Single(tool => tool.Id == mutation.Id);
+                        AssertEqual(mutation.ArgumentSchemaJson, published.ArgumentSchemaJson,
+                            host + " uses the shared " + mutation.Id + " schema");
+                        AssertEqual("Common", published.Host, "source mutation facade is host-neutral");
+                    }
+                    AssertTrue(!tools.Any(tool => tool.Id.StartsWith("vba.module.", StringComparison.Ordinal)),
+                        host + " omits private VBA source commands");
                     AssertTrue(!HasTool(tools, "common.vba_read_module") &&
                         !HasTool(tools, "common.vba_search_code") &&
                         !HasTool(tools, "common.vba_list_backups") &&
@@ -294,9 +302,6 @@ namespace RNAssistant.Harness
                         !HasTool(tools, "common.vba_list_modules") &&
                         !HasTool(tools, "common.vba_replace_text") &&
                         !HasTool(tools, "common.vba_create_module"), host + " omits redundant public aliases");
-                    var vbaTools = tools.Where(tool => (tool.Id ?? string.Empty).StartsWith("common.vba_", StringComparison.OrdinalIgnoreCase)).ToList();
-                    AssertEqual(5, vbaTools.Count, host + " exposes only the five mutation-specific VBA tools");
-                    AssertTrue(vbaTools.All(tool => string.Equals(tool.Host, "Common", StringComparison.OrdinalIgnoreCase)), host + " VBA facade is host-neutral");
                     AssertTrue(!HasTool(tools, host.ToLowerInvariant() + ".vba_apply_patch"), host + " does not publish a host-specific patch facade");
                     var hostPrefix = host.ToLowerInvariant() + ".";
                     AssertTrue(!OfficeToolCatalog.ForHost(adapter.HostName).Any(tool =>
@@ -316,7 +321,10 @@ namespace RNAssistant.Harness
 
                 var outlook = FakeOfficeAdapter.ForHost("Outlook");
                 var outlookExecutor = new OfficeToolExecutor(outlook, new VbaJournalStore(paths), new SkillStore(paths));
-                AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "vba.module.patch"), "Outlook does not expose VBA facade");
+                AssertTrue(HasTool(outlookExecutor.GetControllerTools(), "core.patch"),
+                    "Outlook exposes the shared patch for supported local sources");
+                AssertTrue(!outlookExecutor.GetControllerTools().Any(tool => tool.Id.StartsWith("vba.module.", StringComparison.Ordinal)),
+                    "Outlook does not expose private VBA commands");
                 AssertTrue(!HasTool(outlookExecutor.GetControllerTools(), "office.macro.run"), "Outlook does not expose unsupported Application.Run");
 
                 var excel = FakeOfficeAdapter.ForHost("Excel");
