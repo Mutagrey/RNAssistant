@@ -194,12 +194,16 @@ independent local read clears only matching ResourceIdentity targets with comple
 whole coverage, non-immutable evidence and ObservedAt later than that completion.
 Unrelated catalog reads, partial/stale/historical evidence, failed reads, writes,
 confirmations and rejected replays do not satisfy this floor. Multiple unknown
-resources require each target; missing identity/time remains unresolved rather
-than inferring authority from text. Continuation reconstructs this from terminal facts.
+resources require each target. A managed mutation with missing identity/time
+remains unresolved rather than inferring authority from text. An opaque external
+action with no typed resource target has no satisfiable inspection gate: the model
+may finish with unknown health, and an identical call needs a new explicit user
+confirmation. Auto-confirmed calls cannot repeat it. Continuation reconstructs
+these boundaries from terminal facts.
 This is an inspection prerequisite, not proof of goal success or reconciliation.
 The model still compares actual state with the requested result; questions use the
 typed question tool and unresolved outcomes must be reported honestly. Inspection
-never clears cumulative uncertainty or permits replay of the uncertain call.
+never clears cumulative uncertainty or permits automatic replay of the uncertain call.
 `RunViewState.GoalVerification=not_assessed` records that no independent general
 goal check occurred. It remains separate from verified write/no-change counts in
 the typed state; clean execution health never certifies the requested outcome or
@@ -669,10 +673,11 @@ projected semantic data and are not passed through a domain envelope again.
 
 - Optional tool schemas remain callable through durable admission events. A later
   turn in the same chat reuses unchanged exact schemas when the prior capability
-  read remains in chat history and the complete request fits its budget. Edited or
-  cleared history, changed schemas, host/mode drift, or insufficient budget fall
-  back to the finite core; budget fallback is explicit in the model request. The
-  current `schemaLoaded` flag and complete callable schemas are authoritative.
+  read remains in chat history. Edited or cleared history, changed schemas, or
+  host/mode drift can invalidate that admission. If the complete request exceeds
+  its budget, the request fails explicitly; budget pressure never silently removes
+  an unchanged admitted schema. The current `schemaLoaded` flag and complete
+  callable schemas are authoritative.
 - Skill selection is carried in existing `run.updated` state across user turns,
   cancellation, restart and compaction. Each request revalidates package/tool pins
   and current policy, then injects complete selected instructions and compatible

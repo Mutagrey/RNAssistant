@@ -270,11 +270,12 @@ namespace RNAssistant.Core.Tools
         private ToolPolicySnapshot EffectivePolicy(ToolHandlerRegistry.RegisteredTool tool)
         {
             var captured = tool.Policy();
-            var policy = tool.Registration.Policy;
-            if (_runPolicy != null) return new ToolPolicySnapshot(captured.ToolId,
-                captured.Revision,
-                _runPolicy.EffectiveToolPolicy(captured.ToolId, policy, tool.Registration.Binding));
-            if (!_autoConfirm || !policy.RequiresConfirmation) return captured;
+            var policy = _runPolicy == null ? tool.Registration.Policy :
+                _runPolicy.EffectiveToolPolicy(captured.ToolId, tool.Registration.Policy, tool.Registration.Binding);
+            if (!_autoConfirm || !policy.RequiresConfirmation)
+                return _runPolicy == null ? captured : new ToolPolicySnapshot(captured.ToolId, captured.Revision, policy);
+            // The snapshot must describe the actual dispatch gate. Otherwise the
+            // kernel could mistake an auto-confirmed repeat for a fresh user approval.
             return new ToolPolicySnapshot(captured.ToolId, captured.Revision,
                 new ToolPolicy(policy.Effect, policy.Verification, false,
                     policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode));

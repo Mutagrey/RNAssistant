@@ -1802,7 +1802,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void ToolPackCarryoverFallsBackWithinBudget(bool oversized = true)
+        private static void ToolPackCarryoverRemainsAdmittedWithinBudget(bool oversized = true)
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -1810,7 +1810,7 @@ namespace RNAssistant.Harness
                     .Select(value => "value_" + value + "_" + new string(oversized ? '\u754c' : 'x', 12)));
                 var optional = new ToolCatalogEntry {
                     Id = "fixture.carried_large", Host = "Excel", Name = "Large carried schema",
-                    Description = "Budget fallback fixture.", BuiltIn = true, Enabled = true, AgentCanRun = true,
+                    Description = "Budget retention fixture.", BuiltIn = true, Enabled = true, AgentCanRun = true,
                     ArgumentSchemaJson = new JObject {
                         ["type"] = "object",
                         ["properties"] = new JObject { ["value"] = new JObject {
@@ -1845,6 +1845,22 @@ namespace RNAssistant.Harness
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
                     ContextWindowOverrideTokens = 12000, MaxTokens = 512, AutoCompressContext = false };
                 AssertToolPackBudgetFixture(catalog, settings, oversized);
+                if (oversized)
+                {
+                    using (var next = ConversationModelSession.CreateAsync(adapter, null,
+                        new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
+                        EventStore(store), ChatModes.Agent, "Use the small context.", session,
+                        NewContext(adapter), settings, catalog, null, null, false, null,
+                        CancellationToken.None).GetAwaiter().GetResult())
+                    {
+                        RuntimeThrows<PromptBudgetExceededException>(() => next.PrepareRequestAsync("small-step",
+                            new ModelProtocolCallContext(new string[0]), CancellationToken.None).GetAwaiter().GetResult());
+                    }
+                    AssertTrue(new ToolPackAdmissionJournal(EventStore(store), session).ReadAccepted()
+                        .Any(item => item.RequestedSchemas.Any(schema => schema.Id == optional.Id)),
+                        "budget refusal preserves the durable exact schema admission");
+                    return;
+                }
                 using (var next = ConversationModelSession.CreateAsync(adapter, null,
                     new AttachmentAnalysisService((s, m, o, u, c) => Task.FromResult(new LlmCompletionResult())),
                     EventStore(store), ChatModes.Agent, "Use the small context.", session,
@@ -1853,23 +1869,13 @@ namespace RNAssistant.Harness
                 {
                     var request = next.PrepareRequestAsync("small-step",
                         new ModelProtocolCallContext(new string[0]), CancellationToken.None).GetAwaiter().GetResult();
-                    AssertToolPackWireFits(request, oversized ? "dropped carryover" : "retained carryover");
-                    if (!oversized)
-                    {
-                        AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id),
-                            "original carried schema fits and must not be discarded");
-                        AssertTrue(!FlattenSimple(request.AcceptedMessages).Contains("tool_pack_carryover_budget"),
-                            "fitting carryover has no false budget refusal");
-                        return;
-                    }
-                    AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id),
-                        "oversized prior optional schema yields to the current request budget");
-                    AssertContains(FlattenSimple(request.AcceptedMessages), "tool_pack_carryover_budget",
-                        "budget fallback is explicit in the model request");
+                    AssertToolPackWireFits(request, "retained carryover");
+                    AssertTrue(request.CallableTools.Any(tool => tool.Id == optional.Id),
+                        "original carried schema fits and remains callable");
                     next.RebindAuthority(catalog, new SkillCatalogSnapshot(null), settings, NewContext(adapter), 0);
-                    AssertTrue(!next.CreateRequest("small-step-2", new ModelProtocolCallContext(new string[0]))
+                    AssertTrue(next.CreateRequest("small-step-2", new ModelProtocolCallContext(new string[0]))
                             .CallableTools.Any(tool => tool.Id == optional.Id),
-                        "catalog rebind does not silently restore a dropped prior schema");
+                        "catalog rebind preserves an unchanged carried schema");
                 }
             });
         }

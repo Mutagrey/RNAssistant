@@ -47,8 +47,6 @@ namespace RNAssistant.Office.Services
         private string _requestStepId;
         private string _completionFeedback;
         private LlmRunCache _runCache;
-        private bool _carryOverOnly;
-        private bool _skipPriorAdmissions;
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
             ContextCompactionService contextCompactionService, AttachmentAnalysisService attachmentAnalysisService,
@@ -106,12 +104,7 @@ namespace RNAssistant.Office.Services
         internal ModelProtocolRequest CreateRequest(string stepId, ModelProtocolCallContext callContext)
         {
             _requestStepId = stepId;
-            try { _lastSnapshot = CompileCurrent(true); }
-            catch (PromptBudgetExceededException) when (_carryOverOnly)
-            {
-                DropCarryOverForBudget();
-                _lastSnapshot = CompileCurrent(true);
-            }
+            _lastSnapshot = CompileCurrent(true);
             var request = CreateRequestFromSnapshot(stepId, callContext);
             _lastSnapshot = null;
             return request;
@@ -172,17 +165,14 @@ namespace RNAssistant.Office.Services
             AppSettings settings, DocumentContext context, long catalogGeneration)
         {
             if (catalogGeneration < 0) throw new ArgumentOutOfRangeException(nameof(catalogGeneration));
-            bool currentAdmission;
-            var restoredAdmissions = _toolPackJournal.ReadAccepted(out currentAdmission);
+            var restoredAdmissions = _toolPackJournal.ReadAccepted();
             var pack = CallableToolPack.Create(_mode, _adapter.HostName, _session.LastRun?.RunId, catalog,
-                _skipPriorAdmissions && !currentAdmission ? null : restoredAdmissions);
+                restoredAdmissions);
             _runnableCatalog = catalog; _toolPack = pack; _skillSnapshot = skills; _skills = skills.Skills;
-            if (currentAdmission) _skipPriorAdmissions = false;
-            _carryOverOnly = !_skipPriorAdmissions && !currentAdmission && pack.OptionalSchemaCount > 0;
             _catalogGeneration = catalogGeneration;
             _settings = settings;
             _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
-            if (!_skipPriorAdmissions) _packState = null;
+            _packState = null;
             _lastSnapshot = null;
         }
 
@@ -319,7 +309,6 @@ namespace RNAssistant.Office.Services
             // live pack unchanged and prevents the next request from being sent.
             _toolPackJournal.Append(admission, nextStepId);
             _toolPack.Publish(admission);
-            if (admission.Admitted) { _carryOverOnly = false; _skipPriorAdmissions = false; }
             _packState = admission.StateMessage;
             return true;
         }
@@ -385,28 +374,20 @@ namespace RNAssistant.Office.Services
             _context = context == null ? null : JsonConvert.DeserializeObject<DocumentContext>(JsonConvert.SerializeObject(context));
             _currentAttachments = attachments;
             _currentUserId = ConversationInputMessage.Latest(session)?.Id;
-            bool currentAdmission;
-            var restoredAdmissions = _toolPackJournal.ReadAccepted(out currentAdmission);
+            var restoredAdmissions = _toolPackJournal.ReadAccepted();
             _toolPack = CallableToolPack.Create(
                 mode,
                 _adapter == null ? string.Empty : _adapter.HostName,
                 session == null || session.LastRun == null ? null : session.LastRun.RunId,
                 runnableCatalog,
                 restoredAdmissions);
-            _carryOverOnly = restoredAdmissions.Count > 0 &&
-                !currentAdmission && _toolPack.OptionalSchemaCount > 0;
             cancellationToken.ThrowIfCancellationRequested();
             return Task.CompletedTask;
         }
 
         private async Task PrepareCurrentSnapshotAsync(CancellationToken cancellationToken)
         {
-            try { await PrepareCurrentSnapshotCoreAsync(cancellationToken).ConfigureAwait(false); }
-            catch (PromptBudgetExceededException) when (_carryOverOnly)
-            {
-                DropCarryOverForBudget();
-                await PrepareCurrentSnapshotCoreAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await PrepareCurrentSnapshotCoreAsync(cancellationToken).ConfigureAwait(false);
         }
 
         private async Task PrepareCurrentSnapshotCoreAsync(CancellationToken cancellationToken)
@@ -426,21 +407,6 @@ namespace RNAssistant.Office.Services
                 _lastSnapshot = CompileCurrent(true);
                 EnsureToolPackFits(_lastSnapshot, false);
             }
-        }
-
-        private void DropCarryOverForBudget()
-        {
-            _toolPack = CallableToolPack.Create(_mode, _adapter.HostName, _session.LastRun?.RunId,
-                _runnableCatalog);
-            _carryOverOnly = false;
-            _skipPriorAdmissions = true;
-            _lastSnapshot = null;
-            _packState = new ChatMessage { Role = "user", ProtocolMessage = true,
-                Content = "TOOL_PACK_RESTORE_STATE:\n" + new JObject {
-                    ["restored"] = false,
-                    ["code"] = "tool_pack_carryover_budget",
-                    ["instruction"] = "Prior optional schemas would exceed this request budget. The current callable core and capability catalog are authoritative; read and admit only optional schemas needed for this task."
-                }.ToString(Formatting.None) };
         }
 
         internal ContextReceipt LastReceipt { get { return _lastSnapshot == null ? null : _lastSnapshot.Receipt; } }

@@ -150,6 +150,8 @@ namespace RNAssistant.Harness
             var runtime = new ToolRuntime(registry, "agent", false, true, runPolicy: policy);
             var call = new ToolCall("call", "fixture.read", "{}");
             var context = new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 5);
+            AssertTrue(!context.Policy.RequiresConfirmation,
+                "auto-approved policy cannot masquerade as an explicit confirmation gate");
             var result = await runtime.ExecuteAsync(context, CancellationToken.None);
             AssertEqual(ToolExecutionOutcome.Ok, result.Outcome, "auto-approved write dispatches without registrar");
             AssertEqual(1, handler.PrepareCalls, "auto-confirm preserves preparation");
@@ -174,7 +176,9 @@ namespace RNAssistant.Harness
                     (c, preparation) => "pending", runPolicy: policy);
                 call = new ToolCall("code", "package.code", "{}");
                 var snapshot = runtime.Describe(call);
-                AssertTrue(snapshot.Policy.RequiresConfirmation && !snapshot.Policy.IndependentLocalRead, "code does not become a batch-safe read");
+                AssertEqual(!policy.AutoConfirmsToolActions, snapshot.Policy.RequiresConfirmation,
+                    "captured policy exposes the actual confirmation gate");
+                AssertTrue(!snapshot.Policy.IndependentLocalRead, "code does not become a batch-safe read");
                 result = await runtime.ExecuteAsync(new ToolExecutionContext(call, snapshot, "run", "turn", "step", DateTime.UtcNow, false, 5), CancellationToken.None);
                 AssertEqual(policy.AutoConfirmsToolActions ? 1 : 0, code.Calls, "dynamic code follows the same approval gate");
                 AssertEqual(!policy.AllowsConfirmation ? ToolExecutionOutcome.Error : automatic ? ToolExecutionOutcome.Ok : ToolExecutionOutcome.AwaitingConfirmation,

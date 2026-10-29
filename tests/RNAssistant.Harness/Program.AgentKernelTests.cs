@@ -499,6 +499,39 @@ namespace RNAssistant.Harness
             AssertEqual("repeated_unknown_tool_call", reason, "uncertain effect remains protected");
         }
 
+        private static async Task KernelOpaqueUnknownFinishesWithoutImpossibleInspection()
+        {
+            var f = new KernelFixture(KernelResponse(KernelCall("external")), KernelResponse());
+            f.Tools.Policies["external"] = new ToolPolicySnapshot("external", "r1", new ToolPolicy(
+                ToolEffect.External, ToolVerification.None, true, false, new[] { "agent" }));
+            f.Tools.OnExecute = (context, token) => Task.FromResult(KernelRecord(context, ToolExecutionOutcome.Unknown));
+            var result = await f.RunAsync(limits: new AgentRunLimits(2, 3));
+            AssertEqual(RunLifecycle.Completed, result.Summary.Lifecycle,
+                "opaque unknown has no target that a read can inspect");
+            AssertEqual(ExecutionHealth.Unknown, result.Summary.ExecutionHealth,
+                "finish preserves the uncertain effect");
+            AssertEqual(1, f.Tools.Calls.Count, "opaque action is not automatically repeated");
+            AssertEqual<string>(null, f.Model.Requests[1].CompletionFeedback,
+                "model receives no impossible inspection instruction");
+            var durable = Newtonsoft.Json.JsonConvert.DeserializeObject<ToolExecutionProgress>(
+                Newtonsoft.Json.JsonConvert.SerializeObject(result.AcceptedMessages.Single(m =>
+                    m.Kind == AgentMessageKind.ToolResult).Progress));
+            AssertTrue(durable.OpaqueAction, "opaque classification survives durable result replay");
+
+            var tracker = new AgentProgressTracker();
+            tracker.Restore(result.AcceptedMessages);
+            AssertTrue(!tracker.InspectionRequired, "replay does not invent an inspectable macro target");
+            string reason, message; int delay;
+            AssertTrue(tracker.CanDispatch(new ToolCall("again", "external", "{}"), out reason, out message,
+                out delay, f.Tools.Policies["external"]),
+                "a new explicit confirmation can authorize an opaque repeat");
+            var automatic = new ToolPolicySnapshot("external", "r2", new ToolPolicy(
+                ToolEffect.External, ToolVerification.None, false, false, new[] { "agent" }));
+            AssertTrue(!tracker.CanDispatch(new ToolCall("again", "external", "{}"), out reason, out message,
+                out delay, automatic), "auto-confirmed opaque action cannot repeat an unknown effect");
+            AssertEqual("repeated_unknown_tool_call", reason, "automatic repeat remains blocked");
+        }
+
         private static async Task KernelReadsAreSequentialAndBounded()
         {
             var f = new KernelFixture(KernelResponse(KernelCall("read"), KernelCall("read")), KernelResponse());

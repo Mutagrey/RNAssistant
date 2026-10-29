@@ -25,6 +25,7 @@ namespace RNAssistant.Core.Agent
         }
         private readonly List<PendingInspection> _inspections = new List<PendingInspection>();
         private readonly HashSet<string> _unknown = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _opaqueUnknown = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Failure> _failures = new Dictionary<string, Failure>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _seenResults = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _unchanged = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -53,6 +54,10 @@ namespace RNAssistant.Core.Agent
             var key = Signature(call);
             if (_unknown.Contains(key))
             {
+                // An opaque action can run again only through a fresh, explicit
+                // confirmation. Auto-confirmed policies keep the replay guard.
+                if (_opaqueUnknown.Contains(key) && policy?.RequiresConfirmation == true &&
+                    policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction) return true;
                 reason = "repeated_unknown_tool_call";
                 message = "This call was not dispatched: the previous identical call may have had an effect. Inspect its actual state or choose another operation; do not repeat the uncertain effect.";
                 return false;
@@ -93,11 +98,14 @@ namespace RNAssistant.Core.Agent
             if (progress.Outcome == ToolExecutionOutcome.Unknown)
             {
                 _unknown.Add(key);
+                if (progress.OpaqueAction) _opaqueUnknown.Add(key);
                 var targets = (effect?.Impacts ?? new ResourceImpact[0]).Select(impact => impact.Identity)
                     .Concat(progress.Recovery?.ResourceIdentity == null ? new ResourceIdentity[0] :
                         new[] { progress.Recovery.ResourceIdentity }).Distinct().ToArray();
-                // Missing typed identity cannot be supplied by a later unrelated read.
-                if (targets.Length == 0) targets = new ResourceIdentity[] { null };
+                // An opaque action has no inspectable target. Requiring a read
+                // here would make finish impossible and cause a model loop.
+                if (targets.Length == 0 && !progress.OpaqueAction)
+                    targets = new ResourceIdentity[] { null };
                 foreach (var target in targets)
                     _inspections.Add(new PendingInspection { Target = target, AfterUtc = progress.CompletedUtc });
                 return;

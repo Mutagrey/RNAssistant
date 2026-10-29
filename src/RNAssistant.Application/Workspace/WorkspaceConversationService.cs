@@ -1129,7 +1129,6 @@ namespace RNAssistant.Runtime
             private CallableToolSet _callable;
             private ToolPackAdmissionJournal _admissions;
             private ChatMessage _packState;
-            private bool _carryoverOnly;
             private readonly ResourceProviderRouter<WorkspaceFileResourceProvider> _resources;
             private readonly WorkspaceChatAttachmentResourceProvider _chatAttachments;
             private readonly ModelContextCompiler _compiler;
@@ -1547,7 +1546,6 @@ namespace RNAssistant.Runtime
                     _admissions.Append(admission, request.StepId);
                     _callable.Publish(admission);
                     _packState = admission.StateMessage;
-                    if (admission.Admitted) _carryoverOnly = false;
                     authority = CaptureModelAuthority(cancellationToken);
                 }
                 _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _callable.Tools, request.StepId, _settings);
@@ -1555,17 +1553,7 @@ namespace RNAssistant.Runtime
                 ModelContextSnapshot snapshot;
                 try
                 {
-                    try { snapshot = CompileCurrent(authority, preparation, request); }
-                    catch (PromptBudgetExceededException) when (_carryoverOnly)
-                    {
-                        _callable = NewCallableSet(null);
-                        _carryoverOnly = false;
-                        _packState = new ChatMessage { Role = "user", ProtocolMessage = true,
-                            Content = "TOOL_PACK_RESTORE_STATE:\n{\"restored\":false,\"code\":\"tool_pack_carryover_budget\",\"instruction\":\"Prior schemas exceed this request budget. Discover and read needed schemas again.\"}" };
-                        _skillSurface = SkillTaskService.Compile(_session, _skills, _toolPack, _catalog, _callable.Tools, request.StepId, _settings);
-                        preparation = PrepareRequest(_skillSurface);
-                        snapshot = CompileCurrent(authority, preparation, request);
-                    }
+                    snapshot = CompileCurrent(authority, preparation, request);
                 }
                 catch (PromptBudgetExceededException ex)
                 {
@@ -1645,10 +1633,8 @@ namespace RNAssistant.Runtime
             {
                 if (_callable != null) return;
                 _admissions = new ToolPackAdmissionJournal(new ChatEventStoreAdapter(_chats), _session);
-                bool current;
-                var restored = _admissions.ReadAccepted(out current);
+                var restored = _admissions.ReadAccepted();
                 _callable = NewCallableSet(restored);
-                _carryoverOnly = restored.Count > 0 && !current && _callable.OptionalSchemaCount > 0;
             }
 
             private bool CanAdmitTools(ModelAuthoritySnapshot authority, AgentModelRequest request,
