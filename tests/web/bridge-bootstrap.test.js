@@ -41,7 +41,7 @@ function createContext() {
 }
 
 function installChatProjection(context) {
-  for (const file of ["app-run-view-state.js", "app-chat-state.js", "app-chat-session.js"]) {
+  for (const file of ["app-conversation-state.js", "app-run-view-state.js", "app-chat-state.js", "app-chat-session.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
   context.document.body = { classList: { add() {}, remove() {} } };

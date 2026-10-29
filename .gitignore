@@ -5,6 +5,8 @@ obj/
 *.suo
 *.cache
 *.log
+__pycache__/
+*.pyc
 TestResults/
 /artifacts/
 Directory.Build.local.props
