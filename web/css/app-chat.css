@@ -669,6 +669,7 @@
 .agent-model-results ol { margin: 4px 0 0; padding-left: 20px; }
 .agent-model-results li { overflow-wrap: anywhere; }
 .agent-model-results small { color: var(--muted); }
+.agent-run-effect-facts { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .workspace-chat-activity { width: calc(100% - 36px); max-width: 100%; margin: 0 auto 10px; }
 .workspace-reflection-step {
   color: var(--muted); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere;

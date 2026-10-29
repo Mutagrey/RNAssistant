@@ -643,13 +643,21 @@ function appendAcceptedResponseDetails(node, message, runView) {
     node.appendChild(step);
   }
   var claimsInRunNotice = runNoticeIncludesModelResults(runView);
-  if (message.Results && message.Results.length && !claimsInRunNotice)
-    node.appendChild(renderModelResults(message.Results));
+  var results = runView && runView.modelResults.length ? runView.modelResults.map(function (item) {
+    return { Summary: item.summary, Assessment: item.assessment, Evidence: item.evidence };
+  }) : message.Results;
+  if (results && results.length && !claimsInRunNotice)
+    node.appendChild(renderModelResults(results));
+  var facts = window.RNAssistantRunViewState.effectFacts(runView);
+  if (facts) {
+    var evidence = document.createElement("div");
+    evidence.className = "agent-run-effect-facts";
+    evidence.textContent = facts;
+    node.appendChild(evidence);
+  }
 }
 
 function renderModelResults(results) {
-  var labels = { satisfied: "выполнено", partially_satisfied: "частично",
-    unverified: "не подтверждено", not_satisfied: "не выполнено" };
   var incomplete = results.some(function (item) { return item.Assessment !== "satisfied"; });
   var details = document.createElement("details"); details.className = "agent-model-results";
   details.open = incomplete;
@@ -665,7 +673,8 @@ function renderModelResults(results) {
   var list = document.createElement("ol");
   results.forEach(function (item) {
     var row = document.createElement("li");
-    row.textContent = item.Summary + " · " + (labels[item.Assessment] || "оценка неизвестна");
+    row.textContent = item.Summary + " · " +
+      window.RNAssistantRunViewState.assessmentLabel(item.Assessment);
     if (Array.isArray(item.Evidence) && item.Evidence.length) {
       var refs = document.createElement("small"); refs.textContent = " · результаты: " + item.Evidence.join(", ");
       row.appendChild(refs);

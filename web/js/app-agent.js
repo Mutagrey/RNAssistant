@@ -509,15 +509,13 @@ function appendAgentRunViewState(parent, runViewState, runId, showJournal) {
     details.className = "agent-model-results";
     details.open = modelResults.some(function (item) { return item.assessment !== "satisfied"; });
     var heading = document.createElement("summary");
-    heading.textContent = "Итоги и ссылки на результаты";
+    heading.textContent = "Оценка модели и ссылки на результаты";
     details.appendChild(heading);
     var list = document.createElement("ol");
     modelResults.forEach(function (item) {
       var row = document.createElement("li");
-      row.textContent = item.summary + " · " + ({
-        satisfied: "выполнено", partially_satisfied: "частично", unverified: "не подтверждено",
-        not_satisfied: "не выполнено"
-      }[item.assessment] || item.assessment);
+      row.textContent = item.summary + " · " +
+        window.RNAssistantRunViewState.assessmentLabel(item.assessment);
       if (item.evidence.length) {
         var refs = document.createElement("small");
         refs.textContent = " · результаты: " + item.evidence.join(", ");
@@ -605,7 +603,7 @@ function renderAgentRunArticle(run) {
       finalSection.appendChild(title);
     }
     appendAgentFinalAnswer(finalSection, finalMessage);
-    if (run.workspace && typeof appendAcceptedResponseDetails === "function")
+    if (typeof appendAcceptedResponseDetails === "function")
       appendAcceptedResponseDetails(finalSection, finalMessage.message, runViewState);
     body.appendChild(finalSection);
   }

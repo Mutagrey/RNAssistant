@@ -182,6 +182,11 @@ reflection progress handoff retires the provisional attempt before the next one;
 rejected drafts are never promoted into accepted history. Ordinary completed answers need no service card; partial,
 unverified and unsatisfied claims receive a separate notice. The run journal
 retains the exact accepted wire and tool-result correlation.
+For a finish with result claims, the shared Office/Workspace final renderer also
+shows the runtime count of actions with a confirmed change (including zero after
+read-only work), verified no-ops, failed calls and unknown effects. A direct information answer
+with no result claims gets no effect row. These counts describe tool effects, not
+independent verification of the user's whole task.
 Model-context replay sanitizes runtime identifiers from accepted `reason` and
 `message` without changing literal text in `tool_calls.arguments`.
 

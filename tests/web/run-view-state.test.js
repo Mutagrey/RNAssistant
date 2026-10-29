@@ -72,6 +72,27 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   assert.match(runView.failureReasonLabel("ReflectionDisabled"), /Рефлексия отключена.*корректировка не запрашивалась/);
   assert.match(runView.failureReasonLabel("repeated_tool_no_progress"), /отклонённые действия/);
   assert.equal(runView.runNotice(runView.normalize(state("completed"))), null);
+  const claimedCreate = runView.normalize(Object.assign(state("claimed-create"), {
+    Reason: "model_finish", ModelOutcome: "completed",
+    ModelResults: [{ Summary: "script.js created", Assessment: "satisfied", Evidence: ["E1"] }]
+  }));
+  assert.match(runView.effectFacts(claimedCreate), /подтверждённым изменением: 0/,
+    "a read-only finish cannot look like a confirmed file creation");
+  assert.match(runView.assessmentLabel("satisfied"), /модель считает/);
+  assert.equal(runView.assessmentLabel("toString"), "оценка модели неизвестна");
+  assert.equal(runView.effectFacts(runView.normalize(state("direct-answer"))), "",
+    "ordinary information answers need no effect row");
+  const changed = runView.normalize(Object.assign(state("real-change"), {
+    Reason: "model_finish", ModelOutcome: "completed", VerifiedWrites: 1, NoChangeWrites: 1,
+    ModelResults: [{ Summary: "saved", Assessment: "satisfied", Evidence: ["E1"] }]
+  }));
+  assert.match(runView.effectFacts(changed), /подтверждённым изменением: 1.*без изменений: 1/);
+  const uncertain = runView.normalize(Object.assign(state("uncertain", "completed", "unknown"), {
+    Reason: "model_finish", ModelOutcome: "partial", UnknownEffects: 1, FailedCalls: 1,
+    ModelResults: [{ Summary: "read done", Assessment: "satisfied", Evidence: ["E1"] },
+      { Summary: "write uncertain", Assessment: "unverified", Evidence: ["E2"] }]
+  }));
+  assert.match(runView.effectFacts(uncertain), /подтверждённым изменением: 0.*с ошибкой: 1.*неизвестным эффектом: 1/);
   assert.equal(runView.sessionRevision({ sessionRevision: 0 }), 0);
   assert.equal(runView.sessionRevision({ SessionRevision: 4 }), null);
   assert.equal(runView.chatRevision({ Revision: 0 }), 0);
@@ -214,8 +235,10 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
 
 {
   class Node {
-    constructor() { this.children = []; this.textContent = ""; this.attributes = {}; }
+    constructor() { this.children = []; this.textContent = ""; this.attributes = {};
+      this.classList = { add() {} }; }
     appendChild(child) { this.children.push(child); return child; }
+    append(...children) { children.forEach(child => this.appendChild(child)); }
     setAttribute(name, value) { this.attributes[name] = value; }
     addEventListener() {}
   }
@@ -244,6 +267,17 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   const ordinary = new Node();
   ui.appendAgentRunViewState(ordinary, runView.normalize(state("ordinary")), "run-ordinary");
   assert.equal(ordinary.children.length, 0, "ordinary completed answers have no service card");
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-messages.js"), "utf8"), ui,
+    { filename: "app-messages.js" });
+  const claimed = runView.normalize(Object.assign(state("claimed"), { Reason: "model_finish", ModelOutcome: "completed",
+    ModelResults: [{ Summary: "Created file", Assessment: "satisfied", Evidence: ["E1"] }] }));
+  const final = new Node();
+  ui.appendAcceptedResponseDetails(final, {}, claimed);
+  assert.match(flatten(final), /Created file/,
+    "Office receives the same accepted model claims from the shared run projection");
+  assert.match(flatten(final), /модель считает выполненным/);
+  assert.match(flatten(final), /подтверждённым изменением: 0/,
+    "the shared final renderer exposes zero confirmed changes next to a model claim");
   console.log("PASS run view state: partial model claim is visible without promoting task success");
 }
 

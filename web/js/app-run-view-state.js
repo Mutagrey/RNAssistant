@@ -13,6 +13,14 @@
   var modelOutcomes = { completed: true, partial: true, unable_to_complete: true };
   var assessments = { satisfied: true, partially_satisfied: true,
     unverified: true, not_satisfied: true };
+  var assessmentLabels = { satisfied: "модель считает выполненным",
+    partially_satisfied: "модель считает частично выполненным",
+    unverified: "модель не подтвердила", not_satisfied: "модель считает невыполненным" };
+
+  function assessmentLabel(value) {
+    return Object.prototype.hasOwnProperty.call(assessmentLabels, value)
+      ? assessmentLabels[value] : "оценка модели неизвестна";
+  }
 
   function text(source, key) {
     var result = source ? source[key] : null;
@@ -230,6 +238,16 @@
     return "Выполняется";
   }
 
+  function effectFacts(viewState) {
+    if (!viewState || viewState.lifecycle !== "completed" ||
+        !viewState.modelResults || !viewState.modelResults.length) return "";
+    var facts = ["Действий с подтверждённым изменением: " + viewState.verifiedWrites];
+    if (viewState.noChangeWrites) facts.push("без изменений: " + viewState.noChangeWrites);
+    if (viewState.failedCalls) facts.push("с ошибкой: " + viewState.failedCalls);
+    if (viewState.unknownEffects) facts.push("с неизвестным эффектом: " + viewState.unknownEffects);
+    return facts.join(" · ");
+  }
+
   window.RNAssistantRunViewState = Object.freeze({
     normalize: normalize,
     fromMessage: fromMessage,
@@ -241,6 +259,8 @@
     displayStatus: displayStatus,
     failureReasonLabel: failureReasonLabel,
     runNotice: runNotice,
-    outcomeLabel: outcomeLabel
+    outcomeLabel: outcomeLabel,
+    assessmentLabel: assessmentLabel,
+    effectFacts: effectFacts
   });
 }());
