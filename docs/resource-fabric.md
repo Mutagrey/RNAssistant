@@ -730,8 +730,8 @@ rename guard; observe the complete current source before retrying.
 Agent `core.write` creates a text/code file with an explicit extension;
 `resources.copy` creates an independent authored `File` from an exact complete
 uploaded or authored text source; `core.patch` replaces
-unique non-overlapping full-line hunks on the selected current authored revision,
-using `*** Update Target:` sections in its sole `patch` argument. Every target
+unique non-overlapping structured substring edits on the selected current authored revision,
+using `targets: [{target, edits}]`. Every target
 prepares before writes; sequential execution retains per-target partial/unknown facts.
 Copy requires an explicit `destination` such as `file: report.md`;
 the rename does not alter the source bytes.

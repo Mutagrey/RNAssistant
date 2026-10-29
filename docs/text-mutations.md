@@ -201,8 +201,9 @@ VBA требует полного кода в памяти для проверк
 `core.patch` и `core.replace` используют один guarded whole-module writer; прежний
 `VbaPatchEngine`, JSON-parser и patch-specific service/guards удалены. Строгая
 проверка snapshot, journal до COM и полный read-back остаются у существующего owner.
-Старый Workspace `PatchExact`/`PatchLargeExact` удалён; владельческий путь hunks
-единственный. Общие проверки байтов, journal и recovery сохранены.
+Старый Workspace `PatchExact`/`PatchLargeExact` удалён; типизированные edits идут
+через общий resolver и единственный staged writer. Общие проверки байтов, journal
+и recovery сохранены.
 HTML owner также получает готовые типизированные `ResolvedTextEdit`; прежние
 JSON-операции и `StructuredTextPatchEngine` удалены. Диагностика поиска принадлежит
 общему механизму, а проверка файла/ёмкости и публикация — HTML owner.
@@ -220,7 +221,8 @@ replacement символы `$1` буквальны, в regex — стандар�
 поиска; рестарт требует нового поиска. Нужен следующий model step после результата,
 а не соседняя операция в том же ответе. `expectedMatches` — 1–10000; смена версии,
 числа, неполный scan/source и zero-length regex не допускают запись. Для больших
-источников за бюджетом полного поиска используйте hunks. Это текстовая замена:
+источников за бюджетом полного поиска используйте `core.patch` с доставленным
+ограниченным фрагментом. Это текстовая замена:
 она может затронуть комментарии и строки и не обещает semantic rename.
 Отдельных regexp tools и обязательных language parsers нет.
 
@@ -228,7 +230,7 @@ replacement символы `$1` буквальны, в regex — стандар�
 
 | Источник | Поддерживаемые операции / особенности |
 | --- | --- |
-| Workspace UTF-8 | write/patch/replace/copy/move/delete/restore; staged commit и read-back; большие hunks потоковые; managed trash; destination parent для move должен существовать |
+| Workspace UTF-8 | write/patch/replace/copy/move/delete/restore; staged commit и read-back; большие правки потоковые; managed trash; destination parent для move должен существовать |
 | Live VBA | write/patch/replace/copy/move/delete/restore; copy/rename только в текущем проекте, ограничения типов/ownership сохранены; UserForms только CodeOnly |
 | HTML workspace file | write/patch/replace/delete; существующий workspace snapshot и preflight; file move/copy/restore через этот контракт пока не поддержаны |
 | HTML data binding | delete по точному target; содержимое/связи остаются структурированными `html.data.*` |
@@ -278,7 +280,7 @@ VBA использует тот же формат, с токенным сопо�
 только к matching и существующей проверке read-back, **не** к проверке актуальности
 подготовленного исходника. Неизменный контекст берётся из фактического source.
 
-Все hunks вычисляются в памяти. Полученный полный candidate передаётся существующему
+Все edits вычисляются в памяти. Полученный полный candidate передаётся существующему
 CodeModule: DeleteLines всего кода, затем InsertLines полного результата. Старый
 bottom-up/LCS path удалён. `core.patch` передаёт полный код прямо guarded whole-module
 writer, без повторного разбора прежних операций замены. Journal записывает before/intended до COM, после идёт
@@ -310,10 +312,9 @@ Tools и skills разделены, полные ID сохраняются в с
 при этом сами сообщения/данные сохраняются. Exact admissions пересобираются по
 новому профилю. [Таблица переименования](tool-name-migration.json) — только данные
 для явной миграции authoring, не registry dispatch.
-Отклонённый `core.patch` с текущими JSON-аргументами `{patch}` остаётся допустимой
-историей, даже если текст patch не прошёл разбор или подготовку: сохранённый отказ
-не выполняется повторно. Несовместимую форму аргументов и URI target preflight
-по-прежнему блокирует без изменения истории.
+Отклонённый исторический `core.patch` с аргументами `{patch}` остаётся в истории и
+не выполняется повторно. Новое выполнение требует `targets/edits`; несовместимый
+pending state и URI target блокируются без изменения истории.
 
 Для structured dependencies пользовательских skills есть отдельный offline script:
 

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Structured `core.patch` v2 — 2026-10-29
+
+Owner: Core Tools, Application Workspace, Office source owners. Публичный вызов
+использует `targets/edits` и contract version 2; общий resolver разрешает точные
+подстроки, упорядоченный контекст и явные вставки до существующих owner guards,
+записи и read-back. Старое `{patch}` и pending state v1 не исполняются повторно.
+Проверка после переноса выявила и исправила несовместимые version 1 зависимости
+встроенных Office/Workspace skills, допуск Plan source tools в Agent Deny,
+применение Deny к read-only workspace и hash ограниченного authored-file
+after-source. Целевые host-neutral Harness, CLI и Web
+проверки проходят; широкие старые VBA/HTML/context-continuity fixtures уже падали
+до v2. Сравнение Qwen/DeepSeek и реальная Windows/Office/WebView2 квалификация
+остаются открытыми. Контракт — [Text mutations](../text-mutations.md).
+
 ## Patch, неизвестный эффект и схемы — 2026-10-29
 
 Owner: Core Agent/Tools, Office и Workspace model session, Web timeline.
