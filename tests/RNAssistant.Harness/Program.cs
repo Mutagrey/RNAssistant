@@ -896,7 +896,7 @@ namespace RNAssistant.Harness
                 Test("vba editor: upload rejects invalid source and replay", VbaEditorUploadRejectsInvalidSource),
                 Test("vba: public tools use native runtime", VbaPublicToolsUseNativeRuntime),
                 Test("vba: semantic intent contracts isolate runtime state", VbaSemanticIntentContractsAreStrict),
-                Test("vba: mutation service owns apply patch", VbaMutationServiceOwnsApplyPatch),
+                Test("vba: mutation service owns guarded write", VbaMutationServiceOwnsGuardedWrite),
                 Test("vba: large module patch preserves whole-source safety", VbaLargeModulePatchPreservesWholeSourceSafety),
                 Test("vba: whole write service owns workflow", VbaWholeModuleWriteServiceOwnsWorkflow),
                 Test("vba: delete service owns workflow", VbaDeleteModuleServiceOwnsWorkflow),

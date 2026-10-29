@@ -9,8 +9,9 @@ are removed, with no callable compatibility path. One wrapper prepares all owner
 commands and preserves per-target existing journals/effects; it adds no store.
 Prepared state/confirmation/replay, model projection and per-target UI consume the
 new contract. `DomainOperation` below remains the existing temporary owner bridge.
-The VBA patch route now invokes the guarded whole-module writer directly; the
-private replace adapter does not parse public patch hunks. Workspace streams large
+VBA patch and replace now invoke the guarded whole-module writer directly. The
+private VBA JSON-operation reader, substring engine and patch service/guards are
+removed; shared fault/journal fixtures use the surviving whole-write owner. Workspace streams large
 UTF-8 sources. Authored-file patches now stream UTF-8/16/32 through the existing
 artifact owner/CAS; its old private find/replace-hunk parser is removed. Metadata
 resolution and full file read-back no longer hydrate complete bodies. Markdown/HTML

@@ -87,8 +87,6 @@ namespace RNAssistant.Office.Tools
                     Route(prepared, selected, context.Arguments);
                     if (_id == ResourceMutationToolCatalog.Copy || _id == ResourceMutationToolCatalog.Move)
                         RequireAbsent(Value(context.Arguments, "destination"));
-                    if (source?.Text.Length == 0 && prepared.Operation == VbaToolCatalog.ApplyPatch)
-                        prepared.Operation = VbaToolCatalog.WriteModule;
                     var owner = Owner(prepared);
                     var args = Arguments(prepared, context, source?.Text, token);
                     if (_id == ResourceMutationToolCatalog.Patch && selected.Descriptor.Kind == ChatHtmlResourceCatalog.FileKind)
@@ -273,8 +271,8 @@ namespace RNAssistant.Office.Tools
                 string existingType;
                 if (selected?.Descriptor.Metadata.TryGetValue("componentType", out existingType) == true)
                     args["componentType"] = existingType;
-                prepared.Operation = _id == ResourceMutationToolCatalog.Write || _id == ResourceMutationToolCatalog.Patch ? VbaToolCatalog.WriteModule :
-                    _id == ResourceMutationToolCatalog.Replace ? VbaToolCatalog.ApplyPatch :
+                prepared.Operation = _id == ResourceMutationToolCatalog.Write || _id == ResourceMutationToolCatalog.Patch ||
+                    _id == ResourceMutationToolCatalog.Replace ? VbaToolCatalog.WriteModule :
                     _id == ResourceMutationToolCatalog.Delete ? VbaToolCatalog.DeleteModule :
                     _id == ResourceMutationToolCatalog.Move ? VbaToolCatalog.RenameModule :
                     _id == ResourceMutationToolCatalog.Restore ? VbaToolCatalog.RestoreBackup : null;
@@ -361,11 +359,6 @@ namespace RNAssistant.Office.Tools
             if (content != null)
             {
                 args["content"] = content; args["code"] = content; args["markdown"] = content;
-                // The replace adapter still uses its private owner command. core.patch
-                // passes complete code directly to the guarded whole-module writer.
-                if (prepared.Operation == VbaToolCatalog.ApplyPatch)
-                    args["patch"] = new JArray(new JObject { ["find"] = before, ["text"] = content });
-
             }
             return args;
         }

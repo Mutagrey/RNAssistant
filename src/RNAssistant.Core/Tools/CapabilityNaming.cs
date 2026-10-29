@@ -44,6 +44,7 @@ namespace RNAssistant.Core.Tools
             "common.tools_delete",
             "common.tools_upsert",
             "common.vba_apply_patch",
+            "vba.module.patch",
             "common.vba_delete_module",
             "common.vba_rename_module",
             "common.vba_restore_backup",

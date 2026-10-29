@@ -422,7 +422,7 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void VbaMutationServiceOwnsApplyPatch()
+        private static void VbaMutationServiceOwnsGuardedWrite()
         {
             WithTempPaths(delegate(AppDataPaths paths)
             {
@@ -444,29 +444,10 @@ namespace RNAssistant.Harness
                     ToolCallId = command.ToolCallId
                 };
 
-                var guard = service.PrepareApplyPatchGuard(new VbaApplyPatchGuardRequest
-                {
-                    RequestedModuleName = "Module1",
-                    Correlation = correlation
-                });
-                AssertTrue(guard.Success, "service prepares its own typed patch guard");
-                var result = service.ApplyPatch(
-                    new VbaApplyPatchRequest
-                    {
-                        RequestedModuleName = guard.ResolvedModuleName,
-                        Operations = new List<VbaPatchOperationRequest>
-                        {
-                            new VbaPatchOperationRequest
-                            {
-                                Operation = "replace",
-                                Find = "\"before\"",
-                                Text = "\"after\""
-                            }
-                        },
-                        Guard = guard.Guard,
-                        Correlation = correlation
-                    },
-                    CancellationToken.None);
+                var request = PrepareTypedWrite(service, adapter, session.Id, "\"before\"", "\"after\"");
+                request.Correlation.StepId = command.RuntimeStepId;
+                request.Correlation.ToolCallId = command.ToolCallId;
+                var result = service.WriteWholeModule(request, CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Ok, result.Status, "service applies and verifies patch");
                 AssertContains(adapter.VbaModuleCode, "\"after\"", "service dispatches the intended source");
@@ -501,8 +482,8 @@ namespace RNAssistant.Harness
                 var store = new VbaJournalStore(paths);
                 var executor = new OfficeToolExecutor(adapter, store, new SkillStore(paths));
                 var session = NewSession(adapter);
-                var patch = Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
-                    "patch", new JArray(new JObject { ["find"] = "\"before\"", ["text"] = "\"after\"" }));
+                var patch = Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" +
+                    LineHunk("Debug.Print \"before\"", "Debug.Print \"after\""));
                 var pending = PrepareVbaNative(executor, session, patch);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome,
                     "large-module patch validates before confirmation without a whole model read");
@@ -531,12 +512,11 @@ namespace RNAssistant.Harness
                 AssertEqual(source, store.Find(adapter.HostName, adapter.DocumentKey,
                     committed.Prepared.BackupId, null).Code, "the full rollback source is retained");
 
-                var stale = PrepareVbaNative(executor, session, Command(VbaToolCatalog.ApplyPatch,
-                    "moduleName", "Module1", "patch", new JArray(new JObject {
-                        ["find"] = "\"after\"", ["text"] = "\"stale\"" })));
+                var stale = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" +
+                    LineHunk("Debug.Print \"after\"", "Debug.Print \"stale\"")));
                 adapter.VbaModuleCode += "\n' external edit";
                 var rejected = ToolRunResultFactory.Create(ConfirmVbaNative(stale));
-                AssertEqual("stale_vba_module", rejected.ErrorCode, "late drift still refuses a large patch");
+                AssertContains(rejected.DataJson, "source_changed", "late drift still refuses a large patch");
                 AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
                     "stale confirmation never reaches the backend");
                 AssertEqual(1, store.ListMutations(adapter.HostName, adapter.DocumentKey).Count,
@@ -550,7 +530,7 @@ namespace RNAssistant.Harness
                 var interruptedJournal = new FaultingVbaMutationJournal(store) { FailComplete = true };
                 var service = CreateTypedMutationService(adapter, interruptedJournal,
                     new VbaMutationHostBackend(adapter.VbaHostBackend));
-                var interrupted = service.ApplyPatch(PrepareTypedPatch(service, "large-interrupted",
+                var interrupted = service.WriteWholeModule(PrepareTypedWrite(service, adapter, "large-interrupted",
                     "\"before\"", "\"recovered\""), CancellationToken.None);
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, interrupted.Status,
                     "terminal persistence failure remains unknown for a large module");
@@ -1085,8 +1065,8 @@ namespace RNAssistant.Harness
                 });
                 var service = CreateTypedMutationService(adapter, journal, backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "prepare-failure", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "prepare-failure", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status,
@@ -1116,8 +1096,8 @@ namespace RNAssistant.Harness
                 });
                 var service = CreateTypedMutationService(adapter, journal, backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "terminal-failure", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "terminal-failure", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
@@ -1154,8 +1134,8 @@ namespace RNAssistant.Harness
                     new VbaMutationJournalStoreAdapter(store),
                     backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "rollback-prose", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "rollback-prose", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status,
@@ -1175,8 +1155,8 @@ namespace RNAssistant.Harness
                     adapter,
                     new VbaMutationJournalStoreAdapter(store),
                     explicitBackend);
-                var explicitOutcome = explicitService.ApplyPatch(
-                    PrepareTypedPatch(explicitService, "rollback-structured", "\"before\"", "\"after\""),
+                var explicitOutcome = explicitService.WriteWholeModule(
+                    PrepareTypedWrite(explicitService, adapter, "rollback-structured", "\"before\"", "\"after\""),
                     CancellationToken.None);
                 AssertEqual(VbaMutationOutcomeStatus.Error, explicitOutcome.Status,
                     "structured rollback remains a definite error outcome");
@@ -1204,8 +1184,8 @@ namespace RNAssistant.Harness
                     new VbaMutationJournalStoreAdapter(store),
                     backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "throw-before", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "throw-before", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Error, outcome.Status,
@@ -1236,8 +1216,8 @@ namespace RNAssistant.Harness
                     new VbaMutationJournalStoreAdapter(store),
                     backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "throw-after", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "throw-after", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Ok, outcome.Status,
@@ -1279,8 +1259,8 @@ namespace RNAssistant.Harness
                     new VbaMutationJournalStoreAdapter(store),
                     backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "divergence", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "divergence", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
@@ -1322,8 +1302,8 @@ namespace RNAssistant.Harness
                     new VbaMutationJournalStoreAdapter(store),
                     backend);
 
-                var outcome = service.ApplyPatch(
-                    PrepareTypedPatch(service, "unavailable-readback", "\"before\"", "\"after\""),
+                var outcome = service.WriteWholeModule(
+                    PrepareTypedWrite(service, adapter, "unavailable-readback", "\"before\"", "\"after\""),
                     CancellationToken.None);
 
                 AssertEqual(VbaMutationOutcomeStatus.Unknown, outcome.Status,
@@ -2240,80 +2220,17 @@ namespace RNAssistant.Harness
             foreach (var newline in new[] { "\n", "\r\n", "\r" })
             {
                 var source = "' Контекст" + newline + "Debug.Print \"C:\\temp\\n\"" + newline + "End Sub";
-                var result = VbaPatchEngine.Replace(source, "Debug.Print \"C:\\temp\\n\"\nEnd Sub",
-                    "Debug.Print \"C:\\temp\\r\\n\"\nEnd Sub");
-                AssertEqual(VbaPatchStatus.Changed, result.Status, "plain text engine changes exact match");
-                AssertEqual(source.Replace("C:\\temp\\n", "C:\\temp\\r\\n"), result.Text,
-                    "literal backslashes and surrounding source preserved for each newline style");
-                AssertEqual(VbaPatchStatus.Unchanged,
-                    VbaPatchEngine.Replace(source, source, source).Status, "no-op is distinct from change");
-                var overlappingLines = "A" + newline + "A" + newline + "A";
-                var overlap = VbaPatchEngine.Replace(overlappingLines, "A\nA", "B");
-                AssertEqual(VbaPatchStatus.Ambiguous, overlap.Status, "overlap rejected after newline matching");
-                AssertEqual(2, overlap.MatchCount, "both overlapping line blocks counted");
-                AssertEqual(overlappingLines, overlap.Text, "overlapping line patch preserves original source");
+                var patch = LineHunk("Debug.Print \"C:\\temp\\n\"", "Debug.Print \"C:\\temp\\r\\n\"");
+                AssertEqual(source.Replace("C:\\temp\\n", "C:\\temp\\r\\n"),
+                    TextEditPlan.Patch(source, patch).Text, "line patch keeps escapes and source newlines");
+                var same = TextEditPlan.Patch(source, LineHunk("End Sub", "End Sub"));
+                AssertEqual(source, same.Text, "no-op preserves complete source");
+                AssertTrue(same.Edits.All(edit => edit.Before == edit.After), "no-op edits preserve their selected bytes");
             }
-            foreach (var sample in new[]
-            {
-                new { Source = "A\nA", Find = "A", Count = 2 },
-                new { Source = "aaaa", Find = "aaa", Count = 2 },
-                new { Source = "ababa", Find = "aba", Count = 2 },
-                new { Source = "aaaaa", Find = "aaa", Count = 3 }
-            })
-            {
-                var ambiguous = VbaPatchEngine.Replace(sample.Source, sample.Find, "B");
-                AssertEqual(VbaPatchStatus.Ambiguous, ambiguous.Status, "all starting offsets count for uniqueness");
-                AssertEqual(sample.Count, ambiguous.MatchCount, "full match count retained for tool guidance");
-                AssertEqual(sample.Source, ambiguous.Text, "ambiguity preserves original text");
-                AssertEqual(VbaPatchStatus.Ambiguous,
-                    VbaPatchEngine.Replace(sample.Source, sample.Find, sample.Find).Status,
-                    "unchanged replacement still requires one unambiguous match");
-            }
-            AssertEqual("B", VbaPatchEngine.Replace("aaa", "aaa", "B").Text, "full source remains a unique match");
-            var mixed = VbaPatchEngine.Replace("Sub Main()\nold\r\nEnd Sub",
-                "Sub Main()\nold", "new");
-            AssertEqual(VbaPatchStatus.Changed, mixed.Status,
-                "a copied VBA block survives mixed source line endings");
-            AssertTrue(!mixed.FormatNormalizedMatch,
-                "a copied VBA block is matched exactly before format normalization");
-            AssertEqual("new\r\nEnd Sub", mixed.Text,
-                "exact VBA match preserves source outside the selected block");
-            var normalized = VbaPatchEngine.Replace(
-                "Sub Main()\r\n    If X = 1 Then\r\n        Debug.Print \"old\"\r\n    End If\r\nEnd Sub",
-                "if x=1 then\nDebug.Print \"old\"\nend if",
-                "If X = 2 Then\nDebug.Print \"new\"\nEnd If");
-            AssertEqual(VbaPatchStatus.Changed, normalized.Status,
-                "one complete VBA line block survives VBE spacing and identifier case normalization");
-            AssertTrue(normalized.FormatNormalizedMatch, "format-normalized match is reported explicitly");
-            AssertContains(normalized.Text, "Sub Main()\r\nIf X = 2 Then\r\nDebug.Print \"new\"\r\nEnd If\r\nEnd Sub",
-                "format-normalized replacement preserves text outside matched complete lines");
-            AssertEqual(VbaPatchStatus.NotFound,
-                VbaPatchEngine.Replace("Debug.Print \"actual\"", "debug.print \"different\"", "Debug.Print \"new\"").Status,
-                "string literal differences never normalize into a match");
-            AssertEqual(VbaPatchStatus.Ambiguous,
-                VbaPatchEngine.Replace("    X = 1\n    X = 1", "x=1", "X = 2").Status,
-                "two format-equivalent lines remain ambiguous");
-            var contextual = VbaPatchEngine.Replace(
-                "If x = 1 Then\n    Debug.Print \"old\"\nEnd If\nIf x = 2 Then\n    Debug.Print \"old\"\nEnd If",
-                "debug.print \"old\"", "Debug.Print \"new\"",
-                "if X=2 then\n", "\nend if");
-            AssertEqual(VbaPatchStatus.Changed, contextual.Status,
-                "line-aligned normalized context selects one of two equivalent find lines");
-            AssertContains(contextual.Text,
-                "If x = 1 Then\n    Debug.Print \"old\"\nEnd If\nIf x = 2 Then\nDebug.Print \"new\"\nEnd If",
-                "context remains unchanged while only the selected find line is replaced");
-            AssertEqual(VbaPatchStatus.NotFound,
-                VbaPatchEngine.Replace("    X = 1", "x=1", "X = 2", "wrong\n", null).Status,
-                "different line-aligned context cannot select an otherwise matching line");
-            AssertEqual(VbaPatchStatus.NotFound,
-                VbaPatchEngine.Replace("prefix X = 1", "x=1", "X = 2", "prefix ", null).Status,
-                "inline context remains exact after an exact-match miss");
-            AssertEqual(VbaPatchStatus.NotFound, VbaPatchEngine.Replace("A", "B", "C").Status, "stale source rejected");
-            var contextMismatch = VbaPatchEngine.Replace("before\nfind\nafter", "find", "new", "wrong\n", "\nafter");
-            AssertEqual(VbaPatchStatus.NotFound, contextMismatch.Status, "incorrect context rejects the edit");
-            AssertEqual(1, contextMismatch.FindMatchCount, "diagnostic distinguishes wrong context from missing find");
-            AssertEqual(VbaPatchStatus.EmptyFind, VbaPatchEngine.Replace("A", null, "B").Status, "empty find rejected");
-            AssertEqual(string.Empty, VbaPatchEngine.Replace("A", "A", null).Text, "null replacement is deletion");
+            var normalized = TextEditPlan.Patch("Sub Main()\r\n    Value = 1\r\nEnd Sub",
+                "@@ sub main()\n-value=1\n+    Value = 2\n", normalizeLine: VbaTextCanonicalizer.NormalizeVbeComparableLine);
+            AssertEqual("Sub Main()\r\n    Value = 2\r\nEnd Sub", normalized.Text,
+                "VBE formatting is matched by the shared line planner");
         }
 
         private static void VbaPatchAcceptsUniqueFormatNormalizedLine()
@@ -2322,7 +2239,7 @@ namespace RNAssistant.Harness
             {
                 adapter.VbaModuleCode = "Sub Main()\n    Debug.Print \"old\"\nEnd Sub";
                 var result = executor.ExecuteManual(
-                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                    Command("vba.module.patch", "moduleName", "Module1",
                         "patch", new JArray(new JObject
                         {
                             ["find"] = "debug.print \"old\"",
@@ -2909,7 +2826,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName)
                     .Concat(executor.GetControllerTools()).ToList();
                 var failed = PrepareVbaNative(executor, session,
-                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                    Command("vba.module.patch", "moduleName", "Module1",
                         "patch", new JArray(new JObject {
                             ["find"] = "\"missing\"", ["text"] = "\"after\""
                         }))).Record;
@@ -2940,7 +2857,7 @@ namespace RNAssistant.Harness
                     (string)charData["coverage"]["kind"] == ResourceCoverageKinds.CharacterRange,
                     "model-facing VBA character selector returns bounded partial source evidence");
                 var corrected = PrepareVbaNative(executor, session,
-                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1",
+                    Command("vba.module.patch", "moduleName", "Module1",
                         "patch", new JArray(new JObject {
                             ["find"] = "\"before\"", ["text"] = "\"after\""
                         })));
@@ -3004,98 +2921,26 @@ namespace RNAssistant.Harness
         {
             WithTempExecutor((executor, adapter) =>
             {
-                var source = "Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
-                    "Sub Two()\nDebug.Print \"same\"\nEnd Sub";
+                var source = "Sub One()\nDebug.Print \"same\"\nEnd Sub\nSub Two()\nDebug.Print \"same\"\nEnd Sub";
                 adapter.VbaModuleCode = source;
-                var hunk = new JObject { ["find"] = "Debug.Print \"same\"", ["text"] = "Debug.Print \"changed\"" };
-                var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
-                Func<ToolRunResult> apply = () => executor.ExecuteManual(Command(VbaToolCatalog.ApplyPatch,
-                    "moduleName", "Module1", "patch", new JArray(hunk.DeepClone())), tools,
-                    new AppSettings { AutoConfirmToolActions = true }, false, false);
-                var ambiguous = apply();
-                AssertEqual("vba_patch_ambiguous", ambiguous.ErrorCode, "unaddressed duplicate writes nothing");
-                var locations = JObject.Parse(ambiguous.DataJson);
-                AssertEqual(true, (bool)locations["locationsComplete"], "all candidate locations are supplied");
-                AssertEqual(5, (int)locations["locations"][1]["startLine"], "second procedure's line is explicit");
-                hunk["startLine"] = locations["locations"][1]["startLine"].DeepClone();
-                hunk["startColumn"] = locations["locations"][1]["startColumn"].DeepClone();
-                AssertTrue(apply().Success, "exact location selects the intended duplicate");
-                AssertEqual("Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
-                    "Sub Two()\nDebug.Print \"changed\"\nEnd Sub", adapter.VbaModuleCode,
-                    "only the selected occurrence changes");
-                AssertEqual("vba_patch_not_found", apply().ErrorCode,
-                    "repeating the old patch cannot redirect to the remaining occurrence");
-                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
-                    "ambiguous and stale positions never dispatch");
+                var session = NewSession(adapter);
+                var body = LineHunk("Debug.Print \"same\"", "Debug.Print \"changed\"");
+                var ambiguous = PrepareVbaNative(executor, session,
+                    Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" + body)).Record;
+                AssertEqual(ToolExecutionOutcome.Error, ambiguous.Outcome, "unqualified duplicates fail before dispatch");
+                AssertContains(ambiguous.Result.DataJson, "ambiguous_context", "public diagnostic identifies ambiguity");
+                AssertEqual(0, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "ambiguity never writes");
+                var selected = Command("core.patch", "patch", "*** Update Target: VBA module: Module1\n" +
+                    body.Replace("@@\n", "@@ Sub Two()\n"));
+                var completed = ConfirmVbaNative(PrepareVbaNative(executor, session, selected));
+                AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "anchor selects the unique later block");
+                AssertEqual(source.Substring(0, source.IndexOf("Sub Two()", StringComparison.Ordinal)) +
+                    "Sub Two()\nDebug.Print \"changed\"\nEnd Sub", adapter.VbaModuleCode, "only the intended block changes");
+                var repeated = PrepareVbaNative(executor, session, selected).Record;
+                AssertEqual(ToolExecutionOutcome.Error, repeated.Outcome, "old patch cannot redirect to remaining occurrence");
+                AssertContains(repeated.Result.DataJson, "context_not_found", "stale anchor diagnostic remains specific");
+                AssertEqual(1, adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule), "only one whole-module write occurred");
             });
-
-            WithTempExecutor(delegate(OfficeToolExecutor executor,
-                FakeOfficeAdapter adapter)
-            {
-                adapter.VbaModuleCode =
-                    "Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
-                    "Sub Two()\nDebug.Print \"same\"\nEnd Sub";
-                var result = executor.ExecuteManual(
-                    Command(
-                        VbaToolCatalog.ApplyPatch,
-                        "moduleName", "Module1",
-                        "patch", new JArray(new JObject
-                        {
-                            ["find"] = "Debug.Print \"same\"",
-                            ["text"] = "Debug.Print \"changed\"",
-                            ["contextBefore"] = "Sub Two()\n",
-                            ["contextAfter"] = "\nEnd Sub"
-                        })),
-                    OfficeToolCatalog.ForHost(adapter.HostName)
-                        .Concat(executor.GetControllerTools()).ToList(),
-                    new AppSettings { AutoConfirmToolActions = true },
-                    false,
-                    false);
-
-                AssertTrue(result.Success,
-                    "exact context disambiguates repeated source");
-                AssertEqual(
-                    "Sub One()\nDebug.Print \"same\"\nEnd Sub\n" +
-                    "Sub Two()\nDebug.Print \"changed\"\nEnd Sub",
-                    adapter.VbaModuleCode,
-                    "context is verified but only find is replaced");
-                AssertEqual(1,
-                    adapter.CountVbaCalls(FakeVbaOperation.ReplaceModule),
-                    "context-qualified patch remains one whole-module dispatch");
-            });
-
-            var stale = VbaPatchEngine.Replace(
-                "A\nX\nA", "A", "B", "missing\n", null);
-            AssertEqual(VbaPatchStatus.NotFound, stale.Status,
-                "stale exact context is rejected");
-            AssertEqual("A\nX\nA", stale.Text,
-                "stale context never mutates source");
-            foreach (var newline in new[] { "\n", "\r\n", "\r" })
-            {
-                var source = "header" + newline + "  old old";
-                var selected = VbaPatchEngine.Replace(source, "old", "new", null, null, 2, 7);
-                AssertEqual("header" + newline + "  old new", selected.Text,
-                    "exact column selects a duplicate on the same line for each newline style");
-                AssertEqual(VbaPatchStatus.NotFound,
-                    VbaPatchEngine.Replace(source, "old", "new", null, null, 2, 4).Status,
-                    "nearby matching text cannot rescue a wrong coordinate");
-                AssertEqual(VbaPatchStatus.NotFound,
-                    VbaPatchEngine.Replace(source, "old", "new", "wrong", null, 2, 7).Status,
-                    "position does not bypass adjacent context verification");
-                AssertEqual(VbaPatchStatus.InvalidLocation,
-                    VbaPatchEngine.Replace(source, "old", "new", null, null, null, 7).Status,
-                    "a column requires a line");
-                AssertEqual(VbaPatchStatus.InvalidLocation,
-                    VbaPatchEngine.Replace(source, "old", "new", null, null, 99).Status,
-                    "out-of-range location is rejected");
-                AssertEqual(VbaPatchStatus.Unchanged,
-                    VbaPatchEngine.Replace(source, "old", "old", null, null, 2, 7).Status,
-                    "explicitly selected no-op remains a no-op despite another occurrence");
-            }
-            var many = VbaPatchEngine.Replace(string.Join("\n", Enumerable.Repeat("old", 25)), "old", "new");
-            AssertEqual(25, many.MatchCount, "ambiguity count is complete");
-            AssertEqual(20, many.Locations.Count, "candidate location preview is bounded");
-            AssertTrue(!many.LocationsComplete, "omitted locations are explicit");
         }
 
         private static void VbaExactPatchPreservesBoundaryNewlines()
@@ -4093,33 +3938,24 @@ namespace RNAssistant.Harness
                 backend);
         }
 
-        private static VbaApplyPatchRequest PrepareTypedPatch(
-            VbaMutationService service,
-            string sessionId,
-            string find,
-            string text)
+        private static VbaWholeModuleWriteRequest PrepareTypedWrite(
+            VbaMutationService service, FakeOfficeAdapter adapter,
+            string sessionId, string find, string text)
         {
-            var correlation = new VbaMutationCorrelation { SessionId = sessionId };
-            var preparation = service.PrepareApplyPatchGuard(new VbaApplyPatchGuardRequest
+            var before = adapter.VbaModuleCode;
+            var correlation = new VbaMutationCorrelation { SessionId = sessionId,
+                ExpectedContentSha256 = VbaTextCanonicalizer.LiveCodeSha256(before) };
+            var preparation = service.PrepareWholeModuleWriteGuard(new VbaWholeModuleWriteGuardRequest
             {
-                RequestedModuleName = "Module1",
-                Correlation = correlation
+                RequestedModuleName = "Module1", Correlation = correlation
             });
-            AssertTrue(preparation.Success, "typed patch guard preparation succeeds");
-            return new VbaApplyPatchRequest
+            AssertTrue(preparation.Success, "typed whole-write guard preparation succeeds");
+            return new VbaWholeModuleWriteRequest
             {
-                RequestedModuleName = preparation.ResolvedModuleName,
-                Operations = new List<VbaPatchOperationRequest>
-                {
-                    new VbaPatchOperationRequest
-                    {
-                        Operation = "replace",
-                        Find = find,
-                        Text = text
-                    }
-                },
-                Guard = preparation.Guard,
-                Correlation = correlation
+                ModuleName = preparation.ResolvedModuleName,
+                Code = before.Replace(find, text),
+                ComponentType = "StdModule", Mode = VbaWholeModuleWriteMode.UpdateOnly,
+                Guard = preparation.Guard, Correlation = correlation
             };
         }
 

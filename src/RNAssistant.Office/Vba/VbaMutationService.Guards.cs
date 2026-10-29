@@ -6,115 +6,6 @@ namespace RNAssistant.Office.Vba
 {
     internal sealed partial class VbaMutationService
     {
-        public VbaApplyPatchGuardPreparation PrepareApplyPatchGuard(
-            VbaApplyPatchGuardRequest request)
-        {
-            var requestedName = (request == null ? null : request.RequestedModuleName ?? string.Empty).Trim();
-            if (string.IsNullOrWhiteSpace(requestedName))
-            {
-                return new VbaApplyPatchGuardPreparation
-                {
-                    Error = VbaMutationOutcome.Error(
-                        "moduleName is required.",
-                        null,
-                        "vba_module_name_required",
-                        true)
-                };
-            }
-
-            string resolvedName;
-            VbaModuleState current;
-            var readError = TryReadExistingModule(requestedName, out resolvedName, out current);
-            if (readError != null)
-            {
-                return new VbaApplyPatchGuardPreparation { Error = readError };
-            }
-
-            var correlation = request.Correlation ?? new VbaMutationCorrelation();
-            var currentHash = CodeSha256(current.Code);
-            return new VbaApplyPatchGuardPreparation
-            {
-                ResolvedModuleName = resolvedName,
-                Guard = CreateGuard(
-                    correlation,
-                    resolvedName,
-                    currentHash,
-                    requestedName)
-            };
-        }
-
-        private VbaMutationOutcome ValidateApplyPatchGuard(
-            VbaApplyPatchRequest request,
-            string moduleName,
-            VbaModuleState current)
-        {
-            if (current == null)
-            {
-                return VbaMutationOutcome.Error(
-                    "VBA module state is unavailable.",
-                    null,
-                    "vba_read_invalid",
-                    true);
-            }
-
-            var correlation = request.Correlation ?? new VbaMutationCorrelation();
-            var guard = request.Guard;
-            if (guard == null)
-            {
-                string observedHash;
-                if (!TryGetObservation(correlation, moduleName, out observedHash))
-                {
-                    return SnapshotRequired(moduleName);
-                }
-                var actualHash = CodeSha256(current.Code);
-                if (!string.Equals(observedHash, actualHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    correlation.ObserveExternalDrift?.Invoke(moduleName);
-                    return StaleSnapshot(
-                        moduleName,
-                        true,
-                        observedHash,
-                        true,
-                        actualHash,
-                        "editor");
-                }
-                request.Guard = CreateGuard(correlation, moduleName, observedHash, moduleName);
-                return null;
-            }
-
-            if (guard.Version != 2 || string.IsNullOrWhiteSpace(guard.ModuleName))
-            {
-                return SnapshotRequired(moduleName);
-            }
-            if (!GuardContextMatches(guard, correlation, moduleName))
-            {
-                return VbaMutationOutcome.Error(
-                    "The prepared VBA action belongs to another document, chat, or module. Retry the same tool in the current document.",
-                    new JObject
-                    {
-                        ["moduleName"] = moduleName,
-                        ["retrySameTool"] = true
-                    },
-                    "vba_snapshot_context_changed",
-                    true);
-            }
-
-            var currentHash = CodeSha256(current.Code);
-            if (!guard.ModuleExists ||
-                !string.Equals(guard.CodeSha256, currentHash, StringComparison.OrdinalIgnoreCase))
-            {
-                correlation.ObserveExternalDrift?.Invoke(moduleName);
-                return StaleSnapshot(
-                    moduleName,
-                    guard.ModuleExists,
-                    guard.CodeSha256,
-                    true,
-                    currentHash,
-                    "patch");
-            }
-            return null;
-        }
-
         private bool GuardContextMatches(
             VbaMutationGuard guard,
             VbaMutationCorrelation correlation,
@@ -184,7 +75,7 @@ namespace RNAssistant.Office.Vba
         private static VbaMutationOutcome SnapshotRefreshRequired(string moduleName)
         {
             return VbaMutationOutcome.Error(
-                "Whole-module replacement requires the complete current source in model context. That observation is missing or stale; it may have been omitted by the context budget. This is a source-observation guard, not a VBA access denial. Read the complete current source with core.read and reconcile before replacing; diagnostic currentContent in this error is not a resource-read observation. If the complete source does not fit, read the relevant source lines with startLine/lineCount and use vba.module.patch for a focused edit. Do not repeat an unchanged whole-source read/write loop or create another module to bypass this guard.",
+                "Whole-module replacement requires the complete current source in model context. That observation is missing or stale; it may have been omitted by the context budget. This is a source-observation guard, not a VBA access denial. Read the complete current source with core.read and reconcile before replacing; diagnostic currentContent in this error is not a resource-read observation. If the complete source does not fit, read the relevant source lines with startLine/lineCount and use core.patch for a focused edit. Do not repeat an unchanged whole-source read/write loop or create another module to bypass this guard.",
                 new JObject
                 {
                     ["moduleName"] = moduleName ?? string.Empty,
@@ -209,13 +100,10 @@ namespace RNAssistant.Office.Vba
         {
             var editor = string.Equals(operation, "editor", StringComparison.OrdinalIgnoreCase);
             var wholeWrite = string.Equals(operation, "write", StringComparison.OrdinalIgnoreCase);
-            var patch = string.Equals(operation, "patch", StringComparison.OrdinalIgnoreCase);
             var message = editor
                 ? "The VBA module changed after it was loaded in the editor. Reload it and reconcile the changes before saving."
                 : wholeWrite
-                    ? "The VBA module changed after the source was inspected or this write was prepared. Obtain its complete current source and reconcile before replacing it. If the complete source does not fit in context, read the relevant source lines with startLine/lineCount and use vba.module.patch. This conflict does not mean VBA access was denied."
-                    : patch
-                        ? "The VBA module changed after the source was inspected. Use current source supplied with this result, or read relevant lines with core.read, then correct the patch anchors. Do not retry the unchanged patch."
+                    ? "The VBA module changed after the source was inspected or this write was prepared. Obtain its complete current source and reconcile before replacing it. If the complete source does not fit in context, read the relevant source lines with startLine/lineCount and use core.patch. This conflict does not mean VBA access was denied."
                     : "The VBA module changed after this action was prepared. Retry the same tool so runtime can bind the current state; read it only if the intended action may no longer match.";
             return VbaMutationOutcome.Error(
                 message,
@@ -226,8 +114,8 @@ namespace RNAssistant.Office.Vba
                     ["observedCodeSha256"] = string.IsNullOrWhiteSpace(observedHash) ? null : observedHash,
                     ["actualExists"] = actualExists,
                     ["actualCodeSha256"] = string.IsNullOrWhiteSpace(actualHash) ? null : actualHash,
-                    ["retrySameTool"] = !editor && !wholeWrite && !patch,
-                    ["retryAfterRefresh"] = wholeWrite || patch,
+                    ["retrySameTool"] = !editor && !wholeWrite,
+                    ["retryAfterRefresh"] = wholeWrite,
                     ["reloadEditor"] = editor,
                     ["reconcileBeforeOverwrite"] = wholeWrite,
                     ["inspectTool"] = "core.read",

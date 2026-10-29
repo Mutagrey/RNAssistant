@@ -198,7 +198,6 @@
     <Compile Include="Vba\VbaPackageService.Journal.cs" />
     <Compile Include="Vba\VbaRestoreContracts.cs" />
     <Compile Include="Vba\VbaMutationService.cs" />
-    <Compile Include="Vba\VbaMutationService.ApplyPatch.cs" />
     <Compile Include="Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="Vba\VbaMutationService.Guards.cs" />
     <Compile Include="Vba\VbaMutationService.Journal.cs" />

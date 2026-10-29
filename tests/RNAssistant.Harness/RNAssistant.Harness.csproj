@@ -116,7 +116,6 @@
     <Compile Include="..\..\src\RNAssistant.OfficeHosts\Vba\VbaProjectSupport.PackageGuards.cs" Link="OfficeHosts\Vba\VbaProjectSupport.PackageGuards.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaRestoreContracts.cs" Link="Office\Vba\VbaRestoreContracts.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.cs" Link="Office\Vba\VbaMutationService.cs" />
-    <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.ApplyPatch.cs" Link="Office\Vba\VbaMutationService.ApplyPatch.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.DeleteModule.cs" Link="Office\Vba\VbaMutationService.DeleteModule.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Guards.cs" Link="Office\Vba\VbaMutationService.Guards.cs" />
     <Compile Include="..\..\src\RNAssistant.Office\Vba\VbaMutationService.Journal.cs" Link="Office\Vba\VbaMutationService.Journal.cs" />

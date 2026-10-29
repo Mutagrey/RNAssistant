@@ -115,6 +115,25 @@ namespace RNAssistant.Harness
                 var patch = executor.ExecuteManual(Command("core.patch", "patch", "*** Update Target: VBA module: Universal\n" + "@@ sub run()\n-debug.print 1\n+Debug.Print 2\n"), catalog, settings, false, true, session);
                 AssertTrue(patch.Success, "universal VBA patch: " + patch.Message);
                 AssertContains(adapter.GetVbaModuleCode("Universal"), "Print 2", "owner read-back verifies changed VBA");
+                var replacementRuntime = executor.CreateNativeRuntime(session, catalog,
+                    new AppSettings { AutoConfirmToolActions = false }, "agent", false,
+                    (execution, preparation) => "replace-confirm");
+                Func<string, JObject, string, ToolExecutionRecord> replaceStep = (id, args, step) => {
+                    var call = new ToolCall("replace-" + step, id, args.ToString(Newtonsoft.Json.Formatting.None));
+                    return replacementRuntime.ExecuteAsync(new ToolExecutionContext(call, replacementRuntime.Describe(call),
+                        "replace-run", "replace-turn", step, DateTime.UtcNow, false, 5), CancellationToken.None).GetAwaiter().GetResult();
+                };
+                var searched = replaceStep("core.search", new JObject { ["target"] = "VBA module: Universal",
+                    ["query"] = "Debug.Print 2", ["matchCase"] = true }, "search");
+                AssertEqual(ToolExecutionOutcome.Ok, searched.Outcome, "VBA replacement searches current source");
+                var replacePending = replaceStep("core.replace", new JObject { ["target"] = "VBA module: Universal",
+                    ["query"] = "Debug.Print 2", ["replacement"] = "Debug.Print 3", ["matchCase"] = true,
+                    ["expectedMatches"] = 1 }, "replace");
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, replacePending.Outcome,
+                    "VBA replacement uses its completed search: " + replacePending.Result?.Message);
+                var replaced = ConfirmVbaNative(new VbaPendingExecution { Runtime = replacementRuntime, Record = replacePending });
+                AssertEqual(ToolExecutionOutcome.Ok, replaced.Outcome, "VBA replacement uses the guarded whole writer");
+                AssertContains(adapter.GetVbaModuleCode("Universal"), "Debug.Print 3", "replacement verifies full module read-back");
                 var rewrite = executor.ExecuteManual(Command("core.write", "target", "VBA module: Universal", "content", "Sub Run()\nEnd Sub"), catalog, settings, false, true, session);
                 AssertTrue(rewrite.Success, "same write updates an existing module: " + rewrite.Message);
                 var html = executor.ExecuteManual(Command("core.write", "target", "HTML file: index.html", "content", "<main>before</main>"), catalog, settings, false, true, session);

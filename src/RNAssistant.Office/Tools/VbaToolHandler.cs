@@ -41,9 +41,6 @@ namespace RNAssistant.Office.Tools
             if (string.Equals(toolId, VbaToolCatalog.RenameModule,
                 StringComparison.Ordinal))
                 return new ToolBinding("vba.public.vba.rename.module.intent.v1");
-            if (string.Equals(toolId, VbaToolCatalog.ApplyPatch,
-                StringComparison.Ordinal))
-                return new ToolBinding("vba.public.vba.apply.patch.intent.v2");
             if (string.Equals(toolId, VbaToolCatalog.DeleteModule,
                 StringComparison.Ordinal))
                 return new ToolBinding("vba.public.vba.delete.module.intent.v2");

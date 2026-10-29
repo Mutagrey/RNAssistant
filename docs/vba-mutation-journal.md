@@ -14,10 +14,13 @@ History protection applies to the VBA journal and its CAS bodies exactly as it d
 
 ## Text representations
 
-Pure rules live in `Core.Tools.VbaTextCanonicalizer`; `VbaPatchEngine` performs one
-text replacement and returns typed status/text/match information. JSON validation,
-resource guidance, guards, ordered operations and journal orchestration remain in
-Office. Phase 6A changes ownership only, not stored hashes or source bytes.
+Pure VBA text rules live in `Core.Tools.VbaTextCanonicalizer`. Shared `TextPatch` /
+`TextEditPlan` resolve original-snapshot line hunks; `core.replace` uses the shared
+literal/regex planner after an exact search receipt. Both pass the complete candidate
+to `VbaMutationService.WriteWholeModule`, preserving guard, journal-before-COM and
+full read-back. The private `VbaPatchEngine`, JSON operation reader, patch DTOs and
+patch-specific mutation service/guards are removed. `vba.module.patch` is explicitly
+retired, including accepted-history validation; no fallback alias is callable.
 
 Phase 6B placed deterministic name fallback and typed project/module payload
 validation in `Office.Vba.VbaReader`. Since 11T9A the reader consumes

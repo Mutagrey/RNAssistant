@@ -96,29 +96,6 @@ namespace RNAssistant.Office.Tools
             { throw new ResourceRequestException(error.Message, error.ErrorCode, error.Retryable); }
         }
 
-        private static IReadOnlyList<VbaPatchOperationRequest> ParsePatchOperations(JArray patch)
-        {
-            var operations = new List<VbaPatchOperationRequest>();
-            if (patch == null) return operations;
-            foreach (var token in patch)
-            {
-                var item = token as JObject;
-                operations.Add(item == null
-                    ? null
-                    : new VbaPatchOperationRequest
-                    {
-                        Operation = "replace",
-                        Find = (string)item["find"],
-                        Text = (string)item["text"],
-                        ContextBefore = (string)item["contextBefore"],
-                        ContextAfter = (string)item["contextAfter"],
-                        StartLine = (int?)item["startLine"],
-                        StartColumn = (int?)item["startColumn"]
-                    });
-            }
-            return operations;
-        }
-
         private VbaNativeOutcome ResolveRestoreIntent(
             IDictionary<string, object> arguments,
             out string backupId,

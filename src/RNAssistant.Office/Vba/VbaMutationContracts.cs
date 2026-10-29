@@ -192,40 +192,6 @@ namespace RNAssistant.Office.Vba
         public string ToolCallId { get; set; }
     }
 
-    internal sealed class VbaPatchOperationRequest
-    {
-        public string Operation { get; set; }
-        public string Find { get; set; }
-        public string Text { get; set; }
-        public string ContextBefore { get; set; }
-        public string ContextAfter { get; set; }
-        public int? StartLine { get; set; }
-        public int? StartColumn { get; set; }
-    }
-
-    internal sealed class VbaApplyPatchGuardRequest
-    {
-        public string RequestedModuleName { get; set; }
-        public VbaMutationCorrelation Correlation { get; set; }
-    }
-
-    internal sealed class VbaApplyPatchGuardPreparation
-    {
-        public VbaMutationGuard Guard { get; set; }
-        public string ResolvedModuleName { get; set; }
-        public VbaMutationOutcome Error { get; set; }
-        public bool Success { get { return Error == null && Guard != null; } }
-    }
-
-    internal sealed class VbaApplyPatchRequest
-    {
-        public string RequestedModuleName { get; set; }
-        public IReadOnlyList<VbaPatchOperationRequest> Operations { get; set; }
-        public bool DryRun { get; set; }
-        public VbaMutationGuard Guard { get; set; }
-        public VbaMutationCorrelation Correlation { get; set; }
-    }
-
     internal sealed class VbaModuleMutationRequest
     {
         public string Operation { get; set; }

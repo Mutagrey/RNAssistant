@@ -144,7 +144,7 @@ namespace RNAssistant.Office.Vba
             {
                 return VbaMutationOutcome.Error(
                     "VBA module already exists: " + moduleName +
-                    ". If editing this existing component is intended, inspect its current source and use mode=updateOnly, or vba.module.patch for a targeted edit.",
+                    ". If editing this existing component is intended, inspect its current source and use mode=updateOnly, or core.patch for a targeted edit.",
                     new JObject
                     {
                         ["moduleName"] = moduleName,

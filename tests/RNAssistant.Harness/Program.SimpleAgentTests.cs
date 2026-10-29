@@ -3000,7 +3000,7 @@ namespace RNAssistant.Harness
                 {
                     LoadSkillResponse("skills.vba.code.editing"),
                     ModelProtocolWire.WriteAcceptedCall("Apply the requested VBA patch.", "Обновляю VBA.",
-                        new ConversationToolCall { Name = VbaToolCatalog.ApplyPatch,
+                        new ConversationToolCall { Name = "vba.module.patch",
                             Arguments = new JObject { ["moduleName"] = "Module1", ["patch"] = patch } }),
                     "__FINISH__"
                 });
@@ -3013,7 +3013,7 @@ namespace RNAssistant.Harness
                     if (response == "__FINISH__")
                     {
                         var callId = messages.Single(message => message.Role == "assistant" &&
-                            message.ToolName == VbaToolCatalog.ApplyPatch &&
+                            message.ToolName == "vba.module.patch" &&
                             message.AcceptedCallOrigin != null).ToolCallId;
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the confirmed patch outcome.",
@@ -3084,7 +3084,7 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual(3, calls.Count, "confirmation reaches exactly one next model decision");
                     AssertEqual(AgentResponseStatuses.Completed, final.ResponseStatus, "confirmed mutation completes");
-                    var terminal = loaded.Messages.Last(message => message.ToolName == VbaToolCatalog.ApplyPatch &&
+                    var terminal = loaded.Messages.Last(message => message.ToolName == "vba.module.patch" &&
                         message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant");
                     ToolResultWireReadResult terminalWire;
                     string terminalError;
@@ -3098,7 +3098,7 @@ namespace RNAssistant.Harness
                     AssertContains(afterSource.Content, expectedSource,
                         "the first request after confirmation contains complete changed source");
                     AssertContains(afterSource.Content, "VBA module: Module1", "archival keeps the source associated with its target");
-                    AssertTrue(loaded.Messages.Any(message => message.ToolName == VbaToolCatalog.ApplyPatch &&
+                    AssertTrue(loaded.Messages.Any(message => message.ToolName == "vba.module.patch" &&
                         message.ResultPayload != null), "large patch result exercises CAS archival");
                     var frame = calls.Last().SingleOrDefault(message =>
                         message.ToolCallId == terminal.ToolCallId &&

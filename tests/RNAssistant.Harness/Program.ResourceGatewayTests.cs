@@ -2315,7 +2315,7 @@ namespace RNAssistant.Harness
                 var writer = NewSession(adapter);
                 executor.BindResourceAuthority(writer);
                 var completed = ConfirmVbaNative(PrepareVbaNative(executor, writer,
-                    Command(VbaToolCatalog.ApplyPatch, "moduleName", "Module1", "patch",
+                    Command("vba.module.patch", "moduleName", "Module1", "patch",
                         new JArray(new JObject { ["find"] = "\"before\"", ["text"] = "\"after\"" }))));
                 AssertEqual(ToolExecutionOutcome.Ok, completed.Outcome, "shared-document patch succeeds");
                 var frozen = new ResourceAuthoritySnapshotSet(new[] {

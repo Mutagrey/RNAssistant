@@ -158,6 +158,9 @@ retained decoded view. Память зависит от patch и буферов,
 Markdown/HTML aggregates в Office и `core.write/replace/resources.copy` authored-файлов
 пока материализуют полный source. Их пиковая память растёт с размером источника.
 VBA требует полного кода в памяти для проверки и целой записи CodeModule.
+`core.patch` и `core.replace` используют один guarded whole-module writer; прежний
+`VbaPatchEngine`, JSON-parser и patch-specific service/guards удалены. Строгая
+проверка snapshot, journal до COM и полный read-back остаются у существующего owner.
 Старый Workspace `PatchExact`/`PatchLargeExact` удалён; владельческий путь hunks
 единственный. Общие проверки байтов, journal и recovery сохранены.
 HTML owner также получает готовые типизированные `ResolvedTextEdit`; прежние

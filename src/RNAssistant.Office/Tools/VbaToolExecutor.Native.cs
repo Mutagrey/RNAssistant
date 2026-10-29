@@ -69,25 +69,7 @@ namespace RNAssistant.Office.Tools
             var moduleName = ToolArgumentReader.String(
                 arguments, "moduleName", string.Empty);
             VbaMutationOutcome preview;
-            if (string.Equals(toolId, VbaToolCatalog.ApplyPatch,
-                StringComparison.Ordinal))
-            {
-                var prepared = _mutationService.PrepareApplyPatchGuard(
-                    new VbaApplyPatchGuardRequest
-                    {
-                        RequestedModuleName = moduleName,
-                        Correlation = correlation
-                    });
-                if (!prepared.Success)
-                    return VbaNativePreparation.Failed(
-                        MutationOutcome(prepared.Error, correlation, moduleName, toolId));
-                state.ModuleName = prepared.ResolvedModuleName;
-                state.Guard = prepared.Guard;
-                preview = ExecutePreparedMutation(
-                    toolId, arguments, state, correlation, true,
-                    cancellationToken);
-            }
-            else if (string.Equals(toolId, VbaToolCatalog.DeleteModule,
+            if (string.Equals(toolId, VbaToolCatalog.DeleteModule,
                 StringComparison.Ordinal))
             {
                 var prepared = _mutationService.PrepareDeleteModuleGuard(
@@ -264,13 +246,7 @@ namespace RNAssistant.Office.Tools
                     "vba_snapshot_refresh_required", StringComparison.Ordinal) ||
                 string.Equals(mutation.ErrorCode,
                     "stale_vba_module", StringComparison.Ordinal);
-            var rejected = string.Equals(mutation.ErrorCode,
-                    "vba_patch_not_found", StringComparison.Ordinal) ||
-                string.Equals(mutation.ErrorCode,
-                    "vba_patch_ambiguous", StringComparison.Ordinal) ||
-                string.Equals(mutation.ErrorCode,
-                    "vba_patch_invalid", StringComparison.Ordinal);
-            if (!conflict && !rejected) return outcome;
+            if (!conflict) return outcome;
             var moduleName = ((string)data?["moduleName"] ?? fallbackModuleName ?? string.Empty).Trim();
             if (moduleName.Length == 0) return outcome;
             string currentSource;
@@ -278,16 +254,14 @@ namespace RNAssistant.Office.Tools
             ReadCurrentSource(moduleName, data, out currentSource, out currentSourceComplete);
             var observedSource = currentSource == null ? null : ReadObservedSource(correlation, moduleName,
                 (string)data?["observedCodeSha256"]);
-            var patch = toolId == VbaToolCatalog.ApplyPatch;
             // Diagnostic source text is not a published, delivered resource read.
             // Whole-source guards still need that observation, and a matching
             // read must release the failed call even when its arguments stay valid.
-            var refresh = !patch && (!currentSourceComplete || conflict &&
-                toolId == VbaToolCatalog.WriteModule && (bool?)data?["actualExists"] != false);
-            var readScope = refresh ? ToolRecoveryReadScope.Whole : currentSourceComplete ? ToolRecoveryReadScope.None :
-                patch ? ToolRecoveryReadScope.RelevantLines : ToolRecoveryReadScope.Whole;
+            var refresh = !currentSourceComplete ||
+                toolId == VbaToolCatalog.WriteModule && (bool?)data?["actualExists"] != false;
+            var readScope = refresh ? ToolRecoveryReadScope.Whole : ToolRecoveryReadScope.None;
             return outcome.WithRecovery(new ToolRecoveryContract(
-                conflict ? ToolFailureKind.ConflictNoEffect : ToolFailureKind.RejectedNoEffect,
+                ToolFailureKind.ConflictNoEffect,
                 refresh ? ToolRetryPolicy.RefreshRequired : ToolRetryPolicy.Replan,
                 VbaResourceProvider.ComponentIdentity(correlation.DocumentAuthorityId, moduleName),
                 ResourceRepresentations.Source,
@@ -319,8 +293,7 @@ namespace RNAssistant.Office.Tools
                 currentSource = source;
                 complete = true;
             }
-            // A stitched head/tail is not an exact source view. The typed recovery
-            // distinguishes a whole-write refresh from a patch's relevant lines.
+            // A stitched head/tail is not an exact source view; recovery requests a fresh read.
         }
 
         private string ReadObservedSource(VbaMutationCorrelation correlation,
@@ -411,20 +384,6 @@ namespace RNAssistant.Office.Tools
                     Guard = state.RestoreGuard,
                     Correlation = correlation
                 }, cancellationToken);
-            if (string.Equals(toolId, VbaToolCatalog.ApplyPatch,
-                StringComparison.Ordinal))
-            {
-                object patch;
-                arguments.TryGetValue("patch", out patch);
-                return _mutationService.ApplyPatch(new VbaApplyPatchRequest
-                {
-                    RequestedModuleName = state.ModuleName,
-                    Operations = ParsePatchOperations(patch as JArray),
-                    DryRun = dryRun,
-                    Guard = state.Guard,
-                    Correlation = correlation
-                }, cancellationToken);
-            }
             if (string.Equals(toolId, VbaToolCatalog.DeleteModule,
                 StringComparison.Ordinal))
                 return _mutationService.DeleteModule(
