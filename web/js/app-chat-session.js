@@ -51,9 +51,13 @@ function navigateChat(type, payload) {
       return null;
     }
     var version = beginChatNavigation();
+    log("Navigation: " + type + " (" + (payload && payload.chatId || "") + ") started...");
     sentAt = clock(); queueMs = sentAt - startedAt;
     if (timingId) timing.updateNavigation(timingId, { phase: "waiting", queueMs: Math.round(queueMs) });
-    var response = await send(type, payload);
+    var response = await Promise.race([
+      send(type, payload),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Bridge request timeout")), 10000))
+    ]);
     var bridgeMs = clock() - sentAt;
     // Apply each completed switch before dispatching the next. If the next request
     // fails, the visible chat still matches the controller's committed binding.
