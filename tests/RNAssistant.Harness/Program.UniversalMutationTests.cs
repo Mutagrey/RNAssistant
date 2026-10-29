@@ -35,6 +35,16 @@ namespace RNAssistant.Harness
             AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch(sections, "@@ # B\n@@ # A\n-old\n+bad\n")).ErrorCode, "anchor order is strict");
             AssertEqual("ambiguous_context", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch(sections, "@@ # A\n-old\n+bad\n")).ErrorCode, "anchor does not silently choose the first later occurrence or imply a language scope");
             AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("abc", "@@\n-b\n+x\n")).ErrorCode, "matching requires complete lines");
+            var anchorOnly = RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("' </RNAssistantTool>\nEnd Sub\n",
+                "@@ ' </RNAssistantTool>\n+Sub DiagTest8()\n+End Sub\n"));
+            AssertEqual("invalid_patch", anchorOnly.ErrorCode, "an anchor alone does not define an insertion point");
+            AssertContains(anchorOnly.Message, "*** End of File", "diagnostic explains how to append");
+            var vbaSource = "Option Explicit\r\n' </RNAssistantTool>\r\nSub Existing()\r\nEnd Sub\r\n";
+            var vbaAppend = "@@ ' </RNAssistantTool>\n+Sub DiagTest8()\n+End Sub\n*** End of File\n";
+            AssertContains(TextEditPlan.Patch(vbaSource, vbaAppend, normalizeLine:
+                VbaTextCanonicalizer.NormalizeVbeComparableLine).Text,
+                "End Sub\r\nSub DiagTest8()\r\nEnd Sub\r\n",
+                "an existing distant marker plus explicit EOF appends after current VBA code");
             AssertEqual("invalid_patch", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("abc", "@@\nabc\n+x\n")).ErrorCode, "unprefixed body fails");
             AssertEqual("invalid_patch", RuntimeThrows<TextPatternException>(() => TextPatch.Parse("@@\n abc\n" )).ErrorCode, "a hunk needs a change");
             AssertEqual("overlap", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("a\n", "@@\n+x\n a\n@@\n+y\n a\n")).ErrorCode, "same-offset insertions are rejected");
@@ -505,7 +515,12 @@ namespace RNAssistant.Harness
                         AssertEqual("a.txt old\r\n", File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "first prepared target is untouched");
                         AssertEqual(scenario == "invalid" ? "context_not_found" : scenario == "alias" ? "invalid_patch" : "source_changed",
                             result.Targets.Single(t => t.Diagnostic != null).Diagnostic.Code, "typed preparation reason");
-                        if (scenario == "invalid") AssertEqual(1, result.Targets[2].Diagnostic.Hunk.Value, "diagnostic hunk is local to its target");
+                        if (scenario == "invalid")
+                        {
+                            AssertEqual(1, result.Targets[2].Diagnostic.Hunk.Value, "diagnostic hunk is local to its target");
+                            AssertEqual("read_target", result.Targets[2].Diagnostic.NextAction,
+                                "missing context directs the model to refresh the rejected target");
+                        }
                         return;
                     }
                     var expected = scenario == "success" ? new[] { ResourceTargetStatus.Changed, ResourceTargetStatus.Unchanged, ResourceTargetStatus.Changed } :
@@ -549,6 +564,44 @@ namespace RNAssistant.Harness
                     }
                     if (scenario == "unknown") AssertTrue(view.Items[1].After == null && view.Items[1].IntendedAfter.Contains("b.txt new"), "unknown only shows intended comparison");
                 });
+        }
+
+        private static void UniversalPatchRequiresExactAfterState()
+        {
+            WithTempPaths(paths => {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "missing-after"));
+                File.WriteAllText(Path.Combine(workspace.RootPath, "a.txt"), "old\n");
+                var source = new WorkspaceFileService(paths).ReadText(workspace, "a.txt").Evidence.Resource;
+                var entry = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch);
+                var owner = new RuntimePreparableHandler {
+                    Prepare = context => new ToolPreparationResult(ToolResult.Ok("Prepared"), "{\"guard\":1}",
+                        patchTarget: new PatchTargetPlan { Source = source, SourceHash = "pinned",
+                            EffectIdentity = source.Identity, Preview = new List<PatchPreview> {
+                                new PatchPreview { Before = "old", After = "new" } } })
+                };
+                var registry = new ToolHandlerRegistry();
+                registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description,
+                    entry.ArgumentSchemaJson), entry.Policy, entry.Binding), new ResourcePatchBatchHandler(owner));
+                var runtime = new ToolRuntime(registry, "agent", false, true, (ctx, prep) => "approval");
+                var call = new ToolCall("missing-after", entry.Id, new JObject {
+                    ["patch"] = "*** Update Target: a.txt\n@@\n-old\n+new\n"
+                }.ToString(Newtonsoft.Json.Formatting.None));
+                var pending = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call),
+                    "run", "turn", "step", DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Outcome, "package prepares before dispatch");
+                var completed = runtime.ExecuteAsync(new ToolExecutionContext(call, pending.Context.Policy,
+                    "run", "turn", "step", DateTime.UtcNow, true, 1, pending.PreparedStateJson),
+                    CancellationToken.None).GetAwaiter().GetResult();
+                var result = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(completed.Result.DataJson);
+                AssertEqual(ToolExecutionOutcome.Unknown, completed.Outcome,
+                    "a changed owner result without the target after-state cannot become patch success");
+                AssertEqual(ResourceTargetStatus.Unknown, result.Targets.Single().Status,
+                    "target status records unresolved publication");
+                AssertEqual<ResourceRef>(null, completed.ResourceEffect.Targets.Single().After,
+                    "no unrelated result resource substitutes for the missing after-state");
+                AssertEqual(ResourceEffectOutcome.UnknownAfterDispatch, completed.ResourceEffect.Outcome,
+                    "the aggregate effect stays uncertain");
+            });
         }
 
         private static void UniversalWorkspaceGuardsSurviveConfirmation()

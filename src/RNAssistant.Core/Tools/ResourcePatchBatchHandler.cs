@@ -261,6 +261,9 @@ namespace RNAssistant.Core.Tools
         private static ToolPreparationResult RejectPreparation(PatchBatchResult result, int index, PatchDiagnostic diagnostic, ToolRecoveryContract recovery = null)
         {
             foreach (var target in result.Targets) { target.Status = ResourceTargetStatus.NotStarted; target.Preview = null; }
+            // A missing hunk after earlier edits is evidence to refresh this
+            // target, not an invitation to guess another patch from old lines.
+            if (diagnostic?.Code == "context_not_found") diagnostic.NextAction = "read_target";
             result.Targets[index].Status = ResourceTargetStatus.Rejected; result.Targets[index].Diagnostic = diagnostic;
             return new ToolPreparationResult(ToolResult.Error("Patch rejected before any write.", JsonConvert.SerializeObject(result)),
                 recovery: recovery ?? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
@@ -321,11 +324,16 @@ namespace RNAssistant.Core.Tools
                         var published = completed.ResourceEffect?.Impacts.FirstOrDefault(impact => impact.Identity.Equals(root))?.After;
                         if (published != null) effects[i].After = new ResourceRef(source.Uri, published.Revision);
                     }
-                    if (status == ResourceTargetStatus.Changed && effects[i].After == null && completed.Result != null)
+                    // A provider-level result reference can belong to a sibling or
+                    // backup. Only the exact target's published after-state proves a
+                    // changed patch and can become the next model source.
+                    if (status == ResourceTargetStatus.Changed &&
+                        (effects[i].After?.IsExact != true ||
+                         effects[i].After.Identity.Equals(prepared.Targets[i].Plan.EffectIdentity ?? source.Identity) == false &&
+                         effects[i].After.Identity.Equals(source.Identity) == false))
                     {
-                        var provider = ResourceUri.Parse(source.Uri).Provider;
-                        var candidates = completed.Result.Resources.Where(r => ResourceUri.Parse(r.Uri).Provider == provider).Distinct().ToArray();
-                        if (candidates.Length == 1) effects[i].After = candidates[0];
+                        status = row.Status = effects[i].Status = ResourceTargetStatus.Unknown;
+                        effects[i].After = null;
                     }
                     if (status == ResourceTargetStatus.Changed || status == ResourceTargetStatus.Unchanged)
                     {
@@ -341,7 +349,7 @@ namespace RNAssistant.Core.Tools
                     if (status == ResourceTargetStatus.Rejected || status == ResourceTargetStatus.Unknown)
                     {
                         row.Diagnostic = status == ResourceTargetStatus.Unknown
-                            ? new PatchDiagnostic { Code = "effect_unknown", Message = "Write may have happened. Reconcile this target; do not replay the package.", NextAction = "verify_unknown_effect" }
+                            ? new PatchDiagnostic { Code = "effect_unknown", Message = "The target's exact after-state was not verified. Read this target before another edit; do not replay the package.", NextAction = "verify_unknown_effect" }
                             : PatchDiagnostic.From(completed.Result ?? ToolResult.Error(completed.Message));
                         break;
                     }

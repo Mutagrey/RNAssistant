@@ -150,6 +150,10 @@ namespace RNAssistant.Core.Tools
                 var state = states[i];
                 if (state.Old.Length == 0 && state.AnchorIndex == state.Anchors.Length && (last == null || state.Hunk.EndOfFile))
                 { state.Count = 1; state.Candidate = new SourceLine[0]; }
+                if (state.Old.Length == 0 && last != null && !state.Hunk.EndOfFile &&
+                    state.AnchorIndex == state.Anchors.Length)
+                    throw Error("invalid_patch", "Hunk " + (i + 1) +
+                        ": an @@ anchor alone does not locate an insertion. Add *** End of File to append, or include an unchanged context line at the insertion point.", i + 1);
                 if (state.Count == 0) throw Error("context_not_found", "Hunk " + (i + 1) + ": anchors or old/context lines were not found. Read the current source. A context-free insertion needs an empty source or *** End of File.", i + 1);
                 if (state.Count != 1) throw Error("ambiguous_context", "Hunk " + (i + 1) + ": multiple matches at original lines " + string.Join(", ", state.Locations.Select(c => c.Line)) + ". Add @@ anchors or unchanged context.", i + 1, state.Locations);
                 AddEdits(edits, state, offset, last, newline, i + 1);
