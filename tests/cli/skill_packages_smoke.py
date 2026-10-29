@@ -18,7 +18,8 @@ def check(root):
     package = state / "skills" / "workspace" / "fixture"
     package.mkdir(parents=True)
     manifest = {"formatVersion": 1, "packageId": "fixture.report", "requiredTools": [
-        {"id": name, "contractVersion": "1"} for name in ("core.read", "core.patch", "core.write")],
+        {"id": name, "contractVersion": "2" if name == "core.patch" else "1"}
+        for name in ("core.read", "core.patch", "core.write")],
         "optionalTools": [{"id": "fixture.absent", "contractVersion": "1", "fallback": "Report missing validator; use exact source readback."}]}
     marker = "EXACT_PUBLISHED_PROCEDURE: read, update unique total, create report, read both final files."
     source = package / "SKILL.md"
@@ -98,9 +99,9 @@ def check(root):
         assert "Verified total: 13" in json.dumps(requests[-1]), "Current report evidence survives new input and process restart"
         assert direct["ToolCounts"]["ReadOk"] == 0, direct
         responses.extend([call("core.patch", targets=[{'target': 'source.txt', 'edits': [{'before': 'total=13', 'after': 'total=14'}]}]), DONE])
-        guarded = cli("run", "--session", final["SessionId"], "--message", "Check the follow-up write guard.", "--auto-confirm", "on")
+        guarded = cli("run", "--session", final["SessionId"], "--message", "Check the follow-up write guard.", "--auto-confirm", "on", code=5)
         assert (workspace / "source.txt").read_text() == "total=13\n", "Carried skill must not inherit the prior turn's write guard"
-        assert guarded["ToolCounts"]["WriteOk"] == 0 and "source_changed" in json.dumps(requests[-1]), guarded
+        assert guarded["ToolCounts"]["WriteOk"] == 0 and "observation_required" in json.dumps(requests[-1]), guarded
         responses.append(DONE)
         cli("run", "--session", final["SessionId"], "--message", "Inspect with restricted permissions.", "--mutation-policy", "deny")
         assert not selected(requests[-1]), "Current policy must suspend an incompatible retained selection"
@@ -111,10 +112,10 @@ def check(root):
         cli("run", "--session", final["SessionId"], "--message", "Continue after removal.")
         assert not selected(requests[-1]), "Removed selection must not return after restart"
         responses.extend([call("core.skills.load", id="fixture.report"), DONE])
-        cli("run", "--message", "Inspect only", "--mutation-policy", "deny")
+        cli("run", "--message", "Inspect only", "--mutation-policy", "deny", code=5)
         assert not selected(requests[-1]), "Unavailable required writer prevents partial selection under Deny"
         responses.extend([call("core.skills.load", id="fixture.large"), DONE])
-        limited = cli("run", "--message", "Select fixture.large if the complete request fits.", "--context-tokens", "24576")
+        limited = cli("run", "--message", "Select fixture.large if the complete request fits.", "--context-tokens", "24576", code=5)
         assert not selected(requests[-1]), "Rejected candidate never becomes active instructions"
         refusals = [message.get("content", "") for message in requests[-1]["messages"]
                     if "skill_unavailable" in str(message.get("content", ""))]

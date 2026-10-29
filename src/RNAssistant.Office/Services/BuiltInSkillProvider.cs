@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Services
 {
@@ -175,7 +176,9 @@ namespace RNAssistant.Office.Services
                         break;
                 }
                 skill.Package = new SkillPackageManifest { PackageId = skill.Id,
-                    RequiredTools = ids.Distinct(StringComparer.Ordinal).Select(id => new SkillToolDependency { Id = id }).ToList() };
+                    RequiredTools = ids.Distinct(StringComparer.Ordinal).Select(id => new SkillToolDependency {
+                        Id = id, ContractVersion = id == ResourceMutationToolCatalog.Patch ? "2" : "1"
+                    }).ToList() };
             }
             result.Add(RNAssistant.Core.Services.ChatVisualizationSkillProvider.Create());
             return result;

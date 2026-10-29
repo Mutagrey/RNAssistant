@@ -2630,7 +2630,7 @@ namespace RNAssistant.Harness
                 // The default 32K request now fits. Retain a deliberate full-request admission refusal
                 // independently of how much prose the built-in prompts happen to contain.
                 var userRequest = "Исправь незакрытый If в UniLoader." +
-                    (tightBudget ? "\nRequired fixture context: " + new string('x', 32000) : "");
+                    (tightBudget ? "\nRequired fixture context: " + new string('x', 31500) : "");
                 var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
                     ChatModes.Agent, userRequest, session, NewContext(adapter),
                     requestSettings,

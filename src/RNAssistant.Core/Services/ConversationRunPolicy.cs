@@ -79,7 +79,7 @@ namespace RNAssistant.Core.Services
             if (policy == null || policy.Effect == ToolEffect.Unclassified) return false;
             if (!policy.AllowedModes.Contains(Mode, StringComparer.Ordinal)) return false;
             return (!policy.MayHaveSideEffects && !policy.ExecutesCode && !policy.RequiresConfirmation) ||
-                IsPlanningArtifact(id, binding) || IsPlanSourceTool(id, binding) || AllowsConfirmation;
+                IsPlanningArtifact(id, binding) || (Mode == ChatModes.Plan && IsPlanSourceTool(id, binding)) || AllowsConfirmation;
         }
         public ToolPolicy EffectiveToolPolicy(string id, ToolPolicy policy, ToolBinding binding)
         {

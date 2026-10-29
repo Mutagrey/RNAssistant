@@ -491,7 +491,8 @@ namespace RNAssistant.Runtime
                 }
                 ConversationRunPolicy.RequireCurrentSession(session);
                 var acceptedMode = mode ?? ChatModes.Require(session.Mode);
-                var policy = ConversationRunPolicy.For(acceptedMode, request.MutationPolicy ?? session.MutationPolicy,
+                var policy = ConversationRunPolicy.For(acceptedMode,
+                    workspace.ReadOnly ? MutationPolicy.Deny : request.MutationPolicy ?? session.MutationPolicy,
                     request.AutoConfirmToolActions ?? settings.AutoConfirmToolActions);
                 var changedPolicy = session.Mode != policy.Mode || session.MutationPolicy != policy.MutationPolicy;
                 if (changedPolicy && session.LastRun?.KernelState?.Summary?.Lifecycle == RunLifecycle.AwaitingConfirmation)
@@ -1183,7 +1184,10 @@ namespace RNAssistant.Runtime
                 _settings = settings.Clone(); _progress = progress; _modelProgress = modelProgress; _acceptance = acceptance; _office = office;
                 _pluginSource = pluginSource;
                 _directProfile = toolProfile ?? CallableToolProfile.Core();
-                _mode = runPolicy ?? ConversationRunPolicy.ForAcceptedRun(session);
+                var acceptedPolicy = runPolicy ?? ConversationRunPolicy.ForAcceptedRun(session);
+                _mode = workspace.ReadOnly && acceptedPolicy.MutationPolicy != MutationPolicy.Deny
+                    ? ConversationRunPolicy.For(acceptedPolicy.Mode, MutationPolicy.Deny)
+                    : acceptedPolicy;
                 if (office != null && office.ModelProjection == null)
                     throw new InvalidOperationException("The bound Office result projection is unavailable.");
                 _compiler = new ModelContextCompiler(payloads, office?.ModelProjection);

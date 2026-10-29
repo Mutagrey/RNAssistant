@@ -109,6 +109,9 @@ namespace RNAssistant.Harness
                 var code = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent", "plan" }, executesCode: true);
                 AssertTrue(!policy.Allows("web.verify", code, new ToolBinding("browser")), "Plan cannot execute read-producing code");
                 AssertTrue(!ConversationRunPolicy.For("agent", MutationPolicy.Deny, automatic).Allows("web.verify", code, new ToolBinding("browser")), "Deny cannot execute read-producing code");
+                var patch = ResourceMutationToolCatalog.GetTools().Single(entry => entry.Id == ResourceMutationToolCatalog.Patch);
+                AssertTrue(!ConversationRunPolicy.For("agent", MutationPolicy.Deny, automatic).Allows(patch.Id, patch.Policy, patch.Binding),
+                    "Plan source exception does not expose patch in Agent Deny");
                 AssertTrue(ConversationRunPolicy.For("agent").EffectiveToolPolicy("web.verify", code, new ToolBinding("browser")).RequiresConfirmation, "code needs approval");
             }
             RuntimeThrows<ArgumentException>(() => ConversationRunPolicy.For("chat"));

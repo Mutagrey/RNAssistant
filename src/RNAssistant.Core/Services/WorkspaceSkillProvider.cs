@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Services
 {
@@ -20,7 +21,7 @@ Use for tasks that create, inspect or edit real workspace files.
 
 1. Identify the required files and completion checks. Use core.find for an unfamiliar directory (recursive/glob selectors are available), and core.search for literal or regex content across scope=workspace; choose the scope and depth yourself. Search snippets are not source-read authorization; known relative paths can be read directly with core.read (type=file).
 2. Before editing, reuse current source already included from a read or verified after-state; read missing/stale source. core.write creates a missing path or replaces a completely observed existing file; runtime guards existence and revision. Use core.patch for focused edits.
-3. Follow the current core.patch schema for section/hunk syntax, anchors, insertion boundaries and per-target outcomes. Copy context from observed source, disambiguate with more context and reconcile unknown effects before another write. Use core.search then core.replace for an explicitly counted literal/regex replacement. The file owner streams large source and result; core.write requires complete current source and a deliberate whole-file change.
+3. Follow the current core.patch schema for structured targets/edits, full-line context, insertion boundaries and per-target outcomes. Copy fragments and context from observed source, disambiguate with more context and reconcile unknown effects before another write. Use core.search then core.replace for an explicitly counted literal/regex replacement. The file owner streams large source and result; core.write requires complete current source and a deliberate whole-file change.
 4. Verify the changed behavior with the available task checks. A write read-back confirms bytes, not application behavior. A skill read supplies instructions, not file source or mutation permission.
 5. Reuse current verified after-state for final source assessment. If RUNTIME_CONTEXT.readAcceptance is present, complete its remaining exact final-file reads and expected paths; later writes invalidate those reads, and browser checks or skill reads do not satisfy them. Report only verified outcomes and explicit remaining limitations.
 
@@ -64,7 +65,9 @@ For a plugin annotation, inspect plugin.json and only its declared HTML/CSS/JS s
                 BodyMarkdown = body,
                 BuiltIn = true, Enabled = true, Version = "1.0.0",
                 Package = new SkillPackageManifest { PackageId = id,
-                    RequiredTools = tools.ConvertAll(tool => new SkillToolDependency { Id = tool }),
+                    RequiredTools = tools.ConvertAll(tool => new SkillToolDependency {
+                        Id = tool, ContractVersion = tool == ResourceMutationToolCatalog.Patch ? "2" : "1"
+                    }),
                     OptionalTools = optional } };
         }
     }

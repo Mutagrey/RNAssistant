@@ -104,7 +104,7 @@ def run_case(root, role):
         value = cli("run", "--mode", mode, "--tool-result-role", role, "--instruction-role", "system",
                     "--response-mode", "json_schema", "--message", "Save, read, restore or remove the requested Plan; preserve notes.txt.",
                     "--max-iterations", iterations, "--max-tool-steps", "12",
-                    *(["--read-only"] if mode == "plan" else ["--auto-confirm", "on"]),
+                    *(["--read-only"] if mode == "plan" else ["--auto-confirm", "on", "--mutation-policy", "ask"]),
                     *(["--session", session] if session else []), *extra, code=code, directory=directory)
         assert not responses and not errors, (responses, errors)
         return value, requests[start:]

@@ -151,9 +151,15 @@ namespace RNAssistant.Harness
             var pluginAuthoring = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == WorkspaceSkillProvider.PluginId);
             AssertTrue(pluginAuthoring.BodyMarkdown.Contains(VisualAnnotationSourceWorkflow.Common),
                 "plugin source authoring includes the shared annotation-to-source procedure");
+            AssertEqual("2", pluginAuthoring.Package.RequiredTools.Single(tool => tool.Id == ResourceMutationToolCatalog.Patch).ContractVersion,
+                "workspace skill requires the current patch contract");
 
             var pluginCatalog = new SkillCatalogSnapshot(new[] { pluginAuthoring });
-            var fileTools = pluginAuthoring.Package.RequiredTools.Select(item => PackageTool(item.Id)).ToArray();
+            var fileTools = pluginAuthoring.Package.RequiredTools.Select(item => {
+                var tool = PackageTool(item.Id);
+                tool.ContractVersion = item.ContractVersion;
+                return tool;
+            }).ToArray();
             var withoutPlugins = SkillTaskService.Select(PackageSession(), pluginAuthoring.Id,
                 pluginCatalog, PackageTools(fileTools), "plugin-without-capabilities");
             AssertContains(withoutPlugins.Reason, "package validation", "missing check has explicit fallback");
