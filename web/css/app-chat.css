@@ -209,7 +209,7 @@
 .messages {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 16px;
   flex: 1;
   width: 100%;
   height: 100%;
@@ -672,11 +672,12 @@
 .agent-run-effect-facts { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .workspace-chat-activity { width: calc(100% - 36px); max-width: 100%; margin: 0 auto 10px; }
 .agent-reflection-step {
-  position: relative; min-width: 0; color: var(--muted);
+  display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 6px;
+  min-width: 0; color: var(--muted);
   font-size: 1rem; line-height: 1.65; overflow-wrap: anywhere;
 }
-.agent-reflection-icon { position: absolute; left: -22px; top: .32em; display: inline-flex;
-  align-items: center; justify-content: center; width: 16px; height: 16px; color: inherit; }
+.agent-reflection-icon { display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin-top: 9px; color: inherit; }
 .agent-reflection-icon svg { width: 14px; height: 14px; }
 .agent-reflection-body { min-width: 0; }
 .agent-reflection-body.markdown > :first-child { margin-top: 0; }

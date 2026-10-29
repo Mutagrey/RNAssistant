@@ -112,6 +112,30 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.equal(await page.locator("#separate-steps-run .agent-model-step").evaluateAll(nodes =>
         nodes.map(node => getComputedStyle(node).borderBottomWidth).join(",")), "0px,0px",
         "ordinary steps have no separators");
+      const runRhythm = await page.evaluate(() => {
+        const separate = document.querySelector("#separate-steps-run");
+        const steps = separate.querySelectorAll(".agent-model-step");
+        const firstText = steps[0].querySelector(".agent-step-message").getBoundingClientRect();
+        const firstTool = steps[0].querySelector(".agent-activity-row").getBoundingClientRect();
+        const grouped = document.querySelector("#grouped-actions-run");
+        const groupIcon = grouped.querySelector(".agent-stage-symbol").getBoundingClientRect();
+        const groupText = grouped.querySelector(".agent-run-history-title").getBoundingClientRect();
+        return {
+          messageLeft: firstText.left,
+          toolIconLeft: steps[0].querySelector(".agent-activity-mark").getBoundingClientRect().left,
+          groupIconLeft: groupIcon.left,
+          groupTextLeft: groupText.left,
+          narrationToAction: firstTool.top - firstText.bottom,
+          betweenSteps: steps[1].getBoundingClientRect().top - steps[0].getBoundingClientRect().bottom
+        };
+      });
+      assert.ok(Math.abs(runRhythm.messageLeft - runRhythm.toolIconLeft) < 1 &&
+        Math.abs(runRhythm.messageLeft - runRhythm.groupIconLeft) < 1 &&
+        Math.abs(runRhythm.groupTextLeft - runRhythm.groupIconLeft - 22) < 1,
+        "tool and group icons share the narration edge at width " + width);
+      assert.ok(runRhythm.narrationToAction >= 5 && runRhythm.narrationToAction <= 7 &&
+        runRhythm.betweenSteps >= 11 && runRhythm.betweenSteps <= 13,
+        "narration, actions and successive steps keep a consistent rhythm at width " + width);
       assert.equal(await page.locator("#full-run .agent-final-step").evaluate(node => getComputedStyle(node).borderTopWidth), "1px",
         "the separator appears only before the final answer");
       assert.equal(await page.locator("#usage-run .message-usage").textContent(),
@@ -230,6 +254,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#full-run").hover();
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT, fullPage: true });
     await page.locator(".agent-activity-row").first().click();
+    if (process.env.TOOL_CARD_SCREENSHOT)
+      await page.locator("#actions .agent-activity").first().screenshot({ path: process.env.TOOL_CARD_SCREENSHOT });
     assert.equal(await page.getByText("Что войдёт в следующий запрос модели", { exact: true }).count(), 0);
     assert.equal(await page.locator(".agent-activity-context-note").count(), 0);
     assert.equal(await page.locator("#actions .agent-activity-tool-id").count(), 0,
@@ -291,14 +317,22 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       reflection: node.querySelector(".agent-reflection-body").getBoundingClientRect().left,
       toolIcon: node.querySelector(".agent-activity-mark").getBoundingClientRect().left,
       reflectionIcon: node.querySelector(".agent-reflection-icon").getBoundingClientRect().left,
+      reflectionIconTop: node.querySelector(".agent-reflection-icon").getBoundingClientRect().top,
+      reflectionTop: node.querySelector(".agent-reflection-body").getBoundingClientRect().top,
       toolColor: getComputedStyle(node.querySelector(".agent-activity-name")).color,
       reflectionColor: getComputedStyle(node.querySelector(".agent-reflection-body")).color
     }));
-    assert.ok(Math.abs(alignment.message - alignment.tool) < 1 && Math.abs(alignment.message - alignment.reflection) < 1,
-      "tool and reflection text align with assistant messages");
-    assert.ok(Math.abs(alignment.toolIcon - alignment.reflectionIcon) < 1,
-      "tool and reflection icons share the same gutter");
+    assert.ok(Math.abs(alignment.message - alignment.toolIcon) < 1 &&
+      Math.abs(alignment.message - alignment.reflectionIcon) < 1,
+      "tool and reflection icons begin at the assistant message edge");
+    assert.ok(Math.abs(alignment.tool - alignment.reflection) < 1 &&
+      Math.abs(alignment.tool - alignment.message - 22) < 1,
+      "tool and reflection text follow the shared icon column");
+    assert.ok(Math.abs(alignment.reflectionIconTop - alignment.reflectionTop - 9) < 1,
+      "reflection icon sits beside the first text line");
     assert.equal(alignment.reflectionColor, alignment.toolColor, "reflection uses the muted action color");
+    if (process.env.REFLECTION_SCREENSHOT)
+      await page.locator("#reflection-preview").screenshot({ path: process.env.REFLECTION_SCREENSHOT });
     assert.equal(await page.locator("#resource-previews").innerText().then(text => text.includes("Показана доступная часть результата")), false,
       "a complete selected PDF slice is not labelled as a truncated UI preview");
     for (const theme of ["light", "dark"]) {
@@ -317,17 +351,25 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       run.appendChild(renderActivityNode({ Kind: "tool", ToolId: "core.read", Status: "completed",
         Subtitle: "Module1", Display: { Action: "Чтение", Operation: "Read" } }, false, false, null));
       appendAgentReflectionStep(run, "Проверю модуль."); article.appendChild(run); list.appendChild(article);
+      const following = document.createElement("article"); following.className = "message assistant";
+      following.textContent = "Следующее сообщение"; list.appendChild(following);
       document.querySelector("main").appendChild(list);
     });
     const narrow = await page.locator("#narrow-feed").evaluate(node => ({
       edge: node.getBoundingClientRect().left,
+      articleLeft: node.querySelector(".message").getBoundingClientRect().left,
       message: node.querySelector(".agent-step-message").getBoundingClientRect().left,
       tool: node.querySelector(".agent-activity-copy").getBoundingClientRect().left,
       reflection: node.querySelector(".agent-reflection-body").getBoundingClientRect().left,
-      icon: node.querySelector(".agent-reflection-icon").getBoundingClientRect().left
+      icon: node.querySelector(".agent-reflection-icon").getBoundingClientRect().left,
+      betweenMessages: node.children[1].getBoundingClientRect().top - node.children[0].getBoundingClientRect().bottom
     }));
-    assert.ok(narrow.icon >= narrow.edge && Math.abs(narrow.message - narrow.tool) < 1 &&
-      Math.abs(narrow.message - narrow.reflection) < 1, "narrow chat keeps icons visible and text aligned");
+    assert.ok(narrow.icon >= narrow.edge && Math.abs(narrow.articleLeft - narrow.message) < 1 &&
+      Math.abs(narrow.message - narrow.icon) < 1 &&
+      Math.abs(narrow.tool - narrow.reflection) < 1 && Math.abs(narrow.tool - narrow.message - 22) < 1,
+      "narrow chat keeps the icon column inside the transcript");
+    assert.ok(narrow.betweenMessages >= 15 && narrow.betweenMessages <= 17,
+      "successive messages use the same compact spacing in a narrow transcript");
     if (process.env.RESULT_DETAILS_SCREENSHOT) await page.locator("#resource-previews").screenshot({ path: process.env.RESULT_DETAILS_SCREENSHOT });
     await page.evaluate(() => {
       const view = { RunId: "sparse", TurnId: "sparse", Lifecycle: "running", ExecutionHealth: "unknown",
