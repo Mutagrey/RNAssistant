@@ -17,6 +17,11 @@ confirmation collisions, stale reads, copy/move/delete/restore, retained file di
 and unknown effects. Package checks cover all-before-write preparation, duplicate aliases,
 confirmation drift, per-target rechecks, partial failure/unknown, unexecuted remainder,
 model projection, retained before/after and VBA/HTML/Markdown/authored-file routing.
+The sequential VBA case reproduces the photographed three-line change followed by
+a two-line reversal, verifies delivery of the latest source, preserves the other
+edit, and rejects stale or omitted observations. Confirmed targets remain available
+through compaction even if a later target fails or becomes unknown. These checks
+do not establish why the user's model chose to reverse an edit.
 `shared source:` checks Plan header/body edits, all-target preparation and mode
 policy, verified Plan after-source, editor revision guards, prompt/reference owner
 routing, retained diffs and reference BOM/CRLF preservation.

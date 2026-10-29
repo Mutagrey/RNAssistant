@@ -338,6 +338,119 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void UniversalVbaSequentialPatchKeepsCurrentSource()
+        {
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) => {
+                var session = NewSession(adapter);
+                var original = new[] {
+                    "r.m32 = a.m31 * b.m12 + a.m32 * b.m22 + a.m33 * b.m32 + a.m34 * b.m42",
+                    "r.m42 = a.m41 * b.m12 + a.m42 * b.m22 + a.m43 * b.m32 + a.m44 * b.m42",
+                    "r.m43 = a.m41 * b.m13 + a.m42 * b.m23 + a.m43 * b.m33 + a.m44 * b.m43" };
+                var edited = new[] { original[0].Replace("a.m31", "a.m32"),
+                    original[1].Replace("a.m41", "a.m42"), original[2].Replace("a.m41", "a.m43") };
+                var unchanged = string.Join("\n", Enumerable.Range(0, 300).Select(i => "' unchanged module comment " + i)) + "\n";
+                Func<IEnumerable<string>, string> module = lines => unchanged + "Function Mat4Multiply(a, b)\n" +
+                    string.Join("\n", lines) + "\nMat4Multiply = r\nEnd Function";
+                adapter.SetVbaModule("Scene3D", module(original), "StdModule");
+                var read = ReadVbaSource(executor, session, "Scene3D");
+                var initialEvidence = executor.ResourceGateway.Evidence(session, read).ToList();
+                Func<string, IEnumerable<ResourceEvidence>, VbaPendingExecution> prepare = (body, observed) => {
+                    var command = Command("core.patch", "patch", "*** Update Target: VBA module: Scene3D\n" + body);
+                    command.ToolCallId = Guid.NewGuid().ToString("N");
+                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                        Id = command.ToolCallId, Name = command.ToolId, Arguments = command.Arguments },
+                        "Edit.", "Change these full lines.", null, ToolResultRoles.User, FixtureCallOrigin("run-vba-native:1"));
+                    accepted.RunId = "run-vba-native"; accepted.ResourceEvidence = observed.ToList();
+                    session.Messages.Add(accepted);
+                    return PrepareVbaNative(executor, session, command);
+                };
+                Func<ToolExecutionRecord, ChatMessage> publish = record => {
+                    var command = new ToolInvocation { ToolCallId = record.Context.Call.Id, ToolId = "core.patch" };
+                    var result = new ToolResultMaterialization(record.Result, resourceEvidence: record.ResourceEvidence,
+                        resourceEffect: record.ResourceEffect);
+                    var message = AgentJsonProtocol.CreateToolResultMessage(command, result, int.MaxValue, ToolResultRoles.User);
+                    message.RunId = record.Context.RunId;
+                    ConversationModelSession.AddVerifiedSourceEvidence(session, executor.ResourceAuthority, executor.Payloads,
+                        message, command, result);
+                    session.Messages.Add(message);
+                    return message;
+                };
+                Func<int, ModelContextSnapshot> request = budget => {
+                    var scope = executor.ResourceAuthority.ScopeFor(session, initialEvidence[0].Resource, true);
+                    var authority = new ModelAuthoritySnapshot(executor.ResourceAuthority.CaptureMany(new[] { scope }),
+                        "tools", new SkillCatalogSnapshot(null), null, 1);
+                    return new ModelContextCompiler(executor.Payloads, projection: ModelToolResultProjection.Instance)
+                        .Compile(authority, new ChatMessage[0], session.Messages, null,
+                            new ToolCatalogEntry[0], new AppSettings(), budget);
+                };
+                Func<ChatMessage> currentSource = () => request(12000).Messages.Single(m => m.SyntheticResourceObservation);
+                var first = ConfirmVbaNative(prepare(string.Concat(Enumerable.Range(0, 3)
+                    .Select(i => LineHunk(original[i], edited[i]))), initialEvidence));
+                AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first patch is verified");
+                publish(first);
+                var afterFirst = currentSource();
+                AssertContains(afterFirst.Content, module(edited), "next model request receives the full first result");
+                var bounded = request(1500);
+                AssertEqual(0, bounded.DeliveredObservations.Count, "omitted after-source is not delivered observation authority");
+                var notice = string.Join("\n", bounded.Messages.Select(m => m.Content));
+                AssertContains(notice, "VBA module: Scene3D", "budget omission keeps the exact semantic target");
+                AssertContains(notice, "bodyIncluded\":false", "budget omission is explicit to the model");
+                AssertContains(notice, "Read a narrower", "model is directed to read an affordable view before editing again");
+                var unobserved = prepare(LineHunk(edited[0], original[0]), bounded.DeliveredObservations).Record;
+                AssertTrue(unobserved.Outcome == ToolExecutionOutcome.Error && !unobserved.MayHaveDispatched,
+                    "a model that did not receive the updated body must read before its next patch");
+                publish(unobserved);
+                foreach (var unknown in new[] { false, true })
+                {
+                    var command = new ToolInvocation { ToolCallId = first.Context.Call.Id, ToolId = "core.patch" };
+                    var targets = new[] { first.ResourceEffect.Targets[0], new ResourceTargetEffect {
+                        Target = "VBA module: Later", Status = unknown ? ResourceTargetStatus.Unknown : ResourceTargetStatus.Rejected } };
+                    var effect = new ResourceEffect("partial", "core.patch", unknown ? ResourceEffectOutcome.UnknownAfterDispatch : ResourceEffectOutcome.VerifiedChanged,
+                        first.ResourceEffect.Impacts, targets: targets);
+                    var data = Newtonsoft.Json.JsonConvert.SerializeObject(new PatchBatchResult { Phase = "execution", Partial = true, WriteStarted = true,
+                        Targets = targets.Select(t => new PatchTargetResult { Target = t.Target, Status = t.Status }).ToList() });
+                    var result = new ToolResultMaterialization(unknown ? ToolResult.Unknown("Stopped", data) : ToolResult.Error("Stopped", data), resourceEffect: effect);
+                    var message = AgentJsonProtocol.CreateToolResultMessage(command, result, int.MaxValue, ToolResultRoles.User);
+                    message.RunId = first.Context.RunId;
+                    ConversationModelSession.AddVerifiedSourceEvidence(session, executor.ResourceAuthority, executor.Payloads, message, command, result);
+                    AssertEqual(1, message.ResourceEvidence.Count, "later refusal/unknown retains only the verified source");
+                    var scope = executor.ResourceAuthority.ScopeFor(session, initialEvidence[0].Resource, true);
+                    var authority = new ModelAuthoritySnapshot(executor.ResourceAuthority.CaptureMany(new[] { scope }),
+                        "tools", new SkillCatalogSnapshot(null), null, 1);
+                    var call = session.Messages.First(m => m.ToolCallId == command.ToolCallId);
+                    var archive = new ChatSession { Messages = new List<ChatMessage> { call, message } };
+                    SetContinuityCheckpoint(archive, message);
+                    var active = new[] { new ChatMessage { Role = "user", Content = "Continue after checking the failed target." } };
+                    var compiled = new ModelContextCompiler(executor.Payloads, projection: ModelToolResultProjection.Instance)
+                        .Compile(authority, new ChatMessage[0], active, null, new ToolCatalogEntry[0], new AppSettings(), 12000,
+                            workingSet: ContextWorkingSet.Restore(archive, active, 6000));
+                    var retained = compiled.Messages.SingleOrDefault(m => m.SyntheticResourceObservation);
+                    AssertTrue(retained != null, "compaction retains a verified source from a partial " + (unknown ? "unknown" : "error") + " result");
+                    AssertContains(retained.Content, module(edited),
+                        "compaction cannot hide a confirmed source behind another target's failure");
+                }
+                var second = ConfirmVbaNative(prepare(LineHunk(edited[0], original[0]) + LineHunk(edited[2], original[2]),
+                    afterFirst.ResourceEvidence));
+                AssertEqual(ToolExecutionOutcome.Ok, second.Outcome, "explicit reverse hunks apply to current source");
+                publish(second);
+                var expected = module(new[] { original[0], edited[1], original[2] });
+                AssertEqual(expected, adapter.GetVbaModuleCode("Scene3D"), "second patch preserves the unmentioned first edit");
+                var afterSecond = currentSource();
+                AssertContains(afterSecond.Content, expected, "current source supersedes the previous source in model context");
+                var beforeSecond = PatchChangesProjection.ReadSource(executor.ResourceAuthority, second.ResourceEffect.Targets[0].Source, 10000);
+                AssertEqual(module(edited), beforeSecond, "second diff before is the actual first read-back");
+                var stale = prepare(LineHunk(original[1], edited[1]), initialEvidence).Record;
+                AssertTrue(stale.Outcome == ToolExecutionOutcome.Error && !stale.MayHaveDispatched,
+                    "old observed snapshot cannot overwrite newer code");
+                AssertContains(stale.Result.DataJson, "source_changed", "old observation requires a fresh read");
+                var repeated = prepare(LineHunk(edited[0], original[0]), afterSecond.ResourceEvidence).Record;
+                AssertTrue(repeated.Outcome == ToolExecutionOutcome.Error && !repeated.MayHaveDispatched,
+                    "already consumed minus lines cannot silently match old content");
+                AssertContains(repeated.Result.DataJson, "context_not_found", "repeat is a context conflict");
+                AssertEqual(expected, adapter.GetVbaModuleCode("Scene3D"), "both rejections leave current code intact");
+            });
+        }
+
         private static void UniversalPatchBatchesPreservePerTargetFacts()
         {
             foreach (var scenario in new[] { "success", "invalid", "alias", "stale", "partial", "unknown" })

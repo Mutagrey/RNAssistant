@@ -59,6 +59,7 @@ namespace RNAssistant.Harness
                 Test("universal mutations: public Office routing", UniversalOfficeRoutesToOwners),
                 Test("universal mutations: HTML member guards", UniversalHtmlBatchPinsMembers),
                 Test("universal mutations: delivered Office source authority", UniversalOfficeRequiresDeliveredSource),
+                Test("universal mutations: sequential VBA patches deliver current source", UniversalVbaSequentialPatchKeepsCurrentSource),
                 Test("universal mutations: package preparation and partial effects", UniversalPatchBatchesPreservePerTargetFacts),
                 Test("universal mutations: workspace confirmation and unknown effect", UniversalWorkspaceGuardsSurviveConfirmation),
                 Test("text search: default directory browse through runtime", WorkspaceFindDefaultKeepsDirectories),

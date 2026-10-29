@@ -16,6 +16,17 @@ source-budget, включение production sources и границы зави�
 restore/delete и recovery; целевые Web проверки Plan и HTML actions прошли.
 Windows/Office/WebView2 delivery остаётся открытым; Office/VSTO не запускались.
 
+## Последовательные patch и контекст — 2026-10-29
+
+Owner: Core ModelContextCompiler / Office ConversationModelSession.
+Уточнены инструкции последовательных patch. Подтверждённый after-source каждой
+цели сохраняется в контексте и после compaction при отказе/unknown следующей цели;
+неизвестный source не становится наблюдением. Отсутствие актуального VBA observation
+возвращает требование перечитать источник. Universal mutations: 8 проверок прошли.
+Причина конкретного решения модели на фото не установлена; scripted воспроизведение
+видит результат предыдущего patch и сохраняет остальные изменения. Реальная
+Windows/Office/VBE траектория и качество живых моделей остаются открытыми.
+
 ## Компактный пакетный core.patch — 2026-10-29
 
 Owner: Core Tools / Application Workspace / Office Tools; Web — preview и лента.

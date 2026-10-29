@@ -292,6 +292,7 @@ namespace RNAssistant.Office.Tools
                     observed.Add(Tuple.Create(beginOffset, endOffset));
                 }
             }
+            if (observed.Count == 0) return false;
             var plan = SourcePatch(source.Text, source.Resource.Reference, context);
             return plan.Edits.All(edit => observed.Any(span => span.Item1 <= edit.Offset && span.Item2 >= edit.Offset + edit.Before.Length));
         }

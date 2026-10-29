@@ -720,20 +720,26 @@ namespace RNAssistant.Core.Services
 
         private static void AddCurrentMutationSources(List<ContextAtom> atoms, ToolInteractionFrame frame)
         {
-            var effect = frame.Result.ResourceEffect;
-            if (effect == null) return;
+            foreach (var evidence in CurrentMutationEvidence(frame.Result))
+                atoms.Add(Atom("current-source", CurrentSource(frame.Result, evidence), true));
+        }
+
+        private static IEnumerable<ResourceEvidence> CurrentMutationEvidence(ChatMessage source)
+        {
+            var effect = source.ResourceEffect;
+            if (effect == null) yield break;
             if (effect.Targets != null)
             {
                 // A later unknown target must not erase the earlier verified sources.
-                foreach (var evidence in (frame.Result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
+                foreach (var evidence in (source.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
                     if (effect.Targets.Any(t => (t.Status == ResourceTargetStatus.Changed || t.Status == ResourceTargetStatus.Unchanged) &&
                         t.After?.Uri == evidence.Resource.Uri && t.After.Revision == evidence.Resource.Revision))
-                        atoms.Add(Atom("current-source", CurrentSource(frame.Result, evidence), true));
-                return;
+                        yield return evidence;
+                yield break;
             }
-            if (effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored) return;
-            foreach (var evidence in (frame.Result.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
-                atoms.Add(Atom("current-source", CurrentSource(frame.Result, evidence), true));
+            if (effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored) yield break;
+            foreach (var evidence in (source.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
+                yield return evidence;
         }
 
         private static ChatMessage CurrentSource(ChatMessage source, ResourceEvidence evidence)
@@ -759,7 +765,7 @@ namespace RNAssistant.Core.Services
         private static ContextAtom ArchivedBody(ContextWorkingSet.Candidate candidate)
         {
             var source = candidate.Source;
-            var evidence = source.ResourceEvidence;
+            var evidence = source.ResourceEffect == null ? source.ResourceEvidence : CurrentMutationEvidence(source).ToList();
             if (!ExposesBody(source) || evidence == null || evidence.Count == 0 ||
                 evidence.Any(item => item == null || !new[] { "text", "source", "structure", "formulas", "metadata", "records", "table" }
                     .Contains(item.View, StringComparer.Ordinal))) return null;
@@ -792,9 +798,9 @@ namespace RNAssistant.Core.Services
             if (message == null || message.ExcludeFromModelContext) return false;
             if (message.SyntheticResourceObservation) return true;
             ToolResultWireReadResult wire; string error;
-            if (!ToolResultHistoryReader.TryRead(message, out wire, out error) || wire.Result.Status != ToolResultStatus.Ok) return false;
-            if (message.ResourceEffect != null) return message.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
-                message.ResourceEffect.Outcome == ResourceEffectOutcome.Restored;
+            if (!ToolResultHistoryReader.TryRead(message, out wire, out error)) return false;
+            if (message.ResourceEffect != null) return CurrentMutationEvidence(message).Any();
+            if (wire.Result.Status != ToolResultStatus.Ok) return false;
             var data = wire.Data as JObject;
             if (message.ToolName == "core.read")
                 return (string)data?["type"] != "shared context" && (string)data?["type"] != "HTML data" &&

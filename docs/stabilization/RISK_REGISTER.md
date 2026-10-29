@@ -1,5 +1,24 @@
 # Stabilization risk register
 
+## Последовательные patch: видимость предыдущего результата — 2026-10-29
+
+На фото Scene3D исходные строки E12 совпадают с результатом E11: второй patch
+отменяет две из трёх предыдущих правок. Фото не доказывает устаревший snapshot или
+причину решения модели; точный отправленный контекст этой траектории не установлен.
+Owner: Core ModelContextCompiler / Office ConversationModelSession.
+Исправлен отдельный подтверждённый дефект: общий Unknown/Error пакета мог скрыть
+after-source успешно завершённой цели. Теперь доставка и compaction сохраняют
+только точные after-source подтверждённых целей, независимо от последующего сбоя.
+Отсутствующее VBA observation не маскируется ошибкой поиска контекста.
+
+Scripted regression воспроизводит последовательность с фото, проверяет актуальный
+source в следующем запросе, отказ при stale/omitted observation и сохранение третьей
+строки при отмене двух других. Schema поясняет original snapshot внутри вызова и
+обновлённый source между вызовами; text verification не доказывает правильность
+логики программы. Реальная Windows/Office траектория и решение конкретной модели
+остаются открытыми. Plan/prompt/reference routes также требуют Windows UI evidence;
+их shared source поведение проверено host-neutral и scripted CLI.
+
 ## Преждевременный finish/partial после VBA-анализа — 2026-10-29
 
 Фото Windows показывает завершённый ответ модели (`Termination=Completed`): после
