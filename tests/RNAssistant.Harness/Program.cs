@@ -863,7 +863,7 @@ namespace RNAssistant.Harness
                 Test("html tools: native ownership and typed binding", HtmlWorkspaceUsesExactNativeOwnership),
                 Test("html assets: catalog, pinned import and create-only publish", HtmlAssetsCatalogImportAndPublish),
                 Test("html tools: data binding exposes readable source", HtmlDataBindingExposesReadableSource),
-                Test("html tools: patch mismatch returns current source", HtmlWorkspacePatchMismatchReturnsCurrentSource),
+                Test("html tools: bounded universal patch diagnostics", HtmlWorkspacePatchDiagnosticsAreBounded),
                 Test("html tools: batched writes keep per-call operation identity", HtmlWorkspaceBatchedWritesUsePerCallOperationIdentity),
                 Test("html tools: replacement requires current source", HtmlWorkspaceReplacementRequiresCurrentSource),
                 Test("html tools: identical whole writes retain snapshot", HtmlWorkspaceIdenticalWritesRetainSnapshot),

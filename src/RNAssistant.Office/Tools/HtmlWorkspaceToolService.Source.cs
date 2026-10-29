@@ -13,21 +13,6 @@ namespace RNAssistant.Office.Tools
 {
     internal sealed partial class HtmlWorkspaceToolService
     {
-        internal static string WriteFileSchema()
-        {
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = new JObject
-                {
-                    ["path"] = new JObject { ["type"] = "string", ["description"] = "Workspace-relative .html, .css, or .js file path.", ["minLength"] = 1, ["maxLength"] = 260 },
-                    ["content"] = new JObject { ["type"] = "string", ["description"] = "Complete exact file source after JSON decoding. Preserve line breaks and backslashes; in the outer response JSON encode a real line break as \\n and one literal source backslash as \\\\.", ["maxLength"] = MaxHtmlChars }
-                },
-                ["required"] = new JArray("path", "content"),
-                ["additionalProperties"] = false
-            }.ToString(Formatting.None);
-        }
-
         internal static string WriteDataSchema()
         {
             return new JObject
@@ -41,84 +26,6 @@ namespace RNAssistant.Office.Tools
                 ["required"] = new JArray("name", "json"),
                 ["additionalProperties"] = false
             }.ToString(Formatting.None);
-        }
-
-        internal static string ApplyPatchSchema()
-        {
-            var find = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Non-empty exact decoded source text or unique insertion anchor. Preserve line breaks and backslashes; outer response JSON escaping applies.",
-                ["minLength"] = 1,
-                ["maxLength"] = MaxHtmlChars
-            };
-            var text = new JObject
-            {
-                ["type"] = "string",
-                ["description"] = "Exact decoded replacement or inserted source text; preserve line breaks and backslashes. Empty text is valid for replacement/deletion.",
-                ["maxLength"] = MaxHtmlChars
-            };
-            var operations = new JArray
-            {
-                PatchOperationSchema("replace", "Replace exactly one occurrence; ambiguity is rejected.",
-                    new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
-                PatchOperationSchema("replaceAll", "Replace every exact occurrence explicitly.",
-                    new JObject { ["find"] = find.DeepClone(), ["text"] = text.DeepClone() }, "find", "text"),
-                PatchOperationSchema("insertBefore", "Insert non-empty text before one unique exact anchor.",
-                    new JObject
-                    {
-                        ["find"] = find.DeepClone(),
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty exact decoded source text to insert; preserve line breaks and backslashes.", ["minLength"] = 1, ["maxLength"] = MaxHtmlChars }
-                    }, "find", "text"),
-                PatchOperationSchema("insertAfter", "Insert non-empty text after one unique exact anchor.",
-                    new JObject
-                    {
-                        ["find"] = find.DeepClone(),
-                        ["text"] = new JObject { ["type"] = "string", ["description"] = "Non-empty exact decoded source text to insert; preserve line breaks and backslashes.", ["minLength"] = 1, ["maxLength"] = MaxHtmlChars }
-                    }, "find", "text"),
-            };
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = new JObject
-                {
-                    ["path"] = new JObject
-                    {
-                        ["type"] = "string",
-                        ["description"] = "Existing workspace-relative HTML, CSS, or JavaScript file path.",
-                        ["minLength"] = 1,
-                        ["maxLength"] = 260
-                    },
-                    ["patch"] = new JObject
-                    {
-                        ["type"] = "array",
-                        ["description"] = "Native JSON array of ordered operations applied atomically to current file source.",
-                        ["minItems"] = 1,
-                        ["maxItems"] = 100,
-                        ["items"] = new JObject { ["anyOf"] = operations }
-                    }
-                },
-                ["required"] = new JArray("path", "patch"),
-                ["additionalProperties"] = false
-            }.ToString(Formatting.None);
-        }
-
-        private static JObject PatchOperationSchema(string operation, string description, JObject properties, params string[] required)
-        {
-            properties = properties ?? new JObject();
-            properties.AddFirst(new JProperty("op", new JObject
-            {
-                ["type"] = "string",
-                ["description"] = description,
-                ["enum"] = new JArray(operation)
-            }));
-            return new JObject
-            {
-                ["type"] = "object",
-                ["properties"] = properties,
-                ["required"] = new JArray(new[] { "op" }.Concat(required ?? new string[0])),
-                ["additionalProperties"] = false
-            };
         }
 
         // Validate the mutable owner and the complete candidate before a batch can
@@ -146,196 +53,38 @@ namespace RNAssistant.Office.Tools
         }
 
         private static HtmlWorkspaceToolOutcome ApplyWorkspacePatch(
-            ChatSession session,
-            IDictionary<string, object> arguments,
-            Action markDispatchPossible,
-            CancellationToken cancellationToken)
+            ChatSession session, IDictionary<string, object> arguments,
+            Action markDispatchPossible, CancellationToken cancellationToken)
         {
-            HtmlWorkspaceFile file = null;
-            HtmlWorkspace workspace = null;
-            List<StructuredTextPatchOperation> operations = null;
-            string before = null;
-            try
+            object value;
+            var edits = arguments.TryGetValue("resolvedTextEdits", out value) ? value as IReadOnlyList<ResolvedTextEdit> : null;
+            if (edits == null)
+                return HtmlWorkspaceToolOutcome.Error("A typed prepared source edit is required.", null, "invalid_patch", false);
+            var workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
+            var file = FindFile(workspace, ToolArgumentReader.String(arguments, "path", string.Empty), false);
+            var before = file.Content ?? string.Empty;
+            var planned = TextEditPlan.ApplyResolved(before, edits, cancellationToken);
+            ValidateFile(file.Path, file.Kind, planned.Text);
+            ValidateWorkspaceCapacity(workspace, file.Id, null);
+            var changed = !string.Equals(before, planned.Text, StringComparison.Ordinal);
+            var preview = new RNAssistant.Office.Contracts.HtmlSourcePatchResult {
+                Path = file.Path, Kind = file.Kind, Saved = changed, Changed = changed,
+                OldCharacters = before.Length, NewCharacters = planned.Text.Length,
+                OldLineCount = SourceLineCount(before), NewLineCount = SourceLineCount(planned.Text),
+                PreviousContentSha256 = TextPatternEngine.Sha256(before), ContentSha256 = TextPatternEngine.Sha256(planned.Text),
+                EditCount = planned.Edits.Count
+            };
+            if (!changed)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var name = ToolArgumentReader.String(
-                    arguments, "path", string.Empty);
-                workspace = NormalizedWorkspaceCopy(session.HtmlWorkspace);
-                file = FindFile(workspace, name, false);
-                before = file.Content ?? string.Empty;
-                StructuredTextPatchResult patch;
-                object canonical;
-                if (arguments.TryGetValue("resolvedTextEdits", out canonical))
-                {
-                    var planned = TextEditPlan.ApplyResolved(before, JArray.FromObject(canonical).ToObject<List<ResolvedTextEdit>>(), cancellationToken);
-                    patch = new StructuredTextPatchResult { Text = planned.Text };
-                    patch.Steps.Add(new StructuredTextPatchStep { Op = "patch", MatchCount = planned.Edits.Count, Message = "All hunks resolved against the original snapshot." });
-                }
-                else
-                {
-                    operations = ReadPatchOperations(arguments);
-                    patch = StructuredTextPatchEngine.Apply(before, operations, MaxHtmlChars);
-                }
-                ValidateFile(file.Path, file.Kind, patch.Text);
-                ValidateWorkspaceCapacity(workspace, file.Id, null);
-                var changed = !string.Equals(before, patch.Text, StringComparison.Ordinal);
-                var preview = new JObject
-                {
-                    ["type"] = "rnassistant.htmlWorkspacePatch",
-                    ["version"] = 1,
-                    ["path"] = file.Path,
-                    ["kind"] = file.Kind,
-                    ["saved"] = changed,
-                    ["changed"] = changed,
-                    ["oldCharacters"] = before.Length,
-                    ["newCharacters"] = patch.Text.Length,
-                    ["oldLineCount"] = SourceLineCount(before),
-                    ["newLineCount"] = SourceLineCount(patch.Text),
-                    ["previousContentSha256"] = TextPatternEngine.Sha256(before),
-                    ["contentSha256"] = TextPatternEngine.Sha256(patch.Text),
-                    ["operations"] = new JArray(patch.Steps.Select(item => new JObject
-                    {
-                        ["op"] = item.Op,
-                        ["matchCount"] = item.MatchCount,
-                        ["message"] = item.Message
-                    }))
-                };
-                if (!changed)
-                {
-                    preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                    return WorkspaceResult(session,
-                        "HTML workspace patch made no content changes: " +
-                        file.Path + ".",
-                        preview,
-                        HtmlWorkspaceEffect.VerifiedNoChange);
-                }
-
-                markDispatchPossible();
-                var saved = UpsertFile(session, file.Path, file.Kind, patch.Text, false);
-                preview["revisionArtifactId"] = session.ActiveHtmlArtifactId;
-                return WorkspaceResult(session,
-                    "HTML workspace patch applied: " + saved.Path + ".",
-                    preview,
-                    HtmlWorkspaceEffect.VerifiedChange);
+                preview.RevisionArtifactId = session.ActiveHtmlArtifactId;
+                return WorkspaceResult(session, "HTML source already matches: " + file.Path + ".",
+                    JObject.FromObject(preview), HtmlWorkspaceEffect.VerifiedNoChange);
             }
-            catch (StructuredTextPatchException ex)
-            {
-                if (file != null && before != null &&
-                    (ex.ErrorCode == "text_patch_not_found" ||
-                     ex.ErrorCode == "text_patch_ambiguous"))
-                {
-                    // The complete file is useful only when it fits the bounded
-                    // recovery projection. Larger files require a fresh source read.
-                    var complete = before.Length <= 12000;
-                    var artifact = (session.Artifacts ?? new List<ChatArtifact>())
-                        .FirstOrDefault(item => item != null &&
-                            item.Id == session.ActiveHtmlArtifactId);
-                    var identity = artifact == null ? null :
-                        ChatHtmlResourceCatalog.FileReference(session, artifact, file.Id).Identity;
-                    var recovery = new ToolRecoveryContract(
-                        ToolFailureKind.RejectedNoEffect,
-                        complete ? ToolRetryPolicy.Replan : ToolRetryPolicy.RefreshRequired,
-                        identity, ResourceRepresentations.Source,
-                        ChatHtmlResourceCatalog.FileTarget(artifact, file),
-                        complete ? before : null, complete);
-                    var matchingPaths = new List<string>();
-                    if (ex.ErrorCode == "text_patch_not_found" && operations != null &&
-                        ex.OperationIndex > 0 && ex.OperationIndex <= operations.Count)
-                    {
-                        var find = operations[ex.OperationIndex - 1].Find;
-                        if (!string.IsNullOrEmpty(find))
-                        {
-                            matchingPaths = (workspace.Files ?? new List<HtmlWorkspaceFile>())
-                                .Where(item => item != null && item.Id != file.Id &&
-                                    (item.Content ?? string.Empty).IndexOf(find,
-                                        StringComparison.Ordinal) >= 0)
-                                .Select(item => item.Path).Take(5).ToList();
-                        }
-                    }
-                    var details = new JObject
-                    {
-                        ["path"] = file.Path,
-                        ["hunkIndex"] = ex.OperationIndex,
-                        ["sourceCharacters"] = before.Length,
-                        ["inspectTool"] = "core.read"
-                    };
-                    if (matchingPaths.Count > 0)
-                        details["matchingPaths"] = new JArray(matchingPaths);
-                    return HtmlWorkspaceToolOutcome.Error(
-                        ex.Message + " Nothing was written. " +
-                        (matchingPaths.Count > 0
-                            ? "The missing find text occurs in " +
-                              string.Join(", ", matchingPaths) +
-                              "; patch each file separately. "
-                            : string.Empty) + (complete
-                            ? "Use the complete current source in recovery to revise the patch."
-                            : "Read current source with core.read or find a unique snippet with core.find, then revise the patch.") +
-                        " Do not repeat the same patch unchanged.",
-                        details,
-                        ex.ErrorCode, true, recovery);
-                }
-                return HtmlWorkspaceToolOutcome.Error(
-                    ex.Message, null, ex.ErrorCode, true);
-            }
-            catch (JsonException ex)
-            {
-                return HtmlWorkspaceToolOutcome.Error(
-                    "Invalid HTML workspace patch: " + ex.Message, null,
-                    "text_patch_invalid", true);
-            }
-        }
-
-        private static List<StructuredTextPatchOperation> ReadPatchOperations(
-            IDictionary<string, object> arguments)
-        {
-            object raw;
-            if (arguments == null ||
-                !arguments.TryGetValue("patch", out raw) || raw == null)
-            {
-                return new List<StructuredTextPatchOperation>();
-            }
-            var token = raw as JToken;
-            var array = token as JArray;
-            if (array == null)
-            {
-                var text = raw as string;
-                array = text == null ? JArray.FromObject(raw) : JArray.Parse(text);
-            }
-
-            var result = new List<StructuredTextPatchOperation>();
-            foreach (var tokenItem in array)
-            {
-                var item = tokenItem as JObject;
-                if (item == null)
-                {
-                    throw new JsonException("Each HTML patch operation must be an object.");
-                }
-
-                var unsupported = item.Properties().FirstOrDefault(property =>
-                    property.Name != "op" && property.Name != "find" &&
-                    property.Name != "text");
-                if (unsupported != null)
-                {
-                    throw new JsonException(
-                        "Unsupported HTML patch property: " + unsupported.Name + ".");
-                }
-
-                var op = (string)item["op"];
-                if (op != "replace" && op != "replaceAll" &&
-                    op != "insertBefore" && op != "insertAfter")
-                {
-                    throw new JsonException("Unsupported HTML patch operation: " +
-                        (op ?? "<missing>") + ".");
-                }
-
-                result.Add(new StructuredTextPatchOperation
-                {
-                    Op = op,
-                    Find = (string)item["find"],
-                    Text = (string)item["text"]
-                });
-            }
-            return result;
+            markDispatchPossible();
+            var saved = UpsertFile(session, file.Path, file.Kind, planned.Text, false);
+            preview.RevisionArtifactId = session.ActiveHtmlArtifactId;
+            return WorkspaceResult(session, "HTML source updated: " + saved.Path + ".",
+                JObject.FromObject(preview), HtmlWorkspaceEffect.VerifiedChange);
         }
 
         private static int SourceLineCount(string source)

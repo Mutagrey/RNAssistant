@@ -9,6 +9,25 @@ using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Contracts
 {
+    [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
+    public sealed class HtmlSourcePatchResult
+    {
+        public string Type { get; set; } = "rnassistant.htmlWorkspacePatch";
+        public int Version { get; set; } = 1;
+        public string Path { get; set; }
+        public string Kind { get; set; }
+        public bool Saved { get; set; }
+        public bool Changed { get; set; }
+        public int OldCharacters { get; set; }
+        public int NewCharacters { get; set; }
+        public int OldLineCount { get; set; }
+        public int NewLineCount { get; set; }
+        public string PreviousContentSha256 { get; set; }
+        public string ContentSha256 { get; set; }
+        public string RevisionArtifactId { get; set; }
+        public int EditCount { get; set; }
+    }
+
     public sealed class StageHtmlVisualSelectionPayload : ChatPayload
     {
         [JsonProperty("artifactId")] public string ArtifactId { get; set; }

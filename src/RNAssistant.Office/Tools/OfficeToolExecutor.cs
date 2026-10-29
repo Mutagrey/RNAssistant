@@ -169,7 +169,7 @@ namespace RNAssistant.Office.Tools
                 ControllerToolCatalogEntry.CreateReadProjection(JsToolHandler.Descriptor,
                     JsToolHandler.Policy, JsToolHandler.Binding, "JavaScript computation") });
             RegisterControllerTools(controllerTools,
-                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService).Where(tool => tool.Id != HtmlWorkspaceToolCatalog.WriteFileToolId && tool.Id != HtmlWorkspaceToolCatalog.ApplyPatchToolId && tool.Id != HtmlWorkspaceToolCatalog.DeleteToolId));
+                HtmlWorkspaceToolCatalog.GetTools(_htmlWorkspaceService));
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });

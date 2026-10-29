@@ -21,6 +21,11 @@ private unique-anchor scan/result-range helper are removed. The file owner uses
 `ApplyTextEdits`; shared streaming byte-copy and source/read-back verification
 remain in the current text-edit/stream-write paths. Owner and plugin fixtures now
 use full-line hunks, including large-source ambiguity, stale reads and recovery.
+HTML consumes typed resolved edits from the same planner. Its old JSON-operation
+reader, `StructuredTextPatchEngine` and unused private tool schemas/descriptors
+are removed. Private operation identifiers still route existing owner commands;
+they are not model-visible registrations. Public diagnostics retain bounded hunk
+errors/candidates instead of returning the complete HTML source after a mismatch.
 
 ## Universal text tools — 2026-10-28
 

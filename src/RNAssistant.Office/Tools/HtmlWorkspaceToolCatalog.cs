@@ -58,22 +58,10 @@ namespace RNAssistant.Office.Tools
             HtmlWorkspaceToolService service)
         {
             if (service == null) throw new ArgumentNullException(nameof(service));
-            yield return Projection(WriteFileToolId,
-                "Workspace: Create or replace one complete HTML/CSS/classic JavaScript file with root path/content. Replacement requires complete current source in context; reuse a read or verified after-source, or use html.source.patch for focused edits. Runtime infers kind, injects workspace CSS/JS, loads pinned offline vendors on use and runs static preflight. Do not add local link/script src tags or copy vendor bundles.",
-                HtmlWorkspaceToolService.WriteFileSchema(),
-                "html_workspace_write_file", true, 0);
             yield return Projection(WriteDataToolId,
                 "Workspace: Store exact JSON and immediately bind it under name with view=text. RN.resources.open(name) is ready; no extra html_data_bind call is needed after this write. Text stream batches contain text chunks, not parsed records: concatenate batch.text and JSON.parse once. The result supplies the JSON source target for explicit reads or a deliberate table binding. Runs bounded static preflight automatically.",
                 HtmlWorkspaceToolService.WriteDataSchema(),
                 "html_data_write", true, 0);
-            yield return Projection(ApplyPatchToolId,
-                "Workspace: Apply ordered structured text edits atomically to one existing HTML/CSS/JavaScript file. Runtime reads current source and records one recoverable workspace revision.",
-                HtmlWorkspaceToolService.ApplyPatchSchema(),
-                "html_workspace_apply_patch", true, 0);
-            yield return Projection(DeleteToolId,
-                "Workspace: Delete one exact file path or named JSON data source. The runtime resolves its kind and rejects ambiguous targets; workspace history keeps the operation recoverable.",
-                DeleteSchema(),
-                "html_workspace_delete", true, 1);
             if (service.HasDataSourceTools)
             {
                 yield return Projection(BindDataToolId,
@@ -115,11 +103,6 @@ namespace RNAssistant.Office.Tools
         internal static string PublishAssetSchema()
         {
             return "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"New stable package id.\",\"minLength\":1,\"maxLength\":64},\"version\":{\"type\":\"string\",\"description\":\"New semantic package version.\",\"minLength\":5,\"maxLength\":80},\"title\":{\"type\":\"string\",\"description\":\"Short human-readable title.\",\"minLength\":1,\"maxLength\":100},\"description\":{\"type\":\"string\",\"description\":\"Purpose and when to reuse this package.\",\"minLength\":1,\"maxLength\":240},\"usage\":{\"type\":\"string\",\"description\":\"Optional short API and initialization guidance.\",\"maxLength\":600},\"license\":{\"type\":\"string\",\"description\":\"Optional license identifier.\",\"maxLength\":100},\"provenance\":{\"type\":\"string\",\"description\":\"Optional source or author note; never fetched.\",\"maxLength\":200},\"files\":{\"type\":\"array\",\"description\":\"Exact current workspace file paths to copy.\",\"minItems\":1,\"maxItems\":20,\"items\":{\"type\":\"string\",\"description\":\"One workspace-relative JS, CSS, or HTML path.\",\"minLength\":1,\"maxLength\":200}}},\"required\":[\"id\",\"version\",\"title\",\"description\",\"files\"],\"additionalProperties\":false}";
-        }
-
-        internal static string DeleteSchema()
-        {
-            return "{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"description\":\"Exact workspace-relative file path or data-source name.\",\"minLength\":1,\"maxLength\":260}},\"required\":[\"target\"],\"additionalProperties\":false}";
         }
 
         internal static string RefreshSchema()

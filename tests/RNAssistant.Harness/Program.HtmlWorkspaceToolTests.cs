@@ -273,164 +273,52 @@ namespace RNAssistant.Harness
                 });
         }
 
-        private static void HtmlWorkspacePatchMismatchReturnsCurrentSource()
+        private static void HtmlWorkspacePatchDiagnosticsAreBounded()
         {
-            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"),
-                delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
+            WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+            {
+                var session = NewSession(adapter);
+                var tools = executor.GetControllerTools().ToList();
+                Func<string, string, RNAssistant.Office.Contracts.ToolRunResult> write = (path, content) => executor.ExecuteManual(
+                    Command("core.write", "target", "HTML file: " + path, "content", content), tools,
+                    new AppSettings { AutoConfirmToolActions = true }, false, false, session);
+                Func<string, string, ToolExecutionRecord> patch = (path, body) =>
                 {
-                    var session = NewSession(adapter);
-                    var definitions = OfficeToolCatalog.ForHost(adapter.HostName)
-                        .Concat(executor.GetControllerTools()).ToList();
-                    var runtime = executor.CreateNativeRuntime(
-                        session, definitions, new AppSettings(), "agent", false, manualRun: true);
-                    var source = "const first = 1;\nconst second = 2;\r\nconst third = 3;";
-                    var created = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        new JObject { ["path"] = "app.js", ["content"] = source });
-                    AssertEqual(ToolExecutionOutcome.Ok, created.Outcome,
-                        "mixed-newline source is created");
-                    var revision = session.ActiveHtmlArtifactId;
-
-                    var failed = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                        new JObject
-                        {
-                            ["path"] = "app.js",
-                            ["patch"] = new JArray(
-                                new JObject { ["op"] = "replace",
-                                    ["find"] = "const first = 1;\nconst second = 2;",
-                                    ["text"] = "const first = 4;" },
-                                new JObject { ["op"] = "replace",
-                                    ["find"] = "const missing = 9;",
-                                    ["text"] = "const missing = 10;" })
-                        });
-                    AssertEqual(ToolExecutionOutcome.Error, failed.Outcome,
-                        "missing second anchor refuses the whole patch");
-                    AssertEqual(ToolDispatchEvidence.NotDispatched, failed.Evidence.Dispatch,
-                        "failed patch never reaches the workspace write");
-                    AssertEqual(revision, session.ActiveHtmlArtifactId,
-                        "failed patch keeps the active revision");
-                    AssertEqual(source, session.HtmlWorkspace.Files.Single().Content,
-                        "earlier in-memory hunk is not saved after a later failure");
-                    var data = JObject.Parse(failed.Result.DataJson);
-                    AssertEqual("text_patch_not_found", (string)data["code"],
-                        "mismatch has a precise code");
-                    AssertTrue((bool)data["retryable"],
-                        "structured failure retains the existing retry flag");
-                    AssertEqual(2, (int)data["hunkIndex"],
-                        "mismatch identifies the failed hunk");
-                    AssertEqual(source, failed.Recovery.CurrentContent,
-                        "model-facing result contains the current source");
-                    AssertEqual(source, failed.Recovery.CurrentContent,
-                        "bounded recovery returns the exact current source");
-                    AssertTrue(failed.Recovery.CurrentContentComplete,
-                        "recovery labels the complete source");
-                    AssertEqual(ToolRetryPolicy.Replan, failed.Recovery.RetryPolicy,
-                        "model can repair the patch from returned source");
-                    var recoveryTarget = executor.ResourceGateway.ResolveIntentTarget(session, failed.Recovery.SemanticTarget);
-                    AssertEqual(source, executor.ResourceGateway.ReadWhole(session, recoveryTarget.Reference, "source").Result.Text,
-                        "patch recovery advertises a readable exact member target");
-
-                    var corrected = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                        new JObject
-                        {
-                            ["path"] = "app.js",
-                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
-                                ["find"] = "const first = 1;\nconst second = 2;",
-                                ["text"] = "const first = 4;" })
-                        });
-                    AssertEqual(ToolExecutionOutcome.Ok, corrected.Outcome,
-                        "a copied exact anchor across mixed line endings applies");
-                    AssertContains(session.HtmlWorkspace.Files.Single().Content,
-                        "const first = 4;\r\nconst third = 3;",
-                        "replacement affects only the copied block");
-
-                    var mixedSource = "const a = 1;\nconst b = 2;\r\nconst c = 3;";
-                    var mixed = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        new JObject { ["path"] = "mixed.js", ["content"] = mixedSource });
-                    AssertEqual(ToolExecutionOutcome.Ok, mixed.Outcome,
-                        "second mixed-newline file is created");
-                    var normalizedAnchor = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                        new JObject { ["path"] = "mixed.js",
-                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
-                                ["find"] = "const a = 1;\nconst b = 2;\nconst c = 3;",
-                                ["text"] = "const fixed = 4;" }) });
-                    AssertEqual(ToolExecutionOutcome.Ok, normalizedAnchor.Outcome,
-                        "replace finds a normalized anchor in mixed line endings");
-                    AssertEqual("const fixed = 4;",
-                        session.HtmlWorkspace.Files.Single(item => item.Path == "mixed.js").Content,
-                        "normalized anchor replaces the exact original span");
-
-                    var css = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        new JObject { ["path"] = "styles.css",
-                            ["content"] = ".legend-item:hover { border-color: blue; }" });
-                    AssertEqual(ToolExecutionOutcome.Ok, css.Outcome,
-                        "CSS file is created for cross-file diagnostic");
-                    var wrongFileRevision = session.ActiveHtmlArtifactId;
-                    var wrongFile = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                        new JObject { ["path"] = "app.js",
-                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
-                                ["find"] = ".legend-item:hover { border-color: blue; }",
-                                ["text"] = ".legend-item:hover { border-color: red; }" }) });
-                    AssertEqual(ToolExecutionOutcome.Error, wrongFile.Outcome,
-                        "CSS anchor in a JavaScript patch is rejected");
-                    AssertEqual(wrongFileRevision, session.ActiveHtmlArtifactId,
-                        "wrong-file patch does not write");
-                    AssertEqual("styles.css",
-                        (string)JObject.Parse(wrongFile.Result.DataJson)["matchingPaths"][0],
-                        "mismatch points to the file with the exact anchor");
-                    AssertContains(wrongFile.Result.Message, "patch each file separately",
-                        "wrong-file repair guidance is visible without expanding data");
-
-                    var ambiguousSource = "x\r\ny\nx\ry";
-                    foreach (var operation in new[] { "replace", "replaceAll", "insertBefore", "insertAfter" })
-                    {
-                        try
-                        {
-                            StructuredTextPatchEngine.Apply("aaaa", new[] {
-                                new StructuredTextPatchOperation { Op = operation, Find = "aaa", Text = "b" } }, 100);
-                            throw new Exception("Overlapping anchor was accepted: " + operation);
-                        }
-                        catch (StructuredTextPatchException ex)
-                        { AssertEqual("text_patch_ambiguous", ex.ErrorCode, "overlapping anchors fail before writing"); }
-                    }
-                    try
-                    {
-                        StructuredTextPatchEngine.Apply(ambiguousSource,
-                            new[] { new StructuredTextPatchOperation { Op = "replace",
-                                Find = "x\ny", Text = "z" } }, 100);
-                        throw new Exception("newline-equivalent duplicate was accepted");
-                    }
-                    catch (StructuredTextPatchException ex)
-                    {
-                        AssertEqual("text_patch_ambiguous", ex.ErrorCode,
-                            "newline-equivalent duplicate remains ambiguous");
-                    }
-
-                    var largeSource = string.Concat(Enumerable.Repeat("// source line\n", 900));
-                    var large = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        new JObject { ["path"] = "large.js", ["content"] = largeSource });
-                    AssertEqual(ToolExecutionOutcome.Ok, large.Outcome,
-                        "large source is created");
-                    var missingLarge = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                        new JObject { ["path"] = "large.js",
-                            ["patch"] = new JArray(new JObject { ["op"] = "replace",
-                                ["find"] = "missing anchor", ["text"] = "new" }) });
-                    AssertEqual(ToolExecutionOutcome.Error, missingLarge.Outcome,
-                        "large missing anchor is rejected");
-                    AssertEqual(ToolRetryPolicy.RefreshRequired,
-                        missingLarge.Recovery.RetryPolicy,
-                        "large source requires a fresh resource read");
-                    AssertTrue(missingLarge.Recovery.CurrentContent == null,
-                        "large source is not silently truncated in recovery");
-                });
+                    var pending = PrepareVbaNative(executor, session, Command("core.patch", "patch", "*** Update Target: HTML file: " + path + "\n" + body));
+                    return pending.Record.Outcome == ToolExecutionOutcome.AwaitingConfirmation ? ConfirmVbaNative(pending) : pending.Record;
+                };
+                var source = "const first = 1;\nconst second = 2;\r\nconst third = 3;";
+                AssertTrue(write("app.js", source).Success, "mixed-newline HTML member is created through core.write");
+                var revision = session.ActiveHtmlArtifactId;
+                var failed = patch("app.js", LineHunk("const first = 1;", "const first = 4;") + LineHunk("const missing = 9;", "const missing = 10;"));
+                AssertEqual(ToolExecutionOutcome.Error, failed.Outcome, "missing second hunk refuses the whole file");
+                AssertTrue(!failed.MayHaveDispatched && session.ActiveHtmlArtifactId == revision, "failed preparation cannot publish the earlier hunk");
+                var diagnostic = JsonConvert.DeserializeObject<PatchBatchResult>(failed.Result.DataJson).Targets.Single().Diagnostic;
+                AssertEqual("context_not_found", diagnostic.Code, "stable common diagnostic code");
+                AssertEqual(2, diagnostic.Hunk.Value, "the failed hunk is identified inside its target");
+                AssertEqual("refine_context", diagnostic.NextAction, "the model gets a bounded correction action");
+                AssertTrue(!failed.Result.DataJson.Contains(source), "failure does not inject the whole source into the result");
+                var corrected = patch("app.js", LineHunk("const first = 1;", "const first = 4;") + LineHunk("const second = 2;", "const second = 20;"));
+                AssertEqual(ToolExecutionOutcome.Ok, corrected.Outcome, "corrected original-snapshot hunks apply");
+                AssertEqual(source.Replace("first = 1", "first = 4").Replace("second = 2", "second = 20"),
+                    session.HtmlWorkspace.Files.Single(file => file.Path == "app.js").Content, "mixed EOLs and EOF remain exact");
+                var sameRevision = session.ActiveHtmlArtifactId;
+                var unchanged = patch("app.js", LineHunk("const first = 4;", "const first = 4;"));
+                AssertEqual(ResourceTargetStatus.Unchanged, unchanged.ResourceEffect.Targets.Single().Status, "no-op is explicit");
+                AssertEqual(sameRevision, session.ActiveHtmlArtifactId, "no-op creates no workspace revision");
+                AssertTrue(write("duplicate.js", "// a\r\n// b\n// a\r// b").Success, "repeated-line source");
+                var ambiguous = patch("duplicate.js", "@@\n-// a\n-// b\n+// c\n");
+                var ambiguity = JsonConvert.DeserializeObject<PatchBatchResult>(ambiguous.Result.DataJson).Targets.Single().Diagnostic;
+                AssertEqual("ambiguous_context", ambiguity.Code, "newline-equivalent repeated blocks remain ambiguous");
+                AssertTrue(ambiguity.Candidates.Count >= 2 && ambiguity.Candidates.Count <= 5, "diagnostic exposes bounded candidates");
+                AssertTrue(write("large.js", string.Concat(Enumerable.Repeat("// source line\n", 900))).Success, "large source");
+                var missingLarge = patch("large.js", LineHunk("// absent", "// new"));
+                AssertTrue(missingLarge.Outcome == ToolExecutionOutcome.Error && missingLarge.Result.DataJson.Length < 4000,
+                    "large-source failure stays bounded and does not materialize recovery prose");
+                var oldJson = PrepareVbaNative(executor, session, Command("core.patch", "target", "HTML file: app.js", "patch", new JArray()));
+                AssertTrue(oldJson.Record.Outcome == ToolExecutionOutcome.Error && !oldJson.Record.MayHaveDispatched,
+                    "retired JSON patch format has no fallback");
+            });
         }
 
         private static void HtmlWorkspaceBatchedWritesUsePerCallOperationIdentity()
