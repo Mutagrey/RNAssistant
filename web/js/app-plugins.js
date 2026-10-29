@@ -228,7 +228,9 @@
         if(current!==epoch)return false;
         sourceStamp=source;delete publishedSourceStamps[id];status('');return true;
       }catch(error){if(current===epoch){candidate=null;candidateStamp=null;sourceStamp=source;
-          status('Предпросмотр не обновлён: '+error.message,true);}return false;}
+          var message='Предпросмотр не обновлён: '+error.message;
+          status(message,true);
+          previewSurface.fail({title:selected.name,path:'Новый предпросмотр недоступен'},message+' Открытый экран не подтверждает текущие исходники.');}return false;}
     })();
     previewTask=task;
     try{return await task;}finally{if(previewTask===task)previewTask=null;previewBusy=false;controls();}

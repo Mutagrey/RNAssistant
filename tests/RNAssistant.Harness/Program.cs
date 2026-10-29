@@ -70,6 +70,7 @@ namespace RNAssistant.Harness
                 Test("text search: Office parity", TextSearchOfficeParity),
                 Test("text search: mixed project experiment", TextSearchMixedProjectExperiment),
                 Test("plugins: immutable publications and independent grants", PluginsPublishAndSeparateAuthority),
+                Test("plugins: command contract diagnostics and checked completion", PluginsCommandDiagnosticsAndCheckedCompletion),
                 Test("plugins: paged published history and guarded restore", PluginsPublishedHistoryAndRestore),
                 Test("plugins: panel removal preserves and restores publication", PluginsPanelVisibility),
                 Test("plugins: source chats share project history", PluginsSourceChatSessions),

@@ -775,17 +775,7 @@ namespace RNAssistant.Runtime
             {
                 ToolResultWireReadResult wire; string readError;
                 if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError)) continue;
-                if (fact.ToolName == ResourceMutationToolCatalog.Patch && fact.ResourceEffect?.Targets != null)
-                {
-                    changed += fact.ResourceEffect.Targets.Count(target => target.Status == ResourceTargetStatus.Changed &&
-                        target.Source?.Uri.StartsWith("rna://file/", StringComparison.Ordinal) == true);
-                    continue;
-                }
-                if (wire.Result.Status != ToolResultStatus.Ok) continue;
-                if (ResourceMutationToolCatalog.Owns(fact.ToolName) && fact.ResourceEffect?.Impacts.Any(i => i.Identity.Uri.StartsWith("rna://file/", StringComparison.Ordinal)) == true &&
-                    (fact.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
-                        fact.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored))
-                    changed++;
+                changed += VerifiedWorkspaceFileChanges(fact, wire.Result.Status);
             }
             acceptance.VerifiedFileChanges = changed;
             try
@@ -809,6 +799,34 @@ namespace RNAssistant.Runtime
             {
                 acceptance.Error = ex.Message;
             }
+        }
+
+        private static int VerifiedWorkspaceFileChanges(ChatMessage fact, ToolResultStatus status)
+        {
+            if (fact.ToolName == ResourceMutationToolCatalog.Patch && fact.ResourceEffect?.Targets != null)
+                return fact.ResourceEffect.Targets.Count(target => target.Status == ResourceTargetStatus.Changed &&
+                    (target.Source?.Uri.StartsWith("rna://file/", StringComparison.Ordinal) == true ||
+                     target.After?.Uri.StartsWith("rna://file/", StringComparison.Ordinal) == true));
+            return status == ToolResultStatus.Ok && ResourceMutationToolCatalog.Owns(fact.ToolName) &&
+                fact.ResourceEffect?.Impacts.Any(impact => impact.Identity.Uri.StartsWith("rna://file/", StringComparison.Ordinal)) == true &&
+                (fact.ResourceEffect.Outcome == ResourceEffectOutcome.VerifiedChanged ||
+                    fact.ResourceEffect.Outcome == ResourceEffectOutcome.Restored) ? 1 : 0;
+        }
+
+        private static bool PluginSourceHasUncheckedChanges(ChatSession session, string runId)
+        {
+            var uncheckedChanges = false;
+            foreach (var fact in session.Messages.Where(item => item.RunId == runId && item.ProtocolMessage &&
+                !string.IsNullOrWhiteSpace(item.ToolCallId)))
+            {
+                ToolResultWireReadResult wire; string readError;
+                if (!ToolResultHistoryReader.TryRead(fact, out wire, out readError)) continue;
+                if (fact.ToolName == "plugins.check" && wire.Result.Status == ToolResultStatus.Ok)
+                    uncheckedChanges = false;
+                else if (VerifiedWorkspaceFileChanges(fact, wire.Result.Status) > 0)
+                    uncheckedChanges = true;
+            }
+            return uncheckedChanges;
         }
 
         private static string UnmetAcceptance(WorkspaceRunAcceptance acceptance)
@@ -1601,6 +1619,12 @@ namespace RNAssistant.Runtime
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
                 if (result.ProviderRefusal != null) return AgentModelResult.Refused(result.ProviderRefusal);
                 if (result.Response == null) return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, "Missing accepted response.");
+                if (result.Response.Action == ConversationResponse.FinishAction &&
+                    result.Response.Outcome == ConversationOutcome.Completed && _pluginSource &&
+                    _catalog.Any(item => item.Id == "plugins.check") &&
+                    PluginSourceHasUncheckedChanges(_session, request.RunId))
+                    return AgentModelResult.RejectCompletion("Plugin source changed, but no successful plugins.check followed the last file change. " +
+                        "Run plugins.check on the current source; repair its reported error before claiming completion.");
                 if (result.Response.Action == ConversationResponse.FinishAction && _acceptance?.Requested == true)
                 {
                     // Refresh after the model wait, including externally changed dependencies.
@@ -1886,7 +1910,7 @@ namespace RNAssistant.Runtime
             private string Prompt(SkillRequestSurface surface = null)
             {
                 return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
-                    (_pluginSource ? "This is the source chat for an RNAssistant plugin. Work on the user's plugin request in this source workspace, using its files and plugin tools. Office documents are outside this chat's scope. " :
+                    (_pluginSource ? "This is the source chat for an RNAssistant plugin. Work on the user's plugin request in this source workspace, using its files and plugin tools. Office documents are outside this chat's scope. After any source file change, run plugins.check on the final source before claiming completion when that tool is available; repair validation errors and check again. " :
                     _office?.Target == null ? "No Office document is bound to this run. " :
                         "Office document for this run: " + _office.Target.Host + " — " +
                         (_office.Target.DocumentTitle ?? "untitled") + ". " +

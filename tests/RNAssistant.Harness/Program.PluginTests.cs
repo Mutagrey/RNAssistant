@@ -33,6 +33,72 @@ namespace RNAssistant.Harness
             WithTempPaths(paths => test(paths.Root.StartsWith("/var/",StringComparison.Ordinal)
                 ? AppDataPaths.CreateForRoot("/private" + paths.Root) : paths));
         }
+
+        private static void PluginsCommandDiagnosticsAndCheckedCompletion()
+        {
+            WithPluginPaths(paths =>
+            {
+                using (var service = new PluginApplicationService(paths))
+                {
+                    var plugin = service.Create(new PluginCreateRequest { Name = "Command diagnostics",
+                        RootPath = Path.Combine(paths.Root, "command-diagnostics"), Description = "Test" });
+                    var manifestPath = Path.Combine(plugin.SourceRoot, "plugin.json");
+                    var original = JObject.Parse(File.ReadAllText(manifestPath));
+                    Action<Action<JObject>, string> reject = (change, expected) =>
+                    {
+                        var manifest = (JObject)original.DeepClone();
+                        change(manifest);
+                        File.WriteAllText(manifestPath, manifest.ToString());
+                        try { service.Check(plugin.PluginId); throw new Exception("Expected invalid command: " + expected); }
+                        catch (PluginException error)
+                        {
+                            AssertEqual("plugin_command_invalid", error.Code, "command validation keeps its typed error");
+                            AssertContains(error.Message, "plugin.json commands[0] (echo)", "diagnostic locates the command");
+                            AssertContains(error.Message, expected, "diagnostic identifies the invalid field");
+                        }
+                    };
+                    reject(json => ((JObject)((JArray)json["commands"])[0])["entry"] = "missing.js", "entry must name a declared .js file");
+                    reject(json => ((JObject)((JArray)json["commands"])[0])["writesData"] = true, "writesData requires project.write");
+                    reject(json => ((JObject)((JArray)json["commands"])[0])["argumentsSchema"]["additionalProperties"] = true,
+                        "argumentsSchema: schema.additionalProperties must be false");
+                    reject(json => ((JObject)((JArray)json["commands"])[0])["resultSchema"]["properties"]["text"]["description"] = "",
+                        "resultSchema: schema.properties.text.description is required");
+                    File.WriteAllText(manifestPath, original.ToString());
+                    AssertTrue(service.Check(plugin.PluginId).CandidateId != null, "corrected command can be previewed");
+                }
+            });
+
+            var session = new ChatSession();
+            var runId = "plugin-run";
+            var method = typeof(WorkspaceConversationService).GetMethod("PluginSourceHasUncheckedChanges",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            AssertTrue(method != null, "plugin completion policy is available");
+            Func<bool> uncheckedChanges = () => (bool)method.Invoke(null, new object[] { session, runId });
+            var write = ContinuityResult("source-write", "core.write", ToolResult.Ok("Saved."));
+            write.RunId = runId;
+            write.ResourceEffect = new ResourceEffect("source-effect", "core.write", ResourceEffectOutcome.VerifiedChanged,
+                new[] { new ResourceImpact(new ResourceIdentity("rna://file/plugin/index.html"), ResourceImpactRelation.Exact) });
+            session.Messages.Add(write);
+            AssertTrue(uncheckedChanges(), "changed plugin source prevents an unchecked completed claim");
+            var failed = ContinuityResult("failed-check", "plugins.check", ToolResult.Error("Invalid command contract."));
+            failed.RunId = runId; session.Messages.Add(failed);
+            AssertTrue(uncheckedChanges(), "failed package validation cannot clear the completion requirement");
+            var checkedResult = ContinuityResult("valid-check", "plugins.check", ToolResult.Ok("Candidate retained."));
+            checkedResult.RunId = runId; session.Messages.Add(checkedResult);
+            AssertTrue(!uncheckedChanges(), "successful check after the edit permits a completed claim");
+            var laterWrite = ContinuityResult("later-write", "core.write", ToolResult.Ok("Saved again."));
+            laterWrite.RunId = runId; laterWrite.ResourceEffect = write.ResourceEffect; session.Messages.Add(laterWrite);
+            AssertTrue(uncheckedChanges(), "later source edits invalidate the prior package check");
+            var lastCheck = ContinuityResult("last-check", "plugins.check", ToolResult.Ok("Candidate retained."));
+            lastCheck.RunId = runId; session.Messages.Add(lastCheck);
+            var partialPatch = ContinuityResult("partial-patch", "core.patch", ToolResult.Error("Second target failed."));
+            partialPatch.RunId = runId;
+            partialPatch.ResourceEffect = new ResourceEffect("partial-effect", "core.patch", ResourceEffectOutcome.VerifiedChanged,
+                targets: new[] { new ResourceTargetEffect { Status = ResourceTargetStatus.Changed,
+                    After = new ResourceRef("rna://file/plugin/new.js", "rev-1") } });
+            session.Messages.Add(partialPatch);
+            AssertTrue(uncheckedChanges(), "a changed patch target still requires checking when a later target failed");
+        }
         private sealed class PluginPicker : IPluginProjectPicker
         {
             public string Root;

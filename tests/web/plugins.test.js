@@ -68,7 +68,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.deepEqual(JSON.parse(await execute(fixture('v1'),'echo','{"text":"worker"}')),{text:'worker v1'});
     const page=await context.newPage();page.on('pageerror',error=>errors.push(error.stack||error.message));
     await page.goto('file://'+path.join(web,'index.html'));assert.equal(await page.title(),'RN Assistant');
-    let active=null,candidate=null,version=1,iconPrompt='',savedIcons=[],drawCalls=0,sourceChatCreated=false,sourceChatCreateCalls=0;
+    let active=null,candidate=null,version=1,checkError=null,iconPrompt='',savedIcons=[],drawCalls=0,sourceChatCreated=false,sourceChatCreateCalls=0;
     let visualAttachment=null,visualSent=false,visualRequest=null;
     const publishedVersions=[];
     const item={pluginId:'example',name:'Example',sourceWorkspaceId:'source-1',sourceRoot:'C:\\Plugins\\Example',releaseId:null,enabled:false};
@@ -99,7 +99,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
           iconPrompt=payload.input.message;return {project:{workspaceId:'source-1'},sessionId:payload.sessionId,messages:[
           {Id:'step',Role:'assistant',RunId:'plugin-test-run',Activity:{RunId:'plugin-test-run',StepId:'check',Kind:'tool',Title:'Проверка исходников',Status:'completed',ToolId:'core.read'}},
           {Id:'answer',Role:'assistant',Content:'SVG-иконка смоделирована.'}],state:{Status:'completed',runId:'plugin-test-run',runViewState:{RunId:'plugin-test-run',TurnId:'turn',Lifecycle:'completed',ExecutionHealth:'clean',SuccessfulReads:1,VerifiedWrites:0,NoChangeWrites:0,UnverifiedWrites:0,FailedCalls:0,UnknownEffects:0}}};
-        case 'checkPlugin':candidate='candidate-'+version;return {candidateId:candidate,hasChanges:!item.enabled||version!==active,files:3,bytes:100};
+        case 'checkPlugin':if(checkError)throw Error(checkError);candidate='candidate-'+version;return {candidateId:candidate,hasChanges:!item.enabled||version!==active,files:3,bytes:100};
         case 'applyPlugin':assert.equal(payload.candidateId,candidate);active=version;item.releaseId='release-'+version;item.enabled=true;item.icon='icon.svg';item.iconSvg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 18V6h3v12M10 18v-7h3v7M16 18V4h3v14"/></svg>';publishedVersions.unshift({releaseId:item.releaseId,name:item.name,version:'1.0.0',capturedUtc:new Date().toISOString()});return {...item};
         case 'getPluginVersions':{const offset=payload.cursor?Number(payload.cursor):0;return {items:publishedVersions.slice(offset,offset+12).map(saved=>({...saved,active:item.enabled&&saved.releaseId===item.releaseId})),nextCursor:publishedVersions.length>offset+12?String(offset+12):null};}
         case 'restorePluginVersion':{assert.equal(payload.expectedActiveReleaseId,item.releaseId);const saved=publishedVersions.find(entry=>entry.releaseId===payload.releaseId);assert.ok(saved);item.releaseId=saved.releaseId;item.enabled=true;active=Number(saved.releaseId.split('-').pop());publishedVersions.splice(publishedVersions.indexOf(saved),1);publishedVersions.unshift(saved);return {...item};}
@@ -246,7 +246,13 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginApply').click();await page.locator('#pluginVersions summary').click();await page.locator('#pluginReopen').click();
     assert.equal(await page.locator('#pluginRail [data-plugin-id="example"] .plugin-icon-image').count(),1,'published SVG icon appears in the rail');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello v1'}).waitFor();
-    version=2;await refreshPreview();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
+    version=2;checkError='plugin.json commands[0] (echo): entry must name a declared .js file in files.';
+    const oldFrame=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
+    await page.locator('#pluginPreview').click();
+    await page.locator('#pluginPreviewMount .preview-surface-status[role="alert"]').filter({hasText:'commands[0]'}).waitFor();
+    assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('src'),oldFrame,'invalid source keeps the prior preview');
+    assert.equal(await page.locator('#pluginApply').isVisible(),false,'invalid source cannot be applied');
+    checkError=null;await refreshPreview();await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').filter({hasText:'hello preview-v2'}).waitFor();
     await page.locator('#pluginApply').click();
     assert.equal(await page.frameLocator('#pluginPreviewMount iframe').locator('#answer').textContent(),'hello preview-v2','apply preserves the pinned visible instance');

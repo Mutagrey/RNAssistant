@@ -86,19 +86,34 @@ namespace RNAssistant.Core.Storage
                 manifest.Capabilities == null || manifest.Capabilities.Any(value => value != "project.read" && value != "project.write") ||
                 manifest.Commands == null || manifest.Commands.Length > 32 || manifest.Vendors == null || manifest.Vendors.Length > 32)
                 throw new PluginException("plugin_manifest_invalid", "Invalid or unsupported plugin manifest/protocol.");
-            if (manifest.Commands.Select(command => command?.Id).Distinct(StringComparer.Ordinal).Count() != manifest.Commands.Length)
-                throw new PluginException("plugin_command_invalid", "Duplicate command IDs.");
-            foreach (var command in manifest.Commands)
+            var commandIds = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            for (var index = 0; index < manifest.Commands.Length; index++)
             {
+                var command = manifest.Commands[index];
+                if (command == null)
+                    throw new PluginException("plugin_command_invalid", "plugin.json commands[" + index + "] must be an object.");
+                var label = "plugin.json commands[" + index + "] (" +
+                    (ValidId(command.Id) ? command.Id : "invalid id") + ")";
+                if (!ValidId(command.Id))
+                    throw new PluginException("plugin_command_invalid", label + ": id must match [a-z][a-z0-9-]{0,63}.");
+                if (!commandIds.Add(command.Id))
+                    throw new PluginException("plugin_command_invalid", label + ": duplicate command id.");
+                if (string.IsNullOrWhiteSpace(command.Description) || command.Description.Length > 500)
+                    throw new PluginException("plugin_command_invalid", label + ": description must contain 1–500 characters.");
+                if (string.IsNullOrWhiteSpace(command.Entry) || !command.Entry.EndsWith(".js", StringComparison.Ordinal) ||
+                    !manifest.Files.Contains(command.Entry))
+                    throw new PluginException("plugin_command_invalid", label + ": entry must name a declared .js file in files.");
+                if (command.ArgumentsSchema == null)
+                    throw new PluginException("plugin_command_invalid", label + ": argumentsSchema is required.");
+                if (command.ResultSchema == null)
+                    throw new PluginException("plugin_command_invalid", label + ": resultSchema is required.");
+                if (command.WritesData && !manifest.Capabilities.Contains("project.write"))
+                    throw new PluginException("plugin_command_invalid", label + ": writesData requires project.write in capabilities.");
                 Newtonsoft.Json.Linq.JObject schema; string error;
-                if (command == null || !ValidId(command.Id) || string.IsNullOrWhiteSpace(command.Description) || command.Description.Length > 500 ||
-                    !manifest.Files.Contains(command.Entry) || !command.Entry.EndsWith(".js", StringComparison.Ordinal) ||
-                    command.ArgumentsSchema == null || command.ResultSchema == null ||
-                    command.WritesData && !manifest.Capabilities.Contains("project.write"))
-                    throw new PluginException("plugin_command_invalid", "Invalid command contract.");
-                if (!ToolSchemaSupport.TryParse(new ToolCatalogEntry { ArgumentSchemaJson = command.ArgumentsSchema.ToString() }, out schema, out error) ||
-                    !ToolSchemaSupport.TryParse(new ToolCatalogEntry { ArgumentSchemaJson = command.ResultSchema.ToString() }, out schema, out error))
-                    throw new PluginException("plugin_command_invalid", command.Id + ": " + error);
+                if (!ToolSchemaSupport.TryParse(new ToolCatalogEntry { ArgumentSchemaJson = command.ArgumentsSchema.ToString() }, out schema, out error))
+                    throw new PluginException("plugin_command_invalid", label + ": argumentsSchema: " + error.Replace("argumentSchemaJson", "schema"));
+                if (!ToolSchemaSupport.TryParse(new ToolCatalogEntry { ArgumentSchemaJson = command.ResultSchema.ToString() }, out schema, out error))
+                    throw new PluginException("plugin_command_invalid", label + ": resultSchema: " + error.Replace("argumentSchemaJson", "schema"));
             }
             foreach (var vendor in manifest.Vendors)
                 if (vendor == null || !ValidId(vendor.Id) || !ValidVersion(vendor.Version) || !ValidPath(vendor.Mount))
