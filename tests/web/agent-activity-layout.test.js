@@ -31,7 +31,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.appendMessageArtifactCards = () => {};
       window.setPromptContextInspectorOpen = open => { window.inspectorOpened = open; };
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
+    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-icons.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
@@ -132,7 +132,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       assert.ok(bounds.every(row => row.targetOverflow !== "ellipsis"), "semantic targets remain visible");
       assert.equal(new Set(bounds[0].colors.filter(Boolean)).size, 1, "completed action and icon use one muted color");
       assert.notEqual(bounds[4].colors[2], bounds[4].colors[0], "error remains distinct");
-      assert.ok(bounds[4].text.includes("Лист уже существует"), "failed action shows its readable outcome");
+      assert.ok(bounds[4].text.includes("Sheet already exists: raw error"),
+        "failed action shows the tool message rather than a generic error label");
       assert.notEqual(bounds[5].colors[2], bounds[5].colors[0], "unknown effect stands out from the muted action");
       assert.equal(bounds[5].colors[2], bounds[4].colors[2], "unknown effect and correctable conflicts use the warning color");
       assert.notEqual(bounds[5].colors[2], bounds[8].colors[2], "unknown effect is distinct from a hard failure");
@@ -235,7 +236,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       "the expanded card does not repeat the tool ID");
     assert.match(await page.locator("#actions .agent-tool-card").first().textContent(), /Loaded catalogRevision=private-id/,
       "the retained tool message is immediately visible in the card");
-    assert.match(await page.locator("#actions .agent-activity-row").nth(4).textContent(), /Лист уже существует/);
+    assert.match(await page.locator("#actions .agent-activity-row").nth(4).textContent(), /Sheet already exists: raw error/);
     await page.evaluate(() => {
       const host = document.createElement("div"); host.id = "previews"; document.querySelector("main").appendChild(host);
       RNAssistantToolResultPresentation.renderCompact(host, [
@@ -271,6 +272,17 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       host.querySelectorAll("details").forEach(node => { node.open = true; });
     });
     assert.match(await page.locator("#resource-previews .tool-source-caption").first().innerText(), /R5@v1 — Отчёт.pdf, страница 2, символы \[4, 32\)/);
+    await page.evaluate(() => {
+      const host = document.createElement("div"); host.id = "reflection-preview";
+      document.querySelector("main").appendChild(host);
+      appendAgentReflectionStep(host, "Проверю **модуль**.");
+    });
+    assert.equal(await page.locator("#reflection-preview").innerText(), "Проверю модуль.",
+      "reflection renders as message text without a visible title");
+    assert.equal(await page.locator("#reflection-preview .agent-reflection-icon").count(), 1);
+    assert.equal(await page.locator("#reflection-preview .agent-reflection-icon svg").count(), 1);
+    assert.equal(await page.locator("#reflection-preview .agent-reflection-step").evaluate(node =>
+      getComputedStyle(node).display), "grid", "icon and Markdown share one message row");
     assert.equal(await page.locator("#resource-previews").innerText().then(text => text.includes("Показана доступная часть результата")), false,
       "a complete selected PDF slice is not labelled as a truncated UI preview");
     for (const theme of ["light", "dark"]) {

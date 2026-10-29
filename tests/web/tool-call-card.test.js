@@ -43,7 +43,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const search = { Kind: "tool", ToolId: "core.find", Status: "completed", Subtitle: "исходники",
         Display: { Action: "Поиск", Operation: "Search" },
         ResultSummary: { Kind: "resource-find", ReturnedItems: 2, Complete: true } };
-      const failed = { Kind: "tool", ToolId: "custom.tool", Status: "failed", ErrorCode: "unexpected_failure",
+      const failed = { Kind: "tool", RunId: "run", ToolCallId: "failed", ToolId: "custom.tool", Status: "failed", ErrorCode: "unexpected_failure",
         ResultMessage: "Файл занят другим процессом.", ExecutionEvidence: { Dispatch: "NotDispatched", Effect: "None" },
         Display: { Action: "Запись", Operation: "Write" } };
       [["read", read], ["write", write], ["search", search], ["failed", failed]].forEach(([id, activity]) => {
@@ -80,20 +80,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#read > details > summary").click();
     await page.waitForFunction(() => requests.length === 1);
     assert.equal(await page.locator("#read .agent-activity-tool-id").count(), 0);
-    assert.match(await page.locator("#read .agent-tool-card-header").innerText(), /Получен фрагмент исходного кода/);
+    assert.match(await page.locator("#read .agent-tool-card-header").innerText(), /core\.read · app\.js, строки 81–120/);
     await page.evaluate(() => requests[0].resolve({ chatId: "chat", runId: "run", toolCallId: "read",
       rawJson: JSON.stringify({ message: "Прочитано", text: "a".repeat(2000) }),
       blocks: [{ kind: "text", title: "Содержимое", text: "const x = 1;\nconst y = 2;", complete: true,
-        source: { target: "app.js", line: 81 } }] }));
+        source: { reference: "R1@v1", target: "app.js", line: 81 } }] }));
     await page.locator("#read .agent-tool-tab").getByText("JSON").waitFor();
-    assert.equal(await page.locator("#read .tool-source-caption").count(), 0,
-      "a single source does not repeat the target inside the card");
+    assert.match(await page.locator("#read .tool-source-caption").innerText(), /R1@v1 — app\.js, строка 81/,
+      "the source reference remains visible for one read");
+    assert.match(await page.locator("#read .agent-tool-panel:visible .agent-tool-message").innerText(), /Получен фрагмент исходного кода/);
     assert.equal(await page.locator("#read .agent-tool-panel:visible pre").textContent(), "const x = 1;\nconst y = 2;");
     const positions = await page.locator("#read .agent-tool-card-header").evaluate(node => ({
-      messageRight: node.querySelector(".agent-tool-message").getBoundingClientRect().right,
+      receiptRight: node.querySelector(".agent-tool-receipt").getBoundingClientRect().right,
       tabsLeft: node.querySelector(".agent-tool-tabs").getBoundingClientRect().left
     }));
-    assert.ok(positions.messageRight <= positions.tabsLeft + 1, "tabs stay to the right of the message");
+    assert.ok(positions.receiptRight <= positions.tabsLeft + 1, "tabs share the receipt row without overlap");
     if (process.env.TOOL_CARD_SCREENSHOT) await page.locator("#feed").screenshot({ path: process.env.TOOL_CARD_SCREENSHOT });
     await page.locator("#read .agent-tool-tab").getByText("Аргументы").click();
     assert.equal(await page.locator("#read .agent-tool-panel:visible .rn-json-viewer.is-compact").count(), 1);
@@ -110,12 +111,23 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#write > details > summary").click();
     await page.waitForFunction(() => requests.length === 2);
     await page.evaluate(() => requests[1].resolve({ chatId: "chat", runId: "run", toolCallId: "write",
+      rawJson: '{"status":"ok"}',
       blocks: [{ kind: "text_changes", title: "Изменения", complete: true,
         changes: { complete: true, evidenceFound: true, items: [{ title: "app.js" }] } }] }));
     await page.locator("#write .agent-tool-tab").getByText("Изменения").waitFor();
-    assert.equal(await page.locator("#write .agent-tool-tab:visible").count(), 2,
-      "a change-only result keeps changes and arguments without an empty result tab");
+    assert.equal(await page.locator("#write .agent-tool-tab:visible").count(), 3,
+      "changes, arguments and raw JSON remain reachable");
+    assert.equal(await page.locator("#write .agent-tool-tab.active").innerText(), "Изменения",
+      "verified diff is the initial view for a mutation");
     assert.match(await page.locator("#write .agent-tool-panel:visible").textContent(), /app.js/);
+    await page.locator("#failed > details > summary").click();
+    await page.waitForFunction(() => requests.length === 3);
+    await page.evaluate(() => requests[2].resolve({ chatId: "chat", runId: "run", toolCallId: "failed",
+      rawJson: '{"code":"unexpected_failure"}', blocks: [] }));
+    await page.locator("#failed .agent-tool-tab").getByText("JSON").waitFor();
+    assert.equal(await page.locator("#failed .agent-tool-tab.active").innerText(), "Результат");
+    assert.equal(await page.locator("#failed .agent-tool-panel:visible").innerText(), "Файл занят другим процессом.",
+      "failure details open on the full tool message, with JSON available separately");
     for (const width of [740, 360]) {
       await page.setViewportSize({ width, height: 700 });
       assert.ok(await page.locator("#read .agent-tool-card").evaluate(node => node.scrollWidth <= node.clientWidth + 1),

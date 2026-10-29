@@ -13,7 +13,7 @@
     if (text != null) result.textContent = text;
     return result;
   }
-  function sourceLabel(source) {
+  function sourceLabel(source, includeExcerpt) {
     var coverage = source.coverage || {}, location = "";
     if (source.line != null) location = "строка " + source.line + (source.column != null ? ", столбец " + source.column : "");
     else if (coverage.kind === "line-range" && coverage.start != null && coverage.end > coverage.start)
@@ -31,7 +31,8 @@
     var text = (source.reference ? source.reference + " — " : "") + (source.target || "Источник");
     if (location) text += ", " + location;
     else if (source.view) text += " · " + (views[source.view] || source.view);
-    if (source.excerpt != null && source.excerpt !== "") text += ": «" + source.excerpt + (source.excerptTruncated ? "…" : "") + "»";
+    if (includeExcerpt !== false && source.excerpt != null && source.excerpt !== "")
+      text += ": «" + source.excerpt + (source.excerptTruncated ? "…" : "") + "»";
     return text;
   }
   function rows(body, block) {
@@ -64,7 +65,13 @@
   }
   // Add a renderer for a new block kind here; no tool names or payload guessing.
   var renderers = {
-    text: function (body, block) { body.appendChild(node("pre", "", block.text)); },
+    text: function (body, block) {
+      if (block.format === "markdown" && typeof window.markdown === "function") {
+        var content = node("div", "tool-result-markdown markdown");
+        content.innerHTML = window.markdown(block.text || "");
+        body.appendChild(content);
+      } else body.appendChild(node("pre", block.format === "json" ? "tool-result-schema" : "", block.text));
+    },
     list: rows,
     table: rows,
     text_changes: function (body, block) {
@@ -81,10 +88,9 @@
         parent.appendChild(node("p", "tool-result-note", "Этот вид представления недоступен. Откройте JSON результата."));
         return;
       }
-      var source = !!block.source && (blocks || []).length > 1;
-      var card = node(source ? "details" : "section", "tool-result-preview" + (source ? " has-source" : ""));
-      if (source) {
-        card.appendChild(node("summary", "tool-source-caption", sourceLabel(block.source)));
+      var card = node("section", "tool-result-preview" + (block.source ? " has-source" : ""));
+      if (block.source) {
+        card.appendChild(node("div", "tool-source-caption", sourceLabel(block.source, false)));
       } else if ((blocks || []).length > 1 && block.title && block.title !== "Содержимое") {
         card.appendChild(node("div", "tool-result-block-title", block.title));
       }

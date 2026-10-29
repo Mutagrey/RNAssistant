@@ -20,7 +20,7 @@
     parent.appendChild(count);
   }
   function targetStatus(item) {
-    return { Prepared: "Предложено", Changed: "Изменение подтверждено", Unchanged: "Изменений не потребовалось",
+    return { Prepared: "Предложено", Changed: "", Unchanged: "Изменений не потребовалось",
       Rejected: "Отказ без эффекта", Unknown: "Эффект неизвестен", NotStarted: "Выполнение не начиналось" }[item.targetStatus] || "";
   }
   function availability(item) {
@@ -123,19 +123,25 @@
     (result.items || []).forEach(function (item) {
       var block = element("div", "inline-change");
       var title = item.beforeTitle && item.beforeTitle !== item.title ? item.beforeTitle + " → " + item.title : item.title;
-      block.appendChild(element("div", "run-change-title", title || "Исходник"));
-      if (targetStatus(item)) block.appendChild(element("p", "run-changes-caption", targetStatus(item)));
+      var header = element("div", "inline-change-header");
+      header.appendChild(element("span", "run-change-title", title || "Исходник"));
+      block.appendChild(header);
+      if (item.targetStatus && item.targetStatus !== "Changed" && item.targetStatus !== "Unchanged")
+        block.appendChild(element("p", "run-changes-caption", targetStatus(item)));
       var preview = item.availability === "unverified" && typeof item.before === "string" && typeof item.intendedAfter === "string";
       if (preview) block.appendChild(element("p", "run-changes-caption", "Предварительный diff · результат не подтверждён"));
       if (item.availability === "available" || preview) {
-        window.RNAssistantTextDiff.renderInline(block, window.RNAssistantTextDiff.format(item.before, preview ? item.intendedAfter : item.after));
+        var diff = window.RNAssistantTextDiff.format(item.before, preview ? item.intendedAfter : item.after);
+        header.appendChild(element("span", "vba-diff-summary", diff.summary || ""));
+        window.RNAssistantTextDiff.renderInline(block, diff, { hideSummary: true });
       } else if (item.availability === "hunks") {
         block.appendChild(element("p", "run-changes-caption", "Проверенные фрагменты · длинные фрагменты сокращены"));
         (item.hunks || []).forEach(function (hunk, index) {
           block.appendChild(element("p", "run-changes-caption", "@@ " + (hunk.offset >= 0 ? "символ " + hunk.offset : "фрагмент " + (index + 1)) + " · −" + hunk.removed + " / +" + hunk.inserted + " @@"));
           window.RNAssistantTextDiff.renderInline(block, window.RNAssistantTextDiff.format(hunk.before || "", hunk.after || ""));
         });
-      } else if (!targetStatus(item)) block.appendChild(element("p", "run-changes-caption", availability(item)));
+      } else if (item.targetStatus === "Changed" || item.targetStatus === "Unchanged" || !targetStatus(item))
+        block.appendChild(element("p", "run-changes-caption", availability(item)));
       parent.appendChild(block);
     });
     if (!result.complete) parent.appendChild(element("p", "run-changes-caption", "Часть сравнений недоступна."));

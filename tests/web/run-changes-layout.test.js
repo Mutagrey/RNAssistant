@@ -141,7 +141,7 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
       ]});
     });
     assert.equal(await page.locator('.inline-change').count(), 4);
-    assert.match(await page.locator('.inline-change').nth(0).textContent(), /Изменение подтверждено/);
+    assert.doesNotMatch(await page.locator('.inline-change').nth(0).textContent(), /Изменение подтверждено/);
     assert.match(await page.locator('.inline-change').nth(1).textContent(), /Эффект неизвестен/);
     assert.match(await page.locator('.inline-change').nth(2).textContent(), /Выполнение не начиналось/);
     assert.match(await page.locator('.inline-change').nth(3).textContent(), /Отказ без эффекта/);

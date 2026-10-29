@@ -59,6 +59,7 @@ namespace RNAssistant.Office.Contracts
     {
         public override string Kind => "text";
         [JsonProperty("text")] public string Text { get; set; }
+        [JsonProperty("format", NullValueHandling = NullValueHandling.Ignore)] public string Format { get; set; }
     }
     public sealed class ToolListBlockDto : ToolResultBlockDto
     {

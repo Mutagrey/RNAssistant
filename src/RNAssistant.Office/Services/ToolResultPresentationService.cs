@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Services;
@@ -51,7 +52,7 @@ namespace RNAssistant.Office.Services
                 activity.ExecutionEvidence?.Effect == ToolEffectEvidence.VerifiedNoChange)
                 result.Blocks.Add(new ToolTextBlockDto { Title = "Сравнение", Text =
                     (effect == ToolEffectEvidence.Unknown ? "Результат действия не подтверждён. " :
-                     effect == ToolEffectEvidence.VerifiedNoChange ? "Подтверждено отсутствие изменений. " : "Изменения подтверждены. ") +
+                     effect == ToolEffectEvidence.VerifiedNoChange ? "Изменений нет. " : "") +
                     "Сохранённое сравнение для этого вызова недоступно." });
             var questions = activity.ToolId == UserQuestionToolCatalog.AskToolId;
             if (questions) result.QuestionsUnavailableReason = "Сохранённые вопросы недоступны. Повторите загрузку; при повторной ошибке сообщите об этом в чат.";
@@ -140,11 +141,18 @@ namespace RNAssistant.Office.Services
                     if (reader.TokenType == JsonToken.String) data = new PreviewSource { Text = (string)reader.Value };
                     else if (reader.TokenType == JsonToken.StartArray) data = new PreviewSource { Items = serializer.Deserialize<List<PreviewItem>>(reader) };
                     else if (reader.TokenType == JsonToken.StartObject) data = toolId == ResourceToolCatalog.ReadToolId
-                        ? serializer.Deserialize<ResourceReadPreviewSource>(reader) : serializer.Deserialize<PreviewSource>(reader);
+                        ? serializer.Deserialize<ResourceReadPreviewSource>(reader) :
+                        toolId == CapabilityToolCatalog.ReadToolId ? serializer.Deserialize<CapabilityReadPreviewSource>(reader) :
+                        toolId == SkillLoadToolHandler.ToolId ? serializer.Deserialize<SkillSelectionPreviewSource>(reader) :
+                        serializer.Deserialize<PreviewSource>(reader);
                     else return;
                     if (reader.Read()) throw new JsonSerializationException("Trailing data.");
                 }
                 if (data == null) return;
+                var capability = data as CapabilityReadPreviewSource;
+                if (capability != null && AppendCapabilityContent(blocks, capability)) return;
+                var selection = data as SkillSelectionPreviewSource;
+                if (selection != null && AppendSkillSelectionContent(blocks, selection)) return;
                 var readData = data as ResourceReadPreviewSource;
                 var sourceView = readData?.Kind == "resource-read"
                     ? Source(data.Target, data.Text, readData.Representation, readData.SourceCoverage ?? readData.Coverage) : null;
@@ -191,9 +199,9 @@ namespace RNAssistant.Office.Services
                     {
                         if (item == null) { block.Complete = false; continue; }
                         block.Items.Add(new ToolListItemDto {
-                            Title = Clip(item.Title ?? item.Name ?? item.Label ?? item.Target ?? "Результат", 240, block),
+                            Title = Clip(item.Title ?? item.Id ?? item.Name ?? item.Label ?? item.Target ?? "Результат", 240, block),
                             Source = toolId == ResourceToolCatalog.FindToolId ? Source(item.Target, item.Snippet, null, null) : null,
-                            Detail = Clip(string.Join("\n", new[] { item.Target, item.Description, item.Snippet, item.Text, item.Type ?? item.Kind, item.Scope }
+                            Detail = Clip(string.Join("\n", new[] { item.Target, item.Description, item.Summary, item.Snippet, item.Text, item.Type ?? item.Kind, item.Scope }
                                 .Where(t => !string.IsNullOrEmpty(t)).Distinct()), 2000, block) });
                     }
                     blocks.Add(block);
@@ -230,6 +238,75 @@ namespace RNAssistant.Office.Services
             }
             catch (JsonException) { Notice(blocks); }
             catch (OverflowException) { Notice(blocks); }
+        }
+        private static bool AppendCapabilityContent(List<ToolResultBlockDto> blocks, CapabilityReadPreviewSource source)
+        {
+            if (source.Kind == "tool-schema" && source.Descriptor?.Function != null)
+            {
+                var start = blocks.Count;
+                var function = source.Descriptor.Function;
+                if (!string.IsNullOrWhiteSpace(function.Description))
+                {
+                    var description = new ToolTextBlockDto { Title = "Описание" };
+                    description.Text = Clip(function.Description, MaxText, description); blocks.Add(description);
+                }
+                if (function.Parameters != null)
+                {
+                    var schema = new ToolTextBlockDto { Title = "Параметры", Format = "json" };
+                    schema.Text = Clip(function.Parameters.ToString(Formatting.Indented), MaxText, schema);
+                    blocks.Add(schema);
+                }
+                return blocks.Count > start;
+            }
+            if (source.Kind == "skill" && source.BodyMarkdown != null)
+            {
+                var body = new ToolTextBlockDto { Title = "Инструкция навыка", Format = "markdown", Complete = source.Complete != false };
+                body.Text = Clip(source.BodyMarkdown, MaxText, body); blocks.Add(body);
+                return true;
+            }
+            if (source.Kind == "reference" && source.Content != null)
+            {
+                var body = new ToolTextBlockDto { Title = source.Path ?? "Справка навыка", Format = "markdown", Complete = source.Complete != false };
+                body.Text = Clip(source.Content, MaxText, body); blocks.Add(body);
+                return true;
+            }
+            if (source.Kind == "skill-tool" && source.LoadSkill != null)
+            {
+                var list = new ToolListBlockDto { Title = "Доступ через навык" };
+                foreach (var id in source.LoadSkill.Take(MaxRows))
+                    list.Items.Add(new ToolListItemDto { Title = Clip(id, 240, list) });
+                list.Complete = source.LoadSkill.Count <= MaxRows;
+                blocks.Add(list);
+                return true;
+            }
+            return false;
+        }
+        private static bool AppendSkillSelectionContent(List<ToolResultBlockDto> blocks, SkillSelectionPreviewSource source)
+        {
+            if (source.Status != "selected_for_next_request" && source.Status != "removed_for_next_request") return false;
+            var start = blocks.Count;
+            if (source.Status == "removed_for_next_request")
+            {
+                blocks.Add(new ToolTextBlockDto { Title = "Выбор навыка", Text = "Навык убран из следующего запроса." });
+                return true;
+            }
+            if (!string.IsNullOrWhiteSpace(source.Notice))
+            {
+                var note = new ToolTextBlockDto { Title = "Выбор навыка" };
+                note.Text = Clip(source.Notice, MaxText, note); blocks.Add(note);
+            }
+            foreach (var group in new[] { new { Title = "Инструменты", Items = source.Tools },
+                new { Title = "Справки", Items = source.References } })
+            {
+                if (group.Items == null || group.Items.Count == 0) continue;
+                var list = new ToolListBlockDto { Title = group.Title, Complete = group.Items.Count <= MaxRows };
+                foreach (var item in group.Items.Take(MaxRows))
+                    list.Items.Add(new ToolListItemDto { Title = Clip(item, 240, list) });
+                blocks.Add(list);
+            }
+            if (blocks.Count == start)
+                blocks.Add(new ToolTextBlockDto { Title = "Выбор навыка", Text = "Навык выбран для следующего запроса." });
+            return true;
         }
         private static string ReadNote(ResourceReadPreviewSource data)
         {
@@ -283,6 +360,27 @@ namespace RNAssistant.Office.Services
             public int? NextPageIndex { get; set; }
             public bool HydratedForNextModelStep { get; set; }
         }
+        private sealed class CapabilityReadPreviewSource : PreviewSource
+        {
+            public string Kind { get; set; }
+            public string BodyMarkdown { get; set; }
+            public string Path { get; set; }
+            public List<string> LoadSkill { get; set; }
+            public CapabilityDescriptorPreview Descriptor { get; set; }
+        }
+        private sealed class SkillSelectionPreviewSource : PreviewSource
+        {
+            public string Status { get; set; }
+            public string Notice { get; set; }
+            public List<string> Tools { get; set; }
+            public List<string> References { get; set; }
+        }
+        private sealed class CapabilityDescriptorPreview { public CapabilityFunctionPreview Function { get; set; } }
+        private sealed class CapabilityFunctionPreview
+        {
+            public string Description { get; set; }
+            public JToken Parameters { get; set; }
+        }
         private class PreviewSource
         {
             public bool? Complete { get; set; }
@@ -306,6 +404,8 @@ namespace RNAssistant.Office.Services
         }
         private sealed class PreviewItem
         {
+            public string Id { get; set; }
+            public string Summary { get; set; }
             public string Title { get; set; }
             public string Name { get; set; }
             public string Label { get; set; }

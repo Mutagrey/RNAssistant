@@ -99,9 +99,11 @@
       row.appendChild(code); container.appendChild(row);
     });
   }
-  function renderInline(container, diff) {
-    var summary = document.createElement("div"); summary.className = "vba-diff-summary";
-    summary.textContent = diff.summary || ""; container.appendChild(summary);
+  function renderInline(container, diff, options) {
+    if (!(options && options.hideSummary)) {
+      var summary = document.createElement("div"); summary.className = "vba-diff-summary";
+      summary.textContent = diff.summary || ""; container.appendChild(summary);
+    }
     var lines = diff.lines || [], shown = 0;
     var body = document.createElement("div"); body.className = "inline-text-diff";
     body.tabIndex = 0; body.setAttribute("aria-label", "Изменённый текст"); container.appendChild(body);

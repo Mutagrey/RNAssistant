@@ -85,6 +85,10 @@ function renderActivityRow(activity, current, expandable, context) {
   var time = activityTimeText(context);
   var presentation = activityPresentationState(activity);
   var resultText = context && context.terminal && isActiveTimelineStatus(status) ? "Остановлено" : activityDisplayResult(activity);
+  if (activityToolId(activity) && (status === "failed" || status === "completed_with_errors") && presentation !== "unknown") {
+    var failureMessage = String(activityResultMessage(activity) || "").replace(/\s+/g, " ").trim();
+    if (failureMessage) resultText = failureMessage.length > 170 ? failureMessage.slice(0, 167) + "…" : failureMessage;
+  }
   if (activityToolId(activity) && status === "completed" && presentation !== "unknown") {
     var completed = activityCompletedRowCopy(activity, resultText);
     if (completed) { title = completed.title; resultText = completed.result; }
@@ -95,6 +99,7 @@ function renderActivityRow(activity, current, expandable, context) {
     (activityKind(activity) === "notice" && isActiveTimelineStatus(status));
   row.className = "agent-activity-row" + (comment ? " has-comment" : " has-no-comment") +
     (hideIcon ? " is-status-label" : "") +
+    (activityToolId(activity) && (status === "failed" || status === "completed_with_errors") ? " is-failed-tool" : "") +
     (context && context.liveFeed && activity === context.currentActivity && status === "running" ? " is-live-current" : "");
   row.title = [title, comment, resultText, agentStatusLabel(presentation), time].filter(Boolean).join(" · ");
 
@@ -573,29 +578,12 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
   card.className = "agent-tool-card";
   var header = document.createElement("div");
   header.className = "agent-tool-card-header";
-  var message = activityResultMessage(activity);
-  if (message && message.trim() && message.trim() !== outcome) {
-    var messageWrap = document.createElement("div");
-    messageWrap.className = "agent-tool-message";
-    var messageText = document.createElement("span");
-    messageText.textContent = message.trim();
-    messageWrap.appendChild(messageText);
-    if (message.length > 180 || message.indexOf("\n") >= 0) {
-      var more = document.createElement("button");
-      more.type = "button";
-      more.className = "agent-tool-message-more";
-      more.textContent = "Показать всё";
-      more.setAttribute("aria-expanded", "false");
-      more.addEventListener("click", function () {
-        var expanded = messageWrap.classList.toggle("is-expanded");
-        more.textContent = expanded ? "Свернуть" : "Показать всё";
-        more.setAttribute("aria-expanded", String(expanded));
-      });
-      messageWrap.appendChild(more);
-    }
-    header.appendChild(messageWrap);
-    header.classList.add("has-message");
-  }
+  var receipt = document.createElement("span");
+  receipt.className = "agent-tool-receipt";
+  var toolTarget = activityCommentText(activity);
+  receipt.textContent = activityToolId(activity) + (toolTarget && toolTarget !== activityToolId(activity) ? " · " + toolTarget : "");
+  receipt.title = receipt.textContent;
+  header.appendChild(receipt);
   var tabs = document.createElement("div");
   tabs.className = "agent-tool-tabs";
   tabs.setAttribute("role", "tablist");
@@ -670,16 +658,37 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
   var resultSlot = document.createElement("div");
   resultSlot.className = "agent-tool-result-content";
   result.panel.appendChild(resultSlot);
+  var message = String(activityResultMessage(activity) || "").trim();
+  var failed = activityStatus(activity) === "failed" || activityStatus(activity) === "completed_with_errors";
+  if (message && (failed || message !== outcome)) {
+    var messageWrap = document.createElement("div");
+    messageWrap.className = "agent-tool-message";
+    messageWrap.textContent = message;
+    resultSlot.appendChild(messageWrap);
+  }
+  var resultContent = document.createElement("div");
+  resultContent.className = "agent-tool-result-data";
+  resultSlot.appendChild(resultContent);
   function showResponse(target, response) {
     var blocks = response.blocks || [];
     var normal = blocks.filter(function (block) { return block.kind !== "text_changes"; });
     var changes = blocks.filter(function (block) { return block.kind === "text_changes"; });
     var raw = response.rawJson || "";
+    if (changes.length && toolTarget === activityToolId(activity)) {
+      var changedItems = changes.reduce(function (items, block) {
+        return items.concat(block.changes && block.changes.items || []);
+      }, []);
+      if (changedItems.length === 1 && changedItems[0].title) {
+        receipt.textContent = activityToolId(activity) + " · " + changedItems[0].title;
+        receipt.title = receipt.textContent;
+      }
+    }
     release(result);
     result.button.hidden = false;
     if (normal.length) result.render = function () {
       window.RNAssistantToolResultPresentation.renderCompact(target, normal);
     };
+    else if (failed && message) result.render = function () { target.textContent = ""; };
     else if (raw) result.render = function () {
       target.textContent = "";
       return mountAgentJsonContent(target, raw);
@@ -701,25 +710,27 @@ function appendToolActivityCard(parent, activity, context, disclosure, outcome) 
       };
       if (active === "changes") mount(changeTab);
     } else if (entries.changes) entries.changes.button.hidden = true;
-    if (raw && normal.length) {
+    if (raw && (normal.length || changes.length || failed && message)) {
       var jsonTab = addTab("json", "JSON", null, true);
       release(jsonTab);
       jsonTab.button.hidden = false;
       jsonTab.render = function (panel) { return mountAgentJsonContent(panel, raw); };
       if (active === "json") mount(jsonTab);
     } else if (entries.json) entries.json.button.hidden = true;
-    if (changes.length && !normal.length && !raw) {
+    if (changes.length && !normal.length && !failed) {
       result.button.hidden = true;
-      selectTab("changes");
-    } else if (active === "result") mount(result);
+    }
+    if (changes.length && active === "result" && !failed) selectTab("changes");
+    else if (active === "result") mount(result);
     else if (entries[active] && entries[active].button.hidden) selectTab("result");
   }
   var loading = typeof appendToolResultPreview === "function" &&
-    appendToolResultPreview(resultSlot, activity, context, disclosure, showResponse);
+    appendToolResultPreview(resultContent, activity, context, disclosure, showResponse);
   if (!loading) {
     var local = activityDataJson(activity);
-    result.render = local ? function () { return mountAgentJsonContent(resultSlot, local); }
-      : function () { resultSlot.textContent = activityStatus(activity) === "running" ? "Ожидаю результат…" : "Содержимое результата недоступно."; };
+    result.render = local ? function () { return mountAgentJsonContent(resultContent, local); }
+      : function () { resultContent.textContent = activityStatus(activity) === "running" ? "Ожидаю результат…" :
+          message ? "" : "Содержимое результата недоступно."; };
     result.disposable = !!local;
   }
   selectTab("result");

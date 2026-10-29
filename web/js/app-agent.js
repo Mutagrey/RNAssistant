@@ -246,19 +246,11 @@ function appendAgentReflectionStep(parent, decision, commentary) {
   var step = document.createElement("div");
   step.className = "agent-reflection-step";
   step.setAttribute("aria-label", "Промежуточное решение агента");
-  var label = document.createElement("div");
-  label.className = "agent-reflection-label";
-  if (window.RNAssistantIcons) {
-    var icon = document.createElement("span");
-    icon.className = "agent-reflection-icon";
-    icon.setAttribute("aria-hidden", "true");
-    icon.innerHTML = window.RNAssistantIcons.render("bulb");
-    label.appendChild(icon);
-  }
-  var title = document.createElement("strong");
-  title.textContent = "Промежуточное решение";
-  label.appendChild(title);
-  step.appendChild(label);
+  var icon = document.createElement("span");
+  icon.className = "agent-reflection-icon";
+  icon.setAttribute("aria-hidden", "true");
+  if (window.RNAssistantIcons) icon.innerHTML = window.RNAssistantIcons.render("bulb");
+  step.appendChild(icon);
   var body = document.createElement("div");
   body.className = "agent-reflection-body markdown";
   body.innerHTML = markdown(text);

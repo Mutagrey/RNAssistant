@@ -299,6 +299,28 @@ namespace RNAssistant.Harness
                 "{\"text\":\"Summary\",\"table\":{\"columns\":[{\"key\":\"n\"}],\"rows\":[{\"n\":2}],\"totalRows\":1},\"items\":[{\"title\":\"Diagnostic\",\"text\":\"Detail\"}]}");
             AssertTrue(blocks.OfType<ToolTableBlockDto>().Count() == 1 && blocks.OfType<ToolListBlockDto>().Count() == 1 &&
                 blocks.OfType<ToolTextBlockDto>().Count() == 1, "a composite result retains table, list and text independently");
+            blocks.Clear();
+            ToolResultPresentationService.AppendContent(blocks,
+                "{\"kind\":\"tool-schema\",\"descriptor\":{\"function\":{\"description\":\"Reads a source\",\"parameters\":{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\"}}}}}}",
+                "core.tools.read");
+            AssertTrue(blocks.OfType<ToolTextBlockDto>().Any(b => b.Text == "Reads a source") &&
+                blocks.OfType<ToolTextBlockDto>().Any(b => b.Format == "json" && b.Text.Contains("\"properties\"")),
+                "tool schema presents description and parameter tree without raw-result navigation");
+            blocks.Clear();
+            ToolResultPresentationService.AppendContent(blocks,
+                "{\"kind\":\"skill\",\"complete\":true,\"bodyMarkdown\":\"# VBA\\nRead modules\"}", "core.tools.read");
+            AssertEqual("markdown", ((ToolTextBlockDto)blocks.Single()).Format, "skill body uses safe Markdown renderer");
+            blocks.Clear();
+            ToolResultPresentationService.AppendContent(blocks,
+                "{\"id\":\"skills.vba.code.editing\",\"status\":\"selected_for_next_request\",\"tools\":[\"vba.read\"],\"references\":[\"README.md\"]}",
+                "core.skills.load");
+            AssertTrue(blocks.OfType<ToolListBlockDto>().Count() == 2,
+                "selected skill exposes its tools and references instead of opaque JSON");
+            blocks.Clear();
+            ToolResultPresentationService.AppendContent(blocks,
+                "{\"items\":[{\"id\":\"skills.vba.code.editing\",\"summary\":\"VBA editing\"}],\"complete\":true}", "core.tools.search");
+            AssertEqual("skills.vba.code.editing", ((ToolListBlockDto)blocks.Single()).Items.Single().Title,
+                "capability search preserves identifiers in the visible result");
             foreach (var effect in new[] { ToolEffectEvidence.VerifiedChange, ToolEffectEvidence.VerifiedNoChange, ToolEffectEvidence.Unknown }) {
                 var mutation = new ChatSession { Messages = new List<ChatMessage> { new ChatMessage { RunId = "run",
                     Activity = new ChatActivity { ToolId = "files.patch", ToolCallId = "patch",
@@ -306,8 +328,8 @@ namespace RNAssistant.Harness
                         DataJson = "{\"before\":\"invented\",\"after\":\"invented\",\"replacements\":7}" } } } };
                 var receipt = new ToolResultPresentationService(null).Read(mutation, "run", "patch");
                 AssertEqual(1, receipt.Blocks.Count, "arbitrary business counts and before/after never become verified comparisons");
-                AssertContains(((ToolTextBlockDto)receipt.Blocks.Single()).Text, effect == ToolEffectEvidence.VerifiedChange ? "Изменения подтверждены" :
-                    effect == ToolEffectEvidence.VerifiedNoChange ? "Подтверждено отсутствие изменений" : "Результат действия не подтверждён",
+                AssertContains(((ToolTextBlockDto)receipt.Blocks.Single()).Text, effect == ToolEffectEvidence.VerifiedChange ? "Сохранённое сравнение" :
+                    effect == ToolEffectEvidence.VerifiedNoChange ? "Изменений нет" : "Результат действия не подтверждён",
                     "missing comparison preserves the exact effect, including confirmed no-op");
             }
         }

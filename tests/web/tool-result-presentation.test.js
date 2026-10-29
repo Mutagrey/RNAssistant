@@ -65,10 +65,9 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#source-captions > p").count(), 0,
       "the compact content does not repeat the call title or receipt");
     const sourceHeading = page.locator("#source-captions .tool-source-caption").first();
-    assert.equal(await sourceHeading.textContent(), "R3@v1 — src/A.cs, строка 42: «искомый текст»");
-    assert.equal(await sourceHeading.evaluate(node => node.parentNode.open), false, "source body starts collapsed behind the caption");
-    await sourceHeading.click();
-    assert.equal(await page.locator("#source-captions pre").first().textContent(), "искомый текст\nfull retained slice", "caption opens this retained slice");
+    assert.equal(await sourceHeading.textContent(), "R3@v1 — src/A.cs, строка 42");
+    assert.equal(await page.locator("#source-captions pre").first().textContent(), "искомый текст\nfull retained slice",
+      "retained slice is visible below its exact source reference");
     assert.equal(await page.locator("#source-captions img").count(), 0, "source paths and snippets are inert text");
     assert.match(await page.locator("#source-captions .tool-source-caption").last().textContent(), /^src\/B.cs, строка 17:/,
       "unbound search item has a useful label without a minted R reference");
