@@ -733,13 +733,23 @@ namespace RNAssistant.Core.Services
                 // A later unknown target must not erase the earlier verified sources.
                 foreach (var evidence in (source.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
                     if (effect.Targets.Any(t => (t.Status == ResourceTargetStatus.Changed || t.Status == ResourceTargetStatus.Unchanged) &&
-                        t.After?.Uri == evidence.Resource.Uri && t.After.Revision == evidence.Resource.Revision))
+                        MatchesVerifiedAfterSource(t.After, evidence)))
                         yield return evidence;
                 yield break;
             }
             if (effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored) yield break;
             foreach (var evidence in (source.ResourceEvidence ?? new List<ResourceEvidence>()).Where(IsSourceObservation))
                 yield return evidence;
+        }
+
+        private static bool MatchesVerifiedAfterSource(ResourceRef after, ResourceEvidence evidence)
+        {
+            if (after?.IsExact != true || evidence == null) return false;
+            if (after.Uri == evidence.Resource.Uri && after.Revision == evidence.Resource.Revision) return true;
+            // Authored source is the read-back snapshot of this exact logical head,
+            // established by the owner through immutable-snapshot publication.
+            return evidence.Immutable && evidence.Dependencies.Any(d => d.Kind == "current-authored-source" &&
+                d.Resource.Uri == after.Uri && d.Resource.Revision == after.Revision);
         }
 
         private static ChatMessage CurrentSource(ChatMessage source, ResourceEvidence evidence)
@@ -827,7 +837,7 @@ namespace RNAssistant.Core.Services
             {
                 var targets = result.ResourceEffect.Targets;
                 for (var i = 0; i < targets.Count; i++)
-                    if (evidence != null && targets[i].After?.Uri == evidence.Resource.Uri && targets[i].After.Revision == evidence.Resource.Revision)
+                    if (MatchesVerifiedAfterSource(targets[i].After, evidence))
                         return LabelText((data?["targets"] as JArray)?.ElementAtOrDefault(i)?["currentTarget"]) ?? targets[i].Target;
                 return null;
             }

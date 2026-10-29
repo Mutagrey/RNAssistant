@@ -65,6 +65,8 @@ namespace RNAssistant.Core.Llm
         public bool? ReasoningEnabled { get; set; }
         public Action<LlmRequestDiagnosticUpdate> DiagnosticProgress { get; set; }
         [JsonIgnore]
+        public LlmContextPreparationTiming ContextPreparation { get; set; }
+        [JsonIgnore]
         public ChatSession TraceSession { get; set; }
         [JsonIgnore]
         public string TracePurpose { get; set; }

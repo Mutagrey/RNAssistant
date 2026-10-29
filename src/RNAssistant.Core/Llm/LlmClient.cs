@@ -75,7 +75,8 @@ namespace RNAssistant.Core.Llm
                 settings,
                 requestOptions.DiagnosticProgress,
                 _diagnosticProgress,
-                _debugLog);
+                _debugLog,
+                requestOptions.ContextPreparation);
             var requestTraceRecorded = false;
             var terminalTraceRecorded = false;
             var traceEndpoint = string.Empty;

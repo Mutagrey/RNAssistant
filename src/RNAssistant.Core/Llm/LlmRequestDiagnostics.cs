@@ -16,6 +16,15 @@ namespace RNAssistant.Core.Llm
         public const string Failed = "failed";
     }
 
+    public sealed class LlmContextPreparationTiming
+    {
+        public long TotalMs { get; set; }
+        public long AuthorityMs { get; set; }
+        public long SetupMs { get; set; }
+        public long CompileMs { get; set; }
+        public long TraceMs { get; set; }
+    }
+
     public sealed class LlmRequestDiagnosticUpdate
     {
         public string RequestId { get; set; }
@@ -28,6 +37,7 @@ namespace RNAssistant.Core.Llm
         public long? FirstChunkMs { get; set; }
         public long? TotalMs { get; set; }
         public long? RequestBytes { get; set; }
+        public LlmContextPreparationTiming ContextPreparation { get; set; }
         public int? StatusCode { get; set; }
         public LlmFailureKind? FailureKind { get; set; }
         public string Error { get; set; }
@@ -42,6 +52,7 @@ namespace RNAssistant.Core.Llm
         private readonly Action<LlmRequestDiagnosticUpdate> _requestProgress;
         private readonly Action<LlmRequestDiagnosticUpdate> _globalProgress;
         private readonly Action<string> _debugLog;
+        private readonly LlmContextPreparationTiming _contextPreparation;
         private long? _preparationMs;
         private long? _responseHeadersMs;
         private long? _firstChunkMs;
@@ -54,12 +65,14 @@ namespace RNAssistant.Core.Llm
             AppSettings settings,
             Action<LlmRequestDiagnosticUpdate> requestProgress,
             Action<LlmRequestDiagnosticUpdate> globalProgress,
-            Action<string> debugLog)
+            Action<string> debugLog,
+            LlmContextPreparationTiming contextPreparation = null)
         {
             _settings = settings ?? new AppSettings();
             _requestProgress = requestProgress;
             _globalProgress = globalProgress;
             _debugLog = debugLog;
+            _contextPreparation = contextPreparation;
             RequestId = Guid.NewGuid().ToString("N").Substring(0, 12);
             Report(LlmRequestDiagnosticPhases.Preparing, null, null);
         }
@@ -126,6 +139,7 @@ namespace RNAssistant.Core.Llm
                     FirstChunkMs = _firstChunkMs,
                     TotalMs = terminal ? (long?)elapsedMs : null,
                     RequestBytes = _requestBytes,
+                    ContextPreparation = _contextPreparation,
                     StatusCode = _statusCode,
                     FailureKind = failureKind,
                     Error = Bound(error)
