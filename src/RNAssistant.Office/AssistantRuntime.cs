@@ -48,10 +48,8 @@ namespace RNAssistant.Office
                 if (!string.Equals(nextController.HostName, expectedHost, StringComparison.Ordinal) ||
                     !string.Equals(nextController.DocumentKey, expectedDocumentKey, StringComparison.Ordinal))
                     throw new InvalidOperationException("Office target изменился до переключения панели.");
-                var selected = nextController.SelectChat(chatId);
-                if (!string.Equals(selected.ActiveChatId, chatId, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Созданный чат не выбран в целевом документе.");
-                var init = nextController.Initialize();
+                // Selection and bootstrap share one loaded session and one DTO.
+                var init = nextController.InitializeSelectedChat(chatId);
                 if (!string.Equals(init.Host, expectedHost, StringComparison.Ordinal) ||
                     !string.Equals(init.DocumentKey, expectedDocumentKey, StringComparison.Ordinal) ||
                     !string.Equals(init.ActiveChatId, chatId, StringComparison.Ordinal))

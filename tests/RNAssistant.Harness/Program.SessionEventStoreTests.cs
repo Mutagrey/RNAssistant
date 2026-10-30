@@ -1332,6 +1332,119 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void IndexedInputJournalPreservesCanonicalReplay()
+        {
+            foreach (var encrypted in new[] { false, true }) WithTempPaths(paths =>
+            {
+                var protector = encrypted ? new StorageProtector(HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256, "input index test secret",
+                    Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()) : StorageProtector.None;
+                var writer = new ChatStore(paths, () => protector);
+                var session = writer.Create("Word", "input-index", "Input.docx", "Input index");
+                var inbox = new ConversationInboxService(new ChatEventStoreAdapter(writer));
+                inbox.Submit(session, InboxInput("indexed-input", "Keep the receipt", InputDelivery.Queue));
+                inbox.TakeNext(session);
+                var message = new ChatMessage { Id = "indexed-input", Role = "user", Content = "Keep the receipt" };
+                session.Messages.Add(message);
+                writer.Commit(session, ConversationCommit.UserInput(message));
+                inbox.Applied(session, message.Id);
+                for (var i = 0; i < 12; i++)
+                    writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                        new { Text = new string('x', 32 * 1024) }, null, null, "run", "turn", "step");
+                for (var i = 0; i < 24; i++) writer.SetTitle(session, "Заголовок " + i);
+                var path = SessionEventFile(paths, session);
+                var canonical = writer.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id)
+                    .Where(item => item.Type == SessionEventTypes.ConversationInputChanged || item.Type == SessionEventTypes.SessionCommit)
+                    .Select(item => JsonConvert.SerializeObject(item)).ToArray();
+                var original = File.ReadAllBytes(path);
+                File.Delete(path + ".projection.sqlite");
+                var protectionReads = 0;
+                var reader = new ChatStore(paths, () => { protectionReads++; return protector; });
+                Func<IReadOnlyList<SessionEvent>> read = () => reader.ReadCompleteInputJournalEvents(session.Host, session.DocumentKey, session.Id);
+                Action check = () => AssertEqual(string.Join("\n", canonical),
+                    string.Join("\n", read().Select(item => JsonConvert.SerializeObject(item))), "indexed replay returns exact canonical events in order");
+                check();
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount, "input replay does not materialize the full message projection");
+                AssertEqual(1L, reader.HeaderFullReplayCount, "cold input lookup validates the stream once with its header");
+                var reads = reader.InputJournalEventReads;
+                protectionReads = 0;
+                check();
+                AssertEqual((long)canonical.Length, reader.InputJournalEventReads - reads, "warm replay reads only input/commit records, no model trace bodies");
+                AssertEqual(1L, reader.HeaderFullReplayCount, "warm replay does not scan JSONL again");
+                AssertTrue(protectionReads < 12, "indexed replay captures protection per batch, not per event");
+                var loaded = reader.Load(session.Id);
+                AssertEqual(message.Content, loaded.Messages.Single().Content, "header-to-session materialization preserves history");
+                AssertEqual(1L, reader.HeaderFullReplayCount, "opening a catalog chat reuses the validated stream");
+                AssertTrue(reader.IndexedMaterializationEventReads > 0 && reader.IndexedMaterializationEventReads <= canonical.Length + 1,
+                    "full session materialization visits only projection records, not input or model trace bodies");
+                AssertEqual(0, new ConversationInboxService(new ChatEventStoreAdapter(reader)).Snapshot(session).Items.Count,
+                    "indexed receipt remains applied and cannot replay its input");
+                foreach (var sql in new[] {
+                    "DELETE FROM event_locators WHERE sequence=(SELECT MAX(sequence) FROM event_locators)",
+                    "UPDATE event_locators SET locator=X'00' WHERE sequence=(SELECT MIN(sequence) FROM event_locators)",
+                    "PRAGMA user_version=7" })
+                {
+                    using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder {
+                        DataSource = path + ".projection.sqlite", Pooling = false }.ToString()))
+                    {
+                        connection.Open();
+                        using (var command = connection.CreateCommand()) { command.CommandText = sql; command.ExecuteNonQuery(); }
+                    }
+                    check();
+                    AssertTrue(original.SequenceEqual(File.ReadAllBytes(path)), "index repair leaves the canonical stream unchanged");
+                }
+                writer.SetTitle(session, "Foreign append");
+                AssertEqual(canonical.Length + 1, read().Count, "a foreign append advances the same locator index");
+                File.AppendAllText(path, "{\"incomplete\":");
+                var refused = false;
+                try { read(); } catch (ChatConcurrencyException) { refused = true; }
+                AssertTrue(refused, "incomplete input journal refuses instead of reporting an empty queue");
+            });
+        }
+
+        private static void ChatNavigationWithTracesProfile()
+        {
+            if (Environment.GetEnvironmentVariable("RNA_CHAT_PERF") != "1") return;
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var session = writer.Create("Word", "navigation-profile", "Profile.docx", "300 messages");
+                for (var index = 0; index < 300; index++)
+                    session.Messages.Add(new ChatMessage { Role = index % 2 == 0 ? "user" : "assistant",
+                        Content = new string('m', 768) });
+                writer.Save(session);
+                var inbox = new ConversationInboxService(new ChatEventStoreAdapter(writer));
+                inbox.Submit(session, InboxInput("profile-input", "Pending input", InputDelivery.Queue));
+                for (var i = 0; i < 120; i++)
+                    writer.AppendTrace(session, SessionEventTypes.AssistantChunk,
+                        new { Text = new string('t', 192 * 1024) }, null, null, "run", "turn", "step");
+                var path = SessionEventFile(paths, session);
+                var reader = new ChatStore(paths) { PerformanceLog = Console.WriteLine };
+                var timer = Stopwatch.StartNew();
+                File.Delete(path + ".projection.sqlite");
+                reader.ListHeaders(session.Host, session.DocumentKey, session.DocumentTitle);
+                var catalogMs = timer.ElapsedMilliseconds;
+                timer.Restart();
+                var loaded = reader.Load(session.Id);
+                var loadMs = timer.ElapsedMilliseconds;
+                // Reference full-stream read: the old filtered inbox scan has been
+                // removed from production, not retained as a navigation fallback.
+                timer.Restart();
+                reader.ReadCompleteEvents(session.Host, session.DocumentKey, session.Id);
+                var scanMs = timer.ElapsedMilliseconds;
+                timer.Restart();
+                var snapshot = new ConversationInboxService(new ChatEventStoreAdapter(reader)).Snapshot(loaded);
+                var inboxMs = timer.ElapsedMilliseconds;
+                timer.Restart();
+                reader.Load(session.Id);
+                var warmMs = timer.ElapsedMilliseconds;
+                AssertEqual(1, snapshot.Items.Count, "pending input remains visible without automatic replay");
+                Console.WriteLine("PROFILE navigation messages=300 journalMiB=" + (new FileInfo(path).Length / 1048576.0).ToString("F1", CultureInfo.InvariantCulture) +
+                    " catalogMs=" + catalogMs + " loadMs=" + loadMs + " warmMs=" + warmMs + " fullScanMs=" + scanMs +
+                    " indexedInboxMs=" + inboxMs + " inputEventReads=" + reader.InputJournalEventReads);
+            });
+        }
+
         private static void LargeChatPerformanceProfile()
         {
             if (Environment.GetEnvironmentVariable("RNA_CHAT_PERF") != "1")

@@ -456,26 +456,25 @@ namespace RNAssistant.Office
             Action<string, long> reportStage = null)
         {
             var timer = Stopwatch.StartNew();
-            var session = LoadSession(chatId);
+            EnsureStartupRecovery();
+            var session = _chatSessions.SelectSession(chatId);
             var loadMs = timer.ElapsedMilliseconds;
             ReportChatReadStage(reportStage, "load", loadMs);
-            _chatSessions.SetActiveSession(session);
-            var selectionMs = timer.ElapsedMilliseconds - loadMs;
-            ReportChatReadStage(reportStage, "selection", selectionMs);
+            // SelectSession already commits the selection through ChatSessionService.
+            // Do not fsync the same active pointer again for the selection preview.
             if (selected != null)
             {
                 try { selected(ChatSelectionState(session)); }
                 catch (Exception ex) { RNAssistant.Office.Diagnostics.RuntimeLog.Error("Chat selection preview failed.", ex); }
             }
-            var previewMs = timer.ElapsedMilliseconds - loadMs - selectionMs;
+            var previewMs = timer.ElapsedMilliseconds - loadMs;
             if (selected != null) ReportChatReadStage(reportStage, "preview", previewMs);
             var response = ChatState(session, false);
-            var stateMs = timer.ElapsedMilliseconds - loadMs - selectionMs - previewMs;
+            var stateMs = timer.ElapsedMilliseconds - loadMs - previewMs;
             ReportChatReadStage(reportStage, "state", stateMs);
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
-                    "Chat select timing: load=" + loadMs + "ms, selection=" + selectionMs +
-                    "ms, preview=" + previewMs + "ms, projection=" + stateMs +
+                    "Chat select timing: load=" + loadMs + "ms, preview=" + previewMs + "ms, projection=" + stateMs +
                     "ms, messages=" + (session.Messages == null ? 0 : session.Messages.Count) +
                     ", artifacts=" + (session.Artifacts == null ? 0 : session.Artifacts.Count) + ".");
             return response;
@@ -809,7 +808,6 @@ namespace RNAssistant.Office
             return new ChatStateResponse
             {
                 DetailDeferred = true,
-                Inbox = InboxResponse(_inbox.Snapshot(session)),
                 ActiveChatId = session.Id,
                 SessionRevision = session.Revision,
                 MessageTotalCount = session.Messages == null ? 0 : session.Messages.Count,

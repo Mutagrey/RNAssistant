@@ -315,6 +315,16 @@ namespace RNAssistant.Office.Services
                 : LoadSession(requestedSessionId, false, false, false);
         }
 
+        public ChatSession SelectSession(string requestedSessionId)
+        {
+            if (string.IsNullOrWhiteSpace(requestedSessionId)) throw new ArgumentException("A chat id is required.", nameof(requestedSessionId));
+            // Explicit navigation binds once, including when a running document
+            // postpones Save As migration. Ordinary addressed reads never select.
+            var session = LoadSession(requestedSessionId, false, false, false);
+            SetActiveSession(session);
+            return session;
+        }
+
         public ChatSession TryLoadCurrentDocumentChat(string requestedSessionId)
         {
             return string.IsNullOrWhiteSpace(requestedSessionId)

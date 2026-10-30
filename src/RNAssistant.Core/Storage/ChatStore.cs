@@ -518,18 +518,13 @@ namespace RNAssistant.Core.Storage
             if (string.IsNullOrWhiteSpace(sessionId)) return new List<SessionEvent>();
             var path = GetSessionPath(host, documentKey, sessionId);
             using (AcquirePersistenceRead())
-            using (AcquireDocumentLock(host, documentKey))
+            using (AcquireDocumentLockForRead(host, documentKey))
             {
                 var timer = Stopwatch.StartNew();
-                var log = ReadEventLog(path, 0, null, null,
-                    item => item.Type == SessionEventTypes.ConversationInputChanged ||
-                        item.Type == SessionEventTypes.SessionCommit);
+                var events = ReadIndexedInputJournal(path, sessionId);
                 LogPerformance("inputJournalReplay", timer.ElapsedMilliseconds,
-                    "bytes=" + (log == null ? 0 : log.ByteLength) +
-                    ", retainedEvents=" + (log == null ? 0 : log.Events.Count));
-                if (log != null && log.HasIncompleteTail)
-                    throw new ChatConcurrencyException("The chat event log has an incomplete tail and cannot be replayed.");
-                return log == null ? new List<SessionEvent>() : log.Events;
+                    "retainedEvents=" + events.Count);
+                return events;
             }
         }
 

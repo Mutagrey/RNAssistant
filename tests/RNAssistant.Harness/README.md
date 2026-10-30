@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+Chat navigation storage: `storage: indexed input journal` compares exact canonical
+input/commit events with indexed replay, counts skipped trace reads, checks reuse
+of a header-only index for full-session materialization, foreign appends, damaged
+locators/row loss, schema upgrade and incomplete-tail refusal. Also run `storage:
+sqlite`, `storage: corrupt sqlite` and `inbox:` when changing this boundary. These
+are Core/Application behavior checks independent of UI structure. The opt-in
+`RNA_CHAT_PERF=1` case `storage perf: chat navigation with traces` uses 300 messages
+and a 23 MiB journal, reporting catalog, load, reference full scan and indexed inbox
+times; it has no machine-dependent time gate. Actual Office host-switch delivery
+and Windows timings remain separate qualification.
+`chat sessions: selection loads and binds once` verifies one session load and one
+active-pointer write, including explicit navigation during deferred Save As
+migration. Both ordinary selection and host initialization use this service owner.
+
 UI demand loading: `chat sessions: catalog avoids active history` forbids full
 loads during routine catalog reads while checking fresh metadata and selection
 rebinds. `inbox: durable FIFO edit and recovery` counts latest-input CAS reads and

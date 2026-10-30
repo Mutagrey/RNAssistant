@@ -24,7 +24,14 @@ RNAssistant uses one append-only event stream per chat as its durable source of 
 
 `ChatSession` is an in-memory projection. Its `Revision` is the last durable event sequence, not an independently stored counter. The SQLite sidecar stores encrypted payload blobs when history protection is enabled; its table keys, counts and cursor metadata are not encrypted. Windows uses the OS `winsqlite3.dll` through managed NuGet assemblies, without a bundled SQLite native binary. The host-neutral harness uses the platform `sqlite3` provider.
 
-The first catalog read validates the complete JSONL stream but builds only its header reducer in the existing SQLite sidecar. It does not build message/artifact rows or hydrate CAS. The cursor explicitly records whether the full projection is materialized; opening that chat or reading a message page builds its full index from validated events. This cold work remains proportional to file size; it does not delete or rewrite the source. Later reads verify the exact last indexed record at its byte offset. A longer stream is caught up from the validated suffix; shrink, same-length replacement, incomplete tail or protection mismatch triggers a rebuild. Append first flushes JSONL to stable storage, then advances the derived index transactionally, preserving a header-only index until the chat is opened. Failure to advance the index never replaces a successful JSONL append; the next read catches up or rebuilds it.
+The first catalog read validates the complete JSONL stream and builds its header reducer plus exact event locators in the existing SQLite sidecar. It does not build message/artifact rows or hydrate CAS. The cursor explicitly records whether the full projection is materialized. Opening that chat or reading a message page materializes only its located projection events, verifying each canonical record; it does not scan model/SSE trace bodies a second time. The initial validation remains proportional to file size; it does not delete or rewrite the source. Later reads verify the exact last indexed record at its byte offset. A longer stream is caught up from the validated suffix; shrink, same-length replacement, incomplete tail or protection mismatch triggers a rebuild. Append first flushes JSONL to stable storage, then advances the derived index transactionally, preserving a header-only index until the chat is opened. Failure to advance the index never replaces a successful JSONL append; the next read catches up or rebuilds it.
+
+SQLite projection schema 8 adds the shared `event_locators` table and its count at
+the existing cursor. Earlier sidecars rebuild once on demand. Locators bind the
+event type, sequence, hash and exact byte range to the session; they use the same
+history protection as other index rows. Missing rows or invalid bindings cause
+the bounded sidecar repair, never an empty inbox. A batch shares one JSONL reader
+and one protector, avoiding a file open and settings/key read for every record.
 
 Catalog/startup, full-session and paged reads share one bounded recovery boundary
 for malformed SQLite metadata, row payloads and missing/corrupt schema. It disposes
@@ -87,13 +94,40 @@ Slow storage diagnostics separate a header catalog pass into SQLite open/cursor,
 header/CAS size calculation, and directory enumeration/sort. Startup recovery and
 document-alias scans identify their own catalog passes. Complete event reads report
 their JSONL bytes and retained event count after lock acquisition; this includes
-the first inbox replay. That replay still validates the complete canonical stream
-outside the SQLite message projection and retains input changes and session commits.
+the first inbox replay. That replay shares the validated SQLite cursor and event
+locators with catalog/session reads; it rereads exact input changes and session
+commits, without reparsing unrelated model/SSE traces or materializing messages.
 All transitions and delivery evidence are validated, but CAS text is hydrated only
 for each input's latest revision (including terminal receipts). Recovery hydrates
 only changed inputs, and finishes required body reads before advancing its live
 projection. Historical bodies remain available through explicit event reads.
 These timings do not include the document lock wait, reported separately.
+
+### Chat selection ownership and performance
+
+Office navigation serializes selection and drains already admitted catalog and
+preference requests before a possible host switch. This prevents an old controller
+request from changing the newly selected binding; queue time is reported separately
+from bridge and rendering time. The bridge dispatches storage work off the Office
+UI thread. `ChatSessionService.SelectSession` owns explicit selection and persists
+its active pointer once, including during deferred document migration; the service owns run
+recovery. `SelectChat` must not persist that same pointer a second time; its deferred
+preview carries selection metadata and does not initialize the inbox. A host switch
+uses `InitializeSelectedChat` to load and present the selected session once, rather
+than discarding a complete `SelectChat` DTO before loading it again for initialization.
+
+Core `ChatStore` owns stream validation, locators, caching and lazy materialization;
+Application `ConversationInputJournal`/inbox own transition validation and delivery.
+Web rendering consumes the bounded message DTO (80 newest messages) and cannot
+choose the storage/replay strategy. A CSS or renderer change must not add a second
+detail request, reread the event stream or move cache policy into the DOM layer.
+The storage regression checks assert exact event equivalence, no trace reads on
+indexed input replay, header-to-session reuse, foreign-append catch-up, index damage
+recovery and incomplete-stream refusal independently of UI markup. The opt-in
+300-message/large-trace profile separates catalog, selected-session and inbox cost.
+Full runtime session materialization and initial cold validation still scale with
+retained data; these checks do not claim constant-time cold opening or Windows
+Office/WebView2 qualification.
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
 Workspace older-history reads use the same bounded SQLite window through the exact

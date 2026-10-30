@@ -75,6 +75,14 @@ static WebView UI
 - `RNAssistant.OfficeHosts` and `RNAssistant.*AddIn` own host adapters and Office wiring only. Host document identity is owned by `RNAssistant.OfficeHosts/Identity/DocumentIdentity.cs`, while the dynamic COM/VBE backend is owned by `RNAssistant.OfficeHosts/Vba/VbaProjectSupport*.cs`; host-neutral Office code cannot consume either helper.
 - `web` is static HTML/CSS/JS with no build pipeline.
 
+Chat navigation performance belongs below presentation: Core `ChatStore` owns the
+single validated SQLite projection and shared canonical event locators; Application
+owns inbox transitions/recovery; Office session service owns selection and binding.
+Web consumes bounded DTOs and owns DOM reconciliation. Host rebinding uses one
+selected-session initialization, not a selection DTO followed by a second load.
+The [selection read boundary](session-events.md#chat-selection-ownership-and-performance)
+and storage regression checks preserve this behavior independently of UI redesigns.
+
 ### Whole-conversation Application boundary (planned, 2026-10-27)
 
 The current dependency sketch describes the implemented Office path; a shared

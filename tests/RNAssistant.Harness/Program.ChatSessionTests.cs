@@ -1976,9 +1976,10 @@ namespace RNAssistant.Harness
         {
             private readonly IConversationStore _inner;
             internal bool ForbidFullLoads;
+            internal int FullLoads, SelectionWrites;
             internal CatalogReadStore(IConversationStore inner) { _inner = inner; }
             private void RequireFullLoad()
-            { if (ForbidFullLoads) throw new InvalidOperationException("Catalog attempted to load history."); }
+            { FullLoads++; if (ForbidFullLoads) throw new InvalidOperationException("Catalog attempted to load history."); }
             public ChatSession LoadOrCreateActive(string host, string key, string title)
             { RequireFullLoad(); return _inner.LoadOrCreateActive(host, key, title); }
             public ChatSession Load(string host, string key, string id)
@@ -2004,9 +2005,37 @@ namespace RNAssistant.Harness
             public bool Delete(string host, string key, string id) { return _inner.Delete(host, key, id); }
             public bool DeleteDocument(string host, string key) { return _inner.DeleteDocument(host, key); }
             public string LoadActiveSessionId(string host, string key) { return _inner.LoadActiveSessionId(host, key); }
-            public void SaveActiveSessionId(string host, string key, string id) { _inner.SaveActiveSessionId(host, key, id); }
+            public void SaveActiveSessionId(string host, string key, string id) { SelectionWrites++; _inner.SaveActiveSessionId(host, key, id); }
             public bool PrepareInterruptedRunRecovery(ChatSession session, string id)
             { return _inner.PrepareInterruptedRunRecovery(session, id); }
+        }
+
+        private static void ChatSelectionLoadsAndBindsOnce()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var first = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "First");
+                var second = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Second");
+                var reads = new CatalogReadStore(ConversationStore(store));
+                var service = new ChatSessionService(adapter, reads);
+                service.SelectSession(first.Id);
+                reads.FullLoads = reads.SelectionWrites = 0;
+                AssertEqual(second.Id, service.SelectSession(second.Id).Id, "explicit selection returns the requested chat");
+                AssertEqual(1, reads.FullLoads, "same-document selection loads exactly one session");
+                AssertEqual(1, reads.SelectionWrites, "selection persists its active pointer once");
+                AssertEqual(second.Id, store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey), "selection is durable");
+                service.RunOwnershipProvider = id => id == first.Id;
+                adapter.DocumentKeyValue = "saved-doc";
+                adapter.DocumentPathValue = "C:\\Demo\\SavedWorkbook.xlsx";
+                reads.SelectionWrites = 0;
+                var selected = service.SelectSession(first.Id);
+                AssertEqual(first.Id, selected.Id, "explicit selection also works during deferred document migration");
+                AssertEqual(first.DocumentKey, selected.DocumentKey, "the running document is not relocated by navigation");
+                AssertEqual(1, reads.SelectionWrites, "deferred migration does not lose or duplicate the explicit selection");
+                AssertEqual(first.Id, service.GetActiveSession().Id, "in-memory selection matches the requested binding");
+            });
         }
 
         private static void ChatCatalogDoesNotLoadActiveHistory()

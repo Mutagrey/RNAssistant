@@ -38,6 +38,19 @@ namespace RNAssistant.Core.Storage
 
         public long Position { get { return _position; } }
 
+        public void Seek(long offset)
+        {
+            if (offset < 0 || offset > _length) throw new ArgumentOutOfRangeException(nameof(offset));
+            if (offset >= _position - _bufferIndex && offset <= _position + _bufferCount - _bufferIndex)
+                _bufferIndex += checked((int)(offset - _position));
+            else
+            {
+                _stream.Position = offset;
+                _bufferIndex = _bufferCount = 0;
+            }
+            _position = offset;
+        }
+
         public JsonlByteLine ReadLine()
         {
             if (_position >= _length) return null;

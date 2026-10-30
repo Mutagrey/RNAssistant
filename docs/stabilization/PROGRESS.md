@@ -1,5 +1,26 @@
 # Stabilization progress
 
+## Переключение чатов: повторные чтения — 2026-10-30
+
+Owner: Core ChatStore/SQLite и Office session initialization; UI — consumer.
+По уточнению пользователя исследована история в сотни сообщений. Найдены два
+повторных полных прохода по JSONL: materialization после header catalog и inbox
+replay. Один существующий SQLite-индекс теперь хранит общие exact event locators:
+каталог валидирует поток, открытие читает projection events, очередь — input/commit
+events с проверкой исходных записей. Batch использует один JSONL reader/protector.
+Убраны повторная запись active pointer, inbox replay в deferred preview и полный
+SelectChat DTO перед повторным Initialize при Office rebind. Владение и независимые
+от UI performance invariants закреплены в Session events и Architecture.
+
+27 целевых storage/SQLite/inbox/selection checks прошли на копии baseline с этим diff,
+изолированной от параллельной незавершённой диагностики. Профиль: 300 сообщений,
+23 MiB JSONL; прежний input scan 128 ms, новый inbox 22 ms; открытие после каталога
+47 ms, повторная session load 5 ms. Это не полное время пользовательского UI.
+Первичная валидация и полная runtime materialization всё ещё зависят от объёма;
+SQLite schema 8 требует одноразового rebuild производного индекса. Source/CAS и
+правила no-replay сохранены. Windows/Office/WebView2 и controller delivery не
+квалифицированы; текущая проверка controller/rebind wiring — по исходникам.
+
 ## Диагностика формы tool_calls — 2026-10-30
 
 Owner: Core ModelProtocol и Web run journal. Вместо общей причины `invalid_tool_call`

@@ -217,17 +217,28 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
-                JsonlByteLine line;
                 using (var reader = new JsonlByteReader(path, expectedByteOffset))
-                {
-                    if (reader.Length != expectedSnapshotLength) return null;
-                    line = reader.ReadLine();
-                    if (line == null || !line.Terminated || line.NextOffset != expectedNextByteOffset ||
-                        string.IsNullOrWhiteSpace(line.Text)) return null;
-                }
+                    return ReadValidatedEventAtOffset(reader, Protection(), sessionId, expectedRevision,
+                        expectedHeadHash, expectedByteOffset, expectedNextByteOffset, expectedSnapshotLength);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentOutOfRangeException ||
+                ex is JsonException || ex is DecoderFallbackException || ex is CryptographicException)
+            { return null; }
+        }
+
+        private static SessionEvent ReadValidatedEventAtOffset(JsonlByteReader reader, StorageProtector protector,
+            string sessionId, long expectedRevision, string expectedHeadHash, long expectedByteOffset,
+            long expectedNextByteOffset, long expectedSnapshotLength)
+        {
+            try
+            {
+                if (reader.Length != expectedSnapshotLength) return null;
+                reader.Seek(expectedByteOffset);
+                var line = reader.ReadLine();
+                if (line == null || !line.Terminated || line.NextOffset != expectedNextByteOffset ||
+                    string.IsNullOrWhiteSpace(line.Text)) return null;
 
                 var sessionEvent = ParseSessionEvent(line.Text);
-                var protector = Protection();
                 if (sessionEvent == null || sessionEvent.SchemaVersion != SessionEvent.CurrentSchemaVersion ||
                     sessionEvent.Sequence != expectedRevision ||
                     !string.Equals(sessionEvent.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||

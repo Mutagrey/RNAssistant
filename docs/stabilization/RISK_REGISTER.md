@@ -35,11 +35,22 @@ catalog на завершении очереди и eager tools/skills в bootst
 возвращаемого DTO для queue turn/queued confirmation, где consumer использует
 только Task completion и затем отдельный финальный callback. Replay очереди
 больше не читает CAS-текст повторно для каждого перехода одного ввода.
-Первичная проверка всех JSONL, полная загрузка выбранной сессии и первый inbox
-replay остаются пропорциональны истории. Адресный `getChatInbox` всё ещё проходит
+После дополнительного разбора переключения убраны повторная проверка всех JSONL
+между каталогом и открытием и полный проход по trace для inbox replay. Общие
+event locators принадлежат существующему Core SQLite-индексу; первичная проверка
+всех JSONL и полная загрузка runtime-сессии остаются пропорциональны данным.
+Inbox читает только input/commit facts, проверяя их исходные записи. Адресный `getChatInbox` всё ещё проходит
 через session loader, а Workspace run snapshot включает полную session projection;
 облегчение этих путей требует сохранения recovery/ownership и cross-window freshness.
 Trajectories, context inspector и исходники библиотеки уже загружаются по запросу.
+Сотни видимых сообщений сами по себе не объясняют задержку: размер запросов,
+trace и результатов также влияет на стоимость. Локальный fixture из 300 сообщений
+и 23 MiB дал 128 ms для прежнего filtered scan против 22 ms для нового inbox
+(включая его projection), 47 ms для первого открытия после каталога и 5 ms для
+повторной session load. Это host-neutral измерение, не время Windows UI. После
+обновления schema 7 → 8 производный индекс перестраивается один раз по требованию;
+журнал/CAS не меняются. Реальные блокировки, Office rebind и WebView2 render timing
+остаются открытыми; экранная диагностика уже разделяет queue/bridge/render.
 
 В текущем дереве расширенный `chat sessions:` дал 17 pass / 3 fail:
 `closed bound document keeps navigation and HTML` ожидает accepted call

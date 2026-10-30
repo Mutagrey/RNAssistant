@@ -250,12 +250,24 @@ namespace RNAssistant.Office
 
         public InitResponse Initialize(bool includeChatState = true)
         {
+            return InitializeCore(includeChatState, null);
+        }
+
+        public InitResponse InitializeSelectedChat(string chatId)
+        {
+            if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("A chat id is required.", nameof(chatId));
+            return InitializeCore(true, chatId);
+        }
+
+        private InitResponse InitializeCore(bool includeChatState, string selectedChatId)
+        {
             var timer = Stopwatch.StartNew();
             // The initial bridge handshake must not wait for history/index recovery.
             // Host switches still request the complete state in the same operation.
             if (includeChatState) EnsureStartupRecovery();
             var recoveryMs = timer.ElapsedMilliseconds;
-            var session = includeChatState ? _chatSessions.GetActiveSessionForOfficeState() : null;
+            var session = includeChatState ? (selectedChatId == null
+                ? _chatSessions.GetActiveSessionForOfficeState() : _chatSessions.SelectSession(selectedChatId)) : null;
             var sessionMs = timer.ElapsedMilliseconds - recoveryMs;
             var settings = _settingsService.Load();
             var settingsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs;

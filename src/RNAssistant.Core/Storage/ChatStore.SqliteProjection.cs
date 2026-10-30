@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
-        private const int SqliteProjectionVersion = 7;
+        private const int SqliteProjectionVersion = 8;
         private static readonly object SqliteProviderSync = new object();
         private static bool _sqliteProviderReady;
         private long _sqliteProjectionFullBuildCount;
@@ -123,6 +123,7 @@ namespace RNAssistant.Core.Storage
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS messages");
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS artifacts");
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS finish_facts");
+                            ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS event_locators");
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS projection");
                             CreateSqliteSchema(connection, transaction);
                             ExecuteSql(connection, transaction, "PRAGMA user_version=" + SqliteProjectionVersion);
@@ -141,12 +142,14 @@ namespace RNAssistant.Core.Storage
 
         private static void CreateSqliteSchema(SqliteConnection connection, SqliteTransaction transaction)
         {
+            ExecuteSql(connection, transaction, "CREATE TABLE IF NOT EXISTS event_locators (sequence INTEGER PRIMARY KEY, " +
+                "type TEXT NOT NULL, locator BLOB NOT NULL)");
             ExecuteSql(connection, transaction, "CREATE TABLE IF NOT EXISTS projection (id INTEGER PRIMARY KEY CHECK(id=1), " +
                 "version INTEGER NOT NULL, session_id TEXT NOT NULL, sequence INTEGER NOT NULL, head_hash TEXT NOT NULL, " +
                 "byte_length INTEGER NOT NULL, next_offset INTEGER NOT NULL, tail_offset INTEGER NOT NULL, " +
                 "mtime_ticks INTEGER NOT NULL, protection_key_id TEXT, incomplete_tail INTEGER NOT NULL, " +
                 "message_count INTEGER NOT NULL, artifact_count INTEGER NOT NULL, root BLOB NOT NULL, header BLOB NOT NULL, " +
-                "materialized INTEGER NOT NULL)");
+                "materialized INTEGER NOT NULL, locator_count INTEGER NOT NULL)");
             ExecuteSql(connection, transaction, "CREATE TABLE IF NOT EXISTS messages (ordinal INTEGER PRIMARY KEY, " +
                 "item_id TEXT NOT NULL UNIQUE COLLATE NOCASE, payload BLOB NOT NULL)");
             ExecuteSql(connection, transaction, "CREATE TABLE IF NOT EXISTS artifacts (ordinal INTEGER PRIMARY KEY, " +
@@ -233,7 +236,8 @@ namespace RNAssistant.Core.Storage
                     command.CommandText = "SELECT version,session_id,sequence,head_hash,byte_length,next_offset," +
                         "tail_offset,mtime_ticks,protection_key_id,incomplete_tail,message_count,artifact_count," +
                         (readRoot ? "root" : "NULL") + ",header," +
-                        "(SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM artifacts),materialized " +
+                        "(SELECT COUNT(*) FROM messages),(SELECT COUNT(*) FROM artifacts),materialized," +
+                        "locator_count,(SELECT COUNT(*) FROM event_locators) " +
                         "FROM projection WHERE id=1";
                     using (var reader = command.ExecuteReader())
                     {
@@ -245,7 +249,8 @@ namespace RNAssistant.Core.Storage
                             StringComparison.OrdinalIgnoreCase)) return null;
                         var messageCount = reader.GetInt64(10);
                         var artifactCount = reader.GetInt64(11);
-                        if (messageCount != reader.GetInt64(14) || artifactCount != reader.GetInt64(15))
+                        if (messageCount != reader.GetInt64(14) || artifactCount != reader.GetInt64(15) ||
+                            reader.GetInt64(17) != reader.GetInt64(18))
                             return null;
                         var materialized = reader.GetInt32(16) != 0;
                         var root = materialized && readRoot
@@ -312,6 +317,13 @@ namespace RNAssistant.Core.Storage
                 Interlocked.Increment(ref _sqliteProjectionHitCount);
                 return saved;
             }
+            if (append && requireSession && !saved.Materialized &&
+                (current.ByteLength > saved.ByteLength || current.LastWriteUtcTicks == saved.LastWriteUtcTicks))
+            {
+                if (current.ByteLength > saved.ByteLength)
+                    saved = MaterializeSqliteProjection(connection, path, saved, false);
+                return MaterializeIndexedSession(connection, path, saved);
+            }
             if (append && (current.ByteLength == saved.ByteLength || (requireSession && !saved.Materialized))) append = false;
             // Catalog reads need only the reducer. Build message/artifact rows when
             // this chat is opened, not for every stored chat before the UI can start.
@@ -333,6 +345,7 @@ namespace RNAssistant.Core.Storage
                     ExecuteSql(connection, transaction, "DELETE FROM messages");
                     ExecuteSql(connection, transaction, "DELETE FROM artifacts");
                     ExecuteSql(connection, transaction, "DELETE FROM finish_facts");
+                    ExecuteSql(connection, transaction, "DELETE FROM event_locators");
                     ExecuteSql(connection, transaction, "DELETE FROM projection");
                 }
                 var root = previous == null ? null : previous.Root;
@@ -350,6 +363,7 @@ namespace RNAssistant.Core.Storage
                 {
                     HydrateEventData(item, protector);
                     header.Apply(item);
+                    IndexProjectionEvent(connection, transaction, item, line.NextOffset, protector);
                     if (materializeSession && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item, line.NextOffset, protector);
                     last = item;
                 });
@@ -402,14 +416,15 @@ namespace RNAssistant.Core.Storage
         {
             ExecuteSql(connection, transaction, "INSERT OR REPLACE INTO projection " +
                 "(id,version,session_id,sequence,head_hash,byte_length,next_offset,tail_offset," +
-                "mtime_ticks,protection_key_id,incomplete_tail,message_count,artifact_count,root,header,materialized) " +
-                "VALUES (1,$p0,$p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12,$p13,$p14)",
+                "mtime_ticks,protection_key_id,incomplete_tail,message_count,artifact_count,root,header,materialized,locator_count) " +
+                "VALUES (1,$p0,$p1,$p2,$p3,$p4,$p5,$p6,$p7,$p8,$p9,$p10,$p11,$p12,$p13,$p14,$p15)",
                 SqliteProjectionVersion, cursor.SessionId, cursor.Sequence, cursor.HeadHash,
                 cursor.ByteLength, cursor.NextOffset, cursor.TailOffset, cursor.LastWriteUtcTicks,
                 cursor.ProtectionKeyId, cursor.IncompleteTail ? 1 : 0, cursor.MessageCount, cursor.ArtifactCount,
                 SealProjection(cursor.SessionId, "root", cursor.Root?.ToString(Formatting.None) ?? "null", protector),
                 SealProjection(cursor.SessionId, "header", cursor.Header.ToCheckpoint().ToString(Formatting.None), protector),
-                cursor.Materialized ? 1 : 0);
+                cursor.Materialized ? 1 : 0,
+                Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM event_locators")));
         }
 
         private void ApplySqliteEvent(SqliteConnection connection, SqliteTransaction transaction,
@@ -894,6 +909,8 @@ namespace RNAssistant.Core.Storage
                             var item = appended[index];
                             HydrateEventData(item, protector);
                             header.Apply(item);
+                            IndexProjectionEvent(connection, transaction, item,
+                                index + 1 < appended.Count ? appended[index + 1].StorageByteOffset : current.ByteLength, protector);
                             if (saved.Materialized && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item,
                                 index + 1 < appended.Count ? appended[index + 1].StorageByteOffset : current.ByteLength, protector);
                         }
