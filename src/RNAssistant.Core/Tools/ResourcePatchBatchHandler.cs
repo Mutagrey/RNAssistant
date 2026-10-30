@@ -275,7 +275,7 @@ namespace RNAssistant.Core.Tools
             if (diagnostic != null) diagnostic.TargetIndex = index + 1;
             result.Targets[index].Status = ResourceTargetStatus.Rejected; result.Targets[index].Diagnostic = diagnostic;
             return new ToolPreparationResult(ToolResult.Error(
-                "Patch rejected. No target in this call changed; follow the rejected target diagnostic.",
+                "Patch rejected. No target in this call changed. " + (diagnostic?.Message ?? "Follow the rejected target diagnostic."),
                 JsonConvert.SerializeObject(result)),
                 recovery: recovery ?? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
         }

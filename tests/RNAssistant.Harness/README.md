@@ -98,6 +98,10 @@ redaction. `RNA_PATCH_RESULT_AUDIT=<directory>` on package/HTML diagnostic check
 writes the actual serialized results for inspection. Package checks cover all-before-write preparation, duplicate aliases,
 confirmation drift, per-target rechecks, partial failure/unknown, unexecuted remainder,
 model projection, retained before/after and VBA/HTML/Markdown/authored-file routing.
+`delivered Office source authority` also reproduces an insertion that incorrectly
+uses its own `End Function` as a preceding anchor, then verifies the corrected
+unique-fragment insertion through the host-neutral VBA owner. The bounded error
+checks cover both anchor directions and exclude undelivered candidate locations.
 The sequential VBA case reproduces the photographed three-line change followed by
 a two-line reversal, verifies delivery of the latest source, preserves the other
 edit, and rejects stale or omitted observations. Confirmed targets remain available

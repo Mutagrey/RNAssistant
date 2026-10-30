@@ -93,9 +93,10 @@ namespace RNAssistant.Harness
                     AssertEqual("invalid_edit", data.Diagnostic.Code, "runtime schema refusal uses patch diagnostic");
                     AssertEqual("fix_patch", data.Diagnostic.NextAction, "schema refusal tells the model how to recover");
                 }
-                var calls = new[] { EditSet(Edit("x", "new")), EditSet(Edit("absent", "new")), EditSet(Edit("a\nx", "new"), Edit("a", "other")) };
-                var codes = new[] { "ambiguous_context", "context_not_found", "overlap" };
-                var actions = new[] { "refine_context", "read_target", "fix_patch" };
+                var calls = new[] { EditSet(Edit("x", "new")), EditSet(Edit("absent", "new")), EditSet(Edit("a\nx", "new"), Edit("a", "other")),
+                    EditSet(Edit("end", "end\nfooter", new[] { "end" })), EditSet(Edit("a", "header\na", following: new[] { "a" })) };
+                var codes = new[] { "ambiguous_context", "context_not_found", "overlap", "context_not_found", "context_not_found" };
+                var actions = new[] { "refine_context", "read_target", "fix_patch", "read_target", "read_target" };
                 for (var i = 0; i < calls.Length; i++)
                 {
                     var call = new ToolCall("diagnostic-" + i, entry.Id, PatchArguments("a.txt", calls[i]).ToString());
@@ -107,6 +108,14 @@ namespace RNAssistant.Harness
                     AssertEqual(actions[i], diagnostic.NextAction, "public recovery hint");
                     AssertTrue(diagnostic.Edit >= 1, "edit index belongs to the original edits array");
                     if (i == 0) AssertTrue(diagnostic.Candidates.Select(c => c.Line).SequenceEqual(new long[] { 2, 3 }), "actual candidate lines are bounded and ordered");
+                    if (i >= 3)
+                    {
+                        AssertEqual(ResourceTargetStatus.Rejected, data.Targets[0].Status, "self-anchor is a known rejection, not unknown");
+                        AssertTrue(!data.WriteStarted, "self-anchor never starts writing");
+                        AssertContains(diagnostic.Message, "old was found", "distinguish mismatched anchors from missing old");
+                        AssertEqual(i == 3 ? 4L : 1L, diagnostic.Candidates.Single().Line, "hint identifies the observed old, not a valid patch location");
+                        AssertContains(record.Result.Message, diagnostic.Message, "visible tool summary carries the actual reason");
+                    }
                 }
                 AssertEqual("a\nx\nx\nend", File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "all rejected calls preserve source");
             });
@@ -161,6 +170,10 @@ namespace RNAssistant.Harness
             AssertEqual("x y", TextEditPlan.Patch("x x", EditSet(Edit("x", "y")).WithCoverage(range)).Text, "unique within delivered coverage");
             AssertEqual("observation_required", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("H\nx", EditSet(Edit("x", "y", new[] { "H" })).WithCoverage(range))).ErrorCode, "undelivered anchor cannot authorize edit");
             AssertEqual("observation_required", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("x x", EditSet(Edit("x x", "x xy")).WithCoverage(range))).ErrorCode, "old cannot exceed delivered coverage");
+            var hiddenHints = RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("x\nx\nx",
+                EditSet(Edit("x", "new", new[] { "missing" })).WithCoverage(range)));
+            AssertEqual("observation_required", hiddenHints.ErrorCode, "hidden occurrences do not authorize anchor recovery");
+            AssertEqual(2L, hiddenHints.Candidates.Single().Line, "diagnostic candidates contain only delivered occurrences");
             Func<string, string> vba = VbaTextCanonicalizer.NormalizeVbeComparableLine;
             AssertEqual("Sub Run()\r\n    Value = 2\r\nEnd Sub", TextEditPlan.Patch("Sub Run()\r\n    Value = 1\r\nEnd Sub",
                 EditSet(Edit("value=1", "    Value = 2", new[] { "sub run()" })), normalizeLine: vba).Text, "canonical whole-line fallback");
@@ -444,6 +457,26 @@ namespace RNAssistant.Harness
                 var stale = ConfirmVbaNative(pending);
                 AssertTrue(stale.Outcome == ToolExecutionOutcome.Error && !stale.MayHaveDispatched, "confirmation rechecks source without dispatch");
                 AssertEqual(ToolRetryPolicy.RefreshRequired, stale.Recovery.RetryPolicy, "source drift requires a new delivered read");
+
+                var tail = "        LastValue = 1\r\n    End If\r\nEnd Function";
+                var source = "Function LastValue() As Long\r\n    If True Then\r\n" + tail;
+                var addition = "\r\n\r\nSub DiagTest9()\r\n    Debug.Print 9\r\nEnd Sub";
+                adapter.VbaModuleCode = source;
+                var current = ReadVbaSource(executor, session, "Module1");
+                var insertionEvidence = executor.ResourceGateway.Evidence(session, current).ToArray();
+                var ownAnchor = prepare(Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1",
+                    EditSet(Edit("End Function", "End Function" + addition, new[] { "    End If", "End Function" }))))), insertionEvidence).Record;
+                var rejection = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(ownAnchor.Result.DataJson);
+                AssertEqual(ToolExecutionOutcome.Error, ownAnchor.Outcome, "photographed own-anchor insertion is rejected before writing");
+                AssertTrue(!ownAnchor.MayHaveDispatched && !rejection.WriteStarted && !rejection.Partial, "failed insertion has no unknown effect");
+                AssertEqual("context_not_found", rejection.Targets.Single().Diagnostic.Code, "anchor mismatch reaches the public VBA result");
+                AssertContains(ownAnchor.Result.Message, "replaced occurrence cannot be its own anchor", "VBA summary explains the actual mismatch");
+                AssertEqual(source, adapter.VbaModuleCode, "rejected insertion preserves the module");
+                var corrected = prepare(Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1",
+                    EditSet(Edit(tail, tail + addition))))), insertionEvidence);
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, corrected.Record.Outcome, "longer unique old prepares the insertion: " + corrected.Record.Result?.Message);
+                AssertEqual(ToolExecutionOutcome.Ok, ConfirmVbaNative(corrected).Outcome, "corrected insertion is verified after confirmation");
+                AssertEqual(source + addition, adapter.VbaModuleCode, "DiagTest9 is appended exactly once without changing the previous function");
             });
         }
 

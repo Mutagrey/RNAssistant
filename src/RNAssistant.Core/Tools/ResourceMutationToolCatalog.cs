@@ -44,7 +44,8 @@ namespace RNAssistant.Core.Tools
                     required.Add("targets");
                     description = "Edit existing observed source. Each edit has exact nonempty old and literal replacement new; new: \"\" deletes. " +
                         "For insertion, replace a unique existing nearby fragment with itself plus inserted text, including intended newlines. " +
-                        "If old is ambiguous, provide ordered full-line anchors_before and/or anchors_after. Anchors can be distant or repeated, but the final edit location must be unique. " +
+                        "If old is ambiguous, use a longer unique old or ordered full-line anchors_before and/or anchors_after. Anchor occurrences must lie strictly outside old; never reuse the replaced occurrence as its own anchor. " +
+                        "Anchors can be distant or repeated, but the final edit location must be unique; a procedure header alone does not scope a repeated End Sub/End Function. " +
                         "All edits for each target resolve against one original observed snapshot, not intermediate edits. No line numbers, regex or operation types. " +
                         "Read current source or reuse delivered verified after-source. Use core.write for creation/full overwrite and core.replace for bulk replacement. " +
                         "At most 262144 JSON characters. All targets prepare before sequential writes. Wait for TOOL_RESULT and inspect each target: " +
@@ -89,7 +90,8 @@ namespace RNAssistant.Core.Tools
                 if (schema["description"] == null)
                     schema["description"] = property.Name == "targets" ? "Existing sources and their structured edits." :
                         property.Name == "edits" ? "Edits against one original snapshot." :
-                        "Ordered complete source lines, allowing gaps; empty strings are literal empty lines.";
+                        property.Name == "anchors_before" ? "Ordered complete source lines without EOL, strictly before the start of old. Do not include the occurrence being replaced. Gaps/repeats allowed; empty strings are literal empty lines." :
+                        "Ordered complete source lines without EOL, strictly after the end of old. Do not include the occurrence being replaced. Gaps/repeats allowed; empty strings are literal empty lines.";
                 foreach (var child in schema.DescendantsAndSelf().OfType<JObject>().Where(o => o["properties"] is JObject).ToArray())
                     DescribePatchProperties((JObject)child["properties"]);
             }

@@ -101,6 +101,7 @@ namespace RNAssistant.Core.Tools
             internal long BeforeEnd;
             internal string[] BeforeAnchors, AfterAnchors, CanonicalLines, CanonicalEndings;
             internal readonly Queue<Line> Lines = new Queue<Line>();
+            internal readonly List<Candidate> ObservedExact = new List<Candidate>(2);
             internal List<Candidate>[] Exact, Canonical;
         }
         private static List<Candidate>[] Buckets(int n)
@@ -158,9 +159,15 @@ namespace RNAssistant.Core.Tools
                     {
                         var begin = state.Ring[(int)((state.Seen - pattern.Length) % state.Ring.Length)];
                         if (!Covered(begin.Offset, offset + 1)) state.Unobserved = true;
-                        if (begin.Boundary && !pairedCr && state.BeforeIndex == state.BeforeAnchors.Length &&
-                            begin.Offset >= state.BeforeEnd && Covered(begin.Offset, offset + 1))
-                            Add(state.Exact[0], new Candidate { Offset = begin.Offset, End = offset + 1, Line = begin.Line, Before = pattern });
+                        if (begin.Boundary && !pairedCr && Covered(begin.Offset, offset + 1))
+                        {
+                            // Diagnostic hints only: an observed old occurrence does not
+                            // authorize a match unless every surrounding anchor passes.
+                            if (state.ObservedExact.Count < 2)
+                                Add(state.ObservedExact, new Candidate { Offset = begin.Offset, End = offset + 1, Line = begin.Line, Before = pattern });
+                            if (state.BeforeIndex == state.BeforeAnchors.Length && begin.Offset >= state.BeforeEnd)
+                                Add(state.Exact[0], new Candidate { Offset = begin.Offset, End = offset + 1, Line = begin.Line, Before = pattern });
+                        }
                         state.Matched = state.Prefix[state.Matched - 1];
                     }
                 }
@@ -184,7 +191,15 @@ namespace RNAssistant.Core.Tools
                 var s = states[i];
                 var candidates = s.Exact[s.AfterAnchors.Length];
                 if (candidates.Count == 0) candidates = s.Canonical[s.AfterAnchors.Length];
-                if (candidates.Count == 0) throw Error((s.Unobserved || _coverage != null && _coverage.Count == 0) ? "observation_required" : "context_not_found", "No edit location in delivered source. Read current source and refine anchors.", i + 1);
+                if (candidates.Count == 0)
+                {
+                    var unobserved = s.Unobserved || _coverage != null && _coverage.Count == 0;
+                    var message = !unobserved && s.ObservedExact.Count > 0
+                        ? "old was found, but the ordered anchors did not match outside it. anchors_before must be strictly before old; anchors_after strictly after. The replaced occurrence cannot be its own anchor. Read current source and correct the anchors or use a longer unique old."
+                        : "No edit location with all anchors in delivered source. Read current source; anchors must be complete lines strictly outside old.";
+                    throw Error(unobserved ? "observation_required" : "context_not_found", message, i + 1,
+                        s.ObservedExact.Count == 0 ? null : s.ObservedExact.Select(m => new PatchCandidate { Line = m.Line, Context = PatchDiagnostic.Limit(m.Before, 160) }).ToArray());
+                }
                 if (candidates.Count > 1) throw Error("ambiguous_context", "Multiple edit locations. Add surrounding complete lines.", i + 1,
                     candidates.Select(m => new PatchCandidate { Line = m.Line, Context = PatchDiagnostic.Limit(m.Before, 160) }).ToArray());
                 var match = candidates[0];
