@@ -58,7 +58,7 @@ function appInit(host, chatId) {
   return { host, activeChatId: chatId, sessionRevision: 1, activeChatMode: "agent",
     activeChatModel: "model", activeChatReasoning: true, mutationPolicy: "Ask", chatReadOnly: false,
     chats: [], documents: [], messages: [], artifacts: [], context: {}, contextUsage: {},
-    htmlWorkspace: { files: [], dataSources: [] }, tools: { items: [] }, skills: { items: [] },
+    htmlWorkspace: { files: [], dataSources: [] },
     inbox: { chatId, inputs: [] } };
 }
 

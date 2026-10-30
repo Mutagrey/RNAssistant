@@ -160,11 +160,24 @@ namespace RNAssistant.Harness
                 AssertEqual(removed.Revision, inbox.Update(session,
                     new ConversationInputUpdate { InputId = "removed", ExpectedRevision = 1 }, "remove").Revision, "removal retry is idempotent");
                 AssertEqual(0, inbox.Snapshot(session).Receipts.Count, "normal snapshots do not replay terminal history");
-                var recovered = new ConversationInboxService(events);
+                var countedEvents = new InboxFailingEvents(events);
+                var recovered = new ConversationInboxService(countedEvents);
                 var receipts = recovered.Snapshot(session, new[] { "a", "removed", "unknown", "a" }).Receipts;
+                AssertEqual(3, countedEvents.PayloadReads, "inbox replay reads one latest CAS body per input, not per transition");
                 AssertEqual(2, receipts.Count, "bounded lookup deduplicates and only returns known operations");
                 AssertEqual(ConversationInputStatus.Applied, receipts.Single(item => item.OperationId == "a").Status, "applied receipt survives restart");
                 AssertEqual(ConversationInputStatus.Removed, receipts.Single(item => item.OperationId == "removed").Status, "removed receipt survives restart");
+                inbox.Update(session, new ConversationInputUpdate { InputId = "b", ExpectedRevision = 2, Text = "edited" }, "edit");
+                countedEvents.FailPayload = true;
+                var missingBody = false;
+                try { recovered.ReconcileAcceptedDelivery(session); }
+                catch (System.IO.IOException) { missingBody = true; }
+                AssertTrue(missingBody, "latest input body remains required during recovery");
+                AssertEqual(2L, recovered.Find(session, "b").Revision,
+                    "failed hydration cannot advance the recovery projection");
+                countedEvents.FailPayload = false;
+                recovered.ReconcileAcceptedDelivery(session);
+                AssertEqual(3L, recovered.Find(session, "b").Revision, "recovery retries the failed input revision");
                 AssertEqual(removed.Revision, receipts.Single(item => item.OperationId == "removed").Revision, "terminal receipt preserves input revision");
                 var excessive = false;
                 try { recovered.Snapshot(session, Enumerable.Repeat("a", 129).ToArray()); }
@@ -358,6 +371,8 @@ namespace RNAssistant.Harness
         {
             internal readonly IEventStore Inner;
             internal bool Fail;
+            internal bool FailPayload;
+            internal int PayloadReads;
             internal InboxFailingEvents(IEventStore inner) { Inner = inner; }
             public SessionEvent Append(ChatSession session, SessionEventWrite write)
             { if (Fail) throw new System.IO.IOException("simulated disk failure"); return Inner.Append(session, write); }
@@ -365,7 +380,9 @@ namespace RNAssistant.Harness
             public ISessionEventReader OpenReader(ChatSession session) { return Inner.OpenReader(session); }
             public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
             { return Inner.ReadFinishEvidence(session, runId, references); }
-            public string ReadPayload(ChatSession session, SessionEvent fact) { return Inner.ReadPayload(session, fact); }
+            public string ReadPayload(ChatSession session, SessionEvent fact)
+            { PayloadReads++; if (FailPayload) throw new System.IO.IOException("simulated missing input body");
+                return Inner.ReadPayload(session, fact); }
         }
         private static void InboxFailedPauseStillStopsScheduling()
         {

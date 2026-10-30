@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+UI demand loading: `chat sessions: catalog avoids active history` forbids full
+loads during routine catalog reads while checking fresh metadata and selection
+rebinds. `inbox: durable FIFO edit and recovery` counts latest-input CAS reads and
+checks failed hydration/retry without advancing the projection. `bridge: chat list
+is catalog-only` checks the narrow DTO and deferred library metadata (stub controller).
+Web checks: `instruction-loading`, `chat-inbox`, `chat-sync`, `bridge-bootstrap`,
+`tools-contract`, `prompt-review`, `multi-chat-requests`. Queue turn/confirmation
+call sites explicitly skip unused return projections; this controller wiring is
+source-reviewed. Real controller/Office delivery remains a Windows gate.
+
 `inbox: stop freezes queue and retains target` also checks idle Send after an empty
 cancelled queue and fresh input bypassing only its own retained pause. `conversation:
 application queue owns FIFO and drain` checks that the empty tail does not reload

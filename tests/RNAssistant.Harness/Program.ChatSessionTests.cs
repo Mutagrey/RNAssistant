@@ -1972,6 +1972,90 @@ namespace RNAssistant.Harness
             });
         }
 
+        private sealed class CatalogReadStore : IConversationStore
+        {
+            private readonly IConversationStore _inner;
+            internal bool ForbidFullLoads;
+            internal CatalogReadStore(IConversationStore inner) { _inner = inner; }
+            private void RequireFullLoad()
+            { if (ForbidFullLoads) throw new InvalidOperationException("Catalog attempted to load history."); }
+            public ChatSession LoadOrCreateActive(string host, string key, string title)
+            { RequireFullLoad(); return _inner.LoadOrCreateActive(host, key, title); }
+            public ChatSession Load(string host, string key, string id)
+            { RequireFullLoad(); return _inner.Load(host, key, id); }
+            public ChatSession Load(string id) { RequireFullLoad(); return _inner.Load(id); }
+            public ChatSession CreateTransient(string host, string key, string title, string name)
+            { return _inner.CreateTransient(host, key, title, name); }
+            public void Commit(ChatSession session, ConversationCommit commit) { _inner.Commit(session, commit); }
+            public void CommitRun(ChatSession session, ConversationRunCommit commit) { _inner.CommitRun(session, commit); }
+            public void SetTitle(ChatSession session, string value) { _inner.SetTitle(session, value); }
+            public void SetModel(ChatSession session, string value) { _inner.SetModel(session, value); }
+            public void SetReasoningEnabled(ChatSession session, bool value) { _inner.SetReasoningEnabled(session, value); }
+            public ConversationMessageWindow ReadMessageWindow(string id, int before, int count)
+            { RequireFullLoad(); return _inner.ReadMessageWindow(id, before, count); }
+            public IReadOnlyList<ChatSessionHeader> ListHeaders() { return _inner.ListHeaders(); }
+            public IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string key, string title)
+            { return _inner.ListHeaders(host, key, title); }
+            public ChatSession Move(ChatSession session, string host, string key, string title)
+            { return _inner.Move(session, host, key, title); }
+            public bool IsPersisted(ChatSession session) { return _inner.IsPersisted(session); }
+            public void MoveDocument(string sourceHost, string sourceKey, string host, string key, string title, string path)
+            { _inner.MoveDocument(sourceHost, sourceKey, host, key, title, path); }
+            public bool Delete(string host, string key, string id) { return _inner.Delete(host, key, id); }
+            public bool DeleteDocument(string host, string key) { return _inner.DeleteDocument(host, key); }
+            public string LoadActiveSessionId(string host, string key) { return _inner.LoadActiveSessionId(host, key); }
+            public void SaveActiveSessionId(string host, string key, string id) { _inner.SaveActiveSessionId(host, key, id); }
+            public bool PrepareInterruptedRunRecovery(ChatSession session, string id)
+            { return _inner.PrepareInterruptedRunRecovery(session, id); }
+        }
+
+        private static void ChatCatalogDoesNotLoadActiveHistory()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var reads = new CatalogReadStore(ConversationStore(store));
+                var service = new ChatSessionService(adapter, reads);
+                var selected = service.LoadSession(null);
+                string activeId;
+                reads.ForbidFullLoads = true;
+                AssertEqual(selected.Id, service.GetChatCatalogForOfficeState(out activeId).Single().Id,
+                    "transient selection is included without loading history");
+                AssertEqual(selected.Id, activeId, "catalog preserves the transient selection");
+                store.Save(selected);
+                service.NotifySaved(selected);
+                var writer = new ChatStore(paths);
+                var changed = writer.Load(selected.Id);
+                changed.Title = "Changed in another window";
+                changed.Messages.Add(new ChatMessage { Role = "user", Content = "new message" });
+                writer.Save(changed);
+                var summary = service.GetChatCatalogForOfficeState(out activeId).Single();
+                AssertEqual(changed.Title, summary.Title, "catalog reads fresh canonical header metadata");
+                AssertEqual(changed.Revision, summary.Revision, "catalog detects new history without materializing it");
+                AssertEqual(1, summary.MessageCount, "catalog reports the updated message count");
+                AssertEqual(selected.Id, activeId, "external update does not replace the selection");
+
+                reads.ForbidFullLoads = false;
+                var foreign = store.Create("Word", "archived-doc", "Archive.docx", "Closed chat");
+                service.LoadSession(foreign.Id);
+                reads.ForbidFullLoads = true;
+                service.GetChatCatalogForOfficeState(out activeId);
+                AssertEqual(foreign.Id, activeId, "catalog preserves a selected foreign chat without hydration");
+
+                reads.ForbidFullLoads = false;
+                store.Delete(foreign.Host, foreign.DocumentKey, foreign.Id);
+                service.GetChatCatalogForOfficeState(out activeId);
+                AssertEqual(selected.Id, activeId, "deleted selected chat rebinds to the current document");
+                adapter.DocumentKeyValue = "new-document";
+                adapter.RuntimeDocumentKeyValue = "new-runtime";
+                adapter.DocumentPathValue = "C:\\Demo\\New.xlsx";
+                var switched = service.GetChatCatalogForOfficeState(out activeId);
+                AssertEqual("new-document", switched.Single(item => item.Id == activeId).DocumentKey,
+                    "a real Office document switch still resolves its own chat");
+            });
+        }
+
         private static void LoadingActiveChatRefreshesPersistedState()
         {
             WithTempPaths(delegate(AppDataPaths paths)

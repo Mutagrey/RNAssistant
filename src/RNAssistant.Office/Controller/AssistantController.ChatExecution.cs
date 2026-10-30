@@ -371,7 +371,8 @@ namespace RNAssistant.Office
             Action<string, string, ChatActivity> progress,
             Action<ChatStateResponse> chatStateChanged,
             CancellationToken cancellationToken,
-            string runId)
+            string runId,
+            bool includeResponse = true)
         {
             session = session ?? LoadAddressedSession(null);
             var turnTimer = Stopwatch.StartNew();
@@ -648,13 +649,18 @@ namespace RNAssistant.Office
                     session, firstRunMessageIndex, firstRunMessageIndex,
                     runId, completion, null);
                 var finalSaveMs = turnTimer.ElapsedMilliseconds - finalStartMs;
-                response = CreateSendChatResponse(session, settings, completion);
+                // Queue workers consume Task completion only and publish once from
+                // their Changed callback after EndWorker. Do not build a discarded DTO.
+                if (includeResponse)
+                {
+                    response = CreateSendChatResponse(session, settings, completion);
+                    RunCausalTrace.Projected("SendChatResponse");
+                }
                 var finalResponseMs = turnTimer.ElapsedMilliseconds - finalStartMs - finalSaveMs;
                 if (finalSaveMs + finalResponseMs >= 500)
                     RuntimeLog.Info("Chat turn completion timing: chat=" + session.Id + ", finalSave=" + finalSaveMs +
                         "ms, responseProjection=" + finalResponseMs + "ms, messages=" +
                         (session.Messages == null ? 0 : session.Messages.Count) + ".");
-                RunCausalTrace.Projected("SendChatResponse");
                 if (shouldGenerateLlmTitle)
                     assistantTitleSeed = ChatTitleBuilder.ResolveAssistantSeed(
                         session, completion.AssistantText);

@@ -558,6 +558,7 @@ namespace RNAssistant.Harness
                 Test("storage: damaged sqlite metadata preserves startup and history", DamagedSqliteMetadataPreservesStartup),
                 Test("storage: sqlite audit repairs divergent projection", SqliteAuditRepairsDivergentProjection),
                 Test("chat sessions: activity ignores navigation and metadata", ChatActivityIgnoresNavigationAndMetadata),
+                Test("chat sessions: catalog avoids active history", ChatCatalogDoesNotLoadActiveHistory),
                 Test("storage: json save remains atomic", JsonFileStoreWritesAtomicUtf8),
                 Test("storage: jsonl byte offsets are exact", JsonlByteOffsetsAreExact),
                 Test("storage: bounded cache honors LRU and weights", BoundedCacheHonorsLruAndWeights),

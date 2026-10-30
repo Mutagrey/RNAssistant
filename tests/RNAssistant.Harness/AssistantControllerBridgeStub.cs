@@ -112,12 +112,10 @@ namespace RNAssistant.Office
             {
                 DetailDeferred = !includeChatState,
                 Host = "Excel",
-                Title = "Harness.xlsx",
-                Tools = EmptyToolLibrary(),
-                Skills = EmptySkillLibrary()
+                Title = "Harness.xlsx"
             };
         }
-        public ChatStateResponse ListChats() { return ChatCatalogState(); }
+        public ChatCatalogResponse ListChats() { return ChatCatalogState(); }
         public ChatStateResponse GetChatState(string chatId = null)
         {
             LastChatId = chatId;
@@ -964,12 +962,11 @@ namespace RNAssistant.Office
             };
         }
 
-        private static ChatStateResponse ChatCatalogState(string chatId = null)
+        private static ChatCatalogResponse ChatCatalogState(string chatId = null)
         {
-            return new ChatStateResponse
+            return new ChatCatalogResponse
             {
                 ActiveChatId = chatId ?? string.Empty,
-                ActiveChatMode = "chat",
                 Chats = new ChatSessionSummary[0]
             };
         }

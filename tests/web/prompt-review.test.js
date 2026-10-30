@@ -25,12 +25,11 @@ function fixture(loadPrompts = true) {
   const get = id => { if (!ids.has(id)) return null; if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const bodies = Object.fromEntries(keys.map(key => [key, " custom " + key + " "]));
   const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, Blob, Response, setTimeout, clearTimeout, crypto: crypto.webcrypto,
-    state: { settings: { AgentPromptSchemaVersion: 0 }, prompts: metadata(), activeChatId: "chat", promptDrafts: {}, selectedInstructionKind: "prompt", selectedPromptIndex: 0, skills: [], tools: [] },
+    state: { settings: { AgentPromptSchemaVersion: 0 }, prompts: metadata(), activeChatId: "chat", promptDrafts: {}, selectedInstructionKind: "prompt", selectedPromptIndex: 0, skills: [], tools: [], toolLibraryLoaded: true, skillLibraryLoaded: true },
     $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {},
       documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
     RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },
-    RNAssistantLibraryGroups: { category: () => ({ key: "other", title: "Другие" }) },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
     renderModelCapabilityList() {},
     renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
@@ -69,7 +68,7 @@ function fixture(loadPrompts = true) {
   });
   context.window = context;
   vm.runInContext(read("js/app-accent.js"), context, { filename: "app-accent.js" });
-  (loadPrompts ? ["app-settings.js", "app-resource-download.js", "app-resource-upload.js", "app-action-menu.js", "app-prompts.js"] : ["app-settings.js"])
+  (loadPrompts ? ["app-settings.js", "app-resource-download.js", "app-resource-upload.js", "app-action-menu.js", "app-library-groups.js", "app-prompts.js"] : ["app-settings.js"])
     .forEach(file => vm.runInContext(read("js/" + file), context, { filename: file }));
   context.renderSettings = () => { if (loadPrompts) context.renderPromptSettings(context.state.prompts); };
   if (loadPrompts) { context.renderSettings(); context.bindSettingsActions(); }

@@ -29,7 +29,8 @@ namespace RNAssistant.Office
             Action<string, string, ChatActivity> progress = null,
             CancellationToken cancellationToken = default(CancellationToken),
             string runId = null,
-            Action<ChatStateResponse> chatStateChanged = null, bool supersedePending = false)
+            Action<ChatStateResponse> chatStateChanged = null, bool supersedePending = false,
+            bool includeResponse = true)
         {
             PendingAgentTool pending;
             var session = ResolvePendingAgentTool(pendingId, chatId, out pending);
@@ -178,8 +179,11 @@ namespace RNAssistant.Office
                     throw;
                 }
 
-                response = ChatState(session);
-                RunCausalTrace.Projected("ChatStateResponse");
+                if (includeResponse)
+                {
+                    response = ChatState(session);
+                    RunCausalTrace.Projected("ChatStateResponse");
+                }
             }
             finally
             {

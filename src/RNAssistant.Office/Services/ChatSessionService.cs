@@ -745,6 +745,26 @@ namespace RNAssistant.Office.Services
             return summaries;
         }
 
+        public IReadOnlyList<ChatSessionSummary> GetChatCatalogForOfficeState(out string activeId)
+        {
+            if (_activeSession == null || _aliasReconciliationPending ||
+                CurrentDocumentChanged(_adapter.HostName, _adapter.DocumentKey, _adapter.RuntimeDocumentKey))
+                LoadSession(null);
+
+            var selectedId = _activeSessionId;
+            var summaries = GetChatSummaries(selectedId);
+            if (!summaries.Any(item => string.Equals(item.Id, selectedId, StringComparison.OrdinalIgnoreCase)))
+            {
+                // The selected persisted chat may have been deleted in another window.
+                // Rebind only then; routine catalog reads never materialize its history.
+                Reset();
+                selectedId = LoadSession(null).Id;
+                summaries = GetChatSummaries(selectedId);
+            }
+            activeId = selectedId;
+            return summaries;
+        }
+
         private ChatSessionSummary ToSummary(ChatSession session, string currentHost, string currentDocumentKey)
         {
             return ToSummary(ChatSessionHeaderFactory.Create(session), currentHost, currentDocumentKey);

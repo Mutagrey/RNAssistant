@@ -168,8 +168,7 @@ function library(tools) {
   assert.equal(/StoragePath|storagePath/.test(source), false);
   assert.match(source, /expectedRevision/);
   assert.match(source, /toolLibraryMutationRequestType/);
-  assert.match(chatSessionSource,
-    /state\.tools\s*=\s*toolLibraryItemsFromContract\(init\.tools\)/);
+  assert.match(chatSessionSource, /resetInstructionLibraries\(\)/);
   assert.match(chatStateSource,
     /toolLibraryItemsFromContract\(response\.tools\)/);
   assert.doesNotMatch(chatStateSource, /response\.Tools/);

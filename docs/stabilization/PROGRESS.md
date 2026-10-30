@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Загрузка по требованию UI — 2026-10-30
+
+Owner: Office ChatSessionService/controller, Application inbox и Web presentation.
+Обновление списка больше не загружает весь активный чат: отдельный typed catalog
+несёт заголовки и выбор; смена документа/удаление выбранного чата сохраняют rebind.
+Фоновый Office poll отключён вне его раздела, phase-only inbox update не вызывает
+полную проекцию чата, завершение очереди не перечитывает общий каталог.
+Обычный queue turn и queued confirmation больше не строят полный возвращаемый DTO,
+который consumer отбрасывал перед отдельным финальным callback.
+Tools/skills перенесены из bootstrap в первое открытие библиотеки с coalescing,
+явным retry и защитой от ответа прежнего host. Inbox replay проверяет все события,
+но читает CAS-текст только последней версии каждого ввода, до изменения проекции.
+
+Новые проверки каталога, narrow bridge DTO, 12 inbox checks и web загрузки проходят.
+Controller wiring source-reviewed; Harness использует bridge stub. Расширенные chat-session checks
+дали 17 pass и три сбоя протокольных fixtures; детали — в
+[risk register](RISK_REGISTER.md#лишняя-работа-ui-и-оставшаяся-стоимость-чтений--2026-10-30).
+Реальные Windows/Office/WebView2 времена и qualification остаются открытыми.
+
 ## Загрузка истории, SQLite и CAS — 2026-10-30
 
 Owner: Core ChatStore; Office recovery/controller — consumers.

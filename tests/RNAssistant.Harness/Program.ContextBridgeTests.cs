@@ -956,6 +956,11 @@ namespace RNAssistant.Harness
             AssertTrue(list["payload"]["messages"] == null, "catalog omits transcript");
             AssertTrue(list["payload"]["context"] == null, "catalog omits prompt context");
             AssertTrue(list["payload"]["htmlWorkspace"] == null, "catalog omits html workspace");
+            AssertTrue(list["payload"]["sessionRevision"] == null && list["payload"]["inbox"] == null,
+                "catalog response carries no unrequested active-chat projection");
+            var init = JObject.FromObject(controller.Initialize(false));
+            AssertTrue(init["tools"] == null && init["skills"] == null,
+                "bootstrap leaves tool and skill catalogs to explicit library requests");
 
             var fullJson = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"full\",\"type\":\"getChatState\",\"bridgeToken\":\"" + token + "\",\"payload\":{\"chatId\":\"chat-1\"}}")

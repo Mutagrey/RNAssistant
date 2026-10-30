@@ -263,11 +263,7 @@ namespace RNAssistant.Office
             var officeMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs;
             var prompts = _toolExecutor.GetPromptLibrary();
             var promptsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs;
-            var tools = ToolLibraryResponse.From(_toolCatalog.GetVisibleTools());
-            var toolsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - promptsMs;
-            var skills = GetSkills();
-            var skillsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - promptsMs - toolsMs;
-            var librariesMs = promptsMs + toolsMs + skillsMs;
+            // Tool/skill catalogs belong to the library screen's explicit reads.
             var response = new InitResponse
             {
                 DetailDeferred = !includeChatState,
@@ -280,17 +276,14 @@ namespace RNAssistant.Office
                 Prompts = prompts,
                 HasApiKey = !string.IsNullOrWhiteSpace(_settingsService.LoadApiKey()),
                 HasHistorySecret = !string.IsNullOrWhiteSpace(_settingsService.LoadHistorySecret()),
-                Tools = tools,
                 ToolsPath = _paths.ToolsDirectory,
-                Skills = skills,
                 SkillsPath = _paths.SkillsDirectory,
                 QuickAction = DequeueQuickAction()
             };
             if (includeChatState) PopulateChatState(session, response, settings: settings);
             if (timer.ElapsedMilliseconds >= 500)
-                RuntimeLog.Info("Startup timing: recovery=" + recoveryMs + "ms, session=" + sessionMs + "ms, settings=" + settingsMs + "ms, office=" + officeMs + "ms, libraries=" + librariesMs +
-                    "ms (prompts=" + promptsMs + "ms, tools=" + toolsMs + "ms, skills=" + skillsMs + "ms)," +
-                    " chatState=" + (timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - librariesMs) + "ms.");
+                RuntimeLog.Info("Startup timing: recovery=" + recoveryMs + "ms, session=" + sessionMs + "ms, settings=" + settingsMs + "ms, office=" + officeMs + "ms, prompts=" + promptsMs +
+                    "ms, chatState=" + (timer.ElapsedMilliseconds - recoveryMs - sessionMs - settingsMs - officeMs - promptsMs) + "ms.");
             return response;
         }
 

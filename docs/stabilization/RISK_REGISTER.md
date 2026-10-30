@@ -1,5 +1,29 @@
 # Stabilization risk register
 
+## Лишняя работа UI и оставшаяся стоимость чтений — 2026-10-30
+
+Owner: Office chat presentation; Application inbox; Web UI.
+Убраны полная загрузка активной истории при catalog poll, phase-only detail reload,
+catalog на завершении очереди и eager tools/skills в bootstrap. Убрано построение
+возвращаемого DTO для queue turn/queued confirmation, где consumer использует
+только Task completion и затем отдельный финальный callback. Replay очереди
+больше не читает CAS-текст повторно для каждого перехода одного ввода.
+Первичная проверка всех JSONL, полная загрузка выбранной сессии и первый inbox
+replay остаются пропорциональны истории. Адресный `getChatInbox` всё ещё проходит
+через session loader, а Workspace run snapshot включает полную session projection;
+облегчение этих путей требует сохранения recovery/ownership и cross-window freshness.
+Trajectories, context inspector и исходники библиотеки уже загружаются по запросу.
+
+В текущем дереве расширенный `chat sessions:` дал 17 pass / 3 fail:
+`closed bound document keeps navigation and HTML` ожидает accepted call
+`html.source.write`, но получает 0; `saved run boundary preserves protocol` и
+`interrupted mixed exchanges preserve completed context` отказывают с
+`Accepted operation has no execution reference. Start a new chat.` Эти проверки
+не вызывают новый catalog method; их protocol/fixture gaps не закрыты этой правкой.
+Новый `catalog avoids active history` проходит со store, запрещающим full loads,
+включая fresh header revision, transient/foreign selection, удаление и смену документа.
+Windows delivery и фактическое ускорение по-прежнему не измерены.
+
 ## Холодная история и блокировки SQLite — 2026-10-30
 
 Owner: Core ChatStore; Office ChatSessionService/controller — consumers.

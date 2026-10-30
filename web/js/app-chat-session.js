@@ -452,6 +452,7 @@ function applyInitState(init) {
   if (typeof cancelSkillSourceWrite === "function") cancelSkillSourceWrite();
   state.tools = [];
   state.skills = [];
+  if (typeof resetInstructionLibraries === "function") resetInstructionLibraries();
   state.toolLibraryDirty = false;
   state.skillLibraryDirty = false;
   state.toolsPath = init.toolsPath || "";
@@ -637,7 +638,9 @@ async function synchronizeChatState(force) {
   // DOM focus events are not an explicit forced refresh.
   force = force === true;
   if (state.bridgeUnavailable || state.chatNavigationPending || state.initializePromise || state.officeHostChatPending ||
-      (!force && (document.hidden || !document.hasFocus() || currentActiveSend()))) return;
+      (!force && (document.hidden || !document.hasFocus() || currentActiveSend() ||
+        typeof isPanelActive === "function" && !isPanelActive("chat") ||
+        window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office"))) return;
   if (state.chatSyncPromise) {
     var pendingSync = state.chatSyncPromise;
     if (!force) return pendingSync;

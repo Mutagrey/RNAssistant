@@ -489,6 +489,7 @@ function applyLibraryCatalogState(response) {
         return String(tool && tool.Id || "").toLowerCase() === String(selectedToolId).toLowerCase();
       });
     }
+    state.toolLibraryLoaded = true;
     changed = true;
   }
   if (response.skills !== undefined) {
@@ -508,6 +509,7 @@ function applyLibraryCatalogState(response) {
         return String(skill && skill.Id || "").toLowerCase() === String(selectedSkillId).toLowerCase();
       });
     }
+    state.skillLibraryLoaded = true;
     changed = true;
   }
   return changed;

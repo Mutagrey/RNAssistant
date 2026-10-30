@@ -107,7 +107,7 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
   console.log("PASS multi-chat: composer pauses and resumes around navigation");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-chat-run.js?v=addressed-pending-20261027-1"));
+  assert.match(index, /src="js\/app-chat-run\.js\?v=[^"]+"/);
   console.log("OK 4/4");
 }()).catch(error => {
   console.error(error.stack || error);

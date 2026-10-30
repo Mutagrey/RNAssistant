@@ -632,7 +632,7 @@ namespace RNAssistant.Office.WebView
                         Plugins?.ResetAfterRuntimeDataClear();
                         break;
                     case BridgeOperationId.GetTools:
-                        responsePayload = _controller.GetTools();
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.GetTools(), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetToolDocumentation:
                         responsePayload = await _controller.GetToolDocumentationAsync(
@@ -658,7 +658,7 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.UninstallVbaTool(Payload<VbaToolPackagePayload>(payload).Id);
                         break;
                     case BridgeOperationId.GetSkills:
-                        responsePayload = _controller.GetSkills();
+                        responsePayload = await RunBridgeWorkAsync(() => _controller.GetSkills(), cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.SaveSkills:
                         responsePayload = await _controller.SaveSkillsAsync(Payload<SkillMutationWriteRequest>(payload), cancellationToken).ConfigureAwait(false);

@@ -54,6 +54,15 @@ concurrent append into a missing chat. The lock is released before model/user wa
 projection reads, trace appends and saves report stage timings without chat content. An
 indexed cold read still materializes all messages needed by an active conversation;
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
+Routine Office `listChats` reads return only `ChatCatalogResponse` (selected ID,
+headers and open documents); they do not reload the selected session or build its
+message, inbox, context or artifact presentation. A changed Office document or a
+deleted selection still resolves a new active binding. New header revisions cause
+the visible UI to request the addressed chat detail separately. Queue execution
+and queued confirmation continuations skip the unused return DTO; their post-worker
+completion callback pushes addressed detail without rescanning the global
+chat/document or tool/skill catalogs. Direct edit/confirmation callers still receive
+their requested response. Persistence, leases and failure recovery are unchanged.
 Active-pointer, catalog, message-page and full-session reads wait at most two seconds for that document lock;
 the timeout is a typed busy result and cannot be treated as a missing chat. Writes retain
 their ten-second lock wait. Startup recovery defers a busy document and reconciles an
@@ -79,9 +88,12 @@ header/CAS size calculation, and directory enumeration/sort. Startup recovery an
 document-alias scans identify their own catalog passes. Complete event reads report
 their JSONL bytes and retained event count after lock acquisition; this includes
 the first inbox replay. That replay still validates the complete canonical stream
-outside the SQLite message projection, but retains and hydrates only input changes
-and session commits. These timings do not include the document lock wait, reported
-separately.
+outside the SQLite message projection and retains input changes and session commits.
+All transitions and delivery evidence are validated, but CAS text is hydrated only
+for each input's latest revision (including terminal receipts). Recovery hydrates
+only changed inputs, and finishes required body reads before advancing its live
+projection. Historical bodies remain available through explicit event reads.
+These timings do not include the document lock wait, reported separately.
 Paged artifact presentation checks retained source-message IDs separately, so a
 model-linked tombstone outside the page does not disappear from its resource cards.
 Workspace older-history reads use the same bounded SQLite window through the exact

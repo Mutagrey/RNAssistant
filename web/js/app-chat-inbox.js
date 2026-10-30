@@ -195,7 +195,8 @@ function officeInboxObserver() {
   if (chatInboxObserver) return chatInboxObserver;
   chatInboxObserver = window.RNAssistantConversationObserver.create({
     current: function () {
-      if (!state.activeChatId || state.bridgeUnavailable || state.chatNavigationPending ||
+      if (!state.activeChatId || state.bridgeUnavailable || state.chatNavigationPending || state.chatDetailPending || state.chatDetailError ||
+          typeof isPanelActive === "function" && !isPanelActive("chat") ||
           window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return null;
       return { chatId: state.activeChatId, generation: state.chatNavigationVersion || 0 };
     },
@@ -212,15 +213,19 @@ function officeInboxObserver() {
       var operationIds = echoes.filter(function (item) { return !queuedIds.has(item.Id); })
         .concat(echoes.filter(function (item) { return queuedIds.has(item.Id); }))
         .map(function (item) { return item.OperationId; }).slice(0, 128);
-      return send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds })
-        .then(function (inbox) { return { inbox: inbox, previous: previous }; });
+      return send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds });
     },
-    changed: function (result, target) {
-      if (!result || !result.inbox || result.inbox.chatId !== target.chatId) return;
-      applyChatInbox(result.inbox);
-      var current = chatInbox(target.chatId), previous = result.previous;
+    changed: function (inbox, target) {
+      if (!inbox || inbox.chatId !== target.chatId) return;
+      // A pushed chat state may already have delivered this transition while the
+      // poll was in flight. Compare with the state actually on screen now.
+      var previous = chatInbox(target.chatId);
+      applyChatInbox(inbox);
+      var current = chatInbox(target.chatId);
+      // Phase-only updates are already rendered from the inbox/progress snapshot.
+      // Reload history only at lifecycle boundaries or for a missing accepted input.
       if (current.epoch !== previous.epoch || current.running !== previous.running ||
-          current.phase !== previous.phase || chatInboxNeedsHistory(target.chatId)) refreshInboxChat(target.chatId);
+          chatInboxNeedsHistory(target.chatId)) refreshInboxChat(target.chatId);
     },
     failed: function () { /* The normal bridge banner reports disconnection; keep the saved projection. */ }
   });

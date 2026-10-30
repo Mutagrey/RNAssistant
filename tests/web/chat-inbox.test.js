@@ -239,6 +239,36 @@ context.renderChatSessions = () => {};
     Id: "stale-ack", OperationId: staleOperation, Revision: 3, Status: "Applied" } });
   assert.equal(context.pendingChatInputs().length, 0, "settled old acknowledgement cannot recreate a rendered echo");
 
+  historyReads = 0;
+  context.state.activeChatId = "phase-only";
+  context.state.messages = [];
+  context.loadChatState = async () => { historyReads++; return {}; };
+  context.applyChatInbox({ chatId: "phase-only", epoch: "e", revision: 1, items: [], running: true, phase: "thinking" });
+  transport = () => Promise.resolve({ chatId: "phase-only", epoch: "e", revision: 1, items: [], running: true, phase: "executing" });
+  await context.pollChatInbox();
+  assert.equal(context.chatInbox().phase, "executing", "phase-only poll updates the live state");
+  assert.equal(historyReads, 0, "phase-only poll does not project the full chat again");
+  transport = () => Promise.resolve({ chatId: "phase-only", epoch: "e", revision: 2, items: [], running: false });
+  await context.pollChatInbox();
+  assert.equal(historyReads, 1, "terminal boundary still refreshes history");
+  context.applyChatInbox({ chatId: "phase-only", epoch: "e", revision: 3, items: [], running: true });
+  let finishPoll;
+  transport = () => new Promise(resolve => { finishPoll = resolve; });
+  const completing = context.pollChatInbox(); await new Promise(resolve => setImmediate(resolve));
+  const terminal = { chatId: "phase-only", epoch: "e", revision: 4, items: [], running: false };
+  context.applyChatInbox(terminal); // The full pushed chat state arrived before this poll.
+  finishPoll(terminal); await completing;
+  assert.equal(historyReads, 1, "a pushed terminal snapshot prevents a duplicate full history read");
+  const beforeHidden = calls.length;
+  context.isPanelActive = () => false;
+  await context.pollChatInbox();
+  assert.equal(calls.length, beforeHidden, "hidden Office chat does not poll");
+  context.isPanelActive = () => true;
+  context.state.chatDetailPending = true;
+  await context.pollChatInbox();
+  assert.equal(calls.length, beforeHidden, "initial detail owns the inbox read while loading");
+  context.state.chatDetailPending = false;
+
   const polled = [];
   let releaseOldPoll;
   transport = (type, payload) => {

@@ -211,7 +211,7 @@ namespace RNAssistant.Office
                 var runId = session.LastRun.RunId;
                 return _owner.ConfirmAgentToolAsync(pendingId, session.Id,
                     (phase, text, activity) => _progress?.Invoke(runId, phase, text, activity),
-                    token, runId, _changed, true);
+                    token, runId, _changed, true, includeResponse: false);
             }
 
             public Task StartTurnAsync(ChatSession session, ConversationInput item, System.Threading.CancellationToken token)
@@ -231,10 +231,10 @@ namespace RNAssistant.Office
                     });
                 return _owner.ExecuteChatTurnAsync(session, _owner._settingsService.Load(), input, prepare,
                     (phase, text, activity) => _progress?.Invoke(runId, phase, text, activity),
-                    _changed, token, runId);
+                    _changed, token, runId, includeResponse: false);
             }
 
-            public void Changed(ChatSession session) { _changed?.Invoke(_owner.GetChatState(session.Id)); }
+            public void Changed(ChatSession session) { _changed?.Invoke(_owner.GetChatDetail(session.Id)); }
             public void Failed(Exception error)
             { Diagnostics.RuntimeLog.Error("Conversation queue paused: " + error.Message); }
         }

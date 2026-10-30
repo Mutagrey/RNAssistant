@@ -749,6 +749,13 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("contextUsage", NullValueHandling = NullValueHandling.Ignore)] public object ContextUsage { get; set; }
     }
 
+    public sealed class ChatCatalogResponse
+    {
+        [JsonProperty("activeChatId")] public string ActiveChatId { get; set; }
+        [JsonProperty("chats")] public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
+        [JsonProperty("documents")] public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
+    }
+
     public class ChatStateResponse
     {
         [JsonProperty("detailDeferred", DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -849,14 +856,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("hasHistorySecret")]
         public bool HasHistorySecret { get; set; }
 
-        [JsonProperty("tools")]
-        public ToolLibraryResponse Tools { get; set; }
-
         [JsonProperty("toolsPath")]
         public string ToolsPath { get; set; }
-
-        [JsonProperty("skills")]
-        public SkillLibraryResponse Skills { get; set; }
 
         [JsonProperty("skillsPath")]
         public string SkillsPath { get; set; }

@@ -330,19 +330,21 @@ namespace RNAssistant.Office
             });
         }
 
-        public ChatStateResponse ListChats()
+        public ChatCatalogResponse ListChats()
         {
             var timer = Stopwatch.StartNew();
             EnsureStartupRecovery();
-            var session = _chatSessions.GetActiveSessionForOfficeState();
-            var loadMs = timer.ElapsedMilliseconds;
+            var recoveryMs = timer.ElapsedMilliseconds;
             var fullReplays = _chatStore.HeaderFullReplayCount;
             var incrementalReplays = _chatStore.HeaderIncrementalReplayCount;
-            var response = ChatCatalogState(session);
+            string activeId;
+            var chats = _chatSessions.GetChatCatalogForOfficeState(out activeId);
+            var response = new ChatCatalogResponse { ActiveChatId = activeId,
+                Chats = chats, Documents = ListOpenDocuments() };
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
-                    "Chat catalog timing: active=" + loadMs + "ms, catalog=" +
-                    (timer.ElapsedMilliseconds - loadMs) + "ms, chats=" +
+                    "Chat catalog timing: recovery=" + recoveryMs + "ms, catalog=" +
+                    (timer.ElapsedMilliseconds - recoveryMs) + "ms, chats=" +
                     (response.Chats == null ? 0 : response.Chats.Count) +
                     ", headerFullReplays=" + (_chatStore.HeaderFullReplayCount - fullReplays) +
                     ", headerIncrementalReplays=" + (_chatStore.HeaderIncrementalReplayCount - incrementalReplays) +
@@ -821,24 +823,6 @@ namespace RNAssistant.Office
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
                 ActiveTaskListArtifactId = session.ActiveTaskListArtifactId,
                 ActivePlanDocumentArtifactId = session.ActivePlanDocumentArtifactId
-            };
-        }
-
-        private ChatStateResponse ChatCatalogState(ChatSession session)
-        {
-            var activeId = session == null ? string.Empty : session.Id;
-            return new ChatStateResponse
-            {
-                SessionRevision = session == null ? 0 : session.Revision,
-                RunViewState = RunViewStateProjector.Create(session),
-                ActiveChatId = activeId,
-                ActiveChatModel = session == null ? string.Empty : session.Model,
-                ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
-                MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = session != null && !session.UsesCurrentProtocol,
-                ActiveChatReasoning = session != null && session.ReasoningEnabled,
-                Chats = _chatSessions.GetChatSummaries(activeId),
-                Documents = ListOpenDocuments()
             };
         }
 

@@ -74,6 +74,18 @@ function createSyncContext() {
 (async function () {
   {
     const { context, calls } = createSyncContext();
+    context.isPanelActive = () => false;
+    await context.synchronizeChatState(false);
+    context.isPanelActive = () => true;
+    context.RNAssistantWorkspaceChat = { owner: () => "project" };
+    await context.synchronizeChatState(false);
+    assert.equal(calls.length, 0, "hidden Office catalog is not scanned in settings or workspace chats");
+    context.nextCatalog = { activeChatId: "chat-a", chats: context.state.chats, documents: context.state.documents };
+    await context.synchronizeChatState(true);
+    assert.equal(calls.length, 1, "explicit catalog refresh remains available");
+  }
+  {
+    const { context, calls } = createSyncContext();
     context.activeSend = { requestId: "running" };
     await context.synchronizeChatState(false);
     assert.equal(calls.length, 0, "background catalog scan waits for the active send");
@@ -382,7 +394,7 @@ function createSyncContext() {
     assert.match(index, new RegExp('src="js/' + name + '\\.js\\?v=[^"]+"'), name + " has a cache key");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
-  console.log("OK 13/13");
+  console.log("OK 14/14");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

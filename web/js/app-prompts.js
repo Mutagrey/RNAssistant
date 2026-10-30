@@ -1,6 +1,7 @@
 (function () {
   var promptLibrary = null, promptSources = {}, promptReading = null, promptPending = 0, promptWriting = null;
   var maximumSourceBytes = Number.MAX_SAFE_INTEGER, maximumMutationBytes = Number.MAX_SAFE_INTEGER;
+  var libraryRead = null, libraryError = "";
   var promptDefinitions = [
     { key: "systemPrompt", label: "Агент · общие", group: "Основные", field: "SystemPrompt", description: "Роль, runtime context, формат ответа и условие завершения Agent-потока." },
     { key: "agentToolsPrompt", label: "Агент · tools", group: "Основные", field: "AgentToolsPrompt", description: "Общие правила выбора и выполнения tools; конкретные аргументы остаются в схемах tools." },
@@ -231,10 +232,59 @@
       function (key) { return searching || !(state.collapsedResourceGroups && state.collapsedResourceGroups[key]); });
   }
 
+  function loadInstructionLibraries() {
+    if (libraryRead || libraryError || state.bridgeUnavailable) return;
+    var operation = {};
+    libraryRead = operation;
+    var kinds = ["tools", "skills"].filter(function (kind) {
+      return !state[kind === "tools" ? "toolLibraryLoaded" : "skillLibraryLoaded"];
+    });
+    Promise.all(kinds.map(function (kind) {
+      return send(kind === "tools" ? "getTools" : "getSkills", {}).then(function (value) {
+        return { kind: kind, value: value };
+      }, function (error) { return { error: error }; });
+    })).then(function (results) {
+      if (libraryRead !== operation) return;
+      results.forEach(function (result) {
+        if (result.error) libraryError = result.error.detail || result.error.message;
+        else {
+          var response = {}; response[result.kind] = result.value;
+          applyLibraryCatalogState(response);
+        }
+      });
+    }).catch(function (error) {
+      if (libraryRead === operation) libraryError = error.detail || error.message;
+    }).finally(function () {
+      if (libraryRead !== operation) return;
+      libraryRead = null;
+      renderInstructions();
+    });
+  }
+
   function renderInstructions() {
     if (typeof isPanelActive === "function" && !isPanelActive("instructions")) return;
     var list = $("instructionsList");
     if (!list) return;
+    var ready = !!state.toolLibraryLoaded && !!state.skillLibraryLoaded;
+    ["addToolButton", "addSkillButton"].forEach(function (id) {
+      if ($(id)) $(id).disabled = !ready || !!state.bridgeUnavailable;
+    });
+    if (!ready) {
+      loadInstructionLibraries();
+      list.replaceChildren();
+      var status = document.createElement("p");
+      status.className = "muted"; status.setAttribute("role", "status");
+      status.textContent = libraryError || (state.bridgeUnavailable ? "Библиотека недоступна." : "Загрузка библиотеки…");
+      list.appendChild(status);
+      if (libraryError && !state.bridgeUnavailable) {
+        var retry = document.createElement("button");
+        retry.type = "button"; retry.textContent = "Повторить загрузку";
+        retry.onclick = function () { libraryError = ""; renderInstructions(); };
+        list.appendChild(retry);
+      }
+      renderInstructionEditor();
+      return;
+    }
     var rows = instructionRows();
     if (!rows.length) {
       window.RNAssistantNavigationTree.render(list, [], { label: "Библиотека", emptyText: "В библиотеке ничего не найдено." });
@@ -589,6 +639,10 @@
   window.bindPromptSettingsActions = bindPromptSettingsActions;
   window.markPromptEditorDirty = markPromptEditorDirty;
   window.renderInstructions = renderInstructions;
+  window.resetInstructionLibraries = function () {
+    libraryRead = null; libraryError = "";
+    state.toolLibraryLoaded = false; state.skillLibraryLoaded = false;
+  };
   window.renderInstructionEditor = renderInstructionEditor;
   window.syncSelectedLibraryItem = syncSelectedInstruction;
 }());

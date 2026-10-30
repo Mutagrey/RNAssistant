@@ -105,7 +105,7 @@ namespace RNAssistant.Application.Conversations
                 if (created)
                 {
                     box = new Inbox { Session = session };
-                    foreach (var record in new ConversationInputJournal(_events).Read(session))
+                    foreach (var record in ReadInboxReplay(session, 0))
                     {
                         Apply(box, record.Change, record.Event);
                         box.Revision = record.Event.Sequence;
@@ -407,9 +407,8 @@ namespace RNAssistant.Application.Conversations
         }
         private void RefreshForRecovery(Inbox box)
         {
-            foreach (var record in new ConversationInputJournal(_events).Read(box.Session))
+            foreach (var record in ReadInboxReplay(box.Session, box.Revision))
             {
-                if (record.Event.Sequence <= box.Revision) continue;
                 Apply(box, record.Change, record.Event);
                 box.Revision = record.Event.Sequence;
                 box.ViewRevision++;
@@ -420,6 +419,19 @@ namespace RNAssistant.Application.Conversations
                 box.Paused = true;
                 box.PauseReason = "После перезапуска";
             }
+        }
+        private IReadOnlyList<ConversationInputRecord> ReadInboxReplay(ChatSession session, long afterSequence)
+        {
+            // Validate every transition, but hydrate only the latest version of each
+            // input. Claim/applied/edit events otherwise reread the same CAS body.
+            var records = new ConversationInputJournal(_events).Read(session, false)
+                .Where(record => record.Event.Sequence > afterSequence).ToArray();
+            foreach (var latest in records.Where(record => record.Change.Input != null)
+                .GroupBy(record => record.Change.Input.Id, StringComparer.Ordinal).Select(group => group.Last()))
+                latest.Change.Input.Text = _events.ReadPayload(session, latest.Event) ??
+                    throw new InvalidOperationException("Conversation input body is missing.");
+            // Complete all required reads before changing an existing recovery projection.
+            return records;
         }
         private void ReconcilePersistedDelivery(Inbox box, bool requireAcceptedRun)
         {
