@@ -89,6 +89,8 @@ namespace RNAssistant.Office.Contracts
         CancelPromptMutationUpload,
         [BridgeOperationPolicy(true, 300)] TestModelCompatibility,
         [BridgeOperationPolicy(true, 300)] TestModelConnection,
+        GetModelDiagnosticScenarios,
+        [BridgeOperationPolicy(true, 180)] RunModelDiagnostic,
         ClearRuntimeData,
         GetTools,
         [BridgeOperationPolicy(true, 300)] GetToolDocumentation,

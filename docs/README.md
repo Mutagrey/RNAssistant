@@ -72,6 +72,8 @@ adapters и Web Inspector остаются consumers. P0/D0 начат; headless
 до 23 synthetic-проверенных A/B/C сценариев текущего контракта; пять CLI context
 fixtures снимают exact wire чтений, patch, compaction и skills. Live-model прогоны
 по указанию пользователя отложены; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
+Минимальный [UI Diagnostics](model-endpoint-compatibility.md#diagnostics-ui--2026-10-30)
+позволяет запускать встроенные сценарии и читать результаты/HTTP прямо в настройках.
 Планы описывают целевое состояние: T/E separation и `criterion` ещё не текущий
 wire-контракт. После реализации P0–P6/D0–D5 они остаются историей; нормативное
 поведение переносится в canonical documents ниже.

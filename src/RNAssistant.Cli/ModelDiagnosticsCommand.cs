@@ -6,7 +6,6 @@ using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
 
@@ -61,13 +60,7 @@ namespace RNAssistant.Cli
             var seed = Value(options, "seed", Guid.NewGuid().ToString("N"));
             var available = ModelDiagnosticScenarios.All(seed);
             var selected = Value(options, "cases", string.Join(",", available.Select(item => item.Id))).Split(',');
-            var known = new HashSet<string>(available.Select(item => item.Id), StringComparer.Ordinal);
-            if (selected.Length == 0 || selected.Distinct().Count() != selected.Length || selected.Any(id => !known.Contains(id)))
-                throw new ArgumentException("Select distinct diagnostics cases from " + string.Join(",", available.Select(item => item.Id)) + ".");
-            var selection = new HashSet<string>(selected, StringComparer.Ordinal);
-            if (selection.Contains("C4")) selection.Add("C4-control");
-            if (selection.Contains("C3")) selection.Add("C3-valid");
-            if (selection.Contains("A2")) selection.Add("A2-system");
+            ModelDiagnosticScenarios.Select(seed, selected); // Validate before creating output or dispatching.
             output = Path.GetFullPath(output);
             if (Directory.Exists(output) || File.Exists(output)) throw new ArgumentException("Diagnostics output must be a new directory.");
             Directory.CreateDirectory(output);
@@ -82,7 +75,7 @@ namespace RNAssistant.Cli
             var jsonSettings = new JsonSerializerSettings { Formatting = Formatting.Indented };
             jsonSettings.Converters.Add(new StringEnumConverter());
             for (var iteration = 1; iteration <= repeat; iteration++)
-            foreach (var scenario in ModelDiagnosticScenarios.All(seed + "/" + iteration).Where(item => selection.Contains(item.Id)))
+            foreach (var scenario in ModelDiagnosticScenarios.Select(seed + "/" + iteration, selected))
             {
                 var result = runner.RunAsync(settings, scenario, kind, CancellationToken.None).GetAwaiter().GetResult();
                 if (scenario.ParityControlId != null)
@@ -93,21 +86,21 @@ namespace RNAssistant.Cli
                 if (result.RequestUtf8 != null)
                 {
                     var raw = Encoding.UTF8.GetString(result.RequestUtf8);
-                    var safe = RedactJson(raw, apiKey);
+                    var safe = ModelDiagnosticExport.RedactJson(raw, apiKey);
                     row.RequestRedacted = safe != raw;
                     row.RequestFile = stem + ".request.json";
                     File.WriteAllBytes(Path.Combine(output, row.RequestFile), row.RequestRedacted ? Encoding.UTF8.GetBytes(safe) : result.RequestUtf8);
                 }
                 if (result.ResponsePayload != null)
                 {
-                    var safe = RedactJson(result.ResponsePayload, apiKey);
+                    var safe = ModelDiagnosticExport.RedactJson(result.ResponsePayload, apiKey);
                     row.ResponseRedacted = safe != result.ResponsePayload;
                     row.ResponseFile = stem + ".response.txt";
                     File.WriteAllBytes(Path.Combine(output, row.ResponseFile), !row.ResponseRedacted && result.ResponseBytes != null
                         ? result.ResponseBytes : Encoding.UTF8.GetBytes(safe));
                 }
                 var resultJson = JsonConvert.SerializeObject(result, jsonSettings);
-                row.ResultRedacted = RedactJson(resultJson, apiKey) != resultJson;
+                row.ResultRedacted = ModelDiagnosticExport.RedactJson(resultJson, apiKey) != resultJson;
                 report.Results.Add(row);
                 report.NativeGeneration = Aggregate(report.Results.Where(item => item.Result.Capability == ModelDiagnosticCapability.NativeGeneration)
                     .Select(item => item.Result.Verdict));
@@ -116,7 +109,7 @@ namespace RNAssistant.Cli
                 report.Sse = Aggregate(report.Results.Where(item => item.Result.ScenarioId == "C4")
                     .Select(item => item.Result.Verdict == ModelDiagnosticVerdict.Fail ? ModelDiagnosticVerdict.Fail : item.Result.ParityVerdict));
                 File.WriteAllText(Path.Combine(output, "report.json"),
-                    RedactJson(JsonConvert.SerializeObject(report, jsonSettings), apiKey), new UTF8Encoding(false));
+                    ModelDiagnosticExport.RedactJson(JsonConvert.SerializeObject(report, jsonSettings), apiKey), new UTF8Encoding(false));
                 Console.WriteLine(scenario.Id + " #" + iteration + " " + kind + " " + result.Verdict +
                     " · " + result.Reason + " · HTTP " + result.HttpStatusCode + " · " + result.DurationMs + " ms");
             }
@@ -133,34 +126,6 @@ namespace RNAssistant.Cli
             return values.Length == 0 ? ModelDiagnosticVerdict.NotRun : ModelDiagnosticVerdict.Pass;
         }
 
-        private static string Redact(string text, string secret)
-        {
-            if (string.IsNullOrEmpty(secret)) return text;
-            var escaped = JsonConvert.ToString(secret);
-            return text.Replace(escaped.Substring(1, escaped.Length - 2), "[REDACTED]").Replace(secret, "[REDACTED]");
-        }
-        private static string RedactJson(string text, string secret)
-        {
-            if (string.IsNullOrEmpty(secret)) return text;
-            JToken root;
-            try { root = JToken.Parse(text); }
-            catch (JsonException) { return Redact(text, secret); }
-            var changed = false;
-            var tokens = root is JContainer ? ((JContainer)root).DescendantsAndSelf().ToArray() : new[] { root };
-            foreach (var token in tokens)
-            {
-                var property = token as JProperty;
-                if (property != null && Redact(property.Name, secret) != property.Name)
-                    return "\"[REDACTED: sensitive property name]\"";
-                var value = token as JValue;
-                if (value == null || value.Type != JTokenType.String) continue;
-                var original = (string)value;
-                var safe = Redact(original, secret);
-                if (safe == original) continue;
-                value.Value = safe; changed = true;
-            }
-            return changed ? root.ToString(Formatting.Indented) : text;
-        }
         private static string Value(Dictionary<string, string> options, string key, string fallback)
         { string value; return options.TryGetValue(key, out value) ? value : fallback; }
         private static int Number(Dictionary<string, string> options, string key, int fallback, int min, int max)

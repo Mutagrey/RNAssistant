@@ -12,6 +12,18 @@ namespace RNAssistant.Office
     {
         internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
 
+        public ModelDiagnosticCatalogDto GetModelDiagnosticScenarios()
+        { return ModelDiagnosticsService.Catalog(_settingsService.Load()); }
+
+        public Task<ModelDiagnosticRunDto> RunModelDiagnosticAsync(RunModelDiagnosticRequest request, CancellationToken cancellationToken)
+        {
+            var settings = _settingsService.Load();
+            var key = _settingsService.LoadApiKey();
+            // Freeze credentials with the settings for this pair of synthetic probes.
+            return new ModelDiagnosticsService(new LlmClient(() => key).CompleteAsync)
+                .RunAsync(settings, request, key, cancellationToken);
+        }
+
         public Task<ModelConnectionTestResponse> TestModelConnectionAsync(CancellationToken cancellationToken)
         {
             return new ModelConnectionTestService(_llmCompletion).TestAsync(

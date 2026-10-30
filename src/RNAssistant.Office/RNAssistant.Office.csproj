@@ -75,6 +75,7 @@
     <Compile Include="Contracts\BridgeOperationCatalog.cs" />
     <Compile Include="Tools\JsToolHandler.cs" />
     <Compile Include="Contracts\BridgeDtos.Diagnostics.cs" />
+    <Compile Include="Contracts\BridgeDtos.ModelDiagnostics.cs" />
     <Compile Include="Contracts\BridgeDtos.Html.cs" />
     <Compile Include="Contracts\BridgeDtos.Settings.cs" />
     <Compile Include="Contracts\BridgeDtos.Prompts.cs" />
@@ -312,6 +313,7 @@
     <Compile Include="Services\ModelAttachmentService.cs" />
     <Compile Include="Services\ModelCapabilityService.cs" />
     <Compile Include="Services\ModelConnectionTestService.cs" />
+    <Compile Include="Services\ModelDiagnosticsService.cs" />
     <Compile Include="Services\ModelCompatibilityService.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />

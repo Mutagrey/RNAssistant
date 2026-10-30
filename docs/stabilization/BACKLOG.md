@@ -24,6 +24,14 @@ P3 должен сохранить единственную полную выб�
 Проверить снятие выбора, policy suspension, compaction и cold restart.
 Baseline и оставшиеся D-cases — [endpoint compatibility](../model-endpoint-compatibility.md#baseline-and-remaining-qualification).
 
+## Settings navigation fixture: версия в hover — 2026-10-30
+
+Owner: Web settings navigation tests. `settings-navigation-layout.test.js:79`
+ожидает версию в `.rail-hover-title`, хотя текущая разметка выносит её в отдельный
+`.rail-hover-version`. Одинаковое падение воспроизведено на чистом `990c795f` и
+в рабочем дереве Diagnostics UI. Сверить ожидание с действующим UI; runtime или
+дизайн ради устаревшего assertion не менять.
+
 ## Интеграционные fixtures после перехода на Core tools — 2026-10-28
 
 Owner: Harness / Core Tools / Office Tools. Полный набор не запускался. В оставшихся catalog

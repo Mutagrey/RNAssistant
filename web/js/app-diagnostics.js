@@ -315,7 +315,7 @@ async function collectCasGarbage() {
 }
 
 function setDiagnosticsTab(name, refreshRecords) {
-  name = name === "overview" || name === "trajectory" ? name : "runtime-log";
+  name = name === "overview" || name === "trajectory" || name === "model-lab" ? name : "runtime-log";
   state.diagnosticsTab = name;
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (button) {
     var active = button.getAttribute("data-diagnostics-tab") === name;
@@ -334,9 +334,11 @@ function setDiagnosticsTab(name, refreshRecords) {
     requestAnimationFrame(updateLogScrollButton);
   }
   if (name === "overview") performanceDiagnostics.render();
+  if (name === "model-lab" && typeof openModelDiagnosticsLab === "function") openModelDiagnosticsLab();
 }
 
 function bindDiagnosticsActions() {
+  if (typeof bindModelDiagnosticsLab === "function") bindModelDiagnosticsLab();
   performanceDiagnostics.observeLongTasks();
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (tab) {
     tab.addEventListener("click", function () {

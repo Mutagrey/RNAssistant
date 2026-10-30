@@ -238,6 +238,7 @@
     <Compile Include="Llm\ModelDiagnosticScenario.cs" />
     <Compile Include="Llm\ModelDiagnosticTransportScenarios.cs" />
     <Compile Include="Llm\ModelDiagnosticRunner.cs" />
+    <Compile Include="Llm\ModelDiagnosticExport.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />
     <Compile Include="Llm\LlmMessageBuilder.cs" />
     <Compile Include="Llm\LlmRequestDiagnostics.cs" />

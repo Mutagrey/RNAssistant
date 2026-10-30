@@ -619,6 +619,12 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.TestModelConnection:
                         responsePayload = await _controller.TestModelConnectionAsync(cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.GetModelDiagnosticScenarios:
+                        responsePayload = _controller.GetModelDiagnosticScenarios();
+                        break;
+                    case BridgeOperationId.RunModelDiagnostic:
+                        responsePayload = await _controller.RunModelDiagnosticAsync(Payload<RunModelDiagnosticRequest>(payload), cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.ClearRuntimeData:
                         _workspaces.EnsureNoSourceWork();
                         responsePayload = Bootstrap(_controller.ClearRuntimeData());

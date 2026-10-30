@@ -1,5 +1,14 @@
 # RNAssistant Harness
 
+`model diagnostics UI:` covers the typed catalog/run bridge, shared automatic controls
+and SSE parity, exact request forwarding, settings isolation, endpoint drift rejection,
+bounded redaction before truncation and cancellation without another request.
+`node tests/web/model-diagnostics-layout.test.js` uses the shipped UI with a synthetic
+bridge: opening never probes, explicit runs/controls, failures and raw text, inert
+provider output, JSON export, cancellation and 1100/740/390 px light/dark layout.
+Uses Playwright and optional `BROWSER_EXECUTABLE`; optional `RNA_DIAGNOSTICS_SCREENSHOT`
+writes desktop/narrow previews. Neither check calls a model or validates real Office.
+
 `model diagnostics:` covers exact native-history probe requests (null/empty/omitted
 content), shuffled pairing, absent-result control, fallback roles, strict marker/ID
 assertions, HTTP 500 and malformed HTTP 200 capture, timeout/cancellation and the

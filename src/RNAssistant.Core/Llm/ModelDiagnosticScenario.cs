@@ -4,14 +4,18 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Llm
 {
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ModelDiagnosticVerdict { NotRun, Pass, Fail, Inconclusive, Unsupported }
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ModelDiagnosticExecutionKind { Synthetic, RealEndpoint }
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ModelDiagnosticCapability
     {
         NativeHistoryVisibility, NativeHistoryPairing, NativeHistoryNegativeControl,
@@ -19,6 +23,7 @@ namespace RNAssistant.Core.Llm
         TextResponse, InstructionRole, V8Execute, V8Finish, NativeGeneration, MultiRunHistory,
         JsonObject, JsonSchema, MinimalSchema, InvalidSchema, TextJson, StreamingParity
     }
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ModelDiagnosticAssertion { HistoryJson, ExactText, ExactJson, V8, NativeCall, SchemaRejection }
 
     // Shared input for headless and future UI runners. No tool dispatcher or document authority.
@@ -43,6 +48,24 @@ namespace RNAssistant.Core.Llm
     public static partial class ModelDiagnosticScenarios
     {
         public const int Revision = 2;
+        public static IReadOnlyList<string> Controls(string id)
+        {
+            return id == "A2" ? new[] { "A2-system" } : id == "C3" ? new[] { "C3-valid" } :
+                id == "C4" ? new[] { "C4-control" } : new string[0];
+        }
+
+        public static IReadOnlyList<ModelDiagnosticScenario> Select(string seed, IEnumerable<string> ids)
+        {
+            var all = All(seed);
+            var selected = (ids ?? all.Select(item => item.Id)).ToArray();
+            if (selected.Length == 0 || selected.Distinct(StringComparer.Ordinal).Count() != selected.Length ||
+                selected.Any(id => !all.Any(item => item.Id == id)))
+                throw new ArgumentException("Select distinct diagnostic scenario IDs from the current catalog.");
+            var included = new HashSet<string>(selected, StringComparer.Ordinal);
+            foreach (var id in selected) included.UnionWith(Controls(id));
+            return all.Where(item => included.Contains(item.Id)).ToArray();
+        }
+
         public static IReadOnlyList<ModelDiagnosticScenario> NativeHistory(string seed)
         {
             if (string.IsNullOrWhiteSpace(seed)) throw new ArgumentException("A reproducible marker seed is required.", nameof(seed));

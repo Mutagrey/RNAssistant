@@ -1,0 +1,26 @@
+/* Layout only. Controls, tree, table and disclosures use the shared product components. */
+.model-diagnostics-lab.active { display: block; overflow: auto; padding: 0 4px 16px 0; container-type: inline-size; }
+.model-lab-heading { margin-bottom: 16px; }
+.model-lab-heading h3 { margin: 0 0 6px; }
+.model-lab-heading p { margin: 0; }
+.model-lab-toolbar { display: flex; align-items: end; gap: 10px; }
+.model-lab-model { flex: 1; min-width: 0; grid-template-columns: minmax(0, 1fr); margin: 0; }
+.model-lab-actions { display: flex; align-items: center; gap: 6px; padding-bottom: 1px; }
+.model-lab-layout { display: grid; grid-template-columns: minmax(220px, .95fr) minmax(0, 2fr); gap: 18px; margin-top: 12px; align-items: start; }
+.model-lab-nav { min-width: 0; padding-right: 12px; border-right: 1px solid var(--line); }
+#modelLabScenarioList { max-height: min(60dvh, 520px); overflow: auto; }
+.model-lab-report { min-width: 0; }
+.model-lab-selection-heading { margin: 0 0 16px; }
+.model-lab-selection-heading h4 { margin: 0 0 6px; }
+.model-lab-selection-heading p { margin: 0; }
+.model-lab-results { max-height: 300px; overflow: auto; margin-bottom: 12px; }
+.model-lab-results thead { position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.model-lab-results tr[aria-selected="true"] { background: var(--surface-selected); }
+.model-lab-inspector { width: auto; max-width: none; padding: 12px 0 0; overflow: visible; }
+@container (max-width: 640px) {
+  .model-lab-layout { grid-template-columns: minmax(0, 1fr); }
+  .model-lab-nav { border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 12px; }
+  #modelLabScenarioList { max-height: 220px; }
+  .model-lab-toolbar { flex-wrap: wrap; }
+  .model-lab-model { flex-basis: 100%; }
+}

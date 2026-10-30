@@ -1,5 +1,29 @@
 # Stabilization progress
 
+## V8 Diagnostics: минимальный UI — 2026-10-30
+
+Предыдущий headless/context baseline закоммичен: `990c795f`.
+Owner: Core diagnostic runner/selection/redaction; Office `ModelDiagnosticsService`
+и typed bridge; Web `app-model-diagnostics.js`. В настройках → Помощь и обслуживание
+→ Протокол модели доступны выбор встроенных сценариев, повторы/seed, запуск/отмена,
+таблица verdict/HTTP/времени, assertions, expected/actual, сообщения и HTTP-текст,
+JSON-отчёт. Открытие каталога не обращается к модели. Global settings не меняются;
+raw previews ограничены с явными truncation/redaction/completeness flags.
+UI переиспользует product tree/buttons/forms/table/disclosures; Endpoint убран,
+повторы/таймаут/seed свёрнуты в параметры прогона.
+
+Три целевых service/bridge Harness checks, source inclusion, CLI smoke 23 сценариев
+и новый browser test (1100/740/390 px, light/dark, отмена/экспорт) прошли на fixtures.
+Соседний settings-navigation test падает на ожидании версии в hover title также
+на чистом `990c795f`; устаревшая fixture записана в BACKLOG.
+Реальные модели не вызывались; Windows/Office/WebView2 delivery остаётся открытым.
+Это минимальный UI: editor/import, сравнение прогонов, diff и полный inspector
+Resources/Evidence/Composition ещё не сделаны. Следующий основной этап — P2:
+T/E/R, criterion, eligibility, case-insensitive lookup и новая reference revision;
+default transport до реальной qualification не переключать. Exact HTTP budget
+omission/unknown-effect baseline также остаётся открытым.
+Подробности — [Diagnostics UI](../model-endpoint-compatibility.md#diagnostics-ui--2026-10-30).
+
 ## V8 Diagnostics: transport matrix P1/D1 — 2026-10-30
 
 Owner: Core LLM/ModelProtocol; CLI — consumer общего scenario/assertion runner.

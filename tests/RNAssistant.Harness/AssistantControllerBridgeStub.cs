@@ -315,6 +315,18 @@ namespace RNAssistant.Office
             });
         }
 
+        public ModelDiagnosticCatalogDto GetModelDiagnosticScenarios()
+        { return Services.ModelDiagnosticsService.Catalog(new AppSettings { BaseUrl = "http://fixture", Model = "scripted" }); }
+
+        public Task<ModelDiagnosticRunDto> RunModelDiagnosticAsync(RunModelDiagnosticRequest request, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(new ModelDiagnosticRunDto { ScenarioRevision = ModelDiagnosticScenarios.Revision,
+                Seed = request.Seed, Exchanges = new List<ModelDiagnosticExchangeDto> { new ModelDiagnosticExchangeDto {
+                    Result = new ModelDiagnosticResult { ScenarioId = request.ScenarioId, Model = request.Model,
+                        ExecutionKind = ModelDiagnosticExecutionKind.Synthetic, Verdict = ModelDiagnosticVerdict.Inconclusive } } } });
+        }
+
         public Task<ModelConnectionTestResponse> TestModelConnectionAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();

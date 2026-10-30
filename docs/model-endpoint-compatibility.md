@@ -119,6 +119,43 @@ Per the user's current instruction, further real-model runs are deferred. Automa
 validation uses only synthetic HTTP endpoints; live compatibility will be tested
 on the user's real machine. No live model was called for scenario revision 2.
 
+### Diagnostics UI — 2026-10-30
+
+Settings → **Помощь и обслуживание → Протокол модели** exposes the shared A/B/C
+runner: a shared navigation tree selects a group, a single scenario or all checks
+(20 scenarios and three automatic controls), 1–3 repetitions,
+reproducible seed and a 10–60 second per-request timeout. Opening or refreshing
+only reads the catalog; model requests require an explicit Run. Stop cancels the
+active bridge request and prevents subsequent scenarios. Results stay in panel
+memory until another run or panel reload; there is no additional durable store.
+
+`ModelDiagnosticsService` owns the UI use case with typed catalog/run/exchange DTOs.
+The endpoint and credentials come from the saved connection; the model can be
+overridden for a diagnostic run. There is no duplicate endpoint field. Repeat,
+timeout and seed live in the collapsed **Параметры прогона** disclosure. Endpoint
+drift is rejected before dispatch. Each
+scenario/control group freezes settings and credentials, with 512 output tokens,
+8192 context tokens, temperature 0 and reasoning off. Chat settings are not saved
+or changed. Both CLI and UI use Core selection/control rules, assertions, SSE parity
+and redaction. No synthetic function is dispatched to a real tool or document.
+
+The screen reuses the product navigation tree, buttons, form fields, table,
+compatibility statuses and disclosures; its CSS owns layout only. The table shows
+explicit verdicts, HTTP status and duration. Selecting a result
+shows assertions, parser/stream status, expected/actual content, ordered request
+messages, raw HTTP request text and received response text. The original request
+hash is retained. The UI and its JSON report use previews bounded to 65,536 characters
+per text field; truncation, redaction and incomplete SSE capture are distinct and
+visible. API key and saved custom-header values are redacted before truncation.
+The report does not contain headers. It must not be represented as a complete raw
+export when any of those flags is set; the CLI remains the full diagnostic export.
+
+This is the minimum runnable UI, not the complete D3/D4 laboratory. Custom scenario
+editing/import, persistent run history, endpoint comparison, request diff and the
+expanded actual-conversation Resources/Evidence/Composition inspector remain open.
+Target T/E/R/criterion remains NotRun. Host-neutral service/bridge and mocked-browser
+checks do not qualify the controller delivery, download or rendering in real Office/WebView2.
+
 ### Baseline and remaining qualification
 
 Baseline HEAD: `9e7eccb50fe8e7819a15ff69f3837353c6a69551` on `main`.
@@ -187,7 +224,7 @@ P0/D0 and D2 remain partial: real Office traces, exact HTTP budget omissions and
 unknown-effect/inspection chains are still open. The target skill dedup and
 reference/evidence behavior are not claimed as implemented. The A/B/C
 headless matrix is implemented for the current contract and verified synthetically;
-UI Scenario Lab/Inspector and the target reference migration remain separate slices.
+The remaining Scenario Lab/Inspector work and target reference migration remain separate slices.
 Real Office/Windows/WebView2 and revision-2 endpoint qualification are open; only
 screen photographs are available from the user's Windows machine.
 

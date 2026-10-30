@@ -43,6 +43,7 @@
   <link rel="stylesheet" href="css/app-vba.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-context-panel.css?v=json-height-20260929-1">
   <link rel="stylesheet" href="css/app-model-context.css?v=request-reader-20261025-2-source-composition-1-saved-cost-1-explorer-export-1">
+  <link rel="stylesheet" href="css/app-model-diagnostics.css?v=v8-lab-20261030-1">
   <link rel="stylesheet" href="css/app-context-inspector.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-artifacts.css?v=shared-palette-20261025-2">
@@ -1006,7 +1007,40 @@
                 <button class="diagnostics-tab-button active" type="button" role="tab" aria-selected="true" data-diagnostics-tab="runtime-log">Ход работы</button>
                 <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="trajectory">История чата</button>
                 <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="overview">Проверки и данные</button>
+                <button class="diagnostics-tab-button" type="button" role="tab" aria-selected="false" data-diagnostics-tab="model-lab">Протокол модели</button>
               </div>
+
+              <section class="diagnostics-tab-panel model-diagnostics-lab" data-diagnostics-panel="model-lab" aria-labelledby="modelLabTitle">
+                <div class="model-lab-heading"><h3 id="modelLabTitle">Совместимость модели</h3><p class="muted">Ответы, история инструментов и формат обмена — на тестовых сообщениях.</p></div>
+                <div class="model-lab-toolbar">
+                  <div class="form-grid model-lab-model"><label><span>Модель для проверки</span><input id="modelLabModel" type="text" list="modelOptions" maxlength="256" autocomplete="off" placeholder="Выберите или введите ID модели"></label></div>
+                  <div class="model-lab-actions">
+                    <button id="modelLabRun" class="button primary" type="button" disabled><svg data-rna-icon="play" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Запустить</span></button>
+                    <button id="modelLabStop" class="button hidden" type="button" disabled><svg data-rna-icon="stop" viewBox="0 0 24 24" aria-hidden="true"></svg>Остановить</button>
+                    <button id="modelLabExport" class="icon-btn hidden" type="button" disabled title="Скачать отчёт" aria-label="Скачать отчёт"><svg data-rna-icon="download" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+                  </div>
+                </div>
+                <details id="modelLabOptions" class="product-settings-advanced"><summary>Параметры прогона</summary>
+                  <div class="form-grid two-columns">
+                    <label><span>Повторения</span><input id="modelLabRepeat" type="number" min="1" max="3" value="1"></label>
+                    <label><span>Таймаут запроса, секунд</span><input id="modelLabTimeout" type="number" min="10" max="60" value="30"></label>
+                    <label class="wide"><span>Seed</span><input id="modelLabSeed" type="text" maxlength="120" placeholder="Автоматически"><small>Одинаковый seed повторяет тестовые данные.</small></label>
+                    <p class="wide muted">Используется сохранённое подключение. Параметры относятся только к этому прогону; документ не используется.</p>
+                  </div>
+                </details>
+                <p id="modelLabStatus" class="status" role="status" aria-live="polite">Загрузка сценариев…</p>
+                <div class="model-lab-layout">
+                  <aside class="model-lab-nav" aria-label="Выбор проверок">
+                    <div class="product-nav-heading"><strong>Проверки</strong><div class="tree-toolbar"><button id="modelLabRefresh" class="icon-btn" type="button" title="Обновить сценарии и модель из настроек" aria-label="Обновить сценарии"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div></div>
+                    <div id="modelLabScenarioList"></div>
+                  </aside>
+                  <div class="model-lab-report">
+                    <div class="model-lab-selection-heading"><h4 id="modelLabSelectionTitle">Проверки</h4><p id="modelLabSelectionInfo" class="muted"></p></div>
+                    <div id="modelLabResults" class="rna-table-wrap model-lab-results" aria-label="Результаты сценариев"></div>
+                    <section id="modelLabInspector" class="model-context-body model-lab-inspector" aria-label="Запрос и результат"><p class="tree-empty">После запуска здесь появятся результаты и детали ответов.</p></section>
+                  </div>
+                </div>
+              </section>
 
               <div class="diagnostics-tab-panel diagnostics-overview" data-diagnostics-panel="overview">
                 <section class="model-compatibility-panel diagnostics-model-panel" aria-labelledby="performanceDiagnosticsTitle">
@@ -1164,7 +1198,8 @@
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
   <script src="js/app-settings.js?v=screen-timing-20261029-1"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
-  <script src="js/app-diagnostics.js?v=context-stages-20261029-1"></script>
+  <script src="js/app-diagnostics.js?v=v8-lab-20261030-1"></script>
+  <script src="js/app-model-diagnostics.js?v=v8-lab-20261030-1"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2"></script>
   <script src="js/app-viewer-ui.js?v=shared-viewers-20261019-1"></script>
   <script src="js/app-json-viewer.js?v=chat-projection-20260907-1-history-compact-20261025-1-chat-json-20261029-1"></script>
