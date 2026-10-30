@@ -92,7 +92,7 @@ namespace RNAssistant.Harness
                 var latest = ContinuityResult("last", "core.patch", ToolResult.Error("Ambiguous patch.", "{\"code\":\"patch_ambiguous\",\"targets\":[]}"), role);
                 var latestCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "core.patch",
                     Arguments = new Dictionary<string, object> { { "targets", new[] { new { target = "index.html",
-                        edits = new[] { new { before = "repeated", after = "changed" } } } } } } },
+                        edits = new[] { new { old = "repeated", @new = "changed" } } } } } } },
                     "Attempted patch.", "Try the requested patch.", null, role, FixtureCallOrigin("last"));
                 var facts = new[] { call, old, latestCall, latest };
                 var compiler = new ModelContextCompiler();

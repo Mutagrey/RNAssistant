@@ -576,6 +576,9 @@ namespace RNAssistant.Office.Services
                 .GroupBy(item => item.Uri + "\n" + item.Revision, StringComparer.Ordinal).Select(group => group.First()))
             {
                 var exact = verifiedReference;
+                // HTML member after-states are projected below through the retained
+                // workspace snapshot, using the same source identity as core.read.
+                if (HtmlWorkspaceIdentity.IsMemberIdentity(exact.Identity)) continue;
                 var provider = ResourceUri.Parse(exact.Uri).Provider;
                 if (provider == "state")
                 {
@@ -643,8 +646,11 @@ namespace RNAssistant.Office.Services
                     immutable: artifact != null, contentSha256: hash));
             }
 
-            if (!HtmlWorkspaceToolCatalog.Owns(command.ToolId) ||
-                effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored) return;
+            var verifiedHtmlMembers = verified.Where(item => item?.IsExact == true &&
+                HtmlWorkspaceIdentity.IsMemberIdentity(item.Identity)).ToArray();
+            var publicPatch = command.ToolId == ResourceMutationToolCatalog.Patch && verifiedHtmlMembers.Length > 0;
+            if (!publicPatch && (!HtmlWorkspaceToolCatalog.Owns(command.ToolId) ||
+                effect.Outcome != ResourceEffectOutcome.VerifiedChanged && effect.Outcome != ResourceEffectOutcome.Restored)) return;
             var current = (session.Artifacts ?? new List<ChatArtifact>()).SingleOrDefault(item =>
                 item != null && item.Id == session.ActiveHtmlArtifactId &&
                 item.Kind == ChatArtifactKinds.HtmlWorkspace);
@@ -669,6 +675,8 @@ namespace RNAssistant.Office.Services
                 var payload = PayloadRef.FromBlob(payloads.StoreText(source, "text/plain; charset=utf-8"));
                 var fileHead = frozenDocument.GetHead(HtmlWorkspaceIdentity.MemberIdentity(session, logicalId,
                     ChatHtmlResourceCatalog.FileMemberKey(file.Id)));
+                if (publicPatch && (fileHead?.Knowledge != HeadKnowledge.Known ||
+                    !verifiedHtmlMembers.Any(item => item.Uri == fileHead.Revision.Uri && item.Revision == fileHead.Revision.Revision))) continue;
                 message.ResourceEvidence.Add(new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"),
                     documentScope, ChatHtmlResourceCatalog.FileReference(session, current, file.Id),
                     ResourceRepresentations.Source, ResourceCoverage.Whole(), true, frozenDocument.Generation,

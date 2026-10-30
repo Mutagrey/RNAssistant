@@ -10,7 +10,8 @@ namespace RNAssistant.Core.Tools
     // All coordinates belong to the original source, never to an intermediate edit.
     public sealed class ResolvedTextEdit
     {
-        public int Offset { get; set; }
+        public long Offset { get; set; }
+        public int Hunk { get; internal set; }
         public string Before { get; set; }
         public string After { get; set; }
     }
@@ -25,8 +26,7 @@ namespace RNAssistant.Core.Tools
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             using (var reader = new System.IO.StringReader(source))
-                return ApplyResolved(source, patch.Resolve(reader, cancellation, normalizeLine)
-                    .Select(edit => new ResolvedTextEdit { Offset = checked((int)edit.Offset), Before = edit.Before, After = edit.After }), cancellation);
+                return ApplyResolved(source, patch.Resolve(reader, cancellation, normalizeLine), cancellation);
         }
 
         public static TextEditPlan ApplyResolved(string source, IEnumerable<ResolvedTextEdit> resolved,
@@ -35,10 +35,10 @@ namespace RNAssistant.Core.Tools
             var edits = resolved.ToList();
             foreach (var edit in edits)
             {
-                if (edit?.Before == null || edit.After == null || !Matches(source, edit.Offset, edit.Before))
+                if (edit?.Before == null || edit.After == null || !Matches(source, checked((int)edit.Offset), edit.Before))
                     throw Error("patch_not_found", "Resolved edit no longer matches the source.");
-                RequireScalarBoundary(source, edit.Offset);
-                RequireScalarBoundary(source, edit.Offset + edit.Before.Length);
+                RequireScalarBoundary(source, checked((int)edit.Offset));
+                RequireScalarBoundary(source, checked((int)edit.Offset + edit.Before.Length));
             }
             return Apply(source, edits, cancellation);
         }
@@ -104,9 +104,9 @@ namespace RNAssistant.Core.Tools
             foreach (var edit in edits)
             {
                 cancellation.ThrowIfCancellationRequested();
-                builder.Append(source, position, edit.Offset - position);
+                builder.Append(source, position, checked((int)edit.Offset - position));
                 builder.Append(edit.After);
-                position = edit.Offset + edit.Before.Length;
+                position = checked((int)edit.Offset + edit.Before.Length);
             }
             builder.Append(source, position, source.Length - position);
             return new TextEditPlan { Text = builder.ToString(), Edits = edits.AsReadOnly() };

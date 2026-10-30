@@ -748,7 +748,7 @@ namespace RNAssistant.Core.Services
             if (after.Uri == evidence.Resource.Uri && after.Revision == evidence.Resource.Revision) return true;
             // Authored source is the read-back snapshot of this exact logical head,
             // established by the owner through immutable-snapshot publication.
-            return evidence.Immutable && evidence.Dependencies.Any(d => d.Kind == "current-authored-source" &&
+            return evidence.Immutable && evidence.Dependencies.Any(d => (d.Kind == "current-authored-source" || d.Kind == "current-html-file") &&
                 d.Resource.Uri == after.Uri && d.Resource.Revision == after.Revision);
         }
 

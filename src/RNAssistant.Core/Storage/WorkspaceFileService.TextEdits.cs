@@ -24,8 +24,6 @@ namespace RNAssistant.Core.Storage
             using (var stream = OpenRetainedStream(snapshot.Evidence.Payload, long.MaxValue, token, null, true))
             {
                 var parsed = observed == null ? patch : patch.WithCoverage(TextPatch.Coverage(new[] { observed }));
-                if (parsed.RequiresWholeSource && !(observed?.Complete == true && observed.Coverage.Kind == ResourceCoverageKinds.Whole))
-                    throw new TextPatternException("source_observation_required", "A context-free insertion requires complete observed source.");
                 var edits = PlanByteEdits(stream, parsed, token);
                 if (observed?.Coverage.Kind == ResourceCoverageKinds.CharacterRange)
                 {
@@ -34,7 +32,7 @@ namespace RNAssistant.Core.Storage
                     if (edits.Any(edit => edit.Offset < start || edit.Offset + edit.Before.Length > end))
                         throw new TextPatternException("source_observation_required", "Changed lines must stay inside the observed source excerpt.");
                 }
-                return PatchPreview.From(edits.Select(e => new TextPatchEdit {
+                return PatchPreview.From(edits.Select(e => new ResolvedTextEdit {
                     Before = StrictUtf8.GetString(e.Before), After = StrictUtf8.GetString(e.After) }));
             }
         }
@@ -72,10 +70,10 @@ namespace RNAssistant.Core.Storage
                 var edits = new List<ByteEdit>(); long offset = 0; var position = 0;
                 foreach (var edit in plan.Edits)
                 {
-                    offset += TextByteLength(source.Substring(position, edit.Offset - position));
+                    offset += TextByteLength(source.Substring(position, checked((int)edit.Offset - position)));
                     var before = EncodePatchFragment(edit.Before);
                     edits.Add(new ByteEdit { Offset = offset, Before = before, After = EncodePatchFragment(edit.After) });
-                    position = edit.Offset + edit.Before.Length; offset += before.Length;
+                    position = checked((int)edit.Offset + edit.Before.Length); offset += before.Length;
                 }
                 return CommitTextEdits(workspace, path, expected, stream, edits, onDispatch, token, effectOperation);
             }
@@ -126,7 +124,7 @@ namespace RNAssistant.Core.Storage
         private static IReadOnlyList<ByteEdit> PlanByteEdits(Stream source, TextPatch patch, CancellationToken token)
         {
             source.Position = 0;
-            IReadOnlyList<TextPatchEdit> resolved;
+            IReadOnlyList<ResolvedTextEdit> resolved;
             using (var reader = new StreamReader(source, StrictUtf8, false, 81920, true))
                 resolved = patch.Resolve(reader, token);
             return resolved.Select(edit => new ByteEdit {
@@ -134,7 +132,7 @@ namespace RNAssistant.Core.Storage
                 Before = EncodePatchFragment(edit.Before), After = EncodePatchFragment(edit.After)
             }).ToList();
         }
-        public IReadOnlyList<TextPatchEdit> ReadRetainedPatchEdits(ResourceRef before, ResourceRef after, TextPatch patch, int maximumCharacters)
+        public IReadOnlyList<ResolvedTextEdit> ReadRetainedPatchEdits(ResourceRef before, ResourceRef after, TextPatch patch, int maximumCharacters)
         {
             var evidence = PublishedEvidence(before, ResourceRepresentations.Raw);
             using (var stream = OpenRetainedStream(evidence.Payload, long.MaxValue, CancellationToken.None, null, true))

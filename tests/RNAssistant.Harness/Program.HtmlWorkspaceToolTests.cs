@@ -233,27 +233,6 @@ namespace RNAssistant.Harness
                             out contractError),
                         "HTML history rejects nested source execution");
 
-                    var unchanged = ExecuteHtmlNative(runtime,
-                        HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                        new JObject
-                        {
-                            ["path"] = "index.html",
-                            ["targets"] = new JArray(new JObject
-                            {
-                                ["op"] = "replace",
-                                ["find"] = "native",
-                                ["text"] = "native"
-                            })
-                        });
-                    AssertEqual(ToolExecutionOutcome.Ok, unchanged.Outcome,
-                        "no-change HTML patch succeeds");
-                    AssertEqual(ToolDispatchEvidence.NotDispatched,
-                        unchanged.Evidence.Dispatch,
-                        "no-change HTML patch stays before dispatch");
-                    AssertEqual(ToolEffectEvidence.VerifiedNoChange,
-                        unchanged.Evidence.Effect,
-                        "no-change HTML patch is explicit");
-
                     var sourceArtifact = new ChatArtifact { Kind = ChatArtifactKinds.File, Title = "native-sales.json",
                         MimeType = "application/json", InlineText = "[{\"sales\":120}]" };
                     session.Artifacts.Add(sourceArtifact);
@@ -296,7 +275,7 @@ namespace RNAssistant.Harness
                 var diagnostic = JsonConvert.DeserializeObject<PatchBatchResult>(failed.Result.DataJson).Targets.Single().Diagnostic;
                 AssertEqual("context_not_found", diagnostic.Code, "stable common diagnostic code");
                 AssertEqual(2, diagnostic.Edit.Value, "the failed hunk is identified inside its target");
-                AssertEqual("refine_context", diagnostic.NextAction, "the model gets a bounded correction action");
+                AssertEqual("read_target", diagnostic.NextAction, "the model gets a bounded correction action");
                 AssertTrue(!failed.Result.DataJson.Contains(source), "failure does not inject the whole source into the result");
                 var corrected = patch("app.js", MergeEdits(LineHunk("const first = 1;", "const first = 4;"), LineHunk("const second = 2;", "const second = 20;")));
                 AssertEqual(ToolExecutionOutcome.Ok, corrected.Outcome, "corrected original-snapshot hunks apply");
@@ -307,9 +286,11 @@ namespace RNAssistant.Harness
                 AssertEqual(ResourceTargetStatus.Unchanged, unchanged.ResourceEffect.Targets.Single().Status, "no-op is explicit");
                 AssertEqual(sameRevision, session.ActiveHtmlArtifactId, "no-op creates no workspace revision");
                 AssertTrue(write("duplicate.js", "// a\r\n// b\n// a\r// b").Success, "repeated-line source");
-                var ambiguous = patch("duplicate.js", EditSet(Edit("// a\n// b", "// c")));
+                var ambiguous = patch("duplicate.js", EditSet(Edit("// a", "// c")));
+                var audit = Environment.GetEnvironmentVariable("RNA_PATCH_RESULT_AUDIT");
+                if (!string.IsNullOrEmpty(audit)) { System.IO.Directory.CreateDirectory(audit); System.IO.File.WriteAllText(System.IO.Path.Combine(audit, "ambiguity.json"), ambiguous.Result.DataJson); }
                 var ambiguity = JsonConvert.DeserializeObject<PatchBatchResult>(ambiguous.Result.DataJson).Targets.Single().Diagnostic;
-                AssertEqual("ambiguous_context", ambiguity.Code, "newline-equivalent repeated blocks remain ambiguous");
+                AssertEqual("ambiguous_context", ambiguity.Code, "repeated literal fragments remain ambiguous across mixed EOLs");
                 AssertTrue(ambiguity.Candidates.Count >= 2 && ambiguity.Candidates.Count <= 5, "diagnostic exposes bounded candidates");
                 AssertTrue(write("large.js", string.Concat(Enumerable.Repeat("// source line\n", 900))).Success, "large source");
                 var missingLarge = patch("large.js", LineHunk("// absent", "// new"));

@@ -2681,7 +2681,7 @@ namespace RNAssistant.Harness
                     ModelProtocolWire.Write(new ConversationResponse(ConversationResponse.ExecuteAction,
                         "Try an invalid mixed read/write batch.", "Добавляю диагностику и обновляю заголовок.",
                         calls: new[] {
-                            new ConversationToolCall { Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Insert("Debug.Print \"started\"\n", "before", "End Sub", new[] { "Sub Main()" }, null))) },
+                            new ConversationToolCall { Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Edit("End Sub", "Debug.Print \"started\"\nEnd Sub", new[] { "Sub Main()" }, null))) },
                             new ConversationToolCall { Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
                                 ["target"] = "VBA module: Module1", ["representation"] = "source" } },
                             new ConversationToolCall { Name = ResourceMutationToolCatalog.Write, Arguments = new JObject {
@@ -2689,7 +2689,7 @@ namespace RNAssistant.Harness
                         })),
                     ModelProtocolWire.WriteAcceptedCall("Apply the source patch separately.",
                         "Добавляю диагностику отдельным действием.", new ConversationToolCall {
-                            Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Insert("Debug.Print \"started\"\n", "before", "End Sub", new[] { "Sub Main()" }, null))) }),
+                            Name = "core.patch", Arguments = PatchArguments("VBA module: Module1", EditSet(Edit("End Sub", "Debug.Print \"started\"\nEnd Sub", new[] { "Sub Main()" }, null))) }),
                     ModelProtocolWire.WriteAcceptedCall("Read current source after the patch.",
                         "Читаю текущий модуль после записи.", new ConversationToolCall {
                             Name = ResourceToolCatalog.ReadToolId, Arguments = new JObject {
@@ -3052,9 +3052,9 @@ namespace RNAssistant.Harness
                     var response = responses.Dequeue();
                     if (response == "__FINISH__")
                     {
-                        var callId = messages.Single(message => message.Role == "assistant" &&
-                            message.ToolName == "core.patch" &&
-                            message.EvidenceReference != null && message.Activity == null).EvidenceReference.Alias;
+                        var callId = messages.Single(message => message.ToolName == "core.patch" &&
+                            message.EvidenceReference != null && message.Activity == null &&
+                            message.AcceptedCallOrigin == null && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion).EvidenceReference.Alias;
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the confirmed patch outcome.",
                             externalDrift ? "Изменение отклонено как устаревшее." : "Изменение сохранено.",

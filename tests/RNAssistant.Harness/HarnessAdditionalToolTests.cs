@@ -402,8 +402,8 @@ namespace RNAssistant.Harness
                 var tools = new List<ToolCatalogEntry>(OfficeToolCatalog.ForHost(adapter.HostName));
                 tools.AddRange(executor.GetControllerTools());
                 foreach (var source in new[] { new[] { "index.html", "one\ntwo\nthree\nfour" }, new[] { "app.js", "alpha\nconst beta = 1;\nalpha beta;" } })
-                    AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId, "path", source[0], "content", source[1]),
-                        tools, new AppSettings(), false, false, session).Success, "publish source through the document owner");
+                    AssertTrue(executor.ExecuteManual(Command("core.write", "target", "HTML file: " + source[0], "content", source[1]),
+                        tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session).Success, "publish source through the document owner");
 
                 var gateway = new ResourceGatewayService(new IResourceProvider[] { new ChatArtifactResourceProvider(
                     payloads: executor.Payloads, documentArtifacts: new ChatStore(FixturePaths.Value).DocumentArtifacts) });
@@ -429,63 +429,29 @@ namespace RNAssistant.Harness
                 AssertEqual("app.js", searchResult.Matches[0].Title, "HTML search identifies the exact source resource");
                 AssertContains(searchResult.Matches[0].Snippet, "beta", "HTML search returns a bounded snippet");
 
-                var patch = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
-                patch.Arguments["path"] = "app.js";
-                patch.Arguments["patch"] = new JArray
-                {
-                    new JObject { ["op"] = "replace", ["find"] = "const beta = 1;", ["text"] = "const beta = 2;" },
-                    new JObject { ["op"] = "insertAfter", ["find"] = "alpha beta;", ["text"] = "\nwindow.ready = true;" }
-                };
+                var patch = Command("core.patch", "targets", PatchTargets(PatchSection("HTML file: app.js", EditSet(
+                    Edit("const beta = 1;", "const beta = 2;"), Edit("alpha beta;", "alpha beta;\nwindow.ready = true;")))));
                 var artifactCount = session.Artifacts.Count;
-                var patchResult = executor.ExecuteManual(patch, tools, new AppSettings(), false, false, session);
+                var patchResult = executor.ExecuteManual(patch, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(patchResult.Success, "HTML structured patch succeeds");
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "beta = 2", "HTML patch replaces exact source");
                 AssertContains(session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "window.ready", "HTML patch inserts source");
                 AssertEqual(artifactCount + 1, session.Artifacts.Count, "HTML patch creates one artifact revision");
 
-                var failedPatch = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId };
-                failedPatch.Arguments["path"] = "app.js";
-                failedPatch.Arguments["patch"] = new JArray
-                {
-                    new JObject { ["op"] = "replace", ["find"] = "alpha", ["text"] = "omega" }
-                };
+                var failedPatch = Command("core.patch", "targets", PatchTargets(PatchSection("HTML file: app.js", EditSet(Edit("alpha", "omega")))));
                 var beforeFailure = session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content;
                 artifactCount = session.Artifacts.Count;
-                var failedResult = executor.ExecuteManual(failedPatch, tools, new AppSettings(), false, false, session);
+                var failedResult = executor.ExecuteManual(failedPatch, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(!failedResult.Success, "ambiguous HTML patch fails");
-                AssertEqual("text_patch_ambiguous", failedResult.ErrorCode, "ambiguous HTML patch has stable code");
+                AssertEqual("ambiguous_context", (string)JObject.Parse(failedResult.DataJson)["targets"][0]["diagnostic"]["code"], "ambiguous HTML patch has stable code");
                 AssertEqual(beforeFailure, session.HtmlWorkspace.Files.Single(item => item.Path == "app.js").Content, "failed HTML patch is atomic");
                 AssertEqual(artifactCount, session.Artifacts.Count, "failed HTML patch creates no revision");
 
-                var retiredRegexPatch = new ToolInvocation
-                {
-                    ToolId = HtmlWorkspaceToolCatalog.ApplyPatchToolId
-                };
-                retiredRegexPatch.Arguments["path"] = "app.js";
-                retiredRegexPatch.Arguments["patch"] = new JArray
-                {
-                    new JObject
-                    {
-                        ["op"] = "regexReplace",
-                        ["pattern"] = "beta",
-                        ["text"] = "gamma"
-                    }
-                };
-                var retiredRegexResult = executor.ExecuteManual(
-                    retiredRegexPatch, tools, new AppSettings(), false,
-                    false, session);
-                AssertTrue(!retiredRegexResult.Success,
-                    "HTML patch rejects retired regex operations");
-                AssertEqual(beforeFailure,
-                    session.HtmlWorkspace.Files.Single(item =>
-                        item.Path == "app.js").Content,
-                    "rejected regex patch preserves source");
-
-                var strictCreate = new ToolInvocation { ToolId = HtmlWorkspaceToolCatalog.WriteFileToolId };
-                strictCreate.Arguments["path"] = "index.html";
+                var strictCreate = new ToolInvocation { ToolId = "core.write" };
+                strictCreate.Arguments["target"] = "HTML file: index.html";
                 strictCreate.Arguments["content"] = "overwrite";
                 strictCreate.Arguments["mode"] = "createOnly";
-                var strictCreateResult = executor.ExecuteManual(strictCreate, tools, new AppSettings(), false, false, session);
+                var strictCreateResult = executor.ExecuteManual(strictCreate, tools, new AppSettings { AutoConfirmToolActions = true }, false, false, session);
                 AssertTrue(!strictCreateResult.Success,
                     "HTML file write rejects retired existence-mode plumbing");
                 AssertEqual("one\ntwo\nthree\nfour", session.HtmlWorkspace.Files.Single(item => item.Path == "index.html").Content,

@@ -18,10 +18,8 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
-        private static TextEditIntent Edit(string before, string after, string[] preceding = null, string[] following = null)
-        { return new TextEditIntent { Before = before, After = after, Context = new TextEditContext { Before = preceding, After = following } }; }
-        private static TextEditIntent Insert(string text, string position, string anchor = null, string[] preceding = null, string[] following = null)
-        { return new TextEditIntent { Op = "insert", Text = text, Position = position, Anchor = anchor, Context = new TextEditContext { Before = preceding, After = following } }; }
+        private static TextEditIntent Edit(string old, string replacement, string[] preceding = null, string[] following = null)
+        { return new TextEditIntent { Old = old, New = replacement, AnchorsBefore = preceding, AnchorsAfter = following }; }
         private static TextPatch MergeEdits(params TextPatch[] patches) { return new TextPatch(patches.SelectMany(p => p.Intents)); }
         private static JArray MergeTargets(params JArray[] targets) { return new JArray(targets.SelectMany(t => t)); }
         private static TextPatch EditSet(params TextEditIntent[] edits) { return new TextPatch(edits); }
@@ -36,52 +34,140 @@ namespace RNAssistant.Harness
             var entry = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch);
             var schema = JObject.Parse(entry.ArgumentSchemaJson);
             string error;
-            var arguments = PatchArguments("VBA module: Module1", EditSet(Edit("old", "new"), Insert("ready\n", "before", "End Sub")));
+            var arguments = PatchArguments("VBA module: Module1", EditSet(Edit("old", "new"), Edit("End Sub", "ready\nEnd Sub")));
             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, schema, false, out error), error);
             AssertTrue(ToolSchemaSupport.ValidateArguments(arguments, ToolSchemaSupport.ForPrompt(schema), false, out error), error);
             AssertEqual(2, ResourcePatch.Parse(arguments.ToString())[0].Edits.Count, "typed public edit shapes");
             AssertTrue(!ToolSchemaSupport.ValidateArguments(new JObject { ["patch"] = "@@\n-old\n+new" }, schema, false, out error), "retired manual diff rejected");
             foreach (var bad in new[] {
-                new JObject { ["before"] = "", ["after"] = "x" },
+                new JObject { ["old"] = "", ["new"] = "x" },
                 new JObject { ["op"] = "insert", ["text"] = "x", ["position"] = "before" },
-                new JObject { ["before"] = "a", ["after"] = "b", ["offset"] = 1 } })
+                new JObject { ["old"] = "a", ["new"] = "b", ["offset"] = 1 },
+                new JObject { ["before"] = "a", ["after"] = "b" },
+                new JObject { ["old"] = "a", ["new"] = "b", ["context"] = new JObject() },
+                new JObject { ["old"] = "a", ["new"] = "b", ["op"] = "replace" },
+                new JObject { ["old"] = 1, ["new"] = "b" },
+                new JObject { ["Old"] = "a", ["new"] = "b" },
+                new JObject { ["old"] = "a", ["new"] = JValue.CreateNull() },
+                new JObject { ["old"] = "a", ["new"] = "b", ["anchors_before"] = JValue.CreateNull() },
+                new JObject { ["old"] = "a", ["new"] = "b", ["anchors_after"] = new JArray("line\nother") },
+                new JObject { ["old"] = "a", ["new"] = "b", ["anchors_after"] = JArray.FromObject(Enumerable.Repeat("x", 101)) } })
             {
                 var invalid = new JObject { ["targets"] = new JArray(new JObject { ["target"] = "a.txt", ["edits"] = new JArray(bad) }) };
-                AssertTrue(!ToolSchemaSupport.ValidateArguments(invalid, schema, false, out error), "closed discriminated schema rejects invalid edit");
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(invalid, schema, false, out error), "closed schema rejects invalid edit");
+                AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() => ResourcePatch.Parse(invalid.ToString())).ErrorCode, "parser rejects without JSON coercion");
             }
+            AssertEqual("old,new,anchors_before,anchors_after", string.Join(",", ((JObject)schema["properties"]["targets"]["items"]["properties"]["edits"]["items"]["properties"]).Properties().Select(p => p.Name)), "one normative edit shape");
+            foreach (var scope in new[] { arguments, (JObject)arguments["targets"][0] })
+            {
+                scope["unknown"] = true;
+                AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() => ResourcePatch.Parse(arguments.ToString())).ErrorCode, "all objects are closed");
+                scope.Remove("unknown");
+            }
+            AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() => ResourcePatch.ReadPreparation(arguments.ToString(), "{\"Version\":2}")).ErrorCode, "previous structured approvals cannot execute");
             AssertContains(entry.Description, "TOOL_RESULT", "receipt does not prove effect");
             AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() => ResourcePatch.ReadPreparation(arguments.ToString(), "{\"Version\":1}")).ErrorCode, "old approvals cannot execute");
+        }
+
+        private static void UniversalPatchDiagnosticResults()
+        {
+            WithTempPaths(paths => {
+                var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "diagnostics"));
+                var files = new WorkspaceFileService(paths);
+                File.WriteAllText(Path.Combine(workspace.RootPath, "a.txt"), "a\nx\nx\nend");
+                var observed = new Dictionary<string, ResourceEvidence> { ["a.txt"] = files.ReadText(workspace, "a.txt").Evidence };
+                var entry = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch);
+                var registry = new ToolHandlerRegistry();
+                registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson), entry.Policy, entry.Binding),
+                    new ResourcePatchBatchHandler(new WorkspaceConversationService.FileHandler(files, workspace, observed, entry.Id, new ChatBlobStore(paths), new ResourceSearchObservation())));
+                var runtime = new ToolRuntime(registry, "agent", false, true);
+                var invalid = new[] { "{", "{\"unexpected\":1}", "{\"targets\":[{\"target\":\"a.txt\",\"edits\":[{\"old\":\"\",\"new\":\"x\"}]}]}" };
+                foreach (var json in invalid)
+                {
+                    var call = new ToolCall(Guid.NewGuid().ToString("N"), entry.Id, json);
+                    var record = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", call.Id, DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                    var data = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(record.Result.DataJson);
+                    AssertEqual(ToolExecutionOutcome.Error, record.Outcome, "invalid arguments are a known refusal");
+                    AssertTrue(!record.MayHaveDispatched && !data.WriteStarted && !data.Partial && data.Targets.Count == 0, "malformed package invents no targets or effects");
+                    AssertEqual("preparation", data.Phase, "invalid arguments use the existing preparation phase");
+                    AssertEqual("invalid_edit", data.Diagnostic.Code, "runtime schema refusal uses patch diagnostic");
+                    AssertEqual("fix_patch", data.Diagnostic.NextAction, "schema refusal tells the model how to recover");
+                }
+                var calls = new[] { EditSet(Edit("x", "new")), EditSet(Edit("absent", "new")), EditSet(Edit("a\nx", "new"), Edit("a", "other")) };
+                var codes = new[] { "ambiguous_context", "context_not_found", "overlap" };
+                var actions = new[] { "refine_context", "read_target", "fix_patch" };
+                for (var i = 0; i < calls.Length; i++)
+                {
+                    var call = new ToolCall("diagnostic-" + i, entry.Id, PatchArguments("a.txt", calls[i]).ToString());
+                    var record = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", call.Id, DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
+                    var data = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(record.Result.DataJson);
+                    var diagnostic = data.Targets.Single().Diagnostic;
+                    AssertTrue(!record.MayHaveDispatched && !data.Partial, "resolver refusal never writes");
+                    AssertEqual(codes[i], diagnostic.Code, "public diagnostic code");
+                    AssertEqual(actions[i], diagnostic.NextAction, "public recovery hint");
+                    AssertTrue(diagnostic.Edit >= 1, "edit index belongs to the original edits array");
+                    if (i == 0) AssertTrue(diagnostic.Candidates.Select(c => c.Line).SequenceEqual(new long[] { 2, 3 }), "actual candidate lines are bounded and ordered");
+                }
+                AssertEqual("a\nx\nx\nend", File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "all rejected calls preserve source");
+            });
+            var reason = "Owner refused rna://workspace/private/path@secret " + new string('a', 64) + "\nSTACK_AND_SOURCE";
+            var bounded = PatchDiagnostic.From(new TextPatternException("VBA_CODE_INVALID", reason, 2,
+                Enumerable.Range(1, 9).Select(i => new PatchCandidate { Line = i, Context = "<script>\"😀" + new string('x', 500) }).ToArray()));
+            AssertEqual("VBA_CODE_INVALID", bounded.OwnerCode, "the real owner code keeps its original spelling");
+            AssertEqual("fix_patch", bounded.NextAction, "known VBA validation refusal can be corrected");
+            AssertTrue(!bounded.Message.Contains("rna://") && !bounded.Message.Contains(new string('a', 64)) && !bounded.Message.Contains("STACK_AND_SOURCE"), "diagnostic contains no runtime values or stack/source tail");
+            AssertTrue(bounded.Candidates.Count == 5 && bounded.Candidates.All(c => c.Context.Length <= 161), "candidate text and count are bounded at serialization");
+            var unknown = PatchDiagnostic.Unknown(ToolResult.Unknown(reason, "{\"code\":\"vba_write_unverified\"}"));
+            AssertEqual("vba_write_unverified", unknown.OwnerCode, "unknown preserves a real owner code when supplied");
+            AssertEqual("verify_effect", unknown.NextAction, "unknown never authorizes retry");
         }
 
         private static void UniversalHunksUseOriginalSnapshot()
         {
             string Apply(string source, params TextEditIntent[] edits) => TextEditPlan.Patch(source, EditSet(edits)).Text;
             AssertEqual("α😀 expanded\r\nline\r\nrepeat\r\nsecond\r\nend!",
-                Apply("α😀 one\r\nrepeat\r\nrepeat\r\nend", Edit("one", "expanded\nline"),
+                Apply("α😀 one\r\nrepeat\r\nrepeat\r\nend", Edit("one", "expanded\r\nline"),
                     Edit("repeat", "second", new[] { "repeat" }, new[] { "end" }), Edit("end", "end!")), "original snapshot, scalar boundaries and EOL");
             AssertEqual("axc", Apply("abc", Edit("b", "x")), "within-line replacement");
+            AssertEqual("function f(){let x=1;return x*3}", Apply("function f(){let x=1;return x*2}", Edit("return x*2", "return x*3")), "minified line substring");
+            AssertEqual("a\nX\rc", Apply("a\nb\rc", Edit("b", "X")), "mixed EOL unchanged outside old");
+            AssertEqual("a\r\nX\nY\r\nz", Apply("a\r\nb\r\nz", Edit("b", "X\nY")), "new EOL remains literal");
+            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => Apply("a\r\nb", Edit("a\nb", "x"))).ErrorCode, "old EOL remains exact");
+            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => Apply("a\r\nb", Edit("\n", "x"))).ErrorCode, "cannot split CRLF");
+            AssertEqual("a\nb", Apply("a\r\nb", Edit("\r\n", "\n")), "explicit EOL change");
+            AssertEqual("a\r\nb\rc\n", Apply("a\r\nb\rc\n", Edit("a\r\nb\rc\n", "a\r\nb\rc\n")), "mixed EOL no-op and final newline");
+            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => Apply("a", Edit("a", "b"), Edit("b", "c"))).ErrorCode, "edits never see intermediate new text");
+            AssertEqual("ambiguous_context", RuntimeThrows<TextPatternException>(() => Apply("Sub A()\nEnd Sub\nSub B()\nEnd Sub", Edit("End Sub", "x", new[] { "Sub A()" }))).ErrorCode, "anchors are not procedure scopes");
+            AssertEqual("H\nH\nx\nH\nH\nnew\nT\nT", Apply("H\nH\nx\nH\nH\nx\nT\nT", Edit("x", "new", new[] { "H", "H", "H" }, new[] { "T", "T" })), "repeated distant anchors on both sides");
+            AssertEqual("ambiguous_context", RuntimeThrows<TextPatternException>(() => Apply("H\nH\nx\nx\nT\nT", Edit("x", "new", new[] { "H", "H" }, new[] { "T", "T" }))).ErrorCode, "two distinct ranges despite multiple anchor chains");
+            AssertEqual("\n\nnew\n\n", Apply("\n\nx\n\n", Edit("x", "new", new[] { "", "" }, new[] { "" })), "repeated empty anchors");
+            AssertEqual("H\nnew\nT", TextEditPlan.Patch("H\nx\nT", EditSet(Edit("x", "new", new[] { "H" }, new[] { "T" })).WithCoverage(new[] { Tuple.Create(0L, 1L), Tuple.Create(2L, 3L), Tuple.Create(4L, 5L) })).Text, "anchors need full line text but not EOL coverage");
+            AssertEqual("observation_required", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("hidden\nx\nT", EditSet(Edit("x", "new", new[] { "hidden" })).WithCoverage(new[] { Tuple.Create(3L, 10L) }))).ErrorCode, "truncated line is not a delivered anchor");
+
             AssertEqual("a\r\nX\nZ\rc", Apply("a\r\nb\nc\rc", Edit("b\nc", "X\nZ")), "logical mixed EOL only changes selected fragment");
             AssertEqual("H\nH\n\nnew\nT", Apply("H\nH\n\nold\nT", Edit("old", "new", new[] { "H", "" }, new[] { "T" })), "multiple chains to one location, gaps and empty anchors");
             AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => Apply("A\nB\nold", Edit("old", "x", new[] { "B", "A" }))).ErrorCode, "strict anchor order");
             AssertEqual("ambiguous_context", RuntimeThrows<TextPatternException>(() => Apply("x x", Edit("x", "y"))).ErrorCode, "never choose first occurrence");
             AssertEqual("overlap", RuntimeThrows<TextPatternException>(() => Apply("abc", Edit("ab", "x"), Edit("bc", "y"))).ErrorCode, "replacement overlap");
-            AssertEqual("overlap", RuntimeThrows<TextPatternException>(() => Apply("a", Insert("x", "start"), Insert("y", "start"))).ErrorCode, "insertion collision");
-            AssertEqual("\uFEFFheader\nbody", Apply("\uFEFFbody", Insert("header\n", "start")), "BOM outside start insertion");
-            AssertEqual("body\nfooter", Apply("body", Insert("\nfooter", "end")), "explicit EOF separator");
-            AssertEqual("bodytail", Apply("body", Insert("tail", "end")), "no implicit separator");
-            AssertEqual("a\r\nx\r\nb", Apply("a\r\nb", Insert("x\n", "after", "a")), "after includes anchor EOL");
+            AssertEqual("overlap", RuntimeThrows<TextPatternException>(() => Apply("a", Edit("a", "xa"), Edit("a", "ya"))).ErrorCode, "insertion collision");
+            AssertEqual("\uFEFFheader\nbody", Apply("\uFEFFbody", Edit("body", "header\nbody")), "BOM outside start insertion");
+            AssertEqual("body\nfooter", Apply("body", Edit("body", "body\nfooter")), "explicit EOF separator");
+            AssertEqual("bodytail", Apply("body", Edit("body", "bodytail")), "no implicit separator");
+            AssertEqual("a\r\nx\r\nb", Apply("a\r\nb", Edit("a\r\n", "a\r\nx\r\n")), "after includes anchor EOL");
             AssertEqual("a\nb", Apply("a\nx\nb", Edit("x\n", "")), "explicit line deletion");
-            AssertEqual("\uFEFFnew", Apply("\uFEFF", Insert("new", "start")), "empty BOM source");
+            AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() => Apply("\uFEFF", Edit("", "new"))).ErrorCode, "empty source needs core.write");
             AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() => EditSet(Edit("x", "\uD800"))).ErrorCode, "invalid Unicode rejected");
             var range = new[] { Tuple.Create(2L, 3L) };
             AssertEqual("x y", TextEditPlan.Patch("x x", EditSet(Edit("x", "y")).WithCoverage(range)).Text, "unique within delivered coverage");
             AssertEqual("observation_required", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("H\nx", EditSet(Edit("x", "y", new[] { "H" })).WithCoverage(range))).ErrorCode, "undelivered anchor cannot authorize edit");
-            AssertEqual("observation_required", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("x x", EditSet(Insert("y", "end")).WithCoverage(range))).ErrorCode, "EOF requires whole source");
+            AssertEqual("observation_required", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("x x", EditSet(Edit("x x", "x xy")).WithCoverage(range))).ErrorCode, "old cannot exceed delivered coverage");
             Func<string, string> vba = VbaTextCanonicalizer.NormalizeVbeComparableLine;
             AssertEqual("Sub Run()\r\n    Value = 2\r\nEnd Sub", TextEditPlan.Patch("Sub Run()\r\n    Value = 1\r\nEnd Sub",
                 EditSet(Edit("value=1", "    Value = 2", new[] { "sub run()" })), normalizeLine: vba).Text, "canonical whole-line fallback");
             AssertEqual("Dim Other\ndim value", TextEditPlan.Patch("Dim Value\ndim value", EditSet(Edit("Dim Value", "Dim Other")), normalizeLine: vba).Text, "exact preferred");
             AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("Rem Keep", EditSet(Edit("rem keep", "x")), normalizeLine: vba)).ErrorCode, "comments retain distinctions");
+            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("Value = \"Keep\"", EditSet(Edit("value=\"keep\"", "x")), normalizeLine: vba)).ErrorCode, "string literals retain distinctions");
+            AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("Value = 1\r\nOther = 2", EditSet(Edit("value=1\nother=2", "x")), normalizeLine: vba)).ErrorCode, "canonical fallback never normalizes EOL");
             AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() => TextEditPlan.Patch("  Value = 1", EditSet(Edit("value", "x")), normalizeLine: vba)).ErrorCode, "substring has no canonical fallback");
         }
 
@@ -117,7 +203,7 @@ namespace RNAssistant.Harness
                 RuntimeThrows<WorkspaceFileException>(() => files.ApplyTextEdits(workspace, "large.txt", exact,
                     EditSet(Edit("LAST", "stale")), () => dispatched++));
                 AssertEqual(1, dispatched, "stale snapshot never dispatches");
-                files.ApplyTextEdits(workspace, "large.txt", changed.Reference, EditSet(Insert("header\n", "before", "α😀 FIRST")));
+                files.ApplyTextEdits(workspace, "large.txt", changed.Reference, EditSet(Edit("α😀 FIRST", "header\nα😀 FIRST")));
                 var bytes = File.ReadAllBytes(Path.Combine(workspace.RootPath, "large.txt"));
                 AssertTrue(bytes[0] == 0xef && bytes[1] == 0xbb && bytes[2] == 0xbf && bytes[3] == (byte)'h', "streamed start insertion leaves BOM at byte zero");
                 var small = files.CreateText(workspace, "matches.md", "aaaa");
@@ -189,7 +275,8 @@ namespace RNAssistant.Harness
                 AssertEqual(10, CallableToolProfile.Core().Select(catalog).Count, "all hosts use the same compact core");
                 AssertTrue(executor.ExecuteManual(Command("core.write", "target", "file: report.txt", "content", "before"), catalog, settings, false, true, session).Success,
                     "authored file joins the same prepared package");
-                var mixed = Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Klass", EditSet(Edit("Public Value As String", "Public Value As Boolean"))), PatchSection("HTML file: index.html", EditSet(Edit("<main>after</main>", "<main>verified</main>"))), PatchSection("note: review.md", EditSet(Insert("# Complete\n", "end", null))), PatchSection("file: report.txt", EditSet(Edit("before", "after")))));
+                AssertTrue(executor.ExecuteManual(Command("core.write", "target", "note: review.md", "content", "# Review"), catalog, settings, false, true, session).Success, "seed nonempty note for patch");
+                var mixed = Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Klass", EditSet(Edit("Public Value As String", "Public Value As Boolean"))), PatchSection("HTML file: index.html", EditSet(Edit("<main>after</main>", "<main>verified</main>"))), PatchSection("note: review.md", EditSet(Edit("# Review", "# Review\n# Complete\n"))), PatchSection("file: report.txt", EditSet(Edit("before", "after")))));
                 var mixedPending = PrepareVbaNative(executor, session, mixed);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, mixedPending.Record.Outcome, "mixed owners prepare together: " + mixedPending.Record.Result?.DataJson);
                 var mixedResult = ConfirmVbaNative(mixedPending);
@@ -343,6 +430,13 @@ namespace RNAssistant.Harness
                 var patch = prepare(Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit("Debug.Print 1", "Debug.Print 2"))))), evidence);
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, patch.Record.Outcome, "current retained excerpt authorizes its exact hunk: " + patch.Record.Result?.Message);
                 AssertEqual(ToolExecutionOutcome.Ok, ConfirmVbaNative(patch).Outcome, "exact observed VBA hunk applies");
+                ReadVbaSource(executor, session, "Module1");
+                var deliveredExcerpt = executor.ResourceGateway.ReadLines(session, new ResourceRef(module.Reference.Uri), "source", 2, 1).Result;
+                var staleExcerpt = executor.ResourceGateway.Evidence(session, deliveredExcerpt).ToArray();
+                adapter.VbaModuleCode += "\n' outside the excerpt changed";
+                var staleExcerptPatch = prepare(Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit("Debug.Print 2", "Debug.Print 3"))))), staleExcerpt).Record;
+                AssertTrue(staleExcerptPatch.Outcome == ToolExecutionOutcome.Error && !staleExcerptPatch.MayHaveDispatched, "equal excerpt bytes cannot bypass changed module authority");
+                AssertContains(staleExcerptPatch.Result.DataJson, "source_changed", "stale excerpt has an authority conflict");
                 var full = ReadVbaSource(executor, session, "Module1");
                 var pending = prepare(Command("core.write", "target", "VBA module: Module1", "content", "Sub Run()\nEnd Sub"), executor.ResourceGateway.Evidence(session, full));
                 AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, pending.Record.Outcome, "whole source pins overwrite");
@@ -457,7 +551,7 @@ namespace RNAssistant.Harness
                 var stale = prepare(LineHunk(original[1], edited[1]), initialEvidence).Record;
                 AssertTrue(stale.Outcome == ToolExecutionOutcome.Error && !stale.MayHaveDispatched,
                     "old observed snapshot cannot overwrite newer code");
-                AssertContains(stale.Result.DataJson, "observation_required", "old observation requires a fresh read");
+                AssertContains(stale.Result.DataJson, "source_changed", "old observation requires a fresh read");
                 var repeated = prepare(LineHunk(edited[0], original[0]), afterSecond.ResourceEvidence).Record;
                 AssertTrue(repeated.Outcome == ToolExecutionOutcome.Error && !repeated.MayHaveDispatched,
                     "already consumed minus lines cannot silently match old content");
@@ -468,7 +562,7 @@ namespace RNAssistant.Harness
 
         private static void UniversalPatchBatchesPreservePerTargetFacts()
         {
-            foreach (var scenario in new[] { "success", "invalid", "alias", "stale", "partial", "unknown" })
+            foreach (var scenario in new[] { "success", "invalid", "alias", "stale", "partial", "unknown", "guard_throw" })
                 WithTempPaths(paths => {
                     var workspace = new WorkspaceStore(paths).Open(Path.Combine(paths.Root, "batch"));
                     var files = new WorkspaceFileService(paths); var blobs = new ChatBlobStore(paths);
@@ -483,9 +577,10 @@ namespace RNAssistant.Harness
                     var registry = new ToolHandlerRegistry();
                     registry.Register(ToolPackSnapshot.Capture(new ToolDescriptor(entry.Id, entry.Description, entry.ArgumentSchemaJson), entry.Policy, entry.Binding),
                         new ResourcePatchBatchHandler(new WorkspaceConversationService.FileHandler(files, workspace, observed, entry.Id, blobs, new ResourceSearchObservation())));
-                    var runtime = new ToolRuntime(registry, "agent", false, true, (ctx, prep) => "approval");
+                    var runtime = new ToolRuntime(registry, "agent", false, true, (ctx, prep) => "approval",
+                        dispatchGuard: ctx => { if (scenario == "guard_throw" && ctx.TargetOrdinal == 1) throw new InvalidOperationException("Guard failed before dispatch."); return null; });
                     var second = scenario == "alias" ? "a.txt" : "b.txt";
-                    var body = PatchTargets(PatchSection("a.txt", EditSet(Edit("a.txt old", "a.txt new"))), PatchSection(second, EditSet(Edit((scenario == "alias" ? "a.txt" : "b.txt") + " old", (scenario == "success" ? "b.txt old" : "b.txt new")))), PatchSection("c.txt", EditSet(Edit("c.txt " + (scenario == "invalid" ? "missing" : "old"), "c.txt new"))));
+                    var body = PatchTargets(PatchSection("a.txt", EditSet(Edit("a.txt old", "a.txt new"))), PatchSection(second, EditSet(Edit((scenario == "alias" ? "a.txt" : "b.txt") + (scenario == "invalid" ? " missing" : " old"), (scenario == "success" ? "b.txt old" : "b.txt new")))), PatchSection("c.txt", EditSet(Edit("c.txt old", "c.txt new"))));
                     var call = new ToolCall("batch", entry.Id, new JObject { ["targets"] = body }.ToString(Newtonsoft.Json.Formatting.None));
                     var pending = runtime.ExecuteAsync(new ToolExecutionContext(call, runtime.Describe(call), "run", "turn", "step", DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                     ToolExecutionRecord completed;
@@ -510,6 +605,8 @@ namespace RNAssistant.Harness
                         completed = runtime.ExecuteAsync(new ToolExecutionContext(call, pending.Context.Policy, "run", "turn", "step", DateTime.UtcNow, true, 1,
                             pending.PreparedStateJson), CancellationToken.None).GetAwaiter().GetResult();
                     }
+                    var audit = Environment.GetEnvironmentVariable("RNA_PATCH_RESULT_AUDIT");
+                    if (!string.IsNullOrEmpty(audit)) { Directory.CreateDirectory(audit); File.WriteAllText(Path.Combine(audit, scenario + ".json"), completed.Result.DataJson); }
                     var result = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(completed.Result.DataJson);
                     AssertEqual(3, result.Targets.Count, scenario + " lists every target");
                     if (scenario == "invalid" || scenario == "alias" || scenario == "stale")
@@ -518,12 +615,12 @@ namespace RNAssistant.Harness
                         AssertContains(completed.Result.Message, "No target in this call changed",
                             "preparation refusal explicitly denies an applied edit");
                         AssertEqual("a.txt old\r\n", File.ReadAllText(Path.Combine(workspace.RootPath, "a.txt")), "first prepared target is untouched");
-                        AssertEqual(scenario == "invalid" ? "context_not_found" : scenario == "alias" ? "invalid_edit" : "observation_required",
+                        AssertEqual(scenario == "invalid" ? "context_not_found" : scenario == "alias" ? "invalid_edit" : "source_changed",
                             result.Targets.Single(t => t.Diagnostic != null).Diagnostic.Code, "typed preparation reason");
                         if (scenario == "invalid")
                         {
-                            AssertEqual(1, result.Targets[2].Diagnostic.Edit.Value, "diagnostic hunk is local to its target");
-                            AssertEqual("read_target", result.Targets[2].Diagnostic.NextAction,
+                            AssertEqual(1, result.Targets[1].Diagnostic.Edit.Value, "diagnostic hunk is local to its target");
+                            AssertEqual("read_target", result.Targets[1].Diagnostic.NextAction,
                                 "missing context directs the model to refresh the rejected target");
                             var acceptedFailure = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
                                 Id = call.Id, Name = call.Name, Arguments = new Dictionary<string, object> { ["targets"] = body } },
@@ -548,7 +645,7 @@ namespace RNAssistant.Harness
                             var visibleFailure = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(failedWire.Result.DataJson);
                             AssertEqual("preparation", visibleFailure.Phase, "model sees rejection before any write");
                             AssertTrue(visibleFailure.Targets.Select(target => target.Status).SequenceEqual(new[] {
-                                ResourceTargetStatus.NotStarted, ResourceTargetStatus.NotStarted, ResourceTargetStatus.Rejected }),
+                                ResourceTargetStatus.NotStarted, ResourceTargetStatus.Rejected, ResourceTargetStatus.NotStarted }),
                                 "model sees every unapplied target and the rejected hunk");
                             var missingMarker = new ToolCall("missing-marker", entry.Id, new JObject {
                                 ["targets"] = "*** Update Target: a.txt\n@@\n    a.txt new\n"
@@ -585,6 +682,20 @@ namespace RNAssistant.Harness
                     AssertEqual(call.Id, wire.ToolCallId, "partial result remains linked to the exact call");
                     var visible = Newtonsoft.Json.JsonConvert.DeserializeObject<PatchBatchResult>(wire.Result.DataJson);
                     AssertTrue(visible.Targets.Select(t => t.Status).SequenceEqual(expected), "model receives all per-target statuses");
+                    AssertTrue(JToken.DeepEquals(JArray.FromObject(result.Targets.Select(t => t.Diagnostic)), JArray.FromObject(visible.Targets.Select(t => t.Diagnostic))), "serialized and model diagnostics agree");
+                    if (scenario == "unknown")
+                    {
+                        AssertEqual("verify_effect", visible.Targets[1].Diagnostic.NextAction, "unknown requires reconciliation, never replay");
+                        AssertEqual("owner_error", visible.Targets[1].Diagnostic.Code, "unknown reuses the owner error category");
+                    }
+                    var compiled = new ModelContextCompiler(blobs, projection: ModelToolResultProjection.Instance).Compile(
+                        new ModelAuthoritySnapshot(files.CaptureAuthority(completed.ResourceEvidence), "pack", new SkillCatalogSnapshot(null), null, 1),
+                        new ChatMessage[0], new[] { accepted, terminal }, null, new ToolCatalogEntry[0], new AppSettings(), 16000);
+                    var nextResult = compiled.Messages.Single(m => m.ToolCallId == call.Id && m.Role != "assistant");
+                    RNAssistant.Core.ModelProtocol.ToolResultWireReadResult sent; string sentError;
+                    AssertTrue(ToolResultHistoryReader.TryRead(nextResult, out sent, out sentError), "actual next request has a terminal result");
+                    AssertEqual(completed.Result.Status, sent.Result.Status, "actual next request preserves the top-level effect status");
+                    if (scenario == "guard_throw") AssertTrue(!result.Targets[1].WriteStarted && result.Targets[1].Status == ResourceTargetStatus.Rejected, "earlier dispatch does not turn a later guard exception into unknown");
                     if (scenario == "partial") AssertContains(wire.Result.Message, "Rejected/NotStarted were not applied",
                         "partial result distinguishes successful and unapplied targets in model context");
                     var receipt = ModelContextCompiler.CompleteOperation(modelMessage, wire,
@@ -598,7 +709,7 @@ namespace RNAssistant.Harness
                     if (scenario != "success")
                     {
                         session.LastRun = RunViewSession(new RunSummary("run", "turn", RunLifecycle.Completed,
-                            new ToolCounts(writeError: scenario == "partial" ? 1 : 0, writeUnknown: scenario == "unknown" ? 1 : 0),
+                            new ToolCounts(writeError: scenario == "partial" || scenario == "guard_throw" ? 1 : 0, writeUnknown: scenario == "unknown" ? 1 : 0),
                             1, 1, "Stopped.", "model_finish", null)).LastRun;
                         session.Messages.Add(EffectMessage("run", call.Id, completed.Evidence.Effect));
                         var runState = RunViewStateProjector.Create(session);

@@ -142,7 +142,7 @@ namespace RNAssistant.Harness
                         tool.Id + " is owned by native ToolRuntime");
                     var binding = tool.Binding;
                     AssertTrue(binding != null && (ResourceMutationToolCatalog.Owns(tool.Id)
-                            ? binding.HandlerId == tool.Id + (tool.Id == ResourceMutationToolCatalog.Patch ? ".resource.v4" : ".resource.v1")
+                            ? binding.HandlerId == tool.Id + (tool.Id == ResourceMutationToolCatalog.Patch ? ".resource.v5" : ".resource.v1")
                             : binding.HandlerId.StartsWith("vba.public.", StringComparison.Ordinal)),
                         tool.Id + " has an exact non-legacy handler binding");
                     AssertTrue(tool.Policy != null &&
@@ -2603,13 +2603,13 @@ namespace RNAssistant.Harness
             var patch = ResourceMutationToolCatalog.GetTools().Single(tool => tool.Id == ResourceMutationToolCatalog.Patch);
             AssertContains(editing.BodyMarkdown, "Follow the current `core.patch` schema",
                 "VBA skill delegates common patch rules to the always-present Core schema");
-            AssertContains(patch.Description, "structured edits",
+            AssertContains(patch.Description, "old and literal replacement new",
                 "shared patch schema groups related original-snapshot edits");
             AssertContains(editing.BodyMarkdown, "Exact patches can use relevant excerpts",
                 "VBA skill does not require whole-source observation for focused patches");
             AssertContains(editing.BodyMarkdown, "Reuse included recovery/after-source",
                 "VBA skill reuses current source after compaction");
-            AssertContains(patch.Description, "stale or unobserved source reject the package",
+            AssertContains(patch.Description, "All targets prepare before sequential writes",
                 "shared patch schema describes pre-write conflicts");
             AssertContains(editing.BodyMarkdown, "never backslash escaping",
                 "VBA skill distinguishes JSON transport escaping from VBA string syntax");

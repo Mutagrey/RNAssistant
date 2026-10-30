@@ -206,7 +206,6 @@ namespace RNAssistant.Core.Tools
                 context.Arguments["edits"] = TextPatch.FromArguments(context.Arguments).WithCoverage(TextPatch.Coverage(evidence));
             var patch = context.Execution.Call.Name == ResourceMutationToolCatalog.Patch
                 ? TextEditPlan.Patch(source.Text, TextPatch.FromArguments(context.Arguments)) : null;
-            whole |= patch != null && TextPatch.FromArguments(context.Arguments).RequiresWholeSource;
             if (evidence.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)) return;
             long covered = 0;
             foreach (var item in evidence.Where(e => e.Coverage.Kind == ResourceCoverageKinds.CharacterRange).OrderBy(e => e.Coverage.Start))

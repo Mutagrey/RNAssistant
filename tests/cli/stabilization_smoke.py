@@ -36,9 +36,9 @@ def main():
             response("BATCH_NARRATION_ONCE", call("core.read", target="large.txt", startLine=1257, lineCount=2),
                      *(call("core.read", target=f"small{i}.txt") for i in range(4))),
             response("Attempt whole replacement from a partial read.", call("core.write", target="large.txt", content="UNSAFE")),
-            response("Patch related observed targets together.", call("core.patch", targets=[{'target': 'large.txt', 'edits': [{'before': 'TARGET_OLD', 'after': 'TARGET_NEW'}]}, {'target': 'small0.txt', 'edits': [{'before': 'small source 0', 'after': 'small updated 0'}]}])),
+            response("Patch related observed targets together.", call("core.patch", targets=[{'target': 'large.txt', 'edits': [{'old': 'TARGET_OLD', 'new': 'TARGET_NEW'}]}, {'target': 'small0.txt', 'edits': [{'old': 'small source 0', 'new': 'small updated 0'}]}])),
             response("Read the changed tail before the dependent patch.", call("core.read", target="large.txt", startLine=1257, lineCount=2)),
-            response("Patch the newly observed source.", call("core.patch", targets=[{'target': 'large.txt', 'edits': [{'before': 'TARGET_NEW', 'after': 'TARGET_FINAL'}]}])),
+            response("Patch the newly observed source.", call("core.patch", targets=[{'target': 'large.txt', 'edits': [{'old': 'TARGET_NEW', 'new': 'TARGET_FINAL'}]}])),
             response("Verified patches complete."),
         ]
         requests = []

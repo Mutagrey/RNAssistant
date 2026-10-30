@@ -51,12 +51,10 @@ Owner: Harness / Core Tools / Office Tools. Полный набор не зап�
 Не возвращать старые aliases ради fixtures. После переноса запускать только
 затронутые сценарии. Два основных catalog fixtures, полные dotted references и
 Skill Library init уже переключены и проверены; см. [аудит](../audits/capability-inventory-2026-10-29.md).
-`universal mutations: public Office routing` сейчас останавливается на patch
-`note: review.md`: после двух подтверждённых целей note получает `Unknown`, потому
-что exact after-state этой цели не дошёл до общего пакетного результата. Owner —
-Office Markdown source mutation. Проверить публикацию exact impact/after у
-`MarkdownDocumentToolHandler` и затем обновить fixture; не ослаблять правило
-`core.patch`, запрещающее выдавать успех без after-state.
+Повторная проверка `universal mutations: public Office routing` 2026-10-30 проходит,
+включая exact after-state `note: review.md`. Прежний отмеченный здесь отказ не
+воспроизводится; правило отказа от успеха без after-state отдельно проверяется
+`universal mutations: changed target requires exact after-state`.
 `settings: built-in guidance uses runtime IDs and result v1` отдельно падает на
 устаревшем ожидании HTML skill `exact decoded strings`; сверить fixture с текущим
 контрактом HTML source, не добавляя фразу ради теста.

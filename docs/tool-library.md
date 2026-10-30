@@ -6,7 +6,7 @@ skill loading and resource find/search/outline publish no E reference. Other rea
 and mutations default to Eligible. Only a terminal runtime commit may issue E;
 a tool/model never supplies it. See [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
 
-Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+Текущий контракт Core, patch и имён: [Text mutations](text-mutations.md).
 Текущий [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
@@ -65,9 +65,15 @@ Mode, read-only и доступность owner фильтруют этот сп
 подмешиваются в начальную схему. Остальные descriptors подключаются через существующий
 exact admission `core.tools.read` или зависимости выбранного skill.
 
-Контракт текста, hunks, upsert, recovery и имён задаёт
+Контракт текста, patch, upsert, recovery и имён задаёт
 [Text mutations](text-mutations.md). Профиль сохраняет exact policy/binding и порядок
-каталога. Смена профиля явно сбрасывает несовместимые admissions; старые вызовы
+каталога. Единственная schema `core.patch` — `targets[].edits[]` с `old/new`
+и необязательными `anchors_before/anchors_after`; contract version 3, binding
+`.resource.v5`. Private owner commands не публикуются второй модельной schema.
+Результат использует прежний `rnassistant.patch` и `preparation/execution`,
+per-target statuses и bounded diagnostic `edit/code/nextAction/candidates`;
+Unknown требует `verify_effect`, без автоматического повтора.
+Смена профиля явно сбрасывает несовместимые admissions; старые вызовы
 не переименовываются и не исполняются через aliases. Explicit AllDirect остаётся
 только композиционным выбором для диагностики, не production default.
 

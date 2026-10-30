@@ -52,7 +52,7 @@ def save(markdown, title="Shared plan"):
 
 
 def patch(title, before, after):
-    return [{"target": "plan: " + title, "edits": [{"before": before, "after": after}]}]
+    return [{"target": "plan: " + title, "edits": [{"old": before, "new": after}]}]
 
 
 def run_case(root, role):

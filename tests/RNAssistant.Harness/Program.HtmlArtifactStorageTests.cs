@@ -272,7 +272,7 @@ namespace RNAssistant.Harness
                 var executor = new OfficeToolExecutor(adapter, new VbaJournalStore(paths), new SkillStore(paths), new ToolStore(paths));
                 var session = NewSession(adapter);
                 var runtime = executor.CreateNativeRuntime(session, OfficeToolCatalog.ForHost(adapter.HostName)
-                    .Concat(executor.GetControllerTools()).ToList(), new AppSettings(), "agent", false, manualRun: true);
+                    .Concat(executor.GetControllerTools()).ToList(), new AppSettings { AutoConfirmToolActions = true }, "agent", false, manualRun: true);
                 const string prefix = "<!doctype html><html><body>before";
                 var source = prefix + new string('x', 32000 - prefix.Length - "</body>".Length) + "</body></html>\r\n";
                 var expectedReferences = new Dictionary<string, string[]>();
@@ -287,8 +287,8 @@ namespace RNAssistant.Harness
                     AssertTrue(expectedReferences[message.Id].Length > 0, "runtime supplies exact resource links");
                     session.Messages.Add(message);
                 };
-                recordActivity(ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.WriteFileToolId,
-                    new JObject { ["path"] = "index.html", ["content"] = source }));
+                recordActivity(ExecuteHtmlNative(runtime, "core.write",
+                    new JObject { ["target"] = "HTML file: index.html", ["content"] = source }));
                 var gateway = executor.ResourceGateway;
                 var member = gateway.List(session, "chat", ChatHtmlResourceCatalog.FileKind, null, 10).Items.Single();
                 var first = gateway.Read(session, new ResourceReadRequest { Reference = member.Reference,
@@ -302,9 +302,7 @@ namespace RNAssistant.Harness
                 var target = gateway.Find(session, "index.html", "html").Items.Single(item => item.Type == "HTML file").Target;
                 recordActivity(ExecuteHtmlNative(runtime, ResourceToolCatalog.ReadToolId,
                     new JObject { ["target"] = target, ["representation"] = "source" }));
-                recordActivity(ExecuteHtmlNative(runtime, HtmlWorkspaceToolCatalog.ApplyPatchToolId,
-                    new JObject { ["path"] = "index.html", ["patch"] = new JArray(new JObject {
-                        ["op"] = "replace", ["find"] = "before", ["text"] = "after!" }) }));
+                recordActivity(ExecuteHtmlNative(runtime, "core.patch", PatchArguments("HTML file: index.html", EditSet(Edit("before", "after!")))));
 
                 var store = new ChatStore(paths);
                 store.Save(session);

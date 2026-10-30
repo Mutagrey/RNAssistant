@@ -627,7 +627,7 @@ namespace RNAssistant.Office
 
         internal string ReadRetainedPatchSource(ResourceRef reference, int maximum, string workspaceId = null)
         { throw new InvalidOperationException("No retained source in bridge stub."); }
-        internal IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef reference, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch, string workspaceId = null)
+        internal IReadOnlyList<RNAssistant.Core.Tools.ResolvedTextEdit> ReadRetainedPatchFragments(ResourceRef reference, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch, string workspaceId = null)
         { throw new InvalidOperationException("No retained source in bridge stub."); }
 
         public RunChangesDto ReadRunChanges(RunChangesRequest request)

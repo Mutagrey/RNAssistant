@@ -84,8 +84,8 @@ namespace RNAssistant.Harness
                     new[] { "app.js", "let count = 0;\ndocument.getElementById('counter').onclick = function () { count += 1; this.textContent = count; };\n" }
                 };
                 foreach (var file in vbaOnly || excelReport ? new string[0][] : original)
-                    AssertTrue(executor.ExecuteManual(Command(HtmlWorkspaceToolCatalog.WriteFileToolId,
-                        "path", file[0], "content", file[1]), tools, settings, false, false, session).Success, "seed HTML");
+                    AssertTrue(executor.ExecuteManual(Command("core.write",
+                        "target", "HTML file: " + file[0], "content", file[1]), tools, settings, false, false, session).Success, "seed HTML");
                 const string vba = "Option Explicit\r\nPublic Function ReportTitle() As String\r\n    ReportTitle = \"Old report\"\r\nEnd Function\r\n";
                 if (!excelReport) adapter.SetVbaModule("ReportModule", vba, "StdModule");
                 var task = "В существующем HTML-проекте измени заголовок Old report на Sales report, цвет текста #112233 на #225588, " +
@@ -118,8 +118,7 @@ namespace RNAssistant.Harness
                 var script = new Queue<string>(new[] {
                     LoadSkillResponse("skills.vba.code.editing"),
                     call(ResourceToolCatalog.ReadToolId, new JObject { ["target"] = "VBA module: ReportModule", ["representation"] = "source" }),
-                    call("vba.module.patch", new JObject { ["moduleName"] = "ReportModule", ["patch"] = new JArray(
-                        new JObject { ["find"] = "ReportTitle = \"Old report\"", ["text"] = "ReportTitle = \"Sales report\"" }) }),
+                    call("core.patch", PatchArguments("VBA module: ReportModule", EditSet(Edit("ReportTitle = \"Old report\"", "ReportTitle = \"Sales report\"")))),
                     null // Generate finish after terminal call IDs are assigned.
                 });
                 if (report != null) script = ExcelReportWorkflowFixture.Script();
@@ -153,7 +152,7 @@ namespace RNAssistant.Harness
                             scriptedResponse = report == null
                                 ? ScriptedVerifiedFinish(session, "The module patch completed with read-back.",
                                     "Исходник исправлен и проверен; выполнение VBA не проверялось.",
-                                    "VBA module source was updated.", "vba.module.patch")
+                                    "VBA module source was updated.", "core.patch")
                                 : ScriptedVerifiedFinish(session, "The report steps and final read completed.",
                                     "Создан и проверен отчёт. Реальный Excel и внешний вид диаграммы не проверялись.",
                                     "The requested report was created and read back.",

@@ -130,7 +130,7 @@ def capture(output, role, case="read-patch"):
     def patch(before, after):
         return {"action": "execute", "reason": "Change synthetic source.", "message": "Patch.",
                 "tool_calls": [{"name": "core.patch", "arguments": {"targets": [{"target": "sample.txt",
-                            "edits": [{"before": before, "after": after}]}]}}]}
+                            "edits": [{"old": before, "new": after}]}]}}]}
 
     done = {"finish_from_request": True}
     scripts = {

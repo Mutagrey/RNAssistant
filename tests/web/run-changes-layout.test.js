@@ -135,9 +135,12 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
       const output = document.getElementById('output'); output.textContent = '';
       RNAssistantRunChanges.renderInline(output, {complete:true, items: [
         {title:'a.js',scope:'Текст',targetStatus:'Changed',availability:'available',before:'old\n',after:'saved\n'},
-        {title:'b.bas',scope:'Текст',targetStatus:'Unknown',availability:'unverified',before:'old\n',intendedAfter:'planned\n'},
+        {title:'b.bas',scope:'Текст',targetStatus:'Unknown',availability:'unverified',before:'old\n',intendedAfter:'planned\n',
+          diagnostic:{code:'owner_error',message:'Read-back unavailable.',nextAction:'verify_effect'}},
         {title:'c.md',scope:'Текст',targetStatus:'NotStarted',availability:'not_started'},
-        {title:'d.txt',scope:'Текст',targetStatus:'Rejected',availability:'rejected'}
+        {title:'d.txt',scope:'Текст',targetStatus:'Rejected',availability:'rejected',diagnostic:{edit:2,
+          code:'ambiguous_context',message:'Multiple locations.',nextAction:'refine_context',
+          candidates:[{line:3,context:'<img src=x onerror=alert(1)>'},{line:8,context:'same line'}]}}
       ]});
     });
     assert.equal(await page.locator('.inline-change').count(), 4);
@@ -149,6 +152,16 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
       'a rejected patch shows its status once');
     assert.match(await page.locator('.inline-change').nth(0).textContent(), /saved/);
     assert.match(await page.locator('.inline-change').nth(1).textContent(), /planned/);
+    assert.match(await page.locator('.inline-change').nth(1).textContent(), /Проверить фактический результат/);
+    assert.match(await page.locator('.inline-change').nth(3).textContent(), /Правка №2/);
+    assert.match(await page.locator('.inline-change').nth(3).textContent(), /Уточнить якоря/);
+    assert.match(await page.locator('.inline-change').nth(3).textContent(), /строка 3: <img/);
+    assert.match(await page.locator('.inline-change').nth(3).textContent(), /строка 8: same line/);
+    assert.equal(await page.locator('#output img, #output script').count(), 0, 'diagnostic candidates stay inert');
+    for (const width of [320, 740]) {
+      await page.setViewportSize({width, height:844});
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'diagnostics fit at ' + width);
+    }
     await page.evaluate(() => {
       const output = document.getElementById('output'); output.textContent = '';
       RNAssistantRunChanges.renderPrepared(output, {targets:[

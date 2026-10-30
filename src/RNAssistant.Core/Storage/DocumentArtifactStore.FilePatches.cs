@@ -15,7 +15,7 @@ namespace RNAssistant.Core.Storage
         public PayloadRef Source { get; set; }
         public PayloadRef Result { get; set; }
         public long SourceCharacters { get; set; }
-        [Newtonsoft.Json.JsonIgnore] public List<TextPatchEdit> Edits { get; set; }
+        [Newtonsoft.Json.JsonIgnore] public List<ResolvedTextEdit> Edits { get; set; }
     }
 
     public sealed partial class DocumentArtifactStore
@@ -30,7 +30,7 @@ namespace RNAssistant.Core.Storage
             var parsed = patch;
             try
             {
-                List<TextPatchEdit> edits;
+                List<ResolvedTextEdit> edits;
                 using (var raw = _payloads.OpenVerifiedRead(source.ToBlobReference(), long.MaxValue, token))
                 using (var reader = OpenFileText(raw, encoding))
                     edits = parsed.Resolve(reader, token).ToList();

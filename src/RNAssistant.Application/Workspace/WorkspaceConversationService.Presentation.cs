@@ -4,6 +4,9 @@ using System.IO;
 using System.Linq;
 using Newtonsoft.Json;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
+using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools.Contracts;
 using RNAssistant.Core.Storage;
 using RNAssistant.Core.Tools;
 using RNAssistant.Runtime.Contracts;
@@ -19,9 +22,23 @@ namespace RNAssistant.Runtime
         }
 
         private static WorkspaceFileActivity FileActivity(string toolId, string arguments,
-            ToolExecutionOutcome? outcome, ResourceEffect effect)
+            ToolExecutionOutcome? outcome, ResourceEffect effect, ToolResult result = null)
         {
             if (!ResourceMutationToolCatalog.Owns(toolId)) return null;
+            if (toolId == ResourceMutationToolCatalog.Patch && result != null)
+            {
+                PatchBatchResult batch = null;
+                try { batch = JsonConvert.DeserializeObject<PatchBatchResult>(result.DataJson ?? "null"); }
+                catch (JsonException) { }
+                if (batch?.Type == "rnassistant.patch")
+                    return new WorkspaceFileActivity { ToolId = toolId,
+                        Effect = effect?.Outcome ?? (outcome == ToolExecutionOutcome.Unknown ? ResourceEffectOutcome.UnknownAfterDispatch : ResourceEffectOutcome.FailedNoEffect),
+                        Diagnostic = batch.Diagnostic?.Bounded(),
+                        Targets = (batch.Targets ?? new List<PatchTargetResult>()).Take(ResourcePatch.MaximumTargets).Select((t, i) => new PatchTargetResult {
+                            Target = t.Target, Status = effect?.Targets?.ElementAtOrDefault(i)?.Status ?? t.Status,
+                            WriteStarted = effect?.Targets?.ElementAtOrDefault(i)?.WriteStarted ?? t.WriteStarted,
+                            Diagnostic = t.Diagnostic?.Bounded() }).ToArray() };
+            }
             var state = effect?.Outcome;
             if (outcome == ToolExecutionOutcome.Unknown) state = ResourceEffectOutcome.UnknownAfterDispatch;
             if (state != ResourceEffectOutcome.VerifiedChanged && state != ResourceEffectOutcome.Restored &&
@@ -90,7 +107,8 @@ namespace RNAssistant.Runtime
                     (item.ResourceEffect?.Outcome == ResourceEffectOutcome.VerifiedChanged ||
                      item.ResourceEffect?.Outcome == ResourceEffectOutcome.Restored ||
                      item.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch ||
-                     item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Unknown))
+                     item.ExecutionProgress?.Outcome == ToolExecutionOutcome.Unknown ||
+                     item.ToolName == ResourceMutationToolCatalog.Patch && item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
                 {
                     if (kept.Count < 32) kept.Add(item);
                     else presentation.FilesTruncated = true;
@@ -107,9 +125,12 @@ namespace RNAssistant.Runtime
                 foreach (var call in message.ToolCalls)
                     if (ids.Contains(call.Id) && !calls.ContainsKey(call.Id)) calls.Add(call.Id, call.ArgumentsJson);
             }
-            presentation.Files = kept.Select(item => FileActivity(item.ToolName,
-                calls.TryGetValue(item.ToolCallId, out var arguments) ? arguments : null,
-                item.ExecutionProgress?.Outcome, item.ResourceEffect)).Where(item => item != null).ToArray();
+            presentation.Files = kept.Select(item => {
+                ToolResultWireReadResult wire; string error;
+                var result = ToolResultHistoryReader.TryRead(item, out wire, out error) ? wire.Result : null;
+                return FileActivity(item.ToolName, calls.TryGetValue(item.ToolCallId, out var arguments) ? arguments : null,
+                    item.ExecutionProgress?.Outcome, item.ResourceEffect, result);
+            }).Where(item => item != null).ToArray();
             if (verification != null)
                 presentation.LatestVerification = VerificationSummary(_webSnapshots, workspace, session.Id,
                     verification.RunId, verification.ToolCallId, verification.ResourceRefs);

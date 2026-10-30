@@ -91,6 +91,7 @@ namespace RNAssistant.Office.Services
                     if (patch == null) continue;
                     patchCalls.Add(terminal.ToolCallId);
                     result.EvidenceFound = true; result.Complete &= patch.Complete;
+                    result.Diagnostic = result.Diagnostic ?? patch.Diagnostic;
                     foreach (var item in patch.Items)
                     {
                         if (result.Items.Count >= MaximumItems) { result.Complete = false; break; }

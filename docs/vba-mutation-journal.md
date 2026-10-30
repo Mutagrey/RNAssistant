@@ -131,17 +131,21 @@ component, discover its retained backup and use that target. UserForms remain Co
 | VBE-comparable fingerprint | `NormalizeVbeComparableCode` / `VbeComparableCodeSha256`: existing token-based comparison; quoted strings/bracketed names and apostrophe/Rem comment text remain significant; not replacement source |
 | Package-comparable fingerprint | `PackageComparableCodeSha256`: package normalization followed by VBE-comparable normalization |
 
-The public `core.patch` accepts only `{ "patch": "..." }`, with one or more
-`*** Update Target:` sections. See [Text mutations](text-mutations.md) for the
-complete grammar, EOF rules and package outcomes. Ordered `@@ <complete line>`
-anchors may be distant; they are text, never inferred procedure scopes. All hunks
-address the original source, and ambiguity/overlap rejects preparation entirely.
-Live VBA matching tolerates identifier case and token spacing but preserves quoted
-strings, bracketed names, apostrophe/Rem comments. Snapshot revision/hash checks
-remain strict. Normalized fingerprints never become replacement source.
+The public `core.patch` accepts only `targets[] → edits[] → old, new,
+anchors_before?, anchors_after?`. See [Text mutations](text-mutations.md) for
+literal EOL, insertion/deletion and package outcomes. `old` is a nonempty observed
+substring; insertion replaces an existing fragment with itself plus added text.
+Ordered full-line anchors may be distant or repeated; they never imply procedure
+scopes. All edits address one original source; ambiguity/overlap rejects preparation.
+Exact matching wins. Full-line VBA canonical matching tolerates identifier case and
+token spacing while preserving quoted strings, bracketed names and comments;
+substrings and EOL stay exact. Snapshot revision/hash checks remain strict.
+Normalized fingerprints never become replacement source. Delivered module-line
+excerpts must also remain Current in the existing resource authority: equal excerpt
+bytes do not authorize a patch after the module revision changes.
 
 Whole overwrite needs complete delivered source; patch can use relevant delivered
-excerpts if every changed full line is inside their coverage. Internal reads do not
+excerpts if every changed fragment and anchor is inside their coverage. Internal reads do not
 grant model observation. Every target prepares before any write, then every target
 is checked again immediately before execution. An earlier module write may alter
 later modules: stop and report partial effects, never replay or roll back the batch.

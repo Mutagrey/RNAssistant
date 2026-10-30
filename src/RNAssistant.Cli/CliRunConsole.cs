@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
+using RNAssistant.Core.Tools;
 using RNAssistant.Runtime;
 using RNAssistant.Runtime.Contracts;
 
@@ -98,15 +99,30 @@ namespace RNAssistant.Cli
 
         private static void File(WorkspaceFileActivity file)
         {
+            Diagnostic(file.Diagnostic);
             if (file.Targets != null)
             {
                 foreach (var target in file.Targets)
+                {
                     Console.WriteLine("  " + target.Status + ": " + Text(target.Target, 512) + "; write started: " + target.WriteStarted);
+                    Diagnostic(target.Diagnostic);
+                }
                 return;
             }
             var state = file.Effect == ResourceEffectOutcome.UnknownAfterDispatch ? "UNKNOWN possible effect" : "Verified change";
             Console.WriteLine("  " + state + ": " + Text(file.ToolId) + " " + Text(file.Path ?? "[target unavailable]", 1024) +
                 (file.TargetPath == null ? "" : " -> " + Text(file.TargetPath, 1024)));
+        }
+
+        private static void Diagnostic(PatchDiagnostic value)
+        {
+            if (value == null) return;
+            var diagnostic = value.Bounded();
+            Console.WriteLine("    " + (diagnostic.Edit.HasValue ? "Edit " + diagnostic.Edit + ": " : "") +
+                Text(diagnostic.Code, 80) + " — " + Text(diagnostic.Message, 500));
+            Console.WriteLine("    Next: " + Text(diagnostic.NextAction, 80));
+            foreach (var candidate in diagnostic.Candidates ?? new PatchCandidate[0])
+                Console.WriteLine("    Candidate line " + candidate.Line + ": " + Text(candidate.Context, 160));
         }
 
         private static void Verification(WorkspaceVerificationSummary verification)

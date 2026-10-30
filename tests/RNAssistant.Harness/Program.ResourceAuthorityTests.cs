@@ -2973,7 +2973,7 @@ namespace RNAssistant.Harness
                         new ToolResultMaterialization(RNAssistant.Core.Tools.Contracts.ToolResult.Error("Patch rejected.", new JObject {
                             ["type"] = "rnassistant.patch", ["phase"] = "preparation", ["writeStarted"] = false,
                             ["targets"] = new JArray(new JObject { ["target"] = "VBA module: Module1", ["status"] = "Rejected",
-                                ["diagnostic"] = new JObject { ["code"] = "ambiguous_context", ["hunk"] = 2,
+                                ["diagnostic"] = new JObject { ["code"] = "ambiguous_context", ["edit"] = 2,
                                     ["candidates"] = new JArray(new JObject { ["line"] = 12, ["context"] = "old" }),
                                     ["nextAction"] = "refine_context", ["message"] = diagnostic } }) }.ToString())), int.MaxValue, role);
                     failure.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(failure.Content, "application/json"));
@@ -2992,7 +2992,7 @@ namespace RNAssistant.Harness
                     AssertEqual("error", (string)frameData["status"], "actual failure status survives projection");
                     var actualDiagnostic = frameData["data"]["targets"][0]["diagnostic"];
                     AssertEqual("ambiguous_context", (string)actualDiagnostic["code"], "patch recovery remains typed in " + role);
-                    AssertEqual(2, (int)actualDiagnostic["hunk"], "failure keeps its target-local hunk");
+                    AssertEqual(2, (int)actualDiagnostic["edit"], "failure keeps its target-local hunk");
                     AssertEqual(12, (int)actualDiagnostic["candidates"][0]["line"], "candidate line survives folding");
                     AssertEqual(diagnostic, (string)actualDiagnostic["message"], "bounded archived diagnostic is delivered completely");
                     RuntimeThrows<PromptBudgetExceededException>(() => new ModelContextCompiler(payloads, projection: ModelToolResultProjection.Instance).Compile(

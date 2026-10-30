@@ -18,7 +18,7 @@ def check(root, capture=None):
     package = state / "skills" / "workspace" / "fixture"
     package.mkdir(parents=True)
     manifest = {"formatVersion": 1, "packageId": "fixture.report", "requiredTools": [
-        {"id": name, "contractVersion": "2" if name == "core.patch" else "1"}
+        {"id": name, "contractVersion": "3" if name == "core.patch" else "1"}
         for name in ("core.read", "core.patch", "core.write")],
         "optionalTools": [{"id": "fixture.absent", "contractVersion": "1", "fallback": "Report missing validator; use exact source readback."}]}
     marker = "EXACT_PUBLISHED_PROCEDURE: read, update unique total, create report, read both final files."
@@ -75,7 +75,7 @@ def check(root, capture=None):
             call("core.read", type="skill", target="fixture.report"),
             call("core.skills.load", id="fixture.report"),
             call("core.read", target="source.txt"),
-            call("core.patch", targets=[{'target': 'source.txt', 'edits': [{'before': 'total=12', 'after': 'total=13'}]}]),
+            call("core.patch", targets=[{'target': 'source.txt', 'edits': [{'old': 'total=12', 'new': 'total=13'}]}]),
             call("core.read", target="source.txt"),
             call("core.write", target="report.txt", content="Verified total: 13\n"),
             call("core.read", target="report.txt"), DONE])
@@ -101,7 +101,7 @@ def check(root, capture=None):
         assert len(requests) == prior + 1 and selected(requests[-1]) == ["SELECTED_SKILL fixture.report\n" + marker], "Follow-up must retain selection without a load call"
         assert "Verified total: 13" in json.dumps(requests[-1]), "Current report evidence survives new input and process restart"
         assert direct["ToolCounts"]["ReadOk"] == 0, direct
-        responses.extend([call("core.patch", targets=[{'target': 'source.txt', 'edits': [{'before': 'total=13', 'after': 'total=14'}]}]), DONE])
+        responses.extend([call("core.patch", targets=[{'target': 'source.txt', 'edits': [{'old': 'total=13', 'new': 'total=14'}]}]), DONE])
         guarded = cli("run", "--session", final["SessionId"], "--message", "Check the follow-up write guard.", "--auto-confirm", "on", code=5)
         assert (workspace / "source.txt").read_text() == "total=13\n", "Carried skill must not inherit the prior turn's write guard"
         assert guarded["ToolCounts"]["WriteOk"] == 0 and "observation_required" in json.dumps(requests[-1]), guarded

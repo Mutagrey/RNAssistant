@@ -112,7 +112,7 @@ def run_case(root, recover):
                         assert read_progress(request)["remainingCompleteFileReads"] == 1
                         assert "app.js" in read_progress(request)["expectedFilesWithoutCurrentRead"]
                         assert "STRUCTURED_CONTEXT_CLAIMS" in content
-                        response = call("core.patch", targets=[{'target': 'app.js', 'edits': [{'before': "const marker = 'OLD_MARKER';", 'after': "const marker = 'UNSAFE';"}]}])
+                        response = call("core.patch", targets=[{'target': 'app.js', 'edits': [{'old': "const marker = 'OLD_MARKER';", 'new': "const marker = 'UNSAFE';"}]}])
                     elif phase["after"] == 2:
                         assert (workspace / "app.js").read_text() == EXTERNAL, "Stale observation overwrote the user's edit"
                         assert "source_changed" in content
@@ -123,7 +123,7 @@ def run_case(root, recover):
                             "The external edit requires review before I can finish.")
                     elif phase["after"] == 3:
                         assert "EXTERNAL_MARKER" in content
-                        response = call("core.patch", targets=[{'target': 'app.js', 'edits': [{'before': "const marker = 'EXTERNAL_MARKER';", 'after': "const marker = 'VERIFIED_MARKER';"}]}])
+                        response = call("core.patch", targets=[{'target': 'app.js', 'edits': [{'old': "const marker = 'EXTERNAL_MARKER';", 'new': "const marker = 'VERIFIED_MARKER';"}]}])
                     elif phase["after"] == 4:
                         assert read_progress(request)["remainingCompleteFileReads"] == 1
                         response = call("core.read", target="app.js")

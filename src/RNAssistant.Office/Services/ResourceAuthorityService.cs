@@ -166,7 +166,8 @@ namespace RNAssistant.Office.Services
                 return Scope(session, true);
             if (address?.Provider == "context" || address?.Provider == "state")
             {
-                if (address.Segments.Count != 3 || address.Segments[0] != "conversation" && address.Segments[0] != "document")
+                var htmlMember = address.Provider == "state" && HtmlWorkspaceIdentity.IsMemberIdentity(reference.Identity);
+                if (address.Segments.Count != 3 && !htmlMember || address.Segments[0] != "conversation" && address.Segments[0] != "document")
                     throw new ResourceRequestException("The embedded authority scope is invalid.", "RESOURCE_ACCESS_DENIED", false);
                 var scope = Scope(session, address.Segments[0] == "document");
                 if (address.Segments[1] != scope.Id)

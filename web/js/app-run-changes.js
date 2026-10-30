@@ -29,10 +29,21 @@
       item.availability === "copied" ? "Создана точная копия" :
       item.availability === "too_large" ? "Исходник превышает лимит сравнения" : "Исходник для сравнения недоступен");
   }
+  function diagnostic(parent, value) {
+    if (!value) return;
+    var label = value.edit ? "Правка №" + value.edit + " · " : "";
+    parent.appendChild(element("p", "run-changes-caption", label + String(value.message || value.code || "").slice(0, 501)));
+    var next = { fix_patch: "Исправить правку", read_target: "Перечитать исходник", refine_context: "Уточнить якоря",
+      verify_effect: "Проверить фактический результат перед следующей записью", inspect_owner_error: "Проверить ошибку источника" }[value.nextAction];
+    if (next) parent.appendChild(element("p", "run-changes-caption", next));
+    (value.candidates || []).slice(0, 5).forEach(function (candidate) {
+      parent.appendChild(element("p", "run-changes-caption", "Возможное место · строка " + candidate.line + ": " + String(candidate.context || "").slice(0, 161)));
+    });
+  }
   function render(parent, result) {
     parent.textContent = "";
     var items = result.items || [];
-    if (!items.length && result.complete) return;
+    if (!items.length && result.complete && !result.diagnostic) return;
     var card = element("details", "run-changes");
     var summary = element("summary", "run-changes-summary");
     summary.appendChild(element("span", "", "Сравнения: " + items.length));
@@ -54,6 +65,7 @@
     if (compared) counts(summary, added, removed);
     if (compared && planned) summary.appendChild(element("span", "run-changes-caption", "фактическое сравнение"));
     card.appendChild(summary);
+    diagnostic(card, result.diagnostic);
     if (unverified) {
       var plannedSummary = element("div", "run-changes-caption run-changes-planned", "Предварительное сравнение");
       if (planned) { plannedSummary.appendChild(document.createTextNode(": ")); counts(plannedSummary, plannedAdded, plannedRemoved); }
@@ -78,6 +90,7 @@
       var body = element("div", "run-change-diff"); body.tabIndex = 0;
       body.setAttribute("aria-label", "Сравнение: " + (title || "исходник"));
       row.appendChild(body);
+      diagnostic(body, item.diagnostic);
       var rendered = false;
       row.addEventListener("toggle", function () {
         if (!row.open || rendered) return;
@@ -120,12 +133,14 @@
     parent.appendChild(card);
   }
   function renderInline(parent, result) {
+    diagnostic(parent, result.diagnostic);
     (result.items || []).forEach(function (item) {
       var block = element("div", "inline-change");
       var title = item.beforeTitle && item.beforeTitle !== item.title ? item.beforeTitle + " → " + item.title : item.title;
       var header = element("div", "inline-change-header");
       header.appendChild(element("span", "run-change-title", title || "Исходник"));
       block.appendChild(header);
+      diagnostic(block, item.diagnostic);
       if (item.targetStatus && item.targetStatus !== "Changed" && item.targetStatus !== "Unchanged")
         block.appendChild(element("p", "run-changes-caption", targetStatus(item)));
       var preview = item.availability === "unverified" && typeof item.before === "string" && typeof item.intendedAfter === "string";

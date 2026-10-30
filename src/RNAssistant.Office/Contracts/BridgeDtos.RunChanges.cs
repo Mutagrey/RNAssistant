@@ -16,6 +16,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
         [JsonProperty("evidenceFound")] public bool EvidenceFound { get; set; }
         [JsonProperty("complete")] public bool Complete { get; set; } = true;
+        [JsonProperty("diagnostic", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.Tools.PatchDiagnostic Diagnostic { get; set; }
         [JsonProperty("items")] public List<RunTextChangeDto> Items { get; set; } = new List<RunTextChangeDto>();
     }
 
@@ -35,6 +36,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("intendedAfterExists")] public bool? IntendedAfterExists { get; set; }
         [JsonProperty("availability")] public string Availability { get; set; }
         [JsonProperty("targetStatus", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.Models.ResourceTargetStatus? TargetStatus { get; set; }
+        [JsonProperty("diagnostic", NullValueHandling = NullValueHandling.Ignore)] public RNAssistant.Core.Tools.PatchDiagnostic Diagnostic { get; set; }
         [JsonProperty("hunks", NullValueHandling = NullValueHandling.Ignore)]
         public List<RunTextHunkDto> Hunks { get; set; }
     }

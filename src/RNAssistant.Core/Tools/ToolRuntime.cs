@@ -92,7 +92,7 @@ namespace RNAssistant.Core.Tools
             }
             catch (Exception ex) when (ex is JsonException || ex is FormatException || ex is OverflowException || ex is InvalidCastException)
             {
-                return Reject(context, "invalid_arguments", ex.Message);
+                return Reject(context, "invalid_arguments", context.Call.Name == ResourceMutationToolCatalog.Patch ? "Invalid patch JSON or argument value." : ex.Message);
             }
 
             var planSourceTool = ConversationRunPolicy.IsPlanSourceTool(context.Call.Name, tool.Registration.Binding) &&
@@ -233,7 +233,7 @@ namespace RNAssistant.Core.Tools
                         var child = new ToolExecutionContext(context.Call, context.Policy, context.RunId, context.TurnId,
                             context.StepId, context.StartedUtc, context.IsConfirmed, context.RemainingToolSteps,
                             state, context.ExpectedContentSha256, context.ExpectedTargetAbsent, index, context.ExpectedArtifactId);
-                        return ExecuteHandlerAsync(child, policy, owner, targetArguments, state, token, handlerContext.MarkDispatchPossible);
+                        return ExecuteHandlerAsync(child, policy, owner, targetArguments, state, token, () => handlerContext.MarkTargetDispatchPossible(index));
                     });
             ToolExecutionRecord terminal;
             try
@@ -361,6 +361,11 @@ namespace RNAssistant.Core.Tools
 
         private static ToolExecutionRecord Reject(ToolExecutionContext context, string code, string message)
         {
+            if (context.Call.Name == ResourceMutationToolCatalog.Patch && (code == "invalid_arguments" || code == "invalid_edit"))
+            {
+                var rejection = ResourcePatchBatchHandler.InvalidArguments(PatchDiagnostic.Create("invalid_edit", message));
+                return Record(context, ToolExecutionOutcome.Error, rejection.Result, false, ToolEffectEvidence.None, recovery: rejection.Recovery);
+            }
             return Record(context, ToolExecutionOutcome.Error, ToolResult.Error(message, Code(code)), false,
                 ToolEffectEvidence.None, recovery: RejectionRecovery(code));
         }

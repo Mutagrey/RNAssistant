@@ -1,6 +1,6 @@
 # Skill Library and package revisions
 
-Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
+Текущий контракт Core, patch и имён: [Text mutations](text-mutations.md).
 
 ## Status and boundary
 
@@ -31,7 +31,9 @@ is not an alias: stale selections must explicitly load the current package;
 user history and custom package files remain untouched. Common patch syntax and
 boundary rules belong to the always-present Core schema. Workspace/VBA guidance
 retains source observation and domain-specific behavior without duplicating the
-whole patch contract. Counts and remaining cleanup: [inventory](audits/capability-inventory-2026-10-29.md).
+whole patch contract. Built-in dependencies require `core.patch` contract version 3;
+its only edit fields are `old/new/anchors_before/anchors_after`. Stale custom package
+pins require an explicit update; their files and history are not rewritten. Counts and remaining cleanup: [inventory](audits/capability-inventory-2026-10-29.md).
 
 Built-in skills are supplied by the application and host adapter. Custom skills are
 stored under `%AppData%/RNAssistant/skills/<host>/<skill>/` as one `SKILL.md` plus

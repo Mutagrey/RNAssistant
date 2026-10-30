@@ -114,8 +114,7 @@ namespace RNAssistant.Office.Tools
                                 return new ToolPreparationResult(result.Result, recovery: new ToolRecoveryContract(
                                     ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.RefreshRequired,
                                     selected.Reference.Identity, ResourceRepresentations.Text, target,
-                                    readScope: TextPatch.FromArguments(args).RequiresWholeSource
-                                        ? ToolRecoveryReadScope.Whole : ToolRecoveryReadScope.RelevantLines), patchDiagnostic: result.PatchDiagnostic);
+                                    readScope: ToolRecoveryReadScope.RelevantLines), patchDiagnostic: result.PatchDiagnostic);
                             return result;
                         }
                         prepared.OwnerState = result.PreparedStateJson;
@@ -251,11 +250,13 @@ namespace RNAssistant.Office.Tools
 
         private void RequireObservation(ToolHandlerContext context, ResourceReadResult source, bool complete)
         {
-            if (_id == ResourceMutationToolCatalog.Patch && TextPatch.FromArguments(context.Arguments).RequiresWholeSource) complete = true;
             var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
             if (accepted == null) return; // Manual editor has its explicit owner guard.
-            var evidence = (accepted.ResourceEvidence ?? new List<ResourceEvidence>())
-                .Where(e => e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision).ToArray();
+            var delivered = accepted.ResourceEvidence ?? new List<ResourceEvidence>();
+            if (_id == ResourceMutationToolCatalog.Patch && delivered.Any(e => e.Resource.Uri == source.Resource.Reference.Uri) &&
+                !delivered.Any(e => e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision))
+                throw new ResourceRequestException("Source changed after the delivered read.", "source_changed", false);
+            var evidence = delivered.Where(e => e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision).ToArray();
             if (complete)
             {
                 if (evidence.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)) return;
@@ -289,6 +290,9 @@ namespace RNAssistant.Office.Tools
                     address.Segments[0] != current.Segments[0] || address.Segments[1] != "module-lines" ||
                     VbaResourceProvider.ComponentIdentity(current.Segments[0], address.Segments[2]).Uri != current.Uri ||
                     !int.TryParse(address.Segments[3], out first) || !int.TryParse(address.Segments[4], out end)) continue;
+                if (_gateway.Authority == null || new EvidenceStateReducer().Reduce(evidence,
+                    _gateway.Authority.CaptureMany(new[] { evidence.ScopeId })).State != EvidenceState.Current)
+                    throw new ResourceRequestException("The delivered VBA excerpt is no longer current.", "source_changed", false);
                 var excerpt = _gateway.ReadObservedText(evidence);
                 if (excerpt == null) continue;
                 var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
@@ -483,7 +487,7 @@ namespace RNAssistant.Office.Tools
         private ToolRecoveryContract Recovery(ToolHandlerContext context, Exception error)
         {
             var code = (error as ResourceRequestException)?.ErrorCode;
-            if (code == "source_observation_required" || code == "observation_required" || code == "target_conflict" || code == "replacement_search_required")
+            if (code == "source_observation_required" || code == "observation_required" || code == "target_conflict" || code == "source_changed" || code == "replacement_search_required")
             {
                 try
                 {

@@ -22,13 +22,13 @@ namespace RNAssistant.Core.Tools
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchDiagnostic
     {
-        public int? Edit { get; set; }
-        public int? TargetIndex { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? Edit { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public int? TargetIndex { get; set; }
         public string Code { get; set; }
-        public string OwnerCode { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string OwnerCode { get; set; }
         public string Message { get; set; }
         public string NextAction { get; set; }
-        public IReadOnlyList<PatchCandidate> Candidates { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public IReadOnlyList<PatchCandidate> Candidates { get; set; }
         public static PatchDiagnostic From(Exception error)
         {
             var pattern = error as TextPatternException;
@@ -38,26 +38,45 @@ namespace RNAssistant.Core.Tools
             result.Edit = pattern?.Hunk;
             result.TargetIndex = pattern?.TargetIndex;
             result.Candidates = pattern?.Candidates;
-            return result;
+            return result.Bounded();
         }
         private sealed class OwnerFailure { public string Code { get; set; } }
-        public static PatchDiagnostic From(ToolResult result)
+        public static PatchDiagnostic From(ToolResult result, ToolRecoveryContract recovery = null)
         {
             string code = null;
             try { code = JsonConvert.DeserializeObject<OwnerFailure>(result.DataJson ?? "{}")?.Code; }
             catch (JsonException) { }
-            return Create(code, result.Message);
+            return Create(code, result.Message, recovery);
         }
-        public static PatchDiagnostic Create(string code, string message)
+        public static PatchDiagnostic Create(string code, string message, ToolRecoveryContract recovery = null)
         {
-            code = code?.ToLowerInvariant();
-            var reason = code == "context_not_found" || code == "ambiguous_context" || code == "invalid_edit" || code == "overlap" ? code :
-                code == "source_observation_required" || code == "observation_required" ? "observation_required" :
-                code == "target_conflict" || code == "resource_revision_changed" || code == "source_changed" ? "source_changed" : "owner_error";
+            var key = code?.ToLowerInvariant();
+            var reason = key == "context_not_found" || key == "ambiguous_context" || key == "invalid_edit" || key == "overlap" ? key :
+                key == "source_observation_required" || key == "observation_required" ? "observation_required" :
+                key == "target_conflict" || key == "resource_revision_changed" || key == "source_changed" ? "source_changed" : "owner_error";
             return new PatchDiagnostic { Code = reason, OwnerCode = reason == "owner_error" ? code : null,
-                Message = Limit(message, 500), NextAction = reason == "source_changed" || reason == "observation_required" ? "read_target" :
-                    reason == "ambiguous_context" || reason == "context_not_found" ? "refine_context" :
-                    reason == "invalid_edit" || reason == "overlap" ? "correct_patch" : "inspect_owner_error" };
+                Message = message, NextAction = reason == "source_changed" || reason == "observation_required" || reason == "context_not_found" ? "read_target" :
+                    reason == "ambiguous_context" ? "refine_context" : reason == "invalid_edit" || reason == "overlap" ? "fix_patch" :
+                    recovery?.RetryPolicy == ToolRetryPolicy.RefreshRequired ? "read_target" :
+                    recovery?.RetryPolicy == ToolRetryPolicy.Replan || recovery?.RetryPolicy == ToolRetryPolicy.ChangeRequired || key == "vba_code_invalid" ? "fix_patch" : "inspect_owner_error" }.Bounded();
+        }
+        public static PatchDiagnostic Unknown(ToolResult result = null)
+        {
+            var diagnostic = From(result ?? ToolResult.Unknown("Write may have occurred; read-back unconfirmed."));
+            diagnostic.Code = "owner_error";
+            diagnostic.Message = "Write may have occurred; read-back unconfirmed. Reconcile this target before another write.";
+            diagnostic.NextAction = "verify_effect";
+            return diagnostic;
+        }
+        public PatchDiagnostic Bounded()
+        {
+            var message = ModelResultProjection.SanitizeOperationalText(Message ?? "");
+            var newline = message.IndexOfAny(new[] { '\r', '\n' });
+            if (newline >= 0) message = message.Substring(0, newline);
+            return new PatchDiagnostic { Edit = Edit, TargetIndex = TargetIndex, Code = Limit(Code, 80), OwnerCode = Limit(OwnerCode, 100),
+                Message = Limit(message, 500), NextAction = Limit(NextAction, 80),
+                Candidates = Candidates?.Where(c => c != null && c.Line > 0).Take(5)
+                    .Select(c => new PatchCandidate { Line = c.Line, Context = Limit(c.Context, 160) }).ToArray() };
         }
         internal static string Limit(string value, int limit)
         {
@@ -73,8 +92,6 @@ namespace RNAssistant.Core.Tools
         public string After { get; set; }
         public bool Truncated { get; set; }
         public static List<PatchPreview> From(IEnumerable<ResolvedTextEdit> edits)
-        { return From(edits.Select(e => new TextPatchEdit { Before = e.Before, After = e.After })); }
-        public static List<PatchPreview> From(IEnumerable<TextPatchEdit> edits)
         {
             var result = new List<PatchPreview>();
             var remaining = 1200;
@@ -95,17 +112,17 @@ namespace RNAssistant.Core.Tools
         public ResourceRef Source { get; set; }
         public string SourceHash { get; set; }
         public ResourceIdentity EffectIdentity { get; set; }
-        public List<PatchPreview> Preview { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public List<PatchPreview> Preview { get; set; }
     }
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchTargetResult
     {
         public string Target { get; set; }
         public ResourceTargetStatus Status { get; set; }
-        public string CurrentTarget { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public string CurrentTarget { get; set; }
         public bool WriteStarted { get; set; }
-        public PatchDiagnostic Diagnostic { get; set; }
-        public List<PatchPreview> Preview { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PatchDiagnostic Diagnostic { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public List<PatchPreview> Preview { get; set; }
     }
     [JsonObject(NamingStrategyType = typeof(Newtonsoft.Json.Serialization.CamelCaseNamingStrategy))]
     public sealed class PatchBatchResult
@@ -114,7 +131,7 @@ namespace RNAssistant.Core.Tools
         public string Phase { get; set; }
         public bool WriteStarted { get; set; }
         public bool Partial { get; set; }
-        public PatchDiagnostic Diagnostic { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)] public PatchDiagnostic Diagnostic { get; set; }
         public List<PatchTargetResult> Targets { get; set; } = new List<PatchTargetResult>();
     }
     [JsonObject(MemberSerialization.OptIn)]
@@ -139,6 +156,11 @@ namespace RNAssistant.Core.Tools
             {
                 if (argumentsJson == null || argumentsJson.Length > MaximumPatchCharacters)
                     throw new TextPatternException("invalid_edit", "Patch arguments exceed 262144 characters or are absent.");
+                var args = Newtonsoft.Json.Linq.JObject.Parse(argumentsJson);
+                var schema = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch).ArgumentSchemaJson;
+                string schemaError;
+                if (!ToolSchemaSupport.ValidateArguments(args, Newtonsoft.Json.Linq.JObject.Parse(schema), false, out schemaError))
+                    throw new TextPatternException("invalid_edit", "Invalid core.patch: " + PatchDiagnostic.Limit(schemaError, 200));
                 var request = JsonConvert.DeserializeObject<ResourcePatchRequest>(argumentsJson,
                     new JsonSerializerSettings { MissingMemberHandling = MissingMemberHandling.Error });
                 if (request?.Targets == null || request.Targets.Count == 0 || request.Targets.Count > MaximumTargets)
@@ -152,24 +174,19 @@ namespace RNAssistant.Core.Tools
                 }
                 return request.Targets.AsReadOnly();
             }
-            catch (JsonException error) { throw new TextPatternException("invalid_edit", "Invalid structured patch: " + PatchDiagnostic.Limit(error.Message, 200)); }
+            catch (JsonException) { throw new TextPatternException("invalid_edit", "Invalid patch JSON; use targets with old/new edits."); }
         }
         public static ResourcePatchPreparedBatch ReadPreparation(string argumentsJson, string json)
         {
             var sections = Parse(argumentsJson);
             var prepared = JsonConvert.DeserializeObject<ResourcePatchPreparedBatch>(json ?? "null");
-            if (prepared?.Version != 2 || prepared.ArgumentsHash != TextPatternEngine.Sha256(argumentsJson) || prepared.Targets == null ||
+            if (prepared?.Version != 3 || prepared.ArgumentsHash != TextPatternEngine.Sha256(argumentsJson) || prepared.Targets == null ||
                 prepared.Targets.Count != sections.Count || prepared.Targets.Where((t, i) => t?.Target != sections[i].Target || t.Plan?.Source?.IsExact != true).Any())
                 throw new TextPatternException("invalid_edit", "Missing or incompatible prepared package; read sources and prepare a new call. History is retained.");
             return prepared;
         }
         public static void ValidateCall(string argumentsJson)
         {
-            var schema = ResourceMutationToolCatalog.GetTools().Single(t => t.Id == ResourceMutationToolCatalog.Patch).ArgumentSchemaJson;
-            var args = Newtonsoft.Json.Linq.JObject.Parse(argumentsJson);
-            string error;
-            if (!ToolSchemaSupport.ValidateArguments(args, Newtonsoft.Json.Linq.JObject.Parse(schema), false, out error))
-                throw new TextPatternException("invalid_edit", "Stored core.patch uses an incompatible contract. Start a new chat; stored history is preserved.");
             Parse(argumentsJson);
         }
         private static bool IsUri(string target) { return target.TrimStart().StartsWith("rna:", StringComparison.OrdinalIgnoreCase) || target.Contains("://"); }
@@ -190,7 +207,7 @@ namespace RNAssistant.Core.Tools
     }
     public sealed class ResourcePatchPreparedBatch
     {
-        [JsonProperty(Required = Required.Always)] public int Version { get; set; } = 2;
+        [JsonProperty(Required = Required.Always)] public int Version { get; set; } = 3;
         public string ArgumentsHash { get; set; }
         public List<ResourcePatchPreparedTarget> Targets { get; set; } = new List<ResourcePatchPreparedTarget>();
     }
@@ -218,8 +235,7 @@ namespace RNAssistant.Core.Tools
             IReadOnlyList<ResourcePatchSection> sections;
             try { sections = Sections(context); }
             catch (Exception ex) when (ex is TextPatternException || ex is ArgumentException)
-            { return new ToolPreparationResult(ToolResult.Error("core.patch was rejected before any write. No target in this call changed. " + ex.Message,
-                JsonConvert.SerializeObject(new PatchBatchResult { Phase = "preparation", Diagnostic = PatchDiagnostic.From(ex) }))); }
+            { return InvalidArguments(PatchDiagnostic.From(ex)); }
             var result = Result(sections, "preparation");
             var prepared = new ResourcePatchPreparedBatch { ArgumentsHash = TextPatternEngine.Sha256(context.Execution.Call.ArgumentsJson) };
             var identities = new HashSet<string>(StringComparer.Ordinal);
@@ -229,7 +245,7 @@ namespace RNAssistant.Core.Tools
                 try
                 {
                     next = await TargetHandler.PrepareAsync(TargetContext(context, sections[i], i), token).ConfigureAwait(false);
-                    if (next.Result.Status != ToolResultStatus.Ok) return RejectPreparation(result, i, next.PatchDiagnostic ?? PatchDiagnostic.From(next.Result), next.Recovery);
+                    if (next.Result.Status != ToolResultStatus.Ok) return RejectPreparation(result, i, next.PatchDiagnostic ?? PatchDiagnostic.From(next.Result, next.Recovery), next.Recovery);
                     if (next.PatchTarget?.Source?.IsExact != true) throw new InvalidOperationException("Owner did not pin a patch source.");
                     if (!identities.Add((next.PatchTarget.EffectIdentity ?? next.PatchTarget.Source.Identity).Uri))
                         return RejectPreparation(result, i, PatchDiagnostic.Create("invalid_edit", "Two target sections resolve to the same resource; combine their edits."));
@@ -245,16 +261,21 @@ namespace RNAssistant.Core.Tools
                 return RejectPreparation(result, 0, PatchDiagnostic.Create("invalid_edit", "Prepared package exceeds its bounded preview/state budget; split the task into smaller calls."));
             return new ToolPreparationResult(ToolResult.Ok("All targets prepared. Approve this package; writes are sequential, not transactional.", preview), state);
         }
+        internal static ToolPreparationResult InvalidArguments(PatchDiagnostic diagnostic)
+        {
+            diagnostic = diagnostic.Bounded();
+            return new ToolPreparationResult(ToolResult.Error("Patch rejected before writing. " + diagnostic.Message,
+                JsonConvert.SerializeObject(new PatchBatchResult { Phase = "preparation", Diagnostic = diagnostic })),
+                recovery: new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
+        }
         private static ToolPreparationResult RejectPreparation(PatchBatchResult result, int index, PatchDiagnostic diagnostic, ToolRecoveryContract recovery = null)
         {
             foreach (var target in result.Targets) { target.Status = ResourceTargetStatus.NotStarted; target.Preview = null; }
-            // A missing hunk after earlier edits is evidence to refresh this
-            // target, not an invitation to guess another patch from old lines.
-            if (diagnostic?.Code == "context_not_found") diagnostic.NextAction = "read_target";
+            diagnostic = diagnostic?.Bounded();
             if (diagnostic != null) diagnostic.TargetIndex = index + 1;
             result.Targets[index].Status = ResourceTargetStatus.Rejected; result.Targets[index].Diagnostic = diagnostic;
             return new ToolPreparationResult(ToolResult.Error(
-                "core.patch was rejected before any write. No target in this call changed. Inspect data.targets and the diagnostic; correct the patch from current source before trying again.",
+                "Patch rejected. No target in this call changed; follow the rejected target diagnostic.",
                 JsonConvert.SerializeObject(result)),
                 recovery: recovery ?? new ToolRecoveryContract(ToolFailureKind.RejectedNoEffect, ToolRetryPolicy.Replan));
         }
@@ -339,17 +360,17 @@ namespace RNAssistant.Core.Tools
                     if (status == ResourceTargetStatus.Rejected || status == ResourceTargetStatus.Unknown)
                     {
                         row.Diagnostic = status == ResourceTargetStatus.Unknown
-                            ? new PatchDiagnostic { Code = "effect_unknown", Message = "The target's exact after-state was not verified. Read this target before another edit; do not replay the package.", NextAction = "verify_unknown_effect" }
-                            : PatchDiagnostic.From(completed.Result ?? ToolResult.Error(completed.Message));
+                            ? PatchDiagnostic.Unknown(completed.Result)
+                            : PatchDiagnostic.From(completed.Result ?? ToolResult.Error(completed.Message), completed.Recovery);
                         break;
                     }
                 }
                 catch (Exception ex)
                 {
-                    row.Status = effects[i].Status = ResourceTargetStatus.Unknown;
-                    row.WriteStarted = effects[i].WriteStarted = true;
-                    context.MarkDispatchPossible();
-                    row.Diagnostic = new PatchDiagnostic { Code = "effect_unknown", Message = PatchDiagnostic.Limit(ex.Message, 500), NextAction = "verify_unknown_effect" };
+                    var dispatched = context.TargetMayHaveDispatched(i);
+                    row.Status = effects[i].Status = dispatched ? ResourceTargetStatus.Unknown : ResourceTargetStatus.Rejected;
+                    row.WriteStarted = effects[i].WriteStarted = dispatched;
+                    row.Diagnostic = dispatched ? PatchDiagnostic.Unknown() : PatchDiagnostic.From(ex);
                     break;
                 }
             }
@@ -360,7 +381,7 @@ namespace RNAssistant.Core.Tools
             result.Partial = !complete && changed;
             var json = JsonConvert.SerializeObject(result);
             var message = complete ? "Every patch target was verified." :
-                "core.patch stopped. Inspect data.targets: Changed/Unchanged are verified; Rejected/NotStarted were not applied; Unknown may have changed. Do not repeat the package; reconcile before another edit.";
+                "Patch stopped. Changed/Unchanged are verified; Rejected/NotStarted were not applied; reconcile Unknown before another write. Do not replay the package.";
             var toolResult = unknown ? ToolResult.Unknown(message, json, resources) : complete ? ToolResult.Ok(message, json, resources) : ToolResult.Error(message, json, resources);
             var effect = new ResourceEffect("patch_" + Guid.NewGuid().ToString("N"), ResourceMutationToolCatalog.Patch,
                 unknown ? ResourceEffectOutcome.UnknownAfterDispatch : changed ? ResourceEffectOutcome.VerifiedChanged : complete ? ResourceEffectOutcome.VerifiedNoChange : ResourceEffectOutcome.FailedNoEffect,

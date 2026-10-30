@@ -30,6 +30,20 @@ const root = new Element('div');
 context.window.RNAssistantRunChanges.renderInline(root, { complete: true, items: [{ title: 'a.js', availability: 'unverified', before: 'old', intendedAfter: 'new' }] });
 assert(root.children[0].children.some(node => node.textContent.includes('результат не подтверждён')));
 assert(!root.children.some(node => node.tagName === 'details'), 'no nested full diff component in a step');
+const diagnostics = new Element('div');
+context.window.RNAssistantRunChanges.renderInline(diagnostics, { complete: true, diagnostic: { code: 'invalid_edit', message: 'Invalid old', nextAction: 'fix_patch' }, items: [
+  { title: 'broken.js', targetStatus: 'Rejected', availability: 'rejected', diagnostic: { edit: 2, code: 'ambiguous_context', message: '<img src=x onerror=alert(1)>', nextAction: 'refine_context', candidates: Array.from({length: 9}, (_, i) => ({line: i + 1, context: '<script>' + 'x'.repeat(500)})) } },
+  { title: 'unknown.js', targetStatus: 'Unknown', availability: 'unverified', diagnostic: { nextAction: 'verify_effect', message: 'Read-back unconfirmed' } }
+] });
+const texts = node => [node.textContent || '', ...(node.children || []).flatMap(texts)];
+const diagnosticText = texts(diagnostics).join('\n');
+assert.match(diagnosticText, /Правка №2/);
+assert.match(diagnosticText, /Уточнить якоря/);
+assert.match(diagnosticText, /Проверить фактический результат/);
+assert.match(diagnosticText, /Исправить правку/);
+assert.equal(texts(diagnostics).filter(t => t.startsWith('Возможное место')).length, 5);
+assert(!diagnosticText.includes('x'.repeat(200)));
+assert(diagnosticText.includes('<img src=x onerror=alert(1)>'), 'diagnostic is inert text');
 const groups = context.window.RNAssistantLibraryGroups;
 const tree = groups.tree(['html.data.read', 'html.assets.import', 'core.write', 'excel.range.write'].map(Id => ({ value: { Id } })), 'tools', row => ({ kind: 'leaf', title: row.value.Id }), () => true);
 assert.equal(tree[0].title, 'Core');

@@ -513,7 +513,7 @@ Agent mode and document-independent local tools remain usable when that chat's O
 - Use `core.write` with a semantic `target` (for example `HTML file: index.html`) and complete `content` for HTML, CSS, and classic JavaScript files; runtime infers the kind and runs bounded static preflight automatically.
 - Use `html.data.write` with `name` and exact JSON text for static data sources opened by page code through `RN.resources.open(name)`.
 - Use `core.find` and `core.read` with their semantic targets to discover or inspect current HTML members; URIs, revisions, cursors, and guards remain runtime-owned.
-- Use `core.patch` for exact context hunks against the original snapshot to one current file; ambiguous anchors are rejected.
+- Use `core.patch` for exact old/new edits with optional ordered full-line anchors against one observed snapshot per target; ambiguous anchors are rejected.
 - Use `html.data.bind` with a semantic target returned by resource discovery. The runtime owns the canonical resource reference, view, and exact/head binding policy.
 - Use `html.data.refresh` to resolve current head-bound sources and `html.data.freeze` to pin one binding to an exact revision.
 - Use `resources.delete` with the exact discovered file or data-binding target. Deletions remain recoverable through workspace history.
@@ -597,18 +597,18 @@ Office VBA support requires Office setting `Trust access to the VBA project obje
 - VBA writes retain CAS-backed before/intended source, ownership and read-back checks. Existing-source mutations require delivered source evidence: a whole rewrite needs complete source; a patch can use its exact excerpt. Runtime pins current VBIDE state before confirmation and rechecks it before dispatch. A changed source requires a fresh read. VBE-equivalent case/spacing/terminal-line normalization is reported explicitly; an unresolved prepared mutation is never replayed automatically.
 - `Review in Chat` sends loaded VBA modules to chat for review and improvement suggestions.
 
-The model addresses a module by semantic `target`, for example `VBA module: Module1`. `core.write` accepts complete `content` and creates or updates it. `resources.move` accepts `target` and `destination` for a guarded rename without rewriting textual references. `core.patch` accepts exact hunks against one original source snapshot:
+The model addresses a module by semantic `target`, for example `VBA module: Module1`. `core.write` accepts complete `content` and creates or updates it. `resources.move` accepts `target` and `destination` for a guarded rename without rewriting textual references. `core.patch` accepts exact old/new edits against one original observed source snapshot per target:
 
 ```json
-{
-  "target": "VBA module: Module1",
-  "hunks": [
-    { "oldText": "Debug.Print 1", "newText": "Debug.Print 2", "startLine": 3 }
-  ]
-}
+{"targets":[{"target":"VBA module: Module1","edits":[{"old":"Debug.Print 1","new":"Debug.Print 2","anchors_before":["Sub Run()"]}]}]}
 ```
 
-Use adjacent context or 1-based UTF-16 coordinates to disambiguate repeated text. All hunks are resolved before writing; no fuzzy matching or shifted coordinates are used. Physical VBA line edits run bottom-up with journal and full read-back. See [Text mutations](docs/text-mutations.md) for insertion, deletion, counted replacement, encoding and per-owner limits.
+Optional `anchors_before`/`anchors_after` are ordered complete lines, with gaps and
+repeats allowed; they must identify one edit location. Empty `new` deletes; insertion
+retains `old` inside `new` plus added text and explicit newlines. All targets prepare
+before sequential writes. VBA uses the existing guarded whole-module writer,
+journal and full read-back. See [Text mutations](docs/text-mutations.md) for coverage,
+encoding and per-target outcomes.
 
 ## Tool Usage
 

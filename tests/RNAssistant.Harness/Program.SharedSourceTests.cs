@@ -71,7 +71,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Error, refused.Outcome, "invalid second target rejects entire package");
                 AssertTrue(!refused.MayHaveDispatched && session.Artifacts.Count == beforeCount, "no partial preparation effects");
                 var mixed = execute("core.patch", new Dictionary<string, object> { ["targets"] =
-                    PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("first", "bad"))), PatchSection("VBA module: Module1", EditSet(Insert("x\n", "end", null)))) });
+                    PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("first", "bad"))), PatchSection("VBA module: Module1", EditSet(Edit("End Sub", "End Sub\nx\n")))) });
                 AssertTrue(mixed.Outcome == ToolExecutionOutcome.Error && !mixed.MayHaveDispatched, "Plan mode rejects mixed owners before prepare");
                 var alias = execute("core.patch", new Dictionary<string, object> { ["targets"] =
                     PatchTargets(PatchSection("plan: Alpha", EditSet(Edit("first", "x"))), PatchSection("Plan: Alpha", EditSet(Edit("first", "y")))) });

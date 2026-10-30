@@ -45,10 +45,14 @@ and full dotted references, including Workspace/default prompts. The shared Skil
 Library projection is covered by `node tests/web/skills-contract.test.js`.
 
 `universal mutations:` covers the shared public source contract: original-snapshot
-structured substring edits, before/after context chains, overlapping/repeated text, UTF-8/BOM/CRLF/EOF and large streamed files,
-shared regex/literal matching, upsert and owner routing, delivered VBA excerpts,
-confirmation collisions, stale reads, copy/move/delete/restore, retained file diffs,
-and unknown effects. Package checks cover all-before-write preparation, duplicate aliases,
+old/new substring edits, ordered anchors_before/anchors_after chains, overlapping/repeated text, UTF-8/BOM/CRLF/EOF and large streamed files,
+strict schema/old-approval refusal, explicit literal EOLs, upsert and owner routing, delivered VBA excerpts,
+confirmation collisions, stale reads and identical VBA excerpts after authority drift,
+copy/move/delete/restore, retained file diffs,
+and unknown effects. `bounded public error results` checks real runtime schema
+refusals, diagnostic/edit/nextAction parity, bounded candidates, owner codes and
+redaction. `RNA_PATCH_RESULT_AUDIT=<directory>` on package/HTML diagnostic checks
+writes the actual serialized results for inspection. Package checks cover all-before-write preparation, duplicate aliases,
 confirmation drift, per-target rechecks, partial failure/unknown, unexecuted remainder,
 model projection, retained before/after and VBA/HTML/Markdown/authored-file routing.
 The sequential VBA case reproduces the photographed three-line change followed by
@@ -59,8 +63,9 @@ do not establish why the user's model chose to reverse an edit.
 `shared source:` checks Plan header/body edits, all-target preparation and mode
 policy, verified Plan after-source, editor revision guards, prompt/reference owner
 routing, retained diffs and reference BOM/CRLF preservation.
-`tests/web/run-changes-layout.test.js` checks per-target inline statuses and prepared
-preview; `run-view-state.test.js` checks typed preview delivery.
+`tests/web/run-changes-layout.test.js` checks per-target inline statuses, bounded
+inert diagnostics/candidates at narrow widths and prepared preview;
+`run-view-state.test.js` checks typed preview delivery.
 `tests/cli/structured_patch_model_compare.py` compares isolated manual/structured CLI
 builds against one pinned Ollama model using identical tasks and HTTP evidence.
 Pass `--manual`, `--structured`, `--manual-revision`, `--model`, `--output`.
@@ -69,6 +74,9 @@ It does not transform prompts or responses, and does not qualify native tool-cal
 or Windows/VBE. Model runs are separate from regression tests.
 `tests/cli/stabilization_smoke.py` covers multi-target confirmation across restart,
 bounded partial-source reads and intermediate reading before a dependent patch.
+`tests/cli/patch_diagnostics_smoke.py` checks actual next-request preflight diagnostics,
+ordered NotStarted/Rejected targets, correction, CLI text and retained presentation
+after approval/restart. Both scripts use synthetic HTTP and do not build automatically.
 `text search:`, `tool pack:`, `authored file:`, `run changes:`
 and `tool presentation:` cover their existing owners. No COM/VSTO runs are involved.
 `authored file:` additionally checks streamed preparation allocation for a 10 MiB
@@ -85,7 +93,7 @@ lines and unverified previews. `tests/cli/tool_name_migration_test.py` uses only
 skill packages to check explicit migration with preserved originals/body/BOM.
 See the current [source tool contract](../../docs/text-mutations.md).
 Workspace owner tests use the same typed structured edits as the public contract. The
-retired substring writer is removed; migrated checks retain large-file no-op,
+retired insert/context DTOs and duplicate resolved edit type are removed; migrated checks retain large-file no-op,
 stale/ambiguous context, invalid Unicode, post-dispatch unknown and read-back
 mismatch recovery, plus visual-selection edits against exact plugin source.
 

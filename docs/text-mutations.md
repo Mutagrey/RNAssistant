@@ -16,7 +16,7 @@ HTML data и plugin tools. Core не обходит read-only, режим и д�
 | Tool | Контракт |
 | --- | --- |
 | `core.write` | `target`, `content`; неявный upsert: отсутствующий ресурс создаётся, существующий получает полный новый текст |
-| `core.patch` | `targets: [{target, edits}]`; структурированные замены фрагментов и явные вставки |
+| `core.patch` | `targets: [{target, edits}]`; точные `old/new` и необязательные `anchors_before/anchors_after` |
 | `core.replace` | `target`, `query`, `replacement`, `expectedMatches`, опционально `mode`, `matchCase`; все совпадения проверенного поиска |
 | `resources.move` | `target`, `destination`; перенос или переименование внутри допустимого owner, без перезаписи назначения |
 | `resources.copy` | `target`, `destination`; независимая копия, без перезаписи назначения |
@@ -37,63 +37,69 @@ VBA-компонента (`StdModule`, `ClassModule`, `MSForm`); тип суще
 Workspace owner не переиспользует отсутствующий путь с прежней resource identity:
 для управляемого удаления сначала нужен явный restore. Никакого удаления истории нет.
 
-## Patch v2: структурированные цели и правки
+## Patch: old/new и упорядоченные якоря
 
 ```json
-{"targets":[{"target":"VBA module: Module1","edits":[{"before":"total + i","after":"total + i * 2","context":{"before":["Public Sub ProcessData()","    For i = 1 To 10"],"after":["    Next i","End Sub"]}}]}]}
+{"targets":[{"target":"VBA module: Module1","edits":[{"old":"total + i","new":"total + i * 2","anchors_before":["Public Sub ProcessData()","    For i = 1 To 10"],"anchors_after":["    Next i","End Sub"]}]}]}
 ```
 
-Одна цель использует тот же формат. Только существующие источники; создание и
-полная перезапись — `core.write`, lifecycle — `resources.*`. Старые `{patch}`,
-JSON-hunks, координаты, URI, revision/hash и исполнение прежних pending approvals
-явно отклоняются. История и пользовательские данные не удаляются.
+Единственный формат edit: обязательная непустая строка `old`, обязательная строка
+`new` и необязательные массивы `anchors_before`/`anchors_after`. Все объекты закрыты
+для неизвестных полей. Только существующие источники; создание, пустой файл и
+полная перезапись — `core.write`, массовая замена — `core.replace`, lifecycle —
+`resources.*`. Старые `before/after`, `context`, `op`, `text`, `position`, `anchor`,
+`{patch}`, JSON-hunks и координаты не принимаются. Несовместимые pending approvals
+отклоняются; история, исходники, evidence и пользовательские данные сохраняются.
 
-Две формы edit:
+`old` — точная подстрока или многострочный фрагмент фактически доставленного модели
+исходника S0. `new: ""` удаляет фрагмент. Для вставки `new` сохраняет опорный `old`
+и добавляет текст с явно указанными переводами строк. Например:
 
-- Замена: непустой `before`, обязательный `after` (пустой удаляет), `op` отсутствует
-  или равен `replace`. Допустимы точные подстроки и многострочные фрагменты.
-- Вставка: `op: "insert"`, непустой `text`, `position: before|after|start|end`.
-  Before/after требуют `anchor` — полную строку без EOL, включая пустую.
-  Start/end требуют полного доставленного источника и запрещают `anchor`.
+```json
+{"targets":[{"target":"src/app.js","edits":[{"old":"return x*2","new":"return x*3"}]}]}
+```
 
-Опциональные `context.before[]` и `context.after[]` — упорядоченные полные строки
-с допустимыми промежутками, строго до/после заменяемого фрагмента либо строки-якоря
-вставки. Это текстовые ограничения, не границы процедур/AST. Пустая строка не wildcard.
-Каждый используемый якорь и диапазон должны входить в доставленную coverage текущей
-версии. Уникальность проверяется в этой coverage: недоставленная часть файла не
-может ни разрешать правку, ни служить скрытым контекстом.
+```json
+{"targets":[{"target":"VBA module: Module1","edits":[{"old":"End Sub","new":"    Debug.Print total\nEnd Sub","anchors_before":["Sub ProcessData()"]}]}]}
+```
 
-Допустимо ровно одно различное место правки. Несколько цепочек якорей, ведущих
-к нему, не создают неоднозначности. Нет выбора первого/ближайшего совпадения или
-fuzzy fallback. Все edits разрешаются на одном оригинале; пересечения замен и
-совпадающие точки вставок отвергаются до записи. Последующий вызов использует
-подтверждённый after-source либо новое чтение.
+Второй пример допустим, только если условия определяют один `End Sub`.
+`Sub ProcessData()` не ограничивает поиск телом процедуры.
+
+Якоря — упорядоченные **полные логические строки без EOL**, строго до начала или
+после конца `old`. Возможны промежутки, повторения и пустые строки; это текстовые
+условия, не AST-границы. Без якорей достаточно уникального `old`. Каждый диапазон
+и используемый якорь должны входить в доставленную coverage текущей версии.
+Недоставленная часть источника не служит скрытым контекстом; внутренние guard reads
+и история tool calls не дают модели права на правку невидимого текста.
+
+Допустимо ровно одно различное место правки. Несколько цепочек якорей к нему
+допустимы; разные диапазоны дают `ambiguous_context`. Нет выбора первого/ближайшего
+совпадения, fuzzy/regex fallback или переноса на другую ревизию. Все edits разрешаются
+на одном S0; пересечения отвергаются до записи. Зависимость от результата другого
+edit требует отдельного вызова по доставленному verified after-source или новому чтению.
 
 Exact matching имеет приоритет. Для VBA при отсутствии exact совпадения сохраняется
-существующая канонизация полных строк с сохранением значимости literals/comments.
-Внутристрочные фрагменты не получают такой fallback. Канонизация не отменяет
-revision/authority guard: конкурентное изменение требует нового чтения.
+проверенная канонизация **полных строк**, сохраняющая значимые tokens, literals и
+comments. Внутристрочные фрагменты остаются exact. Канонизация не меняет EOL и не
+отменяет revision/authority guard: конкурентное изменение требует нового чтения.
 
 ### Границы и переводы строк
 
-- LF/CRLF/CR сопоставляются как логические разделители с отображением в точные
-  диапазоны исходника. Границы не разрывают Unicode scalar или CRLF.
-- Новые разделители берутся из выбранного фрагмента/строки-якоря, иначе из первого
-  EOL источника, иначе LF. Вне изменяемых диапазонов байты, BOM и EOL сохраняются.
-  Логически неизменная замена сохраняет исходные разделители внутри фрагмента.
-- `before` вставляет перед началом строки-якоря; `after` — после её EOL либо в EOF,
-  если последняя строка не завершена. `start` — после BOM; `end` — EOF.
-- Разделители задаются явно в `text`/`after`, автоматически не добавляются.
-  Например, append к `body` с текстом `\nfooter` даёт `body\nfooter`, а с `tail` —
-  `bodytail`. Финальный EOL изменяется только явно указанным содержимым правки.
-- Частичное наблюдение разрешает подстроку внутри доставленного диапазона; оно
-  не разрешает недоставленные якоря, границы файла или полную замену источника.
-  Внутреннее чтение guard не является доставкой модели.
+- `old/new` буквальны: LF, CRLF и CR различаются, EOL автоматически не добавляется
+  и не выбирается по соседней строке. Границы не разрывают Unicode scalar или CRLF.
+- Неприкосновенные области, BOM, смешанные EOL и final newline сохраняются.
+  Перевод строки изменяется только явно указанным `old/new`.
+- Вставка в начало/конец непустого файла использует наблюдавшийся непустой фрагмент.
+  Замена `body` на `body\nfooter` добавляет разделитель, на `bodytail` — нет.
+  Скрытой ветки insert и `old: ""` нет.
+- Частичное наблюдение разрешает только покрытые фрагменты и полные строки-якоря;
+  оно не разрешает полную перезапись или использование недоставленных якорей.
 
 ### Подготовка, подтверждение и выполнение
 
 `ResourcePatchBatchHandler` координирует существующих owners. Для всех целей до
-записи проверяются resolution, policy, наблюдённая версия, coverage, context,
+записи проверяются resolution, policy, наблюдённая версия, coverage, якоря,
 пересечения и итоговый candidate. Повторные секции одного разрешённого ресурса,
 включая aliases, отклоняются. Любой отказ на этой стадии отвергает весь пакет.
 
@@ -113,8 +119,8 @@ Prepared state хранит exact источники, owner guards и bounded be
 прежнего текста также отклоняется. Актуальность выбранного workspace проверяется
 владельцем перед каждой публикацией; другой чат или исторический snapshot не дают
 права продолжать запись. Исходный snapshot для preview/истории не подменяется.
-Публичный batch prepared state имеет version 2 и новую binding `.resource.v4`;
-Office owner prepared state также имеет version 2; прежнее pending-состояние явно несовместимо
+Публичный contract и batch prepared state имеют version 3, binding — `.resource.v5`.
+Внутренний Office owner state остаётся version 2; прежний публичный patch pending-state несовместим
 и требует новой подготовки, без удаления истории.
 
 Результат `type=rnassistant.patch` содержит `phase`, `writeStarted`, `partial` и
@@ -143,13 +149,18 @@ Office owner prepared state также имеет version 2; прежнее pend
 подтверждением и не попадает в следующий source context.
 Подтверждённые дочерние effects сохраняются даже при последующем отказе/unknown.
 Их публикации/journals — прежние; общий effect лишь содержит ссылки на эти факты.
+HTML after-source раскрывается из существующего retained workspace snapshot как
+тот же file source, который возвращает `core.read`. В пакетном результате выбираются
+только подтверждённые текущие member revisions; соседние и Unknown-цели не получают
+source evidence. Ссылка `current-html-file` связывает этот immutable source с exact
+after-state; проверка document scope сохраняется.
 Лента и CLI показывают эти цели отдельно; summary не превращает известный частичный
 отказ в дополнительный unknown. Доставленные verified after-source сохраняют свой
 semantic target. Для больших файлов без включённого after-source нужен новый
 `core.read` перед следующей зависимой правкой.
 
 «Исходный snapshot» относится к **одному вызову**. Следующий вызов строится уже
-по результату предыдущего: строки `-` и контекста берутся из доставленного
+по результату предыдущего: `old` и якоря берутся из доставленного
 актуального after-source либо нового `core.read`. Остальные предыдущие изменения
 сохраняются; намеренная отмена выражается обратными edits по текущему тексту.
 При сомнении модель перечитывает цель, а не восстанавливает её из старого чтения.
@@ -161,18 +172,38 @@ Read-back подтверждает применение текста, а не п
 не выдаётся за подтверждённый. Отсутствие актуального наблюдения VBA диагностируется
 как необходимость нового чтения, даже если старые строки уже не находятся.
 
-Диагностика: `targetIndex` и номер `edit` внутри цели (с единицы), `code`, пояснение, `nextAction`, максимум
-пять кандидатов `line/context`. Коды: `context_not_found`, `ambiguous_context`,
-`source_changed`, `observation_required`, `invalid_edit`, `overlap`, `owner_error` с `ownerCode`;
-`context_not_found` в пакете требует нового чтения отклонённой цели перед правкой;
-`effect_unknown` требует `verify_unknown_effect`. Ошибка грамматики всего пакета
-возвращает общую `diagnostic` без вымышленных целей. Runtime URI/hash/revision не
-являются аргументами модели. Модельная проекция сохраняет статусы каждой цели.
-Если отказ или unknown не содержит объектных данных целей, проекция сохраняет
-terminal status и сообщение с пустым списком целей, не прерывая сборку следующего
-контекста.
+Результат использует только фазы `preparation` и `execution`. `partial=true` означает
+остановку после подтверждённого изменения хотя бы одной цели. Ошибка подготовки,
+включая вторую цель, оставляет все прочие цели `NotStarted`, `writeStarted=false`,
+`partial=false`. Ошибка JSON/schema до разрешения целей возвращает `targets: []`
+и общую `diagnostic`; фиктивные цели не создаются. Успешных `editResults[]` нет.
 
-Лимиты: 16 целей, 100 edits на цель и по 100 ориентиров before/after,
+Диагностика содержит `targetIndex`, где он уже требуется пакету, и `edit` — индекс
+в исходном `edits[]` с единицы. `message` — одна ограниченная причина без stack,
+полного исходника и runtime URI/hash/revision; отсутствующие поля опускаются.
+`candidates` — до пяти реальных мест с `line` и ограниченным `context`; это подсказки,
+не источник observation authority. `ownerCode` сохраняет реальный код владельца.
+
+| `code` | `nextAction` |
+| --- | --- |
+| `invalid_edit`, `overlap` | `fix_patch` |
+| `context_not_found`, `observation_required`, `source_changed` | `read_target` |
+| `ambiguous_context` | `refine_context` |
+| `owner_error` | `fix_patch`, `read_target` по owner recovery или `inspect_owner_error` |
+| `owner_error` при статусе `Unknown` | `verify_effect` |
+
+`nextAction` — подсказка, не разрешение на повторный dispatch. Unknown сохраняется
+в существующем runtime outcome/recovery; перед следующей записью требуется
+reconciliation, автоматического replay пакета нет. Ошибка после dispatch не
+превращается в `Rejected`. Preview/candidates и journal evidence не доказывают,
+что after-source доставлен: это определяет context compiler.
+
+Core и Office model projections сохраняют те же исходы и bounded diagnostics,
+включая отказ без object data. CLI, inline diff и Inspector показывают статус,
+номер ошибочной правки и кандидаты как текст. Нет отдельного result protocol
+или второго хранилища; канонический факт остаётся в прежнем TOOL_RESULT/effect.
+
+Лимиты: 16 целей, 100 edits на цель и по 100 якорей в `anchors_before`/`anchors_after`,
 262144 UTF-16 символа полного JSON аргументов;
 prepared state до 128 Ki символов, confirmation data до 32 Ki. Превью ограничено
 по цели; слишком большой подготовленный пакет отклоняется до записи. Workspace
@@ -204,9 +235,41 @@ VBA требует полного кода в памяти для проверк
 Старый Workspace `PatchExact`/`PatchLargeExact` удалён; типизированные edits идут
 через общий resolver и единственный staged writer. Общие проверки байтов, journal
 и recovery сохранены.
-HTML owner также получает готовые типизированные `ResolvedTextEdit`; прежние
+Все owners получают один тип `ResolvedTextEdit` с runtime offsets; прежний
+дублирующий `TextPatchEdit` и DTO `TextEditContext` удалены. HTML owner получает
+тот же готовый план; прежние
 JSON-операции и `StructuredTextPatchEngine` удалены. Диагностика поиска принадлежит
 общему механизму, а проверка файла/ёмкости и публикация — HTML owner.
+Private `file.source.patch` остаётся внутренней командой authored-file owner,
+принимает тот же typed `TextPatch` и не публикует отдельную модельную schema.
+`TextPatternEngine` обслуживает Word/PowerPoint replacements; это другой domain,
+его формат не переводится на `core.patch`.
+
+### Аудит перехода на contract 3 — 2026-10-30
+
+Исходный HEAD `990c795f`: 10 проверок `universal mutations:` проходили до изменения
+контракта. Сверены catalog, parser, resolver, owners, сериализованные batch results,
+model projection, skills и UI consumers.
+
+| Поверхность | До изменения | Итог |
+| --- | --- | --- |
+| Catalog / `TextEditIntent` | `before/after/context`, отдельный insert | Одна закрытая форма `old/new/anchors_before/anchors_after` |
+| `TextPatch` | Неявная нормализация EOL, отдельная ветка insert | Буквальный streaming matcher и один план по S0 |
+| Resolved edits | `TextPatchEdit` и копия в `ResolvedTextEdit` | Только `ResolvedTextEdit` с long offset |
+| Diagnostics | `context_not_found → refine_context`, unknown с отдельным code/action | `read_target`, `owner_error → verify_effect`; общий bounded DTO |
+| CLI / run changes | Статусы без полной диагностики | Номер edit, причина, действие и bounded candidates из того же результата |
+| `file.source.patch` | Приватная команда authored-file owner | Сохранена внутренней; модельная схема не опубликована |
+| `TextPatternEngine` | Общие search/replace и Office text consumers | Сохранён для этих consumers; альтернативного patch resolver нет |
+
+Фактические сериализованные результаты до/после сравнивались для success,
+ambiguity, preflight отказа второй цели и partial/unknown. Сохранились фазы
+`preparation/execution`, порядок всех целей и реальные `writeStarted/partial`.
+При позднем отказе первая цель остаётся Changed; при Unknown второй цели третья
+остаётся NotStarted. Исключение guard до второй записи не наследует dispatch первой.
+Новые DTO/stores, aliases и compatibility adapters не добавлены.
+
+Проверки и команды — [Harness](../tests/RNAssistant.Harness/README.md).
+Windows/VBE, COM read-back и поведение реальной модели этим аудитом не квалифицированы.
 
 ## Поиск и массовая замена
 

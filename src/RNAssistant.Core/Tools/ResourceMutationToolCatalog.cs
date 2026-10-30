@@ -11,7 +11,7 @@ namespace RNAssistant.Core.Tools
         public const string Write = "core.write", Patch = "core.patch", Replace = "core.replace";
         public const string Move = "resources.move", Copy = "resources.copy", Delete = "resources.delete", Restore = "resources.restore";
         public static bool Owns(string id) { return id == Write || id == Patch || id == Replace || id == Move || id == Copy || id == Delete || id == Restore; }
-        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v4" : ".resource.v1")) : null; }
+        public static ToolBinding BindingFor(string id) { return Owns(id) ? new ToolBinding(id + (id == Patch ? ".resource.v5" : ".resource.v1")) : null; }
 
         public static IEnumerable<ToolCatalogEntry> GetTools()
         {
@@ -31,36 +31,24 @@ namespace RNAssistant.Core.Tools
                 {
                     properties.Remove("target"); required.Clear();
                     var lines = new JObject { ["type"] = "array", ["maxItems"] = 100, ["items"] = new JObject { ["type"] = "string", ["pattern"] = "^[^\\r\\n]*$" } };
-                    var context = Object(new JObject { ["before"] = lines.DeepClone(), ["after"] = lines.DeepClone() }, new JArray());
-                    var replace = Object(new JObject { ["op"] = new JObject { ["type"] = "string", ["enum"] = new JArray("replace") },
-                        ["before"] = String("Exact nonempty substring or multiline fragment from delivered current source."),
-                        ["after"] = String("Replacement text; empty deletes. Include intended line separators explicitly.", false),
-                        ["context"] = context.DeepClone() }, new JArray("before", "after"));
-                    var insert = Object(new JObject { ["op"] = new JObject { ["type"] = "string", ["enum"] = new JArray("insert") },
-                        ["text"] = String("Inserted text. Include separators explicitly; none are added automatically."),
-                        ["position"] = new JObject { ["type"] = "string", ["enum"] = new JArray("before", "after") },
-                        ["anchor"] = String("Complete source line, excluding its EOL. before inserts at its start; after inserts after its EOL (or EOF).", false),
-                        ["context"] = context.DeepClone() }, new JArray("op", "text", "position", "anchor"));
-                    var boundary = Object(new JObject { ["op"] = new JObject { ["type"] = "string", ["enum"] = new JArray("insert") },
-                        ["text"] = String("Inserted text, including intended separators."),
-                        ["position"] = new JObject { ["type"] = "string", ["enum"] = new JArray("start", "end") },
-                        ["context"] = context.DeepClone() }, new JArray("op", "text", "position"));
+                    var edit = Object(new JObject {
+                        ["old"] = String("Exact nonempty substring or multiline fragment from delivered current source."),
+                        ["new"] = String("Literal replacement; empty deletes. For insertion, include old plus added text and explicit newlines.", false),
+                        ["anchors_before"] = lines.DeepClone(), ["anchors_after"] = lines.DeepClone()
+                    }, new JArray("old", "new"));
                     properties["targets"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = ResourcePatch.MaximumTargets,
                         ["items"] = Object(new JObject { ["target"] = String("Exact existing semantic target; never URI/revision/hash."),
                             ["edits"] = new JObject { ["type"] = "array", ["minItems"] = 1, ["maxItems"] = 100,
-                                ["items"] = new JObject { ["anyOf"] = new JArray(replace, insert, boundary) } } }, new JArray("target", "edits")) };
+                                ["items"] = edit } }, new JArray("target", "edits")) };
                     DescribePatchProperties(properties);
                     required.Add("targets");
-                    description = "Patch existing sources with structured edits, at most 262144 JSON characters. Read current source first or use delivered verified after-source. " +
-                        "Replace uses before/after (optional op=replace); insert uses op=insert, text, position and anchor for before/after. " +
-                        "Context before/after arrays are ordered complete lines with gaps allowed, strictly outside the edit/anchor; they are not language scopes. " +
-                        "Exactly one edit location is required; multiple anchor chains to it are allowed. Empty lines are literal anchors. " +
-                        "LF/CRLF/CR match as logical separators; new separators use local EOL. Unaffected bytes and BOM stay unchanged. " +
-                        "Start/end insertion requires complete delivered source. All edits match the same original snapshot; dependent edits need separate calls. " +
-                        "VBA whole-line canonical matching is allowed only if exact matching fails; substrings remain exact. " +
-                        "All targets prepare before writes. Aliases, overlaps, stale or unobserved source reject the package. Writes are sequential and stop on failure. " +
-                        "Wait for TOOL_RESULT and inspect each target: Changed is verified; Unchanged made no edit; Rejected/NotStarted were not applied; Unknown needs inspection. " +
-                        "Never replay/rollback the package automatically. Text read-back does not prove program logic. Use core.write for creation/overwrite and resources.* for lifecycle.";
+                    description = "Edit existing observed source. Each edit has exact nonempty old and literal replacement new; new: \"\" deletes. " +
+                        "For insertion, replace a unique existing nearby fragment with itself plus inserted text, including intended newlines. " +
+                        "If old is ambiguous, provide ordered full-line anchors_before and/or anchors_after. Anchors can be distant or repeated, but the final edit location must be unique. " +
+                        "All edits for each target resolve against one original observed snapshot, not intermediate edits. No line numbers, regex or operation types. " +
+                        "Read current source or reuse delivered verified after-source. Use core.write for creation/full overwrite and core.replace for bulk replacement. " +
+                        "At most 262144 JSON characters. All targets prepare before sequential writes. Wait for TOOL_RESULT and inspect each target: " +
+                        "Changed/Unchanged are verified; Rejected/NotStarted were not applied; Unknown needs inspection. Never replay a partial or unknown package automatically.";
 
                 }
                 else if (id == Replace)
@@ -89,7 +77,7 @@ namespace RNAssistant.Core.Tools
                     ArgumentSchemaJson = Object(properties, required).ToString(Formatting.None),
                     BuiltIn = true, Enabled = true, AgentCanRun = true, MutatesLocalState = true,
                     Policy = new ToolPolicy(ToolEffect.Write, ToolVerification.Tool, true, false, (id == Write || id == Patch ? new[] { "agent", "plan" } : new[] { "agent" }), 1),
-                    RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = id == Patch ? "2" : "1" };
+                    RequiresConfirmation = true, RiskLevel = 1, Binding = BindingFor(id), ContractVersion = id == Patch ? "3" : "1" };
             }
         }
 
@@ -101,8 +89,6 @@ namespace RNAssistant.Core.Tools
                 if (schema["description"] == null)
                     schema["description"] = property.Name == "targets" ? "Existing sources and their structured edits." :
                         property.Name == "edits" ? "Edits against one original snapshot." :
-                        property.Name == "context" ? "Optional ordered complete source lines surrounding the edit or insertion anchor." :
-                        property.Name == "op" ? "Edit operation." : property.Name == "position" ? "Insertion boundary." :
                         "Ordered complete source lines, allowing gaps; empty strings are literal empty lines.";
                 foreach (var child in schema.DescendantsAndSelf().OfType<JObject>().Where(o => o["properties"] is JObject).ToArray())
                     DescribePatchProperties((JObject)child["properties"]);

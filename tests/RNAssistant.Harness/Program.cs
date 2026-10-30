@@ -62,6 +62,7 @@ namespace RNAssistant.Harness
                 Test("model diagnostics: bounded SSE capture and native deltas", ModelDiagnosticsStreamCapture),
                 Test("universal mutations: exact original hunks", UniversalHunksUseOriginalSnapshot),
                 Test("universal mutations: published patch examples apply", UniversalPatchSchemaExamplesApply),
+                Test("universal mutations: bounded public error results", UniversalPatchDiagnosticResults),
                 Test("universal mutations: streamed file and shared matcher", UniversalFileHunksStageOnce),
                 Test("universal mutations: public Office routing", UniversalOfficeRoutesToOwners),
                 Test("universal mutations: HTML member guards", UniversalHtmlBatchPinsMembers),

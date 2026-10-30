@@ -41,7 +41,7 @@ def run_case(root, operation, restart=False):
     if operation == "replace":
         arguments["content"] = "updated"
     elif operation == "patch":
-        arguments = {"targets": [{'target': 'app.txt', 'edits': [{'before': 'original', 'after': 'updated'}]}]}
+        arguments = {"targets": [{'target': 'app.txt', 'edits': [{'old': 'original', 'new': 'updated'}]}]}
     elif operation in ("copy", "move"):
         arguments["destination"] = "destination.txt"
     mutation = call({"replace": "core.write", "patch": "core.patch", "copy": "resources.copy", "move": "resources.move", "delete": "resources.delete"}[operation], **arguments)

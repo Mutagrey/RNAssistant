@@ -54,7 +54,7 @@ namespace RNAssistant.Office.Services
                 {
                     var patch = ObservedPatch(session, context, intent.Base);
                     intent.Patch = _artifacts.PrepareFilePatch(session, intent.Base, patch, token);
-                    RequirePatchObservation(session, context, intent, patch.RequiresWholeSource);
+                    RequirePatchObservation(session, context, intent);
                 }
             }
             else if (operation == AuthoredFileToolCatalog.CopyToolId)
@@ -220,7 +220,7 @@ namespace RNAssistant.Office.Services
         }
 
         private static void RequirePatchObservation(ChatSession session, ToolHandlerContext context,
-            AuthoredFileIntent intent, bool whole)
+            AuthoredFileIntent intent)
         {
             var accepted = session.Messages.FirstOrDefault(message => message.AcceptedCallOrigin != null &&
                 message.ToolCallId == context.Execution.Call.Id);
@@ -229,15 +229,8 @@ namespace RNAssistant.Office.Services
                 item.Resource.Uri == intent.Base.Uri && item.Resource.Revision == intent.Base.Revision).ToArray();
             if (evidence.Any(item => item.Complete && item.Coverage.Kind == ResourceCoverageKinds.Whole)) return;
             var ranges = evidence.Where(item => item.Coverage.Kind == ResourceCoverageKinds.CharacterRange).ToArray();
-            if (!whole && ranges.Length > 0 && intent.Patch.Edits.All(edit => ranges.Any(item =>
+            if (ranges.Length > 0 && intent.Patch.Edits.All(edit => ranges.Any(item =>
                 item.Coverage.Start <= edit.Offset && item.Coverage.End >= edit.Offset + edit.Before.Length))) return;
-            if (whole)
-            {
-                long covered = 0;
-                foreach (var item in ranges.OrderBy(item => item.Coverage.Start))
-                    if (item.Coverage.Start <= covered && item.Coverage.End.HasValue) covered = Math.Max(covered, item.Coverage.End.Value);
-                if (covered == intent.Patch.SourceCharacters && ranges.Any(item => item.Complete && item.Coverage.End == covered)) return;
-            }
             throw new ResourceRequestException("Read the current file and all changed lines before patching it.", "source_observation_required", false);
         }
 

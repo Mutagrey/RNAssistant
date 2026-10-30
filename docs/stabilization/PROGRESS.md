@@ -1,5 +1,32 @@
 # Stabilization progress
 
+## core.patch: финальный contract 3 и error results — 2026-10-30
+
+Owner: Core Tools — schema/единственный resolver/diagnostics; прежние Workspace,
+Office и domain owners — guard, запись и read-back; CLI/Web — отображение.
+Единственный edit теперь `old/new` с optional `anchors_before/anchors_after`.
+Удалены прежние before/after/context и insert-ветки, `TextEditContext` и
+дублирующий `TextPatchEdit`; один `ResolvedTextEdit` используется всеми consumers.
+EOL буквальны, все edits разрешаются на S0, якоря используют только доставленную
+coverage. Старые prepared packages явно отклоняются, история не удаляется.
+
+Ошибки используют прежний typed batch result: все цели и реальные dispatch/effect
+статусы, edit, bounded candidates, ownerCode и единый nextAction. CLI и UI сохраняют
+диагностику после restart; Unknown требует verify_effect и не разрешает replay.
+Закрыты найденные в этом пути дефекты: устаревший VBA excerpt с прежним текстом
+не обходит authority guard; HTML member after-state проходит document scope и
+передаёт подтверждённый source в следующий запрос через существующий retained snapshot.
+Новые stores, result protocols и compatibility adapters не добавлены.
+
+11 `universal mutations:` проверок, целевые streamed/encoding/Plan/HTML/VBA checks,
+CLI diagnostic/stabilization smoke и browser inline diff/diagnostics прошли на
+host-neutral fixtures. Проверены actual serialized success, ambiguity, preflight
+отказ второй цели, partial/unknown, projection и недоставленный по бюджету after-source.
+Команды — [Harness](../../tests/RNAssistant.Harness/README.md), контракт и аудит —
+[text mutations](../text-mutations.md). Полный Harness и реальные модели не запускались.
+Windows x64 / Office x64 / VBE / WebView2 delivery остаются открытым evidence;
+host-neutral результат не закрывает qualification или release gates.
+
 ## V8 P2: T/E/R, criterion и reference revision 3 — 2026-10-30
 
 Owner: Core ChatStore/ToolPolicy/ModelProtocol; Office/Workspace/Inspector — consumers.

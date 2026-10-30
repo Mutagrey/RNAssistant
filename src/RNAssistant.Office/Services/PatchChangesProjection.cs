@@ -18,7 +18,7 @@ namespace RNAssistant.Office.Services
     internal static class PatchChangesProjection
     {
         internal static RunChangesDto Read(ChatSession session, string run, string call, ChatBlobStore payloads,
-            Func<ResourceRef, int, string> read, Func<ResourceRef, ResourceRef, TextPatch, IReadOnlyList<TextPatchEdit>> fragments, int maximumCharacters = 512000)
+            Func<ResourceRef, int, string> read, Func<ResourceRef, ResourceRef, TextPatch, IReadOnlyList<ResolvedTextEdit>> fragments, int maximumCharacters = 512000)
         {
             var messages = session.Messages.Where(m => m.RunId == run && m.ToolCallId == call && m.Activity == null).ToArray();
             var terminal = messages.LastOrDefault(m => m.AcceptedCallOrigin == null && m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
@@ -28,7 +28,7 @@ namespace RNAssistant.Office.Services
             PatchBatchResult batch;
             try { batch = JsonConvert.DeserializeObject<PatchBatchResult>(wire.Result.DataJson ?? "{}"); }
             catch (JsonException) { return null; }
-            if (batch?.Type != "rnassistant.patch" || batch.Targets == null || batch.Targets.Count == 0) return null;
+            if (batch?.Type != "rnassistant.patch" || batch.Targets == null) return null;
             IReadOnlyList<ResourcePatchSection> sections = null;
             var accepted = messages.SingleOrDefault(m => m.AcceptedCallOrigin != null);
             if (accepted != null && payloads != null)
@@ -41,7 +41,7 @@ namespace RNAssistant.Office.Services
                 }
                 catch (Exception ex) when (ex is JsonException || ex is TextPatternException || ex is IOException) { }
             }
-            var result = new RunChangesDto { ChatId = session.Id, RunId = run, ToolCallId = call, EvidenceFound = true };
+            var result = new RunChangesDto { ChatId = session.Id, RunId = run, ToolCallId = call, EvidenceFound = true, Diagnostic = batch.Diagnostic?.Bounded() };
             var remaining = maximumCharacters;
             for (var i = 0; i < batch.Targets.Count && i < ResourcePatch.MaximumTargets; i++)
             {
@@ -49,7 +49,7 @@ namespace RNAssistant.Office.Services
                 var fact = terminal.ResourceEffect?.Targets?.ElementAtOrDefault(i);
                 var status = fact?.Status ?? row.Status;
                 var item = new RunTextChangeDto { Id = call + ":" + i, Title = row.Target, Scope = "Текст",
-                    TargetStatus = status, Availability = status == ResourceTargetStatus.Rejected ? "rejected" :
+                    TargetStatus = status, Diagnostic = row.Diagnostic?.Bounded(), Availability = status == ResourceTargetStatus.Rejected ? "rejected" :
                         status == ResourceTargetStatus.NotStarted ? "not_started" : status == ResourceTargetStatus.Unknown ? "unverified" : "available" };
                 result.Items.Add(item);
                 if (status == ResourceTargetStatus.Rejected || status == ResourceTargetStatus.NotStarted) continue;
@@ -120,7 +120,7 @@ namespace RNAssistant.Office.Services
             if (text == null || text.Length > maximum) throw new InvalidOperationException("Source exceeds the comparison budget.");
             return text;
         }
-        internal static IReadOnlyList<TextPatchEdit> ReadFragments(ResourceAuthorityService authority, ResourceRef exact, ResourceRef after, TextPatch patch, ResourceAuthorityScopeId scope = null)
+        internal static IReadOnlyList<ResolvedTextEdit> ReadFragments(ResourceAuthorityService authority, ResourceRef exact, ResourceRef after, TextPatch patch, ResourceAuthorityScopeId scope = null)
         {
             var view = View(authority, exact, scope);
             using (var stream = authority.Payloads.OpenVerifiedRead(view.Payload.ToBlobReference(), long.MaxValue, CancellationToken.None))

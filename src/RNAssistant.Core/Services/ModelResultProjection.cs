@@ -66,7 +66,7 @@ namespace RNAssistant.Core.Services
 
             var data = wire.Data;
             var materialized = new ToolResultMaterialization(
-                wire.Result, resultResource: wire.ResultResource, data: data);
+                wire.Result, resultResource: wire.ResultResource, data: data?.DeepClone());
             if (_projectData == null && wire.Name == CapabilityToolCatalog.ReadToolId && wire.Result.Status == ToolResultStatus.Ok)
                 CapabilityCatalogService.CompactCallableSchema(materialized.Data, callableTools);
             // Common families have one projection in both hosts. Domain projection
@@ -182,11 +182,8 @@ namespace RNAssistant.Core.Services
             // Never project the durable per-target ResourceEffect/source references.
             var result = SelectFields(patch, "type", "phase", "writeStarted", "partial", "code", "retryable");
             Func<JToken, JObject> diagnostic = value => {
-                var item = SelectFields(value, "targetIndex", "edit", "code", "ownerCode", "message", "nextAction");
-                if (item["message"] != null) item["message"] = SanitizeOperationalText((string)item["message"]);
-                item["candidates"] = new JArray(((value?["candidates"] as JArray) ?? new JArray()).Take(5)
-                    .Select(candidate => SelectFields(candidate, "line", "context")));
-                return item;
+                try { return JObject.FromObject(value.ToObject<PatchDiagnostic>().Bounded()); }
+                catch (JsonException) { return JObject.FromObject(PatchDiagnostic.Create(null, "Owner diagnostic is unavailable.")); }
             };
             if (patch?["diagnostic"] is JObject) result["diagnostic"] = diagnostic(patch["diagnostic"]);
             result["targets"] = new JArray(((patch?["targets"] as JArray) ?? new JArray()).Take(ResourcePatch.MaximumTargets).Select(target => {

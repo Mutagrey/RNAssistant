@@ -1659,52 +1659,24 @@ namespace RNAssistant.Harness
                     (string)schema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
                     "schema property named type");
 
-                var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "vba.module.patch");
+                var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "core.patch");
                 var patchSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { patchTool }, new ModelProtocolCallContext(new string[0])));
                 var exactReplace = patchSchema.SelectToken(
-                    "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.patch.items") as JObject;
-                AssertTrue(exactReplace != null, "patch schema exposes one exact replacement contract");
-                AssertTrue(exactReplace.SelectToken("properties.op") == null,
-                    "constant VBA patch operation is runtime-owned");
-                AssertEqual(6, ((JObject)exactReplace["properties"]).Properties().Count(),
-                    "exact replacement exposes find, text, optional exact context and location");
-                foreach (var coordinate in new[] { "startLine", "startColumn" })
-                    AssertContains(exactReplace.SelectToken("properties." + coordinate + ".type").ToString(),
-                        "integer", "patch location uses integer coordinates");
-                AssertTrue(exactReplace.SelectToken("properties.deleteCount") == null &&
-                    exactReplace.SelectToken("properties.pattern") == null,
-                    "unchecked line deletion and regex patch fields are absent from the model schema");
-
-                var restoreTool = executor.GetControllerTools().Single(candidate => candidate.Id == "vba.module.restore");
-                var restoreSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { restoreTool }, new ModelProtocolCallContext(new string[0])));
-                var restoreVariants = restoreSchema.SelectToken(
-                    "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.anyOf") as JArray;
-                AssertEqual(2, restoreVariants == null ? 0 : restoreVariants.Count,
-                    "restore schema requires either readable target or module name");
-                var targetVariant = restoreVariants.OfType<JObject>().Single(item =>
-                    (string)item.SelectToken("properties.target.type") == "string");
-                AssertTrue(targetVariant.SelectToken("properties.moduleName") == null,
-                    "readable-target branch cannot mix the latest-module selector");
-                AssertTrue(restoreSchema.SelectToken(
-                        "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.backupId") == null,
-                    "raw backup id is absent from the model schema");
-
-                var strictPatchArguments = new JObject
-                {
-                    ["moduleName"] = "Module1",
-                    ["patch"] = new JArray(new JObject
-                    {
-                        ["find"] = "Old",
-                        ["text"] = "New"
-                    })
-                };
-                JObject runtimePatchSchema;
+                    "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.targets.items.properties.edits.items") as JObject;
+                AssertTrue(exactReplace != null, "model schema exposes the same single edit contract");
+                AssertEqual("old,new,anchors_before,anchors_after", string.Join(",", ((JObject)exactReplace["properties"]).Properties().Select(p => p.Name)),
+                    "strict projection adds no operation, context or coordinates");
+                var strictPatchArguments = PatchArguments("VBA module: Module1", EditSet(Edit("Old", "New")));
+                var runtimePatchSchema = JObject.Parse(patchTool.ArgumentSchemaJson);
+                var edit = (JObject)strictPatchArguments["targets"][0]["edits"][0];
+                edit["anchors_before"] = JValue.CreateNull(); edit["anchors_after"] = JValue.CreateNull();
                 string parseError;
-                AssertTrue(ToolSchemaSupport.TryParse(patchTool, out runtimePatchSchema, out parseError),
-                    "runtime patch schema parses: " + parseError);
+                AssertTrue(ToolSchemaSupport.ValidateArguments(strictPatchArguments,
+                    (JObject)patchSchema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments"), false, out parseError), parseError);
                 ToolSchemaSupport.RemoveOptionalNulls(strictPatchArguments, runtimePatchSchema);
-                AssertEqual(2, ((JObject)((JArray)strictPatchArguments["patch"])[0]).Properties().Count(),
-                    "exact patch arguments remain unchanged by strict normalization");
+                AssertEqual(2, edit.Properties().Count(), "strict optional nulls are omitted before runtime validation");
+                ResourcePatch.ValidateCall(strictPatchArguments.ToString());
+
             });
         }
 

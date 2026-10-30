@@ -2151,7 +2151,7 @@ namespace RNAssistant.Runtime
                         Outcome = record.Outcome,
                         Message = PresentationText(record.Message, 512),
                         File = FileActivity(record.Context.Call.Name, record.Context.Call.ArgumentsJson,
-                            record.Outcome, record.ResourceEffect),
+                            record.Outcome, record.ResourceEffect, record.Result),
                         Verification = record.Context.Call.Name == "web.verify"
                             ? VerificationSummary(_webSnapshots, _workspace, _session.Id, record.Context.RunId,
                                 record.Context.Call.Id, record.Result?.Resources) : null
@@ -2286,7 +2286,11 @@ namespace RNAssistant.Runtime
                             }
                             else
                             {
-                                if (!_delivered.TryGetValue(path, out source) || !CanUse(source, context) ||
+                                _delivered.TryGetValue(path, out source);
+                                if (_operation == ResourceMutationToolCatalog.Patch && source?.Resource?.IsExact == true &&
+                                    (source.Resource.Uri != current.Reference.Uri || source.Resource.Revision != current.Reference.Revision))
+                                    throw new WorkspaceFileException("target_conflict", "Source changed after the delivered read.");
+                                if (!CanUse(source, context) ||
                                     source.Resource.Uri != current.Reference.Uri || source.Resource.Revision != current.Reference.Revision)
                                     throw new WorkspaceFileException("source_observation_required", "Read the current source before editing; core.write requires its complete content.");
                             }
@@ -2314,8 +2318,7 @@ namespace RNAssistant.Runtime
                 if (source.Complete && source.Coverage.Kind == ResourceCoverageKinds.Whole) return true;
                 if (_operation == ResourceMutationToolCatalog.Move || _operation == ResourceMutationToolCatalog.Copy || _operation == ResourceMutationToolCatalog.Delete) return true;
                 if (_operation != ResourceMutationToolCatalog.Patch) return false;
-                return source.Coverage.Kind == ResourceCoverageKinds.CharacterRange &&
-                    !TextPatch.FromArguments(context.Arguments).RequiresWholeSource;
+                return source.Coverage.Kind == ResourceCoverageKinds.CharacterRange;
             }
 
             public Task<ToolHandlerResult> ExecuteAsync(ToolHandlerContext context, CancellationToken token)

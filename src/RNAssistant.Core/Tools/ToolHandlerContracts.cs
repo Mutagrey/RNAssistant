@@ -186,6 +186,7 @@ namespace RNAssistant.Core.Tools
     public sealed class ToolHandlerContext
     {
         private int _dispatchPossible;
+        private int _lastDispatchedTarget = -1;
         private readonly Action _onDispatchPossible;
         private readonly Action<ToolHandlerResult> _onCompleted;
         private readonly PreparedTargetExecutor _executeTarget;
@@ -214,6 +215,13 @@ namespace RNAssistant.Core.Tools
         {
             if (_executeTarget == null) throw new InvalidOperationException("Prepared targets require ToolRuntime execution.");
             return _executeTarget(owner, arguments, state, index, token);
+        }
+
+        internal bool TargetMayHaveDispatched(int index) { return Volatile.Read(ref _lastDispatchedTarget) == index; }
+        internal void MarkTargetDispatchPossible(int index)
+        {
+            MarkDispatchPossible();
+            Volatile.Write(ref _lastDispatchedTarget, index);
         }
 
         // Domain owners call this while their guard/read-back gate is still held.

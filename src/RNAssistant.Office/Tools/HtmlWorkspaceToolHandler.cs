@@ -112,7 +112,7 @@ namespace RNAssistant.Office.Tools
 
             return HtmlWorkspaceToolOutcome.Error(
                 "The model has not seen complete source for the current HTML file contents in this run: " + path +
-                ". Read its complete source with core.find/read before replacing it, or use html.source.patch for a focused change. A successful read omitted from model context does not authorize replacement.",
+                ". Read its complete source with core.find/read before replacing it, or use core.patch for a focused change. A successful read omitted from model context does not authorize replacement.",
                 null, "html_source_observation_required", false,
                 new ToolRecoveryContract(ToolFailureKind.ConflictNoEffect,
                     ToolRetryPolicy.RefreshRequired, current.Identity,

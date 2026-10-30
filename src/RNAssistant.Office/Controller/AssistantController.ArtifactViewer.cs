@@ -124,13 +124,13 @@ namespace RNAssistant.Office
 
         internal string ReadRetainedPatchSource(ResourceRef exact, int maximum)
         { return ReadRetainedPatchSource(exact, maximum, null); }
-        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch)
+        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.ResolvedTextEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch)
         { return ReadRetainedPatchFragments(exact, after, patch, null); }
         internal string ReadRetainedPatchSource(ResourceRef exact, int maximum, string workspaceId)
         { return ResourceUri.Parse(exact.Uri).Provider == "catalog"
             ? _toolExecutor.ResourceGateway.ReadRetainedCatalogText(exact, maximum)
             : PatchChangesProjection.ReadSource(_toolExecutor.ResourceGateway.Authority, exact, maximum, PatchOwnerScope(exact, workspaceId)); }
-        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.TextPatchEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch, string workspaceId)
+        internal System.Collections.Generic.IReadOnlyList<RNAssistant.Core.Tools.ResolvedTextEdit> ReadRetainedPatchFragments(ResourceRef exact, ResourceRef after, RNAssistant.Core.Tools.TextPatch patch, string workspaceId)
         {
             if (ResourceUri.Parse(exact.Uri).Provider != "catalog")
                 return PatchChangesProjection.ReadFragments(_toolExecutor.ResourceGateway.Authority, exact, after, patch, PatchOwnerScope(exact, workspaceId));

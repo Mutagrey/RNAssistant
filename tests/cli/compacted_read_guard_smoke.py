@@ -42,7 +42,7 @@ def run_case(root, role, capture=None):
                                "COMPACTED_READ_SOURCE" in item["content"] for item in request["messages"]), content
                     assert not any(item["role"] == "tool" and "COMPACTED_READ_SOURCE" in
                                    (item.get("content") or "") for item in request["messages"]), "Read must be archived"
-                    response = call("core.patch", targets=[{'target': 'app.js', 'edits': [{'before': "const marker = 'COMPACTED_READ_SOURCE';", 'after': "const marker = 'VERIFIED_EDIT';"}]}])
+                    response = call("core.patch", targets=[{'target': 'app.js', 'edits': [{'old': "const marker = 'COMPACTED_READ_SOURCE';", 'new': "const marker = 'VERIFIED_EDIT';"}]}])
                     phase["patched"] = True
                 else:
                     phase["step"] += 1

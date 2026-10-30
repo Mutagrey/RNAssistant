@@ -778,8 +778,8 @@ namespace RNAssistant.Harness
                 AssertEqual("context_not_found", RuntimeThrows<TextPatternException>(() =>
                     files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("NOT_PRESENT", "x"), () => refusedDispatch = true)).ErrorCode,
                     "an absent large-source anchor is refused before dispatch");
-                AssertEqual("encoding_ambiguous", RuntimeThrows<WorkspaceFileException>(() =>
-                    files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("TAG_OLD", "\uD800"), () => refusedDispatch = true)).Code,
+                AssertEqual("invalid_edit", RuntimeThrows<TextPatternException>(() =>
+                    files.ApplyTextEdits(workspace, "large.txt", observed.Result.Resource.Reference, LineHunk("TAG_OLD", "\uD800"), () => refusedDispatch = true)).ErrorCode,
                     "invalid Unicode replacement is refused before dispatch");
                 AssertTrue(!refusedDispatch, "invalid large patch arguments never dispatch");
                 var dispatched = false;
