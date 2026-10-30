@@ -108,6 +108,13 @@ existing direct admissions and selected dependencies. The compiler injects compl
 `SELECTED_SKILL` instructions alongside exactly those schemas. Words in Markdown,
 a source read, attached files and historical results cannot select a skill.
 
+Prompt schema 60 materializes each selected body once. An exact, complete historical
+read of that same published skill becomes a paired receipt pointing to the selected
+instruction. Partial reads, supporting files, different resources/revisions and
+unselected bodies are preserved. The receipt records where the full bytes are
+included; publication dependencies and budget remain checked. See
+[P3 composition](conversation-protocol.md#p3-request-composition--2026-10-30).
+
 Default prompt schema 46 asks multi-deliverable/staged tasks to select
 `skills.task.tracking` and maintain its Task List. This is model guidance, not an
 automatic intent classifier or a completion gate. The compact Office catalog's

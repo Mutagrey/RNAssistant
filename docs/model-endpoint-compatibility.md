@@ -13,6 +13,28 @@ CLI `TargetCriterion` reflect its actual assertion verdict. All current validati
 synthetic. Real endpoint and Windows/Office/WebView2 qualification remain deferred.
 Earlier dated baselines below describe their own revisions, not the current wire.
 
+## Current P3 composition — 2026-10-30
+
+Prompt schema 60 uses separate Agent Contract and Runtime Context messages, shared
+Office/Workspace Markdown/YAML rendering, explicit callable/on-demand capability
+lists and exact JSON schema fences. Strict transport removes prompt schemas only
+on exact equality; repair and explicit object fallback preserve the frozen source.
+Selected skill reads become causal receipts only when the full exact publication
+is already included. Current policy, confirmation and unknown-effect gates remain.
+
+Synthetic CLI capture `/tmp/rna-v8-p3-skills-20261030-3/manifest.json` contains
+20 conversation requests, nine selected-skill appearances and **zero** duplicate
+skill source bodies. It covers guarded changes, approval, follow-up, policy suspension,
+removal, whole-request refusal and cold restart. The manifest records revision 3,
+`criterion`, a dirty working tree and the exact CLI hash; it is not release evidence.
+The CLI transport matrix also passed object/schema fallback, all result roles and
+approval inheritance. Targeted Harness checks cover schema equality/drift, repair,
+selected-body coverage/provenance, budgets and Inspector. No real endpoint was called.
+
+See [P3 contract](conversation-protocol.md#p3-request-composition--2026-10-30).
+Resource-body chronology/current views (P4), historical finish citations (P5) and
+full Inspector/real-machine qualification (P6) remain open.
+
 ## Required transport
 
 - `POST /v1/chat/completions`, or a `BaseUrl` already ending in `/chat/completions`;

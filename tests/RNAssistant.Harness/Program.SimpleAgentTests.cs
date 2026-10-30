@@ -1559,8 +1559,8 @@ namespace RNAssistant.Harness
                 var responses = new Queue<string>(new[]
                 {
                     ModelProtocolWire.WriteAcceptedCall("Inspect the sheet list.", "Читаю листы.",
-                        new ConversationToolCall { Name = "excel.inspect",
-                            Arguments = new JObject { ["kind"] = "sheets" } }),
+                        new ConversationToolCall { Name = "core.find",
+                            Arguments = new JObject { ["query"] = "sheets" } }),
                     null
                 });
                 LlmCompletionDelegate completion = (completionSettings, messages, options, stream, cancellationToken) =>
@@ -1568,14 +1568,14 @@ namespace RNAssistant.Harness
                     requests.Add(messages.ToList());
                     var response = responses.Dequeue() ?? ScriptedVerifiedFinish(session,
                         "The sheet inspection has a terminal result.", "Готово.",
-                        "The sheet list was inspected.", "excel.inspect");
+                        "The sheet list was inspected.", "core.find");
                     return Task.FromResult(new LlmCompletionResult { Content = response });
                 };
                 var settings = publishedSettings.Clone();
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
                     "List sheets.", session, NewContext(adapter), settings,
-                    OfficeToolCatalog.ForHost(adapter.HostName).ToList(), null).GetAwaiter().GetResult();
+                    OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null).GetAwaiter().GetResult();
 
                 AssertEqual("Готово.", result.AssistantText, "agent completed");
                 AssertEqual(2, requests.Count, "two model requests");
@@ -1585,13 +1585,13 @@ namespace RNAssistant.Harness
                         (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0),
                         "system prompt appears once per request");
                     AssertEqual(1, request.Count(message =>
-                        (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
+                        (message.Content ?? string.Empty).IndexOf("# RUNTIME_CONTEXT", StringComparison.Ordinal) >= 0),
                         "runtime context appears once per request");
                     var materialized = FlattenSimple(request);
                     var generalIndex = materialized.IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal);
                     var toolsIndex = materialized.IndexOf("TOOLS_PROMPT_SENTINEL", StringComparison.Ordinal);
                     var skillsIndex = materialized.IndexOf("SKILLS_PROMPT_SENTINEL", StringComparison.Ordinal);
-                    var runtimeIndex = materialized.IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal);
+                    var runtimeIndex = materialized.IndexOf("# RUNTIME_CONTEXT", StringComparison.Ordinal);
                     AssertTrue(generalIndex >= 0 && generalIndex < toolsIndex && toolsIndex < skillsIndex && skillsIndex < runtimeIndex,
                         "general, tool, skill, and runtime prompt sections keep stable order");
                     AssertTrue(request.Any(message =>
@@ -1605,7 +1605,7 @@ namespace RNAssistant.Harness
                     (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("TOOLS_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("SKILLS_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
-                    (message.Content ?? string.Empty).IndexOf("RUNTIME_CONTEXT:", StringComparison.Ordinal) >= 0),
+                    (message.Content ?? string.Empty).IndexOf("# RUNTIME_CONTEXT", StringComparison.Ordinal) >= 0),
                     "prompt is not persisted in chat history");
             });
         }
@@ -2616,7 +2616,7 @@ namespace RNAssistant.Harness
                                 "The skill load was refused by the context budget.",
                                 "Навык не подключён: контекст не вмещает полный запрос.",
                                 results: new[] { new ConversationResultClaim("The requested skill could not be loaded.",
-                                    new[] { refused.EvidenceReference.Alias }, ConversationAssessment.NotSatisfied) }, outcome: ConversationOutcome.UnableToComplete);
+                                    new[] { session.Messages.Last(item => item.ToolName == "core.read" && item.EvidenceReference != null).EvidenceReference.Alias }, ConversationAssessment.NotSatisfied) }, outcome: ConversationOutcome.UnableToComplete);
                         }
                     }
                     return Task.FromResult(new LlmCompletionResult { Content = scriptedResponse });
@@ -2627,10 +2627,10 @@ namespace RNAssistant.Harness
                     requestSettings.AgentResponseMode = AgentResponseModes.JsonSchema;
                     requestSettings.MaxTokens = 4096;
                 }
-                // The default 32K request now fits. Retain a deliberate full-request admission refusal
-                // independently of how much prose the built-in prompts happen to contain.
+                // Fill the compact request enough to exercise next-request admission refusal,
+                // while the pre-selection request and its explicit rejection still fit.
                 var userRequest = "Исправь незакрытый If в UniLoader." +
-                    (tightBudget ? "\nRequired fixture context: " + new string('x', 31500) : "");
+                    (tightBudget ? "\nRequired fixture context: " + new string('x', 38500) : "");
                 var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
                     ChatModes.Agent, userRequest, session, NewContext(adapter),
                     requestSettings,
@@ -2989,20 +2989,10 @@ namespace RNAssistant.Harness
                     message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
                     "confirmed result is retained as a typed tool result");
                 AssertContains(replay, "skills.upsert", "folded confirmation keeps its tool identity");
-                const string runtimeMarker = "RUNTIME_CONTEXT:\n";
                 var runtimeMessage = calls[2].First(message => (message.Content ?? string.Empty)
-                    .IndexOf(runtimeMarker, StringComparison.Ordinal) >= 0);
-                var runtimeContext = JObject.Parse(runtimeMessage.Content.Substring(
-                    runtimeMessage.Content.IndexOf(runtimeMarker, StringComparison.Ordinal) + runtimeMarker.Length));
-                AssertTrue(((JArray)runtimeContext["capabilities"]["items"])
-                        .OfType<JObject>().Any(item =>
-                            (string)item["id"] == "skills.upsert" &&
-                            (bool?)item["schemaLoaded"] == true),
-                    "selected skill keeps its unchanged authoring schema after publication");
-                AssertTrue(((JArray)runtimeContext["capabilities"]["items"])
-                        .OfType<JObject>().Any(item =>
-                            (string)item["id"] == "common.test" && (string)item["kind"] == "skill"),
-                    "confirmed creation appears in the next exact catalog");
+                    .StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal));
+                AssertContains(runtimeMessage.Content, "### skills.upsert", "selected skill keeps its callable authoring schema");
+                AssertContains(runtimeMessage.Content, "`common.test` (skill)", "created skill appears in the next catalog");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
                 var replayMessages = calls[2].ToList();
                 var userIndex = replayMessages.FindIndex(message => message.Role == "user" && !message.ProtocolMessage &&

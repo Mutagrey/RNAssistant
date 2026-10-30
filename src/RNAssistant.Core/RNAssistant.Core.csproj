@@ -277,6 +277,7 @@
     <Compile Include="Services\ToolResultMaterialization.cs" />
     <Compile Include="Services\ToolResultHistoryReader.cs" />
     <Compile Include="Services\ContextClaimProjection.cs" />
+    <Compile Include="Services\RuntimeContextPrompt.cs" />
     <Compile Include="Llm\PromptBudgetExceededException.cs" />
     <Compile Include="Services\WorkspaceFileResourceProvider.cs" />
     <Compile Include="Services\ChartArtifactBuilder.cs" />

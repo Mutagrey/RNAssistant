@@ -126,6 +126,13 @@ The historical [result matrix](../../docs/audits/tool-result-presentation-matrix
 records the earlier 91 static IDs and presentation paths; current counts are in
 the inventory above. Neither claims real Office execution for every handler.
 
+`context composition:` checks exact selected-skill materialization across all result
+roles, immutable publication dependencies, full/partial/foreign/changed/unselected
+reads, preserved pairing and truthful body provenance. `model context: request schema`
+checks exact HTTP schema deduplication, format repair/fallback and schema drift.
+`skill packages:`, `v8 recovery:` and `context inspector: builds agent snapshot`
+cover selection/budgets, continuation and preview consumers without live models.
+
 `model refs:` checks separate T calls/eligible E terminals/R versions, criterion,
 case-insensitive lookup, revision-3 read-only legacy boundary, canonical/raw preservation, all result roles,
 atomic allocation and stale writers, failed commits, restart/removal, resource versions

@@ -2,7 +2,7 @@
 
 This checks orchestration/guards, not real-model reasoning quality.
 """
-from conversation_transport import conversation_content
+from conversation_transport import runtime_metadata, conversation_content
 import json
 import os
 import shutil
@@ -106,10 +106,10 @@ def run_case(root, ending):
         assert run.returncode == 0, (run.stdout, run.stderr)
         assert result["acceptance"] == "passed" and result["webSnapshotVerified"], result
         if ending in ("late_edit", "stale"):
-            feedback = json.loads(requests[first_done + 1]["messages"][-1]["content"].split("\n", 1)[1])["completionFeedback"]
+            feedback = runtime_metadata(requests[first_done + 1]["messages"][1]["content"])["completionFeedback"]
             assert "Required browser checks" in feedback, feedback
         assert result["webCheckCount"] == 9 and len(requests) == len(responses), result
-        initial_context = json.loads(requests[0]["messages"][-1]["content"].split("\n", 1)[1])
+        initial_context = runtime_metadata(requests[0]["messages"][1]["content"])
         assert initial_context["webAcceptance"] == {"currentSnapshotVerified": False}
         requests = requests[1:]  # The selected skill exposes web.verify for the workflow below.
         read_counts = [0, 0, 1, 0, 1, 1] + ({"passed": [], "late_edit": [1, 0, 1, 0, 1, 1], "stale": [0, 1, 1, 1], "reverified": [0, 1, 1]}[ending])
@@ -118,10 +118,10 @@ def run_case(root, ending):
         web_states = [False, False, False, False, False, True] + ({"passed": [], "late_edit": [True, False, False, False, False, True], "stale": [False, False, False, True], "reverified": [False, False, True]}[ending])
         for index, (request, expected) in enumerate(zip(requests, web_states)):
             messages = request["messages"]
-            contexts = [m for m in messages if m.get("content", "").startswith("RUNTIME_CONTEXT:\n")]
+            contexts = [m for m in messages if m.get("content", "").startswith("# RUNTIME_CONTEXT\n")]
             assert len(contexts) == 1
-            assert json.loads(contexts[0]["content"].split("\n", 1)[1])["webAcceptance"] == {"currentSnapshotVerified": expected}
-            assert messages[-2 if ending == "late_edit" and index == 6 else -1] == contexts[0]
+            assert runtime_metadata(contexts[0]["content"])["webAcceptance"] == {"currentSnapshotVerified": expected}
+            assert messages[1] == contexts[0]
         if ending == "late_edit":
             assert requests[6]["messages"][:-1] == requests[5]["messages"], "Repair must preserve frozen verification state"
             assert requests[6]["messages"][-1]["content"].startswith("FORMAT_REPAIR:")
@@ -129,7 +129,7 @@ def run_case(root, ending):
         def receipts(request, tool):
             return [body for message in request["messages"]
                     if message.get("content", "").startswith("TOOL_INTERACTION")
-                    for body in [json.loads(message["content"].split("\n", 1)[1])]
+                    for body in [runtime_metadata(message["content"])]
                     if body["tool"] == tool]
 
         original_error = [message["content"] for message in requests[1]["messages"]
@@ -205,7 +205,7 @@ def run_recovery_guards(root):
         assert scenario.json("verifications")["Total"] == 2, "Rejected repeats must not start browsers or publish results"
         assert len(scenario.requests) == 13 and not scenario.responses and not scenario.errors
         for request in scenario.requests:
-            context = json.loads(request["messages"][-1]["content"].split("\n", 1)[1])
+            context = runtime_metadata(request["messages"][1]["content"])
             assert "readAcceptance" not in context and "webAcceptance" in context
         wire = json.dumps(scenario.requests)
         assert "ChangeRequired" in wire and "rna://" not in wire and "ChangeDependencies" not in wire

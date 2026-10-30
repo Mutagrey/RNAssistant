@@ -116,7 +116,7 @@ class ExactCapture:
             "revision": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
             "workingTreeDirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=REPO)),
             "cliSha256": hashlib.sha256(CLI.read_bytes()).hexdigest(),
-            "referenceRevision": 2, "targetTERCriterion": "NotRun", "realModelEvaluation": False,
+            "referenceRevision": 3, "finishResultField": "criterion", "realModelEvaluation": False,
             "exchanges": self.exchanges, "requests": rows, "fixtureResult": result}
         (self.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(f"Captured {len(rows)} conversation requests ({self.case}): {self.output}")

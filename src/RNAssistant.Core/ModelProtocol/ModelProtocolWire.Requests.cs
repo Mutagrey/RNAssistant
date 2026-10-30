@@ -20,21 +20,18 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 var source = result[index];
                 var content = source?.Content ?? string.Empty;
-                var contextStart = content.IndexOf("\n\nRUNTIME_CONTEXT:\n", StringComparison.Ordinal);
                 if (source == null || source.ExcludeFromModelContext || source.AttachmentAnalysis != null ||
                     !string.IsNullOrEmpty(source.ToolCallId) || source.Attachments?.Count > 0 ||
                     source.ResourceEvidence?.Count > 0 || source.ContextClaims?.Count > 0 || source.ToolCalls?.Count > 0 ||
                     (!(index == 0 && (source.Role == "system" || source.Role == "developer" ||
-                        source.Role == "user" && contextStart >= 0)) && !(source.ProtocolMessage &&
+                        source.Role == "user" && content.StartsWith(RNAssistant.Core.Services.RuntimeContextPrompt.AgentHeader, StringComparison.Ordinal))) && !(source.ProtocolMessage &&
                     content.StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal)))) continue;
-                // Office can put the owned instruction in the user role. Preserve
-                // the runtime context and any USER_REQUEST suffix verbatim.
-                var instruction = contextStart >= 0 && index == 0 ? content.Substring(0, contextStart) : content;
+                // Owned instruction and runtime/history are separate messages.
+                var instruction = content;
                 // Repair stores its instruction inside JSON, so replace the exact
                 // escaped canonical fragment as well as ordinary prompt prose.
                 var projected = ReplaceGuidance(instruction, JsonObjectGuidance, ResponseGuidance(schemaTransport, reflectionEnabled));
                 projected = ReplaceGuidance(projected, MessageGuidance, MessageGuidanceFor(reflectionEnabled));
-                if (instruction.Length < content.Length) projected += content.Substring(instruction.Length);
                 if (projected == content) continue;
                 result[index] = new ChatMessage { Id = source.Id, Role = source.Role, Content = projected,
                     ProtocolMessage = source.ProtocolMessage, CreatedUtc = source.CreatedUtc,
@@ -56,12 +53,10 @@ namespace RNAssistant.Core.ModelProtocol
         {
             if (!request.ReflectionLimit.HasValue) return request.CompletionFeedback;
             var remaining = Math.Max(0, request.ReflectionLimit.Value - request.ReflectionsUsed);
-            var budget = "REFLECTION_BUDGET: " + request.ReflectionsUsed + " accepted, " + remaining +
-                " remaining before a new terminal tool result or user input. " +
-                (request.ReflectionLimit.Value == 0 ? "Reflection is disabled for this run. Choose execute or finish now; new input or tool results do not enable reflection. " :
-                    remaining == 0 ? "Choose execute or finish now. Reflection is unavailable until new input or a terminal tool result. " :
-                    "Reflection is optional: after choosing an approach, execute the next useful step. ") +
-                "Only accepted reflections count; format repairs and network retries do not. The overall iteration limit still applies.";
+            var budget = "REFLECTION_BUDGET: " + remaining + " remaining. " +
+                (request.ReflectionLimit.Value == 0 ? "Reflection is disabled for this run. Choose execute or finish now." :
+                    remaining == 0 ? "Choose execute or finish now until new input or a terminal tool result." :
+                    "Reflect only when useful, then act.");
             return string.IsNullOrWhiteSpace(request.CompletionFeedback) ? budget : request.CompletionFeedback + "\n" + budget;
         }
 

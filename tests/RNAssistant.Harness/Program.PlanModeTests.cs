@@ -255,7 +255,7 @@ namespace RNAssistant.Harness
                 AssertTrue(updated.Success, "runtime-guarded revision succeeds");
                 var runtimeContext = ConversationPromptComposer.BuildRuntimeContext(
                     ChatModes.Plan, adapter, tools, null, null, session);
-                var activePlan = (JObject)JObject.Parse(runtimeContext)["active_plan"];
+                var activePlan = (JObject)RuntimeMetadata(runtimeContext)["active_plan"];
                 AssertTrue(runtimeContext.IndexOf("revision_uri", StringComparison.Ordinal) < 0 &&
                     runtimeContext.IndexOf("rna://", StringComparison.Ordinal) < 0 &&
                     activePlan["id"] == null &&

@@ -143,7 +143,7 @@ namespace RNAssistant.Office.Services
             var inputLimit = ModelContextBudget.InputBudgetTokens(settings);
             var required = new ConversationPromptComposer().BuildRequiredMessages(mode, draftText,
                 _adapter, runnableTools, enabledSkills, null, settings, previewSession, null, true, 0,
-                capabilityCatalog);
+                capabilityCatalog, skillSurface: skillSurface);
             if (toolPack.RestorationStateMessage != null) required.Add(toolPack.RestorationStateMessage);
             var messageBudget = preparation.MessageBudget(required);
 
@@ -296,24 +296,19 @@ namespace RNAssistant.Office.Services
             var sections = new List<PromptContextSectionDto>();
             var current = messages == null || messages.Count == 0 ? null : messages[messages.Count - 1];
             var currentTokens = EstimateMessageTokens(current);
-            var hasStandaloneInstruction = messages != null && messages.Count > 1 && IsInstructionRole(messages[0].Role);
-            var instructionMessageTokens = hasStandaloneInstruction
-                ? EstimateMessageTokens(messages[0])
-                : 0;
-
-            string instruction;
-            string agentGeneralInstruction = string.Empty;
-            string agentToolInstruction = string.Empty;
-            string agentSkillInstruction = string.Empty;
-            string instructionEnvelope;
-            string runtimeJson = string.Empty;
+            var hasStandaloneInstruction = messages != null && messages.Count > 1 &&
+                (messages[0].Content ?? "").StartsWith(RuntimeContextPrompt.AgentHeader, StringComparison.Ordinal);
+            var runtimeMessage = messages?.FirstOrDefault(message => (message.Content ?? "").StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal));
+            var instructionMessageTokens = hasStandaloneInstruction ? EstimateMessageTokens(messages[0]) + EstimateMessageTokens(runtimeMessage) : 0;
+            string agentGeneralInstruction;
+            string agentToolInstruction;
+            string agentSkillInstruction;
             agentGeneralInstruction = mode == ChatModes.Plan
                 ? ConversationPromptComposer.ResolvePlanPrompt(settings)
                 : ConversationPromptComposer.ResolveGeneralPrompt(settings);
             agentToolInstruction = ConversationPromptComposer.ResolveToolPrompt(settings);
             agentSkillInstruction = ConversationPromptComposer.ResolveSkillPrompt(settings);
-            instruction = ConversationPromptComposer.BuildInstruction(mode, settings);
-            runtimeJson = ConversationPromptComposer.BuildRuntimeContext(
+            var runtime = ConversationPromptComposer.BuildRuntimeContextData(
                 mode,
                 _adapter,
                 tools,
@@ -322,35 +317,26 @@ namespace RNAssistant.Office.Services
                 previewSession,
                 settings,
                 capabilityCatalog);
-            var wireEnvelope = hasStandaloneInstruction ? messages[0].Content : current?.Content;
-            const string runtimeMarker = "\n\nRUNTIME_CONTEXT:\n";
-            var runtimeStart = wireEnvelope == null ? -1 : wireEnvelope.IndexOf(runtimeMarker, StringComparison.Ordinal);
-            if (runtimeStart >= 0)
-            {
-                runtimeStart += runtimeMarker.Length;
-                var runtimeEnd = wireEnvelope.IndexOf("\n\nUSER_REQUEST:\n", runtimeStart, StringComparison.Ordinal);
-                if (runtimeEnd < 0) runtimeEnd = wireEnvelope.Length;
-                runtimeJson = wireEnvelope.Substring(runtimeStart, runtimeEnd - runtimeStart);
-            }
-            instructionEnvelope = instruction + "\n\nRUNTIME_CONTEXT:\n" + runtimeJson;
-
-            var embeddedInstructionTokens = hasStandaloneInstruction || current == null
-                ? 0
-                : Math.Min(currentTokens, EstimateTextTokens(instructionEnvelope));
-            var runtimeBudget = hasStandaloneInstruction ? instructionMessageTokens : embeddedInstructionTokens;
+            runtime["loaded_skills"] = new JArray((_receipt?.Arsenal?.Selected ?? new List<ArsenalSkill>())
+                .Where(skill => skill.Status == "selected").Select(skill => skill.Id));
+            if ((runtimeMessage?.Content ?? "").EndsWith(RuntimeContextPrompt.SchemaDefinitions, StringComparison.Ordinal))
+                foreach (var tool in ((JArray)runtime["tools"]).OfType<JObject>())
+                    ((JObject)tool["function"]).Remove("parameters");
+            var embeddedInstructionTokens = 0;
+            var runtimeBudget = instructionMessageTokens;
             AddAllocatedSections(sections, BuildRuntimeSeeds(
                 mode,
                 agentGeneralInstruction,
                 agentToolInstruction,
                 agentSkillInstruction,
-                runtimeJson,
+                runtime,
                 sourceSession), runtimeBudget);
 
             var historyStart = hasStandaloneInstruction ? 1 : 0;
             var history = new List<ChatMessage>();
             for (var index = historyStart; messages != null && index < messages.Count - 1; index++)
             {
-                if (messages[index] != null) history.Add(messages[index]);
+                if (messages[index] != null && messages[index] != runtimeMessage) history.Add(messages[index]);
             }
             var resourceContext = history.Where(item => (item.Content ?? string.Empty).StartsWith("USER_CONTEXT", StringComparison.Ordinal) ||
                 (item.Content ?? string.Empty).StartsWith("USER_INSTRUCTION:", StringComparison.Ordinal) ||
@@ -370,7 +356,7 @@ namespace RNAssistant.Office.Services
             var currentBudget = Math.Max(0, currentTokens - embeddedInstructionTokens);
             AddAllocatedSections(sections, BuildCurrentSeeds(
                 current,
-                instructionEnvelope,
+                string.Empty,
                 embeddedInstructionTokens > 0,
                 attachments,
                 draftText), currentBudget);
@@ -492,10 +478,9 @@ namespace RNAssistant.Office.Services
             string generalInstruction,
             string toolInstruction,
             string skillInstruction,
-            string runtimeJson,
+            JObject root,
             ChatSession session)
         {
-            var root = string.IsNullOrWhiteSpace(runtimeJson) ? new JObject() : JObject.Parse(runtimeJson);
             var tools = root["tools"] as JArray ?? new JArray();
             var capabilities = root["capabilities"] as JObject ?? new JObject();
             var capabilityItems = capabilities["items"] as JArray ?? new JArray();
@@ -520,7 +505,7 @@ namespace RNAssistant.Office.Services
                 {
                     Id = "instructions",
                     Title = "Общие инструкции и runtime",
-                    Detail = (mode == ChatModes.Plan ? "Plan" : mode == ChatModes.Agent ? "Agent" : "Chat") + " prompt, document identity и JSON-обвязка",
+                    Detail = (mode == ChatModes.Plan ? "Plan" : mode == ChatModes.Agent ? "Agent" : "Chat") + " prompt, document identity и Markdown/YAML",
                     RawTokens = Math.Max(1, baseItems.Sum(item => item.Tokens) + 8),
                     Count = baseItems.Count,
                     Items = baseItems
@@ -580,7 +565,10 @@ namespace RNAssistant.Office.Services
 
             if (capabilities.HasValues)
             {
-                var catalogItems = capabilityItems.OfType<JObject>().ToList();
+                var callable = new HashSet<string>(tools.Select(tool => (string)tool.SelectToken("function.name")), StringComparer.Ordinal);
+                var loaded = new HashSet<string>((root["loaded_skills"] as JArray ?? new JArray()).Values<string>(), StringComparer.Ordinal);
+                var catalogItems = capabilityItems.OfType<JObject>().Where(item => (string)item["kind"] == "tool" ?
+                    !callable.Contains((string)item["id"]) : !loaded.Contains((string)item["id"])).ToList();
                 var toolItems = catalogItems.Where(item => string.Equals((string)item["kind"], "tool", StringComparison.OrdinalIgnoreCase)).ToList();
                 var skillItems = catalogItems.Where(item => string.Equals((string)item["kind"], "skill", StringComparison.OrdinalIgnoreCase)).ToList();
                 var catalogEnvelope = (JObject)capabilities.DeepClone();
@@ -1213,12 +1201,6 @@ namespace RNAssistant.Office.Services
             public override void WriteValue(string value) { base.WriteValue(Prefix(value)); }
             public override void WritePropertyName(string name) { base.WritePropertyName(Prefix(name)); }
             public override void WritePropertyName(string name, bool escape) { base.WritePropertyName(Prefix(name), escape); }
-        }
-
-        private static bool IsInstructionRole(string role)
-        {
-            return string.Equals(role, "system", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(role, "developer", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsProtocolMessage(ChatMessage message)

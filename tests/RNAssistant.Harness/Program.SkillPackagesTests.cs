@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
@@ -18,6 +19,59 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ContextCompositionMaterializesSelectedSkillOnce()
+        {
+            var skill = PackageSkill("fixture.materialization");
+            skill.BodyMarkdown = "UNIQUE_SKILL_BODY\r\nKeep exact \"quotes\" and C:\\source.\n";
+            skill.Publication = new ResourceRef(ResourceUri.Create("catalog", "p3-skills"), "revision-one");
+            var exact = SkillPublicationService.SkillResource(skill);
+            var other = new ResourceRef(ResourceUri.Create("catalog", "p3-skills", "other", "body"), "revision-one");
+            var scope = SkillPublicationService.ScopeId;
+            var resources = new ResourceAuthoritySnapshotSet(new[] { new ResourceAuthoritySnapshot(scope, 1, "publish", 0,
+                new[] { ResourceHeadState.Known(skill.Publication, 1) }) });
+            var skills = new SkillCatalogSnapshot(new[] { skill });
+            var pack = PackageTools(); var catalog = new ToolCatalogEntry[0];
+            var session = PackageSession();
+            SkillTaskService.Select(session, skill.Id, skills, pack, "load");
+            var surface = SkillTaskService.Compile(session, skills, pack, catalog, catalog, "step", new AppSettings());
+            var authority = new ModelAuthoritySnapshot(resources, pack.Generation, skills, null, 1);
+            foreach (var role in new[] { "tool", "user", "developer" })
+            foreach (var variant in new[] { "exact", "partial", "other", "different-text", "not-selected" })
+            {
+                var body = variant == "different-text" ? skill.BodyMarkdown + "additional data" : skill.BodyMarkdown;
+                var result = ContinuityResult("read-skill", "core.read", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read skill",
+                    new JObject { ["type"] = "skill", ["target"] = skill.Id, ["representation"] = "text", ["text"] = body,
+                        ["complete"] = variant != "partial", ["coverage"] = JObject.FromObject(variant == "partial" ?
+                            new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2) : ResourceCoverage.Whole()) }.ToString()), role);
+                result.ResourceEvidence.Add(new ResourceEvidence("skill-read", scope, variant == "other" ? other : exact,
+                    ResourceRepresentations.Text, variant == "partial" ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2) : ResourceCoverage.Whole(),
+                    variant != "partial", 1, dependencies: new[] { new ResourceDependency(skill.Publication,
+                        ResourceRepresentations.Text, ResourceCoverage.Whole(), "catalog-publication") }, immutable: true));
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "read-skill", Name = "core.read",
+                    Arguments = new Dictionary<string, object> { ["target"] = skill.Id } }, "Read", "Read the skill source.", null, role, FixtureCallOrigin("read-skill"));
+                var durable = result.Content;
+                var snapshot = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new[] { call, result }, null,
+                    catalog, new AppSettings(), 20000, skillSurface: variant == "not-selected" ? null : surface);
+                var visible = snapshot.Messages.Single(message => message.ToolName == "core.read" && message.AcceptedCallOrigin == null);
+                ToolResultWireReadResult wire; string error;
+                AssertTrue(ToolResultHistoryReader.TryRead(visible, out wire, out error), "causal result stays valid: " + error);
+                AssertEqual(durable, result.Content, "durable skill read is unchanged");
+                AssertEqual(role, visible.Role, "result role remains paired");
+                if (variant == "exact")
+                {
+                    AssertTrue(wire.Data["text"] == null && (bool?)wire.Data["bodyIncluded"] == false, "only the repeated full body is removed");
+                    AssertEqual(skill.Id, (string)wire.Data["retainedAt"]["id"], "receipt points to admitted skill");
+                    AssertEqual(1, snapshot.Messages.Count(m => (m.Content ?? "").Contains("UNIQUE_SKILL_BODY")), "one exact materialization");
+                    var entry = snapshot.Receipt.Messages.Single(m => m.SourceMessageId == result.Id);
+                    var selected = snapshot.Receipt.Messages.Single(m => m.SourceMessageId == entry.RetainedAtMessageId);
+                    AssertTrue(entry.EvidenceLinks.All(link => link.BodyIncludedInMessage == false), "receipt never claims omitted bytes");
+                    AssertTrue(selected.EvidenceLinks.All(link => link.BodyIncludedInMessage == true), "selected body carries exact provenance");
+                    AssertEqual(exact.Uri, selected.EvidenceLinks.Single().Resource.Uri, "provenance identifies the same skill source");
+                }
+                else AssertEqual(body, (string)wire.Data["text"], "partial, foreign, changed and unselected bodies remain available");
+            }
+        }
+
         private static void CallableProfilesPreserveSkillSurface()
         {
             var read = PackageTool("fixture.read", ToolExposure.Direct);
@@ -151,7 +205,7 @@ namespace RNAssistant.Harness
             var pluginAuthoring = WorkspaceSkillProvider.GetSkills().Single(skill => skill.Id == WorkspaceSkillProvider.PluginId);
             AssertTrue(pluginAuthoring.BodyMarkdown.Contains(VisualAnnotationSourceWorkflow.Common),
                 "plugin source authoring includes the shared annotation-to-source procedure");
-            AssertEqual("2", pluginAuthoring.Package.RequiredTools.Single(tool => tool.Id == ResourceMutationToolCatalog.Patch).ContractVersion,
+            AssertEqual(ResourceMutationToolCatalog.GetTools().Single(tool => tool.Id == ResourceMutationToolCatalog.Patch).ContractVersion, pluginAuthoring.Package.RequiredTools.Single(tool => tool.Id == ResourceMutationToolCatalog.Patch).ContractVersion,
                 "workspace skill requires the current patch contract");
 
             var pluginCatalog = new SkillCatalogSnapshot(new[] { pluginAuthoring });

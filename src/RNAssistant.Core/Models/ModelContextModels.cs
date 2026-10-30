@@ -103,6 +103,8 @@ namespace RNAssistant.Core.Models
         public RNAssistant.Core.ModelProtocol.ModelReference EvidenceReference { get; set; }
         public int? MessageIndex { get; set; }
         public string SourceMessageId { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public string RetainedAtMessageId { get; set; }
         public string Role { get; set; }
         public string Kind { get; set; }
         public ContextPresentationKind Presentation { get; set; }

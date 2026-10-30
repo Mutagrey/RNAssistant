@@ -29,13 +29,13 @@ namespace RNAssistant.Harness
             foreach (var role in new[] { "user", "developer", "tool" })
             foreach (var status in new[] { ToolResultStatus.Ok, ToolResultStatus.Error, ToolResultStatus.Unknown })
             {
-                var result = ContinuityResult("recent", "files.create", new ToolResult(status,
+                var result = ContinuityResult("recent", "core.write", new ToolResult(status,
                     "Exact terminal result.", "{\"code\":\"fixture_result\",\"path\":\"index.html\"}"), role);
                 result.ResourceEffect = new ResourceEffect("effect", "create", status == ToolResultStatus.Ok
                     ? ResourceEffectOutcome.VerifiedChanged : status == ToolResultStatus.Error
                     ? ResourceEffectOutcome.FailedNoEffect : ResourceEffectOutcome.UnknownAfterDispatch);
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "recent", Name = "files.create",
-                    Arguments = new Dictionary<string, object> { { "relativePath", "index.html" }, { "content", "<p>exact body</p>" } } },
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "recent", Name = "core.write",
+                    Arguments = new Dictionary<string, object> { { "target", "index.html" }, { "content", "<p>exact body</p>" } } },
                     "Create the page.", "Create the requested page.", null, role, FixtureCallOrigin("recent"));
                 var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { call, result }, null,
                     new ToolCatalogEntry[0], new AppSettings(), 10000);
@@ -63,18 +63,18 @@ namespace RNAssistant.Harness
 
                 var context = new ChatMessage { Role = "developer", Content = "Current required reads: 0/3." };
                 var withContext = compiler.Compile(authority, new[] { context }, new[] { call, result }, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 10000, trailingRequiredMessageId: context.Id);
+                    new ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(3, withContext.Messages.Count, "required context is moved, never duplicated");
-                AssertEqual(context.Id, withContext.Messages[2].Id, "current requirements follow the complete causal pair");
-                AssertEqual(2, withContext.Receipt.Messages.Single(item => item.SourceMessageId == context.Id).MessageIndex,
+                AssertEqual(context.Id, withContext.Messages[0].Id, "current requirements precede the complete causal pair");
+                AssertEqual(0, withContext.Receipt.Messages.Single(item => item.SourceMessageId == context.Id).MessageIndex,
                     "receipt describes the actual delivered order");
                 AssertEqual(ModelContextBudget.EstimateMessagesTokens(withContext.Messages, new AppSettings()),
-                    withContext.Receipt.EstimatedTokens, "trailing required context participates in the exact request budget");
+                    withContext.Receipt.EstimatedTokens, "required context participates in the exact request budget");
                 var withContextWire = JArray.FromObject(new LlmMessageBuilder().Build(withContext.Messages, new AppSettings()).Messages);
-                AssertTrue(JToken.DeepEquals(request, new JArray(withContextWire.Take(2))), "moving context preserves tool pairing and result roles");
+                AssertTrue(JToken.DeepEquals(request, new JArray(withContextWire.Skip(1))), "moving context preserves tool pairing and result roles");
                 var frozenRepair = compiler.CompileRepair(withContext, new ChatMessage { Role = "user", Content = "Repair format only." });
                 context.Content = "Changed after compilation.";
-                AssertEqual("Current required reads: 0/3.", frozenRepair[2].Content, "repair retains the frozen trailing requirement");
+                AssertEqual("Current required reads: 0/3.", frozenRepair[0].Content, "repair retains the frozen requirement");
             }
         }
 

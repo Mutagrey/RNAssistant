@@ -119,13 +119,15 @@ def main():
             assert len(requests) == 2, len(requests)
             strict_prompt, object_prompt = [request["messages"][0]["content"] for request in requests]
             assert "TOOL_NAME" not in strict_prompt and "TOOL_NAME" in object_prompt
-            assert "argument contracts are in json_schema" in strict_prompt
-            assert "exact argument schemas" in object_prompt
+            strict_runtime, object_runtime = [request["messages"][1]["content"] for request in requests]
+            assert "argument contracts are in response_format.json_schema" in strict_runtime
+            assert "```json" in object_runtime
 
-            # Validate what the model actually sees, not the internal schema dialect.
-            catalog = json.JSONDecoder().raw_decode(object_prompt.split(
-                "Available tools and exact argument schemas: ", 1)[1])[0]
-            schemas = {tool["Id"]: tool["Schema"] for tool in catalog}
+            # Validate the exact schemas delivered in the Runtime Context.
+            schemas = {}
+            for section in object_runtime.split("### ")[1:]:
+                name, definition = section.split("\n```json\n", 1)
+                schemas[name] = json.loads(definition.split("\n```", 1)[0])
             for schema in schemas.values():
                 Draft202012Validator.check_schema(schema)
             for name, arguments, valid in (
@@ -170,8 +172,8 @@ def main():
                     assert native["function"]["name"] == name, native
                     assert json.loads(native["function"]["arguments"]) == arguments, native
                     receipt = json.loads(output["content"])
-                    # Native tool pairing uses its transport ID; model evidence uses E refs.
-                    assert re.fullmatch(r"E[1-9][0-9]*", receipt["tool_call_id"]), receipt
+                    assert re.fullmatch(r"T[1-9][0-9]*", output["tool_call_id"]), output
+                    assert "tool_call_id" not in receipt, receipt
                 else:
                     assert any(m.get("content", "").startswith("TOOL_RESULT:\n") for m in messages), [
                         (m["role"], m.get("content", "")[-1600:]) for m in messages[1:]]
@@ -180,7 +182,7 @@ def main():
                     call, output = messages[result - 1], messages[result]
                     assert call["role"] == "assistant" and output["role"] == role, messages
                     receipt = json.loads(output["content"].split("\n", 1)[1])
-                    assert re.fullmatch(r"E[1-9][0-9]*", receipt["tool_call_id"]), receipt
+                    assert re.fullmatch(r"T[1-9][0-9]*", receipt["tool_call_id"]), receipt
                     assert json.loads(call["content"])["tool_calls"] == [
                         {"id": receipt["tool_call_id"], "name": name, "arguments": arguments}], call
                 assert receipt["status"] == "ok" and receipt["name"] == name, receipt
@@ -222,6 +224,7 @@ def main():
             (workspace / "victim.txt").write_text(original, encoding="utf-8")
             scripted.extend([
                 execute("Read before requesting deletion.", "core.read", {"target": "victim.txt"}),
+                execute("Admit deletion schema.", "core.tools.read", {"id": "resources.delete"}),
                 execute("Request guarded deletion.", "resources.delete", {'target': "victim.txt"}),
             ])
             env["RNA_INSTRUCTION_ROLE"] = "system"
@@ -232,7 +235,7 @@ def main():
             assert pending.returncode == 3, (pending.stdout, pending.stderr)
             state = json.loads(pending.stdout.splitlines()[-1])["data"]
             assert state["pendingTool"] == "resources.delete", state
-            assert len(requests) == start + 2 and not scripted, len(requests)
+            assert len(requests) == start + 3 and not scripted, len(requests)
             assert all(request["messages"][0]["role"] == "system" for request in requests[start:])
             assert (workspace / "victim.txt").read_text() == original
             env.pop("RNA_INSTRUCTION_ROLE")
@@ -245,11 +248,11 @@ def main():
             assert changed.returncode == 5 and "instruction role" in changed.stderr, changed
             changed = cli(*approval_args, "--tool-result-role", "user")
             assert changed.returncode == 5 and "tool result role" in changed.stderr, changed
-            assert len(requests) == start + 2, "Profile drift must fail before model or tool dispatch"
+            assert len(requests) == start + 3, "Profile drift must fail before model or tool dispatch"
             assert (workspace / "victim.txt").read_text() == original
             approved = cli(*approval_args)
             assert approved.returncode == 0, (approved.stdout, approved.stderr)
-            assert len(requests) == start + 3 and requests[-1]["messages"][0]["role"] == "system", requests[-1]
+            assert len(requests) == start + 4 and requests[-1]["messages"][0]["role"] == "system", requests[-1]
             assert requests[-1]["response_format"]["type"] == "json_object", requests[-1]
             assert_pair(requests[-1], "tool", "resources.delete", {'target': "victim.txt"})
             assert not (workspace / "victim.txt").exists()

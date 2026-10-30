@@ -158,11 +158,12 @@ namespace RNAssistant.Harness
 
         private static async Task V8RecoveryDisabledReflectionWire()
         {
-            var userRole = ModelProtocolWire.ProjectGuidance(new[] { new ChatMessage { Role = "user",
-                Content = AgentPromptDefaults.StructuredResponseContract + "\n\nRUNTIME_CONTEXT:\n{}\n\nUSER_REQUEST:\n" + ModelProtocolWire.JsonObjectGuidance } },
-                schemaTransport: false, reflectionEnabled: false)[0].Content;
-            AssertDisabledReflectionGuidance(userRole.Substring(0, userRole.IndexOf("\n\nRUNTIME_CONTEXT:\n", StringComparison.Ordinal)));
-            AssertTrue(userRole.EndsWith(ModelProtocolWire.JsonObjectGuidance, StringComparison.Ordinal), "user-role instruction projection preserves the request suffix");
+            var userRole = ModelProtocolWire.ProjectGuidance(new[] {
+                new ChatMessage { Role = "user", Content = RuntimeContextPrompt.AgentHeader + AgentPromptDefaults.StructuredResponseContract },
+                new ChatMessage { Role = "user", Content = ModelProtocolWire.JsonObjectGuidance } },
+                schemaTransport: false, reflectionEnabled: false);
+            AssertDisabledReflectionGuidance(userRole[0].Content);
+            AssertEqual(ModelProtocolWire.JsonObjectGuidance, userRole[1].Content, "user content remains exact");
             foreach (var mode in new[] { "json_object", "json_schema", "fallback" })
             {
                 var strict = mode != "json_object";

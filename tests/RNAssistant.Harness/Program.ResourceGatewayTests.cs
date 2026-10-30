@@ -373,7 +373,7 @@ namespace RNAssistant.Harness
                         DateTime.UtcNow, false, 1), CancellationToken.None).GetAwaiter().GetResult();
                 };
 
-                var runtimeContext = JObject.Parse(
+                var runtimeContext = RuntimeMetadata(
                     ConversationPromptComposer.BuildRuntimeContext(
                         ChatModes.Agent,
                         adapter,
@@ -1807,7 +1807,7 @@ namespace RNAssistant.Harness
                 null,
                 session,
                 new AppSettings());
-            AssertTrue(runtimeContext.IndexOf("\"active_plan\"", StringComparison.Ordinal) < 0,
+            AssertTrue(runtimeContext.IndexOf("active_plan:", StringComparison.Ordinal) < 0,
                 "ambiguous active Plan is not projected into model context");
 
             ChatSessionNormalizer.Normalize(session, "Excel", "ambiguous-artifacts", "Ambiguous.xlsx");

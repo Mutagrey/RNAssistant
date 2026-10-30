@@ -3,6 +3,7 @@
 Uses scripted HTTP through the production CLI; this is not model-quality evidence.
 """
 import copy
+from conversation_transport import runtime_metadata
 import json
 import os
 import re
@@ -20,9 +21,9 @@ TOOL = "task.list.set"
 
 
 def task(request):
-    contexts = [json.loads(message["content"].split("\n", 1)[1])
+    contexts = [runtime_metadata(message["content"])
                 for message in request["messages"]
-                if (message.get("content") or "").startswith("RUNTIME_CONTEXT:\n")]
+                if (message.get("content") or "").startswith("# RUNTIME_CONTEXT\n")]
     return next((context["active_task_list"] for context in contexts if "active_task_list" in context), None)
 
 

@@ -22,7 +22,7 @@ namespace RNAssistant.Office.Services
             ChatMessage packState = null)
         {
             var required = new ConversationPromptComposer().BuildRequiredMessages(mode, userText, adapter,
-                tools, skills, null, settings, session, null, true, 0, capabilityCatalog);
+                tools, skills, null, settings, session, null, true, 0, capabilityCatalog, skillSurface: skillSurface);
             if (packState != null) required.Add(packState);
             var history = PromptBudgetComposer.ConversationHistory(session, true, !replayCurrentUserInHistory);
             if (!replayCurrentUserInHistory) history.Add(new ChatMessage { Role = "user", Content = userText,

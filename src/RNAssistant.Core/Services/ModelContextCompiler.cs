@@ -74,15 +74,27 @@ namespace RNAssistant.Core.Services
             IReadOnlyList<ChatMessage> required, IReadOnlyList<ChatMessage> facts,
             IReadOnlyList<ContextNote> notes, IReadOnlyList<ToolCatalogEntry> tools,
             AppSettings settings, int budget, bool enforceBudget = true,
-            SkillRequestSurface skillSurface = null, string trailingRequiredMessageId = null,
+            SkillRequestSurface skillSurface = null,
             ContextWorkingSet workingSet = null)
         {
+            var selectedInstructions = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
             if (skillSurface != null)
             {
                 var complete = (required ?? new ChatMessage[0]).ToList();
                 foreach (var skill in skillSurface.Instructions)
-                    complete.Add(new ChatMessage { Role = settings.SystemPromptRole,
-                        Content = "SELECTED_SKILL " + skill.Id + "\n" + skill.BodyMarkdown });
+                {
+                    var instruction = new ChatMessage { Role = settings.SystemPromptRole,
+                        Content = "SELECTED_SKILL " + skill.Id + "\n" + skill.BodyMarkdown };
+                    if (skill.Publication?.IsExact == true && authority.Resources.Get(SkillPublicationService.ScopeId) != null)
+                        instruction.ResourceEvidence.Add(new ResourceEvidence("selected-skill:" + skill.Id,
+                            SkillPublicationService.ScopeId, SkillPublicationService.SkillResource(skill),
+                            ResourceRepresentations.Text, ResourceCoverage.Whole(), true,
+                            authority.Resources.Get(SkillPublicationService.ScopeId).Generation,
+                            dependencies: new[] { new ResourceDependency(skill.Publication, ResourceRepresentations.Text,
+                                ResourceCoverage.Whole(), "catalog-publication") }, immutable: true));
+                    selectedInstructions.Add(skill.Id, instruction);
+                    complete.Add(instruction);
+                }
                 foreach (var skill in skillSurface.Arsenal.Selected.Where(item => item.Reason != null))
                     complete.Add(new ChatMessage { Role = settings.SystemPromptRole,
                         Content = "SKILL_AVAILABILITY " + skill.Id + ": " + skill.Status + "\n" + skill.Reason });
@@ -104,7 +116,7 @@ namespace RNAssistant.Core.Services
             var maximumPayloadBytes = Math.Max(4096L,
                 2L * ModelContextBudget.ApproximateTextCharacterCapacity(budget, settings));
             foreach (var message in required ?? new ChatMessage[0])
-                atoms.Add(Atom("system-invariant", Clone(message), true));
+                atoms.Add(Atom(selectedInstructions.Values.Any(item => item.Id == message.Id) ? "selected-skill" : "system-invariant", Clone(message), true));
             foreach (var note in notes ?? new ContextNote[0])
             {
                 if (note == null) continue;
@@ -217,6 +229,8 @@ namespace RNAssistant.Core.Services
                 var invalid = states.Where(item => item.State != EvidenceState.Current).ToArray();
                 if (invalid.Length > 0)
                 {
+                    if (atom.Kind == "selected-skill")
+                        throw new InvalidOperationException("Selected skill publication is not current in the frozen request.");
                     var exclusion = invalid.Any(item => item.State == EvidenceState.Unavailable)
                         ? ContextExclusionKind.UnavailableEvidence :
                         invalid.Any(item => item.State == EvidenceState.Unknown)
@@ -470,6 +484,16 @@ namespace RNAssistant.Core.Services
                         if (projectionSkills == null) projectionSkills = authority.Skills.Skills;
                         atom.Messages[index] = _projection.Project(message, tools, projectionSkills,
                             parts => atom.BodyParts[message.Id] = parts, skillSurface?.Tools);
+                        foreach (var skill in skillSurface?.Instructions ?? new SkillDefinition[0])
+                        {
+                            var part = ContextClaimProjection.CompactSelectedSkillRead(atom.Messages[index], skill,
+                                selectedInstructions[skill.Id], authority);
+                            if (part == null) continue;
+                            atom.BodyParts[message.Id].RemoveAll(item => item.Kind == "data" || item.Kind == "data.text");
+                            atom.BodyParts[message.Id].Add(part);
+                            receipt.Deduplicated++;
+                            break;
+                        }
                     }
                     else if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                         string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
@@ -596,14 +620,6 @@ namespace RNAssistant.Core.Services
                 updateWorkingSetNotice();
                 atoms.Add(workingSetNotice);
             }
-            if (trailingRequiredMessageId != null)
-            {
-                // Move the existing invariant, preserving its budget, provenance and frozen repair input.
-                var trailing = atoms.Single(atom => atom.Kind == "system-invariant" && atom.Messages.Count == 1 &&
-                    string.Equals(atom.Messages[0].Id, trailingRequiredMessageId, StringComparison.Ordinal));
-                atoms.Remove(trailing);
-                atoms.Add(trailing);
-            }
             var cost = new ModelContextBudget.MessageTokenCost();
             Action<ContextAtom> measure = atom =>
             {
@@ -628,7 +644,7 @@ namespace RNAssistant.Core.Services
                 }
                 updateWorkingSetNotice();
                 if (workingSetNotice != null) measure(workingSetNotice);
-                var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" ||
+                var invariantCost = ModelContextBudget.EstimateMessagesTokens(atoms.Where(a => a.Kind == "system-invariant" || a.Kind == "selected-skill" ||
                     a.Kind == "user-instruction").SelectMany(a => a.PromptMessages), settings);
                 foreach (var atom in atoms.Where(a => a.Messages.Count > 0 && a.TokenCost.Estimate(settings) + invariantCost > budget))
                 {
@@ -1099,6 +1115,8 @@ namespace RNAssistant.Core.Services
                 var evidence = (message.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e => e != null).ToArray();
                 List<ContextMessagePresentation> bodyParts;
                 atom.BodyParts.TryGetValue(message.Id ?? "", out bodyParts);
+                var retainedBody = bodyParts?.FirstOrDefault(part => part.RetainedAtMessageId != null);
+                summary = summary || retainedBody != null;
                 var unchangedData = bodyParts != null && bodyParts.Any(p => p.Kind == "data" && p.Presentation == ContextPresentationKind.Full);
                 var resourceBody = evidence.Length > 0 && !IsFailedResult(message) &&
                     (message.SyntheticResourceObservation || unchangedData);
@@ -1110,9 +1128,11 @@ namespace RNAssistant.Core.Services
                 var entry = new ContextMessagePresentation { MessageIndex = result.Count,
                     SourceMessageId = message.Id, Role = message.Role, Kind = message == atom.Narration ? "assistant-update" : atom.Kind,
                     Presentation = presentation, OriginalPayload = source?.ResultPayload,
+                    RetainedAtMessageId = retainedBody?.RetainedAtMessageId,
                     ToolCallId = message.CompletedOperation?.ToolCallId ?? message.ToolCallId,
                     EvidenceReference = message.AcceptedCallOrigin == null ? message.EvidenceReference : null,
                     EvidenceLinks = EvidenceLinks(evidence, item =>
+                        retainedBody != null ? (bool?)false : atom.Kind == "selected-skill" ? (bool?)true :
                         message.SyntheticResourceObservation && atom.HydratedPayloadMessageIds.Contains(message.Id) &&
                         message.ResultPayload != null &&
                         item.Payload != null && item.Payload.Sha256 == message.ResultPayload.Sha256 &&

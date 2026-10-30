@@ -20,18 +20,6 @@ assertion с действующим guard-контрактом отдельно;
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
-## V8 P3: выбранный skill повторяется в истории чтения — 2026-10-30
-
-Owner: Core context compiler / skill materialization; Office и Workspace consumers.
-Synthetic CLI baseline `v8_context_baseline.py --case skills` воспроизводит полный
-instruction body одновременно в `SELECTED_SKILL fixture.report` и предыдущем
-`core.read` Tool Result. В capture `/tmp/rna-v8-context-regression-20261030-r2/skills`
-это requests 02–07 и 09–11; manifest отмечает `duplicateSourceMessages`.
-P3 должен сохранить единственную полную выбранную инструкцию и причинный receipt
-чтения с provenance; нельзя просто удалить call/result или считать чтение activation.
-Проверить снятие выбора, policy suspension, compaction и cold restart.
-Baseline и оставшиеся D-cases — [endpoint compatibility](../model-endpoint-compatibility.md#baseline-and-remaining-qualification).
-
 ## Settings navigation fixture: версия в hover — 2026-10-30
 
 Owner: Web settings navigation tests. `settings-navigation-layout.test.js:79`

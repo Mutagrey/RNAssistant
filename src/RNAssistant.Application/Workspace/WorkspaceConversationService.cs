@@ -1725,8 +1725,7 @@ namespace RNAssistant.Runtime
                 return new ModelRequestPreparation(_settings, surface.Tools,
                     new ModelProtocolCallContext(surface.Tools.Where(tool => tool.Policy.IndependentLocalRead).Select(tool => tool.Id),
                         reflectionEnabled: _session.LastRun.KernelState.Limits.MaxConsecutiveReflections > 0),
-                    (messages, tools, schema) => ProjectSchemaCatalog(messages,
-                        PromptToolCatalog(tools, true), PromptToolCatalog(tools, false)));
+                    RuntimeContextPrompt.ProjectJsonSchemaMessages);
             }
 
             private ModelContextSnapshot CompileCurrent(ModelAuthoritySnapshot authority, ModelRequestPreparation preparation, AgentModelRequest request,
@@ -1734,7 +1733,7 @@ namespace RNAssistant.Runtime
             {
                 var surface = candidateSurface ?? _skillSurface;
                 var required = new List<ChatMessage>
-                { new ChatMessage { Role = _settings.SystemPromptRole, Content = Prompt(surface) } };
+                { new ChatMessage { Role = _settings.SystemPromptRole, Content = RuntimeContextPrompt.AgentHeader + Prompt() } };
                 var context = new WorkspaceModelContext { CompletionFeedback = ModelProtocolWire.RuntimeFeedback(request), ActiveTaskList = _taskLists.Project(authority.Resources), ActivePlan = _plans.Project(authority.Resources) };
                 if (_acceptance?.MinimumVerifiedReads > 0)
                 {
@@ -1754,13 +1753,17 @@ namespace RNAssistant.Runtime
                         CurrentSnapshotVerified = AssessWebVerification(_files, _webSnapshots, _workspace,
                             _session, request.RunId, _acceptance, authority.Resources)
                     };
-                ChatMessage runtimeContext = null;
-                if (context.ActiveTaskList != null || context.ActivePlan != null || context.ReadAcceptance != null || context.WebAcceptance != null || context.CompletionFeedback != null)
-                {
-                    runtimeContext = new ChatMessage { Role = _settings.SystemPromptRole,
-                        Content = "RUNTIME_CONTEXT:\n" + JsonConvert.SerializeObject(context) };
-                    required.Add(runtimeContext);
-                }
+                var runtime = JObject.FromObject(context);
+                runtime["mode"] = _mode.Mode;
+                runtime["host"] = "Workspace";
+                runtime["mutation_policy"] = _mode.MutationPolicy.ToString();
+                runtime["auto_confirm_tool_actions"] = _mode.AutoConfirmsToolActions;
+                runtime["loaded_skills"] = new JArray(surface.Instructions.Select(skill => skill.Id));
+                runtime["tools"] = RuntimeContextPrompt.Tools(surface.Tools);
+                runtime["capabilities"] = CapabilityCatalogService.BuildPromptCatalog(_catalog, _skills.Skills, surface.Tools);
+                var runtimeContext = new ChatMessage { Role = _settings.SystemPromptRole,
+                    Content = RuntimeContextPrompt.Render(runtime) };
+                required.Add(runtimeContext);
                 var state = packState ?? _packState ?? _callable?.RestorationStateMessage;
                 if (state != null) required.Add(state);
                 var budget = preparation.MessageBudget(required);
@@ -1770,9 +1773,7 @@ namespace RNAssistant.Runtime
                     archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
                         AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
                 return _compiler.Compile(authority, required, facts, null, _catalog, _settings,
-                    budget, skillSurface: surface,
-                    trailingRequiredMessageId: context.ReadAcceptance == null && context.WebAcceptance == null && context.CompletionFeedback == null ? null : runtimeContext.Id,
-                    workingSet: workingSet);
+                    budget, skillSurface: surface, workingSet: workingSet);
             }
 
             private ResourceAuthoritySnapshotSet CaptureContextAuthority(CancellationToken cancellationToken)
@@ -1926,7 +1927,7 @@ namespace RNAssistant.Runtime
                     "then inspect real source files before editing. ";
             }
 
-            private string Prompt(SkillRequestSurface surface = null)
+            private string Prompt()
             {
                 return "You are the RNAssistant workspace assistant. Current mode: " + _mode.Mode + ". " +
                     (_pluginSource ? "This is the source chat for an RNAssistant plugin. Work on the user's plugin request in this source workspace, using its files and plugin tools. Office documents are outside this chat's scope. After any source file change, run plugins.check on the final source before claiming completion when that tool is available; repair validation errors and check again. " :
@@ -1965,8 +1966,7 @@ namespace RNAssistant.Runtime
                     "Ask material decisions through core.ask after discovery; never answer for the user. " +
                     "Load a missing applicable skill with core.skills.load; reuse current SELECTED_SKILL. Complete instructions and tools arrive next request. " +
                     "Selection survives turns, cancellation, restart and compaction; remove irrelevant skills with action=remove. Resource reads never activate skills. " +
-                    "Available skill metadata: " + ResourceFindProjection.Serialize(SkillCatalogService.Find(_skills, null)) + ". " : string.Empty) +
-                    PromptToolCatalog((surface ?? _skillSurface)?.Tools ?? _directProfile.Select(_catalog), true) +
+                    "The runtime catalog distinguishes callable tools from capabilities to load. " : string.Empty) +
                     (_mode.AllowsSkills ? ". Use core.tools.search to discover additional tools or skills; core.tools.read reads an exact tool schema. " +
                     "A direct schema becomes callable only after next-request admission; skill-only tools require core.skills.load. " : ". ") +
                     "Workspace root is a user-selected directory; internal absolute paths and runtime references are not tool arguments.";
@@ -2012,28 +2012,6 @@ namespace RNAssistant.Runtime
                     },
                     AttemptCompleted = () => { if (!pendingReplacement) publish(true); }
                 };
-            }
-
-            private static string PromptToolCatalog(IEnumerable<ToolCatalogEntry> tools, bool includeSchemas)
-            {
-                return (includeSchemas ? "Available tools and exact argument schemas: " : "Available tools (argument contracts are in json_schema): ") +
-                    new JArray(tools.Select(tool => {
-                        var descriptor = new JObject { ["Id"] = tool.Id, ["Description"] = tool.Description };
-                        if (includeSchemas) descriptor["Schema"] = ToolSchemaSupport.ForPrompt(JObject.Parse(tool.ArgumentSchemaJson));
-                        return descriptor;
-                    })).ToString(Formatting.None);
-            }
-
-            private static IReadOnlyList<ChatMessage> ProjectSchemaCatalog(IReadOnlyList<ChatMessage> messages,
-                string fullCatalog, string schemaCatalog)
-            {
-                if (messages.Count == 0 || !(messages[0].Content ?? string.Empty).Contains(fullCatalog)) return messages;
-                var result = messages.ToArray();
-                var source = messages[0];
-                result[0] = new ChatMessage { Id = source.Id, Role = source.Role,
-                    Content = source.Content.Replace(fullCatalog, schemaCatalog), CreatedUtc = source.CreatedUtc,
-                    RunId = source.RunId, Sequence = source.Sequence };
-                return result;
             }
 
             public Task<long> AppendAsync(AgentRunEvent fact, long expectedRevision, CancellationToken cancellationToken)

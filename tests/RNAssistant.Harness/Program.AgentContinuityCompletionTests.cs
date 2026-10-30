@@ -184,7 +184,7 @@ namespace RNAssistant.Harness
                 session.ContextCheckpoints.Add(checkpoint); session.ActiveContextCheckpointId = checkpoint.Id;
                 chats.Save(session);
                 session = chats.Load(session.Id);
-                var runtime = JObject.Parse(ConversationPromptComposer.BuildRuntimeContext("agent", null, new ToolCatalogEntry[0], new SkillDefinition[0], null, session));
+                var runtime = RuntimeMetadata(ConversationPromptComposer.BuildRuntimeContext("agent", null, new ToolCatalogEntry[0], new SkillDefinition[0], null, session));
                 var task = runtime["active_task_list"];
                 AssertEqual("Restore slider", (string)task["goal"], "latest revised goal survives compaction and persistence");
                 AssertEqual("agent_assessment", (string)task["statusSource"], "assessment is distinct from authoritative tool receipts");

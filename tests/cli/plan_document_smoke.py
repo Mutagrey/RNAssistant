@@ -14,7 +14,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from read_acceptance_context_smoke import CLI, REPO, DONE, call
-from conversation_transport import conversation_content, reply_to_title
+from conversation_transport import runtime_metadata, conversation_content, reply_to_title
 
 SAVE, PATCH, RESTORE, DELETE = "core.write", "core.patch", "resources.restore", "resources.delete"
 OP_SAVE, OP_RESTORE, OP_DELETE = ("plan.document." + name for name in ("save", "restore", "delete"))
@@ -23,9 +23,9 @@ V1, V2 = "  # EXACT_PLAN_V1\r\n\n- Review source  \n", "# EXACT_PLAN_V2\n- Revie
 
 
 def plan(request):
-    contexts = [json.loads(message["content"].split("\n", 1)[1])
+    contexts = [runtime_metadata(message["content"])
                 for message in request["messages"]
-                if (message.get("content") or "").startswith("RUNTIME_CONTEXT:\n")]
+                if (message.get("content") or "").startswith("# RUNTIME_CONTEXT\n")]
     return next((item["active_plan"] for item in contexts if "active_plan" in item), None)
 
 

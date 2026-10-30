@@ -60,3 +60,10 @@ def reply_to_title(handler, request, capture=None, raw=None):
     handler.end_headers()
     handler.wfile.write(body)
     return True
+
+
+def runtime_metadata(content):
+    """Read owned YAML metadata with JSON values from a captured request."""
+    block = content.split("```yaml\n", 1)[1].split("\n```", 1)[0]
+    return {key: json.loads(value) for key, value in
+            (line.split(": ", 1) for line in block.splitlines() if ": " in line)}

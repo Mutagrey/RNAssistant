@@ -438,3 +438,12 @@ mirror its organizing folder. Old-style production source inclusion remains a
 separate `harness:` check.
 
 Windows-only validation remains: build `Debug | x64` in VS 2022 and smoke-test each Office host, desktop attach, VSTO task panes, and VBA native-host loading.
+
+### Runtime context rendering (P3)
+
+Core `RuntimeContextPrompt` renders frozen metadata/capability surfaces for both
+Office and Workspace. It owns no selection, authority, persistence or budgets.
+`ModelContextCompiler` materializes selected skills and preserves exact causal
+receipts; `SkillTaskService` still resolves selection and bindings. Strict schema
+projection is shared, equality-checked and leaves the fallback snapshot intact.
+See [request composition](conversation-protocol.md#p3-request-composition--2026-10-30).

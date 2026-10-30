@@ -27,6 +27,35 @@ host-neutral fixtures. Проверены actual serialized success, ambiguity, 
 Windows x64 / Office x64 / VBE / WebView2 delivery остаются открытым evidence;
 host-neutral результат не закрывает qualification или release gates.
 
+## V8 P3: компактная сборка и единственная копия skill — 2026-10-30
+
+P2 закоммичен и отправлен в main: `94260e5c`.
+Owner: Core `RuntimeContextPrompt` (rendering), `ModelContextCompiler` /
+`ContextClaimProjection` (materialization); Office и Workspace — consumers.
+Prompt schema 60 разделяет Agent Contract и Runtime Context перед историей;
+metadata — компактный YAML, capabilities — списки доступных/загружаемых IDs,
+callable schemas — JSON. Общая strict projection проверяет точное равенство схем
+и сохраняет полный fallback snapshot. Reflection feedback сокращён; runtime guards
+сохранены. Старый перенос runtime-сообщения в конец каждого шага удалён.
+
+Точное полное чтение выбранного skill сворачивается на прежнем месте в receipt с
+`retainedAt`; единственный body остаётся в выбранной инструкции. Immutable publication
+и её dependency проверяются по frozen authority. Partial/чужие/изменённые reads,
+supporting files и невыбранные инструкции не сокращаются этим правилом.
+Receipt показывает, где body включён; durable events/CAS не переписываются.
+
+Целевые Harness checks прошли: материализация в трёх result roles, schema equality /
+repair / fallback, Inspector, request-local prompts, pairing, skill budgets и
+9 recovery cases. CLI build, transport matrix и 7 read/completion scenarios прошли.
+Сквозной skill CLI capture: 20 HTTP requests, 9 выбранных инструкций, 0 дублей body;
+проверены approval, follow-up, policy suspension, removal и cold restart.
+Реальные модели и Office/VSTO не запускались; qualification остаётся открытой.
+
+Следующий этап — P4: хронологическое сокращение resource bodies, redundant current
+views и явные budget/coverage notices. P5 historical admission и P6/full Inspector
+также остаются открыты. [Контракт](../conversation-protocol.md#p3-request-composition--2026-10-30),
+[synthetic evidence](../model-endpoint-compatibility.md#current-p3-composition--2026-10-30).
+
 ## V8 P2: T/E/R, criterion и reference revision 3 — 2026-10-30
 
 Owner: Core ChatStore/ToolPolicy/ModelProtocol; Office/Workspace/Inspector — consumers.
@@ -100,8 +129,8 @@ P0/D2 дополнен пятью production CLI fixtures: read/read/patch/read 
 два последовательных patch, failure/correction, compaction, skills/approval/restart
 и отказ по бюджету. Сохранены exact HTTP bodies 43 conversation, одного compaction
 и семи title requests; manifest связывает роли, source body/coverage и hashes.
-Обнаружен дубль `SELECTED_SKILL` с предыдущим `core.read`; задача P3 записана в
-[BACKLOG](BACKLOG.md#v8-p3-выбранный-skill-повторяется-в-истории-чтения--2026-10-30).
+Обнаружен дубль `SELECTED_SKILL` с предыдущим `core.read`; затем исправлен в
+[P3 composition](../conversation-protocol.md#p3-request-composition--2026-10-30).
 Обновлены только две устаревшие fixtures для актуальных `core.*` contracts.
 Exact HTTP budget omission/unknown-effect и Office baseline остаются открытыми;
 T/E/R/criterion, UI и реальная Windows/Office/WebView2 qualification не закрыты.

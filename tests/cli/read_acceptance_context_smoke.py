@@ -1,6 +1,6 @@
 """Current read requirements remain visible through edits and frozen repair."""
 
-from conversation_transport import conversation_content
+from conversation_transport import runtime_metadata, conversation_content
 import json
 import os
 import subprocess
@@ -23,9 +23,9 @@ DONE = {"message": "Finished.", "finish_from_request": True}
 
 
 def read_progress(request):
-    contexts = [json.loads(message["content"].split("\n", 1)[1])
+    contexts = [runtime_metadata(message["content"])
                 for message in request["messages"]
-                if (message.get("content") or "").startswith("RUNTIME_CONTEXT:\n")]
+                if (message.get("content") or "").startswith("# RUNTIME_CONTEXT\n")]
     assert len(contexts) == 1, "The request needs one explicit, frozen read-acceptance projection"
     return contexts[0]["readAcceptance"]
 
@@ -103,7 +103,7 @@ def run_case(root, ending):
         assert final["completeFileReads"] == 2 and final["acceptance"] == "passed", final
         assert len(requests) == first_run_requests, "Only the existing kernel continues after unmet criteria"
         if ending != "repair":
-            feedback = json.loads(requests[first_done + 1]["messages"][-1]["content"].split("\n", 1)[1])["completionFeedback"]
+            feedback = runtime_metadata(requests[first_done + 1]["messages"][1]["content"])["completionFeedback"]
             assert "1/2" in feedback, feedback
             assert not any(message["role"] == "assistant" and "Finished." in message.get("content", "")
                            for message in requests[first_done + 1]["messages"]), "Rejected done entered accepted history"
@@ -112,9 +112,9 @@ def run_case(root, ending):
         expected = [0, 0, 0, 1, 1, 2, 1] + ([1, 1, 2] if ending != "early" else []) + ([1, 2] if ending != "repair" else [])
         for index, (request, count) in enumerate(zip(requests, expected)):
             # Repair adds its notice after the same frozen request; all fresh
-            # decisions see one required read-state block after the tool results.
-            position = -2 if ending != "early" and index == 7 else -1
-            assert request["messages"][position]["content"].startswith("RUNTIME_CONTEXT:\n"), request["messages"][-2:]
+            # decisions see one required read-state block before chronological history.
+            position = 1
+            assert request["messages"][position]["content"].startswith("# RUNTIME_CONTEXT\n"), request["messages"][-2:]
             progress = read_progress(request)
             assert progress["currentCompleteFileReads"] == count, progress
             assert progress["minimumCompleteFileReads"] == 2, progress
@@ -167,7 +167,7 @@ def run_completion_case(root, ending):
             assert result["acceptance"] == "passed" and result["IterationsUsed"] == 3 and result["ToolStepsUsed"] == 1, result
             request, repaired = scenario.requests[1:3]
             assert repaired["messages"][:-1] == request["messages"], "Format repair changed the frozen completion feedback"
-            context = json.loads(request["messages"][-1]["content"].split("\n", 1)[1])
+            context = runtime_metadata(request["messages"][1]["content"])
             assert "Missing required files" in context["completionFeedback"] and "0/1" in context["completionFeedback"]
             assert "readAcceptance" not in context and "webAcceptance" not in context
         else:

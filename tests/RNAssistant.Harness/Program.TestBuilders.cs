@@ -23,6 +23,19 @@ namespace RNAssistant.Harness
         private const string EmptyFormalToolSchema = "{\"type\":\"object\",\"properties\":{},\"required\":[],\"additionalProperties\":false}";
         private const string SheetFormalToolSchema = "{\"type\":\"object\",\"properties\":{\"sheet\":{\"type\":\"string\",\"description\":\"Worksheet name.\"}},\"required\":[\"sheet\"],\"additionalProperties\":false}";
 
+        private static JObject RuntimeMetadata(string content)
+        {
+            var start = content.IndexOf("```yaml\n", StringComparison.Ordinal) + "```yaml\n".Length;
+            var end = content.IndexOf("\n```", start, StringComparison.Ordinal);
+            var root = new JObject();
+            foreach (var line in content.Substring(start, end - start).Split('\n'))
+            {
+                var separator = line.IndexOf(": ", StringComparison.Ordinal);
+                if (separator > 0) root[line.Substring(0, separator)] = JToken.Parse(line.Substring(separator + 2));
+            }
+            return root;
+        }
+
         private static ToolCatalogEntry CustomTool(string host, string id, string name = null)
         {
             var manifest = new

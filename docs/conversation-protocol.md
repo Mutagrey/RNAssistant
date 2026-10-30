@@ -705,12 +705,37 @@ For a repetition incident, compare the persisted `llm.request` bytes with accept
 calls/results and compaction/effect events. A UI tool label or low token percentage
 cannot establish what evidence the model received or why it chose the next call.
 
-Every request contains one editable instruction followed by one dynamic `RUNTIME_CONTEXT` JSON object. Agent composes general (`SystemPrompt`), tool-use (`AgentToolsPrompt`), and skill-use (`AgentSkillsPrompt`) Markdown; Plan uses `PlanSystemPrompt` with the same progressive capability policy. The instruction role is selected independently as `developer` (default), `system`, or `user`:
+### P3 request composition — 2026-10-30
 
-- current host and document identity;
-- exact bootstrap and currently loaded callable tool descriptors;
-- one compact `capabilities` catalog with exact `id`, explicit `kind` (`tool` or `skill`), summary, revision, and kind-specific safety/body metadata in Agent and Plan;
-- chat-owned user context and artifact references.
+Prompt schema 60 separates the Agent Contract from one frozen `# RUNTIME_CONTEXT`
+message before chronological history. The configured instruction role is preserved.
+Office and Workspace use Core `RuntimeContextPrompt` only to render their existing
+frozen metadata; `ModelContextCompiler` remains the sole assembler and budget owner.
+Metadata uses a YAML fence with one key per line and JSON values (a YAML subset);
+capabilities use `id — description`. `Available now` is the actual callable set;
+`Load on demand` excludes callable tools and currently loaded skills. Exact argument
+schemas have their own JSON fences. Discovery metadata never grants authority.
+
+Strict transport removes those JSON definitions only after every supplied schema
+matches `response_format.json_schema`. The untouched snapshot retains full
+schemas for explicit `json_object` fallback and repair. Current skill instructions
+remain in `SELECTED_SKILL`; full instruction bodies are absent from the catalog.
+A prior complete `core.read` of the **same exact published skill resource/version**
+may replace only its duplicate text with `bodyIncluded:false` and
+`retainedAt:{kind:selected_skill,id:...}`. The call/result pair stays in place.
+Partial reads, supporting files, changed text, other resources and unselected skills
+keep their bodies. Publication dependencies must remain current in frozen authority.
+
+The existing receipt records `RetainedAtMessageId` and exact resource/coverage links:
+the old result has no body, the selected instruction has the complete body.
+Selected instructions remain mandatory under budget pressure; no silent truncation.
+Descriptor compaction also compares detached data so provenance cannot claim a
+removed schema was delivered in its historical result. Durable events/CAS are unchanged.
+
+Reflection allowance and completion feedback are compact runtime metadata at the
+front of the request. Runtime still enforces reflection, confirmation, unknown-effect
+and finish guards. No trailing runtime message is appended after every tool step.
+P4 resource-body chronology and P5 historical finish admission remain separate work.
 
 Token reporting separates three quantities. The context ring's tooltip shows the
 remaining percentage and exact input / window size. The inspector's primary
@@ -1122,9 +1147,10 @@ Strict response schemas require every object property to appear. Properties that
 
 When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects support for `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. An invalid supplied schema remains a typed provider HTTP error and does not trigger fallback. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
 
-For `json_schema`, the wire-only projection of the generated `RUNTIME_CONTEXT.tools`
-omits `function.parameters` after checking that every callable name and its exact
-structured argument contract matches `response_format.json_schema`. Descriptions,
+For `json_schema`, the shared renderer's wire-only projection replaces the generated
+`Callable tool definitions` section in Runtime Context with a schema reference,
+after checking that every callable name and its exact structured argument contract
+matches `response_format.json_schema`. Descriptions,
 safety metadata, capability membership, document policy and the v8 envelope stay
 in the request. The accepted prompt retains full parameters: a schema-rejection
 retry and direct `json_object` mode send those same contracts without recompiling

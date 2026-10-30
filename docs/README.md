@@ -76,7 +76,8 @@ fixtures снимают exact wire чтений, patch, compaction и skills. Li
 позволяет запускать встроенные сценарии и читать результаты/HTTP прямо в настройках.
 P2 ввёл [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3):
 T/E separation, eligibility, `criterion` и новый чат для старой истории.
-P3 composition, P4 materialization, P5 historical admission и P6 qualification ещё открыты. После реализации P0–P6/D0–D5 они остаются историей; нормативное
+P3 ввёл [компактную сборку запроса](conversation-protocol.md#p3-request-composition--2026-10-30)
+и единственную materialization выбранных skills/схем. P4 materialization, P5 historical admission и P6 qualification ещё открыты. После реализации P0–P6/D0–D5 они остаются историей; нормативное
 поведение переносится в canonical documents ниже.
 
 | Область | Владелец текущего контракта |

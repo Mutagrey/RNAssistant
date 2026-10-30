@@ -27,7 +27,7 @@ def check(root, capture=None):
                       "rnassistant: " + json.dumps(manifest) + "\n---\n" + marker)
     large = state / "skills" / "workspace" / "large"
     large.mkdir()
-    large_body = "REQUIRED_LARGE_PROCEDURE " + "x" * 24000
+    large_body = "REQUIRED_LARGE_PROCEDURE " + "x" * 80000
     (large / "SKILL.md").write_text("---\nid: fixture.large\nname: Large\nhost: Workspace\ndescription: Large procedure\n---\n" + large_body)
     responses, requests, errors = deque(), [], []
 
@@ -68,7 +68,14 @@ def check(root, capture=None):
         return json.loads(result.stdout.splitlines()[-1])["data"]
 
     def selected(request):
-        return [item["content"] for item in request["messages"] if (item.get("content") or "").startswith("SELECTED_SKILL ")]
+        instructions = [item["content"] for item in request["messages"] if (item.get("content") or "").startswith("SELECTED_SKILL ")]
+        if any(marker in item for item in instructions):
+            assert sum((item.get("content") or "").count(marker) for item in request["messages"]) == 1, "Selected skill body must be materialized exactly once"
+        return instructions
+
+    unavailable = {"action": "finish", "reason": "The required procedure is unavailable.",
+                   "outcome": "unable_to_complete", "results": [{"criterion": "Load the requested procedure",
+                       "evidence": [], "assessment": "not_satisfied"}], "message": "The procedure could not be loaded."}
 
     try:
         responses.extend([
@@ -114,10 +121,10 @@ def check(root, capture=None):
         responses.append(DONE)
         cli("run", "--session", final["SessionId"], "--message", "Continue after removal.")
         assert not selected(requests[-1]), "Removed selection must not return after restart"
-        responses.extend([call("core.skills.load", id="fixture.report"), DONE])
+        responses.extend([call("core.skills.load", id="fixture.report"), unavailable])
         cli("run", "--message", "Inspect only", "--mutation-policy", "deny", code=5)
         assert not selected(requests[-1]), "Unavailable required writer prevents partial selection under Deny"
-        responses.extend([call("core.skills.load", id="fixture.large"), DONE])
+        responses.extend([call("core.skills.load", id="fixture.large"), unavailable])
         limited = cli("run", "--message", "Select fixture.large if the complete request fits.", "--context-tokens", "24576", code=5)
         assert not selected(requests[-1]), "Rejected candidate never becomes active instructions"
         refusals = [message.get("content", "") for message in requests[-1]["messages"]

@@ -852,6 +852,7 @@ namespace RNAssistant.Harness
                 Test("tools: agent CRUD preserves omitted fields", AgentToolCrudPreservesOmittedFields),
                 Test("tools: typed library mutations are revision guarded", ToolLibraryMutationsAreRevisionGuarded),
                 Test("skills: CRUD preserves omitted fields", AgentSkillCrudPreservesOmittedFields),
+                Test("context composition: selected skill exact materialization", ContextCompositionMaterializesSelectedSkillOnce),
                 Test("skill packages: selection deduplication compaction budget and scope", SkillPackagesSelectionAndBudget),
                 Test("skill packages: built-ins load for every Office host", BuiltInSkillPackagesLoadForEveryOfficeHost),
                 Test("excel report: acceptance rejects incomplete state", ExcelReportAcceptanceRejectsIncompleteState),
