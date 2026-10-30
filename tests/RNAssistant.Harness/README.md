@@ -714,6 +714,16 @@ plus a healthy chat beside malformed JSONL. Every rebuild preserves event bytes.
 `storage: sqlite cold catalog defers message indexes` checks plain/encrypted cold
 startup, absent diagnostic blobs, persisted header-only indexes, append/suffix
 catch-up and lazy full materialization of only the selected chat with pagination.
+`storage: sqlite catalog and pages share document boundary` checks concurrent cold
+readers behind a writer, header-cache reuse and an external append. `storage: sqlite
+busy read can retry` holds an exclusive SQLite lock and checks bounded typed refusal,
+retry and unchanged JSONL. `storage: sqlite protection checks are bounded` checks
+plain/encrypted indexing, restart and pages with fewer than 24 protection-provider
+calls for 240 messages. `storage: CAS trace publication shares maintenance boundary`
+checks that payload publication waits for the same maintenance window as its event.
+`storage: CAS missing runtime body isolates startup recovery` checks deleted/corrupt
+in-flight bodies beside a healthy unfinished chat: global recovery proceeds, the
+affected chat remains listed but refuses opening, and its JSONL is unchanged.
 `bridge: init returns token` and `node tests/web/bridge-bootstrap.test.js` cover
 the early settings handshake, delayed history, failure/timeout isolation and retry.
 The bridge Harness uses its controller stub; real controller/Office delivery

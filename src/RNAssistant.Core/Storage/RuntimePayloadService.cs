@@ -5,6 +5,12 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Core.Storage
 {
+    public sealed class RuntimePayloadUnavailableException : InvalidOperationException
+    {
+        public RuntimePayloadUnavailableException()
+            : base("RUNTIME_PAYLOAD_UNAVAILABLE: exact runtime body is missing or unreadable; no replay or newer body substitution is allowed.") { }
+    }
+
     // Storage encoding of opaque runtime bodies. No alternate run state or replay authority.
     public static class RuntimePayloadService
     {
@@ -81,9 +87,9 @@ namespace RNAssistant.Core.Storage
         private static string Read(PayloadRef payload, ChatBlobStore payloads)
         {
             if (payload == null || payloads == null)
-                throw new InvalidOperationException("RUNTIME_PAYLOAD_UNAVAILABLE: exact payload required; cancel the pending action or open a new chat.");
+                throw new RuntimePayloadUnavailableException();
             var value = payloads.ReadText(payload.ToBlobReference());
-            if (value == null) throw new InvalidOperationException("RUNTIME_PAYLOAD_UNAVAILABLE: exact body is missing; no replay or newer body substitution is allowed.");
+            if (value == null) throw new RuntimePayloadUnavailableException();
             return value;
         }
     }

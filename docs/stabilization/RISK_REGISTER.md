@@ -1,5 +1,24 @@
 # Stabilization risk register
 
+## Холодная история и блокировки SQLite — 2026-10-30
+
+Owner: Core ChatStore; Office ChatSessionService/controller — consumers.
+Фото показывает `database is locked` при header materialization и catalog pass
+около 77 с на 74 чатах. Подтверждены обход document lock каталогом/страницами,
+неиспользуемый header cache, повторная проверка файлов защиты на строку SQLite и
+сохранение startup exception в Lazy. Эти пути исправлены и проверены host-neutral.
+Первичная полная проверка JSONL, полная materialization выбранного чата и первичный
+inbox replay остаются пропорциональны истории. Синтетический профиль 6000 сообщений
+создал 84,6 MiB JSONL даже при номинальных 30/50 MiB: fixture использует повторные
+полные Save; это не размер или измерение истории пользователя. Реальные Windows
+времена, параллельные Office-панели и orphan volume CAS остаются открытым evidence.
+
+Соседнее расхождение проверки `model refs: rejected finish corrects citation without
+replay`: `Program.WorkspaceTitleTests.cs` ожидает plain final без V8 envelope, тогда
+как текущий wire contract сохраняет finish decision. Остальные 9 `model refs:`
+проверок проходят. Owner: Core model history / Harness; согласовать это ожидание
+отдельно, не менять transport в исправлении хранилища.
+
 ## Предупреждение unknown в composer — 2026-10-30
 
 При целевом `chat-composer-layout.test.js` обнаружено прежнее расхождение:
@@ -11,16 +30,14 @@
 
 ## Recovery незавершённого чата с утраченным runtime body — 2026-10-30
 
-Соседний риск, найденный при исправлении холодного каталога: глобальный
-`ChatSessionService.ReconcileInterruptedRuns` загружает каждый unfinished chat,
-а `RuntimePayloadService` отказывает при отсутствующем exact pending/in-flight
-payload. Такой отказ не входит в обработку busy-document и может прервать общий
-recovery; controller `Lazy<bool>` сохраняет исключение до пересоздания controller.
-Фото с `projectionIndexBuild` не доказывает этот сценарий. Ранний bootstrap уже
-сохраняет доступ к настройкам при ошибке истории, но изоляция этого отказа между
-чатами остаётся открытой. Owner: Office ChatSessionService / Core runtime payload;
-следующий срез — воспроизведение двух чатов с утраченным pending payload, отказ
-только затронутого чата и сохранение unknown/no-replay guard без замены тела.
+Owner: Office ChatSessionService / Core runtime payload. Исправлено host-neutral:
+`RuntimePayloadUnavailableException` отделяет недоступное exact pending/in-flight
+body. Глобальный recovery оставляет этот чат без изменения журнала и продолжает
+здоровые; адресное открытие по-прежнему явно отказывает. Сохранение исключения
+controller `Lazy<bool>` также устранено. Воспроизведение с двумя чатами проверяет
+удалённый и повреждённый CAS, доступность здорового чата, неизменность повреждённого
+журнала и отсутствие выдуманного terminal/no-replay. Фото не доказывает потерю CAS
+у пользователя; доставка ошибки и восстановление панели на Windows остаются открытыми.
 
 ## Последовательные patch: видимость предыдущего результата — 2026-10-29
 

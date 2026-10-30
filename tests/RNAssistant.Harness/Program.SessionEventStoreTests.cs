@@ -856,6 +856,167 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void SqliteCatalogAndPagesShareDocumentBoundary()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "catalog-lock", "Catalog.docx", "Original");
+                chat.Messages.Add(new ChatMessage { Role = "user", Content = "retained history" });
+                writer.Save(chat);
+                var path = SessionEventFile(paths, chat);
+                File.Delete(path + ".projection.sqlite");
+                var reader = new ChatStore(paths);
+                var gate = typeof(ChatStore).GetMethod("AcquireDocumentLock", BindingFlags.Instance | BindingFlags.NonPublic);
+                Task<IReadOnlyList<ChatSessionHeader>> catalog;
+                Task<ConversationMessageWindow> page;
+                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey }))
+                {
+                    catalog = Task.Run(() => reader.ListHeaders());
+                    page = Task.Run(() => reader.ReadMessageWindow(chat.Id, 1, 1));
+                    AssertTrue(!Task.WaitAll(new Task[] { catalog, page }, 150),
+                        "catalog and page indexing wait for the document writer");
+                    AssertTrue(!File.Exists(path + ".projection.sqlite"), "neither reader writes a sidecar before the boundary");
+                }
+                AssertTrue(Task.WaitAll(new Task[] { catalog, page }, 5000), "both readers finish after release");
+                AssertEqual("retained history", page.Result.PageMessages.Single().Content, "page keeps exact history");
+                AssertEqual(1, catalog.Result.Count, "catalog retains the chat");
+                var hits = reader.SqliteProjectionHitCount;
+                reader.ListHeaders();
+                reader.ListHeaders();
+                AssertEqual(hits, reader.SqliteProjectionHitCount, "unchanged catalog uses the bounded header cache");
+                writer.SetTitle(chat, "Changed externally");
+                AssertEqual("Changed externally", reader.ListHeaders().Single().Title, "cache observes another store's append");
+            });
+        }
+
+        private static void SqliteBusyReadCanRetry()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var chat = store.Create("Word", "sqlite-busy", "Busy.docx", "Retained");
+                var path = SessionEventFile(paths, chat);
+                var canonical = File.ReadAllBytes(path);
+                using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder {
+                    DataSource = path + ".projection.sqlite", Pooling = false }.ToString()))
+                {
+                    connection.Open();
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = "BEGIN EXCLUSIVE";
+                        command.ExecuteNonQuery();
+                        var refused = false;
+                        var timer = Stopwatch.StartNew();
+                        try { store.ListHeaders(); }
+                        catch (ChatStorageLockTimeoutException) { refused = true; }
+                        AssertTrue(refused, "SQLite contention is typed busy, never missing/corrupt history");
+                        AssertTrue(timer.Elapsed < TimeSpan.FromSeconds(6), "read cannot wait the default 30 seconds");
+                        command.CommandText = "ROLLBACK";
+                        command.ExecuteNonQuery();
+                    }
+                }
+                AssertEqual(chat.Id, store.ListHeaders().Single().Id, "same reader can retry after contention");
+                AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(path)), "busy recovery preserves canonical bytes");
+            });
+        }
+
+        private static void SqliteProtectionChecksAreBounded()
+        {
+            foreach (var encrypted in new[] { false, true }) WithTempPaths(paths =>
+            {
+                var protector = encrypted ? new StorageProtector(HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256, "bounded sqlite secret",
+                    Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()) : StorageProtector.None;
+                var writer = new ChatStore(paths, () => protector);
+                var chat = writer.Create("Word", "protector-bound", "History.docx", "History");
+                for (var index = 0; index < 240; index++)
+                    chat.Messages.Add(new ChatMessage { Role = "user", Content = "exact body " + index });
+                writer.Save(chat);
+                File.Delete(SessionEventFile(paths, chat) + ".projection.sqlite");
+                var calls = 0;
+                Func<ChatStore> reader = () => new ChatStore(paths, () => { calls++; return protector; });
+                AssertEqual(240, reader().Load(chat.Id).Messages.Count, "cold rebuild retains all messages");
+                AssertTrue(calls < 24, "index build captures protection per batch, not per message");
+                calls = 0;
+                AssertEqual(240, reader().Load(chat.Id).Messages.Count, "restart reads exact rows");
+                AssertTrue(calls < 24, "indexed load does not query protection files per row");
+                calls = 0;
+                AssertEqual(80, reader().ReadMessageWindow(chat.Id, 120, 80).PageMessages.Count, "bounded page is exact");
+                AssertTrue(calls < 24, "paged load does not query protection files per row");
+            });
+        }
+
+        private static void TracePublicationSharesMaintenanceBoundary()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var chat = writer.Create("Word", "trace-maintenance", "Trace.docx", "Trace");
+                using (var publicationStarted = new ManualResetEventSlim())
+                using (var appendStarted = new ManualResetEventSlim())
+                {
+                    var appender = new ChatStore(paths, () => { publicationStarted.Set(); return StorageProtector.None; });
+                    var gate = typeof(ChatStore).GetMethod("AcquirePersistenceWrite", BindingFlags.Instance | BindingFlags.NonPublic);
+                    Task<SessionEvent> append;
+                    bool publishedDuringMaintenance;
+                    using ((IDisposable)gate.Invoke(writer, null))
+                    {
+                        append = Task.Run(() => {
+                            appendStarted.Set();
+                            return appender.AppendTrace(chat, SessionEventTypes.AssistantChunk, new { chunkCount = 1 },
+                                "exact retained trace", "text/plain", "run", "turn", "step");
+                        });
+                        AssertTrue(appendStarted.Wait(3000), "append starts during maintenance");
+                        publishedDuringMaintenance = publicationStarted.Wait(150);
+                    }
+                    AssertTrue(append.Wait(5000), "append completes after maintenance");
+                    AssertTrue(!publishedDuringMaintenance, "CAS publication cannot start inside the GC snapshot window");
+                    AssertEqual("exact retained trace", new ChatBlobStore(paths).ReadText(append.Result.Payload),
+                        "durable trace still points to its exact CAS body");
+                }
+            });
+        }
+
+        private static void MissingRuntimeBodyIsolatesStartupRecovery()
+        {
+            foreach (var corrupt in new[] { false, true }) WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var writer = new ChatStore(paths);
+                var healthy = writer.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Healthy");
+                healthy.LastRun = new ChatRunRecord { RunId = "healthy-run", RuntimeId = "previous", Status = "running" };
+                writer.Save(healthy);
+                var broken = writer.Create("Word", "missing-runtime", "Broken.docx", "Unavailable");
+                var call = new RNAssistant.Core.Agent.ToolCall("broken-call", "tools.upsert",
+                    "{\"source\":\"" + new string('x', 9000) + "\"}");
+                var running = new RunSummary("broken-run", "broken-turn", RunLifecycle.Running,
+                    new ToolCounts(), 1, 0, string.Empty, null, null);
+                var execution = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "catalog-r1", true, true),
+                    running.RunId, running.TurnId, "step", DateTime.UtcNow, false, 16);
+                broken.LastRun = new ChatRunRecord { RunId = running.RunId, TurnId = running.TurnId,
+                    RuntimeId = "previous", Status = "running", KernelState = new AgentRunState(running,
+                        new AgentRunLimits(8, 16), execution) };
+                writer.Save(broken);
+                var bodyPath = Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories).Single();
+                if (corrupt) File.WriteAllText(bodyPath, "damaged CAS body");
+                else File.Delete(bodyPath);
+                var eventPath = SessionEventFile(paths, broken);
+                var canonical = File.ReadAllBytes(eventPath);
+                var reader = new ChatStore(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(reader));
+                service.ReconcileInterruptedRuns("current");
+                AssertEqual("interrupted", reader.Load(healthy.Id).LastRun.Status,
+                    "an unavailable runtime body does not block recovery of another chat");
+                AssertEqual(2, reader.ListHeaders().Count, "unavailable chat remains listed");
+                RuntimeThrows<RuntimePayloadUnavailableException>(() => service.LoadAddressedSession(broken.Id));
+                AssertEqual(healthy.Id, service.LoadAddressedSession(healthy.Id).Id, "healthy chat can open");
+                AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(eventPath)),
+                    "missing evidence cannot rewrite the run or mark an unobserved tool as completed");
+                AssertEqual(0L, reader.HeaderFullReplayCount, "recovery does not discard a healthy header index");
+            });
+        }
+
         private static void SqliteProjectionPagesMessages()
         {
             WithTempPaths(paths =>

@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Загрузка истории, SQLite и CAS — 2026-10-30
+
+Owner: Core ChatStore; Office recovery/controller — consumers.
+По новому фото и коду исправлены гонки построения SQLite: каталог и страницы
+истории теперь используют document/maintenance boundary. SQLite busy ограничен
+двумя секундами и возвращает typed busy; startup exception больше не сохраняется
+до закрытия панели. Подключён bounded header cache с проверкой exact tail;
+owned append обновляет его без повторного чтения журнала. Индексация и чтение
+строк используют один protector на batch; устранено повторное шифрование новой строки.
+CAS trace body и его durable reference защищены общей границей maintenance.
+Отсутствующее/повреждённое runtime body одного чата больше не останавливает recovery
+остальных; затронутый чат отказывает явно, без изменения журнала или replay.
+Дедупликация и сжатие CAS сохранены, автоматического удаления истории нет.
+
+Целевые SQLite, header, corruption, cache, encryption и CAS checks прошли локально;
+проверены конкурирующие чтения, busy/retry и отсутствие per-row protection I/O.
+В `model refs:` 9 checks проходят, одно отдельное ожидание старого формата истории
+зафиксировано в [risk register](RISK_REGISTER.md#холодная-история-и-блокировки-sqlite--2026-10-30).
+Первичная проверка большого JSONL и startup inbox replay остаются дорогими;
+Windows/Office/WebView2 qualification и фактическое ускорение на машине пользователя
+открыты. Схема SQLite, JSONL и CAS не менялась: новый массовый rebuild не требуется.
+
 ## Статус модели, токены и отправка после отмены — 2026-10-30
 
 Owner: Core LLM diagnostics/usage, Application inbox и Web live presentation.

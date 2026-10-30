@@ -77,6 +77,10 @@ namespace RNAssistant.Core.Storage
                 {
                     DeleteSqliteProjection(path);
                 }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 5 || ex.SqliteErrorCode == 6)
+                {
+                    throw new ChatStorageLockTimeoutException();
+                }
             }
         }
 
@@ -101,13 +105,14 @@ namespace RNAssistant.Core.Storage
             {
                 DataSource = eventPath + ".projection.sqlite",
                 Mode = SqliteOpenMode.ReadWriteCreate,
+                DefaultTimeout = 2,
                 Pooling = false
             };
             var connection = new SqliteConnection(builder.ToString());
             try
             {
                 connection.Open();
-                ExecuteSql(connection, null, "PRAGMA busy_timeout=5000");
+                ExecuteSql(connection, null, "PRAGMA busy_timeout=100");
                 ExecuteSql(connection, null, "PRAGMA synchronous=NORMAL");
                 if (Convert.ToInt32(Scalar(connection, null, "PRAGMA user_version")) != SqliteProjectionVersion)
                 {
@@ -204,15 +209,15 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private byte[] SealProjection(string sessionId, string component, string json)
+        private static byte[] SealProjection(string sessionId, string component, string json, StorageProtector protector)
         {
-            return Protection().Protect(Utf8.GetBytes(json ?? string.Empty),
+            return protector.Protect(Utf8.GetBytes(json ?? string.Empty),
                 "rnassistant/chat-projection/v1/" + sessionId + "/" + component);
         }
 
-        private string OpenProjection(string sessionId, string component, byte[] payload)
+        private static string OpenProjection(string sessionId, string component, byte[] payload, StorageProtector protector)
         {
-            return Utf8.GetString(Protection().Unprotect(payload,
+            return Utf8.GetString(protector.Unprotect(payload,
                 "rnassistant/chat-projection/v1/" + sessionId + "/" + component));
         }
 
@@ -221,6 +226,7 @@ namespace RNAssistant.Core.Storage
         {
             try
             {
+                var protector = Protection();
                 using (var command = connection.CreateCommand())
                 {
                     command.Transaction = transaction;
@@ -235,7 +241,7 @@ namespace RNAssistant.Core.Storage
                         if (reader.GetInt32(0) != SqliteProjectionVersion) return null;
                         var sessionId = reader.GetString(1);
                         var keyId = reader.IsDBNull(8) ? null : reader.GetString(8);
-                        if (!string.Equals(keyId ?? string.Empty, Protection().KeyId ?? string.Empty,
+                        if (!string.Equals(keyId ?? string.Empty, protector.KeyId ?? string.Empty,
                             StringComparison.OrdinalIgnoreCase)) return null;
                         var messageCount = reader.GetInt64(10);
                         var artifactCount = reader.GetInt64(11);
@@ -243,8 +249,8 @@ namespace RNAssistant.Core.Storage
                             return null;
                         var materialized = reader.GetInt32(16) != 0;
                         var root = materialized && readRoot
-                            ? JObject.Parse(OpenProjection(sessionId, "root", (byte[])reader[12])) : null;
-                        var checkpoint = JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13]));
+                            ? JObject.Parse(OpenProjection(sessionId, "root", (byte[])reader[12], protector)) : null;
+                        var checkpoint = JObject.Parse(OpenProjection(sessionId, "header", (byte[])reader[13], protector));
                         var header = ChatHeaderReducer.FromCheckpoint(_blobs, checkpoint);
                         if ((materialized && readRoot && (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]) ||
                             !string.Equals((string)root["Id"], sessionId, StringComparison.OrdinalIgnoreCase))) ||
@@ -344,7 +350,7 @@ namespace RNAssistant.Core.Storage
                 {
                     HydrateEventData(item, protector);
                     header.Apply(item);
-                    if (materializeSession && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item, line.NextOffset);
+                    if (materializeSession && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item, line.NextOffset, protector);
                     last = item;
                 });
                 if (last == null || (materializeSession && root == null) || !header.IsValid)
@@ -363,7 +369,7 @@ namespace RNAssistant.Core.Storage
                     NextOffset = summary.TailNextByteOffset,
                     TailOffset = last.StorageByteOffset,
                     LastWriteUtcTicks = after.LastWriteUtcTicks,
-                    ProtectionKeyId = Protection().KeyId,
+                    ProtectionKeyId = protector.KeyId,
                     IncompleteTail = summary.HasIncompleteTail,
                     MessageCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM messages")),
                     ArtifactCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM artifacts")),
@@ -371,7 +377,7 @@ namespace RNAssistant.Core.Storage
                     Root = root,
                     Header = header
                 };
-                StoreSqliteCursor(connection, transaction, cursor);
+                StoreSqliteCursor(connection, transaction, cursor, protector);
                 transaction.Commit();
                 if (materializeSession)
                 {
@@ -391,7 +397,8 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private void StoreSqliteCursor(SqliteConnection connection, SqliteTransaction transaction, SqliteCursor cursor)
+        private void StoreSqliteCursor(SqliteConnection connection, SqliteTransaction transaction, SqliteCursor cursor,
+            StorageProtector protector)
         {
             ExecuteSql(connection, transaction, "INSERT OR REPLACE INTO projection " +
                 "(id,version,session_id,sequence,head_hash,byte_length,next_offset,tail_offset," +
@@ -400,16 +407,16 @@ namespace RNAssistant.Core.Storage
                 SqliteProjectionVersion, cursor.SessionId, cursor.Sequence, cursor.HeadHash,
                 cursor.ByteLength, cursor.NextOffset, cursor.TailOffset, cursor.LastWriteUtcTicks,
                 cursor.ProtectionKeyId, cursor.IncompleteTail ? 1 : 0, cursor.MessageCount, cursor.ArtifactCount,
-                SealProjection(cursor.SessionId, "root", cursor.Root?.ToString(Formatting.None) ?? "null"),
-                SealProjection(cursor.SessionId, "header", cursor.Header.ToCheckpoint().ToString(Formatting.None)),
+                SealProjection(cursor.SessionId, "root", cursor.Root?.ToString(Formatting.None) ?? "null", protector),
+                SealProjection(cursor.SessionId, "header", cursor.Header.ToCheckpoint().ToString(Formatting.None), protector),
                 cursor.Materialized ? 1 : 0);
         }
 
         private void ApplySqliteEvent(SqliteConnection connection, SqliteTransaction transaction,
-            ref JObject root, SessionEvent item, long nextOffset)
+            ref JObject root, SessionEvent item, long nextOffset, StorageProtector protector)
         {
             if ((int?)(root ?? item.Data)?["ReferenceContractVersion"] == ModelProtocol.ConversationResponse.ReferenceContractVersion)
-                IndexFinishFacts(connection, transaction, item, nextOffset);
+                IndexFinishFacts(connection, transaction, item, nextOffset, protector);
             if (string.Equals(item.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
                 string.Equals(item.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
             {
@@ -418,8 +425,8 @@ namespace RNAssistant.Core.Storage
                 root = (JObject)item.Data.DeepClone();
                 if (!ChatSession.IsReadableFormat((int?)root["FormatVersion"]))
                     throw new JsonException("Chat projection format is unsupported.");
-                SeedSqliteList(connection, transaction, "messages", item.SessionId, root["Messages"] as JArray);
-                SeedSqliteList(connection, transaction, "artifacts", item.SessionId, root["Artifacts"] as JArray);
+                SeedSqliteList(connection, transaction, "messages", item.SessionId, root["Messages"] as JArray, protector);
+                SeedSqliteList(connection, transaction, "artifacts", item.SessionId, root["Artifacts"] as JArray, protector);
                 root.Remove("Messages");
                 root.Remove("Artifacts");
                 return;
@@ -460,21 +467,21 @@ namespace RNAssistant.Core.Storage
                         break;
                     case SessionOperationTypes.ToolCallRecorded:
                         ApplyToolCallReference(root, data["Value"]);
-                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
+                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject, protector);
                         break;
                     case SessionOperationTypes.ToolExecutionFinished:
                         ApplyEvidenceReference(root, data["Value"]);
-                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
+                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject, protector);
                         break;
                     case SessionOperationTypes.MessageUpdated:
                     case SessionOperationTypes.UserMessageAppended:
                     case SessionOperationTypes.AssistantMessageAppended:
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:
-                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
+                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject, protector);
                         break;
                     case SessionOperationTypes.ArtifactRevisionCreated:
-                        UpsertSqliteItem(connection, transaction, "artifacts", item.SessionId, data["Value"] as JObject);
+                        UpsertSqliteItem(connection, transaction, "artifacts", item.SessionId, data["Value"] as JObject, protector);
                         break;
                     case SessionOperationTypes.MessageRemove:
                         RemoveSqliteItem(connection, transaction, "messages", (string)data["Id"]);
@@ -483,10 +490,10 @@ namespace RNAssistant.Core.Storage
                         RemoveSqliteItem(connection, transaction, "artifacts", (string)data["Id"]);
                         break;
                     case SessionOperationTypes.MessagesReorder:
-                        ReorderSqliteList(connection, transaction, "messages", item.SessionId, data["Ids"] as JArray);
+                        ReorderSqliteList(connection, transaction, "messages", item.SessionId, data["Ids"] as JArray, protector);
                         break;
                     case SessionOperationTypes.ArtifactsReorder:
-                        ReorderSqliteList(connection, transaction, "artifacts", item.SessionId, data["Ids"] as JArray);
+                        ReorderSqliteList(connection, transaction, "artifacts", item.SessionId, data["Ids"] as JArray, protector);
                         break;
                     default:
                         throw new JsonException("Unsupported chat projection operation: " + type);
@@ -495,42 +502,41 @@ namespace RNAssistant.Core.Storage
         }
 
         private void SeedSqliteList(SqliteConnection connection, SqliteTransaction transaction,
-            string table, string sessionId, JArray items)
+            string table, string sessionId, JArray items, StorageProtector protector)
         {
             var ordinal = 0;
             foreach (var raw in items ?? new JArray())
             {
                 var value = raw as JObject;
                 if (value == null) throw new JsonException("Indexed chat item must be an object.");
-                InsertSqliteItem(connection, transaction, table, sessionId, ordinal++, value);
+                InsertSqliteItem(connection, transaction, table, sessionId, ordinal++, value, protector);
             }
         }
 
         private void InsertSqliteItem(SqliteConnection connection, SqliteTransaction transaction,
-            string table, string sessionId, long ordinal, JObject value)
+            string table, string sessionId, long ordinal, JObject value, StorageProtector protector)
         {
             var id = (string)value?["Id"];
             if (string.IsNullOrWhiteSpace(id)) throw new JsonException("Indexed chat item has no id.");
             ExecuteSql(connection, transaction, "INSERT INTO " + table +
                 " (ordinal,item_id,payload) VALUES ($p0,$p1,$p2)", ordinal, id,
-                SealProjection(sessionId, table + "/" + id, value.ToString(Formatting.None)));
+                SealProjection(sessionId, table + "/" + id, value.ToString(Formatting.None), protector));
         }
 
         private void UpsertSqliteItem(SqliteConnection connection, SqliteTransaction transaction,
-            string table, string sessionId, JObject value)
+            string table, string sessionId, JObject value, StorageProtector protector)
         {
             var id = (string)value?["Id"];
             if (string.IsNullOrWhiteSpace(id)) throw new JsonException("Indexed chat upsert has no id.");
-            var payload = SealProjection(sessionId, table + "/" + id, value.ToString(Formatting.None));
             var ordinal = Scalar(connection, transaction,
                 "SELECT ordinal FROM " + table + " WHERE item_id=$p0 COLLATE NOCASE", id);
             if (ordinal != null && ordinal != DBNull.Value)
                 ExecuteSql(connection, transaction, "UPDATE " + table + " SET payload=$p0 WHERE item_id=$p1 COLLATE NOCASE",
-                    payload, id);
+                    SealProjection(sessionId, table + "/" + id, value.ToString(Formatting.None), protector), id);
             else
                 InsertSqliteItem(connection, transaction, table, sessionId,
                     Convert.ToInt64(Scalar(connection, transaction,
-                        "SELECT COALESCE(MAX(ordinal),-1)+1 FROM " + table)), value);
+                        "SELECT COALESCE(MAX(ordinal),-1)+1 FROM " + table)), value, protector);
         }
 
         private static void RemoveSqliteItem(SqliteConnection connection, SqliteTransaction transaction,
@@ -541,9 +547,9 @@ namespace RNAssistant.Core.Storage
         }
 
         private void ReorderSqliteList(SqliteConnection connection, SqliteTransaction transaction,
-            string table, string sessionId, JArray ids)
+            string table, string sessionId, JArray ids, StorageProtector protector)
         {
-            var existing = ReadSqliteList(connection, transaction, table, sessionId);
+            var existing = ReadSqliteList(connection, transaction, table, sessionId, protector: protector);
             var byId = existing.OfType<JObject>().ToDictionary(value => (string)value["Id"],
                 value => value, StringComparer.OrdinalIgnoreCase);
             var ordered = new List<JObject>();
@@ -558,12 +564,13 @@ namespace RNAssistant.Core.Storage
             }
             ordered.AddRange(existing.OfType<JObject>().Where(value => byId.ContainsKey((string)value["Id"])));
             ExecuteSql(connection, transaction, "DELETE FROM " + table);
-            SeedSqliteList(connection, transaction, table, sessionId, new JArray(ordered));
+            SeedSqliteList(connection, transaction, table, sessionId, new JArray(ordered), protector);
         }
 
         private JArray ReadSqliteList(SqliteConnection connection, SqliteTransaction transaction,
-            string table, string sessionId, long? first = null, long? before = null)
+            string table, string sessionId, long? first = null, long? before = null, StorageProtector protector = null)
         {
+            protector = protector ?? Protection();
             var values = new JArray();
             using (var command = connection.CreateCommand())
             {
@@ -577,7 +584,7 @@ namespace RNAssistant.Core.Storage
                     while (reader.Read())
                     {
                         var id = reader.GetString(0);
-                        values.Add(ReadSqliteItem(sessionId, table, id, reader[1]));
+                        values.Add(ReadSqliteItem(sessionId, table, id, reader[1], protector));
                     }
                 }
             }
@@ -587,6 +594,7 @@ namespace RNAssistant.Core.Storage
         private JArray ReadSqliteMessageWindow(SqliteConnection connection, SqliteTransaction transaction,
             string sessionId, int start, int count)
         {
+            var protector = Protection();
             var values = new JArray();
             using (var command = connection.CreateCommand())
             {
@@ -599,18 +607,18 @@ namespace RNAssistant.Core.Storage
                     while (reader.Read())
                     {
                         var id = reader.GetString(0);
-                        values.Add(ReadSqliteItem(sessionId, "messages", id, reader[1]));
+                        values.Add(ReadSqliteItem(sessionId, "messages", id, reader[1], protector));
                     }
                 }
             }
             return values;
         }
 
-        private JObject ReadSqliteItem(string sessionId, string table, string id, object payload)
+        private JObject ReadSqliteItem(string sessionId, string table, string id, object payload, StorageProtector protector)
         {
             try
             {
-                var value = JObject.Parse(OpenProjection(sessionId, table + "/" + id, (byte[])payload));
+                var value = JObject.Parse(OpenProjection(sessionId, table + "/" + id, (byte[])payload, protector));
                 if (!string.Equals((string)value["Id"], id, StringComparison.OrdinalIgnoreCase))
                     throw new JsonException("Indexed chat item id does not match its key.");
                 return value;
@@ -645,6 +653,8 @@ namespace RNAssistant.Core.Storage
         private ConversationMessageWindow ReadMessageWindowAtPath(string path, string chatId,
             int beforeIndex, int pageSize)
         {
+            using (AcquirePersistenceRead())
+            using (AcquireDocumentPathLockForRead(path))
             return ReadSqliteProjection(path, connection =>
             {
                 for (var attempt = 0; attempt < 2; attempt++)
@@ -797,6 +807,10 @@ namespace RNAssistant.Core.Storage
         private void AuditSqliteProjection(string path, EventLogReadResult log)
         {
             var timer = Stopwatch.StartNew();
+            // A full audit must also discard warm checkpoints that trusted the
+            // prior prefix. They are rebuilt from the verified sidecar on demand.
+            RemoveHeaderCache(path);
+            RemoveProjectionCache(path);
             var canonical = ReplayProjectionRoot(log.Events, null);
             var tail = LastEvent(log);
             if (canonical == null || tail == null)
@@ -833,18 +847,20 @@ namespace RNAssistant.Core.Storage
         private ChatSessionHeader ReadSqliteHeader(string path, string host, string documentKey,
             string documentTitle, ChatBlobStore.StorageSizeSnapshot storageSizes, Action<long> recordSizeTiming)
         {
-            return ReadSqliteProjection(path, connection =>
+            HeaderReadResult header;
+            // Indexing shares the writer boundary; advisory CAS size enumeration
+            // uses the captured reducer after releasing that document lock.
+            using (AcquirePersistenceRead())
+            using (AcquireDocumentPathLockForRead(path))
+                header = ReadHeader(path);
+            if (header == null) return null;
+            var started = Stopwatch.GetTimestamp();
+            try
             {
-                var cursor = EnsureSqliteProjection(connection, path, requireSession: false);
-                if (cursor == null) return null;
-                var started = Stopwatch.GetTimestamp();
-                try
-                {
-                    return cursor.Header.CreateHeader(storageSizes, cursor.Sequence,
-                        cursor.ByteLength, host, documentKey, documentTitle);
-                }
-                finally { recordSizeTiming?.Invoke(Stopwatch.GetTimestamp() - started); }
-            });
+                return header.Reducer.CreateHeader(storageSizes, header.Tail.Sequence,
+                    header.ByteLength, host, documentKey, documentTitle);
+            }
+            finally { recordSizeTiming?.Invoke(Stopwatch.GetTimestamp() - started); }
         }
 
         private void AdvanceSqliteProjection(string path, IReadOnlyList<SessionEvent> appended)
@@ -870,15 +886,16 @@ namespace RNAssistant.Core.Storage
                             return;
                         var root = saved.Root;
                         var header = saved.Header;
+                        var protector = Protection();
                         var current = CaptureStorageFileState(path);
                         if (current == null) return;
                         for (var index = 0; index < appended.Count; index++)
                         {
                             var item = appended[index];
-                            HydrateEventData(item, Protection());
+                            HydrateEventData(item, protector);
                             header.Apply(item);
                             if (saved.Materialized && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item,
-                                index + 1 < appended.Count ? appended[index + 1].StorageByteOffset : current.ByteLength);
+                                index + 1 < appended.Count ? appended[index + 1].StorageByteOffset : current.ByteLength, protector);
                         }
                         var tail = appended[appended.Count - 1];
                         saved.Sequence = tail.Sequence;
@@ -891,7 +908,7 @@ namespace RNAssistant.Core.Storage
                         saved.ArtifactCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM artifacts"));
                         saved.Root = root;
                         saved.Header = header;
-                        StoreSqliteCursor(connection, transaction, saved);
+                        StoreSqliteCursor(connection, transaction, saved, protector);
                         transaction.Commit();
                     }
                 }

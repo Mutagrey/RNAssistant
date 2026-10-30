@@ -54,7 +54,8 @@ namespace RNAssistant.Office
         private readonly ToolCatalogService _toolCatalog;
         private readonly SkillCatalogService _skillCatalog;
         private readonly ChatSessionService _chatSessions;
-        private readonly Lazy<bool> _startupRecovery;
+        private readonly object _startupRecoverySync = new object();
+        private bool _startupRecoveryCompleted;
         private readonly ChatHistoryEditService _chatHistoryEditService;
         private readonly ConversationRunService _conversationRunService;
         private readonly ContextCompactionService _contextCompactionService;
@@ -151,14 +152,6 @@ namespace RNAssistant.Office
             _chatSessions.RunOwnershipProvider = _activeRuns.IsConversationReserved;
             _chatSessions.RunRecoveryLeaseProvider = session => ReserveChatOperation(session);
             _chatSessions.MaintenanceLeaseProvider = _conversationLeases.AcquireMaintenance;
-            _startupRecovery = new Lazy<bool>(() =>
-            {
-                var recoveryTimer = Stopwatch.StartNew();
-                _chatSessions.ReconcileInterruptedRuns(_runtimeId);
-                if (recoveryTimer.ElapsedMilliseconds >= 250)
-                    RuntimeLog.Info("Chat startup recovery timing: " + recoveryTimer.ElapsedMilliseconds + "ms.");
-                return true;
-            });
             _chatHistoryEditService = new ChatHistoryEditService(
                 RemovePendingAgentToolsForSession,
                 (session, reason) => CancelPendingActivities(session, reason),
@@ -239,7 +232,16 @@ namespace RNAssistant.Office
         {
             // Construction runs on the Office UI thread. Recover at the first chat request,
             // behind the bridge worker boundary, before exposing or mutating any chat state.
-            _ = _startupRecovery.Value;
+            lock (_startupRecoverySync)
+            {
+                if (_startupRecoveryCompleted) return;
+                var recoveryTimer = Stopwatch.StartNew();
+                _chatSessions.ReconcileInterruptedRuns(_runtimeId);
+                if (recoveryTimer.ElapsedMilliseconds >= 250)
+                    RuntimeLog.Info("Chat startup recovery timing: " + recoveryTimer.ElapsedMilliseconds + "ms.");
+                // A transient storage failure must not be cached for the pane lifetime.
+                _startupRecoveryCompleted = true;
+            }
         }
 
         public string HostName { get { return _adapter.HostName; } }

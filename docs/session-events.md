@@ -37,20 +37,37 @@ remain untouched and unavailable, without stopping the catalog of healthy chats.
 
 Within one process, up to 16 recently used canonical projection roots are also cached in memory (maximum about 16 million characters each and 32 million in total). An unchanged warm read checks the exact final record. The cache and SQLite projection are disposable and do not serve trajectory export or CAS reachability. Routine tail checks are a checkpoint trust boundary: a changed prefix that preserves the exact tail and file metadata is detected by the explicit full maintenance audit, not by every navigation read. That audit validates every JSONL event, compares the canonical projection with SQLite and repairs divergence. This preserves fast routine reads without presenting the sidecar as an independent authority.
 
+Catalog reads also use the existing bounded header cache: at most 256 entries,
+512 Ki characters per entry and 4 Mi characters total. Each hit still validates
+the exact tail and recomputes advisory CAS sizes from the listing's fresh snapshot.
+An owned, fsynced append advances this reducer from its accepted batch without
+rereading the same JSONL records. Full maintenance audits invalidate both memory
+caches. SQLite row batches capture their protection configuration once instead of
+checking settings/key files for every message or finish locator.
+
 Writes to separate documents may proceed concurrently under their existing ordered
 cross-process document locks. A shared reader/writer gate excludes CAS reachability
 scans from writes without serializing ordinary writes across documents. Full-session
-reads use the same document lock as message pages and appends, including projection
+reads, catalog/header reads and message pages use the same document lock as appends, including projection
 indexing and cursor capture. They cannot index a changing log or turn an ordinary
 concurrent append into a missing chat. The lock is released before model/user waits. Slow
 projection reads, trace appends and saves report stage timings without chat content. An
 indexed cold read still materializes all messages needed by an active conversation;
 the bridge sends only the newest 80 and requests older pages by ordinal from SQLite.
-Active-pointer and full-session reads wait at most two seconds for that document lock;
+Active-pointer, catalog, message-page and full-session reads wait at most two seconds for that document lock;
 the timeout is a typed busy result and cannot be treated as a missing chat. Writes retain
 their ten-second lock wait. Startup recovery defers a busy document and reconciles an
 unfinished run when its chat is next opened. Slow-lock diagnostics identify the lock by
 an opaque hash prefix and report a tracked in-process holder when one exists.
+SQLite itself also has a two-second managed busy timeout; busy/locked errors become
+the same typed busy result and never cause sidecar deletion or a missing-chat result.
+Startup recovery serializes attempts but does not retain a thrown exception for
+the pane lifetime, so a transient failure can be retried. Its initial catalog scan
+and document-alias scan still scale with the number and size of cold streams.
+An unavailable exact pending/in-flight CAS body is a typed runtime-payload error.
+Global recovery logs and defers that chat while continuing with healthy chats;
+opening the affected chat still fails explicitly. No terminal outcome is invented,
+the event stream is unchanged and no tool is replayed to reconstruct lost evidence.
 The Help screen also keeps a bounded, memory-only timing view for the current pane:
 UI navigation queue/bridge/render, slow bridge handle/JSON, slow Office UI WebView
 posts, model HTTP phases and supported JavaScript long tasks. No timer or chat read

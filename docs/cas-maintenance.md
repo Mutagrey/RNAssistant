@@ -34,6 +34,19 @@ Supplying exact source bytes can repair a damaged blob at its existing content
 address; an earlier reference, matching file size or valid envelope cannot bypass
 verification. No CAS format or identity changes are involved.
 
+Chat trace publication holds the persistence maintenance boundary from CAS storage
+through the flushed JSONL reference. A reachability snapshot cannot run between
+those steps and classify that new body as an orphan. Failed/uncommitted publications
+can still leave ordinary collectable orphans.
+
+The loading-path audit (2026-10-30) confirms that exact HTTP requests, responses,
+batched SSE frames, accepted/rejected model bodies, artifacts and runtime payloads
+are retained for replay/diagnostics. Equal plaintext bytes share one content address;
+compressible bodies are compressed before encryption. Similar requests with changed
+history are distinct blobs, and retained historical revisions are not garbage.
+The catalog reads CAS reference/file-size metadata only. There is no automatic
+trace pruning or evidence from the Windows photo about actual orphan volume.
+
 `StoreFile` hashes and encodes the same open source handle with cancellable,
 bounded-buffer passes and stage progress. Temporary compressed/encoded writes
 are removed on failure/cancellation. `OpenVerifiedRead` authenticates, decodes and

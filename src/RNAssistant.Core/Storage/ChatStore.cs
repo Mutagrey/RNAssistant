@@ -103,7 +103,7 @@ namespace RNAssistant.Core.Storage
         private const int MaxProjectionCacheEntries = 16;
         private const long MaxProjectionCacheCharacters = 16L * 1024 * 1024;
         private const long MaxProjectionCacheTotalCharacters = 32L * 1024 * 1024;
-        private const int MaxHeaderCacheEntries = 64;
+        private const int MaxHeaderCacheEntries = 256;
         private const long MaxHeaderCacheCharacters = 512L * 1024;
         private const long MaxHeaderCacheTotalCharacters = 4L * 1024 * 1024;
         // Document locks serialize writes to the same document. The shared gate only
@@ -356,15 +356,12 @@ namespace RNAssistant.Core.Storage
 
             var dataToken = data == null ? null : JToken.FromObject(data);
             var correlatedStepId = ResolveStepId(stepId, dataToken);
-            ChatBlobReference payload = null;
-            if (payloadBytes != null)
-            {
-                payload = _blobs.StoreBytes(payloadBytes, payloadContentType);
-            }
-            var payloadMs = timer.ElapsedMilliseconds;
-
             using (AcquirePersistenceRead())
             {
+                // Publication and its durable reference are one maintenance boundary.
+                // GC must not see a just-published trace body as an orphan.
+                var payload = payloadBytes == null ? null : _blobs.StoreBytes(payloadBytes, payloadContentType);
+                var payloadMs = timer.ElapsedMilliseconds;
                 var path = GetSessionPath(session.Host, session.DocumentKey, session.Id);
                 using (AcquireDocumentLock(session.Host, session.DocumentKey))
                 {
@@ -1219,6 +1216,7 @@ namespace RNAssistant.Core.Storage
             catch (IOException) { return null; }
             catch (UnauthorizedAccessException) { return null; }
             catch (JsonException) { return null; }
+            catch (ChatStorageLockTimeoutException) { throw; }
             catch (ChatConcurrencyException) { return null; }
             finally { recordTiming?.Invoke(Stopwatch.GetTimestamp() - started, sizeTicks); }
         }

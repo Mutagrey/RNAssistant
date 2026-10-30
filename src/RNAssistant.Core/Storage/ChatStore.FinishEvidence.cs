@@ -24,7 +24,7 @@ namespace RNAssistant.Core.Storage
         }
 
         private void IndexFinishFacts(SqliteConnection connection, SqliteTransaction transaction,
-            SessionEvent item, long nextOffset)
+            SessionEvent item, long nextOffset, StorageProtector protector)
         {
             foreach (var fact in ConversationFinishEvidenceAdmission.Facts(item))
             {
@@ -39,7 +39,7 @@ namespace RNAssistant.Core.Storage
                 var insert = fact.Kind == SessionOperationTypes.ToolExecutionStarted ? "INSERT OR IGNORE" : "INSERT";
                 ExecuteSql(connection, transaction, insert + " INTO finish_facts(call_id,kind,run_id,reference,payload) VALUES($p0,$p1,$p2,$p3,$p4)",
                     locator.CallId, locator.Kind, locator.RunId, locator.Reference,
-                    SealProjection(item.SessionId, "finish/" + locator.CallId + "/" + locator.Kind, JsonConvert.SerializeObject(locator)));
+                    SealProjection(item.SessionId, "finish/" + locator.CallId + "/" + locator.Kind, JsonConvert.SerializeObject(locator), protector));
             }
         }
 
@@ -56,6 +56,7 @@ namespace RNAssistant.Core.Storage
                         cursor.Sequence != session.Revision || cursor.HeadHash != session.StorageHeadHash)
                         throw new ChatConcurrencyException("Canonical finish evidence is not current or complete.");
                     var locators = new Dictionary<string, FinishFactLocator>(StringComparer.Ordinal);
+                    var protector = Protection();
                     Action<string, object[]> select = (condition, values) => {
                         using (var command = connection.CreateCommand())
                         {
@@ -67,7 +68,7 @@ namespace RNAssistant.Core.Storage
                                 var id = reader.GetString(0); var kind = reader.GetString(1);
                                 FinishFactLocator locator;
                                 try { locator = JsonConvert.DeserializeObject<FinishFactLocator>(OpenProjection(session.Id,
-                                    "finish/" + id + "/" + kind, (byte[])reader[4])); }
+                                    "finish/" + id + "/" + kind, (byte[])reader[4], protector)); }
                                 catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
                                 if (locator == null || locator.CallId != id || locator.Kind != kind || locator.RunId != reader.GetString(2) ||
                                     locator.Reference != (reader.IsDBNull(3) ? null : reader.GetString(3)))
@@ -100,7 +101,7 @@ namespace RNAssistant.Core.Storage
                             item = ReadValidatedEventAtOffset(path, session.Id, locator.Sequence, locator.Hash,
                                 locator.Offset, locator.NextOffset, cursor.ByteLength);
                             if (item == null) throw new ProjectionDataException(new JsonException("Finish locator does not identify a canonical event."));
-                            HydrateEventData(item, Protection());
+                            HydrateEventData(item, protector);
                             events.Add(item.Sequence, item);
                             canonicalFacts.Add(item.Sequence, ConversationFinishEvidenceAdmission.Facts(item, positions[item.Sequence])
                                 .ToDictionary(entry => entry.Position));

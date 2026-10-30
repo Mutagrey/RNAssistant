@@ -18,48 +18,25 @@ namespace RNAssistant.Core.Storage
             HeaderReadResult cached;
             if (TryReadHeaderCache(path, out cached)) return cached;
 
-            var result = ReadHeaderLog(path, 0, null, new ChatHeaderReducer(_blobs));
+            var result = ReadSqliteProjection(path, connection =>
+            {
+                var cursor = EnsureSqliteProjection(connection, path, requireSession: false);
+                return cursor == null ? null : new HeaderReadResult
+                {
+                    Reducer = cursor.Header,
+                    Tail = new SessionEvent { SessionId = cursor.SessionId, Sequence = cursor.Sequence,
+                        Hash = cursor.HeadHash, StorageByteOffset = cursor.TailOffset },
+                    ByteLength = cursor.ByteLength,
+                    LastWriteUtcTicks = cursor.LastWriteUtcTicks,
+                    TailNextByteOffset = cursor.NextOffset,
+                    HasIncompleteTail = cursor.IncompleteTail,
+                    IsStableSnapshot = true
+                };
+            });
             if (result != null && result.Tail != null)
             {
-                Interlocked.Increment(ref _headerFullReplayCount);
                 if (CanCacheHeader(result)) StoreHeaderCache(path, result);
             }
-            return result;
-        }
-
-        private HeaderReadResult ReadHeaderLog(
-            string path,
-            long startByteOffset,
-            SessionEvent previousEvent,
-            ChatHeaderReducer reducer)
-        {
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
-            var result = new HeaderReadResult
-            {
-                Reducer = reducer ?? new ChatHeaderReducer(_blobs),
-                Tail = previousEvent,
-                TailNextByteOffset = startByteOffset
-            };
-            var protector = Protection();
-            var before = CaptureStorageFileState(path);
-            var summary = ReadValidatedChatRecords(
-                path,
-                startByteOffset,
-                previousEvent, protector,
-                (sessionEvent, line) =>
-                {
-                    HydrateEventData(sessionEvent, protector);
-                    result.Reducer.Apply(sessionEvent);
-                    result.Tail = sessionEvent;
-                });
-            result.ByteLength = summary.ByteLength;
-            result.TailNextByteOffset = summary.TailNextByteOffset;
-            result.HasIncompleteTail = summary.HasIncompleteTail;
-            var after = CaptureStorageFileState(path);
-            result.IsStableSnapshot = before != null && after != null &&
-                before.ByteLength == result.ByteLength && after.ByteLength == result.ByteLength &&
-                before.LastWriteUtcTicks == after.LastWriteUtcTicks;
-            result.LastWriteUtcTicks = result.IsStableSnapshot ? after.LastWriteUtcTicks : 0;
             return result;
         }
 
@@ -165,34 +142,41 @@ namespace RNAssistant.Core.Storage
                 !string.Equals(cached.SessionId, sessionId, StringComparison.OrdinalIgnoreCase) ||
                 !string.Equals(cached.HeadHash, expectedHeadHash, StringComparison.OrdinalIgnoreCase)) return;
 
-            var previous = new SessionEvent
-            {
-                SessionId = cached.SessionId,
-                Sequence = cached.Sequence,
-                Hash = cached.HeadHash,
-                StorageByteOffset = cached.TailByteOffset
-            };
-            HeaderReadResult suffix;
             try
             {
-                suffix = ReadHeaderLog(path, cached.ByteLength, previous, cached.Reducer.Clone());
+                // These records were just fsynced by this store under the document
+                // lock. Advance from the owned batch, as the full projection does.
+                var current = CaptureStorageFileState(path);
+                var tail = appended[appended.Count - 1];
+                if (current == null || tail.StorageByteOffset >= current.ByteLength)
+                {
+                    RemoveHeaderCache(path);
+                    return;
+                }
+                var reducer = cached.Reducer.Clone();
+                var protector = Protection();
+                foreach (var item in appended)
+                {
+                    if (item.Data == null) HydrateEventData(item, protector);
+                    reducer.Apply(item);
+                }
+                var result = new HeaderReadResult
+                {
+                    Reducer = reducer,
+                    Tail = tail,
+                    ByteLength = current.ByteLength,
+                    TailNextByteOffset = current.ByteLength,
+                    LastWriteUtcTicks = current.LastWriteUtcTicks,
+                    IsStableSnapshot = true
+                };
+                if (!CanCacheHeader(result)) { RemoveHeaderCache(path); return; }
+                StoreHeaderCache(path, result);
+                Interlocked.Increment(ref _headerIncrementalReplayCount);
             }
             catch
             {
                 RemoveHeaderCache(path);
-                return;
             }
-
-            var expectedTail = appended[appended.Count - 1];
-            if (!CanCacheHeader(suffix) || suffix.Tail == null ||
-                suffix.Tail.Sequence != expectedTail.Sequence ||
-                !string.Equals(suffix.Tail.Hash, expectedTail.Hash, StringComparison.OrdinalIgnoreCase))
-            {
-                RemoveHeaderCache(path);
-                return;
-            }
-            StoreHeaderCache(path, suffix);
-            Interlocked.Increment(ref _headerIncrementalReplayCount);
         }
 
         private SessionEvent ReadValidatedTail(

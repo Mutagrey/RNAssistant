@@ -68,7 +68,14 @@ namespace RNAssistant.Office.Services
         {
             var busyDocuments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var timer = Stopwatch.StartNew();
-            var headers = _conversations.ListHeaders();
+            IReadOnlyList<ChatSessionHeader> headers;
+            try { headers = _conversations.ListHeaders(); }
+            catch (ChatStorageLockTimeoutException)
+            {
+                // Catalog indexing also uses document locks. Recovery of a busy
+                // catalog is deferred to opening each affected chat, as below.
+                return;
+            }
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat recovery headers timing: scan=" + timer.ElapsedMilliseconds +
@@ -91,6 +98,13 @@ namespace RNAssistant.Office.Services
                     // Retry recovery when an affected chat is opened; do not wait
                     // again for another chat behind the same document lock.
                     busyDocuments.Add(document);
+                }
+                catch (RuntimePayloadUnavailableException)
+                {
+                    // Keep this chat unavailable with its exact error when opened.
+                    // Missing recovery evidence cannot block unrelated histories.
+                    RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                        "Chat recovery deferred: exact runtime payload unavailable, chat=" + header.Id + ".");
                 }
             }
         }
