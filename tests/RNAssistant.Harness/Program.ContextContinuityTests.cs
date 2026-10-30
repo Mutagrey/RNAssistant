@@ -38,7 +38,7 @@ namespace RNAssistant.Harness
                     Arguments = new Dictionary<string, object> { { "target", "index.html" }, { "content", "<p>exact body</p>" } } },
                     "Create the page.", "Create the requested page.", null, role, FixtureCallOrigin("recent"));
                 var snapshot = compiler.Compile(authority, new ChatMessage[0], new[] { call, result }, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 10000);
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = role }, 10000);
                 AssertEqual(2, snapshot.Messages.Count, "recent mutation remains a call/result pair");
                 AssertEqual(role, snapshot.Messages[1].Role, "compiler respects result transport role");
                 AssertEqual("recent", snapshot.Messages[1].ToolCallId, "result correlation preserved");
@@ -47,7 +47,7 @@ namespace RNAssistant.Harness
                 AssertEqual(status, wire.Result.Status, "outcome is not upgraded or replaced");
                 AssertContains(wire.Result.DataJson, "fixture_result", "short receipt stays complete");
                 AssertEqual(0, snapshot.Receipt.OperationReceipts, "no unconditional folding");
-                var request = JArray.FromObject(new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings()).Messages);
+                var request = JArray.FromObject(new LlmMessageBuilder().Build(snapshot.Messages, new AppSettings { ToolResultRole = role }).Messages);
                 AssertEqual(role, (string)request[1]["role"], "actual wire uses selected role");
                 if (role == "tool")
                 {
@@ -58,19 +58,19 @@ namespace RNAssistant.Harness
                 else AssertContains((string)request[0]["content"], "<p>exact body</p>", "v8 accepted arguments are exact");
                 AssertEqual(result.Content, snapshot.Messages[1].Content, "short result is unchanged");
                 var repaired = new LlmMessageBuilder().Build(compiler.CompileRepair(snapshot,
-                    new ChatMessage { Role = "user", Content = "Repair format only." }), new AppSettings()).Messages;
+                    new ChatMessage { Role = "user", Content = "Repair format only." }), new AppSettings { ToolResultRole = role }).Messages;
                 AssertTrue(JToken.DeepEquals(request, JArray.FromObject(repaired.Take(2))), "format repair reuses the frozen pair in every role");
 
                 var context = new ChatMessage { Role = "developer", Content = "Current required reads: 0/3." };
                 var withContext = compiler.Compile(authority, new[] { context }, new[] { call, result }, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 10000);
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = role }, 10000);
                 AssertEqual(3, withContext.Messages.Count, "required context is moved, never duplicated");
                 AssertEqual(context.Id, withContext.Messages[0].Id, "current requirements precede the complete causal pair");
                 AssertEqual(0, withContext.Receipt.Messages.Single(item => item.SourceMessageId == context.Id).MessageIndex,
                     "receipt describes the actual delivered order");
-                AssertEqual(ModelContextBudget.EstimateMessagesTokens(withContext.Messages, new AppSettings()),
+                AssertEqual(ModelContextBudget.EstimateMessagesTokens(withContext.Messages, new AppSettings { ToolResultRole = role }),
                     withContext.Receipt.EstimatedTokens, "required context participates in the exact request budget");
-                var withContextWire = JArray.FromObject(new LlmMessageBuilder().Build(withContext.Messages, new AppSettings()).Messages);
+                var withContextWire = JArray.FromObject(new LlmMessageBuilder().Build(withContext.Messages, new AppSettings { ToolResultRole = role }).Messages);
                 AssertTrue(JToken.DeepEquals(request, new JArray(withContextWire.Skip(1))), "moving context preserves tool pairing and result roles");
                 var frozenRepair = compiler.CompileRepair(withContext, new ChatMessage { Role = "user", Content = "Repair format only." });
                 context.Content = "Changed after compilation.";
@@ -96,9 +96,9 @@ namespace RNAssistant.Harness
                     "Attempted patch.", "Try the requested patch.", null, role, FixtureCallOrigin("last"));
                 var facts = new[] { call, old, latestCall, latest };
                 var compiler = new ModelContextCompiler();
-                var roomy = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 20000);
+                var roomy = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = role }, 20000);
                 AssertEqual(4, roomy.Messages.Count, "older pairs also remain intact when they fit");
-                var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 1400);
+                var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = role }, 1400);
                 AssertEqual(4, tight.Messages.Count, "old arguments fold while commentary and the latest pair remain");
                 var update = tight.Messages.Single(message => message.Id == call.Id);
                 AssertContains(update.Content, "Attempted create.", "the old decision survives argument folding");
@@ -908,7 +908,7 @@ namespace RNAssistant.Harness
                 var compiler = new ModelContextCompiler(blobs);
                 var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 1000);
                 var restored = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000, workingSet: set);
                 AssertEqual(1, restored.Receipt.RetainedBodies, "body admission uses projected token cost, not a second byte-as-character estimate");
                 AssertEqual(1, restored.Receipt.HydratedPayloads, "one selected exact body is hydrated once");
                 AssertContains(string.Join("\n", restored.Messages.Select(item => item.Content)), body, "the complete current source survives compaction");
@@ -925,13 +925,13 @@ namespace RNAssistant.Harness
                 var latest = ContinuityResult("latest", "fixture.read", ToolResult.Ok("Small result.", "{}"));
                 var withLargeFrame = new[] { writeCall, write, ContinuityCall(latest), latest };
                 var enoughRoom = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 6000,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 6000,
                     workingSet: ContextWorkingSet.Restore(session, withLargeFrame, 5000));
                 AssertTrue(enoughRoom.Messages.SelectMany(item => item.ToolCalls).Any(item =>
                     item.Id == "large_write" && item.ArgumentsJson.Contains(new string('x', 12000))),
                     "actual fitting source does not fold history merely to fund an unused reservation");
                 var funded = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 2500,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 2500,
                     workingSet: ContextWorkingSet.Restore(session, withLargeFrame, 1000));
                 AssertEqual(1, funded.Receipt.RetainedBodies, "folded old write funds archived source before admission");
                 AssertContains(string.Join("\n", funded.Messages.Select(item => item.Content)), body, "freed budget delivers exact source");
@@ -944,14 +944,14 @@ namespace RNAssistant.Harness
                     verification.ResourceEvidence.Add(observation);
                     var facts = new[] { ContinuityCall(verification), verification };
                     var compiled = compiler.Compile(authority, new ChatMessage[0], facts, null,
-                        new ToolCatalogEntry[0], new AppSettings(), 12000,
+                        new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000,
                         workingSet: ContextWorkingSet.Restore(session, facts, 1000));
                     AssertContains(string.Join("\n", compiled.Messages.Select(item => item.Content)), body,
                         "diagnostic input evidence cannot suppress the archived source body");
                     AssertEqual(1, compiled.Receipt.RetainedBodies, "source body restored beside diagnostics");
                     AssertEqual(1, compiled.DeliveredObservations.Count, "delivered source authorizes reuse");
                     var diagnosticsOnly = compiler.Compile(authority, new ChatMessage[0], facts, null,
-                        new ToolCatalogEntry[0], new AppSettings(), 12000);
+                        new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000);
                     AssertEqual(0, diagnosticsOnly.DeliveredObservations.Count, "diagnostics alone never authorize a source read");
                 }
                 var missingRead = ContinuityResult("missing_active", "core.read", ToolResult.Ok("Read.",
@@ -961,7 +961,7 @@ namespace RNAssistant.Harness
                 System.IO.File.Delete(blobs.PathFor(missingRead.ResultPayload.Sha256));
                 var missingFacts = new[] { ContinuityCall(missingRead), missingRead };
                 var recovered = compiler.Compile(authority, new ChatMessage[0], missingFacts, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000,
                     workingSet: ContextWorkingSet.Restore(session, missingFacts, 1000));
                 AssertEqual(1, recovered.Receipt.RetainedBodies, "unavailable active result cannot suppress a usable archive body");
                 AssertEqual(1, recovered.DeliveredObservations.Count, "only the hydrated archive body grants authority");
@@ -970,7 +970,7 @@ namespace RNAssistant.Harness
                         ResourceHeadState.Known(new ResourceRef(exact.Uri, "r2"), 2) }) }),
                     "pack", new SkillCatalogSnapshot(null), null, 1);
                 var stale = compiler.Compile(staleAuthority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000, workingSet: set);
                 AssertEqual(0, stale.DeliveredObservations.Count, "stale archive evidence never authorizes a write");
                 AssertEqual(ContextExclusionKind.SupersededEvidence,
                     stale.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
@@ -979,13 +979,13 @@ namespace RNAssistant.Harness
                     new ResourceAuthoritySnapshot(scope, 2, null, 0, new[] { ResourceHeadState.Removed(exact.Identity, 2) }) }),
                     "pack", new SkillCatalogSnapshot(null), null, 1);
                 var removed = compiler.Compile(removedAuthority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000, workingSet: set);
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000, workingSet: set);
                 AssertEqual(ContextExclusionKind.UnavailableEvidence,
                     removed.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).ExclusionKind.Value,
                     "removed resource reports unavailable evidence instead of a generic exclusion");
                 System.IO.File.Delete(blobs.PathFor(payload.Sha256));
                 var omitted = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000,
                     workingSet: ContextWorkingSet.Restore(session, new ChatMessage[0], 0));
                 AssertEqual(0, omitted.Receipt.HydratedPayloads, "zero body budget never touches missing CAS bytes");
                 AssertEqual(1, omitted.Receipt.EvictedBodies, "budget omission is observable independently of missing storage");
@@ -998,7 +998,7 @@ namespace RNAssistant.Harness
                 activeResult.ResourceEvidence.Add(observation);
                 var active = new[] { ContinuityCall(activeResult), activeResult };
                 var deduplicated = compiler.Compile(authority, new ChatMessage[0], active, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000,
                     workingSet: ContextWorkingSet.Restore(session, active, 1000));
                 AssertEqual(0, deduplicated.Receipt.HydratedPayloads, "active coverage excludes the archived copy before CAS hydration");
                 AssertEqual(0, deduplicated.Receipt.RetainedBodies, "an active body is not counted as archive restoration");
@@ -1016,7 +1016,7 @@ namespace RNAssistant.Harness
                 differentBytes.Content = differentBytes.Content.Replace(body, body + "_DIFFERENT");
                 var different = new[] { ContinuityCall(differentBytes), differentBytes };
                 var separate = compiler.Compile(authority, new ChatMessage[0], different, null,
-                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 12000,
                     workingSet: ContextWorkingSet.Restore(session, different, 1000));
                 AssertEqual(1, separate.Receipt.RetainedBodies, "equal evidence alone cannot suppress different archived bytes");
                 AssertEqual(1, separate.Receipt.HydratedPayloads, "different exact archive body is hydrated");
@@ -1071,7 +1071,7 @@ namespace RNAssistant.Harness
                 if (scenario == "scope") scopes.Add(new ResourceAuthoritySnapshot(otherScope, 1, null, 0, new[] { ResourceHeadState.Known(other, 1) }));
                 var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(scopes), "tools", new SkillCatalogSnapshot(null), null, 7);
                 var compiler = new ModelContextCompiler();
-                var snapshot = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 16000);
+                var snapshot = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = role }, 16000);
                 AssertTrue(facts.Select(message => message.Id).SequenceEqual(snapshot.Messages.Select(message => message.Id)),
                     scenario + ": both user turns and both read pairs keep their exact order in " + role);
                 var duplicate = new[] { "identical", "partial", "table", "empty", "metadata" }.Contains(scenario);
@@ -1079,7 +1079,7 @@ namespace RNAssistant.Harness
                 AssertEqual(duplicate ? last.Id : null, earlier.RetainedAtMessageId, scenario + ": retained target identifies the included body");
                 AssertEqual(duplicate ? 1 : 2, snapshot.DeliveredObservations.Count, scenario + ": only actual source bodies authorize reuse");
                 AssertEqual(!duplicate, earlier.EvidenceLinks.Single().BodyIncludedInMessage.Value, "receipt reports actual body delivery");
-                var wire = JArray.FromObject(new LlmMessageBuilder().Build(ModelReferenceProjection.Project(snapshot.Messages), new AppSettings()).Messages);
+                var wire = JArray.FromObject(new LlmMessageBuilder().Build(ModelReferenceProjection.Project(snapshot.Messages), new AppSettings { ToolResultRole = role }).Messages);
                 if (role == "tool")
                 {
                     AssertEqual("T1", (string)wire[1]["tool_calls"][0]["id"], "earlier native call remains");
@@ -1110,7 +1110,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!wire.ToString().Contains("rna://"), "runtime resource identity never enters wire");
                 AssertEqual(original, JsonConvert.SerializeObject(facts), "compilation leaves durable reads intact");
                 if (scenario != "identical" && scenario != "partial" && scenario != "table") continue;
-                var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), snapshot.Receipt.EstimatedTokens - 1);
+                var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings { ToolResultRole = role }, snapshot.Receipt.EstimatedTokens - 1);
                 AssertTrue(!string.Join("\n", tight.Messages.Select(message => message.Content)).Contains("retainedAt"), "final budget cannot leave a dangling pointer");
                 AssertEqual(null, tight.Receipt.Messages.Single(item => item.SourceMessageId == first.Id).RetainedAtMessageId, "Inspector also drops the omitted destination");
                 AssertEqual(0, tight.DeliveredObservations.Count, "budget notices confer no authority for full, partial or table bodies");
@@ -1143,7 +1143,7 @@ namespace RNAssistant.Harness
             var set = ContextWorkingSet.Restore(session, new ChatMessage[0], 2000);
             var restored = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 current, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
-                new AppSettings(), 6000, workingSet: set);
+                new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 6000, workingSet: set);
             AssertEqual(1, restored.Receipt.RetainedBodies, "current exact line window is retained after compaction");
             var retained = restored.Messages.Single(item => item.Role == "tool" && item.ToolCallId == "lines" &&
                 item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
@@ -1162,7 +1162,7 @@ namespace RNAssistant.Harness
                 "pack", new SkillCatalogSnapshot(null), null, 1);
             var invalidated = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(
                 stale, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
-                new AppSettings(), 6000, workingSet: set);
+                new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 6000, workingSet: set);
             AssertEqual(0, invalidated.Receipt.RetainedBodies, "invalidated line window is not restored");
         }
 

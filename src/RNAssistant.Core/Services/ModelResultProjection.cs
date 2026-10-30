@@ -30,6 +30,48 @@ namespace RNAssistant.Core.Services
             IEnumerable<SkillDefinition>, IEnumerable<ToolCatalogEntry>, ToolResultMaterialization> projectData = null)
         { _projectData = projectData; }
 
+        // Request transport is chosen after bounded payload materialization.
+        // This mutates only the compiler's detached message, never durable facts.
+        internal static void NormalizeTransport(ChatMessage message, string role)
+        {
+            if (!message.ProtocolMessage || message.CompletedOperation != null) return;
+            if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
+            {
+                var parsed = ConversationResponseHistoryReader.Read(message);
+                if (!parsed.Success) throw new InvalidOperationException("Stored response is invalid: " + parsed.Error);
+                if (parsed.Response.ToolCalls.Count > 0)
+                {
+                    var call = parsed.Response.ToolCalls.Single();
+                    var native = role == ToolResultRoles.Tool;
+                    message.ToolResultRole = role;
+                    message.ResponseReason = native ? parsed.Response.Reason : null;
+                    message.Content = native ? parsed.Response.Message : ModelProtocolWire.WriteAcceptedCall(
+                        parsed.Response.Reason, parsed.Response.Message,
+                        new ConversationToolCall { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) });
+                    message.ToolCalls = native ? new List<LlmToolCall> { new LlmToolCall {
+                        Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } }
+                        : new List<LlmToolCall>();
+                    message.AcceptedCallPayload = null;
+                    message.ArgumentPayload = null;
+                    message.AcceptedCallNarration = null;
+                }
+                else if (parsed.Response.Action == ConversationResponse.FinishAction)
+                {
+                    message.Content = SanitizeOperationalText(parsed.Response.Message);
+                    message.ProtocolMessage = false;
+                }
+            }
+            else if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant")
+            {
+                ToolResultWireReadResult wire; string error;
+                if (!ToolResultHistoryReader.TryRead(message, out wire, out error) || wire.ToolCallId != message.ToolCallId)
+                    throw new InvalidOperationException("Stored tool result is invalid: " + error);
+                var body = message.Role == ToolResultRoles.Tool ? message.Content : message.Content.Substring(Prefix.Length);
+                message.Role = role; message.ToolResultRole = role;
+                message.Content = role == ToolResultRoles.Tool ? body : Prefix + body;
+            }
+        }
+
         public ChatMessage Project(
             ChatMessage source,
             IEnumerable<ToolCatalogEntry> tools = null,

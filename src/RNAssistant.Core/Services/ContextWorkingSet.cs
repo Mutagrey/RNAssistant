@@ -44,7 +44,8 @@ namespace RNAssistant.Core.Services
                     result.Bodies.Add(new Candidate(call, message, false));
                 ToolResultWireReadResult wire; string error;
                 if (!ToolResultHistoryReader.TryRead(message, out wire, out error) ||
-                    message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok && message != latestTerminal) continue;
+                    message.ResourceEffect == null && wire.Result.Status == ToolResultStatus.Ok && message != latestTerminal &&
+                        message.EvidenceReference == null) continue;
                 var mandatory = message == latestTerminal || wire.Result.Status == ToolResultStatus.Unknown ||
                     message.ResourceEffect?.Outcome == ResourceEffectOutcome.UnknownAfterDispatch;
                 var recovery = message.ExecutionProgress?.Recovery;

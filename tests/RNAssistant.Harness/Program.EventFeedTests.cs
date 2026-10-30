@@ -124,6 +124,8 @@ namespace RNAssistant.Harness
             public SessionEvent Append(ChatSession session, SessionEventWrite write) { throw new NotSupportedException(); }
             public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { throw new NotSupportedException(); }
             public string ReadPayload(ChatSession session, SessionEvent sessionEvent) { throw new NotSupportedException(); }
+            public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
+            { throw new NotSupportedException(); }
         }
 
         private static void EventFeedSubscriptionBackpressureAndCancellation()

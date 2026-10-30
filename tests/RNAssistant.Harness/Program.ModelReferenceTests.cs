@@ -39,8 +39,8 @@ namespace RNAssistant.Harness
                 session.LastRun = new ChatRunRecord { RunId = summary.RunId, TurnId = summary.TurnId };
                 var ids = new List<string>();
                 Func<ConversationResultClaim[], string[], FinishAdmission> finish = (claims, delivered) =>
-                    ConversationFinishEvidenceAdmission.Evaluate(store.ReadEvents(session.Host, session.DocumentKey, session.Id),
-                        session.Id, summary.RunId, summary.TurnId, ids, claims, new ChatBlobStore(paths), delivered);
+                    ConversationFinishEvidenceAdmission.Evaluate(new ChatEventStoreAdapter(store),
+                        session, summary.RunId, summary.TurnId, ids, claims, new ChatBlobStore(paths), delivered);
                 for (var i = 1; i <= 3; i++)
                 {
                     var policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, i == 2, false, new[] { "agent" },
@@ -193,6 +193,42 @@ namespace RNAssistant.Harness
                 "compiled receipt retains typed evidence attribution through compaction");
             AssertTrue(ModelReferenceProjection.Delivered(projected).SequenceEqual(new[] { "E16" }),
                 "folding never renumbers or drops the last terminal reference");
+            session.LastRun.RunId = "next-run";
+            var optional = ContextWorkingSet.Restore(session, new ChatMessage[0], 1000);
+            AssertTrue(optional.Operations.Count == 1 && !optional.Operations[0].Required,
+                "historical eligible reads become bounded optional receipts in a later run");
+            var historical = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                new ToolCatalogEntry[0], new AppSettings(), 4000, workingSet: optional);
+            AssertTrue(ModelReferenceProjection.Delivered(ModelReferenceProjection.Project(historical.Messages)).SequenceEqual(new[] { "E16" }),
+                "a compact historical receipt delivers its original E without source bytes");
+            AssertEqual(0, ContextWorkingSet.Restore(session, new ChatMessage[0], 0).Operations.Count,
+                "historical receipt retention obeys the optional budget");
+            // Partial source is restored as its native pair. Its mandatory E
+            // receipt must neither duplicate that pair nor disappear on eviction.
+            var scope = new ResourceAuthorityScopeId("workspace", "partial-evidence");
+            var exact = new ResourceRef("rna://file/partial-evidence/source", "r1");
+            var partial = ContinuityResult("partial", "core.read", TerminalToolResult.Ok("Read lines.",
+                new JObject { ["target"] = "sample.txt", ["type"] = "file", ["representation"] = "text",
+                    ["text"] = new string('x', 2000), ["rawContentIncluded"] = true,
+                    ["coverage"] = JObject.FromObject(ResourceCoverage.Whole()) }.ToString()));
+            partial.RunId = "partial-run"; partial.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 43);
+            partial.EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 17);
+            partial.ResourceEvidence.Add(new ResourceEvidence("partial", scope, exact, "text", ResourceCoverage.Whole(), false, 1));
+            var partialCall = ContinuityCall(partial); partialCall.RunId = partial.RunId;
+            partialCall.ToolCallReference = partial.ToolCallReference;
+            session.Messages = new List<ChatMessage> { partialCall, partial }; session.LastRun.RunId = partial.RunId;
+            SetContinuityCheckpoint(session, partial);
+            authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new[] {
+                new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(exact, 1) }) }),
+                "pack", new SkillCatalogSnapshot(null), null, 1);
+            foreach (var budget in new[] { 4000, 700 })
+            {
+                var snapshot = new ModelContextCompiler().Compile(authority, new ChatMessage[0], new ChatMessage[0], null,
+                    new ToolCatalogEntry[0], new AppSettings { ToolResultRole = "tool" }, budget,
+                    workingSet: ContextWorkingSet.Restore(session, new ChatMessage[0], 4000));
+                AssertEqual(1, snapshot.Messages.Count(message => message.EvidenceReference?.Alias == "E17"),
+                    "one required E survives with or without the archived native body");
+            }
         }
 
         private static async Task ModelReferencesFreezeRepairAndFallback()
@@ -471,7 +507,7 @@ namespace RNAssistant.Harness
                 var stale = new ChatStore(paths).Load(session.Id);
                 var expected = new[] { call.ToolCallId };
                 Func<string, string[], FinishAdmission> evaluate = (reference, delivered) => ConversationFinishEvidenceAdmission.Evaluate(
-                    store.ReadEvents(session.Host, session.DocumentKey, session.Id), session.Id, summary.RunId, summary.TurnId,
+                    new ChatEventStoreAdapter(store), session, summary.RunId, summary.TurnId,
                     expected, new[] { new ConversationResultClaim("Read.", new[] { reference }, ConversationAssessment.Satisfied) },
                     new ChatBlobStore(paths), delivered);
                 AssertTrue(call.EvidenceReference == null, "accepted call is never evidence");

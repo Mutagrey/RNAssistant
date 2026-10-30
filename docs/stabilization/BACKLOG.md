@@ -1,5 +1,23 @@
 # RNAssistant backlog
 
+## Стоимость подготовки длинного контекста — 2026-10-30
+
+Owner: Application Workspace preparation / Core context и kernel admission.
+В [аудите](../audits/office-workspace-preparation-audit.md#сборка-контекста-и-стоимость-шага--2026-10-30)
+удалена eager hydration архива на каждом шаге и полный проход finish по JSONL/CAS.
+Остались линейный выбор metadata и `CaptureContextAuthority`: каждый шаг хеширует
+ранее прочитанные live files всей истории. `RestoreAcceptedHistory` при новом run
+также восстанавливает accepted bodies прежних runs. Это подтверждённая стоимость
+по исходникам; длительность на реальной машине ещё не измерена.
+
+Следующий ограниченный срез: измерить длинный чат/архив; выбрать bounded candidates
+до file refresh и сохранить current/unresolved guards; отдельно убрать ненужные
+старые тела из kernel startup, если его consumer не использует их. Acceptance:
+внешняя правка с прежними size/mtime не оставляет stale write authority; выбранный
+CAS проверяется точно, обязательные unknown/recovery facts не выпадают; compaction,
+restart, все result roles и два user turn сохраняют семантику. Без второго store,
+глобального кеша собранного prompt и инвалидации только по mtime.
+
 ## Kernel fixture: external unknown — 2026-10-30
 
 Owner: Core Agent safety tests. `kernel: external unknown` ожидает Failed для любого

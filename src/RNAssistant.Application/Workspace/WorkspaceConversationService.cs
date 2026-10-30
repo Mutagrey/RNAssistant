@@ -1594,7 +1594,7 @@ namespace RNAssistant.Runtime
                             if (phase == "compacting") _progress?.Invoke(new WorkspaceRunEvent(phase,
                                 _session.LastRun.KernelState.Summary, null, ConversationEventFeed.Cursor(_session)));
                         }, cancellationToken, authority, _catalog, ModelContextBudget.EstimateTextTokens(Prompt(), _settings),
-                        AcceptedFacts(ContextCompactionRuntime.BuildReplayTail(_session))).ConfigureAwait(false);
+                        ContextCompactionRuntime.BuildReplayTail(_session)).ConfigureAwait(false);
                     if (checkpoint == null) return AgentModelResult.Failed(ModelProtocolFailureKind.PromptBudgetExceeded, ex.Message);
                     // Publish the checkpoint before it can change a model request.
                     // Complete accepted history still belongs to the kernel, not the summary.
@@ -1767,11 +1767,9 @@ namespace RNAssistant.Runtime
                 var state = packState ?? _packState ?? _callable?.RestorationStateMessage;
                 if (state != null) required.Add(state);
                 var budget = preparation.MessageBudget(required);
-                var facts = AcceptedFacts(ContextCompactionRuntime.BuildActiveWindow(_session)).ToList();
+                var facts = ContextCompactionRuntime.BuildActiveWindow(_session).ToList();
                 if (previewResult != null) facts.Add(previewResult);
-                var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3,
-                    archive: ContextCompactionRuntime.ActiveCheckpoint(_session) == null ? null :
-                        AcceptedFacts(_session.Messages.Where(ContextCompactionRuntime.IsReplayMessage).ToArray()));
+                var workingSet = ContextWorkingSet.Restore(_session, facts, budget / 3);
                 return _compiler.Compile(authority, required, facts, null, _catalog, _settings,
                     budget, skillSurface: surface, workingSet: workingSet);
             }
@@ -1839,61 +1837,6 @@ namespace RNAssistant.Runtime
                 // verified after-sources, but only after the compiler actually delivered their bodies.
                 foreach (var item in delivered.Where(e => ResourceUri.Parse(e.Resource.Uri).Provider != "file"))
                     _delivered["resource:" + item.EvidenceId] = item;
-            }
-
-            // Normalize durable accepted facts without changing their causal order.
-            // Stable message IDs let compaction refer back to the canonical prefix.
-            private IReadOnlyList<ChatMessage> AcceptedFacts(IReadOnlyList<ChatMessage> accepted)
-            {
-                var facts = new List<ChatMessage>();
-                var role = _settings.ToolResultRole;
-                foreach (var item in accepted)
-                {
-                    if (!item.ProtocolMessage) { facts.Add(HistoricalContextProjector.Project(item)); continue; }
-                    if (item.Role == "assistant")
-                    {
-                        var complete = AcceptedCallPayloadService.Hydrate(item, _payloads);
-                        var parsed = ConversationResponseHistoryReader.Read(complete);
-                        if (!parsed.Success) throw new InvalidOperationException("Stored workspace response is invalid: " + parsed.Error);
-                        var projected = HistoricalContextProjector.Project(complete);
-                        if (parsed.Response.ToolCalls.Count > 0)
-                        {
-                            var call = parsed.Response.ToolCalls[0];
-                            var native = role == ToolResultRoles.Tool;
-                            projected.ToolResultRole = role;
-                            projected.ResponseReason = native ? parsed.Response.Reason : null;
-                            projected.Content = native ? parsed.Response.Message : ModelProtocolWire.WriteAcceptedCall(
-                                parsed.Response.Reason, parsed.Response.Message,
-                                new ConversationToolCall { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) });
-                            projected.ToolCalls = native ? new List<LlmToolCall> { new LlmToolCall {
-                                Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } }
-                                : new List<LlmToolCall>();
-                            projected.AcceptedCallPayload = null;
-                            projected.ArgumentPayload = null;
-                            projected.AcceptedCallNarration = null;
-                        }
-                        else if (parsed.Response.Action == ConversationResponse.FinishAction)
-                        {
-                            projected.Content = ModelResultProjection.SanitizeOperationalText(parsed.Response.Message);
-                            projected.ProtocolMessage = false;
-                        }
-                        facts.Add(projected);
-                    }
-                    else if (!string.IsNullOrEmpty(item.ToolCallId))
-                    {
-                        ToolResultWireReadResult wire; string error;
-                        if (!ToolResultHistoryReader.TryRead(item, out wire, out error))
-                            throw new InvalidOperationException("Accepted tool result has no matching terminal body: " + error);
-                        if (wire.ToolCallId != item.ToolCallId)
-                            throw new InvalidOperationException("Accepted tool result has no matching terminal body: runtime ID mismatch.");
-                        var result = HistoricalContextProjector.Project(item);
-                        result.Role = role; result.ToolResultRole = role;
-                        var body = item.Role == ToolResultRoles.Tool ? item.Content : item.Content.Substring("TOOL_RESULT:\n".Length);
-                        result.Content = role == ToolResultRoles.Tool ? body : "TOOL_RESULT:\n" + body;
-                        facts.Add(result);
-                    }
-                }
-                return facts;
             }
 
             private static string WireResult(ToolExecutionRecord record)
@@ -2151,11 +2094,8 @@ namespace RNAssistant.Runtime
                     _session.LastRun.TurnId != turnId)
                     throw new InvalidOperationException("Stale workspace finish cursor or run scope.");
                 cancellationToken.ThrowIfCancellationRequested();
-                var events = new ChatEventStoreAdapter(_chats).Read(_session, SessionEventReadMode.RequireComplete);
-                if (events.Count == 0 || events[events.Count - 1].Sequence != _session.Revision)
-                    throw new InvalidOperationException("Canonical workspace finish evidence is not current.");
-                return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(events,
-                    _session.Id, runId, turnId, acceptedCallIds, results, _payloads, _deliveredEvidenceReferences));
+                return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(new ChatEventStoreAdapter(_chats),
+                    _session, runId, turnId, acceptedCallIds, results, _payloads, _deliveredEvidenceReferences));
             }
 
             private ChatMessage ProjectToolActivity(AgentRunEvent fact)

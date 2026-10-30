@@ -285,6 +285,9 @@ namespace RNAssistant.Core.Persistence
     {
         SessionEvent Append(ChatSession session, SessionEventWrite write);
         IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode);
+        // Verified canonical boundaries for the current run and selected same-chat
+        // aliases. The disposable locator index is never accepted as evidence.
+        FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references);
         ISessionEventReader OpenReader(ChatSession session);
         string ReadPayload(ChatSession session, SessionEvent sessionEvent);
     }

@@ -155,8 +155,8 @@ T without duplicate content IDs; fallback result JSON carries T plus optional E.
 Finish `results[].criterion` cites delivered E; T/R cannot grant evidence or authority.
 Lookup normalizes reference case only. Revision 3 is explicit in the format-8 stream;
 missing/older revisions remain read-only and require a new chat. No event rewrite or
-continuation upgrade occurs. P2 retains current-run finish admission; historical
-cross-run citation remains P5 work. See the [current reference contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+continuation upgrade occurs. P5 admits delivered historical E from retained same-chat
+terminal facts. See the [current reference contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
 
 The workspace prompt includes Core's `AgentPromptDefaults.StructuredResponseContract`,
 the same complete response contract used by Office defaults. Both response formats
@@ -736,7 +736,8 @@ removed schema was delivered in its historical result. Durable events/CAS are un
 Reflection allowance and completion feedback are compact runtime metadata at the
 front of the request. Runtime still enforces reflection, confirmation, unknown-effect
 and finish guards. No trailing runtime message is appended after every tool step.
-Resource-body chronology is specified below; P5 historical finish admission remains open.
+Resource-body chronology is specified below; historical finish admission is specified
+in the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
 
 ### P4 chronological bodies — 2026-10-30
 

@@ -79,7 +79,10 @@ T/E separation, eligibility, `criterion` и новый чат для старо�
 P3 ввёл [компактную сборку запроса](conversation-protocol.md#p3-request-composition--2026-10-30)
 и единственную materialization выбранных skills/схем. P4 сохраняет
 [хронологические пары и единственную копию source body](conversation-protocol.md#p4-chronological-bodies--2026-10-30)
-с явными budget notices. P5 historical admission и P6 qualification ещё открыты.
+с явными budget notices. P5 допускает доставленные historical E из того же чата,
+используя canonical JSONL locators в существующей SQLite-проекции. Общий compiler
+нормализует transport после отбора payloads; [аудит сборки](audits/office-workspace-preparation-audit.md#сборка-контекста-и-стоимость-шага--2026-10-30).
+P6/full Inspector и реальная qualification ещё открыты.
 После реализации P0–P6/D0–D5 они остаются историей; нормативное
 поведение переносится в canonical documents ниже.
 

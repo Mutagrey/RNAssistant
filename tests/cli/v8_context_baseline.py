@@ -139,6 +139,8 @@ def capture(output, role, case="read-patch"):
                         patch("BASELINE_MIDDLE", "BASELINE_NEW"), read, done],
         "failure-correction": [read, patch("ABSENT_BEFORE", "MUST_NOT_APPEAR"),
                                patch("BASELINE_OLD", "BASELINE_NEW"), read, done],
+        "historical-finish": [read, patch("BASELINE_OLD", "BASELINE_NEW"), read, done,
+                              {"finish_from_request": True, "historical_evidence": True}],
     }
     script, calls, errors, finals = scripts[case], [], [], []
 
@@ -155,6 +157,10 @@ def capture(output, role, case="read-patch"):
                     return
                 decision = script[step]
                 content = conversation_content(request, decision)
+                if case == "historical-finish" and step == len(script) - 1:
+                    response = json.loads(content)
+                    response = response.get("response", response)
+                    assert response["results"][0]["evidence"] == ["E3"], response
             else:
                 content = "Synthetic baseline"
             response = json.dumps({"choices": [{"message": {"role": "assistant", "content": content},
@@ -182,7 +188,7 @@ def capture(output, role, case="read-patch"):
             env.update(RNA_STATE_ROOT=str(root / "state"), RNA_BASE_URL=f"http://127.0.0.1:{server.server_port}",
                        RNA_MODEL="scripted-baseline", RNA_API_KEY="synthetic")
             session = []
-            for turn in range(2 if case == "read-patch" else 1):
+            for turn in range(2 if case in ("read-patch", "historical-finish") else 1):
                 result = subprocess.run(["dotnet", str(CLI), "run", "--workspace", str(workspace),
                     "--message", "Inspect, apply the requested edits and verify." if turn == 0 else "Check the saved change.",
                     "--tool-result-role", role, "--auto-confirm", "on", "--max-iterations", "10",
@@ -201,14 +207,17 @@ def capture(output, role, case="read-patch"):
             "read-patch": [None, "BASELINE_OLD", "BASELINE_OLD", "BASELINE_NEW", "BASELINE_NEW", "BASELINE_NEW", "BASELINE_NEW"],
             "multi-patch": [None, "BASELINE_OLD", "BASELINE_MIDDLE", "BASELINE_NEW", "BASELINE_NEW"],
             "failure-correction": [None, "BASELINE_OLD", "BASELINE_OLD", "BASELINE_NEW", "BASELINE_NEW"],
+            "historical-finish": [None, "BASELINE_OLD", "BASELINE_NEW", "BASELINE_NEW", "BASELINE_NEW"],
         }[case]
         for request, expected in zip(calls, expected_bodies):
             bodies = source_bodies(request)
             assert [body["text"].strip() for body in bodies] == ([] if expected is None else [expected]), (
                 case, expected, bodies)
-        if case == "read-patch":
+        if case in ("read-patch", "historical-finish"):
             users = [m["content"] for m in calls[-1]["messages"] if m["role"] == "user"]
             assert "Inspect, apply the requested edits and verify." in users and "Check the saved change." in users
+        if case == "historical-finish":
+            assert finals[1]["ToolCounts"]["ReadOk"] == 0 and finals[1]["ToolCounts"]["WriteOk"] == 0, finals[1]
         counts = finals[0]["ToolCounts"]
         assert counts["WriteOk"] == (2 if case == "multi-patch" else 1) and counts["WriteUnknown"] == 0, counts
         assert counts["WriteError"] == (1 if case == "failure-correction" else 0), counts
@@ -223,11 +232,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--role", choices=("user", "developer", "tool"), default="tool")
-    parser.add_argument("--case", choices=("read-patch", "multi-patch", "failure-correction", "compaction", "skills", "all"),
+    parser.add_argument("--case", choices=("read-patch", "multi-patch", "failure-correction", "historical-finish", "compaction", "skills", "all"),
                         default="read-patch")
     args = parser.parse_args()
     output = args.output.resolve()
-    cases = ("read-patch", "multi-patch", "failure-correction", "compaction", "skills") if args.case == "all" else (args.case,)
+    cases = ("read-patch", "multi-patch", "failure-correction", "historical-finish", "compaction", "skills") if args.case == "all" else (args.case,)
     if args.case == "all":
         output.mkdir(parents=True, exist_ok=False)
     for case in cases:

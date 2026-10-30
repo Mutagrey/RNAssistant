@@ -27,11 +27,8 @@ namespace RNAssistant.Office.Services
                 turnId != _session.LastRun.TurnId)
                 throw new InvalidOperationException("Stale finish admission cursor or run/session identity.");
             cancellationToken.ThrowIfCancellationRequested();
-            var events = _eventStore.Read(_session, SessionEventReadMode.RequireComplete);
-            if (events.Count == 0 || events[events.Count - 1].Sequence != _session.Revision)
-                throw new InvalidOperationException("Canonical finish evidence is not current.");
-            return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(events,
-                _session.Id, runId, turnId, acceptedCallIds, results, _executor.Payloads,
+            return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(_eventStore,
+                _session, runId, turnId, acceptedCallIds, results, _executor.Payloads,
                 _lastModel?.DeliveredEvidenceReferences ?? new string[0]));
         }
 

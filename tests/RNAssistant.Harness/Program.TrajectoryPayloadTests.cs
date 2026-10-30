@@ -158,6 +158,8 @@ namespace RNAssistant.Harness
             public ISessionEventReader OpenReader(ChatSession session) { throw new NotSupportedException(); }
             public string ReadPayload(ChatSession session, SessionEvent item) { throw new Exception("Whole payload reads are forbidden in this contour."); }
             public SessionEvent Append(ChatSession session, SessionEventWrite write) { throw new NotSupportedException(); }
+            public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
+            { throw new NotSupportedException(); }
         }
     }
 }

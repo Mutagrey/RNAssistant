@@ -5,7 +5,8 @@ import re
 
 def conversation_content(request, logical):
     if isinstance(logical, dict) and logical.get("finish_from_request"):
-        logical = finish(request, logical.get("message", "Finished."), logical.get("assessment", "satisfied"))
+        logical = finish(request, logical.get("message", "Finished."), logical.get("assessment", "satisfied"),
+                         historical=logical.get("historical_evidence", False))
     content = logical if isinstance(logical, str) else json.dumps(logical)
     response_format = request.get("response_format", {})
     if (response_format.get("type") == "json_schema" and
@@ -15,7 +16,7 @@ def conversation_content(request, logical):
     return content
 
 
-def finish(request, message="Finished.", assessment="satisfied", direct=False):
+def finish(request, message="Finished.", assessment="satisfied", direct=False, historical=False):
     """Cite an actual terminal receipt, never the native transport call ID."""
     evidence = []
     last_outcome = None
@@ -29,7 +30,7 @@ def finish(request, message="Finished.", assessment="satisfied", direct=False):
             try:
                 receipt = json.loads(content)
             except (ValueError, TypeError):
-                if item.get("role") == "user" and not content.startswith(("RUNTIME_", "SELECTED_SKILL", "FORMAT_REPAIR:", "TOOL_")):
+                if not historical and item.get("role") == "user" and not content.startswith(("RUNTIME_", "SELECTED_SKILL", "FORMAT_REPAIR:", "TOOL_")):
                     evidence.clear()
                     last_outcome = None
                 continue

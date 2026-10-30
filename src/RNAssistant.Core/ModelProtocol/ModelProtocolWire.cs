@@ -50,7 +50,7 @@ namespace RNAssistant.Core.ModelProtocol
             "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
             "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns T1 to a call and E1 only to an eligible terminal result; R1@v2 identifies an observed resource version. T/R are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. Historical calls may include runtime-added id T1, but new calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
             ReflectionInstruction +
-            "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has criterion (an original user requirement), evidence (issued eligible references such as E1 from terminal results of this run), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
+            "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has criterion (an original user requirement), evidence (issued eligible references such as E1 from terminal results of this chat delivered in this request), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             "Without eligible evidence results or evidence may be empty, including after discovery/schema/skill loading. When eligible results exist, cite at least one delivered E reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
             "execute forbids decision/results/outcome; reflection forbids tool_calls/results/outcome; finish forbids tool_calls/decision. No extra root fields. " +
             FinishGuidance + " Keep the envelope even when the task cannot be fulfilled.";
@@ -66,7 +66,7 @@ namespace RNAssistant.Core.ModelProtocol
             "Return the supplied json_schema exactly: the response property contains the conversation-response-v8 decision. " +
             "Choose execute when a useful authorized tool step remains; batch only independent local reads. " +
             SchemaReflectionInstruction +
-            "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria; cite issued eligible evidence (E1, E2) from terminal results of this run. Discovery/schema/skill loading can finish with empty evidence. " +
+            "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria; cite issued eligible evidence (E1, E2) from terminal results of this chat delivered in this request. Discovery/schema/skill loading can finish with empty evidence. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +
             "Runtime assigns T1 to a call and E1 to an eligible terminal result; R1@v2 is an observed resource version. T/R are never finish evidence; R is never a tool argument. Reference lookup is case-insensitive, without changing targets or source text. Ask indispensable questions through the question tool. Follow the current REFLECTION_BUDGET. " +
             "Do not repeat accepted calls or invent evidence. " + FinishGuidance;

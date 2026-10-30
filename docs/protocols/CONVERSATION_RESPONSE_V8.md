@@ -116,13 +116,14 @@ pair to `assistant.tool_calls[].id == tool.tool_call_id == "T1"`. It has no
 result content includes `evidence:"E1"`; service-only results omit it. Original
 accepted response bodies and runtime call IDs remain unchanged.
 
-P2 admission resolves selected E against current-run canonical terminal events,
+P5 admission resolves selected E against retained same-chat canonical terminal events,
 trusted eligibility and the successful request's delivered set. T/R, unknown and
 undelivered references fail closed. A `satisfied` claim cannot cite a failed,
 unknown or undispatched result, even alongside a successful one. Uncited earlier
 errors do not block finish. Unknown-effect inspection/no-replay guards are unchanged.
-Cross-run historical citation and admission/index optimization remain P5 work;
-chat-wide numbering alone does not enable old-run evidence in the current gate.
+Earlier runs may be cited, including a bounded compact receipt after a checkpoint.
+Summaries and assistant prose never issue evidence. Reference revision remains 3;
+older histories are not reinterpreted or rewritten.
 
 `R1` identifies a scoped logical resource; `R1@v2` identifies a registered exact
 revision in that resource's observation history. A model-only `ref` is attached
@@ -190,15 +191,27 @@ limit still bounds model steps; no extra step is granted beyond it. Confirmation
 the same run ID, limits and accepted-call identities; a confirmation cannot
 claim a continuation under a new run ID.
 
-Before accepting `finish`, the run store resolves cited IDs against the
-complete validated append-only event stream for this session, run and turn, and
-the references actually delivered in the successful model request. Each citation
-must resolve through its saved `ExecutionReference` to an accepted call and its canonical
-`tool.execution.finished` fact; pending, naked, foreign and invented IDs are
+Before accepting `finish`, the run store resolves selected E aliases from this
+session against references actually delivered in the successful model request.
+The existing disposable SQLite projection supplies canonical event locators;
+admission rereads the selected accepted/start/terminal JSONL records and checks
+their identities, ordering, trusted eligibility and retained history membership.
+The exact accepted body is hydrated only for cited calls. Current-run accepted
+IDs must still agree with kernel state and have terminal facts; old errors and
+uncited payloads are not revalidated on every finish. A fork's canonical seed owns
+copied bindings. Pending, removed, foreign and invented evidence is
 rejected. Failed/unknown outcomes can support honest unsatisfied or
 unverified claims. An `ok` result or a macro dispatch alone does not prove a
 user-requested effect. Existing effect read-back, unknown-effect guards,
 workspace acceptance and no-replay rules still apply.
+
+The index follows validated append/suffix replay and can be rebuilt from JSONL;
+it is not outcome authority or another durable store. A stale cursor, incomplete
+tail or invalid selected canonical body fails closed. Correction hints are bounded
+to 16 delivered aliases. Pure service work can finish with no evidence; a run with
+eligible terminal work still requires a result and at least one delivered E.
+The read unit is a canonical JSONL record: a fork seed may contain many historical
+headers, but only selected positions are restored as admission facts.
 
 `finish accepted`, `RunLifecycle.Completed` and task success are distinct.
 `RunViewState.GoalVerification` remains `not_assessed`; model

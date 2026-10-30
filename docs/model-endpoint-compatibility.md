@@ -32,8 +32,8 @@ approval inheritance. Targeted Harness checks cover schema equality/drift, repai
 selected-body coverage/provenance, budgets and Inspector. No real endpoint was called.
 
 See [P3 contract](conversation-protocol.md#p3-request-composition--2026-10-30).
-Historical finish citations (P5) and full Inspector/real-machine qualification (P6)
-remain open.
+Historical finish citations are implemented in P5 below; full Inspector and
+real-machine qualification (P6) remain open.
 
 ## Current P4 materialization — 2026-10-30
 
@@ -54,6 +54,33 @@ The omitted-read guard also rejects an overwrite and preserves original bytes.
 Captures are local `/tmp/rna-v8-p4-*-20261030` artifacts with exact bytes/manifests;
 they are synthetic, reproducible diagnostics, not durable release evidence.
 No real models or Windows/Office validation ran; default result role is unchanged.
+
+## Current P5 admission — 2026-10-30
+
+Prompt schema 61 allows delivered historical E from retained same-chat canonical
+terminal facts. Current reference revision stays 3. The existing SQLite projection
+indexes canonical JSONL locations; selected accepted bodies are checked on citation.
+The compiler retains bounded historical receipts after compaction and normalizes
+selected hydrated history to the current tool/user/developer transport. The eager
+Workspace archive-normalization path is removed.
+
+Host-neutral Harness covers multi-run delivery, failed/unknown/service-only results,
+restart/fork, removed or foreign history, case normalization, pending confirmation,
+missing selected versus unrelated CAS and index rebuild. Context checks include
+the 3×3 stored/request role matrix, exact source retention, compaction and aggregate
+budget behavior. Existing SQLite paging/lazy-start/suffix checks and unknown-effect
+no-replay check pass. [Context audit](audits/office-workspace-preparation-audit.md#сборка-контекста-и-стоимость-шага--2026-10-30)
+documents remaining history scans and live-file hashing costs.
+
+`v8_context_baseline.py --case historical-finish` captures two user turns: the
+second finishes with a prior-run E and **zero** new tool steps. Both native tool and
+fallback user transport pass (5 conversation requests each), plus guarded read
+restoration after compaction (7). The raw second response must cite `E3`; an empty
+`results` array cannot pass this fixture. Historical captures are
+`/tmp/rna-v8-p5-e3-{tool,user}-20261030`; the final compaction capture is
+`/tmp/rna-v8-p5-final-compaction-20261030`. Their manifests retain the
+exact CLI hash, dirty-tree flag and request/response bytes; these are synthetic
+captures, not real-model or Office qualification. Defaults are unchanged.
 
 ## Required transport
 

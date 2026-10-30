@@ -51,7 +51,7 @@ namespace RNAssistant.Core.ModelProtocol
                     ["evidence"] = new JObject
                     {
                         ["type"] = "array", ["items"] = NonblankString(),
-                        ["description"] = "Exact short execution reference (E1, E2) references to terminal results of this run; never invented IDs."
+                        ["description"] = "Exact short evidence reference (E1, E2) references to terminal results of this chat delivered in this request; never invented IDs."
                     },
                     ["assessment"] = new JObject
                     {

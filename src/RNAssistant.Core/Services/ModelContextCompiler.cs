@@ -330,6 +330,7 @@ namespace RNAssistant.Core.Services
             var optionalCandidates = 0;
             var optionalBytes = Math.Min(MaximumOptionalOperationBytes, maximumPayloadBytes);
             var observedBodies = new Dictionary<string, ContextAtom>(StringComparer.Ordinal);
+            var restoredTerminals = new Dictionary<string, ContextAtom>(StringComparer.Ordinal);
             var materializationOrder = atoms.Where(item => !item.ArchivedBody && !item.ArchivedOperation &&
                     item.Kind != "current-source" && (item.Kind != "resource-change" || item.KeepPair))
                 .Concat(atoms.Where(item => !item.ArchivedBody && item.Kind == "current-source").Reverse())
@@ -338,6 +339,25 @@ namespace RNAssistant.Core.Services
                 .Concat(atoms.Where(item => item.ArchivedOperation && !item.MustKeep).Reverse());
             foreach (var atom in materializationOrder)
             {
+                ContextAtom restoredPair;
+                if (atom.ArchivedOperation && restoredTerminals.TryGetValue(atom.Messages[0].Id, out restoredPair))
+                {
+                    // An archived native pair already carries this terminal E.
+                    // A separate source view has another ID and still needs its receipt.
+                    var result = restoredPair.Messages.Last();
+                    atom.Messages.Clear();
+                    if (atom.MustKeep)
+                    {
+                        ToolResultWireReadResult wire; string error;
+                        if (!ToolResultHistoryReader.TryRead(result, out wire, out error))
+                            throw new InvalidOperationException("Retained archived result is invalid: " + error);
+                        // Reuse the already selected body; keep a cheap receipt
+                        // ready in case the final aggregate budget evicts the pair.
+                        atom.Messages.Add(CompleteOperation(result, wire, call: restoredPair.Messages[0]));
+                        receiptBudget = Math.Max(0, receiptBudget - ModelContextBudget.EstimateMessagesTokens(atom.Messages, settings));
+                    }
+                    continue;
+                }
                 var bodyKey = BodyKey(atom);
                 ContextAtom observedBody;
                 if (bodyKey != null && observedBodies.TryGetValue(bodyKey, out observedBody) &&
@@ -384,7 +404,8 @@ namespace RNAssistant.Core.Services
                 }
                 if (atom.ArchivedCall != null)
                 {
-                    var call = atom.ArchivedCall;
+                    // Clone only selected inline calls; Hydrate detaches CAS calls.
+                    var call = atom.ArchivedCall.AcceptedCallPayload == null ? Clone(atom.ArchivedCall) : atom.ArchivedCall;
                     if (call.AcceptedCallPayload != null)
                     {
                         if (call.AcceptedCallPayload.ByteLength > maximumPayloadBytes)
@@ -397,6 +418,7 @@ namespace RNAssistant.Core.Services
                         receipt.HydratedPayloads++;
                         receipt.HydratedBytes += call.AcceptedCallPayload.ByteLength;
                     }
+                    ModelResultProjection.NormalizeTransport(call, settings.ToolResultRole);
                     atom.ArchivedCall = _projection.Project(call);
                 }
                 for (var index = 0; index < atom.Messages.Count; index++)
@@ -482,6 +504,8 @@ namespace RNAssistant.Core.Services
                             break;
                         }
                     }
+                    if (!atom.FoldForBudget || message.AcceptedCallPayload == null)
+                        ModelResultProjection.NormalizeTransport(message, settings.ToolResultRole);
                     ProjectSharedContext(message, authority);
                     if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))
@@ -553,6 +577,7 @@ namespace RNAssistant.Core.Services
                     receiptBudget -= bodyCost;
                     retainedBodyCost += bodyCost;
                     receipt.RetainedBodies++;
+                    if (atom.Messages.Count == 2) restoredTerminals[atom.Messages[1].Id] = atom;
                 }
                 // Diagnostics can cite a source without exposing it. Only a body
                 // actually materialized above can suppress another copy, before CAS read.
@@ -689,6 +714,13 @@ namespace RNAssistant.Core.Services
                 result.Content = result.Role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json;
                 measure(atom);
             }
+            // Required terminal receipts must survive a later body eviction.
+            // Remove their duplicate only once final body retention is known.
+            var retainedArchivedMessages = new HashSet<string>(atoms.Where(atom => atom.ArchivedBody)
+                .SelectMany(atom => atom.Messages).Select(message => message.Id), StringComparer.Ordinal);
+            foreach (var atom in atoms.Where(atom => atom.ArchivedOperation && atom.Messages.Count > 0 &&
+                retainedArchivedMessages.Contains(atom.Messages[0].Id)))
+            { atom.Messages.Clear(); atom.BodyParts.Clear(); }
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])
                 .Concat(workingSet == null ? Enumerable.Empty<ChatMessage>() : workingSet.Operations.Concat(workingSet.Bodies)

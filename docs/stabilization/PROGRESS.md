@@ -1,5 +1,32 @@
 # Stabilization progress
 
+## V8 P5: historical evidence и аудит сборки контекста — 2026-10-30
+
+P4 закоммичен и отправлен: `973429a4`. Owner — Core finish admission/ChatStore и
+ModelContextCompiler; Office/Workspace используют общий путь. Finish принимает
+доставленные E прежних runs того же чата с canonical terminal/accepted binding,
+eligibility и проверкой retained history. SQLite хранит disposable locators;
+цитируемые JSONL records проверяются адресно, полная история и невыбранные accepted
+bodies больше не перечитываются на каждом finish. Старые uncited failures не
+блокируют результат, pending/foreign/undelivered/contradictory claims отклоняются.
+Compaction сохраняет bounded eligible receipts. Старые reference revisions остаются
+read-only; unknown-effect/no-replay и acceptance guards сохранены.
+
+Удалён Workspace `AcceptedFacts`, который гидратировал весь архив до budget selection.
+Transport нормализуется общим compiler после отбора. Активное окно пересобирается
+на каждом model step; repair/fallback используют frozen snapshot. Оставшиеся
+metadata scans, file hashing и startup history restoration описаны в
+[аудите](../audits/office-workspace-preparation-audit.md#сборка-контекста-и-стоимость-шага--2026-10-30)
+и BACKLOG; новый prompt cache/store не вводился.
+
+10 reference checks, 17 context continuity checks (включая transport 3×3), 6 SQLite
+checks и unknown-call no-replay прошли. Synthetic CLI: historical finish в tool/user
+transport без новых tools во втором run и guarded write после compaction.
+Реальные модели и Windows/Office/VSTO не запускались. Далее P6/full Inspector;
+реальная qualification остаётся открытой по указанию пользователя.
+[Контракт](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3),
+[проверки](../model-endpoint-compatibility.md#current-p5-admission--2026-10-30).
+
 ## V8 P4: хронология и материализация source bodies — 2026-10-30
 
 P3 закоммичен: `5445dd62`. Owner — Core `ModelContextCompiler`, существующие

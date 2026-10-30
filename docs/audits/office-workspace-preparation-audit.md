@@ -1,5 +1,47 @@
 # Office / workspace: аудит границы общего чата и подготовки контекста
 
+## Сборка контекста и стоимость шага — 2026-10-30
+
+Owner: Core ModelContextCompiler/ChatStore; Application Workspace и Office adapter
+подготавливают authority и передают durable facts. Проверен исходный путь и synthetic
+Harness/CLI, без моделей и Office. Это аудит сборки запроса, не квалификация hosts.
+
+- На каждом логическом model step заново строится активное окно после checkpoint:
+  Agent Contract, Runtime Context, выбранные skills, summary/claims, сообщения и
+  call/result пары. Без checkpoint активное окно содержит всю replay history.
+  Compiler сверяет frozen authority, фильтрует устаревшее, выбирает bounded архив,
+  читает выбранный CAS, делает transport projection, дедуп и итоговый бюджет.
+- Это не инкрементальное дописывание prompt. Новый результат, внешний drift, смена
+  tools/skills/roles и бюджет могут изменить старые блоки. HTTP передаёт полный
+  полученный `messages` и schema; серверного conversation state здесь нет.
+  Repair/fallback работают с frozen snapshot, без повторного чтения live state.
+- Инкрементально обновляется SQLite-проекция append-only JSONL. Token-cost delta
+  в compiler действует внутри одной сборки, а не как кеш между шагами. Metadata
+  history/working-set selection остаётся линейным проходом по сообщениям в памяти;
+  это не повторное чтение всего JSONL/CAS на каждом model step.
+
+Исправлено в P5: Workspace `AcceptedFacts` до отбора гидратировал accepted calls
+активной истории **и всего архива**, повторяя работу compiler и обходя его лимиты.
+Этот путь удалён. Гидратация, перевод tool/user/developer и финальные ответы теперь
+проходят в общем compiler после выбора данных; durable messages не меняются.
+Матрица 3×3 проверяет смену сохранённой/запрошенной роли и отсутствующий payload
+невыбранного архива. Парность, narration, source coverage и write authority сохранены.
+
+Finish раньше перечитывал весь JSONL и тела всех accepted calls текущего run.
+Теперь существующий SQLite index адресует selected/current canonical boundaries;
+admission проверяет оригинальные записи и тела только цитируемых calls. Проба с
+двумя старыми и одним текущим вызовом плюс 30 trace events читает 6 canonical
+records; удаление нецитируемых accepted payloads не мешает, цитируемого — запрещает
+finish. Повреждённый/удалённый индекс восстанавливается, ссылки вне чата или
+удалённой истории не допускаются. После compaction старые eligible reads могут
+вернуться как bounded optional receipts, не зависящие от текста summary.
+
+Оставшаяся стоимость: Workspace перед шагом хеширует ранее прочитанные live files
+из истории; новый run восстанавливает accepted kernel history, включая старые
+тела. Это существующие границы, не обещание O(1). Дальнейшее ограничение selection
+и восстановления описано в [BACKLOG](../stabilization/BACKLOG.md#стоимость-подготовки-длинного-контекста--2026-10-30).
+Не вводить второй prompt store, скрытый fallback или кеш актуальности только по mtime.
+
 ## Прикладное управление разговором — 2026-10-27
 
 Owner: Application conversation orchestration. Проверены текущие исходники, включая

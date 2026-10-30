@@ -363,6 +363,8 @@ namespace RNAssistant.Harness
             { if (Fail) throw new System.IO.IOException("simulated disk failure"); return Inner.Append(session, write); }
             public IReadOnlyList<SessionEvent> Read(ChatSession session, SessionEventReadMode mode) { return Inner.Read(session, mode); }
             public ISessionEventReader OpenReader(ChatSession session) { return Inner.OpenReader(session); }
+            public FinishEvidenceSnapshot ReadFinishEvidence(ChatSession session, string runId, IReadOnlyList<string> references)
+            { return Inner.ReadFinishEvidence(session, runId, references); }
             public string ReadPayload(ChatSession session, SessionEvent fact) { return Inner.ReadPayload(session, fact); }
         }
         private static void InboxFailedPauseStillStopsScheduling()

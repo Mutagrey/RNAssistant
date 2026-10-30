@@ -23,8 +23,13 @@ qualification. `python3 -B tests/cli/model_diagnostics_smoke.py` exercises the b
 CLI's 23 probes, independent native/V8/SSE verdicts, automatic parity control,
 exact request/received response files, redaction and no-overwrite/no-retry behavior.
 `python3 -B tests/cli/v8_context_baseline.py --output <new-directory> --role tool`
-captures a scripted production read/read/patch/read and second-run HTTP baseline;
-add `--case all` for two consecutive patches, failed-patch correction and the existing
+captures a scripted production read/read/patch/read and second-run HTTP baseline.
+`--case historical-finish` makes the second run cite delivered prior-run evidence
+without another tool call. `model refs:` checks indexed canonical admission across
+runs/restart/fork, history membership, selected versus unrelated missing payloads
+and disposable-index repair. `context continuity: transport after bounded materialization`
+covers all nine stored/request role combinations without reading unselected CAS.
+Add `--case all` for two consecutive patches, failed-patch correction and the existing
 compaction/skill-package fixtures. Exact request/response files include compaction
 and titles; the manifest records body coverage/hashes, native pairing, retained-result
 destinations and duplicate selected-skill bodies. `--case` can select one fixture.

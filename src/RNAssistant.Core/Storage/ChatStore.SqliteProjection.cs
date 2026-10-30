@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
-        private const int SqliteProjectionVersion = 6;
+        private const int SqliteProjectionVersion = 7;
         private static readonly object SqliteProviderSync = new object();
         private static bool _sqliteProviderReady;
         private long _sqliteProjectionFullBuildCount;
@@ -117,6 +117,7 @@ namespace RNAssistant.Core.Storage
                         {
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS messages");
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS artifacts");
+                            ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS finish_facts");
                             ExecuteSql(connection, transaction, "DROP TABLE IF EXISTS projection");
                             CreateSqliteSchema(connection, transaction);
                             ExecuteSql(connection, transaction, "PRAGMA user_version=" + SqliteProjectionVersion);
@@ -145,6 +146,10 @@ namespace RNAssistant.Core.Storage
                 "item_id TEXT NOT NULL UNIQUE COLLATE NOCASE, payload BLOB NOT NULL)");
             ExecuteSql(connection, transaction, "CREATE TABLE IF NOT EXISTS artifacts (ordinal INTEGER PRIMARY KEY, " +
                 "item_id TEXT NOT NULL UNIQUE COLLATE NOCASE, payload BLOB NOT NULL)");
+            ExecuteSql(connection, transaction, "CREATE TABLE IF NOT EXISTS finish_facts (call_id TEXT NOT NULL, " +
+                "kind TEXT NOT NULL, run_id TEXT NOT NULL, reference TEXT COLLATE NOCASE UNIQUE, payload BLOB NOT NULL, " +
+                "PRIMARY KEY(call_id,kind))");
+            ExecuteSql(connection, transaction, "CREATE INDEX IF NOT EXISTS finish_run ON finish_facts(run_id)");
         }
 
         private static void DeleteSqliteProjection(string eventPath)
@@ -321,6 +326,7 @@ namespace RNAssistant.Core.Storage
                 {
                     ExecuteSql(connection, transaction, "DELETE FROM messages");
                     ExecuteSql(connection, transaction, "DELETE FROM artifacts");
+                    ExecuteSql(connection, transaction, "DELETE FROM finish_facts");
                     ExecuteSql(connection, transaction, "DELETE FROM projection");
                 }
                 var root = previous == null ? null : previous.Root;
@@ -338,7 +344,7 @@ namespace RNAssistant.Core.Storage
                 {
                     HydrateEventData(item, protector);
                     header.Apply(item);
-                    if (materializeSession && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item);
+                    if (materializeSession && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item, line.NextOffset);
                     last = item;
                 });
                 if (last == null || (materializeSession && root == null) || !header.IsValid)
@@ -400,8 +406,10 @@ namespace RNAssistant.Core.Storage
         }
 
         private void ApplySqliteEvent(SqliteConnection connection, SqliteTransaction transaction,
-            ref JObject root, SessionEvent item)
+            ref JObject root, SessionEvent item, long nextOffset)
         {
+            if ((int?)(root ?? item.Data)?["ReferenceContractVersion"] == ModelProtocol.ConversationResponse.ReferenceContractVersion)
+                IndexFinishFacts(connection, transaction, item, nextOffset);
             if (string.Equals(item.Type, SessionEventTypes.SessionCreated, StringComparison.Ordinal) ||
                 string.Equals(item.Type, SessionEventTypes.SessionForked, StringComparison.Ordinal))
             {
@@ -862,14 +870,16 @@ namespace RNAssistant.Core.Storage
                             return;
                         var root = saved.Root;
                         var header = saved.Header;
-                        foreach (var item in appended)
-                        {
-                            HydrateEventData(item, Protection());
-                            header.Apply(item);
-                            if (saved.Materialized && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item);
-                        }
                         var current = CaptureStorageFileState(path);
                         if (current == null) return;
+                        for (var index = 0; index < appended.Count; index++)
+                        {
+                            var item = appended[index];
+                            HydrateEventData(item, Protection());
+                            header.Apply(item);
+                            if (saved.Materialized && IsProjectionEvent(item)) ApplySqliteEvent(connection, transaction, ref root, item,
+                                index + 1 < appended.Count ? appended[index + 1].StorageByteOffset : current.ByteLength);
+                        }
                         var tail = appended[appended.Count - 1];
                         saved.Sequence = tail.Sequence;
                         saved.HeadHash = tail.Hash;
