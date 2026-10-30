@@ -30,7 +30,7 @@ and titles; the manifest records body coverage/hashes, native pairing, retained-
 destinations and duplicate selected-skill bodies. `--case` can select one fixture.
 `model refs:`, `context continuity: folds older frames only for budget` and
 `kernel: unknown call remains non-repeatable` supplement this baseline; they do not
-qualify the target T/E separation/case rules or exact HTTP unknown-effect delivery.
+qualify real endpoints or exact HTTP unknown-effect delivery.
 Neither script builds automatically. Real probes use `rna diagnostics`; scope and
 usage are in [endpoint compatibility](../../docs/model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
 
@@ -634,6 +634,14 @@ deduplication, diagnostic-only evidence, missing active payloads and frozen
 compaction. `tests/cli/compacted_read_guard_smoke.py` exercises real automatic
 compaction followed by a guarded edit for tool/user result roles;
 `omitted_read_guard_smoke.py` verifies that excluded bodies cannot authorize edits.
+`context continuity: chronological read bodies and final retention` checks P4's
+10 variants across three result roles: original user/call/result order, exact
+scope/resource/view/coverage/body matching, full/partial/table/empty reads,
+non-body metadata, T/E/R projection and removal of budget-evicted destinations.
+`selects active and archived bodies once` also checks exact byte comparison before
+suppressing a CAS view. The `v8_context_baseline.py` read/patch, multi-patch,
+failure-correction and compaction cases inspect actual HTTP bodies and native pairs;
+they use a scripted local server, never a real model.
 `bridge-bootstrap.test.js` applies real init/chat projections across Office host
 switches and reset, with a separate v2 handshake and invalid-bootstrap rejection.
 

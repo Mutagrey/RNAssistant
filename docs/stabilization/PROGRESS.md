@@ -1,5 +1,28 @@
 # Stabilization progress
 
+## V8 P4: хронология и материализация source bodies — 2026-10-30
+
+P3 закоммичен: `5445dd62`. Owner — Core `ModelContextCompiler`, существующие
+ModelReferenceProjection/ContextCompactionRuntime и receipt; Office/Workspace — consumers.
+Повторные и устаревшие reads сохраняют исходные call/result пары и комментарии.
+Дедуп проверяет scope, exact resource/revision/view/coverage/completeness и байты,
+сохраняя индивидуальные status/message/metadata. Active body подавляет лишний
+current view; CAS-кандидаты повторно сверяются после hydration. Свежие полные,
+частичные и табличные тела получают явный budget notice при исключении.
+`retainedAt` и ссылка в receipt удаляются, если конечный бюджет убрал адресата;
+coverage остаётся видимым, исключённое тело не даёт write authority.
+Durable history/CAS, permissions и unknown-effect guards не менялись.
+
+Целевые continuity/reference/skill/current-source/budget Harness checks прошли;
+новая матрица включает 10 вариантов в трёх result roles. Синтетические CLI captures:
+24 conversation HTTP requests — read/repeat/patch/read, multi-patch, исправление
+после failed patch, compaction с guarded write без повторного read. Отдельный
+omitted-read guard сохранил исходный файл при запрещённом overwrite.
+Реальные модели и Windows/Office/VSTO не запускались. Следующий этап — P5:
+historical evidence admission; P6/full Inspector и реальная qualification открыты.
+[Контракт](../conversation-protocol.md#p4-chronological-bodies--2026-10-30),
+[проверки](../model-endpoint-compatibility.md#current-p4-materialization--2026-10-30).
+
 ## Запуск панели с большой историей — 2026-10-30
 
 Owner: Core ChatStore — ленивый SQLite index; Office controller/bridge и Web —

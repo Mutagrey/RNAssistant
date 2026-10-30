@@ -244,7 +244,8 @@ namespace RNAssistant.Core.Services
                 : SelectFields(data, "version", "historical", "startLine", "requestedLines", "startChar", "requestedCharacters", "requestedOffset", "requestedRows", "selectionComplete", "section", "procedure", "partNumber", "partCount", "pageIndex", "startPage", "requestedPages", "nextPageIndex", "pageCount", "kind", "target", "type", "scope",
                     "representation", "text", "table", "tree", "coverage", "sourceCoverage", "sourceEndChar", "sourceTotalLines",
                     "returnedCharacters", "totalCharacters", "complete", "sourceComplete",
-                    "rawContentIncluded", "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
+                    "rawContentIncluded", "bodyIncluded", "omittedReason", "observation",
+                    "references", "claims", "claimsUnavailable", "usage", "code", "retryable");
             if (name == "core.read")
             {
                 if (result["tree"] is JObject tree)

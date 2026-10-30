@@ -647,8 +647,8 @@ success remains relevant even when its message is active or excluded from the
 prompt. The temporary candidate list does not change receipt order, unknown-effect
 retention or body/optional-receipt budgets.
 
-When a completed call/result is folded (including repeated reads and stale-source
-receipts), its nonempty first-call narration remains a separate assistant update
+When an older completed mutation call/result is folded for budget, its nonempty
+first-call narration remains a separate assistant update
 with the original accepted-message identity. It is budgeted once, carries no tool
 call or source/effect authority, and reaches compaction as an assistant source.
 The latest intact pair keeps its original transport and wording. The compiler
@@ -661,7 +661,7 @@ archived headers fail explicitly; no historical transcript is rewritten or
 previously omitted summary content invented. Task List notes remain the existing
 current-state projection, without a second memory store or a new response field.
 
-When several complete source/text reads fit individually but exceed the combined
+When several source/text or structured reads fit individually but exceed the combined
 request budget, the compiler omits older bodies until the request fits. Each
 affected call/result pair keeps its selected transport, correlation and actual
 outcome, with an explicit `bodyIncluded:false` observation and semantic target.
@@ -690,10 +690,11 @@ projected semantic data and are not passed through a domain envelope again.
   sources. Retained selection does not carry confirmations or write guards.
 - Repeated input evidence does not supersede an earlier successful call. Different
   JS computations can use the same resource revision. After hydration/projection,
-  byte-equivalent successful resource/capability results with equal evidence keep
-  one full result and an earlier successful causal frame linked to its call id.
-  Different result data remains distinct; redundant synthetic source copies can
-  also be omitted. Deduplication never reports staleness or requests another read.
+  equal source bytes with the same scoped resource/revision/view/coverage keep
+  one body in the latest result. Earlier read pairs retain their outcome and
+  metadata, with a body receipt linked to the included result. Different source
+  bytes remain distinct; redundant synthetic source copies can also be omitted.
+  Deduplication never reports staleness or requests another read.
   Real revision drift still invalidates an old observation explicitly.
 - Runtime owns Turn/Run/Step/call/effect identities. Model call/result pairs carry
   `tool_call_id`; folded completed mutations retain that correlation alongside
@@ -735,7 +736,45 @@ removed schema was delivered in its historical result. Durable events/CAS are un
 Reflection allowance and completion feedback are compact runtime metadata at the
 front of the request. Runtime still enforces reflection, confirmation, unknown-effect
 and finish guards. No trailing runtime message is appended after every tool step.
-P4 resource-body chronology and P5 historical finish admission remain separate work.
+Resource-body chronology is specified below; P5 historical finish admission remains open.
+
+### P4 chronological bodies — 2026-10-30
+
+`ModelContextCompiler` folds duplicate, stale and budget-omitted read bodies inside
+their original call/result pair in every configured result role. Both user turns,
+accepted commentary, call correlation, terminal status and non-body read metadata
+keep their chronological positions. Native calls remain adjacent to their results.
+Duplicate source bytes do not replace a successful read with an error.
+
+Read deduplication requires equal authority scope, exact resource identity/revision,
+view, coverage, completeness and actual body bytes. Different ranges, scopes,
+resources or text remain distinct even when other metadata matches. Empty text and
+identical partial/table results are valid bodies. Diagnostics and metadata without
+source bytes cannot suppress a body or grant source-read authority. Exact selected
+skill materialization continues to preserve the matching read evidence.
+
+An omitted read carries `data.observation` with `bodyIncluded:false`, an explicit
+`omittedReason` (`duplicate`, `superseded`, `unavailable` or `budget`) and its observed
+R label when exactly bound. Coverage stays beside the receipt. `retainedAt:T2`
+appears only for a duplicate whose actual body is included later in the same request.
+The compiler rechecks every destination after final budget selection, removing both
+the wire pointer and receipt `RetainedAtMessageId` when the body is omitted.
+Inspector evidence links retain original coverage and explicitly report no body in
+the receipt. Compaction sources omit request-local destination pointers because the
+destination may fall outside the selected prefix.
+
+Active reads take precedence over independent `CURRENT_RESOURCE_VIEW` candidates.
+A matching verified after-source/archive body is suppressed by exact identity and
+body hash, including a second check after CAS hydration when required. A current
+view is admitted only when no sufficient matching body is in active history; a
+verified patch without a current source-bearing result may still require that one
+independent view. After compaction, current retained CAS restores the source through
+the same authority/budget path. No separate body store or compiler is introduced.
+
+Fresh results remain substantive when they fit. Under pressure, excluded full,
+partial and structured bodies have explicit budget notices or typed admission
+failure, never a content-free success presented as delivered source. Omitted bytes
+grant no write authority; original durable calls/results/CAS are unchanged.
 
 Token reporting separates three quantities. The context ring's tooltip shows the
 remaining percentage and exact input / window size. The inspector's primary

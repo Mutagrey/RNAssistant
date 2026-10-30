@@ -23,6 +23,8 @@ namespace RNAssistant.Core.Services
         internal bool BodyOmitted;
         internal bool KeepPair;
         internal bool FoldForBudget;
+        internal ContextAtom RetainedBody;
+        internal ContextExclusionKind? BodyExclusion;
         internal HashSet<string> HydratedPayloadMessageIds = new HashSet<string>(StringComparer.Ordinal);
         internal ModelContextBudget.MessageTokenCost TokenCost;
         internal Dictionary<string, List<ContextMessagePresentation>> BodyParts = new Dictionary<string, List<ContextMessagePresentation>>();
@@ -78,6 +80,7 @@ namespace RNAssistant.Core.Services
             ContextWorkingSet workingSet = null)
         {
             var selectedInstructions = new Dictionary<string, ChatMessage>(StringComparer.Ordinal);
+            var selectedSkillReads = new HashSet<string>(StringComparer.Ordinal);
             if (skillSurface != null)
             {
                 var complete = (required ?? new ChatMessage[0]).ToList();
@@ -171,7 +174,11 @@ namespace RNAssistant.Core.Services
                     results.TryGetValue(fact.ToolCallId, out result))
                 {
                     var frame = new ToolInteractionFrame { Call = fact, Result = result };
-                    atoms.Add(InteractionAtom(frame.Call, frame.Result, true));
+                    var interaction = InteractionAtom(frame.Call, frame.Result, true);
+                    // Body folding is a projection inside this historical exchange,
+                    // not removal of the accepted read from the causal sequence.
+                    interaction.KeepPair = ModelResultProjection.IsExactReadEvidence(frame.Call.ToolName);
+                    atoms.Add(interaction);
                     AddCurrentMutationSources(atoms, frame);
                     consumed.Add(result.Id);
                 }
@@ -322,7 +329,7 @@ namespace RNAssistant.Core.Services
             var optionalReceipts = 0;
             var optionalCandidates = 0;
             var optionalBytes = Math.Min(MaximumOptionalOperationBytes, maximumPayloadBytes);
-            var observedBodies = new HashSet<string>(StringComparer.Ordinal);
+            var observedBodies = new Dictionary<string, ContextAtom>(StringComparer.Ordinal);
             var materializationOrder = atoms.Where(item => !item.ArchivedBody && !item.ArchivedOperation &&
                     item.Kind != "current-source" && (item.Kind != "resource-change" || item.KeepPair))
                 .Concat(atoms.Where(item => !item.ArchivedBody && item.Kind == "current-source").Reverse())
@@ -332,10 +339,12 @@ namespace RNAssistant.Core.Services
             foreach (var atom in materializationOrder)
             {
                 var bodyKey = BodyKey(atom);
-                if (bodyKey != null && observedBodies.Contains(bodyKey) &&
+                ContextAtom observedBody;
+                if (bodyKey != null && observedBodies.TryGetValue(bodyKey, out observedBody) &&
                     (atom.ArchivedBody || atom.Kind == "current-source"))
                 {
                     RecordExclusion(exclusions, atom, ContextExclusionKind.DuplicateBody);
+                    atom.RetainedBody = observedBody;
                     atom.Messages.Clear();
                     receipt.Deduplicated++;
                     continue;
@@ -491,6 +500,7 @@ namespace RNAssistant.Core.Services
                             if (part == null) continue;
                             atom.BodyParts[message.Id].RemoveAll(item => item.Kind == "data" || item.Kind == "data.text");
                             atom.BodyParts[message.Id].Add(part);
+                            selectedSkillReads.Add(message.Id);
                             receipt.Deduplicated++;
                             break;
                         }
@@ -507,6 +517,18 @@ namespace RNAssistant.Core.Services
                         message.ResourceRefs = new List<ResourceRef>();
                         message.HtmlWorkspaceCheckpoint = null;
                     }
+                }
+                // An archived JSON envelope may reveal its exact body only after
+                // hydration/projection. Recheck before admitting another copy.
+                bodyKey = BodyKey(atom);
+                if (bodyKey != null && observedBodies.TryGetValue(bodyKey, out observedBody) &&
+                    (atom.ArchivedBody || atom.Kind == "current-source"))
+                {
+                    RecordExclusion(exclusions, atom, ContextExclusionKind.DuplicateBody);
+                    atom.RetainedBody = observedBody;
+                    atom.Messages.Clear(); atom.BodyParts.Clear();
+                    receipt.Deduplicated++;
+                    continue;
                 }
                 if (atom.ArchivedBody)
                 {
@@ -535,7 +557,7 @@ namespace RNAssistant.Core.Services
                 // Diagnostics can cite a source without exposing it. Only a body
                 // actually materialized above can suppress another copy, before CAS read.
                 bodyKey = BodyKey(atom);
-                if (bodyKey != null) observedBodies.Add(bodyKey);
+                if (bodyKey != null) observedBodies[bodyKey] = atom;
                 if (atom.ArchivedOperation && atom.Messages.Count > 0)
                 {
                     var projected = atom.Messages.Single();
@@ -568,44 +590,33 @@ namespace RNAssistant.Core.Services
                 atom.Kind = "historical-diagnostic";
                 RecordHistoricalOutcome(atom, result, wire, atom.HistoricalFailure, preserveDiagnostic: true);
             }
-            // Compare complete projected results, not merely their input evidence.
-            // Keep one full identical read and a truthful completed-operation
-            // record for each earlier call. A missing/oversized/stale body cannot
-            // be used as the retained copy because only hydrated Ok results enter.
+            // Compare actual source bytes, not merely input evidence. Each result
+            // retains its own outcome/metadata at its original position. Only a
+            // visible current body can become the destination of another receipt.
             var completeReads = new Dictionary<string, ContextAtom>(StringComparer.Ordinal);
-            var foldedReadTargets = new List<KeyValuePair<ContextAtom, ContextAtom>>();
             foreach (var atom in atoms.AsEnumerable().Reverse().Where(item => item.Kind == "tool-interaction" && item.Messages.Count == 2))
             {
                 var result = atom.Messages[1];
                 ToolResultWireReadResult wire;
                 string error;
-                if (!ToolResultHistoryReader.TryRead(result, out wire, out error) ||
+                var bodyKey = BodyKey(atom);
+                if (bodyKey == null || !ToolResultHistoryReader.TryRead(result, out wire, out error) ||
                     wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
                     !ModelResultProjection.IsExactReadEvidence(wire.Name)) continue;
-                var key = wire.Name + "\n" + wire.Result.Message + "\n" + wire.Result.DataJson + "\n" +
-                    string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
-                        ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
+                var key = wire.Name + "\n" + bodyKey;
                 ContextAtom retainedAtom;
                 if (!completeReads.TryGetValue(key, out retainedAtom))
                 {
                     completeReads.Add(key, atom);
                     continue;
                 }
-                var retainedCall = retainedAtom.Messages[1].ToolCallId;
                 atom.Kind = "repeated-read";
-                FoldInteraction(atom, new ChatMessage {
-                    Id = result.Id, Role = "assistant", ProtocolMessage = true,
-                    ToolName = wire.Name, ToolCallId = wire.ToolCallId, ToolCallReference = result.ToolCallReference, EvidenceReference = result.EvidenceReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
-                    RunId = result.RunId,
-                    CompletedOperation = new CompletedToolOperation { ToolCallId = wire.ToolCallId,
-                        ToolName = wire.Name, Status = wire.Result.Status, Message = "Identical complete read retained in this request." },
-                    Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
-                        tool_call_id = wire.ToolCallId, tool = wire.Name, outcome = "Ok",
-                        message = "Read completed. The identical complete result is retained later in this request; reuse it without another read.",
-                        retained_result = new { tool_call_id = retainedCall }
-                    }) });
-                atom.BodyParts.Clear();
-                foldedReadTargets.Add(new KeyValuePair<ContextAtom, ContextAtom>(atom, retainedAtom));
+                atom.RetainedBody = retainedAtom;
+                atom.BodyExclusion = ContextExclusionKind.DuplicateBody;
+                RecordHistoricalOutcome(atom, result, wire, new ResourceObservationNotice {
+                    Target = RootTargetLabel(wire.Data as JObject), State = EvidenceState.Current,
+                    OmittedReason = "duplicate", RetainedAt = retainedAtom.Messages[1].ToolCallId,
+                    Reason = "Identical source bytes and coverage are included in the later result. Reuse that body." });
                 receipt.Deduplicated++;
             }
             ContextAtom workingSetNotice = null;
@@ -662,20 +673,21 @@ namespace RNAssistant.Core.Services
             }
             // A later budget decision can omit the only full copy. Do not leave
             // earlier read receipts pointing at a body absent from this request.
-            foreach (var link in foldedReadTargets)
+            foreach (var atom in atoms.Where(item => item.Kind == "repeated-read"))
             {
-                var retained = link.Value;
-                if (retained.Kind == "tool-interaction" && !retained.BodyOmitted &&
-                    retained.Messages.Count == 2 && IsResourceRead(retained.Messages[1]) &&
-                    HasCompleteSource(retained.Messages[1])) continue;
-                var folded = link.Key.Messages.Single();
-                folded.CompletedOperation.Message = "Identical read body omitted from this request.";
-                folded.Content = "TOOL_INTERACTION (completed causal frame):\n" + JsonConvert.SerializeObject(new {
-                    tool_call_id = folded.ToolCallId, tool = folded.ToolName, outcome = "Ok",
-                    message = "Read completed; matching body was omitted from this request.",
-                    bodyIncluded = false
-                });
-                measure(link.Key);
+                if (BodyKey(atom.RetainedBody) != null) continue;
+                atom.RetainedBody = null;
+                var result = atom.Messages.Last();
+                ToolResultWireReadResult wire; string error;
+                if (!ToolResultHistoryReader.TryRead(result, out wire, out error))
+                    throw new InvalidOperationException("Repeated read receipt is invalid: " + error);
+                var data = (JObject)wire.Data;
+                var observation = (JObject)data["observation"];
+                observation.Remove("retainedAt");
+                observation["reason"] = "Read completed; the matching body was also omitted from this request.";
+                var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, wire.Result, data);
+                result.Content = result.Role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json;
+                measure(atom);
             }
             var messages = atoms.SelectMany(item => item.PromptMessages).ToList();
             receipt.Messages = DescribeMessages(atoms, required, (facts ?? new ChatMessage[0])
@@ -688,7 +700,8 @@ namespace RNAssistant.Core.Services
                 throw new PromptBudgetExceededException("Current evidence and causal frames use approximately " +
                     receipt.EstimatedTokens + " tokens at a message budget of " + budget +
                     " after correctness filtering. Compact context or select a narrower resource view.", true);
-            var delivered = messages.Where(message => message.SyntheticResourceObservation || IsResourceRead(message))
+            var delivered = messages.Where(message => message.SyntheticResourceObservation ||
+                    IsResourceRead(message) && (VisibleReadBody(message) != null || selectedSkillReads.Contains(message.Id)))
                 .SelectMany(message => message.ResourceEvidence ?? new List<ResourceEvidence>())
                 .Where(evidence => _reducer.Reduce(evidence, authority.Resources).State == EvidenceState.Current)
                 .GroupBy(evidence => evidence.EvidenceId, StringComparer.Ordinal).Select(group => group.First());
@@ -717,9 +730,39 @@ namespace RNAssistant.Core.Services
 
         private static string BodyKey(ContextAtom atom)
         {
-            if (atom.BodyOmitted || atom.Evidence.Count == 0 || !atom.Messages.Any(ExposesBody)) return null;
-            return string.Join("\n", atom.Evidence.Select(e => e.Resource.Uri + "@" + e.Resource.Revision +
-                ":" + e.View + ":" + JsonConvert.SerializeObject(e.Coverage)).OrderBy(value => value, StringComparer.Ordinal));
+            if (atom == null || atom.BodyOmitted || atom.Evidence.Count != 1 || atom.Messages.Count == 0) return null;
+            var evidence = atom.Evidence[0];
+            var message = atom.Messages.Last();
+            string hash;
+            if (message.SyntheticResourceObservation && message.ResultPayload != null)
+                hash = message.ResultPayload.Sha256;
+            else
+            {
+                var body = VisibleReadBody(message);
+                if (body == null) return null;
+                using (var sha = System.Security.Cryptography.SHA256.Create())
+                    hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(body)))
+                        .Replace("-", string.Empty).ToLowerInvariant();
+            }
+            // Payload identity is independent of the resource head. Equal heads
+            // with different slices/bytes, or a different authority scope, cannot
+            // suppress a source. CAS hashes also allow skipping redundant I/O.
+            return JsonConvert.SerializeObject(new { evidence.ScopeId, evidence.Resource.Uri,
+                evidence.Resource.Revision, evidence.View, evidence.Coverage, evidence.Complete, hash });
+        }
+
+        private static string VisibleReadBody(ChatMessage message)
+        {
+            if (message == null || message.CompletedOperation != null ||
+                message.ToolName != "core.read" && message.ToolName != "core.tools.read") return null;
+            ToolResultWireReadResult wire; string error;
+            if (!ToolResultHistoryReader.TryRead(message, out wire, out error) || wire.Result.Status != ToolResultStatus.Ok) return null;
+            var data = wire.Data as JObject;
+            if ((bool?)data?["rawContentIncluded"] == false || (bool?)data?["bodyIncluded"] == false) return null;
+            if (data?["text"]?.Type == JTokenType.String) return (string)data["text"];
+            var structured = ModelResultProjection.SelectFields(data, "table", "tree");
+            return structured.Properties().Any(item => item.Value.Type != JTokenType.Null)
+                ? structured.ToString(Formatting.None) : null;
         }
 
         private static ContextAtom InteractionAtom(ChatMessage call, ChatMessage result, bool required)
@@ -937,8 +980,9 @@ namespace RNAssistant.Core.Services
 
         private static ResourceObservationNotice SourceOmission(string target, bool aggregateBudget = false)
         { return new ResourceObservationNotice { Target = target, State = EvidenceState.Current, BodyIncluded = false,
+            OmittedReason = "budget",
             Reason = aggregateBudget
-                ? "The complete source is retained locally, but was omitted to fit the combined request budget."
+                ? "The observed source is retained locally, but its body was omitted to fit the combined request budget."
                 : "The read/verified source is retained locally, but its body exceeds this request budget and was not included.",
             NextAction = aggregateBudget
                 ? "Read only the next needed target, one at a time; a fresh read can replace older bodies. Do not repeat the whole batch. An omitted body cannot authorize a write; never replay a completed mutation."
@@ -961,6 +1005,8 @@ namespace RNAssistant.Core.Services
                 catch (JsonException) { }
                 atom.Messages = new List<ChatMessage> { OmittedSourceNotice(target, aggregateBudget) };
                 atom.Kind = "observation-notice";
+                atom.BodyOmitted = true;
+                atom.BodyExclusion = ContextExclusionKind.Budget;
                 atom.BodyParts.Clear();
                 return true;
             }
@@ -968,10 +1014,11 @@ namespace RNAssistant.Core.Services
             if (!ToolResultHistoryReader.TryRead(result, out wire, out error) ||
                 wire.Result.Status != RNAssistant.Core.Tools.Contracts.ToolResultStatus.Ok ||
                 result.ToolName != "core.read" && atom.Kind != "terminal-mutation" ||
-                !HasCompleteSource(result)) return false;
+                !HasCompleteSource(result) && VisibleReadBody(result) == null) return false;
             var projected = _projection.Project(result);
             if (!ToolResultHistoryReader.TryRead(projected, out wire, out error)) return false;
             if (aggregateBudget) atom.KeepPair = true;
+            atom.BodyExclusion = ContextExclusionKind.Budget;
             RecordHistoricalOutcome(atom, projected, wire,
                 SourceOmission(RootTargetLabel(wire.Data as JObject), aggregateBudget));
             atom.Kind = "completed-operation";
@@ -1002,6 +1049,9 @@ namespace RNAssistant.Core.Services
                     ? "capability_evidence_context_too_large"
                     : "resource_evidence_context_too_large",
                 ["complete"] = false,
+                ["bodyIncluded"] = false,
+                ["rawContentIncluded"] = false,
+                ["omittedReason"] = "budget",
                 ["next_action"] = capability
                     ? "Reduce context or use a larger-context model; do not retry unchanged."
                     : "Choose a narrower semantic resource view or reduce context; do not retry unchanged."
@@ -1032,6 +1082,8 @@ namespace RNAssistant.Core.Services
             result.ResourceRefs = new List<ResourceRef>();
             result.ResourceEvidence = new List<ResourceEvidence>();
             atom.BodyOmitted = true;
+            atom.BodyExclusion = ContextExclusionKind.Budget;
+            atom.BodyParts.Clear();
             return true;
         }
 
@@ -1112,14 +1164,17 @@ namespace RNAssistant.Core.Services
                 var summary = message == atom.Narration || !preservedCall && (atom.BodyOmitted || message.CompletedOperation != null || (message.ContextClaims?.Count ?? 0) > 0 ||
                     atom.Kind == "resource-change" || atom.Kind == "context-unavailable" ||
                     atom.Kind == "observation-notice" || atom.Kind == "repeated-read");
-                var evidence = (message.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e => e != null).ToArray();
+                var omittedBody = atom.BodyOmitted && !preservedCall;
+                var evidence = (omittedBody ? source?.ResourceEvidence ?? atom.Evidence : message.ResourceEvidence ?? new List<ResourceEvidence>())
+                    .Where(e => e != null).ToArray();
                 List<ContextMessagePresentation> bodyParts;
                 atom.BodyParts.TryGetValue(message.Id ?? "", out bodyParts);
                 var retainedBody = bodyParts?.FirstOrDefault(part => part.RetainedAtMessageId != null);
                 summary = summary || retainedBody != null;
                 var unchangedData = bodyParts != null && bodyParts.Any(p => p.Kind == "data" && p.Presentation == ContextPresentationKind.Full);
+                var visibleRead = !omittedBody && VisibleReadBody(message) != null;
                 var resourceBody = evidence.Length > 0 && !IsFailedResult(message) &&
-                    (message.SyntheticResourceObservation || unchangedData);
+                    (message.SyntheticResourceObservation || visibleRead || unchangedData);
                 var presentation = summary ? ContextPresentationKind.Summary :
                     resourceBody ? evidence.All(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole)
                         ? ContextPresentationKind.Full : ContextPresentationKind.Fragment :
@@ -1128,11 +1183,13 @@ namespace RNAssistant.Core.Services
                 var entry = new ContextMessagePresentation { MessageIndex = result.Count,
                     SourceMessageId = message.Id, Role = message.Role, Kind = message == atom.Narration ? "assistant-update" : atom.Kind,
                     Presentation = presentation, OriginalPayload = source?.ResultPayload,
-                    RetainedAtMessageId = retainedBody?.RetainedAtMessageId,
+                    RetainedAtMessageId = retainedBody?.RetainedAtMessageId ??
+                        (!preservedCall ? atom.RetainedBody?.Messages.LastOrDefault()?.Id : null),
+                    ExclusionKind = omittedBody ? atom.BodyExclusion : null,
                     ToolCallId = message.CompletedOperation?.ToolCallId ?? message.ToolCallId,
                     EvidenceReference = message.AcceptedCallOrigin == null ? message.EvidenceReference : null,
                     EvidenceLinks = EvidenceLinks(evidence, item =>
-                        retainedBody != null ? (bool?)false : atom.Kind == "selected-skill" ? (bool?)true :
+                        omittedBody || retainedBody != null ? (bool?)false : atom.Kind == "selected-skill" || visibleRead ? (bool?)true :
                         message.SyntheticResourceObservation && atom.HydratedPayloadMessageIds.Contains(message.Id) &&
                         message.ResultPayload != null &&
                         item.Payload != null && item.Payload.Sha256 == message.ResultPayload.Sha256 &&
@@ -1161,6 +1218,8 @@ namespace RNAssistant.Core.Services
                 result.Add(new ContextMessagePresentation { SourceMessageId = source.Id, Role = source.Role,
                     Presentation = ContextPresentationKind.Excluded, OriginalPayload = source.ResultPayload,
                     ExclusionKind = kind,
+                    RetainedAtMessageId = atoms.Where(atom => atom.ArchivedSourceMessageId == source.Id &&
+                        BodyKey(atom.RetainedBody) != null).Select(atom => atom.RetainedBody.Messages.Last().Id).FirstOrDefault(),
                     ToolCallId = source.CompletedOperation?.ToolCallId ?? source.ToolCallId,
                     EvidenceReference = source.AcceptedCallOrigin == null ? source.EvidenceReference : null,
                     EvidenceLinks = EvidenceLinks(source.ResourceEvidence, item => false),
@@ -1229,6 +1288,10 @@ namespace RNAssistant.Core.Services
             ResourceObservationNotice observation, bool preserveDiagnostic = false)
         {
             var call = atom.Messages.Count == 2 ? atom.Messages[0] : null;
+            var original = wire.Data as JObject;
+            if (wire.Name == "core.read" && original?["coverage"] is JObject coverage)
+                observation.ResourceReference = ModelReferenceProjection.BoundSourceReference(result,
+                    (string)original["representation"], coverage.ToObject<ResourceCoverage>())?.Alias;
             if (!atom.KeepPair || call == null)
             {
                 FoldInteraction(atom, CompleteOperation(result, wire, observation, preserveDiagnostic, call));
@@ -1237,8 +1300,12 @@ namespace RNAssistant.Core.Services
             }
             // Keep role/correlation/outcome. Only the data view changes; omitted
             // or stale source bytes can no longer count as delivered read evidence.
-            var data = new JObject { ["targets"] = JArray.FromObject(OperationTargets(wire, call)),
-                ["observation"] = JObject.FromObject(observation) };
+            var data = wire.Name == "core.read" || wire.Name == "core.tools.read"
+                ? (JObject)original?.DeepClone() ?? new JObject() : new JObject();
+            foreach (var bodyField in new[] { "text", "table", "tree" }) data.Remove(bodyField);
+            data["targets"] = JArray.FromObject(OperationTargets(wire, call));
+            data["observation"] = JObject.FromObject(observation);
+            if (wire.Name == "core.read") data["rawContentIncluded"] = false;
             if (preserveDiagnostic || wire.Name == ResourceMutationToolCatalog.Patch) data["tool_data"] = wire.Data;
             var projected = new RNAssistant.Core.Tools.Contracts.ToolResult(wire.Result.Status, wire.Result.Message, data.ToString(Formatting.None));
             var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, projected, data);
@@ -1338,6 +1405,8 @@ namespace RNAssistant.Core.Services
             string code = "resource_evidence_stale")
         {
             atom.Kind = "resource-change";
+            atom.BodyExclusion = code == "resource_evidence_stale" ? ContextExclusionKind.SupersededEvidence :
+                ContextExclusionKind.UnavailableEvidence;
             var message = atom.Messages.Last();
             message.Attachments.Clear();
             message.ResultPayload = null;
@@ -1356,6 +1425,7 @@ namespace RNAssistant.Core.Services
                 RecordHistoricalOutcome(atom, projected, wire,
                     new ResourceObservationNotice { Target = (string)semanticData?["target"],
                         State = code == "resource_evidence_stale" ? EvidenceState.Superseded : EvidenceState.Unavailable, Reason = reason,
+                        OmittedReason = code == "resource_evidence_stale" ? "superseded" : "unavailable",
                         NextAction = "Use an included current observation when available; otherwise read the needed known target. Rediscover only when its identity is unavailable." });
             }
             else message.Content = "RESOURCE_CHANGE: " + reason + " Re-read only if needed.";

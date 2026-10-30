@@ -485,6 +485,7 @@ namespace RNAssistant.Harness
                 Test("context continuity: restores bounded working set", ContextContinuityRestoresWorkingSet),
                 Test("context continuity: retains bounded VBA lines without whole-source authority", ContextContinuityRetainsVbaLines),
                 Test("context continuity: selects active and archived bodies once", ContextContinuitySelectsBodiesOnce),
+                Test("context continuity: chronological read bodies and final retention", ContextContinuityKeepsChronologicalReadBodies),
                 Test("agent continuity: archived read presentation", AgentContinuityReadPresentation),
                 Test("agent continuity: revised plan survives compaction", AgentContinuityTaskContext),
                 Test("agent continuity: open and blocked finals retain unfinished work", AgentContinuityBlockedFinal),

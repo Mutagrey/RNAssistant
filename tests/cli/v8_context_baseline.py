@@ -44,11 +44,11 @@ def source_bodies(request):
         if data.get("kind") == "resource-read" and data.get("rawContentIncluded") and isinstance(data.get("text"), str):
             bodies.append(dict(data, message=index, location="tool-result"))
     for index, receipt in receipts:
-        retained = receipt.get("retained_result", {}).get("tool_call_id")
+        retained = (receipt.get("data") or {}).get("observation", {}).get("retainedAt")
         if retained:
             assert any(position > index and other["tool_call_id"] == retained and
                        (other.get("data") or {}).get("rawContentIncluded")
-                       for position, other in receipts), "Dangling retained_result in actual request"
+                       for position, other in receipts), "Dangling retainedAt in actual request"
     return bodies
 
 

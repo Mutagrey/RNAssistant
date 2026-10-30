@@ -211,6 +211,10 @@ namespace RNAssistant.Harness
                         new ToolResultMaterialization(ToolResult.Ok("Read", "{\"target\":\"notes.txt\",\"text\":\"42 and 43\"}"),
                             resourceEvidence: new[] { evidence }), int.MaxValue, role);
                     result.RunId = call.RunId;
+                    call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, index + 1);
+                    result.ToolCallReference = call.ToolCallReference;
+                    result.EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, index + 1);
+                    session.ToolCallReferenceSequence = session.EvidenceReferenceSequence = index + 1;
                     session.Messages.AddRange(new[] { call, result });
                 }
                 var original = JsonConvert.SerializeObject(session.Messages);
@@ -220,9 +224,9 @@ namespace RNAssistant.Harness
                 AssertEqual(2, snapshot.Receipt.Deduplicated, "duplicate results fold without repeating reads");
                 var update = snapshot.Messages.Single(item => item.Content.Contains(finding));
                 AssertEqual("assistant", update.Role, "retained explanation stays an assistant assessment");
-                AssertTrue(update.ToolCallId == null && update.ResourceEvidence.Count == 0,
-                    "retained explanation has no execution or source authority");
-                AssertEqual(1, snapshot.Receipt.Messages.Count(item => item.Kind == "assistant-update"), "empty updates add no messages");
+                AssertTrue(update.ToolCallId == "read-0" && update.ResourceEvidence.Count == 0 && update.EvidenceReference == null,
+                    "accepted commentary retains correlation without source/effect authority");
+                AssertEqual(6, snapshot.Messages.Count, "read folding keeps all pairs without adding separate updates");
                 AssertEqual(original, JsonConvert.SerializeObject(session.Messages), "projection never rewrites the durable transcript");
                 var again = compiler.Compile(authority, new ChatMessage[0], snapshot.Messages, null,
                     new ToolCatalogEntry[0], new AppSettings(), 4096);
@@ -352,7 +356,7 @@ namespace RNAssistant.Harness
                 AssertTrue(!receipt.Content.Contains("rna://"), "source identities stay runtime-only");
                 AssertContains(failed.Content, "Archived diagnostic", "compilation does not mutate durable facts");
                 AssertTrue(failed.ResultPayload != null, "historical exact payload remains retained");
-                var later = ContinuityResult("later", "files.patch", ToolResult.Error("No dispatch.", "{\"code\":\"no_effect\"}"));
+                var later = ContinuityResult("later", "core.patch", ToolResult.Error("No dispatch.", "{\"code\":\"no_effect\"}"));
                 var older = compiler.Compile(authority(ResourceHeadState.Known(new ResourceRef(style.Uri, "r2"), 2)),
                     new ChatMessage[0], facts.Concat(new[] { ContinuityCall(later), later }).ToArray(), null,
                     new ToolCatalogEntry[0], new AppSettings(), 10000);
@@ -913,10 +917,10 @@ namespace RNAssistant.Harness
                 var restoredHeader = JObject.Parse(restoredView.Content.Split('\n')[1]);
                 AssertEqual("R1@v1", (string)restoredHeader["ref"], "compiler binds the hydrated CAS view to its retained reference");
                 AssertTrue(restoredView.Content.EndsWith(body, StringComparison.Ordinal), "reference projection preserves the hydrated CAS bytes");
-                var write = ContinuityResult("large_write", "files.create", ToolResult.Ok("Written.", "{\"path\":\"other.txt\"}"));
-                write.ResourceEffect = new ResourceEffect("fx", "files.create", ResourceEffectOutcome.VerifiedChanged);
-                var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "files.create",
-                    Arguments = new Dictionary<string, object> { ["text"] = new string('x', 12000) } },
+                var write = ContinuityResult("large_write", "core.write", ToolResult.Ok("Written.", "{\"target\":\"other.txt\"}"));
+                write.ResourceEffect = new ResourceEffect("fx", "core.write", ResourceEffectOutcome.VerifiedChanged);
+                var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "core.write",
+                    Arguments = new Dictionary<string, object> { ["target"] = "other.txt", ["content"] = new string('x', 12000) } },
                     "Saved another file.", "Save the requested file.", null, "tool", FixtureCallOrigin("large_write"));
                 var latest = ContinuityResult("latest", "fixture.read", ToolResult.Ok("Small result.", "{}"));
                 var withLargeFrame = new[] { writeCall, write, ContinuityCall(latest), latest };
@@ -1004,7 +1008,113 @@ namespace RNAssistant.Harness
                     "archive copy records deduplication without claiming its body was delivered elsewhere");
                 AssertContains(string.Join("\n", deduplicated.Messages.Select(item => item.Content)), body, "the active source remains complete");
                 AssertEqual(1, deduplicated.DeliveredObservations.Count, "active and archived source share delivery rules");
+                AssertEqual(activeResult.Id, deduplicated.Receipt.Messages.Single(item => item.SourceMessageId == result.Id).RetainedAtMessageId,
+                    "archive exclusion points to the exact included active result");
+
+                blobs.StoreText(body, "text/plain");
+                var differentBytes = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(activeResult));
+                differentBytes.Content = differentBytes.Content.Replace(body, body + "_DIFFERENT");
+                var different = new[] { ContinuityCall(differentBytes), differentBytes };
+                var separate = compiler.Compile(authority, new ChatMessage[0], different, null,
+                    new ToolCatalogEntry[0], new AppSettings(), 12000,
+                    workingSet: ContextWorkingSet.Restore(session, different, 1000));
+                AssertEqual(1, separate.Receipt.RetainedBodies, "equal evidence alone cannot suppress different archived bytes");
+                AssertEqual(1, separate.Receipt.HydratedPayloads, "different exact archive body is hydrated");
+                AssertEqual(0, separate.Receipt.Deduplicated, "byte comparison guards current-view omission");
             });
+        }
+
+        private static void ContextContinuityKeepsChronologicalReadBodies()
+        {
+            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var scenario in new[] { "identical", "partial", "table", "empty", "metadata", "different-body", "scope", "resource", "coverage", "view" })
+            {
+                var scope = new ResourceAuthorityScopeId("document", "p4");
+                var otherScope = scenario == "scope" ? new ResourceAuthorityScopeId("document", "p4-other") : scope;
+                var source = new ResourceRef("rna://vba/p4/module", "v1");
+                var other = scenario == "resource" ? new ResourceRef("rna://vba/p4/other", "v1") : source;
+                var partial = scenario == "partial" || scenario == "coverage";
+                var coverage = partial ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 1, end: 2) : ResourceCoverage.Whole();
+                var otherCoverage = scenario == "coverage" ? new ResourceCoverage(ResourceCoverageKinds.LineRange, start: 3, end: 4) : coverage;
+                var body = scenario == "empty" ? "" : "EXACT_READ_" + new string('Ж', 2048);
+                var view = scenario == "table" ? "table" : "source";
+                Func<int, ChatMessage> read = number => {
+                    var selectedView = number == 2 && scenario == "view" ? "text" : view;
+                    var selectedCoverage = number == 2 ? otherCoverage : coverage;
+                    var evidence = new ResourceEvidence("read" + number, number == 2 ? otherScope : scope,
+                        number == 2 ? other : source, selectedView, selectedCoverage, !partial, 1);
+                    var data = new JObject { ["kind"] = "resource-read", ["type"] = "VBA module",
+                        ["target"] = "VBA module: M", ["representation"] = selectedView,
+                        ["coverage"] = JObject.FromObject(selectedCoverage), ["complete"] = !partial,
+                        ["rawContentIncluded"] = true };
+                    if (scenario == "table") data["table"] = new JObject { ["rows"] = new JArray(new JArray("value", body)) };
+                    else data["text"] = number == 2 && scenario == "different-body" ? body + "_CHANGED" : body;
+                    if (scenario == "metadata") data["requestedLines"] = 100 * number;
+                    var result = ContinuityResult("p4-read-" + number, "core.read", ToolResult.Ok(scenario == "metadata" ? "Read " + number : "Read.", data.ToString()), role);
+                    result.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, number);
+                    result.EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, number);
+                    result.ResourceEvidence.Add(evidence);
+                    result.ResourceModelReferences.Add(new ModelResourceReference(evidence.ScopeId, evidence.Resource,
+                        ModelReference.Create(ModelReferenceKind.Resource, scenario == "scope" || scenario == "resource" ? number : 1), 1));
+                    return result;
+                };
+                var first = read(1); var last = read(2);
+                var firstCall = ContinuityCall(first); firstCall.ToolCallReference = first.ToolCallReference;
+                var lastCall = ContinuityCall(last); lastCall.ToolCallReference = last.ToolCallReference;
+                var facts = new[] { new ChatMessage { Role = "user", Content = "Read the module." }, firstCall, first,
+                    new ChatMessage { Role = "assistant", Content = "First inspection done." },
+                    new ChatMessage { Role = "user", Content = "Check the same source again." }, lastCall, last };
+                var original = JsonConvert.SerializeObject(facts);
+                var scopes = new List<ResourceAuthoritySnapshot> { new ResourceAuthoritySnapshot(scope, 1, null, 0,
+                    scenario == "resource" ? new[] { ResourceHeadState.Known(source, 1), ResourceHeadState.Known(other, 1) } :
+                        new[] { ResourceHeadState.Known(source, 1) }) };
+                if (scenario == "scope") scopes.Add(new ResourceAuthoritySnapshot(otherScope, 1, null, 0, new[] { ResourceHeadState.Known(other, 1) }));
+                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(scopes), "tools", new SkillCatalogSnapshot(null), null, 7);
+                var compiler = new ModelContextCompiler();
+                var snapshot = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), 16000);
+                AssertTrue(facts.Select(message => message.Id).SequenceEqual(snapshot.Messages.Select(message => message.Id)),
+                    scenario + ": both user turns and both read pairs keep their exact order in " + role);
+                var duplicate = new[] { "identical", "partial", "table", "empty", "metadata" }.Contains(scenario);
+                var earlier = snapshot.Receipt.Messages.Single(item => item.SourceMessageId == first.Id);
+                AssertEqual(duplicate ? last.Id : null, earlier.RetainedAtMessageId, scenario + ": retained target identifies the included body");
+                AssertEqual(duplicate ? 1 : 2, snapshot.DeliveredObservations.Count, scenario + ": only actual source bodies authorize reuse");
+                AssertEqual(!duplicate, earlier.EvidenceLinks.Single().BodyIncludedInMessage.Value, "receipt reports actual body delivery");
+                var wire = JArray.FromObject(new LlmMessageBuilder().Build(ModelReferenceProjection.Project(snapshot.Messages), new AppSettings()).Messages);
+                if (role == "tool")
+                {
+                    AssertEqual("T1", (string)wire[1]["tool_calls"][0]["id"], "earlier native call remains");
+                    AssertEqual("T1", (string)wire[2]["tool_call_id"], "earlier native result remains adjacent");
+                    AssertEqual("T2", (string)wire[5]["tool_calls"][0]["id"], "later native call remains");
+                    AssertEqual("T2", (string)wire[6]["tool_call_id"], "later native result remains adjacent");
+                }
+                Func<int, JObject> dataAt = index => {
+                    var content = (string)wire[index]["content"];
+                    return JObject.Parse(content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal) ? content.Substring(13) : content);
+                };
+                var deliveredFirst = dataAt(2);
+                AssertEqual("ok", (string)deliveredFirst["status"], "body omission never rewrites the actual read outcome");
+                AssertEqual("E1", (string)deliveredFirst["evidence"], "historical eligible evidence remains visible");
+                if (duplicate)
+                {
+                    AssertEqual("T2", (string)deliveredFirst["data"]["observation"]["retainedAt"], "wire pointer uses the issued call alias");
+                    AssertEqual("R1@v1", (string)deliveredFirst["data"]["observation"]["ref"], "omitted body keeps its observed version");
+                    AssertEqual("duplicate", (string)deliveredFirst["data"]["observation"]["omittedReason"], "omission is explicit");
+                    AssertEqual(ContextExclusionKind.DuplicateBody, earlier.ExclusionKind.Value, "Inspector identifies deduplication");
+                    AssertTrue(JToken.DeepEquals(JObject.FromObject(coverage), deliveredFirst["data"]["coverage"]), "omission preserves exact coverage");
+                    if (scenario == "metadata")
+                    {
+                        AssertEqual(100, (int)deliveredFirst["data"]["requestedLines"], "folding preserves each read's own metadata");
+                        AssertEqual("Read 1", (string)deliveredFirst["message"], "folding preserves each read's actual outcome message");
+                    }
+                }
+                AssertTrue(!wire.ToString().Contains("rna://"), "runtime resource identity never enters wire");
+                AssertEqual(original, JsonConvert.SerializeObject(facts), "compilation leaves durable reads intact");
+                if (scenario != "identical" && scenario != "partial" && scenario != "table") continue;
+                var tight = compiler.Compile(authority, new ChatMessage[0], facts, null, new ToolCatalogEntry[0], new AppSettings(), snapshot.Receipt.EstimatedTokens - 1);
+                AssertTrue(!string.Join("\n", tight.Messages.Select(message => message.Content)).Contains("retainedAt"), "final budget cannot leave a dangling pointer");
+                AssertEqual(null, tight.Receipt.Messages.Single(item => item.SourceMessageId == first.Id).RetainedAtMessageId, "Inspector also drops the omitted destination");
+                AssertEqual(0, tight.DeliveredObservations.Count, "budget notices confer no authority for full, partial or table bodies");
+            }
         }
 
         private static void ContextContinuityRetainsVbaLines()

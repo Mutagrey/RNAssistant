@@ -67,6 +67,8 @@ namespace RNAssistant.Harness
                     AssertTrue(entry.EvidenceLinks.All(link => link.BodyIncludedInMessage == false), "receipt never claims omitted bytes");
                     AssertTrue(selected.EvidenceLinks.All(link => link.BodyIncludedInMessage == true), "selected body carries exact provenance");
                     AssertEqual(exact.Uri, selected.EvidenceLinks.Single().Resource.Uri, "provenance identifies the same skill source");
+                    AssertEqual("skill-read", snapshot.DeliveredObservations.Single().EvidenceId,
+                        "the exact body included as a selected instruction retains its read evidence");
                 }
                 else AssertEqual(body, (string)wire.Data["text"], "partial, foreign, changed and unselected bodies remain available");
             }

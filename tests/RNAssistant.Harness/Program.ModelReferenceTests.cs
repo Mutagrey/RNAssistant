@@ -134,7 +134,7 @@ namespace RNAssistant.Harness
                     "Reading.", "Read requested text.", null, role, FixtureCallOrigin());
                 call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 7);
                 var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = call.ToolCallId, ToolId = call.ToolName },
-                    TerminalToolResult.Ok("Read complete.", "{\"text\":\"call_canonical e1 r2\"}"), role);
+                    TerminalToolResult.Ok("Read complete.", "{\"text\":\"call_canonical e1 r2\",\"observation\":{\"retainedAt\":\"business value\"}}"), role);
                 result.ToolCallReference = call.ToolCallReference;
                 result.EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 3);
                 var before = JsonConvert.SerializeObject(new[] { call, result });
@@ -156,6 +156,7 @@ namespace RNAssistant.Harness
                 AssertEqual(role == ToolResultRoles.Tool ? null : "T7", (string)resultJson["tool_call_id"], "native content omits duplicate correlation; fallback retains T");
                 AssertEqual("E3", (string)resultJson["evidence"], "terminal evidence has its own sequence");
                 AssertTrue(wire[1].Content.Contains("call_canonical e1 r2"), "literal business data is not rewritten");
+                AssertEqual("business value", (string)resultJson["data"]["observation"]["retainedAt"], "generic business fields are not compiler pointers");
                 AssertTrue(ModelReferenceProjection.Delivered(wire).SequenceEqual(new[] { "E3" }), "pair counts as one reference");
                 RNAssistant.Core.ModelProtocol.ToolResultWireReadResult parsed; string error;
                 AssertTrue(ToolResultHistoryReader.TryRead(result, out parsed, out error), "canonical result remains readable");

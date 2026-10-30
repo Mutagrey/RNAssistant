@@ -2915,13 +2915,13 @@ namespace RNAssistant.Harness
                     repeatedFacts[3].Content = repeatedFacts[3].Content.Replace("RESULT_2", "RESULT_1");
                     var identical = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
                         repeatedFacts, null, new ToolCatalogEntry[0], new AppSettings(), 4096);
-                    AssertEqual(3, identical.Messages.Count, "identical read folds only the earlier call/result pair");
-                    var presentation = identical.Receipt.Messages.Single(item => item.MessageIndex == 0);
+                    AssertEqual(4, identical.Messages.Count, "identical read keeps both call/result pairs in place");
+                    var presentation = identical.Receipt.Messages.Single(item => item.MessageIndex == 1);
                     AssertEqual(ContextPresentationKind.Summary, presentation.Presentation, "deduplicated read is a diagnostic summary");
                     AssertEqual(0, presentation.Parts.Count, "discarded body is not labelled as still fully delivered");
-                    var prior = JObject.Parse(identical.Messages[0].Content.Split(new[] { '\n' }, 2)[1]);
-                    AssertEqual("Ok", (string)prior["outcome"], "a deduplicated read remains a successful completed action");
-                    AssertEqual("repeat-2", (string)prior["retained_result"]["tool_call_id"], "duplicate points to the full retained result");
+                    var prior = JObject.Parse(identical.Messages[1].Content);
+                    AssertEqual("ok", (string)prior["status"], "a deduplicated read remains a successful completed action");
+                    AssertEqual("repeat-2", (string)prior["data"]["observation"]["retainedAt"], "duplicate points to the full retained result");
                     AssertContains(identical.Messages.Last().Content, "RESULT_1", "complete evidence remains in this exact request");
 
                     var largeBody = new string('R', 4096);
@@ -2944,7 +2944,7 @@ namespace RNAssistant.Harness
                     var tight = compiler.Compile(authority, new ChatMessage[0], largeFacts, null,
                         new ToolCatalogEntry[0], new AppSettings(), roomy.Receipt.EstimatedTokens - 1);
                     var tightText = string.Join("\n", tight.Messages.Select(item => item.Content));
-                    AssertTrue(!tightText.Contains("retained_result") || tightText.Contains(largeBody),
+                    AssertTrue(!tightText.Contains("retainedAt") || tightText.Contains(largeBody),
                         "dedup receipt must not point to a body evicted by the final budget");
                     AssertContains(tightText, "\"bodyIncluded\":false", "omitted duplicate is explicit");
                     AssertTrue(!tightText.Contains(largeBody) && tight.DeliveredObservations.Count == 0,

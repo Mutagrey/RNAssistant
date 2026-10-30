@@ -32,8 +32,28 @@ approval inheritance. Targeted Harness checks cover schema equality/drift, repai
 selected-body coverage/provenance, budgets and Inspector. No real endpoint was called.
 
 See [P3 contract](conversation-protocol.md#p3-request-composition--2026-10-30).
-Resource-body chronology/current views (P4), historical finish citations (P5) and
-full Inspector/real-machine qualification (P6) remain open.
+Historical finish citations (P5) and full Inspector/real-machine qualification (P6)
+remain open.
+
+## Current P4 materialization — 2026-10-30
+
+Read receipts now stay inside their original call/result pairs. Deduplication checks
+exact scope/resource/version/view/coverage/completeness and body bytes; final-budget
+omission removes dangling `retainedAt` pointers from wire and receipt. Active bodies
+suppress redundant current views; retained CAS restores an absent current source
+after compaction. [Canonical P4 contract](conversation-protocol.md#p4-chronological-bodies--2026-10-30).
+
+Host-neutral coverage includes all three result roles, full/partial/table/empty reads,
+different bodies/scopes/resources/views/ranges, original metadata, archived body
+hash comparison and budget eviction. The continuity checks, reference projection,
+selected skills, current-source restoration and oversized-source guards passed.
+Scripted CLI captures cover read/repeat/patch/read across user turns (7 requests),
+two patches (5), failed-patch correction (5) and compaction followed by a guarded
+write without rereading (7): **24 conversation HTTP requests** in total.
+The omitted-read guard also rejects an overwrite and preserves original bytes.
+Captures are local `/tmp/rna-v8-p4-*-20261030` artifacts with exact bytes/manifests;
+they are synthetic, reproducible diagnostics, not durable release evidence.
+No real models or Windows/Office validation ran; default result role is unchanged.
 
 ## Required transport
 

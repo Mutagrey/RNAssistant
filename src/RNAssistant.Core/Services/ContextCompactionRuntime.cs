@@ -522,6 +522,16 @@ namespace RNAssistant.Core.Services
                 ? message.Content
                 : message.Content.Substring("TOOL_RESULT:\n".Length));
             value.Property("tool_call_id")?.Remove();
+            // The retained body can lie outside this selected prefix. Its
+            // request-local canonical pointer is neither a compaction source ID
+            // nor evidence that the helper received those bytes.
+            var observation = message.ToolName == "core.read" || message.ToolName == "core.tools.read"
+                ? value["data"]?["observation"] as JObject : null;
+            if (observation?["retainedAt"] != null)
+            {
+                observation.Remove("retainedAt");
+                observation["reason"] = "The source body is omitted from this historical result.";
+            }
             return "TOOL_RESULT_SUMMARY:\n" + value.ToString(Formatting.None);
         }
 

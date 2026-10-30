@@ -183,6 +183,12 @@ namespace RNAssistant.Core.Models
         public EvidenceState State { get; set; }
         [JsonProperty("bodyIncluded")]
         public bool BodyIncluded { get; set; }
+        [JsonProperty("omittedReason", NullValueHandling = NullValueHandling.Ignore)]
+        public string OmittedReason { get; set; }
+        [JsonProperty("retainedAt", NullValueHandling = NullValueHandling.Ignore)]
+        public string RetainedAt { get; set; }
+        [JsonProperty("ref", NullValueHandling = NullValueHandling.Ignore)]
+        public string ResourceReference { get; set; }
         [JsonProperty("reason")]
         public string Reason { get; set; }
         [JsonProperty("nextAction")]

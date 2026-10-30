@@ -1781,11 +1781,15 @@ terminal publication and the tool-result event. Uncaptured affected views become
 Unknown. Interrupted attempts are never automatically replayed/restored.
 HostRuntime/document serialization covers guard through read-back, not model/user waits.
 
-When the context compiler folds identical current reads, it checks the final
-budgeted request before describing the surviving body as delivered. If budgeting
-omits that body, earlier completed-read receipts explicitly say `bodyIncluded=false`
-and carry no pointer to a delivered result. The durable reads and exact evidence
-remain unchanged; omitted bodies confer no write authority.
+When the context compiler folds identical current reads, it keeps their original
+call/result pairs and compares scope, exact identity/revision/view/coverage and
+actual source bytes. A matching active body suppresses an independent current view;
+metadata alone does not. It checks the final budgeted request before linking the
+surviving body with `retainedAt`. If budgeting omits that body, earlier read receipts
+explicitly say `bodyIncluded=false` and carry no destination pointer. This applies
+to full, partial and structured reads. Original coverage remains visible in the
+receipt/Inspector. The durable reads and exact evidence remain unchanged; omitted
+bodies confer no write authority. See [P4 composition](conversation-protocol.md#p4-chronological-bodies--2026-10-30).
 
 Session events use schema 4; incompatible streams require explicit new/reset without
 deleting user history or fallback. Large accepted arguments, activity/results and

@@ -136,13 +136,17 @@ namespace RNAssistant.Core.ModelProtocol
                     throw new InvalidOperationException("A tool result carries a mistyped evidence reference.");
                 root.AddFirst(new JProperty("evidence", source.EvidenceReference.Alias));
             }
-            var retained = root["retained_result"] as JObject;
-            if (retained != null)
+            // Only compiler-owned read receipts contain this pointer. A generic
+            // tool's business data may use the same field names literally.
+            var observation = source.CompletedOperation != null ? root["observation"] as JObject :
+                source.ToolName == "core.read" || source.ToolName == "core.tools.read"
+                    ? root["data"]?["observation"] as JObject : null;
+            if (observation?["retainedAt"] != null)
             {
                 string retainedAlias;
-                if (!bindings.TryGetValue((string)retained["tool_call_id"] ?? "", out retainedAlias))
-                    throw new InvalidOperationException("Retained result reference is absent from this request.");
-                retained["tool_call_id"] = retainedAlias;
+                if (!bindings.TryGetValue((string)observation["retainedAt"], out retainedAlias))
+                    throw new InvalidOperationException("Retained body reference is absent from this request.");
+                observation["retainedAt"] = retainedAlias;
             }
             projected.Content = content.Substring(0, start) + root.ToString(Formatting.None);
             return projected;
