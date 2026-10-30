@@ -3,12 +3,26 @@
 `model diagnostics:` covers exact native-history probe requests (null/empty/omitted
 content), shuffled pairing, absent-result control, fallback roles, strict marker/ID
 assertions, HTTP 500 and malformed HTTP 200 capture, timeout/cancellation and the
-existing diagnostics tracker/stream cases. These are synthetic checks, not endpoint
+existing diagnostics tracker/stream cases. The transport matrix adds instruction
+roles, production V8 parser/schema, expected schema rejection, explicit text JSON,
+native function generation/delta inspection, synthetic multi-run history and real
+SSE versus JSON parity. Failed wrappers, contradictory finish, content pretending
+to be a native call, JSON fallback to a streaming request and malformed/error SSE
+cannot pass. Raw capture checks bounded exact prefixes and truthful completeness.
+These are synthetic checks, not endpoint
 qualification. `python3 -B tests/cli/model_diagnostics_smoke.py` exercises the built
-CLI's nine probes, exact request files, redaction and no-overwrite/no-retry behavior.
+CLI's 23 probes, independent native/V8/SSE verdicts, automatic parity control,
+exact request/received response files, redaction and no-overwrite/no-retry behavior.
 `python3 -B tests/cli/v8_context_baseline.py --output <new-directory> --role tool`
 captures a scripted production read/read/patch/read and second-run HTTP baseline;
-neither script builds automatically. Real probes use `rna diagnostics`; scope and
+add `--case all` for two consecutive patches, failed-patch correction and the existing
+compaction/skill-package fixtures. Exact request/response files include compaction
+and titles; the manifest records body coverage/hashes, native pairing, retained-result
+destinations and duplicate selected-skill bodies. `--case` can select one fixture.
+`model refs:`, `context continuity: folds older frames only for budget` and
+`kernel: unknown call remains non-repeatable` supplement this baseline; they do not
+qualify the target T/E separation/case rules or exact HTTP unknown-effect delivery.
+Neither script builds automatically. Real probes use `rna diagnostics`; scope and
 usage are in [endpoint compatibility](../../docs/model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
 
 `--capability-inventory /tmp/rna-capabilities.json` writes the built-in catalog

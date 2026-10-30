@@ -234,7 +234,9 @@
     <Compile Include="Models\ResourceTree.cs" />
     <Compile Include="Models\ResourceProcedureSelection.cs" />
     <Compile Include="Llm\LlmClient.cs" />
+    <Compile Include="Llm\LlmResponseCaptureStream.cs" />
     <Compile Include="Llm\ModelDiagnosticScenario.cs" />
+    <Compile Include="Llm\ModelDiagnosticTransportScenarios.cs" />
     <Compile Include="Llm\ModelDiagnosticRunner.cs" />
     <Compile Include="Llm\LlmHttpTransport.cs" />
     <Compile Include="Llm\LlmMessageBuilder.cs" />

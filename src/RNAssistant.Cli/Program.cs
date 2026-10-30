@@ -992,7 +992,7 @@ namespace RNAssistant.Cli
 
         private static void Help()
         {
-            Console.WriteLine("rna diagnostics --base-url <url> --model <name> --output <new-directory> [--cases B1,B2,B3,B4,B5,B6,B7,C5,C6] [--seed <text>] [--repeat <1..10>] [--timeout <10..300>] [--synthetic]");
+            Console.WriteLine("rna diagnostics --base-url <url> --model <name> --output <new-directory> [--cases <comma-separated A1..A4,B1..B9,C1..C6 IDs>] [--seed <text>] [--repeat <1..10>] [--timeout <10..300>] [--synthetic]");
             Console.WriteLine("RNAssistant workspace CLI (development profile)");
             Console.WriteLine("run/answer/approve/deny/resume show bounded progress, file effects and verification summaries. Terminal input + output enable prompts automatically; --interactive requires a terminal; --no-interactive disables prompts; --jsonl never prompts.");
             Console.WriteLine("Approval requires explicit yes or no; Enter leaves it pending. Questions accept listed numbers (comma-separated for multiple choice) or text: <answer> when allowed. Esc/Ctrl+D leaves input pending; Ctrl+C exits 130. Recommended options are not selected automatically.");

@@ -68,8 +68,10 @@ Owner — Core/Application; после принятия diff это истори
 По запросу пользователя сохранены [целевой V8 context/reference contract](proposals/RNAssistant_V8_Context_Protocol_Target.md)
 и [план Diagnostics / Qualification Lab](proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md)
 от 2026-10-30. Owner — Core ModelProtocol/LLM/context; существующие Office/Workspace
-adapters и Web Inspector остаются consumers. Начат P0/D0 и первый headless-срез
-P1/D1; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
+adapters и Web Inspector остаются consumers. P0/D0 начат; headless P1/D1 расширен
+до 23 synthetic-проверенных A/B/C сценариев текущего контракта; пять CLI context
+fixtures снимают exact wire чтений, patch, compaction и skills. Live-model прогоны
+по указанию пользователя отложены; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
 Планы описывают целевое состояние: T/E separation и `criterion` ещё не текущий
 wire-контракт. После реализации P0–P6/D0–D5 они остаются историей; нормативное
 поведение переносится в canonical documents ниже.

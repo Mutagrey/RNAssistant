@@ -47,11 +47,13 @@ def finish(request, message="Finished.", assessment="satisfied", direct=False):
             "message": message}
 
 
-def reply_to_title(handler, request):
+def reply_to_title(handler, request, capture=None, raw=None):
     """Title generation is not a conversation step and consumes no scripted decision."""
     if "response_format" in request:
         return False
     body = json.dumps({"choices": [{"message": {"role": "assistant", "content": "Fixture title"}}]}).encode()
+    if capture is not None:
+        capture(raw, body)
     handler.send_response(200)
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(body)))

@@ -414,6 +414,9 @@ namespace RNAssistant.Core.Llm
                 total += EstimateTextTokens(options.ResponseSchemaName, settings, model) +
                     EstimateTextTokens(options.ResponseSchemaJson, settings, model);
             }
+            foreach (var tool in options.NativeTools ?? new LlmFunctionDefinition[0])
+                total += EstimateTextTokens(tool.ToWire().ToString(Newtonsoft.Json.Formatting.None), settings, model);
+            if (options.RequireNativeToolCall) total += 8;
             return total;
         }
 

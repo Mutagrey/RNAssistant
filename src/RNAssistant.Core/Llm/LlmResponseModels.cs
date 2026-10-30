@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using Newtonsoft.Json;
+
 namespace RNAssistant.Core.Llm
 {
     public sealed class LlmToolCall
@@ -12,6 +15,10 @@ namespace RNAssistant.Core.Llm
 
     public sealed class LlmCompletionResult
     {
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public List<LlmToolCall> NativeToolCalls { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool IsEventStream { get; set; }
         public LlmCompletionTermination Termination { get; set; }
         public string Content { get; set; }
         public string RefusalContent { get; set; }

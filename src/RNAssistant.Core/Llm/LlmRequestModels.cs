@@ -4,7 +4,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 
 namespace RNAssistant.Core.Llm
 {
@@ -59,9 +61,30 @@ namespace RNAssistant.Core.Llm
     // Explicit per-request diagnostic variants. Default production projection is unchanged.
     public enum NativeToolCallContentMode { Preserve, Null, Empty, Omitted }
 
+    public sealed class LlmFunctionDefinition
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public string ParametersJson { get; set; }
+
+        internal JObject ToWire()
+        {
+            var parameters = ToolResultWire.ParseData(ParametersJson) as JObject;
+            if (string.IsNullOrWhiteSpace(Name) || parameters == null)
+                throw new ArgumentException("A function name and object parameter schema are required.");
+            return new JObject { ["type"] = "function", ["function"] = new JObject {
+                ["name"] = Name, ["description"] = Description ?? string.Empty, ["parameters"] = parameters } };
+        }
+    }
+
     public sealed class LlmRequestOptions
     {
         public NativeToolCallContentMode NativeToolCallContent { get; set; }
+        public IReadOnlyList<LlmFunctionDefinition> NativeTools { get; set; }
+        public bool RequireNativeToolCall { get; set; }
+        public bool InspectNativeToolCalls { get; set; }
+        // Opt-in diagnostics only; ordinary streaming traces keep their existing bounded frame representation.
+        public bool CaptureStreamBody { get; set; }
         public string ResponseFormat { get; set; }
         public string ResponseSchemaName { get; set; }
         public string ResponseSchemaJson { get; set; }
@@ -138,6 +161,8 @@ namespace RNAssistant.Core.Llm
         public int? ChunkIndex { get; set; }
         public int? ChunkCount { get; set; }
         public bool? Completed { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public bool? CaptureTruncated { get; set; }
         public string ChunkEncoding { get; set; }
         [JsonIgnore]
         public string PayloadJson

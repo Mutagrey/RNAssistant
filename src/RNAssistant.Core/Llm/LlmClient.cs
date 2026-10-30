@@ -221,6 +221,7 @@ namespace RNAssistant.Core.Llm
                             if (settings.StreamResponses)
                             {
                                 using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                                using (var capture = requestOptions.CaptureStreamBody ? new LlmResponseCaptureStream(stream) : null)
                                 {
                                     Action<string> rawResponseLog = null;
                                     if (settings.DebugModelTraffic || streamTrace != null)
@@ -238,12 +239,30 @@ namespace RNAssistant.Core.Llm
                                             if (streamTrace != null) streamTrace.Add(rawJson);
                                         };
                                     }
-                                    var streamed = await LlmResponseParser.ReadStreamingOrJsonResponseAsync(
-                                        stream,
-                                        streamProgress,
-                                        requestCancellation.Token,
-                                        rawResponseLog,
-                                        requestDiagnostics.FirstChunk).ConfigureAwait(false);
+                                    LlmCompletionResult streamed;
+                                    try
+                                    {
+                                        streamed = await LlmResponseParser.ReadStreamingOrJsonResponseAsync(
+                                            capture ?? stream, streamProgress, requestCancellation.Token,
+                                            rawResponseLog, requestDiagnostics.FirstChunk, requestOptions.InspectNativeToolCalls).ConfigureAwait(false);
+                                    }
+                                    finally
+                                    {
+                                        if (capture != null)
+                                        {
+                                            var captured = capture.Snapshot();
+                                            Trace(requestOptions, new LlmTraceRecord {
+                                                Type = "stream-body", RequestId = requestDiagnostics.RequestId,
+                                                Purpose = requestOptions.TracePurpose, Endpoint = traceEndpoint, Model = settings.Model,
+                                                Streaming = true, StatusCode = (int)response.StatusCode,
+                                                PayloadUtf8Bytes = captured.Bytes,
+                                                PayloadContentType = response.Content.Headers.ContentType?.ToString(),
+                                                Completed = !captured.Truncated && (captured.EndOfStream ||
+                                                    response.Content.Headers.ContentLength == captured.BytesRead),
+                                                CaptureTruncated = captured.Truncated, ChunkEncoding = "raw-http-body"
+                                            });
+                                        }
+                                    }
                                     if (streamTrace != null) streamTrace.Flush(true);
                                     AttachPromptEstimate(
                                         streamed,
@@ -267,7 +286,7 @@ namespace RNAssistant.Core.Llm
                             LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
                             // Preserve the actual provider payload even if its envelope cannot be parsed.
                             failurePayload = responseJson;
-                            var parsed = LlmResponseParser.ParseCompletionResponse(responseJson);
+                            var parsed = LlmResponseParser.ParseCompletionResponse(responseJson, requestOptions.InspectNativeToolCalls);
                             AttachPromptEstimate(
                                 parsed,
                                 baseEstimatedRequestTokens,
@@ -577,6 +596,15 @@ namespace RNAssistant.Core.Llm
             if (settings.StreamResponses) body["stream_options"] = new JObject { ["include_usage"] = true };
 
             AppendReasoningRequest(body, settings, requestOptions);
+
+            if (requestOptions.NativeTools?.Count > 0)
+                body["tools"] = new JArray(requestOptions.NativeTools.Select(tool => tool.ToWire()));
+            if (requestOptions.RequireNativeToolCall)
+            {
+                if (requestOptions.NativeTools == null || requestOptions.NativeTools.Count == 0)
+                    throw new ArgumentException("A required native call needs function definitions.");
+                body["tool_choice"] = "required";
+            }
 
             if (string.Equals(requestOptions.ResponseFormat, LlmResponseFormats.JsonObject, StringComparison.OrdinalIgnoreCase))
             {

@@ -50,35 +50,74 @@ per-case deadline. `--synthetic` explicitly labels a scripted endpoint; otherwis
 the execution kind is `RealEndpoint`. Neither label implies a successful check.
 An existing output directory is rejected before dispatch. Seeds reproduce marker
 generation; each repetition derives new markers and call/result order. Calls and
-results are oppositely ordered in B5. The expected marker is never placed in the
-user prompt. B6 omits ModuleB's result; rejection of this intentionally incomplete
+results are oppositely ordered in B5. History visibility/pairing probes put the
+expected marker only in result data. Text/format probes intentionally request an
+exact sentinel and do not establish history visibility. B6 omits ModuleB's result; rejection of this intentionally incomplete
 pair is `Inconclusive`, not proof that the model can detect missing data.
 
-Implemented cases: B1 null content, B2 empty content, B3 omitted content, B4 tool-only
-marker, B5 shuffled pairing, B6 negative control, B7 user-text decoy, C5 user result
-and C6 developer result. All currently use explicit `json_object`, non-streaming,
-512 output tokens, 8192 context tokens, temperature 0 and reasoning disabled.
-These are diagnostic settings; production defaults are unchanged. Native call
-content variants are request-local and reject nonempty narration rather than
-discarding it. Diagnostic T IDs are synthetic, not a migration of production E IDs.
+Scenario/report revision 2 implements 23 A/B/C cases through one runner:
 
-`Pass` requires exact JSON target/marker/call ID (using the existing strict JSON
-value reader) and a captured successful HTTP
-exchange. HTTP acceptance, JSON shape, marker, ID and target assertions are recorded
-separately. Invalid JSON leaves semantic assertions untested; fenced output is not
-repaired into a pass. HTTP 500, auth/network failures, timeouts and malformed provider
-envelopes are `Inconclusive`; a normal probe rejected with HTTP 400 fails. Only the
-existing typed format-support rejection can produce `Unsupported`. No retries or
-format/role fallback occur. Native generation, V8 parser and SSE remain `NotRun`.
+| Cases | Assertion |
+| --- | --- |
+| A1 | Exact text response to a user message, without response_format |
+| A2, A2-system | Marker supplied only in developer/system, not repeated in user |
+| A3 | Exact V8 execute; existing callable schema and production parser |
+| A4 | Current V8 finish with `summary`, `outcome`, assessment and no invented evidence |
+| B1–B7 | Null/empty/omitted native content, visibility, shuffled pairing, missing-result control and user decoy |
+| B8 | Actual native function call with exact name/arguments and a provider ID; no dispatch |
+| B9 | Latest result across synthetic multi-user/run history with distinct paired IDs |
+| C1, C2 | Direct V8 json_object and exact production json_schema with the response wrapper |
+| C3-valid, C3, C3-text | Minimal valid schema, deliberately invalid schema, explicit text JSON without response_format |
+| C4-control, C4 | Same V8 response over JSON and real SSE; compare parsed results |
+| C5, C6 | User/developer TOOL_RESULT fallback visibility |
+
+Selecting A2 also includes A2-system; C3 includes C3-valid; C4 includes its non-stream
+control. Every repetition uses new markers. The common settings are 512 output
+tokens, 8192 context tokens, temperature 0 and reasoning disabled; format and stream
+are fixed by each scenario and recorded per result. Production defaults are unchanged.
+Native call content variants are request-local and reject nonempty narration.
+Diagnostic T/provider IDs carry no runtime authority; no fake function is executed.
+B9 tests submitted history, not durable replay/restart (the CLI baseline below covers
+that separately). A4 deliberately uses the current reference revision 2: the target
+`criterion` contract stays `NotRun` until the coordinated P2 migration.
+
+`Pass` requires the scenario's exact assertion and a captured HTTP exchange.
+The existing strict JSON value reader and V8 parser reject malformed JSON, extra
+fields, model-owned call IDs, wrong wrappers and contradictory outcome/assessment.
+HTTP acceptance, JSON shape, marker, ID, target and V8 parser verdicts are recorded
+separately. Native generation is not inferred from an execute JSON in content;
+inspection of native calls is opt-in and does not change production dispatch.
+Fenced output is not repaired. HTTP 500, auth/network failures, timeouts and malformed
+provider envelopes are `Inconclusive`; a normal probe rejected with HTTP 400 fails.
+Only the existing typed format-support rejection can produce `Unsupported`.
+C3 passes only on a structured schema rejection with HTTP 400/422, never on an
+arbitrary error or 500; its Pass means expected rejection, not HTTP acceptance or
+general schema support. No retries, protocol repair or automatic format/role fallback
+occur. Unrun capabilities remain `NotRun`.
 
 Each case saves the actual post-serialization UTF-8 request, its SHA-256, provider
 response text, expected/actual answer, status, assertion verdicts, duration and
 token usage. These come from the existing `LlmClient.TraceSink`; invalid HTTP 200
-envelopes now retain their original body/status as well. No headers are exported.
+envelopes retain their original body/status as well. For C4, the opt-in stream-body
+capture keeps the exact bytes consumed by the existing parser, including malformed
+frames, with a 32 MiB cap. `ResponseBodyComplete` is true only after EOF or the entire
+declared Content-Length; otherwise the export is explicitly a received prefix.
+`ResponseCaptureTruncated` reports capture-budget loss. The capture never drains or
+replays the stream, and the reconstructed completion JSON is not exported as raw SSE.
+JSON returned for a streaming request fails C4. SSE parity needs both the actual SSE
+result and its successful matching non-stream control. No headers are exported.
 Known API-key values are redacted, including escaped occurrences; changed exports
 are explicitly marked and must not be represented as exact wire. `RequestSha256`
 always describes the original bytes. This explicit diagnostic export only contains
 synthetic scenario bodies; ordinary sensitive-body logging stays disabled by default.
+Native tool schemas are counted in request token estimates. The existing response
+parser can inspect bounded indexed native deltas for diagnostics; this is not a new
+agent execution path. Reports expose native-generation, V8-parser and SSE-parity
+verdicts independently, together with every case's detailed assertions.
+
+Per the user's current instruction, further real-model runs are deferred. Automated
+validation uses only synthetic HTTP endpoints; live compatibility will be tested
+on the user's real machine. No live model was called for scenario revision 2.
 
 ### Baseline and remaining qualification
 
@@ -89,6 +128,41 @@ requests across read → identical read → patch → read and a second user/run
 new process, plus the separate title request. It saves exact bytes and a hash
 manifest. The 2026-10-30 capture is local at `/tmp/rna-v8-baseline-20261030`;
 this temporary directory is not durable release evidence.
+
+The expanded synthetic context baseline supports `--case read-patch|multi-patch|
+failure-correction|compaction|skills|all`. For example:
+
+```sh
+python3 -B tests/cli/v8_context_baseline.py \
+  --output /tmp/rna-context-new --case all --role tool
+```
+
+Only disposable local workspaces and a loopback scripted server are used. Compaction
+and skill cases reuse `compacted_read_guard_smoke.py` and `skill_packages_smoke.py`;
+there is no second context implementation. The skill fixture uses native tool role;
+the other cases honor `--role`. Captures include every conversation, compaction and
+title HTTP body, hashes, CLI binary hash, HEAD and a dirty-tree flag. The manifest
+lists actual roles and delivered source blocks with coverage/body hashes, checks
+native pairs and retained-result destinations, and records duplicate selected-skill
+bodies separately from selected instructions. These are baseline observations, not
+a Pass for the unimplemented target contract.
+
+2026-10-30 capture: `/tmp/rna-v8-context-regression-20261030-r2`, based on `2cb48c28`
+plus the uncommitted diagnostics changes. Five fixtures passed: 43 conversation
+requests, one compaction request and seven title requests. Exact temporary artifacts
+are reproducible; they are not release qualification or model capability evidence.
+
+| D case | Current baseline / remaining target work |
+| --- | --- |
+| D1–D2 | One complete body after identical read and after patch/read; retained-result references resolve later in the same request |
+| D3 | Two consecutive verified patches deliver only OLD → MIDDLE → NEW bodies in order; final read replaces the current view |
+| D4 | Existing compiler budget-folding fixture preserves failure details, latest pair and token bound; skill whole-request refusal is captured. Exact HTTP budget-omission baseline remains open |
+| D5 | Automatic compaction restores one exact current body; it permits one guarded patch without a redundant read, then a final read |
+| D6 | Published selected skill survives approval/restart and oversized selection is rejected. **Confirmed duplicate:** selected instructions also remain in an earlier `core.read` body (requests 02–07 and 09–11); dedup belongs to P3 |
+| D7 | Existing durable admission rejects nonterminal, hidden, foreign/guessed references; target eligibility and separate T/E remain NotRun |
+| D8 | Two user/run histories survive a new CLI process. Current revision 2 deliberately rejects lowercase aliases; target case-insensitive T/E/R remains NotRun |
+| D9 | One failed patch followed by a corrected verified patch finishes Completed; counters retain WriteError=1 and WriteOk=1 |
+| D10 | Existing kernel no-replay regression passes after an intervening successful call; exact HTTP unknown-effect/inspection baseline remains open |
 
 Observed in that trace:
 
@@ -109,17 +183,19 @@ session share preparation/compiler; CLI consumes Workspace. Inspector reads the
 saved trace. `ConversationFinishEvidenceAdmission` still checks the current-run
 registry with case-sensitive E lookup and `results[].summary` (reference revision 2).
 
-P0/D0 remains partial: Office exact traces, compaction, multiple patches, skills,
-budget omissions and failure/unknown chains need their own baseline. A/C protocol,
-schema and SSE probes, native generation, UI Scenario Lab/Inspector and the target
-reference migration remain separate slices. Real Office/Windows/WebView2 evidence
-is open; only screen photographs are available from the user's Windows machine.
+P0/D0 and D2 remain partial: real Office traces, exact HTTP budget omissions and
+unknown-effect/inspection chains are still open. The target skill dedup and
+reference/evidence behavior are not claimed as implemented. The A/B/C
+headless matrix is implemented for the current contract and verified synthetically;
+UI Scenario Lab/Inspector and the target reference migration remain separate slices.
+Real Office/Windows/WebView2 and revision-2 endpoint qualification are open; only
+screen photographs are available from the user's Windows machine.
 
 ### Real endpoint probe — Gemma / Ollama
 
 2026-10-30, `http://127.0.0.1:11434`, cloud model `gemma4:31b-cloud`, reported digest
 `ef09f235533c96cd75e8deed88c628335cb69e2b3ce96275d0d7a67fe9887aba`.
-Scenario revision 1, settings above; seed `v8-20261030-gemma`, one full suite,
+Historical scenario revision 1, json_object/non-stream settings; seed `v8-20261030-gemma`, one full suite,
 then `v8-pairing-r1`, B5/B6 repeated three times. Every request received HTTP 200
 and a raw JSON answer. The repetitions exercised both call orders with reversed
 result order. Results are per endpoint/model/configuration, not universal capability

@@ -1,6 +1,7 @@
 """Exercise diagnostic CLI capture/redaction through the production HTTP client; no build."""
 import json
 import os
+import re
 import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -13,6 +14,8 @@ CLI = REPO / "src/RNAssistant.Cli/bin/Debug/net8.0/RNAssistant.Cli.dll"
 
 def main():
     requests = []
+    responses = []
+    force_error = threading.Event()
     secret = 'local-test-key-"\\-private'
 
     class Handler(BaseHTTPRequestHandler):
@@ -21,18 +24,51 @@ def main():
             requests.append(raw)
             request = json.loads(raw)
             marker = None
+            latest_id = "T2"
+            tool_results = {}
             for message in request["messages"]:
                 content = message.get("content") or ""
-                if message["role"] == "tool" and message["tool_call_id"] == "T2":
-                    marker = json.loads(content)["marker"]
+                for call in message.get("tool_calls", []):
+                    if json.loads(call["function"]["arguments"]).get("target") == "ModuleB":
+                        latest_id = call["id"]
+                if message["role"] == "tool":
+                    tool_results[message["tool_call_id"]] = json.loads(content)["marker"]
                 elif content.startswith("TOOL_RESULT ("):
-                    marker = json.loads(content.split("\n", 1)[1])["data"]["marker"]
-            answer = json.dumps({"target": "ModuleB", "marker": marker, "tool_call_id": "T2"})
-            error = len(requests) > 9
-            response = json.dumps({"error": {"message": secret}} if error else
-                {"choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": answer}}]}).encode()
-            self.send_response(500 if error else 200)
-            self.send_header("Content-Type", "application/json")
+                    value = json.loads(content.split("\n", 1)[1])
+                    latest_id = value["tool_call_id"]
+                    tool_results[latest_id] = value["data"]["marker"]
+            marker = tool_results.get(latest_id)
+            answer = json.dumps({"target": "ModuleB", "marker": marker, "tool_call_id": latest_id})
+            last_user = next(m["content"] for m in reversed(request["messages"]) if m["role"] == "user")
+            if "{" in last_user:
+                answer = json.dumps(json.loads(last_user[last_user.index("{"):]))
+            role_marker = next((re.search(r"ROLE_MARKER=([A-F0-9]{24})", m.get("content") or "")
+                                for m in request["messages"] if "ROLE_MARKER=" in (m.get("content") or "")), None)
+            if role_marker:
+                answer = role_marker.group(1)
+            message = {"role": "assistant", "content": answer}
+            finish = "stop"
+            if request.get("tools"):
+                value = re.search(r"value=([A-F0-9]{24})", last_user).group(1)
+                message = {"role": "assistant", "content": None, "tool_calls": [{"id": "provider_call_1",
+                    "type": "function", "function": {"name": "diagnostic_echo", "arguments": json.dumps({"value": value})}}]}
+                finish = "tool_calls"
+            status, content_type = 200, "application/json"
+            response = json.dumps({"choices": [{"finish_reason": finish, "message": message}]}).encode()
+            if "invalid_diagnostic_type" in json.dumps(request.get("response_format")):
+                status = 400
+                response = b'{"error":{"code":"invalid_json_schema","message":"schema is invalid"}}'
+            elif request["stream"]:
+                content_type = "text/event-stream"
+                def delta(text, reason):
+                    return "data: " + json.dumps({"choices": [{"delta": {"content": text}, "finish_reason": reason}]}) + "\r\n\r\n"
+                response = (delta(answer[:len(answer)//2], None) + delta(answer[len(answer)//2:], "stop") + "data: [DONE]\r\n\r\n").encode()
+            if force_error.is_set():
+                status, content_type = 500, "application/json"
+                response = json.dumps({"error": {"message": secret}}).encode()
+            responses.append(response)
+            self.send_response(status)
+            self.send_header("Content-Type", content_type)
             self.send_header("Content-Length", str(len(response)))
             self.end_headers()
             self.wfile.write(response)
@@ -57,14 +93,24 @@ def main():
             first = run(root / "pass")
             assert first.returncode == 0, (first.stdout, first.stderr)
             report = json.loads((root / "pass/report.json").read_text())
-            assert len(report["Results"]) == 9
-            assert report["NativeGeneration"] == report["V8Parser"] == report["Sse"] == "NotRun"
-            for raw, row in zip(requests, report["Results"]):
+            assert len(report["Results"]) == 23
+            assert report["NativeGeneration"] == report["V8Parser"] == report["Sse"] == "Pass"
+            assert report["TargetCriterion"] == "NotRun" and report["FinishResultField"] == "summary"
+            for raw, response, row in zip(requests, responses, report["Results"]):
                 assert (root / "pass" / row["RequestFile"]).read_bytes() == raw
+                captured = (root / "pass" / row["ResponseFile"]).read_bytes()
+                assert response.startswith(captured)
+                if row["Result"]["ResponseBodyComplete"]:
+                    assert captured == response
                 assert row["Result"]["Verdict"] == "Pass"
                 assert row["Result"]["ExecutionKind"] == "Synthetic"
             assert run(root / "pass").returncode != 0
-            assert len(requests) == 9, "Existing output rejected before network"
+            assert len(requests) == 23, "Existing output rejected before network"
+            assert run(root / "sse", "--cases", "C4").returncode == 0
+            control_report = json.loads((root / "sse/report.json").read_text())
+            assert [r["Result"]["ScenarioId"] for r in control_report["Results"]] == ["C4-control", "C4"]
+            assert control_report["Sse"] == "Pass" and control_report["NativeGeneration"] == "NotRun"
+            force_error.set()
             failure = run(root / "failure", "--cases", "C5")
             assert failure.returncode == 1, (failure.stdout, failure.stderr)
             row = json.loads((root / "failure/report.json").read_text())["Results"][0]
@@ -76,8 +122,8 @@ def main():
                     assert secret not in text and json.dumps(secret)[1:-1] not in text, path
                     if path.name == "report.json":
                         assert secret not in json.dumps(json.loads(text), ensure_ascii=False)
-            assert len(requests) == 10, "No retry or automatic fallback"
-            print("PASS diagnostics CLI: nine probes, exact bytes, explicit source, safe exports, no overwrite/retry")
+            assert len(requests) == 26, "No retry or automatic fallback"
+            print("PASS diagnostics CLI: 23 probes, native/V8/SSE verdicts, exact bytes, safe exports, no overwrite/retry")
     finally:
         server.shutdown()
         server.server_close()

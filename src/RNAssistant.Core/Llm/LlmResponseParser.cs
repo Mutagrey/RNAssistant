@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -39,7 +40,7 @@ namespace RNAssistant.Core.Llm
             return result;
         }
 
-        internal static LlmCompletionResult ParseCompletionResponse(string responseJson)
+        internal static LlmCompletionResult ParseCompletionResponse(string responseJson, bool inspectNativeToolCalls = false)
         {
             if (string.IsNullOrWhiteSpace(responseJson))
             {
@@ -64,7 +65,7 @@ namespace RNAssistant.Core.Llm
             }
 
             return BuildCompletionResult(message, parsed["usage"] as JObject,
-                ReadStringToken(parsed.SelectToken("choices[0].finish_reason"), "choices[0].finish_reason"));
+                ReadStringToken(parsed.SelectToken("choices[0].finish_reason"), "choices[0].finish_reason"), inspectNativeToolCalls);
         }
 
         private static void ThrowIfProviderError(JObject payload)
@@ -93,14 +94,15 @@ namespace RNAssistant.Core.Llm
             Action<LlmStreamUpdate> streamProgress,
             CancellationToken cancellationToken,
             Action<string> rawJsonProgress,
-            Action firstChunkRead = null)
+            Action firstChunkRead = null,
+            bool inspectNativeToolCalls = false)
         {
             if (stream == null)
             {
                 throw new ArgumentNullException("stream");
             }
 
-            var state = new StreamingCompletionState(streamProgress);
+            var state = new StreamingCompletionState(streamProgress, inspectNativeToolCalls);
             var bufferedJson = new StringBuilder();
             bool? isEventStream = null;
             var firstChunkReported = false;
@@ -181,7 +183,7 @@ namespace RNAssistant.Core.Llm
             {
                 var bufferedResponse = bufferedJson.ToString();
                 if (rawJsonProgress != null) rawJsonProgress(bufferedResponse);
-                var jsonResult = ParseCompletionResponse(bufferedResponse);
+                var jsonResult = ParseCompletionResponse(bufferedResponse, inspectNativeToolCalls);
                 ReportCompleted(streamProgress);
                 return jsonResult;
             }
@@ -280,13 +282,17 @@ namespace RNAssistant.Core.Llm
             private bool _reasoningTruncated;
             private bool _embeddedReasoningTruncated;
             private bool _embeddedProgressReported;
+            private readonly bool _inspectNativeToolCalls;
+            private readonly SortedDictionary<int, JObject> _nativeCalls = new SortedDictionary<int, JObject>();
+            private int _nativeChars;
 
             public bool TerminalFinishReasonObserved { get; private set; }
             public bool UsageObserved { get { return _usage != null; } }
 
-            public StreamingCompletionState(Action<LlmStreamUpdate> progress = null)
+            public StreamingCompletionState(Action<LlmStreamUpdate> progress = null, bool inspectNativeToolCalls = false)
             {
                 _progress = progress;
+                _inspectNativeToolCalls = inspectNativeToolCalls;
                 _thinkSplitter = new ThinkStreamSplitter(AddContent, AddEmbeddedReasoning);
             }
 
@@ -318,6 +324,36 @@ namespace RNAssistant.Core.Llm
                 if (delta == null)
                 {
                     return;
+                }
+
+                if (_inspectNativeToolCalls && delta["tool_calls"] != null)
+                {
+                    var calls = delta["tool_calls"] as JArray;
+                    if (calls == null) throw new InvalidOperationException("Native tool deltas must be an array.");
+                    var seen = new HashSet<int>();
+                    foreach (var token in calls)
+                    {
+                        var call = token as JObject;
+                        int index;
+                        if (call?["index"]?.Type != JTokenType.Integer ||
+                            !int.TryParse(call["index"].ToString(Formatting.None), NumberStyles.None, CultureInfo.InvariantCulture, out index) ||
+                            index >= 64 || !seen.Add(index))
+                            throw new InvalidOperationException("Invalid or repeated native call delta index.");
+                        JObject target;
+                        if (!_nativeCalls.TryGetValue(index, out target))
+                        {
+                            target = new JObject { ["function"] = new JObject() };
+                            _nativeCalls.Add(index, target);
+                        }
+                        foreach (var field in new[] { "id", "type" }) AppendNative(target, field, call[field]);
+                        if (call["function"] != null)
+                        {
+                            var function = call["function"] as JObject;
+                            if (function == null) throw new InvalidOperationException("Native function delta must be an object.");
+                            foreach (var field in new[] { "name", "arguments" })
+                                AppendNative((JObject)target["function"], field, function[field]);
+                        }
+                    }
                 }
 
                 var content = ReadStringToken(delta["content"], "choices[0].delta.content");
@@ -352,11 +388,23 @@ namespace RNAssistant.Core.Llm
                     ["reasoning_content"] = reasoning,
                     ["refusal"] = _refusal.ToString()
                 };
-                var result = BuildCompletionResult(message, _usage, _finishReason);
+                if (_nativeCalls.Count > 0) message["tool_calls"] = new JArray(_nativeCalls.Values);
+                var result = BuildCompletionResult(message, _usage, _finishReason, _inspectNativeToolCalls);
+                result.IsEventStream = true;
                 result.ReasoningTruncated = _reasoning.Length > 0
                     ? _reasoningTruncated
                     : _embeddedReasoningTruncated;
                 return result;
+            }
+
+            private void AppendNative(JObject target, string field, JToken value)
+            {
+                if (value == null || value.Type == JTokenType.Null) return;
+                if (value.Type != JTokenType.String) throw new InvalidOperationException("Native call delta fields must be strings.");
+                var text = (string)value;
+                _nativeChars += text.Length;
+                if (_nativeChars > MaxStoredContentChars) throw new LlmRequestException(LlmFailureKind.ResponseTooLarge, "Native calls exceed the safety limit.");
+                target[field] = ((string)target[field] ?? string.Empty) + text;
             }
 
             private void AddContent(string value)
@@ -609,7 +657,8 @@ namespace RNAssistant.Core.Llm
             return ReadInt(details, "reasoning_tokens") ?? ReadInt(usage, "reasoning_tokens");
         }
 
-        private static LlmCompletionResult BuildCompletionResult(JObject message, JObject usage, string finishReason)
+        private static LlmCompletionResult BuildCompletionResult(JObject message, JObject usage, string finishReason,
+            bool inspectNativeToolCalls = false)
         {
             var content = ReadAssistantContent(message);
             string embeddedReasoning;
@@ -625,6 +674,7 @@ namespace RNAssistant.Core.Llm
             }
             return new LlmCompletionResult
             {
+                NativeToolCalls = inspectNativeToolCalls ? ReadNativeCalls(message["tool_calls"]) : null,
                 Termination = string.IsNullOrWhiteSpace(finishReason) ? LlmCompletionTermination.Unspecified :
                     finishReason == "length" ? LlmCompletionTermination.OutputLimit :
                     finishReason == "stop" ? LlmCompletionTermination.Completed :
@@ -641,6 +691,29 @@ namespace RNAssistant.Core.Llm
                 TotalTokens = totalTokens,
                 UsageJson = BoundedUsageJson(usage)
             };
+        }
+
+        private static List<LlmToolCall> ReadNativeCalls(JToken value)
+        {
+            if (value == null || value.Type == JTokenType.Null) return null;
+            var calls = value as JArray;
+            if (calls == null || calls.Count > 64) throw new InvalidOperationException("Invalid native tool call array.");
+            var result = new List<LlmToolCall>();
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var token in calls)
+            {
+                var call = token as JObject;
+                var function = call?["function"] as JObject;
+                var id = ReadStringToken(call?["id"], "native call id");
+                var type = ReadStringToken(call?["type"], "native call type");
+                var name = ReadStringToken(function?["name"], "native function name");
+                var arguments = ReadStringToken(function?["arguments"], "native function arguments");
+                if (string.IsNullOrWhiteSpace(id) || !ids.Add(id) || type != "function" ||
+                    string.IsNullOrWhiteSpace(name) || arguments == null)
+                    throw new InvalidOperationException("Native call requires a unique ID, function name and argument string.");
+                result.Add(new LlmToolCall { Id = id, Type = type, Name = name, ArgumentsJson = arguments });
+            }
+            return result;
         }
 
         private static string ExtractLeadingThink(string content, out string reasoning, out bool truncated)

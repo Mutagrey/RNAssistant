@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 from read_acceptance_context_smoke import CLI, REPO, DONE, call
 
 
-def check(root):
+def check(root, capture=None):
     workspace, state = root / "workspace", root / "state"
     workspace.mkdir()
     (workspace / "source.txt").write_text("total=12\n")
@@ -34,11 +34,14 @@ def check(root):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             try:
-                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                if reply_to_title(self, request): return
+                raw = self.rfile.read(int(self.headers["Content-Length"]))
+                request = json.loads(raw)
+                if reply_to_title(self, request, capture, raw): return
                 requests.append(request)
                 assert responses, "Unexpected model request"
                 body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(requests[-1], responses.popleft())}}]}).encode()
+                if capture is not None:
+                    capture(raw, body)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -128,6 +131,7 @@ def check(root):
         print("PASS skill packages CLI: canonical load, guarded read/patch/report/readback, approvals, exact publication, follow-up/removal, whole-request admission refusal and cold restart")
         print(json.dumps({"controlledModelRequests": len(requests), "pilotRequests": prior,
                           "selectedInstructionCharacters": len(marker), "realModelEvaluation": False}))
+        return {"controlledModelRequests": len(requests), "pilotRequests": prior}
     finally:
         server.shutdown()
         thread.join()

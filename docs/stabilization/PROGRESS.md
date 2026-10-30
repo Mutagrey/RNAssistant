@@ -1,5 +1,35 @@
 # Stabilization progress
 
+## V8 Diagnostics: transport matrix P1/D1 — 2026-10-30
+
+Owner: Core LLM/ModelProtocol; CLI — consumer общего scenario/assertion runner.
+Матрица расширена до 23 сценариев A/B/C: text и instruction roles, текущий V8
+execute/finish, native generation отдельно от visibility, multi-user/run history,
+json_object, точная V8 schema, минимальная/ошибочная schema, text JSON и JSON/SSE parity.
+Native calls только инспектируются; fake functions не выполняются. Обычный runtime,
+transport defaults и durable/reference contract не переключались.
+
+Опциональный SSE capture сохраняет прочитанные bytes с явной полнотой/лимитом,
+включая ошибочные frames. JSON fallback не выдаётся за SSE. Invalid-schema Pass
+требует структурированного отказа 400/422; произвольная 500 не означает Unsupported.
+Отчёт revision 2 разделяет native generation, V8 parser и SSE parity; A4 пока
+проверяет `summary/outcome`, target `criterion` остаётся NotRun до P2.
+
+Проверены только synthetic HTTP: 11 целевых diagnostics Harness checks и CLI smoke
+всех 23 сценариев, exact request/response capture, контроль SSE, redaction и отказ
+перезаписи. CLI build прошёл. По текущему указанию пользователя live-model проверки
+не запускались и отложены до его реальной машины; прежний Gemma probe ниже — история.
+P0/D2 дополнен пятью production CLI fixtures: read/read/patch/read + новый run,
+два последовательных patch, failure/correction, compaction, skills/approval/restart
+и отказ по бюджету. Сохранены exact HTTP bodies 43 conversation, одного compaction
+и семи title requests; manifest связывает роли, source body/coverage и hashes.
+Обнаружен дубль `SELECTED_SKILL` с предыдущим `core.read`; задача P3 записана в
+[BACKLOG](BACKLOG.md#v8-p3-выбранный-skill-повторяется-в-истории-чтения--2026-10-30).
+Обновлены только две устаревшие fixtures для актуальных `core.*` contracts.
+Exact HTTP budget omission/unknown-effect и Office baseline остаются открытыми;
+T/E/R/criterion, UI и реальная Windows/Office/WebView2 qualification не закрыты.
+Контракт и команды — [endpoint compatibility](../model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
+
 ## V8 context / Diagnostics: начало P0/D0 и P1/D1 — 2026-10-30
 
 Owner: Core LLM/ModelProtocol/context; CLI — первый consumer. По запросу пользователя

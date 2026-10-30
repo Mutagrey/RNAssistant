@@ -182,7 +182,7 @@ namespace RNAssistant.Harness
             mismatched.ResourceEvidence = new List<ResourceEvidence> { second };
             AssertTrue(project(mismatched)["data"]["ref"] == null, "a matching resource with different coverage does not bind the displayed slice");
 
-            foreach (var tool in new[] { "core.find", "core.search", "resources.outline", "files.create" })
+            foreach (var tool in new[] { "core.find", "core.search", "core.write" })
             {
                 var navigation = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "navigation", ToolId = tool },
                     TerminalToolResult.Ok("Navigation or outcome.", "{\"target\":\"example.txt\",\"matches\":[{\"target\":\"example.txt\",\"snippet\":\"fragment\"}]}"), ToolResultRoles.User);

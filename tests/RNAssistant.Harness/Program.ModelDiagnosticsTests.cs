@@ -124,7 +124,7 @@ namespace RNAssistant.Harness
                 "a correct answer without exact exchange is not a pass");
         }
 
-        private sealed class DiagnosticReply { public int Status = 200; public string Body; }
+        private sealed class DiagnosticReply { public int Status = 200; public string Body; public string ContentType = "application/json"; }
         private static DiagnosticReply DiagnosticContent(string content)
         { return new DiagnosticReply { Body = new JObject { ["choices"] = new JArray(new JObject {
             ["finish_reason"] = "stop", ["message"] = new JObject { ["role"] = "assistant", ["content"] = content } }) }.ToString(Formatting.None) }; }
@@ -170,7 +170,7 @@ namespace RNAssistant.Harness
                             var response = reply(JObject.Parse(raw));
                             var bytes = Encoding.UTF8.GetBytes(response.Body);
                             context.Response.StatusCode = response.Status;
-                            context.Response.ContentType = "application/json";
+                            context.Response.ContentType = response.ContentType;
                             context.Response.ContentLength64 = bytes.Length;
                             await context.Response.OutputStream.WriteAsync(bytes, 0, bytes.Length);
                             context.Response.Close();

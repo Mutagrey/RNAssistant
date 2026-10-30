@@ -11,7 +11,7 @@ from read_acceptance_context_smoke import CLI, REPO, DONE, call
 from conversation_transport import conversation_content, reply_to_title
 
 
-def run_case(root, role):
+def run_case(root, role, capture=None):
     workspace = root / "workspace"
     workspace.mkdir(parents=True)
     target = workspace / "app.js"
@@ -23,8 +23,9 @@ def run_case(root, role):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
             try:
-                request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-                if reply_to_title(self, request): return
+                raw = self.rfile.read(int(self.headers["Content-Length"]))
+                request = json.loads(raw)
+                if reply_to_title(self, request, capture, raw): return
                 requests.append(request)
                 content = "\n".join(item.get("content") or "" for item in request["messages"])
                 if "CONVERSATION_PREFIX (data to summarize" in content:
@@ -51,6 +52,8 @@ def run_case(root, role):
                         response = call("core.find", query="probe-" + str(phase["step"]))
                         response["message"] = "Inspection: " + "bounded diagnostic context " * 90
                 body = json.dumps({"choices": [{"message": {"role": "assistant", "content": conversation_content(request, response)}}]}).encode()
+                if capture is not None:
+                    capture(raw, body)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(body)))
@@ -85,6 +88,7 @@ def run_case(root, role):
         assert not any('"code":"source_changed"' in str(body) for body in failures), "Compaction revoked a delivered read"
         assert "rna://" not in json.dumps(requests), "Runtime evidence leaked to the model"
         print("PASS compacted read guard:", role, "restored body authorizes one verified edit without another read")
+        return final
     finally:
         server.shutdown()
         server.server_close()

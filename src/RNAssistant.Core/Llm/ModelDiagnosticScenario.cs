@@ -6,6 +6,7 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Llm
 {
@@ -14,8 +15,11 @@ namespace RNAssistant.Core.Llm
     public enum ModelDiagnosticCapability
     {
         NativeHistoryVisibility, NativeHistoryPairing, NativeHistoryNegativeControl,
-        SourceDiscrimination, UserFallbackVisibility, DeveloperFallbackVisibility
+        SourceDiscrimination, UserFallbackVisibility, DeveloperFallbackVisibility,
+        TextResponse, InstructionRole, V8Execute, V8Finish, NativeGeneration, MultiRunHistory,
+        JsonObject, JsonSchema, MinimalSchema, InvalidSchema, TextJson, StreamingParity
     }
+    public enum ModelDiagnosticAssertion { HistoryJson, ExactText, ExactJson, V8, NativeCall, SchemaRejection }
 
     // Shared input for headless and future UI runners. No tool dispatcher or document authority.
     public sealed class ModelDiagnosticScenario
@@ -26,11 +30,19 @@ namespace RNAssistant.Core.Llm
         public List<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
         public string ExpectedJson { get; set; }
         public bool NegativeControl { get; set; }
+        public ModelDiagnosticAssertion Assertion { get; set; }
+        public string ExpectedText { get; set; }
+        public string ResponseFormat { get; set; } = LlmResponseFormats.JsonObject;
+        public string ResponseSchemaJson { get; set; }
+        public bool Streaming { get; set; }
+        public string ParityControlId { get; set; }
+        public List<ToolCatalogEntry> CallableTools { get; set; } = new List<ToolCatalogEntry>();
+        public LlmFunctionDefinition NativeFunction { get; set; }
     }
 
-    public static class ModelDiagnosticScenarios
+    public static partial class ModelDiagnosticScenarios
     {
-        public const int Revision = 1;
+        public const int Revision = 2;
         public static IReadOnlyList<ModelDiagnosticScenario> NativeHistory(string seed)
         {
             if (string.IsNullOrWhiteSpace(seed)) throw new ArgumentException("A reproducible marker seed is required.", nameof(seed));
@@ -107,10 +119,10 @@ namespace RNAssistant.Core.Llm
                 ArgumentsJson = new JObject { ["target"] = target }.ToString(Formatting.None) };
         }
 
-        private static JObject Answer(string marker)
+        private static JObject Answer(string marker, string callId = "T2")
         {
             return new JObject { ["target"] = "ModuleB", ["marker"] = marker == null ? JValue.CreateNull() : new JValue(marker),
-                ["tool_call_id"] = "T2" };
+                ["tool_call_id"] = callId };
         }
 
         private static string Marker(string seed, string purpose)

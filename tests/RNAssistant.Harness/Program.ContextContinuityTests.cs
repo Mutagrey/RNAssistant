@@ -84,14 +84,15 @@ namespace RNAssistant.Harness
                 "pack", new SkillCatalogSnapshot(null), null, 1);
             foreach (var role in new[] { "user", "developer", "tool" })
             {
-                var old = ContinuityResult("old", "files.create", ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
+                var old = ContinuityResult("old", "core.write", ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
                 old.ResourceEffect = new ResourceEffect("effect", "create", ResourceEffectOutcome.FailedNoEffect);
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old", Name = "files.create",
-                    Arguments = new Dictionary<string, object> { { "relativePath", "index.html" }, { "content", new string('x', 20000) } } },
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old", Name = "core.write",
+                    Arguments = new Dictionary<string, object> { { "target", "index.html" }, { "content", new string('x', 20000) } } },
                     "Attempted create.", "Try the requested create.", null, role, FixtureCallOrigin("old"));
-                var latest = ContinuityResult("last", "files.patch", ToolResult.Error("Ambiguous patch.", "{\"code\":\"patch_ambiguous\"}"), role);
-                var latestCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "files.patch",
-                    Arguments = new Dictionary<string, object> { { "relativePath", "index.html" } } },
+                var latest = ContinuityResult("last", "core.patch", ToolResult.Error("Ambiguous patch.", "{\"code\":\"patch_ambiguous\",\"targets\":[]}"), role);
+                var latestCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "last", Name = "core.patch",
+                    Arguments = new Dictionary<string, object> { { "targets", new[] { new { target = "index.html",
+                        edits = new[] { new { before = "repeated", after = "changed" } } } } } } },
                     "Attempted patch.", "Try the requested patch.", null, role, FixtureCallOrigin("last"));
                 var facts = new[] { call, old, latestCall, latest };
                 var compiler = new ModelContextCompiler();
