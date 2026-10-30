@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Office.Contracts
 {
@@ -12,6 +13,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("beforeSequence")] public long? BeforeSequence { get; set; }
         [JsonProperty("knownRevision")] public long? KnownRevision { get; set; }
         [JsonProperty("requestEventId")] public string RequestEventId { get; set; }
+        [JsonProperty("includeEvidence")] public bool IncludeEvidence { get; set; }
         [JsonProperty("alias")] public string Alias { get; set; }
         [JsonProperty("verifyResourceAlias")] public string VerifyResourceAlias { get; set; }
         [JsonProperty("verifyRetainedView")] public string VerifyRetainedView { get; set; }
@@ -61,6 +63,49 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("alias")] public string Alias { get; set; }
         [JsonProperty("canonicalId")] public string CanonicalId { get; set; }
+    }
+
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ModelContextEvidenceDelivery { Unknown, Delivered, Excluded }
+
+    public sealed class ModelContextToolEvidenceDto
+    {
+        [JsonProperty("callId")] public string CallId { get; set; }
+        [JsonProperty("operationAlias")] public string OperationAlias { get; set; }
+        [JsonProperty("evidenceAlias")] public string EvidenceAlias { get; set; }
+        [JsonProperty("toolName")] public string ToolName { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("callEventId")] public string CallEventId { get; set; }
+        [JsonProperty("resultEventId")] public string ResultEventId { get; set; }
+        [JsonProperty("outcome"), JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public ToolExecutionOutcome? Outcome { get; set; }
+        [JsonProperty("eligibility"), JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+        public EvidenceEligibility? Eligibility { get; set; }
+        [JsonProperty("delivery")] public ModelContextEvidenceDelivery Delivery { get; set; }
+        [JsonProperty("messageIndices")] public IReadOnlyList<int> MessageIndices { get; set; }
+    }
+
+    public sealed class ModelContextFinishClaimDto
+    {
+        [JsonProperty("criterion")] public string Criterion { get; set; }
+        [JsonProperty("assessment")] public string Assessment { get; set; }
+        [JsonProperty("evidence")] public IReadOnlyList<string> Evidence { get; set; }
+    }
+
+    public sealed class ModelContextFinishDto
+    {
+        [JsonProperty("eventId")] public string EventId { get; set; }
+        [JsonProperty("messageId")] public string MessageId { get; set; }
+        [JsonProperty("outcome")] public string Outcome { get; set; }
+        [JsonProperty("claims")] public IReadOnlyList<ModelContextFinishClaimDto> Claims { get; set; }
+    }
+
+    public sealed class ModelContextEvidenceReportDto
+    {
+        [JsonProperty("hasContextTrace")] public bool HasContextTrace { get; set; }
+        [JsonProperty("tools")] public IReadOnlyList<ModelContextToolEvidenceDto> Tools { get; set; }
+        [JsonProperty("finishes")] public IReadOnlyList<ModelContextFinishDto> Finishes { get; set; }
     }
 
     public sealed class ModelContextRetainedViewDto
@@ -136,6 +181,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("eligibleEvidence")] public IReadOnlyList<ModelContextIdentityDto> EligibleEvidence { get; set; }
         [JsonProperty("operations")] public IReadOnlyList<ModelContextIdentityDto> Operations { get; set; }
         [JsonProperty("evidence")] public IReadOnlyList<ModelContextIdentityDto> Evidence { get; set; }
+        [JsonProperty("evidenceReport")] public ModelContextEvidenceReportDto EvidenceReport { get; set; }
     }
     public sealed class ModelContextPayloadResponse
     {

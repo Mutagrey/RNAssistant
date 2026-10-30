@@ -17,6 +17,17 @@ execute, включая native history. Историческое сокращё�
 без перезапуска; реальная Windows-причина наблюдения пользователя не установлена.
 Browser checks и prompt-editor checks прошли. Модели/Office не запускались.
 
+## D3 Inspector: канонические доказательства — 2026-10-30
+
+Owner: Office ModelContextInspectorService и Web request reader.
+Вкладка «Доказательства» по запросу показывает T → E, outcome/eligibility, доставку
+в выбранном запросе и критерии принятого finish. T/E берутся из canonical событий
+до запроса и trace metadata; finish — из последующего принятого commit. Parser-accepted
+ответ не выдаётся за runtime-accepted finish. Pending/unknown/отсутствующая trace различаются. Ссылки
+ведут к сообщению, ресурсу и ходу выполнения; раскрытия сохраняются.
+Целевой Harness, browserless и Chromium checks прошли на синтетических данных.
+Request diff, детализация блоков, D4 Scenario Lab и реальная qualification открыты.
+
 ## Загрузка по требованию UI — 2026-10-30
 
 Owner: Office ChatSessionService/controller, Application inbox и Web presentation.

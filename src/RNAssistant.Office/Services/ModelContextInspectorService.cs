@@ -101,6 +101,8 @@ namespace RNAssistant.Office.Services
                 response.Operations = DescribeIdentities(trace, entry => new[] { entry.ToolCallId }, aliases.Operation);
                 response.Evidence = DescribeIdentities(trace, entry =>
                     (entry.EvidenceLinks ?? new List<ContextEvidenceLink>()).Select(link => link?.EvidenceId), aliases.Evidence);
+                if (query.IncludeEvidence)
+                    response.EvidenceReport = ModelContextEvidenceProjection.Describe(all, request, trace, token);
             }
             else
             {

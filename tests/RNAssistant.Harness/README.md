@@ -511,6 +511,11 @@ identity and rejects absent workspace attribution, duplicate message-source posi
 and invented omitted-item counts. `model-context-layout.test.js` checks compact
 source/coverage disclosures, recorded omissions, exact resource navigation and
 restored expansion without a payload reread in both themes at narrow width.
+`model context: canonical execution evidence` covers service/failed/unknown/pending
+calls, historical delivery, future bindings, ambiguous receipts and canonical finish
+ownership across repair attempts. The same Web tests cover lazy evidence metadata,
+criteria → E → exact-message navigation, preserved disclosure state, live acceptance
+and 420/320/205 px layouts without model or Office calls.
 `model context: saved request composition`, `storage: model request trace precedes
 dispatch` and `storage: mixed attachment manifest matches saved request` check
 disjoint baseline costs, exact compiler attribution, selected media estimates and

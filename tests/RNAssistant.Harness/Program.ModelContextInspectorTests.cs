@@ -20,6 +20,115 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void ModelContextExecutionEvidence()
+        {
+            WithTempPaths(paths =>
+            {
+                var chats = new ChatStore(paths);
+                var session = chats.Create("Workspace", "evidence-inspector", "Evidence", "Evidence");
+                var summary = new RunSummary("inspect-run", "inspect-run", RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
+                session.LastRun = new ChatRunRecord { RunId = summary.RunId, TurnId = summary.TurnId };
+                Action<int, ToolExecutionOutcome?, EvidenceEligibility> record = (index, outcome, eligibility) =>
+                {
+                    var call = new ToolCall("call-" + index, index == 1 ? "core.tools.read" : "test.read", "{}");
+                    var context = new ToolExecutionContext(call, new ToolPolicySnapshot(call.Name, "fixture",
+                        new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent" }, evidenceEligibility: eligibility)),
+                        summary.RunId, summary.TurnId, "step-" + index, DateTime.UtcNow, false, 1);
+                    var accepted = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = call.Id, Name = call.Name },
+                        "", "Inspect.", null, ToolResultRoles.Tool, new AcceptedToolCallOrigin(context.StepId, "attempt-" + index, 0));
+                    accepted.RunId = summary.RunId; session.Messages.Add(accepted);
+                    chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                        summary, response: new AgentResponse(ConversationResponse.ExecuteAction, "Inspect.", "", new[] { call })), new[] { accepted }));
+                    var activity = new ChatMessage { Role = "assistant", RunId = summary.RunId, ExcludeFromModelContext = true,
+                        Activity = new ChatActivity { RunId = summary.RunId, StepId = context.StepId, ToolId = call.Name, ToolCallId = call.Id } };
+                    session.Messages.Add(activity);
+                    chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolStarted,
+                        summary, toolContext: context), new ChatMessage[0], activity));
+                    if (outcome.HasValue) chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ToolCompleted,
+                        summary, execution: KernelRecord(context, outcome.Value)), new ChatMessage[0], activity));
+                };
+                record(1, ToolExecutionOutcome.Ok, EvidenceEligibility.None);
+                record(2, ToolExecutionOutcome.Error, EvidenceEligibility.Eligible);
+                record(3, ToolExecutionOutcome.Ok, EvidenceEligibility.Eligible);
+                record(4, ToolExecutionOutcome.Unknown, EvidenceEligibility.Eligible);
+                record(5, ToolExecutionOutcome.AwaitingConfirmation, EvidenceEligibility.Eligible);
+                var entries = new List<ContextMessagePresentation> {
+                    new ContextMessagePresentation { ToolCallId = "call-2", EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 1),
+                        Presentation = ContextPresentationKind.Excluded, Reason = "Budget." },
+                    new ContextMessagePresentation { ToolCallId = "call-3", EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 2),
+                        Presentation = ContextPresentationKind.Summary, MessageIndex = 0, Role = "assistant" },
+                    new ContextMessagePresentation { ToolCallId = "call-4", EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 3),
+                        Presentation = ContextPresentationKind.Unknown, MessageIndex = 1 },
+                    new ContextMessagePresentation { ToolCallId = "call-6", EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 4),
+                        Presentation = ContextPresentationKind.Full, MessageIndex = 2 }
+                };
+                Func<string, List<ContextMessagePresentation>, SessionEvent> request = (id, receipt) => chats.AppendTrace(session,
+                    SessionEventTypes.LlmRequest, new LlmTraceRecord { RequestId = id, RunId = summary.RunId,
+                        ModelAttemptId = "finish-attempt", StepId = "finish-step", MessageCount = 3, ContextMessages = receipt },
+                    "{}", "application/json", summary.RunId, summary.TurnId, "finish-step");
+                var first = request("first", entries);
+                record(6, ToolExecutionOutcome.Ok, EvidenceEligibility.Eligible);
+                chats.AppendTrace(session, SessionEventTypes.ModelResponseAccepted, new LlmTraceRecord {
+                    RequestId = "first", ModelAttemptId = "finish-attempt" }, null, null, summary.RunId, summary.TurnId, "finish-step");
+                using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    var inspector = new ModelContextInspectorService(new ChatEventStoreAdapter(chats), new ChatBlobStore(paths), plane);
+                    Func<SessionEvent, ModelContextEvidenceReportDto> report = item => inspector.Query(session,
+                        new ModelContextQuery { RequestEventId = item.EventId, IncludeEvidence = true }, CancellationToken.None).EvidenceReport;
+                    AssertTrue(inspector.Query(session, new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None).EvidenceReport == null,
+                        "ordinary request/resource inspection does not assemble the evidence report");
+                    var original = report(first);
+                    AssertEqual(0, original.Finishes.Count, "parser acceptance alone is not durable finish acceptance");
+                    Func<int, ModelContextToolEvidenceDto> row = index => original.Tools.Single(item => item.CallId == "call-" + index);
+                    AssertEqual("T1", row(1).OperationAlias, "service call retains T");
+                    AssertTrue(row(1).EvidenceAlias == null && row(1).Eligibility == EvidenceEligibility.None, "service result does not manufacture E");
+                    AssertEqual(ToolExecutionOutcome.Error, row(2).Outcome.Value, "failed result can be eligible");
+                    AssertEqual(ModelContextEvidenceDelivery.Excluded, row(2).Delivery, "omitted E stays excluded");
+                    AssertEqual(ModelContextEvidenceDelivery.Delivered, row(3).Delivery, "summary receipt delivers E without claiming a full source body");
+                    AssertEqual(0, row(3).MessageIndices.Single(), "exact wire position for navigation");
+                    AssertEqual(ToolExecutionOutcome.Unknown, row(4).Outcome.Value, "unknown effect remains unknown");
+                    AssertEqual(ModelContextEvidenceDelivery.Unknown, row(4).Delivery, "uncertain attribution never claims delivery");
+                    AssertTrue(row(5).Outcome == null && row(5).EvidenceAlias == null, "approval is not a terminal result");
+                    AssertTrue(row(6).OperationAlias == null && row(6).EvidenceAlias == null && row(6).Outcome == null,
+                        "future canonical bindings cannot rewrite the earlier request");
+                    AssertTrue(!string.IsNullOrEmpty(row(3).CallEventId) && !string.IsNullOrEmpty(row(3).ResultEventId), "canonical event links retained");
+                    AssertContains(Newtonsoft.Json.JsonConvert.SerializeObject(original), "\"outcome\":\"Unknown\"", "typed outcome is readable in the bridge");
+
+                    var second = request("repair", entries.Take(3).ToList());
+                    var claim = new ConversationResultClaim("Read verified.", new[] { "e2" }, ConversationAssessment.Satisfied);
+                    var decision = new ChatMessage { Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 8,
+                        ResponseModelAttemptId = "finish-attempt", RunId = summary.RunId,
+                        Content = ModelProtocolWire.WriteAcceptedDecision("finish", "Verified.", "Read verified.", results: new[] { claim }, outcome: ConversationOutcome.Completed) };
+                    session.Messages.Add(decision);
+                    chats.CommitRun(session, new ConversationRunCommit(new AgentRunEvent(AgentRunEventKind.ResponseAccepted,
+                        summary, response: new AgentResponse("finish", "Verified.", "Read verified.", results: new[] { claim }, outcome: ConversationOutcome.Completed)), new[] { decision }));
+                    AssertEqual(0, report(first).Finishes.Count, "repair request owns the subsequent accepted finish");
+                    var acceptedFinish = report(second).Finishes.Single();
+                    AssertEqual("E2", acceptedFinish.Claims.Single().Evidence.Single(), "canonical finish citations normalize case");
+                    AssertEqual("satisfied", acceptedFinish.Claims.Single().Assessment, "assessment remains model-authored");
+                    AssertEqual(decision.Id, acceptedFinish.MessageId, "finish points to the canonical decision");
+
+                    var missing = request("missing-trace", null);
+                    AssertTrue(!report(missing).HasContextTrace && report(missing).Tools.All(item => item.Delivery == ModelContextEvidenceDelivery.Unknown),
+                        "missing trace does not imply no delivery or full delivery");
+                    var ambiguous = entries.Take(3).ToList();
+                    ambiguous.Add(new ContextMessagePresentation { MessageIndex = 0, Presentation = ContextPresentationKind.Full });
+                    var conflict = report(request("ambiguous", ambiguous)).Tools.Single(item => item.CallId == "call-3");
+                    AssertTrue(conflict.Delivery == ModelContextEvidenceDelivery.Unknown && conflict.MessageIndices.Count == 0,
+                        "colliding source metadata cannot select a wire message");
+                    summary = new RunSummary("later-run", "later-run", RunLifecycle.Running, new ToolCounts(), 1, 0, "", null, null);
+                    var historical = report(request("later-run", entries.Take(3).ToList()));
+                    AssertEqual("inspect-run", historical.Tools.Single(item => item.EvidenceAlias == "E2").RunId,
+                        "delivered historical evidence keeps its original run");
+                    AssertEqual(0, historical.Finishes.Count, "another run cannot inherit an accepted finish from the same attempt name");
+                    AssertEqual(3, historical.Tools.Count, "unrelated calls from earlier runs are not added to the request report");
+                    var found = inspector.Query(session, new ModelContextQuery { Alias = "e2", IncludeEvidence = true }, CancellationToken.None);
+                    AssertEqual("E2", found.SelectedAlias, "lookup preserves canonical reference case");
+                    AssertTrue(found.EvidenceReport.Tools.Any(item => item.EvidenceAlias == "E2"), "alias lookup opens the same evidence projection");
+                }
+            });
+        }
+
         private static void ModelContextSavedRequestComposition()
         {
             var messages = new List<ChatMessage> {

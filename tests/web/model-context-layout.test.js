@@ -30,7 +30,21 @@ const { chromium } = require("playwright");
     };
     await page.evaluate(() => {
       const original = send; window.layoutPayloadReads = 0;
-      send = (type, args) => { if (type === "getModelContextPayload") layoutPayloadReads++; return original(type, args); };
+      send = async (type, args) => {
+        if (type === "getModelContextPayload") layoutPayloadReads++;
+        const response = await original(type, args);
+        if (type === "getModelContext" && args.includeEvidence) response.evidenceReport = {
+          hasContextTrace: true, tools: [{ callId: "preview-call", operationAlias: "T1", evidenceAlias: "E1",
+            toolName: "core.read", outcome: "Ok", eligibility: "Eligible", delivery: "Delivered", messageIndices: [3],
+            runId: "preview-run", stepId: "preview-step", callEventId: "call-event", resultEventId: "result-event" },
+          { callId: "unknown-call", operationAlias: "T2", evidenceAlias: "E2", toolName: "core.patch",
+            outcome: "Unknown", eligibility: "Eligible", delivery: "Excluded", messageIndices: [] },
+          { callId: "service-call", operationAlias: "T3", toolName: "core.tools.read", outcome: "Ok", eligibility: "None", messageIndices: [] }],
+          finishes: [{ outcome: "partial", claims: [{ criterion: "Сравнить показатели двух месяцев и проверить результат",
+            assessment: "partially_satisfied", evidence: ["E1", "E2"] }] }]
+        };
+        return response;
+      };
       state.activeRunViewState = { runId: "preview-run", lifecycle: "completed", executionHealth: "clean", currentAction: "Сравнение готово" };
       state.liveAgentRun = [{ Kind: "tool", RunId: "preview-run", StepId: "preview-step", ToolCallId: "preview-call",
         StepMessage: "Сравню показатели продаж", ToolId: "core.read", Status: "completed" }];
@@ -44,7 +58,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#modelContextAttempt").inputValue(), "preview-request");
     assert.equal(await page.locator("#modelContextMode").isVisible(), true);
     assert.equal(await page.locator("#modelContextHistory").evaluate(node => node.open), false);
-    assert.equal(await page.locator("#modelContextTabs [role=tab]").count(), 4);
+    assert.equal(await page.locator("#modelContextTabs [role=tab]").count(), 5);
     await screenshot("request-overview");
     const size = page.locator("#modelContextLayout"), body = page.locator("#modelContextBody");
     const panel = page.locator("#chatInspector");
@@ -98,6 +112,27 @@ const { chromium } = require("playwright");
     assert.match(await body.innerText(), /нет сохранённых связей с ресурсами/);
     await screenshot("request-resources-empty");
     await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator("#modelContextEvidenceTab").getAttribute("aria-selected"), "true");
+    const toolEvidence = body.locator('[data-evidence-call="preview-call"]');
+    await toolEvidence.locator(":scope > summary").click();
+    await toolEvidence.getByText("E доставлен в этом запросе.", { exact: true }).waitFor();
+    await body.getByText("Сравнить показатели двух месяцев и проверить результат", { exact: true }).click();
+    assert.equal(await page.evaluate(() => layoutPayloadReads), 1, "evidence uses metadata without loading model or tool payloads");
+    for (const width of [420, 320, 205]) {
+      await page.setViewportSize({ width, height: 780 });
+      assert.equal(await body.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, "evidence fits " + width);
+      assert.equal(await page.locator("#modelContextTabs").evaluate(node => node.scrollWidth > node.clientWidth + 1), false, "tabs fit " + width);
+    }
+    await page.setViewportSize({ width: 420, height: 780 });
+    await screenshot("request-evidence-narrow-dark");
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
+    await screenshot("request-evidence-narrow-light");
+    await toolEvidence.getByRole("button", { name: "Сообщение 4", exact: true }).click();
+    await page.locator('.is-message[data-message-index="3"][open]').waitFor();
+    assert.equal(await page.evaluate(() => layoutPayloadReads), 1, "exact-message jump reuses saved bytes");
+    await page.locator("#modelContextEvidenceTab").click();
+    assert.equal(await toolEvidence.evaluate(node => node.open), true, "evidence expansion survives navigation");
+    await page.locator("#modelContextEvidenceTab").focus(); await page.keyboard.press("ArrowRight");
     assert.equal(await page.locator("#modelContextResponseTab").getAttribute("aria-selected"), "true");
     await body.locator(".rn-markdown-viewer-rendered").waitFor();
     assert.match(await body.locator(".rn-markdown-viewer-rendered").innerText(), /Выручка выросла на 18,4%/);
@@ -123,6 +158,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#modelContextAttempt").isHidden(), true, "preview hides the saved-request selector");
     assert.equal(await page.locator("#modelContextResponseTab").isDisabled(), true);
     assert.equal(await page.locator("#modelContextResourcesTab").isDisabled(), true);
+    assert.equal(await page.locator("#modelContextEvidenceTab").isDisabled(), true);
     assert.equal(await page.locator("#modelContextDownload").isDisabled(), false);
     assert.equal(await body.locator(".model-context-composition").count(), 0, "preview cannot reuse saved request composition");
     await screenshot("request-preview");

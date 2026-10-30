@@ -320,8 +320,10 @@ model-assertion failures. Controls preserve their seed in the report. The malfor
 schema case explicitly explains why an HTTP 400/422 can be a passing result.
 
 This is the minimum runnable UI, not the complete D3/D4 laboratory. Custom scenario
-editing/import, persistent run history, endpoint comparison, request diff and the
-expanded actual-conversation Resources/Evidence/Composition inspector remain open.
+editing/import, persistent run history, endpoint comparison, request diff and
+further block/composition attribution remain open. The actual-conversation Inspector
+now includes canonical T/E outcomes, delivery and accepted finish criteria in its
+**Доказательства** tab, alongside the existing resource and composition views.
 T/E/R/criterion now follows P2 reference revision 3; real-model qualification remains NotRun. Host-neutral service/bridge and mocked-browser
 checks do not qualify the controller delivery, download or rendering in real Office/WebView2.
 

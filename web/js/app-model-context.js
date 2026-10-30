@@ -4,7 +4,7 @@
   var labels = { Full: "Полностью", Fragment: "Фрагмент", Summary: "Сводка / описание ресурса",
     Excluded: "Не включено", Unknown: "Нет сведений" };
   var tabs = { messages: "modelContextMessagesTab", resources: "modelContextResourcesTab",
-    response: "modelContextResponseTab", json: "modelContextJsonTab" };
+    evidence: "modelContextEvidenceTab", response: "modelContextResponseTab", json: "modelContextJsonTab" };
   function el(tag, text, cls) {
     var node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -62,7 +62,7 @@
       var control = $(tabs[key]), selected = c.tab === key;
       control.classList.toggle("active", selected);
       control.setAttribute("aria-selected", String(selected)); control.tabIndex = selected ? 0 : -1;
-      control.disabled = c.mode === "preview" && (key === "response" || key === "resources");
+      control.disabled = c.mode === "preview" && (key === "response" || key === "resources" || key === "evidence");
     });
     $("modelContextBody").setAttribute("aria-labelledby", tabs[c.tab]);
   }
@@ -71,6 +71,7 @@
   }
   function clearView(c) {
     if (c.captureMessages) { c.captureMessages(); c.captureMessages = null; }
+    if (c.captureEvidence) { c.captureEvidence(); c.captureEvidence = null; }
     c.viewVersion = (c.viewVersion || 0) + 1;
     c.mounts.forEach(function (node) { window.RNAssistantViewerRegistry.unmount(node); }); c.mounts = [];
     $("modelContextBody").replaceChildren(); $("modelContextBody").classList.remove("product-viewer");
@@ -663,7 +664,12 @@
       settings.appendChild(el("summary", "Параметры запроса · " + parameters.length)); root.appendChild(settings);
       parameters.forEach(function (part) { lazy(c, settings, "Параметр запроса: " + part.key, function () { return part.raw; }, true); });
     }
-    if (saved && saved.grouped === grouped) {
+    if (Number.isInteger(c.focusMessageIndex)) {
+      var focusIndex = c.focusMessageIndex; c.focusMessageIndex = null;
+      while (count <= focusIndex && count < list.length) page();
+      var focusRow = rows.find(function (row) { return Number(row.dataset.messageIndex) === focusIndex; });
+      if (focusRow) { focusRow.open = true; focusRow.children[0].focus(); focusRow.scrollIntoView({ block: "nearest" }); }
+    } else if (saved && saved.grouped === grouped) {
       var viewVersion = c.viewVersion;
       setTimeout(function () { if (live(c) && c.viewVersion === viewVersion) root.scrollTop = saved.scroll; }, 0);
     }
@@ -722,6 +728,110 @@
   }
 
   function referenceText(ref) { return (ref.uri || "?") + (ref.revision ? " @ " + ref.revision : ""); }
+
+  function executionEvidence(c, root) {
+    var report = c.detail && c.detail.evidenceReport;
+    if (!report) { notice(c, "Нет сведений о доказательствах", "Для этого запроса связь вызовов и итогов недоступна."); return; }
+    var rows = report.tools || [], rendered = new Map(), claimRows = new Map(), count = 0, source = c.selected;
+    var saved = c.evidenceView && c.evidenceView.source === source ? c.evidenceView : null;
+    var outcomes = { Ok: "Инструмент вернул ok", Error: "Ошибка инструмента", Unknown: "Эффект неизвестен",
+      NotDispatched: "Не исполнялся", AwaitingConfirmation: "Ожидает подтверждения" };
+    var assessments = { satisfied: "выполнено", partially_satisfied: "выполнено частично", unverified: "не проверено", not_satisfied: "не выполнено" };
+    var finishes = report.finishes || [];
+    root.appendChild(el("h3", "Вызовы и доказательства"));
+    root.appendChild(el("p", "T — принятый вызов; E — допустимая ссылка на завершённый результат. Наличие E и статус ok сами по себе не доказывают выполнение задачи.", "model-context-note"));
+    if (!report.hasContextTrace) root.appendChild(el("p", "Состав этого запроса не сохранён: доставка E не установлена.", "model-context-note"));
+    c.captureEvidence = function () {
+      c.evidenceView = { source: source, count: count, scroll: root.scrollTop,
+        expanded: Array.from(rendered).filter(function (pair) { return pair[1].open; }).map(function (pair) { return pair[0]; }),
+        claims: Array.from(claimRows).filter(function (pair) { return pair[1].open; }).map(function (pair) { return pair[0]; }) };
+    };
+    function reveal(reference) {
+      var index = rows.findIndex(function (row) { return row.evidenceAlias === reference || row.operationAlias === reference; });
+      if (index < 0) return;
+      while (count <= index && count < rows.length) page();
+      var detail = rendered.get(rows[index].callId);
+      detail.open = true; detail.children[0].focus(); detail.scrollIntoView({ block: "nearest" });
+    }
+    if (!finishes.length) root.appendChild(el("p", "Принятый runtime итог finish для этого запроса не записан. Текст ответа доступен на вкладке «Ответ».", "model-context-note"));
+    finishes.forEach(function (finish, finishIndex) {
+      var section = el("section");
+      section.appendChild(el("h3", "Принятый finish"));
+      section.appendChild(el("p", "Оценка модели: " + ({ completed: "завершено", partial: "частично", unable_to_complete: "завершить не удалось" }[finish.outcome] || finish.outcome) +
+        ". Это принятие решения, а не отдельная проверка результата.", "model-context-note"));
+      (finish.claims || []).forEach(function (claim, claimIndex) {
+        var detail = el("details", undefined, "model-context-message");
+        detail.appendChild(el("summary", claim.criterion));
+        var claimKey = (finish.eventId || finish.messageId || finishIndex) + "/" + claimIndex;
+        claimRows.set(claimKey, detail);
+        if (saved && (saved.claims || []).indexOf(claimKey) >= 0) detail.open = true;
+        var body = el("div", undefined, "model-context-message-body"); detail.appendChild(body);
+        body.appendChild(el("p", "Оценка модели: " + (assessments[claim.assessment] || claim.assessment)));
+        var links = el("div", undefined, "model-context-toolbar"); body.appendChild(links);
+        (claim.evidence || []).forEach(function (reference) {
+          if (rows.some(function (row) { return row.evidenceAlias === reference; }))
+            links.appendChild(button(reference, function () { reveal(reference); }));
+          else links.appendChild(el("span", reference + " · связь не установлена", "model-context-note"));
+        });
+        if (!(claim.evidence || []).length) body.appendChild(el("p", "Без ссылок на инструменты.", "model-context-note"));
+        section.appendChild(detail);
+      });
+      if (!(finish.claims || []).length) section.appendChild(el("p", "Критерии не указаны.", "model-context-note"));
+      root.appendChild(section);
+    });
+    if (!rows.length) { root.appendChild(el("p", "Вызовы из этого запуска и сохранённого состава запроса отсутствуют.", "model-context-note")); return; }
+    var list = el("section"); root.appendChild(list);
+    var more = button("Показать ещё вызовы", page);
+    function page() {
+      more.remove();
+      rows.slice(count, count + 50).forEach(function (row) {
+        var detail = el("details", undefined, "model-context-message");
+        detail.dataset.evidenceCall = row.callId;
+        var summary = el("summary"), heading = el("span", (row.operationAlias || "Вызов без T") + " → " +
+          (row.evidenceAlias || (row.eligibility === "None" ? "без E" : "E не установлен")) +
+          (row.toolName ? " · " + row.toolName : ""));
+        heading.appendChild(el("span", (outcomes[row.outcome] || "Завершение не установлено") +
+          (row.evidenceAlias ? " · " + (row.delivery === "Delivered" ? "E доставлен" : row.delivery === "Excluded" ? "E исключён" : "доставка E неизвестна") : ""),
+          "model-context-message-preview"));
+        summary.appendChild(heading); detail.appendChild(summary);
+        var body = el("div", undefined, "model-context-message-body"); detail.appendChild(body);
+        rendered.set(row.callId, detail); list.appendChild(detail);
+        var loaded = false;
+        detail.addEventListener("toggle", function () {
+          if (!detail.open || loaded || !live(c) || !detail.isConnected) return; loaded = true;
+          body.appendChild(el("p", outcomes[row.outcome] || "Завершение инструмента не установлено."));
+          body.appendChild(el("p", row.eligibility === "None" ? "Служебный результат: E не выдаётся." :
+            row.evidenceAlias ? "Ссылка результата: " + row.evidenceAlias + ". Для цитирования нужна доставка в запрос." : "Допуск к цитированию не установлен.", "model-context-note"));
+          if (row.evidenceAlias) body.appendChild(el("p", row.delivery === "Delivered" ? "E доставлен в этом запросе." :
+            row.delivery === "Excluded" ? "E исключён из этого запроса." : "Доставка E в этом запросе не установлена.", "model-context-note"));
+          var reasons = (c.detail.events.find(function (event) { return event.eventId === source; }).trace.ContextMessages || [])
+            .filter(function (entry) { return entry && entry.ToolCallId === row.callId && entry.Reason; }).map(function (entry) { return entry.Reason; });
+          Array.from(new Set(reasons)).forEach(function (reason) { body.appendChild(el("p", reason, "model-context-note")); });
+          var links = el("div", undefined, "model-context-toolbar"); body.appendChild(links);
+          (row.messageIndices || []).forEach(function (index) {
+            links.appendChild(button("Сообщение " + (index + 1), function () {
+              c.focusMessageIndex = index; c.messageLayout = "wire"; c.tab = "messages"; render(c);
+            }));
+          });
+          (c.detail.resources || []).filter(function (resource) {
+            return resource.alias && row.operationAlias && (resource.observations || []).some(function (item) { return item.operationAlias === row.operationAlias; });
+          }).forEach(function (resource) {
+            links.appendChild(button(resource.alias, function () { c.focusResource = resource.alias; c.tab = "resources"; render(c); }));
+          });
+          if (row.runId && typeof window.openRunJournal === "function") links.appendChild(button("Ход выполнения", function () {
+            if (live(c)) window.openRunJournal({ owner: c.owner, workspaceId: c.workspaceId, sessionId: c.chatId,
+              chatId: c.chatId, runId: row.runId, stepId: row.stepId, toolCallId: row.callId });
+          }));
+          lazy(c, body, "Сохранённые связи · JSON", function () { return JSON.stringify(row, null, 2); }, true);
+        });
+        if (saved && saved.expanded.indexOf(row.callId) >= 0) detail.open = true;
+      });
+      count += 50; if (count < rows.length) list.appendChild(more);
+    }
+    page(); while (saved && count < saved.count && count < rows.length) page();
+    if (c.focusEvidence) { reveal(c.focusEvidence); c.focusEvidence = null; }
+    else if (saved) { var viewVersion = c.viewVersion; setTimeout(function () { if (live(c) && c.viewVersion === viewVersion) root.scrollTop = saved.scroll; }, 0); }
+  }
   async function verifyResource(c, row, control, note, retainedView) {
     var version = c.version, eventId = c.selected;
     c.follow = false; control.disabled = true; note.textContent = retainedView ?
@@ -940,6 +1050,7 @@
       }
       if (c.tab === "response") { root.textContent = "Это предпросмотр — ответа ещё нет."; return; }
       if (c.tab === "resources") { root.textContent = "Сохранённые ревизии появятся после фактического запроса."; return; }
+      if (c.tab === "evidence") { root.textContent = "Доказательства доступны в сохранённом запросе."; return; }
       if (c.tab === "json") mount(c, root, c.preview.text, true);
       else messages(c, c.preview.text, c.previewEntries);
       return;
@@ -950,6 +1061,7 @@
       return;
     }
     if (c.tab === "resources") { resources(c, root); return; }
+    if (c.tab === "evidence") { executionEvidence(c, root); return; }
     var request = c.detail.events.find(function (e) { return e.eventId === c.selected; });
     if (c.tab === "response") {
       var events = c.detail.events.filter(function (e) { return e.type !== "llm.request"; });
@@ -1014,7 +1126,7 @@
   }
   async function select(c, eventId, forceRender) {
     var same = c.selected === eventId && c.detail;
-    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.selected = eventId; c.detail = null; c.focusResource = null; }
+    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.selected = eventId; c.detail = null; c.focusResource = null; c.focusMessageIndex = null; c.focusEvidence = null; }
     if (!same || forceRender) {
       c.loading = true; c.emptyMessage = ""; c.selectionError = "";
       notice(c, "Загрузка запроса…", "Чтение сохранённого обмена.", "loading");
@@ -1023,7 +1135,7 @@
     var version = c.version;
     status(c, "Чтение сохранённого обмена…");
     try {
-      var detail = await call(c, "getModelContext", { requestEventId: eventId });
+      var detail = await call(c, "getModelContext", { requestEventId: eventId, includeEvidence: c.tab === "evidence" });
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (e) { return e.type === "llm.request" && e.eventId === eventId; });
       if (!matches(c, detail) || !request || !request.trace || c.scope &&
@@ -1031,6 +1143,7 @@
         throw new Error("Сохранённый запрос не соответствует выбранному чату и шагу.");
       var changed = !c.detail || JSON.stringify(c.detail.events.map(function (e) { return e.eventId; })) !== JSON.stringify(detail.events.map(function (e) { return e.eventId; }));
       var resourcesChanged = !c.detail || JSON.stringify(c.detail.resources) !== JSON.stringify(detail.resources);
+      var evidenceChanged = !c.detail || JSON.stringify(c.detail.evidenceReport) !== JSON.stringify(detail.evidenceReport);
       c.detail = detail;
       var response = detail.events.find(function (e) { return e.type === "llm.response" || e.type === "llm.failure"; });
       $("modelContextAttempt").title = request.trace.Purpose || "Сохранённый запрос";
@@ -1038,7 +1151,7 @@
         (response ? response.type === "llm.response" ? "Ответ сохранён" : "Ошибка запроса" : "Ответ пока не сохранён") +
         (c.follow ? " · обновляется автоматически" : c.scope ? c.scope.stepId ? " · выбранный шаг" : " · выбранный запуск" : " · выбранный запрос"));
       c.loading = false; previewAvailability(c);
-      if (!same || forceRender || changed && c.tab === "response" || resourcesChanged && c.tab === "resources") await render(c);
+      if (!same || forceRender || changed && c.tab === "response" || resourcesChanged && c.tab === "resources" || evidenceChanged && c.tab === "evidence") await render(c);
     } catch (error) {
       if (valid(c, version)) {
         status(c, error.message);
@@ -1112,7 +1225,7 @@
     status(c, "Поиск " + name + "…");
     notice(c, "Поиск ссылки " + name, "В сохранённой истории этого чата.", "loading");
     try {
-      var detail = await call(c, "getModelContext", { alias: name });
+      var detail = await call(c, "getModelContext", { alias: name, includeEvidence: /^[TE][1-9][0-9]*$/.test(name) });
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (event) { return event.type === "llm.request"; });
       if (!matches(c, detail) || !request || detail.selectedAlias !== name) throw new Error("Короткая ссылка не найдена в этом чате.");
@@ -1120,7 +1233,11 @@
       c.cache = {}; c.loading = false; c.selectionError = "";
       c.selected = request.eventId; c.detail = detail; c.inventory = {}; c.inventoryBusy = {};
       c.focusResource = detail.selectedResourceAlias || null;
-      c.tab = c.focusResource ? "resources" : "messages";
+      c.focusEvidence = detail.evidenceReport && (detail.evidenceReport.tools || []).some(function (row) {
+        return row.operationAlias === name || row.evidenceAlias === name;
+      }) ? name : null;
+      c.focusMessageIndex = null;
+      c.tab = c.focusResource ? "resources" : c.focusEvidence ? "evidence" : "messages";
       if (!c.attempts.some(function (event) { return event.eventId === request.eventId; })) c.attempts.push(request);
       attemptPicker(c).value = request.eventId;
       previewAvailability(c);
@@ -1225,7 +1342,7 @@
       if (!current || current.workspaceId) { this.value = "actual"; return; }
       var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {};
       c.loading = false; c.emptyMessage = ""; c.selectionError = ""; clearView(c);
-      if (c.mode === "preview" && (c.tab === "response" || c.tab === "resources")) c.tab = "messages";
+      if (c.mode === "preview" && (c.tab === "response" || c.tab === "resources" || c.tab === "evidence")) c.tab = "messages";
       syncTabs(c);
       $("modelContextActualControls").classList.toggle("hidden", c.mode !== "actual");
       previewAvailability(c);
@@ -1233,16 +1350,23 @@
         notice(c, "Загрузка запросов…", "Чтение сохранённой истории.", "loading"); list(c, false);
       }
     });
+    function chooseTab(key) {
+      var c = current; if (!c) return;
+      c.tab = key; syncTabs(c);
+      if (key === "evidence" && c.mode === "actual" && c.selected && !(c.detail && c.detail.evidenceReport))
+        select(c, c.selected, true);
+      else render(c);
+    }
     Object.keys(tabs).forEach(function (key) {
       var control = $(tabs[key]);
-      control.addEventListener("click", function () { current.tab = key; render(current); });
+      control.addEventListener("click", function () { chooseTab(key); });
       control.addEventListener("keydown", function (event) {
         if (["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(event.key) < 0) return;
         event.preventDefault();
         var available = Object.keys(tabs).filter(function (tab) { return !$(tabs[tab]).disabled; });
         var index = available.indexOf(key), next = event.key === "Home" ? 0 : event.key === "End" ? available.length - 1 :
           (index + (event.key === "ArrowRight" ? 1 : -1) + available.length) % available.length;
-        current.tab = available[next]; $(tabs[current.tab]).focus(); render(current);
+        chooseTab(available[next]); $(tabs[current.tab]).focus();
       });
     });
     $("modelContextAttempt").addEventListener("change", function () { current.follow = false; select(current, this.value); });

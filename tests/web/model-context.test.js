@@ -19,6 +19,7 @@ class Node {
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
   fire(type) { return Promise.all((this.listeners[type] || []).map(fn => fn.call(this, { key: "", preventDefault() {}, stopPropagation() {} }))); }
   focus() {}
+  scrollIntoView() {}
   querySelectorAll() { return []; }
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
@@ -657,10 +658,79 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   cancelledSave.c.RNAssistantModelContext.close();
   console.log("PASS model context: refresh disclosures, mode-change races, stale errors and failed request selection");
 
+  const proof = fixture(false, false, JSON.stringify({ messages: [
+    { role: "user", content: "Проверь файл." },
+    { role: "assistant", content: '{"action":"execute","reason":"Read.","message":""}',
+      tool_calls: [{ id: "T2", type: "function", function: { name: "core.read", arguments: "{}" } }] },
+    { role: "tool", tool_call_id: "T2", content: '{"status":"unknown","evidence":"E2"}' }
+  ] }));
+  let proofReport = { hasContextTrace: true, tools: [
+    { callId: "call-1", operationAlias: "T1", evidenceAlias: "E1", toolName: "core.read",
+      outcome: "Error", eligibility: "Eligible", delivery: "Excluded", messageIndices: [] },
+    { callId: "call-2", operationAlias: "T2", evidenceAlias: "E2", toolName: "core.read", runId: "run", stepId: "step",
+      outcome: "Unknown", eligibility: "Eligible", delivery: "Delivered", messageIndices: [1, 2] },
+    { callId: "call-3", operationAlias: "T3", eligibility: "None", outcome: "Ok", messageIndices: [] }
+  ], finishes: [{ outcome: "partial", claims: [{ criterion: '<img src=x onerror="bad()"> Read result',
+    assessment: "unverified", evidence: ["E2"] }] }] };
+  proof.events[0].trace.ContextMessages = [{ ToolCallId: "call-2", MessageIndex: 1, Presentation: "Full" },
+    { ToolCallId: "call-2", MessageIndex: 2, Presentation: "Summary" },
+    { ToolCallId: "call-1", Presentation: "Excluded", Reason: "Бюджет запроса." }];
+  const proofSend = proof.c.send;
+  proof.c.send = async (type, query) => {
+    const response = await proofSend(type, query);
+    if (type === "getModelContext" && query.includeEvidence) response.evidenceReport = structuredClone(proofReport);
+    return response;
+  };
+  let journalRoute;
+  proof.c.openRunJournal = query => { journalRoute = query; };
+  proof.c.RNAssistantModelContext.open(); await flush();
+  const payloadReads = () => proof.calls.filter(call => call.type === "getModelContextPayload").length;
+  const beforeProof = payloadReads();
+  await proof.get("modelContextEvidenceTab").fire("click"); await flush();
+  assert.equal(payloadReads(), beforeProof, "evidence reads metadata, not request/accepted-call bodies");
+  assert.ok(proof.calls.some(call => call.query.requestEventId === "r1" && call.query.includeEvidence === true));
+  let proofNodes = descendants(proof.get("modelContextBody"));
+  const claim = proofNodes.find(node => node.tag === "details" && node.children[0].textContent.includes("<img"));
+  assert.ok(claim, "criteria are inert text, not HTML");
+  const proofLink = descendants(claim).find(node => node.tag === "button" && node.textContent === "E2");
+  await proofLink.fire("click");
+  let proofRow = proofNodes.find(node => node.dataset.evidenceCall === "call-2");
+  assert.equal(proofRow.open, true, "claim opens the linked tool result");
+  await proofRow.fire("toggle");
+  assert.ok(descendants(proofRow).some(node => node.textContent === "Эффект неизвестен"));
+  assert.ok(descendants(proofRow).some(node => node.textContent === "E доставлен в этом запросе."));
+  await descendants(proofRow).find(node => node.textContent === "Ход выполнения").fire("click");
+  assert.deepEqual(JSON.parse(JSON.stringify(journalRoute)), { owner: "office", sessionId: "chat", chatId: "chat",
+    runId: "run", stepId: "step", toolCallId: "call-2" });
+  await descendants(proofRow).find(node => node.textContent === "Сообщение 3").fire("click"); await flush();
+  assert.equal(proof.get("modelContextMessagesTab").classList.contains("active"), true);
+  assert.equal(descendants(proof.get("modelContextBody")).find(node => node.dataset.messageIndex === "2").open, true);
+  assert.equal(payloadReads(), beforeProof, "message navigation reuses the exact saved request");
+  await proof.get("modelContextEvidenceTab").fire("click"); await flush();
+  proofRow = descendants(proof.get("modelContextBody")).find(node => node.dataset.evidenceCall === "call-2");
+  assert.equal(proofRow.open, true, "returning preserves the expanded result");
+  const excludedRow = descendants(proof.get("modelContextBody")).find(node => node.dataset.evidenceCall === "call-1");
+  excludedRow.open = true; await excludedRow.fire("toggle");
+  assert.ok(descendants(excludedRow).some(node => node.textContent === "E исключён из этого запроса."));
+  assert.ok(descendants(excludedRow).some(node => node.textContent === "Бюджет запроса."));
+  const serviceRow = descendants(proof.get("modelContextBody")).find(node => node.dataset.evidenceCall === "call-3");
+  serviceRow.open = true; await serviceRow.fire("toggle");
+  assert.ok(descendants(serviceRow).some(node => node.textContent === "Служебный результат: E не выдаётся."));
+  proofReport = { ...proofReport, finishes: [{ outcome: "completed", claims: [{ criterion: "Updated accepted finish", assessment: "satisfied", evidence: ["E2"] }] }] };
+  proof.bump(); await proof.tick();
+  assert.ok(descendants(proof.get("modelContextBody")).some(node => node.textContent === "Updated accepted finish"),
+    "canonical finish updates without a new model-response event");
+  proof.get("modelContextMode").value = "preview";
+  await proof.get("modelContextMode").fire("change"); await flush();
+  assert.equal(proof.get("modelContextEvidenceTab").disabled, true);
+  assert.equal(proof.get("modelContextMessagesTab").classList.contains("active"), true);
+  proof.c.RNAssistantModelContext.close();
+  console.log("PASS model context: evidence claims, exact-message navigation, outcomes and live acceptance");
+
   for (const action of ["execute", "reflection", "finish"]) {
     const wrapped = action !== "execute", decision = fixture(), inner = action === "finish"
-      ? { action: "finish", reason: "Исходные данные неполны.", results: [{ summary: "Подсчитаны только доступные строки.",
-        assessment: "partially_satisfied", evidence: ["call-1"] }], message: "" }
+      ? { action: "finish", reason: "Исходные данные неполны.", outcome: "partial", results: [{ criterion: "Подсчитаны только доступные строки.",
+        assessment: "partially_satisfied", evidence: ["E1"] }], message: "" }
       : action === "reflection"
       ? { action: "reflection", reason: "Нужно уточнить диапазон.", decision: "Проверить заголовки таблицы.", message: "" }
       : { action: "execute", reason: "Нужно прочитать таблицу.", tool_calls: [{ name: "core.read", arguments: {} }], message: "" };
@@ -676,7 +746,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     const nodes = descendants(content), info = nodes.find(node => node.className === "model-context-decision");
     assert.equal(info.open, true, "an empty v8 message exposes its recorded action and decision basis");
     assert.ok(descendants(info).some(node => node.textContent === inner.reason));
-    assert.ok(descendants(info).some(node => node.textContent === (action === "finish" ? inner.results[0].summary :
+    assert.ok(descendants(info).some(node => node.textContent === (action === "finish" ? inner.results[0].criterion :
       action === "reflection" ? inner.decision : "core.read")));
     if (action === "finish") assert.ok(descendants(info).some(node => /Оценка модели: выполнено частично/.test(node.textContent)));
     assert.equal(decision.mounts.some(mount => mount.kind === "markdown" && !mount.options.text), false);

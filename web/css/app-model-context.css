@@ -28,7 +28,7 @@
 .model-context-toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
 .model-context-search { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
 .model-context-search input { flex: 1; width: 0; }
-.shell .model-context-dialog .model-context-tabs { flex: 0 0 auto; width: 100%; max-width: 888px; margin: 0 auto; gap: 18px; padding: 0 16px; flex-wrap: nowrap; }
+.shell .model-context-dialog .model-context-tabs { flex: 0 0 auto; width: 100%; max-width: 888px; margin: 0 auto; gap: 0 18px; padding: 0 16px; flex-wrap: wrap; }
 .model-context-tabs > button { font-size: 12px; }
 .model-context-status { flex: 0 0 auto; width: 100%; max-width: 888px; max-height: min(16dvh, 72px); overflow-y: auto; margin-inline: auto; padding: 10px 16px; font-size: var(--text-xs); line-height: 1.55; color: var(--ink-muted); overflow-wrap: anywhere; white-space: pre-line; border-bottom: 1px solid var(--line); }
 .model-context-status:empty { display: none; }
@@ -159,7 +159,7 @@
 @container request (max-width: 270px) {
   .model-context-head { flex-wrap: wrap; }
   .model-context-head select { margin-left: 36px; flex-basis: calc(100% - 36px); width: auto; }
-  .shell .model-context-dialog .model-context-tabs { gap: 12px; overflow-x: auto; }
+  .shell .model-context-dialog .model-context-tabs { gap: 0 12px; }
 }
 @media (max-width: 1100px) { .shell #tab-chat .chat-workspace .chat-inspector.is-request-wide { width: min(var(--inspector-width), 92%); } }
 @media (max-width: 620px) { .shell #tab-chat .chat-workspace .chat-inspector.is-request.is-request-wide { width: 100%; } }

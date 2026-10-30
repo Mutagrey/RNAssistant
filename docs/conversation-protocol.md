@@ -857,13 +857,35 @@ separately as local originals, never substituted into the displayed request. Old
 requests without provenance show unknown attribution. Diagnostic source references
 and labels never enter provider JSON and do not change context selection or execution.
 
-Saved request events also derive chat-local `Q`, `O`, `E` and `R@v` display aliases
-from their append-only sequence and exact trace links. The resource key includes its
+Saved request events derive chat-local `Q` and `O` diagnostic aliases from their
+append-only sequence and exact trace links. `T`, eligible `E` and `R@v` bindings
+come from canonical runtime records; a trace-only ID cannot allocate them. The resource key includes its
 authority scope and canonical URI; `v` numbers distinct exact revisions of that
 key, including a new revision created by restoring identical bytes. Aliases remain
 stable across pagination/restart and are never model-facing resource addresses.
 The alias search resolves only within the addressed chat and opens the latest saved
-request containing the operation, evidence or resource revision. The Resources tab
+request containing the operation, evidence or resource revision.
+
+The **Доказательства** tab (`ModelContextEvidenceProjection`, 2026-10-30) explicitly
+requests canonical call/terminal metadata before the selected request. It includes
+that run's accepted calls, calls named by its receipt and historical evidence cited
+by its accepted finish. Later bindings cannot change earlier request facts.
+`ToolExecutionProgress` supplies outcome and eligibility: pending approval is not
+terminal, service calls retain T without E, and unknown effects remain unknown.
+No accepted-call/result bodies are hydrated, no admission/authority checks are
+rerun and no new store is created. Ordinary message/resource queries skip this work.
+
+E delivery requires the same issued alias and a uniquely attributed included wire
+position. Explicit exclusion is separate; absent, ambiguous or Unknown provenance
+stays unknown. A summary may deliver E without delivering the source body.
+Message links open the exact saved wire position; resource and execution-history
+links retain chat/workspace scope. Finish criteria come only from canonical v8
+`assistant.message.appended` decisions bound to the selected run/model attempt.
+The latest request in a repair/fallback attempt owns its accepted decision.
+Parser acceptance, provider text and runtime summaries do not establish accepted
+finish. Its outcome/assessments remain model judgments, separate from tool outcomes.
+
+The Resources tab
 shows exact URI/revision, scope, observed coverage, observation completeness and
 body-delivery evidence from that request. It compares the revision with the current
 authority head only for the same chat, current document or catalog; old traces with

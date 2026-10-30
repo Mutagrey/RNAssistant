@@ -596,6 +596,7 @@ namespace RNAssistant.Harness
                 Test("model context: workspace diagnostic usage", WorkspaceDiagnosticUsage),
                 Test("model context: bound original source and pagination", ModelContextSourceAndPagination),
                 Test("model context: stable aliases and resource inspector", ModelContextStableAliases),
+                Test("model context: canonical execution evidence", ModelContextExecutionEvidence),
                 Test("model context: exact read message cost", ModelContextExactReadMessageCost),
                 Test("model context: saved request composition", ModelContextSavedRequestComposition),
                 Test("model context: full preview", ModelContextFullPreview),
