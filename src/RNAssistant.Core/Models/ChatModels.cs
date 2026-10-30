@@ -119,7 +119,9 @@ namespace RNAssistant.Core.Models
         public RunViewState RunViewState { get; set; }
         public string ToolCallId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
-        public RNAssistant.Core.ModelProtocol.ModelReference ExecutionReference { get; set; }
+        public RNAssistant.Core.ModelProtocol.ModelReference ToolCallReference { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.ModelProtocol.ModelReference EvidenceReference { get; set; }
         public List<RNAssistant.Core.ModelProtocol.ModelResourceReference> ResourceModelReferences { get; set; } =
             new List<RNAssistant.Core.ModelProtocol.ModelResourceReference>();
         // Runtime origin of a terminal result; not model-facing or an argument.
@@ -309,7 +311,14 @@ namespace RNAssistant.Core.Models
         public int FormatVersion { get; set; }
         public long Revision { get; set; }
         // Replay-derived high water; removals/compaction never lower it.
-        public long ExecutionReferenceSequence { get; set; }
+        public long ToolCallReferenceSequence { get; set; }
+        public long EvidenceReferenceSequence { get; set; }
+        // Missing revision in an existing stream is legacy, never implicitly upgraded.
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public int ReferenceContractVersion { get; set; } = RNAssistant.Core.ModelProtocol.ConversationResponse.ReferenceContractVersion;
+        [JsonIgnore]
+        public bool UsesCurrentProtocol { get { return FormatVersion == CurrentFormatVersion &&
+            ReferenceContractVersion == RNAssistant.Core.ModelProtocol.ConversationResponse.ReferenceContractVersion; } }
         // Derived from message and saved-request bindings in the same event stream.
         public List<RNAssistant.Core.ModelProtocol.ModelResourceReference> ResourceReferenceIndex { get; set; } =
             new List<RNAssistant.Core.ModelProtocol.ModelResourceReference>();

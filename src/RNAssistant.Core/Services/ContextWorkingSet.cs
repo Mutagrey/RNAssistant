@@ -27,7 +27,7 @@ namespace RNAssistant.Core.Services
                 .ToDictionary(group => group.Key, group => group.Last(), StringComparer.Ordinal);
             var activeIds = new HashSet<string>(active.Select(item => item.Id), StringComparer.Ordinal);
             var runId = session.LastRun?.RunId ?? history.LastOrDefault(item => !string.IsNullOrEmpty(item.RunId))?.RunId;
-            var latestTerminal = history.LastOrDefault(message => message.RunId == runId && message.ExecutionReference != null &&
+            var latestTerminal = history.LastOrDefault(message => message.RunId == runId && message.ToolCallReference != null &&
                 message.Activity == null && message.AcceptedCallOrigin == null && message.ToolResultProtocolVersion != 0);
             var selected = new HashSet<string>(StringComparer.Ordinal);
             var laterSuccesses = new List<ChatMessage>();

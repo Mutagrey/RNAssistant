@@ -40,8 +40,10 @@ namespace RNAssistant.Office.Services
             var terminals = session.Messages.Where(m => m != null && m.RunId == runId && m.ToolCallId == toolCallId &&
                 m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && m.Activity == null && m.AcceptedCallOrigin == null).ToArray();
             var terminal = terminals.Length == 1 && terminals[0].ToolName == activity.ToolId ? terminals[0] : null;
-            result.ExecutionReference = terminal?.ExecutionReference?.Kind == ModelReferenceKind.Execution
-                ? terminal.ExecutionReference.Alias : null;
+            result.ToolCallReference = terminal?.ToolCallReference?.Kind == ModelReferenceKind.ToolCall
+                ? terminal.ToolCallReference.Alias : null;
+            result.EvidenceReference = terminal?.EvidenceReference?.Kind == ModelReferenceKind.Evidence
+                ? terminal.EvidenceReference.Alias : null;
             var effect = activity.ExecutionEvidence?.Effect;
             var changes = effect == ToolEffectEvidence.VerifiedChange || effect == ToolEffectEvidence.VerifiedNoChange ||
                 effect == ToolEffectEvidence.Unknown || activity.ToolId == ResourceMutationToolCatalog.Patch ? _changes?.Invoke(toolCallId) : null;

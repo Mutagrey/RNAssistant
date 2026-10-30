@@ -122,6 +122,7 @@ namespace RNAssistant.Core.Tools
                     ["independentLocalRead"] = policy.IndependentLocalRead,
                     ["allowedModes"] = new JArray(policy.AllowedModes),
                     ["executesCode"] = policy.ExecutesCode,
+                    ["evidenceEligibility"] = policy.EvidenceEligibility.ToString(),
                     ["riskLevel"] = policy.RiskLevel
                 },
                 ["binding"] = new JObject
@@ -147,7 +148,7 @@ namespace RNAssistant.Core.Tools
                 source.Policy.RequiresConfirmation,
                 source.Policy.IndependentLocalRead,
                 source.Policy.AllowedModes,
-                source.Policy.RiskLevel, source.Policy.ExecutesCode);
+                source.Policy.RiskLevel, source.Policy.ExecutesCode, source.Policy.EvidenceEligibility);
             var binding = new ToolBinding(
                 source.Binding.HandlerId,
                 source.Binding.EntryPoint,

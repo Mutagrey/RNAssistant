@@ -68,7 +68,7 @@ namespace RNAssistant.Core.Services
                 string.IsNullOrWhiteSpace(run.CurrentAction) ? summary.AssistantMessage : run.CurrentAction,
                 run.StartedUtc,
                 modelResults: finish?.Results.Select(claim => new ModelResultViewState(
-                    claim.Summary, claim.AssessmentName, claim.Evidence)),
+                    claim.Criterion, claim.AssessmentName, claim.Evidence)),
                 modelOutcome: finish?.Outcome.HasValue == true ? ConversationFinishContract.Name(finish.Outcome.Value) : null);
         }
 

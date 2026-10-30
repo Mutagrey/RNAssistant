@@ -47,7 +47,7 @@ namespace RNAssistant.Core.Llm
 
     public static partial class ModelDiagnosticScenarios
     {
-        public const int Revision = 2;
+        public const int Revision = 3;
         public static IReadOnlyList<string> Controls(string id)
         {
             return id == "A2" ? new[] { "A2-system" } : id == "C3" ? new[] { "C3-valid" } :

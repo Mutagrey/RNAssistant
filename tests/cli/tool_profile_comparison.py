@@ -43,9 +43,10 @@ def scripted_response(request, scenario, index):
             if isinstance(content, str) and (content.startswith('TOOL_RESULT:\n') or message['role'] == 'tool'):
                 result = json.loads(content.removeprefix('TOOL_RESULT:\n'))
                 if result.get('status') == 'ok':
-                    evidence.append(result['tool_call_id'])
+                    if result.get('evidence'):
+                        evidence.append(result['evidence'])
         result = dict(action='finish', reason='Report verified fixture outcomes.', outcome='completed', message='Готово.',
-                      results=[dict(summary='Requested file change verified.', evidence=evidence, assessment='satisfied')])
+                      results=[dict(criterion='Requested file change verified.', evidence=evidence, assessment='satisfied')])
     if request.get('response_format', {}).get('type') == 'json_schema':
         result = {'response': result}
     return json.dumps({'choices': [{'message': {'content': json.dumps(result, ensure_ascii=False)}}]}, ensure_ascii=False).encode()

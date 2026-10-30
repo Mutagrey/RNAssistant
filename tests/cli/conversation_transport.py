@@ -35,7 +35,7 @@ def finish(request, message="Finished.", assessment="satisfied", direct=False):
                 continue
             if not isinstance(receipt, dict):
                 continue
-            reference = receipt.get("tool_call_id", "")
+            reference = receipt.get("evidence", "")
             if str(receipt.get("status", receipt.get("outcome", ""))).lower() in ("ok", "error", "unknown") and re.fullmatch(r"E[1-9][0-9]*", reference):
                 evidence.append(reference)
                 last_outcome = str(receipt.get("status", receipt.get("outcome", ""))).lower()
@@ -43,7 +43,7 @@ def finish(request, message="Finished.", assessment="satisfied", direct=False):
         assessment = "not_satisfied"
     return {"action": "finish", "reason": "Report the observed outcome.",
             "outcome": {"satisfied": "completed", "partially_satisfied": "partial", "unverified": "unable_to_complete", "not_satisfied": "unable_to_complete"}[assessment],
-            "results": [{"summary": message, "evidence": [evidence[-1]] if evidence else [], "assessment": assessment}] if evidence or assessment != "satisfied" else [],
+            "results": [{"criterion": message, "evidence": [evidence[-1]] if evidence else [], "assessment": assessment}] if evidence or assessment != "satisfied" else [],
             "message": message}
 
 

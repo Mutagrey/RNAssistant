@@ -51,7 +51,7 @@ namespace RNAssistant.Core.Services
         }
         public static void RequireCurrentSession(ChatSession session)
         {
-            if (session == null || session.FormatVersion != ChatSession.CurrentFormatVersion)
+            if (session == null || !session.UsesCurrentProtocol)
                 throw new InvalidOperationException("This chat is read-only history. Create a new chat to continue.");
             For(session.Mode, session.MutationPolicy);
             if (string.Equals(Environment.GetEnvironmentVariable("RNA_DISABLE_UNIFIED_AGENT"), "1", StringComparison.Ordinal))
@@ -86,7 +86,7 @@ namespace RNAssistant.Core.Services
             if (policy == null) throw new ArgumentNullException(nameof(policy));
             var confirmation = !IsPlanningArtifact(id, binding) && (policy.RequiresConfirmation || policy.MayHaveSideEffects || policy.ExecutesCode);
             return new ToolPolicy(policy.Effect, policy.Verification, confirmation,
-                policy.IndependentLocalRead && !confirmation, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode);
+                policy.IndependentLocalRead && !confirmation, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode, policy.EvidenceEligibility);
         }
         public List<ToolCatalogEntry> SelectTools(IEnumerable<ToolCatalogEntry> tools)
         {

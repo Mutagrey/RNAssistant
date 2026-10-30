@@ -704,7 +704,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
+                ChatReadOnly = session != null && !session.UsesCurrentProtocol,
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments(),

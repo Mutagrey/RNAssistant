@@ -121,18 +121,18 @@ namespace RNAssistant.Core.ModelProtocol
             foreach (var token in results)
             {
                 var claim = token as JObject;
-                if (claim == null || claim.Properties().Any(property => property.Name != "summary" && property.Name != "evidence" && property.Name != "assessment"))
-                    return Fail(ConversationResponseError.InvalidFinishResults, "Each result contains only summary, evidence and assessment.");
+                if (claim == null || claim.Properties().Any(property => property.Name != "criterion" && property.Name != "evidence" && property.Name != "assessment"))
+                    return Fail(ConversationResponseError.InvalidFinishResults, "Each result contains only criterion, evidence and assessment.");
                 var evidence = claim["evidence"] as JArray;
-                if (!Nonblank(claim["summary"]) || evidence == null || evidence.Any(item => !Nonblank(item)))
-                    return Fail(ConversationResponseError.InvalidFinishResults, "Each result requires a nonblank summary and evidence array of nonblank strings.");
-                if (evidence.Values<string>().Distinct(StringComparer.Ordinal).Count() != evidence.Count)
+                if (!Nonblank(claim["criterion"]) || evidence == null || evidence.Any(item => !Nonblank(item)))
+                    return Fail(ConversationResponseError.InvalidFinishResults, "Each result requires a nonblank criterion and evidence array of nonblank strings.");
+                if (evidence.Values<string>().Distinct(StringComparer.OrdinalIgnoreCase).Count() != evidence.Count)
                     return Fail(ConversationResponseError.DuplicateEvidence, "Evidence references must be unique within each claim.");
                 ConversationAssessment assessment;
                 if (claim["assessment"] == null || claim["assessment"].Type != JTokenType.String ||
                     !ConversationResultClaim.TryReadAssessment((string)claim["assessment"], out assessment))
                     return Fail(ConversationResponseError.InvalidAssessment, "assessment must be satisfied, partially_satisfied, unverified or not_satisfied.");
-                claims.Add(new ConversationResultClaim((string)claim["summary"], evidence.Values<string>(), assessment));
+                claims.Add(new ConversationResultClaim((string)claim["criterion"], evidence.Values<string>(), assessment));
             }
             var contradiction = ConversationFinishContract.Contradiction(outcome, claims.Select(claim => claim.Assessment));
             if (contradiction != null) return Fail(ConversationResponseError.ContradictoryOutcome, contradiction);

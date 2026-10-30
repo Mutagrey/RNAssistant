@@ -35,6 +35,8 @@ def source_bodies(request):
             receipt = json.loads(content)
         except ValueError:
             continue
+        if isinstance(receipt, dict) and message.get("role") == "tool":
+            receipt = dict(receipt, tool_call_id=message["tool_call_id"])
         if not isinstance(receipt, dict) or "tool_call_id" not in receipt:
             continue
         receipts.append((index, receipt))

@@ -1,5 +1,13 @@
 # RNAssistant backlog
 
+## Kernel fixture: external unknown — 2026-10-30
+
+Owner: Core Agent safety tests. `kernel: external unknown` ожидает Failed для любого
+unknown, тогда как текущий opaque-action path допускает честный terminal outcome
+и сохраняет запрет небезопасного повтора. Падение совпадает на чистом d071bc50 и
+P2 working tree; соседний dedicated opaque-unknown test проходит. Сверить старый
+assertion с действующим guard-контрактом отдельно; P2 safety behavior не меняет.
+
 Здесь находится только незавершённая отложенная работа. Это не текущий план:
 рабочий baseline, приоритеты и открытое evidence находятся в [PROGRESS](PROGRESS.md),
 исторический порядок миграции — в [master plan](STABILIZATION_MASTER_PLAN.md),

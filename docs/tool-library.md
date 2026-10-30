@@ -1,5 +1,11 @@
 # Tool Library and capability truth
 
+Trusted `ToolPolicy.EvidenceEligibility` is `None` or `Eligible`; it participates in
+snapshot hashes, copies and policy drift checks. Capability search/schema reads,
+skill loading and resource find/search/outline publish no E reference. Other reads
+and mutations default to Eligible. Only a terminal runtime commit may issue E;
+a tool/model never supplies it. See [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+
 Текущий контракт Core, hunks и имён: [Text mutations](text-mutations.md).
 Текущий [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,

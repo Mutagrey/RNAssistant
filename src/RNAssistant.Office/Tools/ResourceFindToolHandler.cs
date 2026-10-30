@@ -20,7 +20,7 @@ namespace RNAssistant.Office.Tools
             ToolVerification.None,
             false,
             true,
-            new[] { "agent", "plan", "chat" });
+            new[] { "agent", "plan", "chat" }, evidenceEligibility: EvidenceEligibility.None);
         internal static readonly ToolBinding Binding =
             new ToolBinding("resources.find.v1");
 

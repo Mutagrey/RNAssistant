@@ -74,8 +74,9 @@ fixtures снимают exact wire чтений, patch, compaction и skills. Li
 по указанию пользователя отложены; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
 Минимальный [UI Diagnostics](model-endpoint-compatibility.md#diagnostics-ui--2026-10-30)
 позволяет запускать встроенные сценарии и читать результаты/HTTP прямо в настройках.
-Планы описывают целевое состояние: T/E separation и `criterion` ещё не текущий
-wire-контракт. После реализации P0–P6/D0–D5 они остаются историей; нормативное
+P2 ввёл [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3):
+T/E separation, eligibility, `criterion` и новый чат для старой истории.
+P3 composition, P4 materialization, P5 historical admission и P6 qualification ещё открыты. После реализации P0–P6/D0–D5 они остаются историей; нормативное
 поведение переносится в canonical documents ниже.
 
 | Область | Владелец текущего контракта |

@@ -44,7 +44,7 @@ namespace RNAssistant.Core.Tools
                 Id = id, Host = "Common", Name = name, Description = description,
                 ArgumentSchemaJson = schema, BuiltIn = true, Enabled = true,
                 Scope = "session", AgentCanRun = true,
-                Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, true, new[] { "agent", "plan" }),
+                Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, true, new[] { "agent", "plan" }, evidenceEligibility: EvidenceEligibility.None),
                 Binding = BindingFor(id)
             };
         }

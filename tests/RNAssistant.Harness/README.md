@@ -118,10 +118,12 @@ The historical [result matrix](../../docs/audits/tool-result-presentation-matrix
 records the earlier 91 static IDs and presentation paths; current counts are in
 the inventory above. Neither claims real Office execution for every handler.
 
-`model refs:` checks typed E/R labels, canonical/raw preservation, all result roles,
+`model refs:` checks separate T calls/eligible E terminals/R versions, criterion,
+case-insensitive lookup, revision-3 read-only legacy boundary, canonical/raw preservation, all result roles,
 atomic allocation and stale writers, failed commits, restart/removal, resource versions
 and scope, shared message/request allocation, stale trace refusal and unbound historical
-rows, hidden/pending/GUID/type refusal, correction without replay, mandatory
+rows, hidden/pending/GUID/type refusal, service-only empty evidence,
+failed-result eligibility/contradictions, correction without replay, mandatory
 compacted receipts, repair/fallback and the successful request's delivered set.
 Source-block cases check exact scope/revision binding beside coverage, multiple slices,
 reordered bindings, missing/ambiguous evidence, omitted bodies and literal source bytes;

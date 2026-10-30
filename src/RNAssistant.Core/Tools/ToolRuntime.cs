@@ -278,7 +278,7 @@ namespace RNAssistant.Core.Tools
             // kernel could mistake an auto-confirmed repeat for a fresh user approval.
             return new ToolPolicySnapshot(captured.ToolId, captured.Revision,
                 new ToolPolicy(policy.Effect, policy.Verification, false,
-                    policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode));
+                    policy.IndependentLocalRead, policy.AllowedModes, policy.RiskLevel, policy.ExecutesCode, policy.EvidenceEligibility));
         }
 
         private ToolExecutionRecord CompleteMutation(string attemptId, ToolExecutionRecord record, string preparedStateJson)

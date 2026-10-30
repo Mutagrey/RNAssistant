@@ -95,7 +95,7 @@ def main():
             report = json.loads((root / "pass/report.json").read_text())
             assert len(report["Results"]) == 23
             assert report["NativeGeneration"] == report["V8Parser"] == report["Sse"] == "Pass"
-            assert report["TargetCriterion"] == "NotRun" and report["FinishResultField"] == "summary"
+            assert report["TargetCriterion"] == "Pass" and report["FinishResultField"] == "criterion"
             for raw, response, row in zip(requests, responses, report["Results"]):
                 assert (root / "pass" / row["RequestFile"]).read_bytes() == raw
                 captured = (root / "pass" / row["ResponseFile"]).read_bytes()

@@ -939,18 +939,17 @@ is introduced. Automatic approval is a separate explicit per-run opt-in (see
 pending decisions retain their original policy. Windows terminal behavior remains
 unqualified by the Mac PTY tests.
 
-## Typed model references — 2026-10-26
+## Typed model references — 2026-10-30
 
-[ADR-0018](decisions/ADR-0018-typed-model-references.md) adds immutable
-`ExecutionReference` to accepted call metadata in the same pre-dispatch commit.
-`ResourceModelReferences` records scoped exact observations on message writes and
-LlmRequest events. Both use one allocator; a request append updates the caller's
-index only after success. Requests participate in JSON/SQLite reference replay.
-`ExecutionReferenceSequence` and `ResourceReferenceIndex` are replay-derived caches,
-not independent metadata commits. Message removal preserves their high water/bindings.
-Both JSON replay and SQLite projection apply the same reference reducers. Forks copy
-these projections with history; all resolution remains bound to the destination chat.
-Canonical IDs/origins/outcomes and raw attempt payloads remain unchanged. Current
-chat format stays 8; formats 6/7 remain read-only. Intermediate 9/10 and older experimental
-reference shapes have no compatibility path. Incompatible histories are refused without
-deleting data, relabeling old events or implicitly upgrading/downgrading streams.
+`ToolCallReference` (T) is allocated in accepted-call commits; `EvidenceReference`
+(E) only in eligible terminal execution commits. Trusted eligibility is captured in
+`ExecutionProgress`; pending confirmation cannot issue E. `ToolCallReferenceSequence`
+and `EvidenceReferenceSequence` are independent replay-derived high waters. JSON and
+SQLite share reducers; removal, compaction and forks preserve counters and bindings.
+SQLite projection version 5 rebuilds only derived state. Resource allocation is unchanged.
+
+New format-8 chats persist `ReferenceContractVersion=3`. Earlier/missing revisions
+remain read-only; incompatible continuations are not hydrated/recovered and no write
+or implicit upgrade is permitted. Canonical IDs, events/CAS and old raw bodies remain
+untouched. See [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+Windows/Office/WebView2 qualification remains open.

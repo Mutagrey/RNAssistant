@@ -98,6 +98,9 @@ namespace RNAssistant.Core.Models
     // Diagnostic provenance only; never serialized into provider messages.
     public sealed class ContextMessagePresentation
     {
+        // The compiler carries the issued terminal alias; roles alone cannot distinguish a call from a folded receipt.
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public RNAssistant.Core.ModelProtocol.ModelReference EvidenceReference { get; set; }
         public int? MessageIndex { get; set; }
         public string SourceMessageId { get; set; }
         public string Role { get; set; }

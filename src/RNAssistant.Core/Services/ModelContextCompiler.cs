@@ -571,7 +571,7 @@ namespace RNAssistant.Core.Services
                 atom.Kind = "repeated-read";
                 FoldInteraction(atom, new ChatMessage {
                     Id = result.Id, Role = "assistant", ProtocolMessage = true,
-                    ToolName = wire.Name, ToolCallId = wire.ToolCallId, ExecutionReference = result.ExecutionReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
+                    ToolName = wire.Name, ToolCallId = wire.ToolCallId, ToolCallReference = result.ToolCallReference, EvidenceReference = result.EvidenceReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
                     RunId = result.RunId,
                     CompletedOperation = new CompletedToolOperation { ToolCallId = wire.ToolCallId,
                         ToolName = wire.Name, Status = wire.Result.Status, Message = "Identical complete read retained in this request." },
@@ -1111,6 +1111,7 @@ namespace RNAssistant.Core.Services
                     SourceMessageId = message.Id, Role = message.Role, Kind = message == atom.Narration ? "assistant-update" : atom.Kind,
                     Presentation = presentation, OriginalPayload = source?.ResultPayload,
                     ToolCallId = message.CompletedOperation?.ToolCallId ?? message.ToolCallId,
+                    EvidenceReference = message.AcceptedCallOrigin == null ? message.EvidenceReference : null,
                     EvidenceLinks = EvidenceLinks(evidence, item =>
                         message.SyntheticResourceObservation && atom.HydratedPayloadMessageIds.Contains(message.Id) &&
                         message.ResultPayload != null &&
@@ -1141,6 +1142,7 @@ namespace RNAssistant.Core.Services
                     Presentation = ContextPresentationKind.Excluded, OriginalPayload = source.ResultPayload,
                     ExclusionKind = kind,
                     ToolCallId = source.CompletedOperation?.ToolCallId ?? source.ToolCallId,
+                    EvidenceReference = source.AcceptedCallOrigin == null ? source.EvidenceReference : null,
                     EvidenceLinks = EvidenceLinks(source.ResourceEvidence, item => false),
                     Reason = ExclusionReason(kind) });
             }
@@ -1278,7 +1280,7 @@ namespace RNAssistant.Core.Services
             return new ChatMessage {
                 Id = result.Id, RunId = result.RunId, CreatedUtc = result.CreatedUtc,
                 Role = "assistant", ProtocolMessage = true, ToolCallId = wire.ToolCallId,
-                ExecutionReference = result.ExecutionReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
+                ToolCallReference = result.ToolCallReference, EvidenceReference = result.EvidenceReference, ResourceModelReferences = result.ResourceModelReferences.ToList(),
                 ToolName = wire.Name, ResourceEffect = effect, ExecutionProgress = result.ExecutionProgress, CompletedOperation = fact,
                 Content = "TOOL_INTERACTION (completed causal frame; historical outcome, not current source):\n" +
                     JsonConvert.SerializeObject(new {

@@ -34,7 +34,7 @@ namespace RNAssistant.Core.Tools
             return new ToolCatalogEntry { Id = ToolId, Name = "Подключить навык", Host = "Common", Scope = "session",
                 Description = "Select or remove one published skill for this chat. Call alone; complete instructions and compatible tools take effect next request. Reuse current SELECTED_SKILL; load grants no mutation permission.",
                 ArgumentSchemaJson = "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"description\":\"Exact published skill id.\",\"maxLength\":128},\"action\":{\"type\":\"string\",\"description\":\"Load a compatible procedure, or remove a selection to resolve a conflict. Takes effect next request.\",\"enum\":[\"load\",\"remove\"],\"default\":\"load\"}},\"required\":[\"id\"],\"additionalProperties\":false}",
-                BuiltIn = true, Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent", "plan" }),
+                BuiltIn = true, Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None, false, false, new[] { "agent", "plan" }, evidenceEligibility: EvidenceEligibility.None),
                 Binding = Binding };
         }
 

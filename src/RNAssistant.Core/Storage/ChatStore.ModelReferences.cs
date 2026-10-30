@@ -6,19 +6,33 @@ using Newtonsoft.Json.Linq;
 using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Persistence;
+using RNAssistant.Core.Tools;
 
 namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
-        private static void ApplyExecutionReference(JObject root, JToken message)
+        private static void ApplyToolCallReference(JObject root, JToken message)
         {
-            var reference = message?["ExecutionReference"]?.ToObject<ModelReference>();
+            var reference = message?["ToolCallReference"]?.ToObject<ModelReference>();
             if (reference == null) return;
-            if (reference.Kind != ModelReferenceKind.Execution ||
-                reference.Ordinal <= ((long?)root["ExecutionReferenceSequence"] ?? 0))
+            if (reference.Kind != ModelReferenceKind.ToolCall ||
+                reference.Ordinal <= ((long?)root["ToolCallReferenceSequence"] ?? 0))
                 throw new JsonException("Duplicate or out-of-order execution reference.");
-            root["ExecutionReferenceSequence"] = reference.Ordinal;
+            root["ToolCallReferenceSequence"] = reference.Ordinal;
+        }
+
+        private static void ApplyEvidenceReference(JObject root, JToken message)
+        {
+            var reference = message?["EvidenceReference"]?.ToObject<ModelReference>();
+            if (reference == null) return;
+            var progress = message["ExecutionProgress"]?.ToObject<ToolExecutionProgress>();
+            if (reference.Kind != ModelReferenceKind.Evidence || progress == null ||
+                progress.Outcome == ToolExecutionOutcome.AwaitingConfirmation ||
+                progress.EvidenceEligibility != EvidenceEligibility.Eligible ||
+                reference.Ordinal <= ((long?)root["EvidenceReferenceSequence"] ?? 0))
+                throw new JsonException("Invalid or duplicate terminal evidence reference.");
+            root["EvidenceReferenceSequence"] = reference.Ordinal;
         }
 
         private static void ApplyResourceReferences(JObject root, JToken message)
@@ -89,7 +103,7 @@ namespace RNAssistant.Core.Storage
 
         private static ResourceReferenceAllocator AllocateTraceResourceReferences(ChatSession session, JToken data)
         {
-            if (session.FormatVersion != ChatSession.CurrentFormatVersion || data?.Type != JTokenType.Object) return null;
+            if (!session.UsesCurrentProtocol || data?.Type != JTokenType.Object) return null;
             var allocator = new ResourceReferenceAllocator(session.ResourceReferenceIndex);
             var links = data.ToObject<RNAssistant.Core.Llm.LlmTraceRecord>().ContextMessages;
             var bindings = (links ?? new List<ContextMessagePresentation>()).Where(item => item != null)
@@ -104,7 +118,7 @@ namespace RNAssistant.Core.Storage
 
         private static void AllocateResourceReferences(ChatSession session, ChatSession stored, ConversationCommit commit)
         {
-            if (session.FormatVersion != ChatSession.CurrentFormatVersion) return;
+            if (!session.UsesCurrentProtocol) return;
             var allocator = new ResourceReferenceAllocator(stored?.ResourceReferenceIndex ?? session.ResourceReferenceIndex);
             foreach (var write in commit.Messages)
             {
@@ -119,23 +133,47 @@ namespace RNAssistant.Core.Storage
 
         // Called under the existing document lock, after the revision check and
         // before serializing the single accepted-batch commit. No side journal.
-        private static void AllocateExecutionReferences(ChatSession session, ChatSession stored, ConversationCommit commit)
+        private static void AllocateToolCallReferences(ChatSession session, ChatSession stored, ConversationCommit commit)
         {
-            if (session.FormatVersion != ChatSession.CurrentFormatVersion) return;
+            if (!session.UsesCurrentProtocol) return;
             var accepted = (stored?.Messages ?? new List<ChatMessage>())
                 .Where(message => message.AcceptedCallOrigin != null)
                 .ToDictionary(message => message.ToolCallId, StringComparer.Ordinal);
-            var highWater = stored?.ExecutionReferenceSequence ?? session.ExecutionReferenceSequence;
+            var highWater = stored?.ToolCallReferenceSequence ?? session.ToolCallReferenceSequence;
+            var evidenceHighWater = stored?.EvidenceReferenceSequence ?? session.EvidenceReferenceSequence;
+            var evidence = new Dictionary<string, ModelReference>(StringComparer.Ordinal);
+            foreach (var message in stored?.Messages ?? new List<ChatMessage>())
+            {
+                if (message.EvidenceReference == null) continue;
+                var id = message.ToolCallId ?? message.Activity?.ToolCallId;
+                ModelReference previous;
+                if (id == null || message.EvidenceReference.Kind != ModelReferenceKind.Evidence ||
+                    evidence.TryGetValue(id, out previous) && previous.Alias != message.EvidenceReference.Alias)
+                    throw new InvalidOperationException("Ambiguous terminal evidence binding.");
+                evidence[id] = message.EvidenceReference;
+            }
             foreach (var write in commit.Messages.Where(write => write.Operation == SessionOperationTypes.ToolCallRecorded))
             {
                 var message = write.Message;
                 if (message.AcceptedCallOrigin == null || string.IsNullOrEmpty(message.ToolCallId) || accepted.ContainsKey(message.ToolCallId))
                     throw new InvalidOperationException("An accepted operation needs a new canonical call and origin.");
-                var reference = ModelReference.Create(ModelReferenceKind.Execution, checked(++highWater));
-                if (message.ExecutionReference != null && message.ExecutionReference.Alias != reference.Alias)
+                var reference = ModelReference.Create(ModelReferenceKind.ToolCall, checked(++highWater));
+                if (message.ToolCallReference != null && message.ToolCallReference.Alias != reference.Alias)
                     throw new InvalidOperationException("Accepted execution reference cannot be replaced.");
-                message.ExecutionReference = reference;
+                message.ToolCallReference = reference;
                 accepted.Add(message.ToolCallId, message);
+            }
+            foreach (var write in commit.Messages.Where(write => write.Operation == SessionOperationTypes.ToolExecutionFinished))
+            {
+                var message = write.Message;
+                var id = message.Activity?.ToolCallId;
+                var progress = message.ExecutionProgress;
+                if (id == null || !accepted.ContainsKey(id) || progress == null)
+                    throw new InvalidOperationException("Terminal evidence requires an accepted call and typed outcome.");
+                if (progress.Outcome == ToolExecutionOutcome.AwaitingConfirmation) continue;
+                if (evidence.ContainsKey(id)) throw new InvalidOperationException("A terminal evidence binding cannot be reissued.");
+                if (progress.EvidenceEligibility == EvidenceEligibility.Eligible)
+                    evidence.Add(id, ModelReference.Create(ModelReferenceKind.Evidence, checked(++evidenceHighWater)));
             }
             foreach (var write in commit.Messages)
             {
@@ -143,14 +181,22 @@ namespace RNAssistant.Core.Storage
                 ChatMessage call;
                 var callId = message.ToolCallId ?? message.Activity?.ToolCallId;
                 if (callId == null || !accepted.TryGetValue(callId, out call)) continue;
-                if (call.ExecutionReference == null || call.ExecutionReference.Kind != ModelReferenceKind.Execution)
+                if (call.ToolCallReference == null || call.ToolCallReference.Kind != ModelReferenceKind.ToolCall)
                     throw new InvalidOperationException("Accepted operation has no execution reference. Start a new chat.");
-                if (message.ExecutionReference != null && message.ExecutionReference.Alias != call.ExecutionReference.Alias)
+                if (message.ToolCallReference != null && message.ToolCallReference.Alias != call.ToolCallReference.Alias)
                     throw new InvalidOperationException("Execution reference is immutable.");
-                message.ExecutionReference = call.ExecutionReference;
+                message.ToolCallReference = call.ToolCallReference;
+                ModelReference terminal;
+                evidence.TryGetValue(callId, out terminal);
+                // Accepted calls never become evidence retroactively. Only their terminal result/receipt does.
+                if (message.AcceptedCallOrigin != null) terminal = null;
+                if (message.EvidenceReference != null && message.EvidenceReference.Alias != terminal?.Alias)
+                    throw new InvalidOperationException("Evidence reference is immutable and requires a trusted terminal result.");
+                message.EvidenceReference = terminal;
             }
             // This is a projection of accepted records, not a separately written counter.
-            session.ExecutionReferenceSequence = highWater;
+            session.ToolCallReferenceSequence = highWater;
+            session.EvidenceReferenceSequence = evidenceHighWater;
         }
     }
 }

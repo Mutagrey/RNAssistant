@@ -970,12 +970,14 @@ namespace RNAssistant.Core.Storage
             {
                 throw new ChatConcurrencyException("Chat was changed by another RNAssistant instance. Reload the chat before saving again.");
             }
+            if (stored != null && (!stored.UsesCurrentProtocol || stored.ReferenceContractVersion != session.ReferenceContractVersion))
+                throw new InvalidOperationException("This chat uses an earlier reference contract and is read-only. Create a new chat to continue.");
             if (!exists && session.Revision > 0)
             {
                 throw new ChatConcurrencyException("Chat storage changed while this session was open. Reload the chat before saving again.");
             }
 
-            AllocateExecutionReferences(session, stored, commit);
+            AllocateToolCallReferences(session, stored, commit);
             AllocateResourceReferences(session, stored, commit);
             var previousRevision = session.Revision;
             var previousUpdatedUtc = session.UpdatedUtc;
@@ -1010,7 +1012,8 @@ namespace RNAssistant.Core.Storage
                             new JObject { ["Id"] = id })));
                         projectedAfter["Messages"] = projectedBefore["Messages"]?.DeepClone() ?? new JArray();
                         projectedAfter["ResourceReferenceIndex"] = projectedBefore["ResourceReferenceIndex"]?.DeepClone() ?? new JArray();
-                        projectedAfter["ExecutionReferenceSequence"] = projectedBefore["ExecutionReferenceSequence"]?.DeepClone() ?? new JValue(0L);
+                        projectedAfter["ToolCallReferenceSequence"] = projectedBefore["ToolCallReferenceSequence"]?.DeepClone() ?? new JValue(0L);
+                        projectedAfter["EvidenceReferenceSequence"] = projectedBefore["EvidenceReferenceSequence"]?.DeepClone() ?? new JValue(0L);
                         var replay = new ProjectionReplayState(projectedAfter);
                         ApplyOperations(projectedAfter, writes, replay);
                         replay.Materialize(projectedAfter);

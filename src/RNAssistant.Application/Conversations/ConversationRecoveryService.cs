@@ -24,7 +24,7 @@ namespace RNAssistant.Application.Conversations
             Func<ChatSession, ChatSession> interrupt)
         {
             if (interrupt == null) throw new ArgumentNullException(nameof(interrupt));
-            if (current == null || current.FormatVersion != ChatSession.CurrentFormatVersion) return current;
+            if (current == null || !current.UsesCurrentProtocol) return current;
             if (observed != null &&
                 (observed.Id != current.Id || observed.Host != current.Host ||
                  observed.WorkspaceId != current.WorkspaceId || observed.DocumentKey != current.DocumentKey ||

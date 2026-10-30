@@ -42,7 +42,7 @@ namespace RNAssistant.Application.Conversations
         {
             if (session == null) throw new ArgumentNullException(nameof(session));
             if (port == null) throw new ArgumentNullException(nameof(port));
-            if (session.FormatVersion != ChatSession.CurrentFormatVersion || _work.IsClosing ||
+            if (!session.UsesCurrentProtocol || _work.IsClosing ||
                 port.IsClosing || _runs.IsRunning(session.Id) || !_inbox.TryStartWorker(session)) return;
             try
             {

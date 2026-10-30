@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## V8 P2: T/E/R, criterion и reference revision 3 — 2026-10-30
+
+Owner: Core ChatStore/ToolPolicy/ModelProtocol; Office/Workspace/Inspector — consumers.
+T назначается при принятии вызова, E — отдельно при eligible terminal result.
+Discovery/schema/skill loading не получают E; failed/unknown eligible результаты
+можно цитировать для честных ограничений. T/E counters сохраняются после restart,
+удаления видимой истории и compaction; fork переносит обе последовательности.
+Finish использует criterion, lookup ссылок регистронезависим. Native wire содержит
+парные T без EXECUTION_REFERENCE и повторного content.tool_call_id. Canonical
+IDs/events/CAS и default transport не менялись.
+
+Format 8 теперь явно хранит ReferenceContractVersion=3; старые/непомеченные чаты
+читаются без запуска continuation и требуют нового чата. Автомиграции нет.
+Prompt schema 59, diagnostics scenario revision 3; A4 проверяет criterion.
+Проверены 8 model-refs cases, standalone codec 180 cases/2340 assertions,
+CLI build, 23 synthetic diagnostics и finish smoke в json_object/json_schema.
+9 v8 recovery checks и browser Inspector layout также прошли.
+Kernel suite: 58/59; external-unknown assertion так же падает на чистом d071bc50,
+записан отдельно в BACKLOG. Unknown-effect guards не менялись.
+
+Следующий этап — P3: компактные инструкции/runtime context, устранение дублей skills
+и schemas. P4 chronological bodies и P5 cross-run historical citations/оптимизация
+admission остаются открыты: P2 пока допускает E только текущего run. P6/full Inspector,
+реальная модель и Windows/Office/WebView2 qualification также открыты.
+[Текущий контракт](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+
 ## V8 Diagnostics: минимальный UI — 2026-10-30
 
 Предыдущий headless/context baseline закоммичен: `990c795f`.

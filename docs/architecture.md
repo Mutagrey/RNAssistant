@@ -315,6 +315,15 @@ PascalCase aliases. Embedded Core projections retain their declared wire shape;
 the remaining projection-specific adapters are tracked in D03 / MIGRATION_MAP.
 Windows/Office/WebView2 delivery is a separate qualification gate.
 
+## Reference contract revision 3
+
+Core ChatStore allocates chat-wide T call references and separate eligible E terminal
+references in existing commits. Core ToolPolicy owns eligibility; ModelProtocol owns
+`criterion`, reference lookup and wire-only T/E/R projection. Office/Workspace are
+consumers. Native IDs pair literally without duplicate content fields. Canonical
+IDs/events/CAS stay unchanged. Old format-8 chats are read-only under the explicit
+reference revision boundary; see [the current contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+
 ## Important boundaries
 
 - Controller files coordinate bridge requests; reusable behavior stays in services and executor logic stays in `RNAssistant.Office/Tools`.

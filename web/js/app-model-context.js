@@ -279,7 +279,7 @@
     if (coverage.fields && coverage.fields.length) parts.push(coverage.fields.join(", "));
     return parts.join(" · ");
   }
-  function deliveredSource(c, entry, link, selected, content) {
+  function deliveredSource(c, entry, link, selected, content, wireCallId) {
     if (c.mode !== "actual" || link.BodyIncludedInMessage !== true || !selected || !selected.alias ||
         typeof content !== "string" || !window.RNAssistantToolResultPresentation) return null;
     try {
@@ -292,7 +292,8 @@
       } else {
         var result = JSON.parse(content.indexOf("TOOL_RESULT:\n") === 0 ? content.slice(13) : content);
         if (result.name !== "core.read" || result.status !== "ok" ||
-            result.tool_call_id !== alias(c, "operations", entry.ToolCallId)) return null;
+            (wireCallId != null ? result.tool_call_id != null || wireCallId !== alias(c, "operations", entry.ToolCallId) :
+              result.tool_call_id !== alias(c, "operations", entry.ToolCallId))) return null;
         data = result.data;
         if (!data || data.kind !== "resource-read" || data.representation !== link.View ||
             typeof data.text !== "string" && !data.table && !data.tree) return null;
@@ -308,10 +309,10 @@
         coverage: data.sourceCoverage || data.coverage, excerpt: excerpt, excerptTruncated: text != null && excerpt.length < text.length };
     } catch (_) { return null; } // Exact raw message remains available without an inferred label.
   }
-  function sourceLinks(c, parent, entry, key, saved, content) {
+  function sourceLinks(c, parent, entry, key, saved, content, wireCallId) {
     (entry.EvidenceLinks || []).filter(Boolean).forEach(function (link, index) {
       var selected = resourceFor(c, link), resource = link.Resource || {}, metadata = link.ReadMetadata;
-      var preview = deliveredSource(c, entry, link, selected, content);
+      var preview = deliveredSource(c, entry, link, selected, content, wireCallId);
       var row = sourceDisclosure(parent, preview ? window.RNAssistantToolResultPresentation.sourceLabel(preview) :
         selected && selected.alias ? "Ресурс " + selected.alias : resource.uri || link.EvidenceId || "Источник",
         link.BodyIncludedInMessage === true ? "Тело включено" : link.BodyIncludedInMessage === false ? "Тело не включено" : "Включение не установлено",
@@ -359,7 +360,7 @@
     }
     return row;
   }
-  function messageSources(c, parent, entry, key, saved, ambiguous, content) {
+  function messageSources(c, parent, entry, key, saved, ambiguous, content, wireCallId) {
     var counts = [];
     var links = entry && (entry.EvidenceLinks || []).filter(Boolean), parts = entry && (entry.Parts || []).filter(Boolean);
     if (links && links.length) counts.push("наблюдения: " + links.length);
@@ -371,7 +372,7 @@
       return;
     }
     if (entry.Reason) source.appendChild(el("p", entry.Reason, "model-context-note"));
-    sourceLinks(c, source, entry, key, saved, content);
+    sourceLinks(c, source, entry, key, saved, content, wireCallId);
     (entry.Parts || []).filter(Boolean).forEach(function (part, index) { partSource(source, part, key + "/part/" + index, saved); });
     if (!(entry.EvidenceLinks || []).length && !(entry.Parts || []).length && !entry.Reason)
       source.appendChild(el("p", "Сохранена только отметка представления; подробности источников отсутствуют.", "model-context-note"));
@@ -539,7 +540,7 @@
         var loaded = false;
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded || !live(c) || !detail.isConnected) return; loaded = true;
-          messageSources(c, body, entry, "message/" + index, saved, candidates.length > 1, contentValue);
+          messageSources(c, body, entry, "message/" + index, saved, candidates.length > 1, contentValue, role === "tool" ? decoded(field(parts, "tool_call_id")) : null);
           if (role === "assistant" && typeof contentValue === "string" && modelDecision(contentValue)) {
             modelMessage(c, body, contentValue);
           } else if (typeof contentValue === "string") {
@@ -554,6 +555,8 @@
             tokens.toLocaleString("ru-RU") + " токенов. Учтено один раз в составе запроса."));
           if (entry && entry.ToolCallId) metadata.appendChild(el("p", "Операция: " +
             (alias(c, "operations", entry.ToolCallId) ? alias(c, "operations", entry.ToolCallId) + " · " : "") + entry.ToolCallId));
+          if (entry && alias(c, "eligibleEvidence", entry.ToolCallId)) metadata.appendChild(el("p",
+            "Допустимое доказательство: " + alias(c, "eligibleEvidence", entry.ToolCallId)));
           if (Number.isSafeInteger(entry && entry.EstimatedWireMessageTokens) && entry.EstimatedWireMessageTokens >= 0)
             metadata.appendChild(el("p", "Оценка всего сериализованного read-сообщения: ≈ " +
               entry.EstimatedWireMessageTokens + " токенов (не измеренное usage)."));
@@ -692,8 +695,8 @@
         var outcomes = el("ul"), assessments = { satisfied: "выполнено", partially_satisfied: "выполнено частично",
           unverified: "не проверено", not_satisfied: "не выполнено" };
         decision.results.forEach(function (result) {
-          if (!result || typeof result.summary !== "string") return;
-          var row = el("li", result.summary);
+          if (!result || typeof result.criterion !== "string") return;
+          var row = el("li", result.criterion);
           if (typeof result.assessment === "string") row.appendChild(el("small",
             "Оценка модели: " + (assessments[result.assessment] || result.assessment), "model-context-result-assessment"));
           outcomes.appendChild(row);

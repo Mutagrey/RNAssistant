@@ -113,7 +113,7 @@ namespace RNAssistant.Office.Services
             bool refreshActiveProjection = false)
         {
             if (session == null) return null;
-            if (session.FormatVersion != ChatSession.CurrentFormatVersion) return session;
+            if (!session.UsesCurrentProtocol) return session;
             var run = session.LastRun;
             if (!ConversationRecoveryService.NeedsInterruption(run) && !refreshActiveProjection) return session;
             if (RunOwnershipProvider != null)

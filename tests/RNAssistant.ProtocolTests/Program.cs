@@ -83,10 +83,10 @@ internal static class Program
             Case("claim " + assessment, Finish(Claim(assessment)));
             Case("claim without refs " + assessment, Finish(Change(Claim(assessment), "evidence", new JArray())));
         }
-        Case("one terminal supports distinct claims", Finish(Claim("satisfied"), Change(Claim("unverified"), "summary", "Another claim")));
+        Case("one terminal supports distinct claims", Finish(Claim("satisfied"), Change(Claim("unverified"), "criterion", "Another claim")));
         // Local shape validation deliberately cannot resolve whether this terminal exists.
         Case("unknown evidence is kernel concern", Finish(Change(Claim("unverified"), "evidence", new JArray("foreign-call"))));
-        foreach (var field in new[] { "summary", "evidence", "assessment" })
+        foreach (var field in new[] { "criterion", "evidence", "assessment" })
         {
             var code = field == "assessment" ? "invalid_assessment" : "invalid_finish_results";
             Case("claim missing " + field, Finish(Remove(Claim("satisfied"), field)), code);
@@ -94,10 +94,11 @@ internal static class Program
         }
         foreach (var bad in new JToken[] { JValue.CreateNull(), new JArray(), new JValue("C1") })
             Case("bad claim " + bad.Type, Finish(bad), "invalid_finish_results");
-        Case("criterion forbidden", Finish(Change(Claim("satisfied"), "criterion", "C1")), "invalid_finish_results");
-        Case("empty summary", Finish(Change(Claim("satisfied"), "summary", " \t")), "invalid_finish_results");
+        Case("legacy summary forbidden", Finish(Change(Claim("satisfied"), "summary", "Old result")), "invalid_finish_results");
+        Case("empty criterion", Finish(Change(Claim("satisfied"), "criterion", " \t")), "invalid_finish_results");
         foreach (var bad in new JToken[] { new JValue("call-1"), new JArray(" "), new JArray(1), new JArray(JValue.CreateNull()) })
             Case("bad evidence " + bad.ToString(Formatting.None), Finish(Change(Claim("satisfied"), "evidence", bad)), "invalid_finish_results");
+        Case("duplicate evidence case", Finish(Change(Claim("satisfied"), "evidence", new JArray("E1", "e1"))), "duplicate_evidence");
         Case("duplicate evidence", Finish(Change(Claim("satisfied"), "evidence", new JArray("call-1", "call-1"))), "duplicate_evidence");
         foreach (var bad in new JToken[] { new JValue("ok"), new JValue("Satisfied"), new JValue(0) })
             Case("bad assessment " + bad, Finish(Change(Claim("satisfied"), "assessment", bad)), "invalid_assessment");
@@ -285,7 +286,7 @@ internal static class Program
     private static JObject Call(string name)
     { return new JObject { ["name"] = name, ["arguments"] = new JObject { ["kind"] = "sheets" } }; }
     private static JObject Claim(string assessment)
-    { return new JObject { ["summary"] = "Sheet inspected", ["evidence"] = new JArray("call-1"), ["assessment"] = assessment }; }
+    { return new JObject { ["criterion"] = "Sheet inspected", ["evidence"] = new JArray("call-1"), ["assessment"] = assessment }; }
     private static JObject Finish(params JToken[] claims)
     {
         var root = Change(Envelope("finish"), "results", new JArray(claims));

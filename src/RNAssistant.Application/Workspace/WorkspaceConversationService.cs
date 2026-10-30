@@ -134,7 +134,7 @@ namespace RNAssistant.Runtime
         internal ChatSession RefreshSession(WorkspaceDescriptor workspace, string sessionId)
         {
             var observed = GetSession(workspace, sessionId);
-            if (observed == null || observed.FormatVersion != ChatSession.CurrentFormatVersion ||
+            if (observed == null || !observed.UsesCurrentProtocol ||
                 !ConversationRecoveryService.NeedsInterruption(observed.LastRun)) return observed;
 
             IDisposable lease;
@@ -145,7 +145,7 @@ namespace RNAssistant.Runtime
                 // Missing IPC is not proof of abandonment. The exclusive run lease
                 // and a fresh canonical cursor fence this recovery from a live/new run.
                 var current = GetSession(workspace, sessionId);
-                if (current != null && current.FormatVersion == ChatSession.CurrentFormatVersion &&
+                if (current != null && current.UsesCurrentProtocol &&
                     current.LastRun?.RunId == observed.LastRun.RunId &&
                     ConversationEventFeed.Cursor(current) == ConversationEventFeed.Cursor(observed))
                 {
@@ -164,7 +164,7 @@ namespace RNAssistant.Runtime
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was not found.");
-                if (session.FormatVersion == ChatSession.CurrentFormatVersion)
+                if (session.UsesCurrentProtocol)
                 {
                     session = ConversationRecoveryService.ReconcileFenced(session, session, InterruptAbandonedRun);
                     _conversationInbox.ReconcileAcceptedDelivery(session);
@@ -192,7 +192,7 @@ namespace RNAssistant.Runtime
             {
                 var source = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (source == null) throw new InvalidOperationException("Workspace session was not found.");
-                if (source.FormatVersion != ChatSession.CurrentFormatVersion)
+                if (!source.UsesCurrentProtocol)
                     throw new InvalidOperationException("Create a current-format chat before branching history.");
                 RequireIdleSession(workspace, sessionId);
                 var index = source.Messages.FindIndex(message => message != null &&
@@ -243,7 +243,9 @@ namespace RNAssistant.Runtime
                     .Select(reference => reference.ExactKey), StringComparer.Ordinal);
                 fork.ResourceReferenceIndex = (source.ResourceReferenceIndex ?? new List<ModelResourceReference>())
                     .Where(reference => retainedReferences.Contains(reference.ExactKey)).ToList();
-                fork.ExecutionReferenceSequence = source.ExecutionReferenceSequence;
+                fork.ToolCallReferenceSequence = source.ToolCallReferenceSequence;
+                fork.EvidenceReferenceSequence = source.EvidenceReferenceSequence;
+                fork.ReferenceContractVersion = source.ReferenceContractVersion;
                 _chats.Commit(fork, new ConversationCommit());
                 return fork;
             }
@@ -257,7 +259,7 @@ namespace RNAssistant.Runtime
             {
                 var session = _workspaces.LoadSession(_chats, workspace, sessionId);
                 if (session == null) throw new InvalidOperationException("Workspace session was not found.");
-                if (session.FormatVersion != ChatSession.CurrentFormatVersion)
+                if (!session.UsesCurrentProtocol)
                     throw new InvalidOperationException("Old-format history is read-only.");
                 RequireIdleSession(workspace, sessionId);
                 var index = session.Messages.FindIndex(message => message != null &&
@@ -1322,7 +1324,8 @@ namespace RNAssistant.Runtime
                 var policy = new ToolPolicy(mutation ? ToolEffect.Write : ToolEffect.Read,
                     mutation ? ToolVerification.Tool : ToolVerification.None,
                     requiresConfirmation, !mutation && independentRead,
-                    mutation ? new[] { ChatModes.Agent } : new[] { ChatModes.Chat, ChatModes.Plan, ChatModes.Agent }, mutation ? 1 : 0, executesCode);
+                    mutation ? new[] { ChatModes.Agent } : new[] { ChatModes.Chat, ChatModes.Plan, ChatModes.Agent }, mutation ? 1 : 0, executesCode,
+                    id == "core.find" || id == "core.search" || id == "core.outline" ? EvidenceEligibility.None : EvidenceEligibility.Eligible);
                 var binding = new ToolBinding(id, scope: "workspace", host: "Common");
                 Register(registry, entries, new ToolCatalogEntry
                 { Id = id, Host = "Common", Name = id, Description = description,
@@ -1631,7 +1634,7 @@ namespace RNAssistant.Runtime
                     notice => _compiler.CompileRepair(snapshot, notice)),
                     ModelProgress(request, options), cancellationToken).ConfigureAwait(false);
                 _lastCompletion = result.Completion;
-                _deliveredExecutionReferences = result.DeliveredExecutionReferences;
+                _deliveredEvidenceReferences = result.DeliveredEvidenceReferences;
                 if (result.Failure != null) return AgentModelResult.Failed(result.Failure.Kind, result.Failure.Message);
                 if (result.ProviderRefusal != null) return AgentModelResult.Refused(result.ProviderRefusal);
                 if (result.Response == null) return AgentModelResult.Failed(ModelProtocolFailureKind.Infrastructure, "Missing accepted response.");
@@ -2160,7 +2163,7 @@ namespace RNAssistant.Runtime
                 return Task.FromResult(_cursor);
             }
 
-            private IReadOnlyList<string> _deliveredExecutionReferences = new string[0];
+            private IReadOnlyList<string> _deliveredEvidenceReferences = new string[0];
 
             public Task<FinishAdmission> EvaluateFinishAsync(string runId, string turnId,
                 IReadOnlyList<string> acceptedCallIds, IReadOnlyList<ConversationResultClaim> results,
@@ -2174,7 +2177,7 @@ namespace RNAssistant.Runtime
                 if (events.Count == 0 || events[events.Count - 1].Sequence != _session.Revision)
                     throw new InvalidOperationException("Canonical workspace finish evidence is not current.");
                 return Task.FromResult(ConversationFinishEvidenceAdmission.Evaluate(events,
-                    _session.Id, runId, turnId, acceptedCallIds, results, _payloads, _deliveredExecutionReferences));
+                    _session.Id, runId, turnId, acceptedCallIds, results, _payloads, _deliveredEvidenceReferences));
             }
 
             private ChatMessage ProjectToolActivity(AgentRunEvent fact)

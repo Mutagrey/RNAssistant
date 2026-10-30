@@ -16,7 +16,7 @@ namespace RNAssistant.Core.Storage
 {
     public sealed partial class ChatStore
     {
-        private const int SqliteProjectionVersion = 4;
+        private const int SqliteProjectionVersion = 5;
         private static readonly object SqliteProviderSync = new object();
         private static bool _sqliteProviderReady;
         private long _sqliteProjectionFullBuildCount;
@@ -427,7 +427,11 @@ namespace RNAssistant.Core.Storage
                         root["LastRun"] = CloneValue(data["Value"]);
                         break;
                     case SessionOperationTypes.ToolCallRecorded:
-                        ApplyExecutionReference(root, data["Value"]);
+                        ApplyToolCallReference(root, data["Value"]);
+                        UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
+                        break;
+                    case SessionOperationTypes.ToolExecutionFinished:
+                        ApplyEvidenceReference(root, data["Value"]);
                         UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
                         break;
                     case SessionOperationTypes.MessageUpdated:
@@ -435,7 +439,6 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.AssistantMessageAppended:
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:
-                    case SessionOperationTypes.ToolExecutionFinished:
                         UpsertSqliteItem(connection, transaction, "messages", item.SessionId, data["Value"] as JObject);
                         break;
                     case SessionOperationTypes.ArtifactRevisionCreated:

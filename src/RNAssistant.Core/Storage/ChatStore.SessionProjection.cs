@@ -25,7 +25,7 @@ namespace RNAssistant.Core.Storage
         };
         private static readonly string[] MetadataProperties =
         {
-            "FormatVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
+            "FormatVersion", "ReferenceContractVersion", "Id", "ParentSessionId", "ParentSessionRevision", "ForkedThroughMessageId", "ResourceCopies",
             "Host", "DocumentKey", "PreviousDocumentKeys", "DocumentTitle", "DocumentPath", "DocumentAuthorityId", "LastContextReceipt",
             "Title", "Model", "Mode", "MutationPolicy", "ReasoningEnabled", "CreatedUtc", "UpdatedUtc", "ArtifactLinks"
         };
@@ -123,7 +123,16 @@ namespace RNAssistant.Core.Storage
         {
             if (root == null) return null;
             var timer = Stopwatch.StartNew();
-            var session = RuntimePayloadService.HydrateActiveExecution(root, _blobs).ToObject<ChatSession>();
+            var readable = root;
+            if ((int?)root["FormatVersion"] != ChatSession.CurrentFormatVersion ||
+                (int?)root["ReferenceContractVersion"] != RNAssistant.Core.ModelProtocol.ConversationResponse.ReferenceContractVersion)
+            {
+                // Read-only legacy presentation must not deserialize or revive an incompatible continuation.
+                readable = (JObject)root.DeepClone();
+                (readable["LastRun"] as JObject)?.Remove("KernelState");
+            }
+            else readable = RuntimePayloadService.HydrateActiveExecution(root, _blobs);
+            var session = readable.ToObject<ChatSession>();
             ArtifactWorkingSet.Validate(session);
             var sessionMs = timer.ElapsedMilliseconds;
             session.Revision = sequence;
@@ -342,7 +351,11 @@ namespace RNAssistant.Core.Storage
                         root["LastRun"] = CloneValue(data["Value"]);
                         break;
                     case SessionOperationTypes.ToolCallRecorded:
-                        ApplyExecutionReference(root, data["Value"]);
+                        ApplyToolCallReference(root, data["Value"]);
+                        replay.Upsert("Messages", data["Value"]);
+                        break;
+                    case SessionOperationTypes.ToolExecutionFinished:
+                        ApplyEvidenceReference(root, data["Value"]);
                         replay.Upsert("Messages", data["Value"]);
                         break;
                     case SessionOperationTypes.MessageUpdated:
@@ -350,7 +363,6 @@ namespace RNAssistant.Core.Storage
                     case SessionOperationTypes.AssistantMessageAppended:
                     case SessionOperationTypes.ToolResultRecorded:
                     case SessionOperationTypes.ToolExecutionStarted:
-                    case SessionOperationTypes.ToolExecutionFinished:
                         replay.Upsert("Messages", data["Value"]);
                         break;
                     case SessionOperationTypes.MessageRemove:

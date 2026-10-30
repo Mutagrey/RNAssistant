@@ -114,7 +114,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#modelContextAliasSearch").isVisible(), true);
     await page.locator("#modelContextAliasSearch").fill("Q1");
     assert.match(await page.locator("#modelContextReferenceLegend").innerText(),
-      /E — действие и результат; R — ресурс; O — наблюдение; Q — запрос модели/);
+      /T — вызов; E — допустимое доказательство; R — ресурс; O — наблюдение; Q — запрос модели/);
     await screenshot("references-legend");
     await page.locator("#modelContextAliasFind").click();
     await page.waitForFunction(() => document.getElementById("modelContextStatus").textContent.includes("Найдено Q1"));
@@ -267,7 +267,7 @@ const { chromium } = require("playwright");
       const resource = () => ({ uri: captionFixturePdf ? "rna://workspace/files/report.pdf" : "rna://workspace/files/src/A.cs", revision: "exact-a" });
       const scope = { kind: "workspace", id: "project-a" };
       const wire = () => JSON.stringify({ messages: [{ role: "user", content: "TOOL_RESULT:\n" + JSON.stringify({
-        tool_call_id: "E7", name: "core.read", status: "ok", message: "Read.",
+        tool_call_id: "T7", evidence: "E3", name: "core.read", status: "ok", message: "Read.",
         data: { kind: "resource-read", ref: "R3@v1", target: captionFixturePdf ? "report.pdf" : "src/A.cs", representation: "text", coverage: coverage(),
           pageIndex: captionFixturePdf ? 1 : undefined,
           text: "искомый текст", complete: false }
@@ -283,7 +283,7 @@ const { chromium } = require("playwright");
             ToolCallId: "caption-call", EvidenceLinks: [{ EvidenceId: "caption-evidence", ScopeId: scope, Resource: resource(),
               View: "text", ObservedCoverage: coverage(), BodyIncludedInMessage: true }] }] };
           reply.resources = [{ alias: "R3@v1", resource: resource(), scope, currentness: "Unknown", payloadAvailability: "Unknown", observations: [] }];
-          reply.operations = [{ alias: "E7", canonicalId: "caption-call" }];
+          reply.operations = [{ alias: "T7", canonicalId: "caption-call" }];
         }
         return reply;
       };
@@ -309,7 +309,7 @@ const { chromium } = require("playwright");
       RNAssistantModelContext.close();
       const oldSend = send;
       send = async (type, args) => type === "getToolResultPresentation" && args.toolCallId === "caption-call"
-        ? { chatId: args.chatId, runId: args.runId, toolCallId: args.toolCallId, executionReference: "E7", blocks: [{
+        ? { chatId: args.chatId, runId: args.runId, toolCallId: args.toolCallId, toolCallReference: "T7", evidenceReference: "E3", blocks: [{
           kind: "text", title: "Содержимое", complete: false, text: "искомый текст\nточный сохранённый фрагмент",
           source: { reference: "R3@v1", target: "src/A.cs", view: "text", coverage: { kind: "line-range", start: 42, end: 43 },
             excerpt: "искомый текст", excerptTruncated: false }

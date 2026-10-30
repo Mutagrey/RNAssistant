@@ -173,7 +173,9 @@ namespace RNAssistant.Harness
                     "scripted finish cites a terminal successful result for " + call.ToolName);
             return ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, reason, message,
                 results: new[] { new ConversationResultClaim(summary,
-                    calls.Select(call => call.ExecutionReference.Alias), ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
+                    session.Messages.Where(item => item.EvidenceReference != null &&
+                        calls.Any(call => call.ToolCallId == (item.ToolCallId ?? item.Activity?.ToolCallId)))
+                        .Select(item => item.EvidenceReference.Alias).Distinct(StringComparer.Ordinal), ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
         }
 
         private static ChatSession NewSession(FakeOfficeAdapter adapter)

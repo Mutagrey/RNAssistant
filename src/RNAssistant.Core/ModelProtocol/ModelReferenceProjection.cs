@@ -17,10 +17,10 @@ namespace RNAssistant.Core.ModelProtocol
             var aliases = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var message in messages)
             {
-                if (!message.ProtocolMessage || message.ExcludeFromModelContext || message.ExecutionReference == null) continue;
-                var reference = message.ExecutionReference;
+                if (!message.ProtocolMessage || message.ExcludeFromModelContext || message.ToolCallReference == null) continue;
+                var reference = message.ToolCallReference;
                 string previous;
-                if (reference.Kind != ModelReferenceKind.Execution || string.IsNullOrEmpty(message.ToolCallId) ||
+                if (reference.Kind != ModelReferenceKind.ToolCall || string.IsNullOrEmpty(message.ToolCallId) ||
                     bindings.TryGetValue(message.ToolCallId, out previous) && previous != reference.Alias ||
                     aliases.TryGetValue(reference.Alias, out previous) && previous != message.ToolCallId)
                     throw new InvalidOperationException("Ambiguous execution reference in model history.");
@@ -85,9 +85,9 @@ namespace RNAssistant.Core.ModelProtocol
         public static IReadOnlyList<string> Delivered(IReadOnlyList<ChatMessage> messages)
         {
             return Array.AsReadOnly(messages.Where(message => message.ProtocolMessage && !message.ExcludeFromModelContext &&
-                message.ExecutionReference != null && (message.CompletedOperation != null ||
-                message.AcceptedCallOrigin != null || message.ToolResultProtocolVersion != 0))
-                .Select(message => message.ExecutionReference.Alias).Distinct(StringComparer.Ordinal).ToArray());
+                message.EvidenceReference?.Kind == ModelReferenceKind.Evidence && message.Activity == null &&
+                message.AcceptedCallOrigin == null && (message.CompletedOperation != null || message.ToolResultProtocolVersion != 0))
+                .Select(message => message.EvidenceReference.Alias).Distinct(StringComparer.Ordinal).ToArray());
         }
 
         private static ChatMessage ProjectMessage(ChatMessage source, IDictionary<string, string> bindings)
@@ -105,9 +105,9 @@ namespace RNAssistant.Core.ModelProtocol
                 if (!accepted.Success) throw new InvalidOperationException(accepted.Error);
                 if (source.ToolCalls?.Count > 0)
                 {
-                    // Preserve native transport pairing; expose the same semantic alias
-                    // in narration and the result body, without a second operation.
-                    projected.Content = "EXECUTION_REFERENCE: " + alias + "\n" + (source.Content ?? string.Empty);
+                    // Runtime aliases own the wire pair only; canonical IDs/events stay unchanged.
+                    projected.ToolCalls.Single().Id = alias;
+                    projected.ToolCallId = alias;
                 }
                 else
                 {
@@ -123,7 +123,19 @@ namespace RNAssistant.Core.ModelProtocol
             var root = JObject.Parse(content.Substring(start));
             if ((string)root["tool_call_id"] != source.ToolCallId)
                 throw new InvalidOperationException("Model result correlation disagrees with canonical metadata.");
-            root["tool_call_id"] = alias;
+            if (source.Role == ToolResultRoles.Tool && source.CompletedOperation == null)
+            {
+                projected.ToolCallId = alias;
+                root.Remove("tool_call_id");
+            }
+            else root["tool_call_id"] = alias;
+            root.Remove("evidence");
+            if (source.EvidenceReference != null)
+            {
+                if (source.EvidenceReference.Kind != ModelReferenceKind.Evidence)
+                    throw new InvalidOperationException("A tool result carries a mistyped evidence reference.");
+                root.AddFirst(new JProperty("evidence", source.EvidenceReference.Alias));
+            }
             var retained = root["retained_result"] as JObject;
             if (retained != null)
             {

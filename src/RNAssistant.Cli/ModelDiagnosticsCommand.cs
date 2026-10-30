@@ -22,8 +22,8 @@ namespace RNAssistant.Cli
             public string Seed { get; set; }
             public DateTime StartedUtc { get; set; }
             public string ResponseFormat { get; set; } = "per scenario";
-            public string ReferenceContract { get; set; } = "synthetic T IDs; production reference contract unchanged";
-            public string FinishResultField { get; set; } = "summary";
+            public string ReferenceContract { get; set; } = "reference revision 3: T calls, eligible E results, R observed versions";
+            public string FinishResultField { get; set; } = "criterion";
             public ModelDiagnosticVerdict TargetCriterion { get; set; } = ModelDiagnosticVerdict.NotRun;
             public ModelDiagnosticVerdict NativeGeneration { get; set; } = ModelDiagnosticVerdict.NotRun;
             public ModelDiagnosticVerdict V8Parser { get; set; } = ModelDiagnosticVerdict.NotRun;
@@ -102,6 +102,7 @@ namespace RNAssistant.Cli
                 var resultJson = JsonConvert.SerializeObject(result, jsonSettings);
                 row.ResultRedacted = ModelDiagnosticExport.RedactJson(resultJson, apiKey) != resultJson;
                 report.Results.Add(row);
+                report.TargetCriterion = Aggregate(report.Results.Where(item => item.Result.ScenarioId == "A4").Select(item => item.Result.Verdict));
                 report.NativeGeneration = Aggregate(report.Results.Where(item => item.Result.Capability == ModelDiagnosticCapability.NativeGeneration)
                     .Select(item => item.Result.Verdict));
                 report.V8Parser = Aggregate(report.Results.Where(item => item.Result.Assertion == ModelDiagnosticAssertion.V8)

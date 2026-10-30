@@ -2254,6 +2254,11 @@ See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2
 
 ## Model resource labels — 2026-10-26
 
+[Reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3)
+separates T calls from eligible E results. R identity/provenance is unchanged;
+lookup accepts `r1@V2` but does not normalize semantic targets or source text.
+R never becomes a tool argument or finish evidence.
+
 [ADR-0018](decisions/ADR-0018-typed-model-references.md) permits short `R1@v2`
 labels beside the actual model source block: `data.ref` on a delivered
 `core.read`, or `ref` on a hydrated current-source header. No floating

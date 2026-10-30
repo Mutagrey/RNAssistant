@@ -27,10 +27,11 @@ namespace RNAssistant.Core.Persistence
             var expected = new HashSet<string>(acceptedCallIds, StringComparer.Ordinal);
             if (expected.Count != acceptedCallIds.Count)
                 throw new InvalidOperationException("Current-run accepted call IDs are ambiguous.");
-            var references = results.SelectMany(item => item.Evidence).Distinct(StringComparer.Ordinal).ToArray();
+            var references = results.SelectMany(item => item.Evidence).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-            var delivered = new HashSet<string>(deliveredReferences, StringComparer.Ordinal);
-            var byAlias = new Dictionary<string, string>(StringComparer.Ordinal);
+            var delivered = new HashSet<string>(deliveredReferences, StringComparer.OrdinalIgnoreCase);
+            var byAlias = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var callAliases = new HashSet<string>(StringComparer.Ordinal);
             var calls = new Dictionary<string, Accepted>(StringComparer.Ordinal);
             var origins = new HashSet<string>(StringComparer.Ordinal);
             var started = new HashSet<string>(StringComparer.Ordinal);
@@ -76,10 +77,9 @@ namespace RNAssistant.Core.Persistence
                             parsed.Response.ToolCalls[0].Id != message.ToolCallId ||
                             parsed.Response.ToolCalls[0].Name != message.ToolName)
                             throw new InvalidOperationException("Retained accepted call body disagrees with its metadata.");
-                        if (message.ExecutionReference?.Kind != ModelReferenceKind.Execution ||
-                            byAlias.ContainsKey(message.ExecutionReference.Alias))
-                            throw new InvalidOperationException("Accepted execution reference is missing, mistyped or duplicated.");
-                        byAlias.Add(message.ExecutionReference.Alias, message.ToolCallId);
+                        if (message.ToolCallReference?.Kind != ModelReferenceKind.ToolCall ||
+                            !callAliases.Add(message.ToolCallReference.Alias) || message.EvidenceReference != null)
+                            throw new InvalidOperationException("Accepted tool-call reference is missing, mistyped or duplicated.");
                         calls.Add(message.ToolCallId, new Accepted(message.ToolName, origin.StepId));
                         continue;
                     }
@@ -107,12 +107,24 @@ namespace RNAssistant.Core.Persistence
                         if (!Enum.IsDefined(typeof(ToolExecutionOutcome), message.ExecutionProgress.Outcome))
                             throw new InvalidOperationException("Tool terminal outcome is unknown.");
                         if (message.ExecutionProgress.Outcome == ToolExecutionOutcome.AwaitingConfirmation)
+                        {
+                            if (message.EvidenceReference != null) throw new InvalidOperationException("A pending call cannot issue evidence.");
                             continue;
+                        }
                         if (message.ExecutionProgress.Outcome != ToolExecutionOutcome.NotDispatched &&
                             !started.Contains(activity.ToolCallId) || finished.ContainsKey(activity.ToolCallId))
                             throw new InvalidOperationException("Tool terminal execution is missing or ambiguous.");
                         finished.Add(activity.ToolCallId, new Terminal(activity.ToolId, activity.StepId,
                             message.ExecutionProgress.Outcome));
+                        if (message.ExecutionProgress.EvidenceEligibility == EvidenceEligibility.Eligible)
+                        {
+                            if (message.EvidenceReference?.Kind != ModelReferenceKind.Evidence ||
+                                byAlias.ContainsKey(message.EvidenceReference.Alias))
+                                throw new InvalidOperationException("Eligible terminal result has no unique evidence binding.");
+                            byAlias.Add(message.EvidenceReference.Alias, activity.ToolCallId);
+                        }
+                        else if (message.EvidenceReference != null)
+                            throw new InvalidOperationException("Ineligible terminal result cannot issue evidence.");
                         continue;
                     }
                 }
@@ -123,15 +135,15 @@ namespace RNAssistant.Core.Persistence
                 .Take(16).Select(pair => pair.Key + " (" + calls[pair.Value].Name + ": " + finished[pair.Value].Outcome + ")"));
             var hint = string.IsNullOrEmpty(available) ? " No terminal references are available in the delivered request." :
                 " Available terminal references: " + available + ". Correct the citation without repeating completed tools.";
-            if (expected.Count != 0 && results.Count == 0)
+            if (byAlias.Count != 0 && results.Count == 0)
                 return FinishAdmission.Reject("missing_finish_results", "Report the outcomes of the accepted calls before finish." + hint);
-            if (expected.Count != 0 && references.Length == 0)
-                return FinishAdmission.Reject("missing_finish_evidence", "Reference at least one delivered terminal execution reference (E1, E2) from this run." + hint);
+            if (byAlias.Count != 0 && references.Length == 0)
+                return FinishAdmission.Reject("missing_finish_evidence", "Reference at least one delivered eligible result (E1, E2) from this run." + hint);
             foreach (var reference in references)
             {
                 string canonicalId;
                 if (!byAlias.TryGetValue(reference, out canonicalId))
-                    return FinishAdmission.Reject("unknown_evidence", "Evidence " + reference + " is not an execution reference of this run." + hint);
+                    return FinishAdmission.Reject("unknown_evidence", "Evidence " + reference + " is not an eligible terminal result of this run. T/R references are not evidence." + hint);
                 if (!delivered.Contains(reference))
                     return FinishAdmission.Reject("undelivered_evidence", "Evidence " + reference + " was not delivered in this request." + hint);
                 Terminal terminal;
@@ -143,9 +155,9 @@ namespace RNAssistant.Core.Persistence
             }
             foreach (var claim in results)
                 if (claim.Assessment == ConversationAssessment.Satisfied && claim.Evidence.Count > 0 &&
-                    claim.Evidence.All(id => finished[byAlias[id]].Outcome != ToolExecutionOutcome.Ok))
+                    claim.Evidence.Any(id => finished[byAlias[id]].Outcome != ToolExecutionOutcome.Ok))
                     return FinishAdmission.Reject("contradictory_assessment",
-                        "A satisfied claim cites only failed, unknown or undispatched terminal outcomes.");
+                        "A satisfied claim cites a failed, unknown or undispatched terminal outcome.");
             return FinishAdmission.Allow();
         }
 

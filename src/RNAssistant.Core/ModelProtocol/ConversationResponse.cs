@@ -10,7 +10,7 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ConversationResponse
     {
         public const int ProtocolVersion = 8;
-        public const int ReferenceContractVersion = 2;
+        public const int ReferenceContractVersion = 3;
         public const string ExecuteAction = "execute";
         public const string ReflectionAction = "reflection";
         public const string FinishAction = "finish";
@@ -76,7 +76,7 @@ namespace RNAssistant.Core.ModelProtocol
                 root["outcome"] = OutcomeName;
                 root["results"] = new JArray(Results.Select(claim => new JObject
                 {
-                    ["summary"] = claim.Summary,
+                    ["criterion"] = claim.Criterion,
                     ["evidence"] = new JArray(claim.Evidence),
                     ["assessment"] = claim.AssessmentName
                 }));
@@ -158,7 +158,7 @@ namespace RNAssistant.Core.ModelProtocol
 
     public sealed class ConversationResultClaim
     {
-        public string Summary { get; private set; }
+        public string Criterion { get; private set; }
         public IReadOnlyList<string> Evidence { get; private set; }
         public ConversationAssessment Assessment { get; private set; }
         public string AssessmentName
@@ -176,15 +176,15 @@ namespace RNAssistant.Core.ModelProtocol
             }
         }
 
-        public ConversationResultClaim(string summary, IEnumerable<string> evidence, ConversationAssessment assessment)
+        public ConversationResultClaim(string criterion, IEnumerable<string> evidence, ConversationAssessment assessment)
         {
-            if (string.IsNullOrWhiteSpace(summary)) throw new ArgumentException("A summary is required.", nameof(summary));
+            if (string.IsNullOrWhiteSpace(criterion)) throw new ArgumentException("A criterion is required.", nameof(criterion));
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
-            var refs = evidence.ToArray();
+            var refs = evidence.Select(value => { string canonical; return ModelReference.TryNormalize(value, out canonical) ? canonical : value; }).ToArray();
             if (refs.Any(string.IsNullOrWhiteSpace) || refs.Distinct(StringComparer.Ordinal).Count() != refs.Length)
                 throw new ArgumentException("Evidence references must be nonblank and unique within a claim.", nameof(evidence));
             if (!Enum.IsDefined(typeof(ConversationAssessment), assessment)) throw new ArgumentOutOfRangeException(nameof(assessment));
-            Summary = summary;
+            Criterion = criterion;
             Evidence = Array.AsReadOnly(refs);
             Assessment = assessment;
         }

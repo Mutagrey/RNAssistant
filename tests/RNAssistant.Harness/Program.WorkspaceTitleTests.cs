@@ -109,7 +109,7 @@ namespace RNAssistant.Harness
                             if (rejectFinish)
                             {
                                 AssertEqual(3, first.Summary.IterationsUsed, "rejected finish consumes a step of the same run");
-                                AssertTrue(requests[2].Contains("unknown_evidence") && requests[2].Contains("Available terminal references"),
+                                AssertTrue(requests[2].Contains("unknown_evidence") && requests[2].Contains(failedRead ? "Available terminal references" : "No terminal references"),
                                     "correction feedback supplies exact available references");
                             }
                             AssertEqual(2, calls.Length, "accepted read batch has two durable per-call records");
@@ -123,13 +123,13 @@ namespace RNAssistant.Harness
                             AssertEqual(failedRead ? "missing.txt" : "missing", activities[1].Subtitle, "workspace keeps the second call's distinct target");
                             if (failedRead) AssertTrue(activities[1].Status == "failed" && activities[1].ResultSummary == null,
                                 "a failed read cannot appear as completed or inherit a successful read summary");
-                            AssertTrue(calls.Select(call => call.ExecutionReference.Alias).SequenceEqual(new[] { "E1", "E2" }),
+                            AssertTrue(calls.Select(call => call.ToolCallReference.Alias).SequenceEqual(new[] { "T1", "T2" }),
                                 "whole batch has distinct stable typed references");
                             var nextWire = JObject.Parse(requests[1]);
                             var nextContents = string.Join("\n", nextWire["messages"].Select(item => (string)item["content"]));
                             AssertTrue(calls.All(call => !nextContents.Contains(call.ToolCallId)),
                                 "model message bodies expose aliases, never canonical GUIDs");
-                            AssertTrue(nextContents.Contains("\"id\":\"E1\"") && nextContents.Contains("\"tool_call_id\":\"E1\""),
+                            AssertTrue(nextContents.Contains("\"id\":\"T1\"") && nextContents.Contains("\"tool_call_id\":\"T1\""),
                                 "model receives both accepted call and result with the same short reference");
                             AssertTrue(calls.All(call => !string.IsNullOrWhiteSpace(call.ToolCallId) &&
                                 (string)JObject.Parse(call.Content)["tool_calls"]?[0]?["name"] == call.ToolName &&

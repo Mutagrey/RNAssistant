@@ -133,6 +133,7 @@ namespace RNAssistant.Office.Contracts
         public ModelContextViewInventoryDto ViewInventory { get; set; }
         [JsonProperty("viewVariantVerification", NullValueHandling = NullValueHandling.Ignore)]
         public ModelContextViewVariantVerificationDto ViewVariantVerification { get; set; }
+        [JsonProperty("eligibleEvidence")] public IReadOnlyList<ModelContextIdentityDto> EligibleEvidence { get; set; }
         [JsonProperty("operations")] public IReadOnlyList<ModelContextIdentityDto> Operations { get; set; }
         [JsonProperty("evidence")] public IReadOnlyList<ModelContextIdentityDto> Evidence { get; set; }
     }

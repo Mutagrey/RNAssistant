@@ -87,6 +87,8 @@ namespace RNAssistant.Core.Persistence
             {
                 if (fact.Kind != AgentRunEventKind.ToolStarted && fact.Kind != AgentRunEventKind.ToolCompleted)
                     throw new InvalidOperationException("Only a tool fact can publish activity.");
+                if (fact.Kind == AgentRunEventKind.ToolCompleted)
+                    activity.ExecutionProgress = RNAssistant.Core.Tools.ToolExecutionProgress.Capture(fact.Execution);
                 writes.Add(new ConversationMessageWrite(resultProjection ? SessionOperationTypes.MessageUpdated :
                     fact.Kind == AgentRunEventKind.ToolStarted ? SessionOperationTypes.ToolExecutionStarted :
                     SessionOperationTypes.ToolExecutionFinished, activity));

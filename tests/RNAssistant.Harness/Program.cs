@@ -324,6 +324,7 @@ namespace RNAssistant.Harness
                 Test("v8 recovery: workspace live and accepted reasoning", V8RecoveryWorkspaceStream),
                 Test("v8 recovery: workspace terminal failure remains in history", V8RecoveryWorkspaceFailureHistory),
                 Test("v8 recovery: workspace message identity and compatibility", V8RecoveryWorkspacePresentation),
+                Test("model refs: eligibility and revision boundary", ModelReferencesSeparateEligibilityAndRevision),
                 Test("model refs: typed wire pairs and folded receipts", ModelReferencesPreserveTypedWirePairs),
                 Test("model refs: durable allocation and finish admission", ModelReferencesPersistAndGateFinish),
                 Test("model refs: resource identity and revision persistence", ModelResourceReferencesKeepIdentityAndVersions),

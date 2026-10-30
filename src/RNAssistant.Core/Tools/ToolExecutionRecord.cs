@@ -66,17 +66,20 @@ namespace RNAssistant.Core.Tools
         public string ResultFingerprint { get; private set; }
         public bool IndependentLocalRead { get; private set; }
         public bool OpaqueAction { get; private set; }
+        public EvidenceEligibility EvidenceEligibility { get; private set; }
         public DateTime? CompletedUtc { get; private set; }
         public string AdmissionRevision { get; private set; }
 
         [JsonConstructor]
         public ToolExecutionProgress(ToolExecutionOutcome outcome, ToolRecoveryContract recovery = null,
             string resultFingerprint = null, bool independentLocalRead = false, string admissionRevision = null,
-            DateTime? completedUtc = null, bool opaqueAction = false)
+            DateTime? completedUtc = null, bool opaqueAction = false, EvidenceEligibility evidenceEligibility = EvidenceEligibility.None)
         {
             Outcome = outcome; Recovery = recovery; ResultFingerprint = resultFingerprint;
             CompletedUtc = completedUtc;
             IndependentLocalRead = independentLocalRead;
+            if (!Enum.IsDefined(typeof(EvidenceEligibility), evidenceEligibility)) throw new ArgumentOutOfRangeException(nameof(evidenceEligibility));
+            EvidenceEligibility = evidenceEligibility;
             OpaqueAction = opaqueAction;
             AdmissionRevision = admissionRevision;
         }
@@ -93,7 +96,8 @@ namespace RNAssistant.Core.Tools
             return new ToolExecutionProgress(record.Outcome, record.Recovery, fingerprint,
                 record.Context.Policy.IndependentLocalRead,
                 record.Context.Policy.AdmissionRevision ?? record.Context.Policy.Revision, record.CompletedUtc,
-                record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction);
+                record.Context.Policy.Policy?.ExecutionClass == ToolExecutionClass.OpaqueAction,
+                record.Context.Policy.Policy?.EvidenceEligibility ?? EvidenceEligibility.None);
         }
     }
 

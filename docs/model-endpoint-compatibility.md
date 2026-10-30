@@ -2,6 +2,17 @@
 
 RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 
+## Current P2 contract — 2026-10-30
+
+Reference revision 3 separates T calls from eligible E results, accepts case-insensitive
+reference lookup and uses `finish.results[].criterion`. Native pairing uses T in the
+outer protocol fields; content has no duplicate call ID or EXECUTION_REFERENCE.
+New chats persist the revision; earlier chats remain read-only. Default result role
+and endpoint settings are unchanged. A4 now checks criterion; scenario revision 3 and
+CLI `TargetCriterion` reflect its actual assertion verdict. All current validation is
+synthetic. Real endpoint and Windows/Office/WebView2 qualification remain deferred.
+Earlier dated baselines below describe their own revisions, not the current wire.
+
 ## Required transport
 
 - `POST /v1/chat/completions`, or a `BaseUrl` already ending in `/chat/completions`;
@@ -153,7 +164,7 @@ export when any of those flags is set; the CLI remains the full diagnostic expor
 This is the minimum runnable UI, not the complete D3/D4 laboratory. Custom scenario
 editing/import, persistent run history, endpoint comparison, request diff and the
 expanded actual-conversation Resources/Evidence/Composition inspector remain open.
-Target T/E/R/criterion remains NotRun. Host-neutral service/bridge and mocked-browser
+T/E/R/criterion now follows P2 reference revision 3; real-model qualification remains NotRun. Host-neutral service/bridge and mocked-browser
 checks do not qualify the controller delivery, download or rendering in real Office/WebView2.
 
 ### Baseline and remaining qualification

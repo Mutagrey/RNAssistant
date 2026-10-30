@@ -68,9 +68,9 @@ namespace RNAssistant.Harness
                         "Inspection observed an empty range and the sheet write completed.",
                         "Диапазон проверен чтением; лист Report создан.", results: new[] {
                             new ConversationResultClaim("Direct clear verification was uncertain; a later read observed an empty range.",
-                                new[] { clearResult.ExecutionReference.Alias, inspected.ExecutionReference.Alias }, ConversationAssessment.Unverified),
+                                new[] { clearResult.EvidenceReference.Alias, inspected.EvidenceReference.Alias }, ConversationAssessment.Unverified),
                             new ConversationResultClaim("Report sheet was created.",
-                                new[] { sheet.ExecutionReference.Alias }, ConversationAssessment.Satisfied)
+                                new[] { sheet.EvidenceReference.Alias }, ConversationAssessment.Satisfied)
                         }, outcome: ConversationOutcome.Partial);
                     return Task.FromResult(new LlmCompletionResult { Content = finish });
                 });

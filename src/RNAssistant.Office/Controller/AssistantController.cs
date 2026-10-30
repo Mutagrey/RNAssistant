@@ -341,7 +341,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = active == null ? string.Empty : active.Model,
                 ActiveChatMode = ChatModes.Normalize(active == null ? null : active.Mode),
                 MutationPolicy = active?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = active != null && active.FormatVersion != ChatSession.CurrentFormatVersion,
+                ChatReadOnly = active != null && !active.UsesCurrentProtocol,
                 ActiveChatReasoning = active != null && active.ReasoningEnabled,
                 Chats = chats,
                 Documents = ListOpenDocuments(),

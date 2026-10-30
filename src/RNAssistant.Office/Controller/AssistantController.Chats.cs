@@ -212,7 +212,9 @@ namespace RNAssistant.Office
                     source.DocumentTitle,
                     ChatSessionService.BuildForkTitle(source));
                 fork.ParentSessionId = source.Id;
-                fork.ExecutionReferenceSequence = source.ExecutionReferenceSequence;
+                fork.ToolCallReferenceSequence = source.ToolCallReferenceSequence;
+                fork.EvidenceReferenceSequence = source.EvidenceReferenceSequence;
+                fork.ReferenceContractVersion = source.ReferenceContractVersion;
                 fork.ResourceReferenceIndex = source.ResourceReferenceIndex.ToList();
                 fork.DocumentAuthorityId = source.DocumentAuthorityId;
                 fork.DocumentPath = source.DocumentPath;
@@ -732,7 +734,7 @@ namespace RNAssistant.Office
                 Model = updated.Model,
                 Mode = ChatModes.Normalize(updated.Mode),
                 MutationPolicy = updated.MutationPolicy,
-                ChatReadOnly = updated.FormatVersion != ChatSession.CurrentFormatVersion,
+                ChatReadOnly = !updated.UsesCurrentProtocol,
                 ReasoningEnabled = updated.ReasoningEnabled,
                 ContextUsage = includeUsage ? ContextUsageEstimator.FromSession(updated, ResolveChatSettings(updated)) : null
             };
@@ -775,7 +777,7 @@ namespace RNAssistant.Office
             response.ActiveChatModel = session == null ? string.Empty : session.Model;
             response.ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode);
             response.MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask;
-            response.ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion;
+            response.ChatReadOnly = session != null && !session.UsesCurrentProtocol;
             response.ActiveChatReasoning = session != null && session.ReasoningEnabled;
             response.Chats = chats;
             response.Documents = documents;
@@ -812,7 +814,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session.Model,
                 ActiveChatMode = ChatModes.Normalize(session.Mode),
                 MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
+                ChatReadOnly = session != null && !session.UsesCurrentProtocol,
                 ActiveChatReasoning = session.ReasoningEnabled,
                 ActiveContextCheckpointId = session.ActiveContextCheckpointId,
                 ActiveHtmlArtifactId = session.ActiveHtmlArtifactId,
@@ -832,7 +834,7 @@ namespace RNAssistant.Office
                 ActiveChatModel = session == null ? string.Empty : session.Model,
                 ActiveChatMode = ChatModes.Normalize(session == null ? null : session.Mode),
                 MutationPolicy = session?.MutationPolicy ?? MutationPolicy.Ask,
-                ChatReadOnly = session != null && session.FormatVersion != ChatSession.CurrentFormatVersion,
+                ChatReadOnly = session != null && !session.UsesCurrentProtocol,
                 ActiveChatReasoning = session != null && session.ReasoningEnabled,
                 Chats = _chatSessions.GetChatSummaries(activeId),
                 Documents = ListOpenDocuments()

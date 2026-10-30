@@ -1,10 +1,11 @@
 # Conversation Response v8
 
 Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
-Response protocol is 8, reference contract revision is 2, new chat stream format
-is 8, and built-in prompt schema is 57. Formats 6 and 7 remain read-only history;
+Response protocol is 8, reference contract revision is 3, new chat stream format
+is 8, and built-in prompt schema is 59. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
-Earlier format-8 histories without the required bindings or explicit finish outcome are refused;
+Earlier format-8 histories with missing/older ReferenceContractVersion are read-only;
+new chats persist revision 3. Incompatible continuations are not hydrated or resumed;
 no automatic rewrite/deletion or execution upgrade. See [ADR-0018](../decisions/ADR-0018-typed-model-references.md).
 
 ## Model envelope
@@ -21,12 +22,13 @@ No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
 | `reflection` | Nonblank `decision` | Record a useful interpretation and request another bounded model step. No tool dispatch, result or new authority. |
 | `finish` | `outcome`, `results` array, nonblank `message` | Assert the final answer and assessed task outcome. No questions, approval requests, offers to continue or promises of future work. |
 
-`results[]` entries contain exactly `summary`, `evidence` (exact short execution
-references such as `E1` from delivered terminal results) and `assessment`: `satisfied`,
-`partially_satisfied`, `unverified` or `not_satisfied`. A direct answer
-without accepted calls may use `results=[]`. After accepted calls, finish
-needs at least one result and one terminal evidence reference in aggregate;
-discovery calls need not all be cited.
+`results[]` entries contain exactly `criterion`, `evidence` (issued eligible
+terminal references such as `E1`) and `assessment`: `satisfied`,
+`partially_satisfied`, `unverified` or `not_satisfied`. Criteria describe original
+user requirements; no runtime criterion registry exists. `summary` is rejected.
+Reference lookup is case-insensitive; duplicate `E1`/`e1` within one claim is invalid.
+With no eligible terminal results, including service-only calls, evidence/results
+may be empty. Otherwise at least one delivered eligible reference is required.
 
 ### Finish is an assertion
 
@@ -57,7 +59,7 @@ task outcomes, not a list of incidental successful discovery operations.
 | `unable_to_complete` | No result is `satisfied` or `partially_satisfied`; explain the obstacle. With no accepted calls, an empty results array is allowed. |
 
 ```json
-{"action":"finish","reason":"The requested data and chart were produced and checked.","outcome":"completed","results":[{"summary":"Data and chart created.","evidence":["E7","E12"],"assessment":"satisfied"}],"message":"The data and chart are ready. The saved values and chart series were checked."}
+{"action":"finish","reason":"The requested data and chart were produced and checked.","outcome":"completed","results":[{"criterion":"Data and chart created.","evidence":["E7","E12"],"assessment":"satisfied"}],"message":"The data and chart are ready. The saved values and chart series were checked."}
 ```
 
 The parser rejects missing/unknown outcome (`invalid_outcome`), blank final
@@ -91,20 +93,40 @@ dispatch. A fallback separately checks the retained full prompt before sending
 than treated as lack of format support. No-call accepted history rejects stray
 tool transport metadata and a second reason outside its v8 envelope.
 
-## Typed references (revision 2)
+## Typed references (revision 3)
 
-`E1`, `E2`, … identify accepted operations and their outcomes within a chat. The
-existing accepted commit allocates them atomically before dispatch, alongside
-canonical call IDs and origins. They survive restart, confirmation, history removal
-and compaction without reuse. Prefix and case are fixed; only exact lookup is valid.
-Raw execute remains `{name, arguments}`. Wire-only historical calls add `id: "E1"`;
-matching results and folded receipts expose `tool_call_id: "E1"`. Canonical history
-keeps its original envelope and ID. Native transport pairing is preserved; its
-call narration exposes the short reference separately. No global text replacement.
+`T1`, `T2`, … identify accepted calls. ChatStore allocates `ToolCallReference`
+atomically before dispatch, alongside canonical IDs/origins. `E1`, `E2`, … identify
+eligible terminal results: ChatStore allocates `EvidenceReference` only on
+`ToolExecutionFinished`, from the captured trusted `ToolPolicy.EvidenceEligibility`.
+Pending confirmation never issues E; failed/unknown results may issue E for honest
+limitations. `E` means citable, not successful. Capability search/schema read, skill
+loading and resource discovery/search/outline use `None`; ordinary reads/mutations
+use `Eligible`. This policy participates in snapshot hashing and drift checks.
+
+T/E counters are independent, chat-wide replay projections; restart, confirmation,
+message removal and compaction never reuse them. Fork copies both high waters and
+bindings; canonical IDs/events/CAS are unchanged. Runtime emits uppercase prefixes
+and `@v`; only reference lookups normalize case, never target/path/source strings.
+
+Raw execute remains `{name, arguments}`. Fallback history adds `id:"T1"` to calls
+and `tool_call_id:"T1"` to result/receipt JSON. Native history rewrites only the wire
+pair to `assistant.tool_calls[].id == tool.tool_call_id == "T1"`. It has no
+`EXECUTION_REFERENCE` narration or duplicate `content.tool_call_id`. Eligible
+result content includes `evidence:"E1"`; service-only results omit it. Original
+accepted response bodies and runtime call IDs remain unchanged.
+
+P2 admission resolves selected E against current-run canonical terminal events,
+trusted eligibility and the successful request's delivered set. T/R, unknown and
+undelivered references fail closed. A `satisfied` claim cannot cite a failed,
+unknown or undispatched result, even alongside a successful one. Uncited earlier
+errors do not block finish. Unknown-effect inspection/no-replay guards are unchanged.
+Cross-run historical citation and admission/index optimization remain P5 work;
+chat-wide numbering alone does not enable old-run evidence in the current gate.
 
 `R1` identifies a scoped logical resource; `R1@v2` identifies a registered exact
 revision in that resource's observation history. A model-only `ref` is attached
-directly to the delivered `common.resources_read` data, or to the structured header
+directly to the delivered `core.read` data, or to the structured header
 of a hydrated `CURRENT_RESOURCE_VIEW`. It sits beside that source's semantic target,
 representation/view and coverage; it is never a loose list on the result envelope.
 Two excerpts of one revision share a reference and retain their different coverage.
@@ -117,7 +139,7 @@ ResourceEvidence IDs remain distinct; several observations may belong to one `E`
 `O` labels observations and `Q` requests in diagnostics. All type prefixes are uppercase;
 `@v` is a version marker. A single ChatStore allocator persists resource bindings on
 message observations and saved request links. Inspector reads these bindings and
-groups by exact canonical identity; it never allocates replacement `E`/`R` names.
+groups by exact canonical identity; it never allocates replacement `T`/`E`/`R` names.
 
 An omitted body does not erase the operation's reference. Compaction retains the
 latest current-run terminal receipt; older receipts are bounded by relevance/budget.
@@ -135,10 +157,10 @@ retain their existing contracts. The saved final model request contains the proj
 Example model-facing result (line-range end is exclusive):
 
 ```json
-{"tool_call_id":"E7","name":"common.resources_read","status":"ok","message":"Excerpt read.","data":{"ref":"R1@v2","kind":"resource-read","target":"src/example.txt","representation":"text","coverage":{"kind":"line-range","start":10,"end":12,"fields":[]},"text":"first line\nsecond line","complete":false,"selectionComplete":true}}
+{"tool_call_id":"T7","evidence":"E3","name":"core.read","status":"ok","message":"Excerpt read.","data":{"ref":"R1@v2","kind":"resource-read","target":"src/example.txt","representation":"text","coverage":{"kind":"line-range","start":10,"end":12,"fields":[]},"text":"first line\nsecond line","complete":false,"selectionComplete":true}}
 ```
 
-Here `E7` identifies the execution, `R1@v2` the source revision, and `coverage` the
+Here `T7` identifies the call, `E3` the eligible result, `R1@v2` the source revision, and `coverage` the
 delivered excerpt. The label itself includes neither the range nor the text.
 
 ## Admission, persistence and presentation

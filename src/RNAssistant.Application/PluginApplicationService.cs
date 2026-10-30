@@ -689,7 +689,7 @@ namespace RNAssistant.Application
                         ? accepted.Response.Decision : null,
                     Results = accepted.Response.Action == ConversationResponse.FinishAction
                         ? accepted.Response.Results.Select(claim => new ModelResultViewState(
-                            claim.Summary, claim.AssessmentName, claim.Evidence)).ToArray() : null };
+                            claim.Criterion, claim.AssessmentName, claim.Evidence)).ToArray() : null };
             }
             if (message.Role != "assistant" && message.Role != "user")
                 return new ChatMessageViewDto { Id = message.Id, Role = message.Role,

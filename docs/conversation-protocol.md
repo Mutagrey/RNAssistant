@@ -149,13 +149,14 @@ bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and
 `action` are never execution evidence.
 
-ChatStore assigns `E1`, `E2`, … in the accepted-call commit. The shared model
-projection puts the same alias into historical call/result correlation fields;
-raw model calls still contain only `name` and `arguments`. Finish citations must
-resolve to a terminal accepted operation of this run and have been delivered in
-the successful model request. Canonical IDs remain runtime-owned. Resource labels
-`R1` / `R1@v2` identify a scoped resource / observed revision; they are neither
-finish evidence nor tool arguments. Native transport pairing remains canonical.
+ChatStore assigns `T1`, `T2`, … at accepted-call commit and separate `E1`, `E2`, …
+only to eligible terminal results, using trusted tool policy. Native wire pairs use
+T without duplicate content IDs; fallback result JSON carries T plus optional E.
+Finish `results[].criterion` cites delivered E; T/R cannot grant evidence or authority.
+Lookup normalizes reference case only. Revision 3 is explicit in the format-8 stream;
+missing/older revisions remain read-only and require a new chat. No event rewrite or
+continuation upgrade occurs. P2 retains current-run finish admission; historical
+cross-run citation remains P5 work. See the [current reference contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
 
 The workspace prompt includes Core's `AgentPromptDefaults.StructuredResponseContract`,
 the same complete response contract used by Office defaults. Both response formats

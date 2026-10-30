@@ -13,7 +13,7 @@ namespace RNAssistant.Office.Tools
             ResourceToolCatalog.SearchToolId, RNAssistant.Core.Services.ResourceModelSearchSchema.Description,
             RNAssistant.Core.Services.ResourceModelSearchSchema.Create(false, true));
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
-            false, false, new[] { "agent", "plan", "chat" });
+            false, false, new[] { "agent", "plan", "chat" }, evidenceEligibility: EvidenceEligibility.None);
         internal static readonly ToolBinding Binding = new ToolBinding("resources.search.v3");
 
         internal ResourceSearchToolHandler(ResourceGatewayService gateway, RNAssistant.Core.Models.ChatSession session, RNAssistant.Core.Services.ResourceSearchObservation observation = null)

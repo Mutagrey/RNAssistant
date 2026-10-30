@@ -25,7 +25,8 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("chatId")] public string ChatId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("toolCallId")] public string ToolCallId { get; set; }
-        [JsonProperty("executionReference", NullValueHandling = NullValueHandling.Ignore)] public string ExecutionReference { get; set; }
+        [JsonProperty("toolCallReference", NullValueHandling = NullValueHandling.Ignore)] public string ToolCallReference { get; set; }
+        [JsonProperty("evidenceReference", NullValueHandling = NullValueHandling.Ignore)] public string EvidenceReference { get; set; }
         [JsonProperty("action", NullValueHandling = NullValueHandling.Ignore)] public string Action { get; set; }
         [JsonProperty("target", NullValueHandling = NullValueHandling.Ignore)] public string Target { get; set; }
         [JsonProperty("rawJson", NullValueHandling = NullValueHandling.Ignore)] public string RawJson { get; set; }

@@ -38,7 +38,7 @@ namespace RNAssistant.Office
             if (current && acceptedPolicy != null &&
                 (acceptedPolicy.Mode != session.Mode || acceptedPolicy.MutationPolicy != session.MutationPolicy))
                 response.Restriction = "Политика изменилась. Показан состав прежнего запроса; для выполнения нужна новая задача.";
-            if (!current && (session.FormatVersion != ChatSession.CurrentFormatVersion ||
+            if (!current && (!session.UsesCurrentProtocol ||
                 session.Mode != ChatModes.Agent && session.Mode != ChatModes.Plan))
             {
                 response.Prepared = false;

@@ -66,7 +66,9 @@ namespace RNAssistant.Office.Services
             {
                 if (!string.IsNullOrEmpty(requestEventId) || !aliases.TryResolve(query.Alias, out requestEventId))
                     throw new InvalidOperationException("RESOURCE_NOT_FOUND: the alias is absent from this chat's saved requests.");
-                response.SelectedAlias = query.Alias;
+                string selectedAlias;
+                ModelReference.TryNormalize(query.Alias, out selectedAlias);
+                response.SelectedAlias = selectedAlias;
                 response.SelectedResourceAlias = aliases.ResourceFor(query.Alias);
             }
             if (!string.IsNullOrEmpty(requestEventId))
@@ -86,7 +88,7 @@ namespace RNAssistant.Office.Services
                     response.ViewInventory = DescribeViewInventory(response.Resources, query);
                 if (!string.IsNullOrEmpty(query.VerifyResourceAlias))
                 {
-                    var resource = response.Resources.SingleOrDefault(row => row.Alias == query.VerifyResourceAlias);
+                    var resource = response.Resources.SingleOrDefault(row => string.Equals(row.Alias, query.VerifyResourceAlias, StringComparison.OrdinalIgnoreCase));
                     if (resource == null)
                         throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: resource alias is absent from the selected request.");
                     if (variantRequested)
@@ -95,6 +97,7 @@ namespace RNAssistant.Office.Services
                     else if (string.IsNullOrEmpty(query.VerifyRetainedView)) VerifyPayload(resource, token);
                     else VerifyView(resource, query.VerifyRetainedView, token);
                 }
+                response.EligibleEvidence = DescribeIdentities(trace, entry => aliases.Eligible(entry, request.Sequence) == null ? new string[0] : new[] { entry.ToolCallId }, id => aliases.Eligible(id, request.Sequence));
                 response.Operations = DescribeIdentities(trace, entry => new[] { entry.ToolCallId }, aliases.Operation);
                 response.Evidence = DescribeIdentities(trace, entry =>
                     (entry.EvidenceLinks ?? new List<ContextEvidenceLink>()).Select(link => link?.EvidenceId), aliases.Evidence);
@@ -254,7 +257,7 @@ namespace RNAssistant.Office.Services
         private ModelContextViewInventoryDto DescribeViewInventory(IReadOnlyList<ModelContextResourceDto> resources,
             ModelContextQuery query)
         {
-            var resource = resources.SingleOrDefault(row => row.Alias == query.ViewInventoryAlias);
+            var resource = resources.SingleOrDefault(row => string.Equals(row.Alias, query.ViewInventoryAlias, StringComparison.OrdinalIgnoreCase));
             var revisions = _authority?.Store as IResourceRevisionStore;
             if (resource?.RevisionMetadata == null || revisions == null)
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: view inventory is unavailable for this request and scope.");
@@ -398,6 +401,8 @@ namespace RNAssistant.Office.Services
             private readonly Dictionary<string, string> _referenceTargets = new Dictionary<string, string>(StringComparer.Ordinal);
             private readonly HashSet<string> _resourceAliases = new HashSet<string>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _lastRequest = new Dictionary<string, string>(StringComparer.Ordinal);
+            private readonly Dictionary<string, long> _eligibleIssued = new Dictionary<string, long>(StringComparer.Ordinal);
+            private readonly Dictionary<string, string> _eligible = new Dictionary<string, string>(StringComparer.Ordinal);
             private readonly Dictionary<string, string> _resourceForEvidence = new Dictionary<string, string>(StringComparer.Ordinal);
             internal AliasIndex(IEnumerable<SessionEvent> events, bool includeLinks)
             {
@@ -406,12 +411,12 @@ namespace RNAssistant.Office.Services
                     {
                         if (item.Type == SessionEventTypes.SessionCreated || item.Type == SessionEventTypes.SessionForked)
                         {
-                            foreach (var message in item.Data?["Messages"] as JArray ?? new JArray()) RegisterCanonical(message);
+                            foreach (var message in item.Data?["Messages"] as JArray ?? new JArray()) RegisterCanonical(message, item.Sequence);
                             RegisterResourceBindings(item.Data?["ResourceReferenceIndex"]);
                         }
                         else if (item.Type == SessionEventTypes.SessionCommit)
                             foreach (var operation in item.Data?["Operations"] as JArray ?? new JArray())
-                                RegisterCanonical(operation["Data"]?["Value"]);
+                                RegisterCanonical(operation["Data"]?["Value"], item.Sequence);
                         else if (item.Type == SessionEventTypes.LlmRequest)
                             RegisterResourceBindings(item.Data?["ResourceModelReferences"]);
                     }
@@ -424,6 +429,8 @@ namespace RNAssistant.Office.Services
                     {
                         var operation = Operation(entry.ToolCallId);
                         if (operation != null) _lastRequest[operation] = request.EventId;
+                        var eligible = Eligible(entry, request.Sequence);
+                        if (eligible != null) _lastRequest[eligible] = request.EventId;
                         foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
                         {
                             var resource = Resource(link?.ScopeId, link?.Resource);
@@ -438,13 +445,19 @@ namespace RNAssistant.Office.Services
                     }
                 }
             }
-            private void RegisterCanonical(JToken message)
+            private void RegisterCanonical(JToken message, long sequence)
             {
                 if (message?.Type != JTokenType.Object) return;
-                var reference = message["ExecutionReference"]?.ToObject<ModelReference>();
-                var callId = (string)message["ToolCallId"];
-                if (reference?.Kind == ModelReferenceKind.Execution && !string.IsNullOrEmpty(callId))
+                var reference = message["ToolCallReference"]?.ToObject<ModelReference>();
+                var callId = (string)message["ToolCallId"] ?? (string)(message["Activity"] as JObject)?["ToolCallId"];
+                if (reference?.Kind == ModelReferenceKind.ToolCall && !string.IsNullOrEmpty(callId))
                     Bind(_operations, callId, reference.Alias, "execution:" + callId);
+                var eligible = message["EvidenceReference"]?.ToObject<ModelReference>();
+                if (eligible?.Kind == ModelReferenceKind.Evidence && !string.IsNullOrEmpty(callId))
+                {
+                    Bind(_eligible, callId, eligible.Alias, "evidence:" + callId);
+                    if (!_eligibleIssued.ContainsKey(callId)) _eligibleIssued.Add(callId, sequence);
+                }
                 RegisterResourceBindings(message["ResourceModelReferences"]);
             }
             private void RegisterResourceBindings(JToken references)
@@ -480,13 +493,24 @@ namespace RNAssistant.Office.Services
             { return (scope == null ? "" : scope.Kind + "\0" + scope.Id) + "\0" + reference.Uri; }
             internal string Request(string id) { return Find(_requests, id); }
             internal string Operation(string id) { return Find(_operations, id); }
+            internal string Eligible(ContextMessagePresentation entry, long sequence)
+            {
+                if (entry?.EvidenceReference?.Kind != ModelReferenceKind.Evidence ||
+                    entry.Presentation == ContextPresentationKind.Excluded) return null;
+                var canonical = Eligible(entry.ToolCallId, sequence);
+                return canonical == entry.EvidenceReference.Alias ? canonical : null;
+            }
+            internal string Eligible(string id, long sequence)
+            { long issued; return id != null && _eligibleIssued.TryGetValue(id, out issued) && issued < sequence ? Find(_eligible, id) : null; }
             internal string Evidence(string id) { return Find(_evidence, id); }
             internal string Resource(ResourceAuthorityScopeId scope, ResourceRef reference)
             { return reference?.IsExact == true ? Find(_revisions, ResourceKey(scope, reference) + "\0" + reference.Revision) : null; }
             internal bool TryResolve(string alias, out string requestEventId)
-            { return _lastRequest.TryGetValue(alias, out requestEventId); }
+            { string canonical; requestEventId = null; return ModelReference.TryNormalize(alias, out canonical) &&
+                _lastRequest.TryGetValue(canonical, out requestEventId); }
             internal string ResourceFor(string alias)
-            { string value; return _resourceForEvidence.TryGetValue(alias, out value) ? value :
+            { string value, canonical; if (ModelReference.TryNormalize(alias, out canonical)) alias = canonical;
+                return _resourceForEvidence.TryGetValue(alias, out value) ? value :
                 _resourceAliases.Contains(alias) && _lastRequest.ContainsKey(alias) ? alias : null; }
             private static string Find(Dictionary<string, string> values, string id)
             { string value; return id != null && values.TryGetValue(id, out value) ? value : null; }

@@ -7,6 +7,8 @@ using Newtonsoft.Json.Converters;
 namespace RNAssistant.Core.Tools
 {
     [JsonConverter(typeof(StringEnumConverter))]
+    public enum EvidenceEligibility { None, Eligible }
+    [JsonConverter(typeof(StringEnumConverter))]
     public enum ToolExposure { Direct, Skill }
     [JsonConverter(typeof(StringEnumConverter))]
     public enum ToolEffect { Read, Write, External, Unclassified }
@@ -56,12 +58,15 @@ namespace RNAssistant.Core.Tools
         [JsonProperty(Required = Required.Always)]
         public ToolExecutionClass ExecutionClass { get; private set; }
         public bool ExecutesCode { get; private set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Populate)]
+        public EvidenceEligibility EvidenceEligibility { get; private set; }
         [JsonIgnore]
         public bool MayHaveSideEffects { get { return Effect != ToolEffect.Read; } }
 
         [JsonConstructor]
         public ToolPolicy(ToolEffect effect, ToolVerification verification, bool requiresConfirmation,
-            bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0, bool executesCode = false)
+            bool independentLocalRead, IEnumerable<string> allowedModes, int riskLevel = 0, bool executesCode = false,
+            EvidenceEligibility evidenceEligibility = EvidenceEligibility.Eligible)
         {
             if (!Enum.IsDefined(typeof(ToolEffect), effect)) throw new ArgumentOutOfRangeException(nameof(effect));
             if (!Enum.IsDefined(typeof(ToolVerification), verification)) throw new ArgumentOutOfRangeException(nameof(verification));
@@ -71,6 +76,8 @@ namespace RNAssistant.Core.Tools
             var modes = (allowedModes ?? throw new ArgumentNullException(nameof(allowedModes))).ToArray();
             if (modes.Length == 0 || modes.Any(mode => mode != "agent" && mode != "plan" && mode != "chat"))
                 throw new ArgumentException("Explicit supported conversation modes are required.", nameof(allowedModes));
+            if (!Enum.IsDefined(typeof(EvidenceEligibility), evidenceEligibility)) throw new ArgumentOutOfRangeException(nameof(evidenceEligibility));
+            EvidenceEligibility = evidenceEligibility;
             Effect = effect;
             Verification = verification;
             RequiresConfirmation = requiresConfirmation;
@@ -93,7 +100,7 @@ namespace RNAssistant.Core.Tools
         {
             return other != null && Effect == other.Effect && Verification == other.Verification &&
                 RequiresConfirmation == other.RequiresConfirmation && IndependentLocalRead == other.IndependentLocalRead &&
-                RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
+                EvidenceEligibility == other.EvidenceEligibility && RiskLevel == other.RiskLevel && ExecutesCode == other.ExecutesCode && ExecutionClass == other.ExecutionClass &&
                 AllowedModes.SequenceEqual(other.AllowedModes, StringComparer.Ordinal);
         }
     }

@@ -1653,7 +1653,7 @@ namespace RNAssistant.Harness
                 var session = NewSession(adapter);
                 session.LastRun = new ChatRunRecord { RunId = "durable-run-1", TurnId = "durable-turn" };
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "durable-read");
-                evidence.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 1);
+                evidence.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
                 evidence.RunId = session.LastRun.RunId;
                 session.Messages.Add(evidence);
                 var store = new ChatStore(FixturePaths.Value);

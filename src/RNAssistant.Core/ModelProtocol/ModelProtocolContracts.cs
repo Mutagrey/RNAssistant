@@ -78,7 +78,7 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ModelProtocolResult
     {
         public ConversationResponse Response { get; private set; }
-        public IReadOnlyList<string> DeliveredExecutionReferences { get; private set; } = new string[0];
+        public IReadOnlyList<string> DeliveredEvidenceReferences { get; private set; } = new string[0];
         // Provider-native refusal is not a model-authored conversation envelope.
         public string ProviderRefusal { get; private set; }
         // Only an accepted completion may cross the protocol boundary.
@@ -101,7 +101,7 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 Response = response, Completion = completion, ContextUsage = contextUsage,
                 SourceModelAttemptId = sourceModelAttemptId,
-                DeliveredExecutionReferences = Array.AsReadOnly((deliveredReferences ?? new string[0]).ToArray())
+                DeliveredEvidenceReferences = Array.AsReadOnly((deliveredReferences ?? new string[0]).ToArray())
             };
         }
 

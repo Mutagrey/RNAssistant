@@ -10,6 +10,7 @@
     <Reference Include="Newtonsoft.Json">
       <HintPath>../../packages/Newtonsoft.Json.13.0.3/lib/net6.0/Newtonsoft.Json.dll</HintPath>
     </Reference>
+    <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ModelReference.cs" Link="Core/ModelReference.cs" />
     <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponse.cs" Link="Core/ConversationResponse.cs" />
     <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponseJson.cs" Link="Core/ConversationResponseJson.cs" />
     <Compile Include="../../src/RNAssistant.Core/ModelProtocol/ConversationResponseParser.cs" Link="Core/ConversationResponseParser.cs" />

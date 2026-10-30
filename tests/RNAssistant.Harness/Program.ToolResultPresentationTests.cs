@@ -100,7 +100,7 @@ namespace RNAssistant.Harness
                     var terminal = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = "read", ToolId = "core.read" },
                         RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", data), role);
                     terminal.RunId = "run"; terminal.ResourceEvidence.Add(evidence); terminal.ResourceModelReferences = references;
-                    terminal.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 7);
+                    terminal.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 7);
                     terminal.ResultPayload = PayloadRef.FromBlob(payloads.StoreText(terminal.Content, "application/json"));
                     terminal.Content = "Body retained in CAS.";
                     var session = new ChatSession { Messages = new List<ChatMessage> { terminal, new ChatMessage { RunId = "run",
@@ -110,7 +110,7 @@ namespace RNAssistant.Harness
                     var service = new ToolResultPresentationService(null, payloads);
                     var result = service.Read(session, "run", "read");
                     var block = result.Blocks.OfType<ToolTextBlockDto>().Single();
-                    AssertEqual("E7", result.ExecutionReference, "all result roles use the saved execution alias");
+                    AssertEqual("T7", result.ToolCallReference, "all result roles use the saved execution alias");
                     AssertEqual("R3@v1", block.Source.Reference, "source label resolves scope/revision instead of list order");
                     AssertEqual("src/A.cs", block.Source.Target, "semantic path is a display label");
                     AssertEqual(42L, block.Source.Coverage.Start.Value, "caption retains actual line coordinates");

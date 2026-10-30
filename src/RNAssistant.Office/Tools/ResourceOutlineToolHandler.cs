@@ -16,7 +16,7 @@ namespace RNAssistant.Office.Tools
             "\"limit\":{\"type\":\"integer\",\"description\":\"Maximum parts to list.\",\"minimum\":1,\"maximum\":50,\"default\":20}" +
             "},\"required\":[\"target\"],\"additionalProperties\":false}");
         internal static readonly ToolPolicy Policy = new ToolPolicy(ToolEffect.Read, ToolVerification.None,
-            false, true, new[] { "agent", "plan", "chat" });
+            false, true, new[] { "agent", "plan", "chat" }, evidenceEligibility: EvidenceEligibility.None);
         internal static readonly ToolBinding Binding = new ToolBinding("resources.outline.v1");
 
         internal ResourceOutlineToolHandler(ResourceGatewayService gateway, RNAssistant.Core.Models.ChatSession session)

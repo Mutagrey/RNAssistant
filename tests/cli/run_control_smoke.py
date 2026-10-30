@@ -29,12 +29,16 @@ def finish_response(request):
     for item in request["messages"]:
         content = item.get("content") or ""
         if item.get("role") == "tool" and item.get("tool_call_id"):
-            evidence.append(item["tool_call_id"])
+            reference = json.loads(content).get("evidence")
+            if reference:
+                evidence.append(reference)
         elif isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
-            evidence.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
+            reference = json.loads(content.split("\n", 1)[1]).get("evidence")
+            if reference:
+                evidence.append(reference)
     evidence = list(dict.fromkeys(evidence))
     return {"action": "finish", "outcome": "completed", "reason": "Report completed tool outcomes.",
-            "results": [{"summary": "Finished.", "evidence": evidence,
+            "results": [{"criterion": "Finished.", "evidence": evidence,
                          "assessment": "satisfied"}] if evidence else [],
             "message": "Finished."}
 

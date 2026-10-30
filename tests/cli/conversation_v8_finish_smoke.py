@@ -25,11 +25,13 @@ def finish(request):
     for message in request["messages"]:
         content = message.get("content") or ""
         if isinstance(content, str) and content.startswith("TOOL_RESULT:\n"):
-            ids.append(json.loads(content.split("\n", 1)[1])["tool_call_id"])
+            receipt = json.loads(content.split("\n", 1)[1])
+            if receipt.get("evidence"):
+                ids.append(receipt["evidence"])
     ids = list(dict.fromkeys(ids))
     assert len(ids) == 2, ids
     return {"action": "finish", "outcome": "completed", "reason": "Both requested artifacts exist.",
-            "results": [{"summary": "Data and chart created.", "evidence": ids,
+            "results": [{"criterion": "Data and chart created.", "evidence": ids,
                          "assessment": "satisfied"}],
             "message": "Data and chart created."}
 
@@ -126,7 +128,7 @@ def run_direct(mode, outcome):
             request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             assessment = "partially_satisfied" if outcome == "partial" else "not_satisfied"
             response = {"action": "finish", "reason": "The requested facts are partly unavailable.",
-                        "outcome": outcome, "results": [{"summary": "Known facts and limits.",
+                        "outcome": outcome, "results": [{"criterion": "Known facts and limits.",
                         "assessment": assessment, "evidence": []}], "message": "Answer with explicit limits."}
             content = conversation_content(request, response) if "response_format" in request else "Fixture title"
             body = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode()

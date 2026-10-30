@@ -47,7 +47,7 @@ namespace RNAssistant.Core.ModelProtocol
                 ["type"] = "array",
                 ["items"] = ClosedObject(new JObject
                 {
-                    ["summary"] = NonblankString(),
+                    ["criterion"] = NonblankString(),
                     ["evidence"] = new JObject
                     {
                         ["type"] = "array", ["items"] = NonblankString(),

@@ -35,13 +35,13 @@ namespace RNAssistant.Harness
                 "Read the requested range.", null,
                 ToolResultRoles.User, FixtureCallOrigin("inspector-step"));
             callMessage.RunId = "run-1";
-            callMessage.ExecutionReference = ModelReference.Create(ModelReferenceKind.Execution, 1);
+            callMessage.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
             session.Messages.Add(callMessage);
             var resultMessage = AgentJsonProtocol.CreateToolResultMessage(
                 new ToolInvocation { ToolCallId = call.Id, ToolId = call.Name },
                 RuntimeToolResult.Ok("Read"), ToolResultRoles.User);
             resultMessage.RunId = "run-1";
-            resultMessage.ExecutionReference = callMessage.ExecutionReference;
+            resultMessage.ToolCallReference = callMessage.ToolCallReference;
             session.Messages.Add(resultMessage);
             session.Messages.Add(new ChatMessage
             {

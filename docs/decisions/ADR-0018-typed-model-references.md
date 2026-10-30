@@ -1,5 +1,9 @@
 # ADR-0018: типизированные короткие ссылки модели
 
+Уточнение 2026-10-30: решения ниже про E-as-execution и точный регистр — история
+revision 2. Текущий [revision 3](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3)
+вводит T/E separation, eligibility, case-insensitive lookup и `criterion`.
+
 Дата: 2026-10-26. Статус: принято пользователем; реализация host-neutral.
 Owner: Core ModelProtocol / ChatStore / model context.
 Исходный HEAD: `c5eb1618b6b3785204ff398f705a91d0e385d247`.
