@@ -321,7 +321,8 @@ function setDiagnosticsTab(name, refreshRecords) {
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (button) {
     var active = button.getAttribute("data-diagnostics-tab") === name;
     button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", active ? "true" : "false");
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
   });
   Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-panel")).forEach(function (panel) {
     var target = panel.getAttribute("data-diagnostics-panel");
@@ -335,7 +336,7 @@ function setDiagnosticsTab(name, refreshRecords) {
     requestAnimationFrame(updateLogScrollButton);
   }
   if (name === "overview") performanceDiagnostics.render();
-  if (name === "model-lab" && typeof openModelDiagnosticsLab === "function") openModelDiagnosticsLab();
+  if (name === "model-lab" && typeof openModelDiagnosticsLab === "function") openModelDiagnosticsLab(true);
 }
 
 function bindDiagnosticsActions() {

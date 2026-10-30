@@ -160,7 +160,7 @@ namespace RNAssistant.Office.Services
             // real tool execution or asks the provider to allocate identity.
             var call = new AgentToolCall { Id = "call_1", Name = draft.Name };
             ToolArgumentNormalizer.AddProperties(draft.Arguments, call.Arguments);
-            return new[]
+            var messages = new[]
             {
                 AgentJsonProtocol.CreateToolCallMessage(call, "TOOL_OK", "Probe one compatible tool call.", null, role,
                     new AcceptedToolCallOrigin("compatibility-probe", "synthetic-attempt", 0)),
@@ -173,6 +173,8 @@ namespace RNAssistant.Office.Services
                     Content = "Reply with " + finalSentinel + "."
                 }
             };
+            messages[0].ToolCallReference = messages[1].ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
+            return ModelReferenceProjection.Project(messages);
         }
 
         private async Task<ModelCompatibilityCheckDto> RunAsync(

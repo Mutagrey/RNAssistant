@@ -11,7 +11,8 @@ Web checks: `context-usage`, `agent-timeline-order`, `chat-inbox`, `stream-rende
 The separate composer unknown-warning mismatch remains in the risk register.
 
 `history protocol:` checks the six content-response/history-role combinations,
-native pairing, history-specific instructions, unchanged user data and frozen
+native pairing and decision content, retained finish/reflection through the compiler,
+shared concise-field guidance, unchanged user data and frozen
 repair/explicit fallback. `node tests/web/agent-history-settings.test.js` exercises
 the shipped form's independent response/history controls and save/reopen behavior.
 Both are synthetic; provider-native generation is a separate diagnostics capability.
@@ -20,13 +21,16 @@ Both are synthetic; provider-native generation is a separate diagnostics capabil
 and SSE parity, exact request forwarding, settings isolation, endpoint drift rejection,
 bounded redaction before truncation and cancellation without another request.
 `node tests/web/model-diagnostics-layout.test.js` uses the shipped UI with a synthetic
-bridge: opening never probes, explicit runs/controls, failures and raw text, inert
-provider output, JSON export, cancellation and 1100/740/390 px light/dark layout.
+bridge: opening never probes, explicit runs/controls, whole-row/keyboard selection,
+independent native-history/generation groups, connection refresh after saving,
+selectable transport errors, control seeds, inert provider output, JSON export,
+cancellation and 1100/740/390/320 px light/dark layout.
 Uses Playwright and optional `BROWSER_EXECUTABLE`; optional `RNA_DIAGNOSTICS_SCREENSHOT`
 writes desktop/narrow previews. Neither check calls a model or validates real Office.
 
 `model diagnostics:` covers exact native-history probe requests (null/empty/omitted
-content), shuffled pairing, absent-result control, fallback roles, strict marker/ID
+content), retained decision JSON in B4, shuffled pairing, absent-result control,
+production fallback envelopes/aliases, strict marker/ID
 assertions, HTTP 500 and malformed HTTP 200 capture, timeout/cancellation and the
 existing diagnostics tracker/stream cases. The transport matrix adds instruction
 roles, production V8 parser/schema, expected schema rejection, explicit text JSON,

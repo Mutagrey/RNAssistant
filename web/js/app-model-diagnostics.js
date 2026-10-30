@@ -1,19 +1,52 @@
 // Host owns scenarios, controls and assertions; this UI schedules explicit runs and presents reports.
-var modelDiagnosticsLab = { catalog: null, loading: false, running: false, cancelled: false,
-  request: null, rows: [], selected: -1, run: null, scope: "A", expanded: { all: true, A: true, B: true, C: true } };
+var modelDiagnosticsLab = { catalog: null, catalogRevision: 0, loading: false, running: false, cancelled: false,
+  request: null, rows: [], selected: null, followResults: true, run: null, scope: "response", expanded: { all: true } };
 var modelDiagnosticTitles = {
   A1: "Обычный текст", A2: "Роль инструкции", "A2-system": "Контроль system",
   A3: "Вызов в V8", A4: "Завершение в V8", B1: "content: null",
-  B2: "content: пустая строка", B3: "Без поля content", B4: "Маркер в результате",
+  B2: "content: пустая строка", B3: "Без поля content", B4: "Решение execute и результат",
   B5: "Связь вызова с результатом", B6: "Нет результата",
-  B7: "Источник данных", B8: "Native tool call", B9: "Несколько user / run",
+  B7: "Источник данных", B8: "Генерация native-вызова", B9: "Несколько запросов пользователя",
   C1: "Ответ JSON", C2: "Строгая схема V8", C3: "Ошибочная схема",
   "C3-valid": "Контроль валидной schema", "C3-text": "JSON без response_format",
   C4: "SSE и обычный JSON", "C4-control": "Контроль JSON для SSE",
-  C5: "Fallback: user", C6: "Fallback: developer"
+  C5: "Результат в role: user", C6: "Результат в role: developer"
 };
+var modelDiagnosticGroups = [
+  { id: "response", title: "Ответ в content", icon: "braces", ids: ["A1", "A3", "A4", "C1", "C2", "C3", "C3-text"],
+    description: "Обычный ответ, JSON и строгая схема V8. Проверяется новый ответ модели." },
+  { id: "instruction", title: "Роль инструкции", icon: "chat", ids: ["A2"],
+    description: "Сравнение developer и контрольной system-инструкции." },
+  { id: "native-history", title: "История Native tools", icon: "tool", ids: ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B9"],
+    description: "Чтение assistant.tool_calls → role: tool. Новый ответ приходит JSON в content; генерация native-вызовов не требуется." },
+  { id: "json-history", title: "История JSON в content", icon: "chat", ids: ["C5", "C6"],
+    description: "Чтение V8 JSON в assistant.content и TOOL_RESULT в роли user или developer." },
+  { id: "native-generation", title: "Генерация Native tools", icon: "tool", ids: ["B8"],
+    description: "Отдельная возможность: модель сама возвращает tool_calls. Её результат не определяет поддержку native-истории." },
+  { id: "stream", title: "Потоковый ответ", icon: "layers", ids: ["C4"],
+    description: "SSE сравнивается с обычным JSON-ответом на одинаковый запрос." }
+];
 var modelDiagnosticVerdicts = { NotRun: "Не запускался", Pass: "Пройдено", Fail: "Не пройдено",
   Inconclusive: "Недостаточно данных", Unsupported: "Не поддерживается", Running: "Выполняется", Cancelled: "Отменено" };
+var modelDiagnosticReasons = {
+  exact_text_marker: "Текст совпал с ожидаемым маркером.", text_marker_mismatch: "Модель изменила ожидаемый текст.",
+  exact_json_answer: "Все поля ответа совпали с ожидаемыми.", invalid_answer_json: "Ответ не является допустимым JSON-объектом.",
+  marker_mismatch: "Маркер из результата инструмента не совпал.", call_id_mismatch: "Ответ связан с другим вызовом инструмента.",
+  target_mismatch: "Модель выбрала другой объект.", unexpected_answer_fields: "В ответе есть лишние или отличающиеся поля.",
+  exact_v8_response: "Ответ прошёл V8 parser и совпал с ожидаемым.", v8_parser_rejected: "Ответ нарушает контракт V8.",
+  v8_response_mismatch: "V8-ответ допустим, но его содержание отличается от ожидаемого.",
+  exact_native_function_and_arguments: "Имя функции и аргументы native-вызова совпали.",
+  native_call_missing_or_extra: "Модель должна вернуть ровно один native-вызов.",
+  native_arguments_mismatch: "Аргументы native-вызова не совпали.", invalid_native_arguments: "Аргументы native-вызова не являются JSON.",
+  unexpected_native_generation: "Получен native-вызов вместо запрошенного ответа в content.",
+  invalid_schema_rejected: "Сервер корректно отклонил ошибочную схему.", invalid_schema_accepted: "Сервер принял заведомо ошибочную схему.",
+  schema_rejection_unproven: "Не подтверждено, что сервер отклонил именно ошибочную схему.",
+  request_timeout: "Время ожидания ответа истекло.", request_failed: "Запрос не завершился успешно. Подробности — в HTTP-ответе ниже.",
+  incomplete_or_refused_answer: "Модель отказалась отвечать либо ответ не завершён.",
+  json_response_instead_of_sse: "Вместо запрошенного потока SSE получен обычный JSON.",
+  sse_control_unavailable: "Контрольный JSON-ответ не прошёл проверку; сравнение SSE недоступно.",
+  sse_parity_mismatch: "Результаты SSE и обычного JSON не совпали.", missing_exact_exchange: "Недостаточно данных HTTP-обмена для подтверждения результата."
+};
 
 function modelLabNode(tag, text, className) {
   var node = document.createElement(tag);
@@ -24,21 +57,21 @@ function modelLabNode(tag, text, className) {
 
 function modelLabSelectedCases() {
   var lab = modelDiagnosticsLab;
+  var group = modelDiagnosticGroups.find(function (item) { return item.id === lab.scope; });
   return lab.catalog ? lab.catalog.scenarios.filter(function (item) {
-    return !item.isControl && (lab.scope === "all" || item.id === lab.scope || item.id[0] === lab.scope);
+    return !item.isControl && (lab.scope === "all" || item.id === lab.scope || group && group.ids.indexOf(item.id) >= 0);
   }) : [];
 }
 
 function renderModelLabScenarios() {
   var lab = modelDiagnosticsLab;
   if (!lab.catalog) return;
-  var groups = { A: "Ответы и инструкции", B: "История и инструменты", C: "Формат и поток" };
   var tree = window.RNAssistantNavigationTree;
-  var nodes = Object.keys(groups).map(function (group) {
-    var cases = lab.catalog.scenarios.filter(function (item) { return !item.isControl && item.id[0] === group; });
-    return { key: "scope:" + group, scope: group, kind: "parent", selectable: true, title: groups[group],
-      iconHtml: tree.icon(group === "B" ? "tool" : group === "C" ? "braces" : "chat"),
-      expanded: lab.expanded[group], selected: lab.scope === group, disabled: lab.running,
+  var nodes = modelDiagnosticGroups.map(function (group) {
+    var cases = lab.catalog.scenarios.filter(function (item) { return !item.isControl && group.ids.indexOf(item.id) >= 0; });
+    return { key: "scope:" + group.id, scope: group.id, kind: "parent", selectable: true, title: group.title,
+      iconHtml: tree.icon(group.icon), tooltip: group.description,
+      expanded: !!lab.expanded[group.id], selected: lab.scope === group.id, disabled: lab.running,
       badge: String(cases.reduce(function (count, item) { return count + 1 + item.controls.length; }, 0)),
       children: cases.map(function (item) { return { key: "case:" + item.id, scope: item.id, kind: "leaf",
         title: modelDiagnosticTitles[item.id] || item.capability, badge: item.id,
@@ -56,25 +89,45 @@ function renderModelLabScenarios() {
     }
   });
   var selected = modelLabSelectedCases(), count = selected.reduce(function (sum, item) { return sum + 1 + item.controls.length; }, 0);
-  $("modelLabSelectionTitle").textContent = groups[lab.scope] || modelDiagnosticTitles[lab.scope] || "Все проверки";
+  var group = modelDiagnosticGroups.find(function (item) { return item.id === lab.scope || item.ids.indexOf(lab.scope) >= 0; });
+  $("modelLabSelectionTitle").textContent = modelDiagnosticTitles[lab.scope] || group && group.title || "Все проверки";
+  $("modelLabSelectionDescription").textContent = group ? group.description : "Каждая возможность оценивается отдельно. Контрольные запросы включаются автоматически.";
   $("modelLabSelectionInfo").textContent = "Запросов за прогон: " + count +
     (selected.some(function (item) { return item.controls.length; }) ? " · включая контрольные проверки" : "");
   $("modelLabRun").title = "Запустить: " + $("modelLabSelectionTitle").textContent;
 }
 
-async function openModelDiagnosticsLab(force) {
+async function openModelDiagnosticsLab(force, resetModel) {
   var lab = modelDiagnosticsLab;
   if (lab.loading || lab.running || lab.catalog && !force) return;
+  var revision = lab.catalogRevision, previousModel = lab.catalog && lab.catalog.model;
   lab.loading = true; updateModelLabControls();
   $("modelLabStatus").textContent = "Загружаю сценарии…";
   try {
     var catalog = await send("getModelDiagnosticScenarios", {});
+    if (revision !== lab.catalogRevision) return;
+    if (!catalog || !Array.isArray(catalog.scenarios) || !catalog.scenarios.length ||
+        catalog.scenarios.some(function (item) { return !item.id || !Array.isArray(item.controls); }))
+      throw new Error("Получен некорректный каталог. Перезагрузите панель.");
     lab.catalog = catalog;
-    $("modelLabModel").value = catalog.model || "";
+    if (resetModel || !$("modelLabModel").value || $("modelLabModel").value === previousModel)
+      $("modelLabModel").value = catalog.model || "";
+    $("modelLabConnection").textContent = "Сохранённое подключение: " + (catalog.endpoint || "не задано");
     renderModelLabScenarios();
     $("modelLabStatus").textContent = "Выберите раздел или отдельную проверку.";
-  } catch (error) { $("modelLabStatus").textContent = "Сценарии недоступны: " + error.message; }
-  finally { lab.loading = false; updateModelLabControls(); }
+  } catch (error) { lab.catalog = null; $("modelLabStatus").textContent = "Сценарии недоступны: " + error.message; }
+  finally {
+    lab.loading = false; updateModelLabControls();
+    if (revision !== lab.catalogRevision && state.diagnosticsTab === "model-lab") openModelDiagnosticsLab(true);
+  }
+}
+
+function refreshModelDiagnosticsSettings() {
+  if (modelDiagnosticsLab.catalog && $("modelLabModel").value === modelDiagnosticsLab.catalog.model)
+    $("modelLabModel").value = "";
+  modelDiagnosticsLab.catalogRevision++;
+  modelDiagnosticsLab.catalog = null;
+  if (state.diagnosticsTab === "model-lab") openModelDiagnosticsLab(true);
 }
 
 function updateModelLabControls() {
@@ -90,87 +143,142 @@ function updateModelLabControls() {
   renderModelLabScenarios();
 }
 
+function modelLabBadge(verdict) {
+  return modelLabNode("span", modelDiagnosticVerdicts[verdict] || verdict,
+    verdict === "Pass" ? "model-compatibility-summary passed" : verdict === "Fail" ? "model-compatibility-summary failed" :
+      verdict === "Inconclusive" || verdict === "Unsupported" ? "model-compatibility-summary warning" : "muted");
+}
+
+function selectModelLabRow(row) {
+  var lab = modelDiagnosticsLab;
+  lab.selected = row; lab.followResults = false;
+  $("modelLabResults").querySelectorAll("tbody tr").forEach(function (tr, index) {
+    var selected = lab.rows[index] === row;
+    tr.setAttribute("aria-selected", String(selected));
+    tr.querySelector("button").setAttribute("aria-pressed", String(selected));
+  });
+  renderModelLabInspector();
+  var inspector = $("modelLabInspector"), panel = inspector.closest(".model-diagnostics-lab");
+  if (inspector.getBoundingClientRect().top > panel.getBoundingClientRect().bottom - 240)
+    inspector.scrollIntoView({ block: "start" });
+}
+
 function renderModelLabResults() {
-  var lab = modelDiagnosticsLab, root = $("modelLabResults"); root.replaceChildren();
+  var lab = modelDiagnosticsLab, root = $("modelLabResults"), scroll = root.scrollTop;
+  var focused = root.contains(document.activeElement) && document.activeElement.closest("tr");
+  var focusKey = focused && focused.getAttribute("data-row-key");
+  root.replaceChildren();
+  $("modelLabRunSummary").classList.toggle("hidden", !lab.run);
+  var synthetic = lab.rows.some(function (row) { return row.exchange && row.exchange.result.ExecutionKind === "Synthetic"; });
+  $("modelLabRunSummary").textContent = lab.run ? (synthetic ? "Синтетический прогон: " : "Результаты прогона: ") + lab.run.model + " · " + lab.run.endpoint : "";
   if (!lab.rows.length) return;
   var table = modelLabNode("table", undefined, "rna-table"), head = modelLabNode("thead"), header = modelLabNode("tr");
-  ["Сценарий", "Результат", "HTTP", "Время"].forEach(function (name) { header.appendChild(modelLabNode("th", name)); });
+  ["Проверка", "Результат"].forEach(function (name) { header.appendChild(modelLabNode("th", name)); });
   head.appendChild(header); table.appendChild(head); var body = modelLabNode("tbody");
-  lab.rows.forEach(function (row, index) {
+  lab.rows.forEach(function (row) {
     var result = row.exchange && row.exchange.result, verdict = result ? result.Verdict : row.phase;
-    var tr = modelLabNode("tr"); tr.setAttribute("aria-selected", index === lab.selected ? "true" : "false");
-    var first = modelLabNode("td"), button = modelLabNode("button", row.id + (lab.run.repeat > 1 ? " · #" + row.repetition : ""), "rna-table-link");
-    button.type = "button"; button.title = modelDiagnosticTitles[row.id] || row.id;
-    button.disabled = !row.exchange;
-    button.setAttribute("aria-pressed", index === lab.selected ? "true" : "false");
-    button.addEventListener("click", function () { lab.selected = index; renderModelLabResults(); renderModelLabInspector(); });
-    first.appendChild(button); tr.appendChild(first);
-    var status = modelLabNode("td");
-    var badge = modelLabNode("span", modelDiagnosticVerdicts[verdict] || verdict,
-      verdict === "Pass" ? "model-compatibility-summary passed" : verdict === "Fail" ? "model-compatibility-summary failed" :
-        verdict === "Inconclusive" || verdict === "Unsupported" ? "model-compatibility-summary warning" : "muted");
-    status.appendChild(badge);
-    status.title = verdict;
-    status.setAttribute("data-verdict", verdict); tr.appendChild(status);
-    tr.appendChild(modelLabNode("td", result && result.HttpStatusCode != null ? result.HttpStatusCode : "—"));
-    tr.appendChild(modelLabNode("td", result ? formatDiagnosticDuration(result.DurationMs) : "—")); body.appendChild(tr);
+    var tr = modelLabNode("tr"), selected = row === lab.selected, key = row.id + "/" + row.repetition;
+    tr.setAttribute("aria-selected", String(selected)); tr.setAttribute("data-row-key", key);
+    tr.setAttribute("data-row-action", "inspect");
+    var first = modelLabNode("td"), button = modelLabNode("button", modelDiagnosticTitles[row.id] || row.id, "rna-table-link");
+    button.type = "button"; button.setAttribute("aria-pressed", String(selected));
+    button.setAttribute("aria-controls", "modelLabInspector");
+    tr.addEventListener("click", function () { selectModelLabRow(row); });
+    first.appendChild(button);
+    first.appendChild(modelLabNode("small", row.id + (row.control ? " · контроль" : "") +
+      (lab.run.repeat > 1 ? " · повтор " + row.repetition : "")));
+    tr.appendChild(first);
+    var status = modelLabNode("td"); status.setAttribute("data-verdict", verdict);
+    status.appendChild(modelLabBadge(verdict));
+    if (result) status.appendChild(modelLabNode("small", (result.HttpStatusCode != null ? "HTTP " + result.HttpStatusCode + " · " : "") +
+      formatDiagnosticDuration(result.DurationMs)));
+    tr.appendChild(status);
+    body.appendChild(tr);
   });
-  table.appendChild(body); root.appendChild(table);
+  table.appendChild(body); root.appendChild(table); root.scrollTop = scroll;
+  if (focusKey) Array.from(body.rows).some(function (tr) {
+    if (tr.getAttribute("data-row-key") !== focusKey) return false;
+    tr.querySelector("button").focus({ preventScroll: true }); return true;
+  });
 }
 
 function modelLabAssertion(root, name, value) {
+  if (value === null || value === undefined || value === "NotRun") return;
   var row = modelLabNode("tr");
-  row.appendChild(modelLabNode("td", name));
-  row.appendChild(modelLabNode("td", value === null || value === undefined ? "Не проверялось" :
-    typeof value === "boolean" ? value ? "Да" : "Нет" : modelDiagnosticVerdicts[value] || value)); root.appendChild(row);
+  row.appendChild(modelLabNode("th", name));
+  row.lastChild.setAttribute("scope", "row");
+  row.appendChild(modelLabNode("td", typeof value === "boolean" ? value ? "Да" : "Нет" : modelDiagnosticVerdicts[value] || value));
+  root.appendChild(row);
+}
+
+function modelLabDisplayJson(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); }
+  catch (_) { return text || "—"; }
 }
 
 function modelLabRaw(root, title, data, open) {
-  if (!data) { root.appendChild(modelLabNode("p", title + ": не получено.")); return; }
   var details = modelLabNode("details", undefined, "product-settings-advanced"); details.open = !!open;
-  details.appendChild(modelLabNode("summary", title + (data.truncated ? " · сокращённый просмотр" : "") +
-    (data.redacted ? " · секреты скрыты" : "")));
-  var body = modelLabNode("div"); body.appendChild(modelLabNode("pre", data.text)); details.appendChild(body); root.appendChild(details);
+  details.appendChild(modelLabNode("summary", title + (data && data.truncated ? " · сокращённый просмотр" : "") +
+    (data && data.redacted ? " · секреты скрыты" : "")));
+  var body = modelLabNode("div"); body.appendChild(modelLabNode("pre", data ? data.text : "Не получено."));
+  details.appendChild(body); root.appendChild(details); return details;
 }
 
 function renderModelLabInspector() {
-  var lab = modelDiagnosticsLab, row = lab.rows[lab.selected], root = $("modelLabInspector"); root.replaceChildren();
-  if (!row || !row.exchange) { root.appendChild(modelLabNode("p", "После запуска здесь появятся результаты и детали ответов.", "tree-empty")); return; }
-  var exchange = row.exchange, result = exchange.result;
-  root.appendChild(modelLabNode("h4", row.id + " · " + (modelDiagnosticTitles[row.id] || result.Capability) + " · #" + row.repetition));
-  root.appendChild(modelLabNode("p", result.Model + " · " + formatDiagnosticDuration(result.DurationMs), "muted"));
-  root.appendChild(modelLabNode("p", (modelDiagnosticVerdicts[result.Verdict] || result.Verdict) + " · " + result.Reason));
-  var assertions = modelLabNode("table", undefined, "rna-table");
-  [["HTTP принят", result.HttpAccepted], ["Маркер совпал", result.MarkerMatches], ["Call ID совпал", result.CallIdMatches],
-    ["Target совпал", result.TargetMatches], ["V8 parser", result.ParserVerdict], ["SSE parity", result.ParityVerdict],
-    ["Получен SSE", result.StreamingRequested ? result.StreamingObserved : null], ["Вход / выход токенов", (result.PromptTokens == null ? "—" : result.PromptTokens) +
-      " / " + (result.CompletionTokens == null ? "—" : result.CompletionTokens)]].filter(function (item) {
-        return item[1] !== null && item[1] !== undefined && item[1] !== "NotRun";
-      }).forEach(function (item) { modelLabAssertion(assertions, item[0], item[1]); });
-  root.appendChild(assertions);
-  if (row.id === "C3") root.appendChild(modelLabNode("p", "Pass здесь означает корректный отказ на ошибочную schema.", "muted"));
-  if (result.StreamingRequested) root.appendChild(modelLabNode("p", result.ResponseCaptureTruncated ? "Лимит захвата: сохранена часть ответа." :
-    result.ResponseBodyComplete ? "Тело HTTP получено полностью." : "Сохранён полученный префикс HTTP; полнота не подтверждена.", "muted"));
+  var lab = modelDiagnosticsLab, row = lab.selected, root = $("modelLabInspector"); root.replaceChildren();
+  if (!row) { root.appendChild(modelLabNode("p", "Нажмите на строку результата, чтобы увидеть детали.", "tree-empty")); return; }
+  root.appendChild(modelLabNode("h4", (modelDiagnosticTitles[row.id] || row.id) + " · " + row.id +
+    (lab.run.repeat > 1 ? " · повтор " + row.repetition : "")));
+  var exchange = row.exchange, result = exchange && exchange.result;
+  root.appendChild(modelLabBadge(result ? result.Verdict : row.phase));
+  if (!result) {
+    root.appendChild(modelLabNode("p", row.error || (row.phase === "Running" ? "Ожидается ответ модели…" : "Проверка ещё не выполнена.")));
+    if (row.error) root.appendChild(modelLabNode("p", "Ошибка запуска не является результатом проверки модели.", "muted"));
+    return;
+  }
+  root.appendChild(modelLabNode("p", modelDiagnosticReasons[result.Reason] || result.Reason || "Причина не указана."));
+  var group = modelDiagnosticGroups.find(function (item) { return item.ids.indexOf(row.id) >= 0; });
+  if (group) root.appendChild(modelLabNode("p", group.description, "muted"));
+  if (row.id === "C3") root.appendChild(modelLabNode("p", "Ожидается отказ HTTP 400/422 на ошибочную схему. Такой отказ означает, что проверка пройдена.", "muted"));
+  var assertions = modelLabNode("section"), checks = modelLabNode("table", undefined, "rna-table");
+  assertions.appendChild(modelLabNode("h5", "Что проверено"));
+  [["HTTP принят", result.HttpAccepted], ["JSON разобран", result.JsonObjectAccepted], ["Маркер совпал", result.MarkerMatches],
+    ["ID вызова совпал", result.CallIdMatches], ["Объект совпал", result.TargetMatches], ["Контракт V8", result.ParserVerdict],
+    ["SSE совпал с JSON", result.ParityVerdict], ["Получен SSE", result.StreamingRequested ? result.StreamingObserved : null]]
+    .forEach(function (item) { modelLabAssertion(checks, item[0], item[1]); });
+  if (checks.children.length) { assertions.appendChild(checks); root.appendChild(assertions); }
+  if (result.ParserErrorCode || result.FailureKind) root.appendChild(modelLabNode("p", "Код ошибки: " + (result.ParserErrorCode || result.FailureKind)));
+  var comparison = modelLabNode("section", undefined, "model-lab-comparison");
+  [["Ожидалось", result.ExpectedJson || result.ExpectedText], ["Получено", result.ActualNativeCallsJson || result.ActualContent]]
+    .forEach(function (item) {
+      var panel = modelLabNode("div"); panel.appendChild(modelLabNode("h5", item[0]));
+      panel.appendChild(modelLabNode("pre", modelLabDisplayJson(item[1]))); comparison.appendChild(panel);
+    });
+  root.appendChild(comparison);
   if (exchange.resultTruncated || exchange.resultRedacted) root.appendChild(modelLabNode("p",
     (exchange.resultTruncated ? "Просмотр результата сокращён. " : "") + (exchange.resultRedacted ? "Секреты скрыты." : ""), "muted"));
-  modelLabRaw(root, "Ожидаемый ответ", { text: result.ExpectedJson || result.ExpectedText || "—" }, false);
-  modelLabRaw(root, "Фактический ответ", { text: result.ActualNativeCallsJson || result.ActualContent || "—" }, result.Verdict !== "Pass");
-  if (result.ParserErrorCode || result.FailureKind) root.appendChild(modelLabNode("p", "Ошибка: " + (result.ParserErrorCode || result.FailureKind)));
+  if (result.StreamingRequested) root.appendChild(modelLabNode("p", result.ResponseCaptureTruncated ? "Лимит захвата: сохранена часть ответа." :
+    result.ResponseBodyComplete ? "Тело HTTP получено полностью." : "Сохранён полученный префикс HTTP; полнота не подтверждена.", "muted"));
   var raw = exchange.request;
   if (raw && !raw.truncated) {
     try {
-      var request = JSON.parse(raw.text), messages = modelLabNode("details");
-      messages.appendChild(modelLabNode("summary", "Сообщения запроса · " + (request.messages || []).length));
+      var request = JSON.parse(raw.text), messages = modelLabNode("details", undefined, "product-settings-advanced");
+      messages.appendChild(modelLabNode("summary", "Состав запроса · сообщений: " + (request.messages || []).length));
+      var messageBody = modelLabNode("div");
       (request.messages || []).forEach(function (message, index) {
-        modelLabRaw(messages, (index + 1) + ". " + message.role + (message.tool_call_id ? " · " + message.tool_call_id : ""),
-          { text: JSON.stringify(message, null, 2) }, false);
-      }); root.appendChild(messages);
-    } catch (_) { /* A redacted payload may no longer be a JSON object; the text remains below. */ }
+        modelLabRaw(messageBody, (index + 1) + ". " + message.role + (message.tool_calls ? " · tool_calls" : "") +
+          (message.tool_call_id ? " · " + message.tool_call_id : ""), { text: JSON.stringify(message, null, 2) }, false);
+      }); messages.appendChild(messageBody); root.appendChild(messages);
+    } catch (_) { /* Redaction may make JSON unparsable; the raw text remains available. */ }
   }
-  modelLabRaw(root, "Метаданные обмена", { text: JSON.stringify({ verdict: result.Verdict, reason: result.Reason,
-    requestSha256: result.RequestSha256, endpoint: result.Endpoint, seed: row.seed }, null, 2) }, false);
-  modelLabRaw(root, "HTTP request · UTF-8", raw, false);
-  modelLabRaw(root, "HTTP response · текст", exchange.response, false);
+  modelLabRaw(root, "HTTP-запрос", raw, false);
+  modelLabRaw(root, "HTTP-ответ", exchange.response, result.Reason === "request_failed");
+  var metadata = modelLabRaw(root, "Параметры и технические детали", { text: JSON.stringify({
+    model: result.Model, endpoint: result.Endpoint, responseFormat: result.ResponseFormat,
+    durationMs: result.DurationMs, promptTokens: result.PromptTokens, completionTokens: result.CompletionTokens,
+    verdict: result.Verdict, reason: result.Reason, seed: row.seed, requestSha256: result.RequestSha256,
+    executionKind: result.ExecutionKind }, null, 2) }, false);
+  metadata.setAttribute("data-model-lab-metadata", "true");
 }
 
 async function runModelDiagnosticsLab() {
@@ -185,7 +293,8 @@ async function runModelDiagnosticsLab() {
   var seed = $("modelLabSeed").value.trim();
   if (!seed) { var bytes = new Uint32Array(4); window.crypto.getRandomValues(bytes); seed = Array.from(bytes).map(function (n) { return n.toString(16); }).join("-"); }
   $("modelLabSeed").value = seed;
-  lab.running = true; lab.cancelled = false; lab.selected = -1; lab.rows = [];
+  lab.running = true; lab.cancelled = false; lab.selected = null; lab.followResults = true; lab.rows = [];
+  $("modelLabCases").open = false;
   lab.run = { scenarioRevision: lab.catalog.scenarioRevision, endpoint: lab.catalog.endpoint, model: model,
     seed: seed, repeat: repeat, timeoutSeconds: timeout, startedUtc: new Date().toISOString() };
   for (var iteration = 1; iteration <= repeat; iteration++) ids.forEach(function (id) {
@@ -195,20 +304,24 @@ async function runModelDiagnosticsLab() {
   try {
     for (var i = 0; i < scheduled.length && !lab.cancelled; i++) {
       var row = scheduled[i]; row.phase = "Running";
+      row.seed = seed + "/" + row.repetition;
+      if (lab.followResults) lab.selected = row;
       $("modelLabStatus").textContent = "Выполняется " + row.id + " · повтор " + row.repetition + " · " + (i + 1) + "/" + scheduled.length;
-      renderModelLabResults();
-      lab.request = send("runModelDiagnostic", { scenarioId: row.id, seed: seed + "/" + row.repetition,
+      renderModelLabResults(); renderModelLabInspector();
+      lab.request = send("runModelDiagnostic", { scenarioId: row.id, seed: row.seed,
         endpoint: lab.run.endpoint, model: model, timeoutSeconds: timeout });
       var response = await lab.request; lab.request = null;
-      if (response.scenarioRevision !== lab.run.scenarioRevision || !Array.isArray(response.exchanges) ||
+      if (!response || response.scenarioRevision !== lab.run.scenarioRevision || !Array.isArray(response.exchanges) ||
+          response.exchanges.some(function (exchange) { return !exchange || !exchange.result; }) ||
           !response.exchanges.some(function (exchange) { return exchange.result && exchange.result.ScenarioId === row.id; }))
         throw new Error("Ответ диагностики не соответствует выбранному сценарию. Обновите список.");
       row.seed = response.seed;
       response.exchanges.forEach(function (exchange) {
         if (exchange.result.ScenarioId === row.id) { row.exchange = exchange; row.phase = "Complete"; }
-        else lab.rows.splice(lab.rows.indexOf(row), 0, { id: exchange.result.ScenarioId, repetition: row.repetition, phase: "Complete", exchange: exchange });
+        else lab.rows.splice(lab.rows.indexOf(row), 0, { id: exchange.result.ScenarioId, repetition: row.repetition,
+          seed: response.seed, control: true, phase: "Complete", exchange: exchange });
       });
-      lab.selected = lab.rows.indexOf(row); renderModelLabResults(); renderModelLabInspector();
+      renderModelLabResults(); renderModelLabInspector();
     }
     var counts = {};
     lab.rows.forEach(function (item) { if (item.exchange) {
@@ -217,9 +330,13 @@ async function runModelDiagnosticsLab() {
     $("modelLabStatus").textContent = lab.cancelled ? "Остановлено. Полученные результаты сохранены в панели." :
       "Завершено · " + Object.keys(counts).map(function (verdict) { return modelDiagnosticVerdicts[verdict] + ": " + counts[verdict]; }).join(" · ");
   } catch (error) {
-    if (row) { row.phase = lab.cancelled ? "Cancelled" : "Inconclusive"; row.error = error.message; }
+    if (row) { row.phase = lab.cancelled ? "Cancelled" : "Inconclusive"; row.error = error.message; lab.selected = row; }
     $("modelLabStatus").textContent = lab.cancelled ? "Остановлено. Активная проверка отменена." : "Серия остановлена: " + error.message;
-  } finally { lab.request = null; lab.running = false; renderModelLabResults(); updateModelLabControls(); }
+  } finally {
+    lab.request = null; lab.running = false;
+    renderModelLabResults(); renderModelLabInspector(); updateModelLabControls();
+    if (!lab.catalog && state.diagnosticsTab === "model-lab") openModelDiagnosticsLab(true);
+  }
 }
 
 function stopModelDiagnosticsLab() {
@@ -244,7 +361,7 @@ function exportModelDiagnosticsLab() {
 }
 
 function bindModelDiagnosticsLab() {
-  $("modelLabRefresh").addEventListener("click", function () { openModelDiagnosticsLab(true); });
+  $("modelLabRefresh").addEventListener("click", function () { openModelDiagnosticsLab(true, true); });
   $("modelLabRun").addEventListener("click", runModelDiagnosticsLab);
   $("modelLabStop").addEventListener("click", stopModelDiagnosticsLab);
   $("modelLabExport").addEventListener("click", exportModelDiagnosticsLab);

@@ -249,10 +249,19 @@ reproducible seed and a 10–60 second per-request timeout. Opening or refreshin
 only reads the catalog; model requests require an explicit Run. Stop cancels the
 active bridge request and prevents subsequent scenarios. Results stay in panel
 memory until another run or panel reload; there is no additional durable store.
+The groups explicitly separate content response, instruction role, native history,
+JSON history, native generation and SSE. Native generation is not a prerequisite
+for native history. Scenario revision 4 makes B4 carry the actual execute decision
+JSON in content while calls stay native. C5/C6 use accepted call aliases and the
+production `TOOL_RESULT` envelope, without repeating arguments in the result.
+The Agent-page compatibility probe now uses the same final history projection too.
 
 `ModelDiagnosticsService` owns the UI use case with typed catalog/run/exchange DTOs.
 The endpoint and credentials come from the saved connection; the model can be
-overridden for a diagnostic run. There is no duplicate endpoint field. Repeat,
+overridden for a diagnostic run. The saved endpoint is read-only context, not a
+duplicate input. Catalog snapshots refresh when reopening the panel or saving
+settings, so a previously loaded endpoint cannot keep breaking new runs after a
+connection change. Existing results retain their own run/model/endpoint label. Repeat,
 timeout and seed live in the collapsed **Параметры прогона** disclosure. Endpoint
 drift is rejected before dispatch. Each
 scenario/control group freezes settings and credentials, with 512 output tokens,
@@ -260,16 +269,23 @@ scenario/control group freezes settings and credentials, with 512 output tokens,
 or changed. Both CLI and UI use Core selection/control rules, assertions, SSE parity
 and redaction. No synthetic function is dispatched to a real tool or document.
 
-The screen reuses the product navigation tree, buttons, form fields, table,
+The screen reuses the product editor tabs (wrapping labels at narrow widths),
+navigation tree, buttons, form fields, table,
 compatibility statuses and disclosures; its CSS owns layout only. The table shows
-explicit verdicts, HTTP status and duration. Selecting a result
-shows assertions, parser/stream status, expected/actual content, ordered request
+scenario names, explicit verdicts, HTTP status and duration. The scenario selector
+collapses on Run; advanced settings stay collapsed by default. Clicking any part of
+a row, or activating its native button with the keyboard, selects the result.
+Manual selection stays stable while subsequent results arrive. The details separate
+the verdict and readable reason, assertions, expected/actual content, ordered request
 messages, raw HTTP request text and received response text. The original request
 hash is retained. The UI and its JSON report use previews bounded to 65,536 characters
 per text field; truncation, redaction and incomplete SSE capture are distinct and
 visible. API key and saved custom-header values are redacted before truncation.
 The report does not contain headers. It must not be represented as a complete raw
 export when any of those flags is set; the CLI remains the full diagnostic export.
+Bridge failures and cancellation are selectable rows with readable errors, never
+model-assertion failures. Controls preserve their seed in the report. The malformed
+schema case explicitly explains why an HTTP 400/422 can be a passing result.
 
 This is the minimum runnable UI, not the complete D3/D4 laboratory. Custom scenario
 editing/import, persistent run history, endpoint comparison, request diff and the

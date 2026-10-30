@@ -23,6 +23,24 @@ Durable barriers сохранены.
 Факт зависания провайдера и время Windows/Office/WebView2 по фото не установлены;
 реальная qualification открыта, новые стадии дают экранную диагностику причины.
 
+## Протокол модели: сценарии и экран — 2026-10-30
+
+Owner: Core ModelDiagnosticScenarios, Office ModelCompatibilityService и Web UI.
+Диагностические группы разделяют ответ в content, роли инструкции, Native/JSON
+history, native generation и SSE. Revision 4 сохраняет execute decision в B4;
+C5/C6 используют актуальный result envelope и T aliases. Быстрая проверка агента
+тоже проходит общую wire projection. Генерация native calls не считается условием
+пригодности native history.
+
+Устранён stale endpoint каталога после сохранения настроек. Общие вкладки проекта
+переносятся на узком экране; таблица выбирается всей строкой/клавиатурой, ошибки
+запуска доступны в деталях. Verdict, assertions, ожидание/ответ и HTTP разделены;
+предыдущий прогон сохраняет собственную подпись подключения. Автоконтроли сохраняют seed.
+11 diagnostics checks, 2 compatibility checks и shipped UI с синтетическим bridge
+прошли; проверены светлая/тёмная темы и ширины 1100/740/390/320 px.
+Реальные модели и Windows/Office не запускались; причина любого иного сбоя на
+реальном endpoint не объявляется установленной. Полный D3/D4 Inspector остаётся открыт.
+
 ## Ответ модели и представление истории — 2026-10-30
 
 Owner: Core ModelProtocol wire guidance; existing Agent settings UI is the consumer.
@@ -41,8 +59,7 @@ criterion — короткая формулировка требования. П
 Шесть сочетаний response/history, сохранение трёх решений через compiler,
 repair/fallback и сохранение формы проверены
 синтетически. Реальные модели и Windows/Office не запускались.
-Следующий отдельный срез — работоспособность, структура и выбор результатов
-экрана «Протокол модели», включая проверки его runner/bridge.
+Следующий срез экрана описан выше; дальнейшая работа — полный D3/D4 Inspector.
 
 ## V8 P5: historical evidence и аудит сборки контекста — 2026-10-30
 

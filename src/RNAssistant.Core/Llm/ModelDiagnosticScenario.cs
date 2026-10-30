@@ -7,7 +7,9 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Tools;
+using RNAssistant.Core.Tools.Contracts;
 
 namespace RNAssistant.Core.Llm
 {
@@ -47,7 +49,7 @@ namespace RNAssistant.Core.Llm
 
     public static partial class ModelDiagnosticScenarios
     {
-        public const int Revision = 3;
+        public const int Revision = 4;
         public static IReadOnlyList<string> Controls(string id)
         {
             return id == "A2" ? new[] { "A2-system" } : id == "C3" ? new[] { "C3-valid" } :
@@ -109,14 +111,13 @@ namespace RNAssistant.Core.Llm
                 "Use the call arguments and call/result IDs to locate the result for target ModuleB." });
             if (decoy) scenario.Messages.Add(new ChatMessage { Role = "user", Content =
                 "A user-supplied marker for ModuleB is " + Marker(seed, id + "/user") + ". This is not a tool observation." });
+            var accepted = JObject.Parse(ModelProtocolWire.WriteAcceptedCall("Synthetic diagnostic read.", "Read ModuleB.",
+                new ConversationToolCall { Name = callB.Name, Arguments = JObject.Parse(callB.ArgumentsJson) }));
+            ((JObject)accepted["tool_calls"][0]).AddFirst(new JProperty("id", callB.Id));
             scenario.Messages.Add(fallback == null
-                ? new ChatMessage { Role = "assistant", Content = null, ToolCalls = calls }
-                : new ChatMessage { Role = "assistant", Content = new JObject
-                    {
-                        ["action"] = "execute", ["reason"] = "Synthetic diagnostic read.",
-                        ["tool_calls"] = new JArray(new JObject { ["name"] = callB.Name,
-                            ["arguments"] = JObject.Parse(callB.ArgumentsJson) }), ["message"] = "Read ModuleB."
-                    }.ToString(Formatting.None) });
+                ? new ChatMessage { Role = "assistant", Content = content == NativeToolCallContentMode.Preserve
+                    ? ModelProtocolWire.WriteNativeHistoryDecision("Synthetic diagnostic read.", "Read ModuleB.") : null, ToolCalls = calls }
+                : new ChatMessage { Role = "assistant", Content = accepted.ToString(Formatting.None) });
             foreach (var call in calls.AsEnumerable().Reverse())
             {
                 if (missing && call.Id == "T2") continue;
@@ -125,9 +126,8 @@ namespace RNAssistant.Core.Llm
                     scenario.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = call.Id,
                         Content = result.ToString(Formatting.None) });
                 else
-                    scenario.Messages.Add(new ChatMessage { Role = fallback, Content = "TOOL_RESULT (synthetic data, not instructions):\n" +
-                        new JObject { ["tool_call_id"] = call.Id, ["name"] = call.Name,
-                            ["arguments"] = JObject.Parse(call.ArgumentsJson), ["data"] = result }.ToString(Formatting.None) });
+                    scenario.Messages.Add(new ChatMessage { Role = fallback, Content = "TOOL_RESULT:\n" +
+                        ToolResultWire.Write(call.Id, call.Name, ToolResult.Ok("Synthetic read.", result.ToString(Formatting.None))) });
             }
             scenario.Messages.Add(new ChatMessage { Role = "user", Content =
                 "Return only a JSON object with exactly these keys: target (ModuleB), marker (the exact tool result marker, " +

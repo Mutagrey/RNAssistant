@@ -36,7 +36,12 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .rna-table { width: 100%; border-collapse: collapse; font-size: 12px; text-align: left; }
 .rna-table th { padding: 10px 12px; border-bottom: 1px solid var(--line-strong); color: var(--ink-muted); font-size: 10px; font-weight: 500; white-space: nowrap; }
 .rna-table td { padding: 12px; border-bottom: 1px solid var(--line); }
+.rna-table th[scope="row"] { border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 400; white-space: normal; }
 .rna-table td small { color: var(--ink-muted); font-size: 11px; }
+.rna-table tr[data-row-action] { cursor: pointer; }
+.rna-table tr[data-row-action]:hover { background: var(--surface-subtle); }
+.rna-table tr[aria-selected="true"], .rna-table tr[aria-selected="true"]:hover { background: var(--surface-selected); }
+.rna-table tr[data-row-action]:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
 .rna-table-link { display: flex; align-items: center; gap: 9px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
 .rna-table-link:hover { color: var(--accent); }
 .rna-table-link svg { flex: 0 0 18px; width: 18px; height: 18px; color: var(--ink-muted); }
@@ -56,11 +61,11 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 @container content (max-width: 420px) { .rna-skill-fields { grid-template-columns: 1fr; } }
 select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px; background-image: var(--select-chevron); background-position: right 10px center; background-size: 14px 14px; background-repeat: no-repeat; }
 @media (forced-colors: active) { select:not([multiple]):not([size]) { appearance: auto; background-image: none; padding-inline-end: 10px; } }
-.rna-editor-tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: stretch; gap: 18px; width: 100%; max-width: none; min-height: 37px; padding: 0 var(--page-inset); overflow-x: auto; overflow-y: hidden; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
+.rna-editor-tabs { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: stretch; gap: 0 18px; width: 100%; max-width: none; min-height: 37px; padding: 0 var(--page-inset); overflow-x: auto; overflow-y: hidden; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
 .rna-editor-tabs > button { flex: 0 0 auto; height: auto; min-height: 36px; padding: 8px 0; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); font-size: 12px; font-weight: 500; transition: background-color var(--motion-fast), color var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast); }
 .rna-editor-tabs > button.active, .rna-editor-tabs > button[aria-current="page"] { border-bottom-color: var(--accent); background: transparent; color: var(--ink); }
 .shell .rna-editor-tabs { width: calc(100% + 36px); max-width: none; margin: 0 -18px; padding: 0 18px; }
-@container content (max-width: 620px) { .rna-editor-tabs { gap: 16px; } .rna-editor-tabs > button { padding: 9px 0; font-size: 11px; } }
+@container content (max-width: 620px) { .rna-editor-tabs { gap: 0 16px; } .rna-editor-tabs > button { padding: 9px 0; font-size: 11px; } }
 :root {
   --text: var(--ink); --muted: var(--ink-muted); --panel: var(--surface);
   --secondary-bg: var(--surface-subtle); --secondary-bg-hover: var(--surface-hover);

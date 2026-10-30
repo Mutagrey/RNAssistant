@@ -33,7 +33,23 @@ namespace RNAssistant.Harness
                     var messages = (JArray)JObject.Parse(requests[i])["messages"];
                     var native = messages.OfType<JObject>().FirstOrDefault(message => message["tool_calls"] != null);
                     if (scenario.Id == "B1") AssertEqual(JTokenType.Null, native["content"].Type, "literal null");
-                    if (scenario.Id == "B2" || scenario.Id == "B4") AssertEqual("", (string)native["content"], "explicit empty/default content");
+                    if (scenario.Id == "B2") AssertEqual("", (string)native["content"], "explicit empty content");
+                    if (scenario.Id == "B4")
+                    {
+                        var decision = JObject.Parse((string)native["content"]);
+                        AssertEqual("execute", (string)decision["action"], "production native history retains its decision");
+                        AssertTrue(decision["reason"] != null && decision["message"] != null && decision["tool_calls"] == null,
+                            "only calls move to the native field");
+                    }
+                    if (scenario.Id == "C5" || scenario.Id == "C6")
+                    {
+                        var call = JObject.Parse((string)messages.Single(item => (string)item["role"] == "assistant")["content"]);
+                        AssertEqual("T2", (string)call["tool_calls"][0]["id"], "fallback call carries its runtime alias");
+                        var resultMessage = messages.Single(item => ((string)item["content"] ?? "").StartsWith("TOOL_RESULT:\n"));
+                        var body = JObject.Parse(((string)resultMessage["content"]).Substring("TOOL_RESULT:\n".Length));
+                        AssertEqual("ok", (string)body["status"], "fallback uses the production result envelope");
+                        AssertTrue(body["arguments"] == null, "fallback result cannot leak target from repeated arguments");
+                    }
                     if (scenario.Id == "B3") AssertTrue(native.Property("content") == null, "content omitted");
                     if (scenario.Id == "B5")
                     {
@@ -137,7 +153,7 @@ namespace RNAssistant.Harness
                 var text = (string)message["content"] ?? "";
                 if ((string)message["role"] == "tool" && (string)message["tool_call_id"] == "T2")
                     marker = (string)JObject.Parse(text)["marker"];
-                else if (text.StartsWith("TOOL_RESULT (", StringComparison.Ordinal))
+                else if (text.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal))
                 {
                     var result = JObject.Parse(text.Substring(text.IndexOf('\n') + 1));
                     if ((string)result["tool_call_id"] == "T2") marker = (string)result["data"]["marker"];

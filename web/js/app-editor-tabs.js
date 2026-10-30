@@ -22,6 +22,10 @@
   }
 
   var presets = {
+    diagnostics: { className: "diagnostics-tabs", buttonClass: "diagnostics-tab-button",
+      label: "Разделы диагностики", dataAttribute: "data-diagnostics-tab", selected: "runtime-log",
+      items: [{ label: "Ход работы", value: "runtime-log" }, { label: "История чата", value: "trajectory" },
+        { label: "Проверки и данные", value: "overview" }, { label: "Протокол модели", value: "model-lab" }] },
     skill: { className: "skill-page-tabs", buttonClass: "skill-page-button",
       label: "Раздел навыка", dataAttribute: "data-skill-page", selected: "instruction",
       items: [{ label: "Инструкция", value: "instruction" }, { label: "Файлы", value: "files" }] },

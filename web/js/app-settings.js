@@ -408,6 +408,7 @@ async function persistSettingsFromForm() {
   $("apiKeyInput").value = "";
   $("historySecretInput").value = "";
   renderSettings();
+  if (typeof refreshModelDiagnosticsSettings === "function") refreshModelDiagnosticsSettings();
   if (typeof renderChatModePicker === "function") renderChatModePicker();
   if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
       typeof applyLibraryCatalogState === "function") {

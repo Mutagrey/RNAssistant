@@ -2572,24 +2572,30 @@ namespace RNAssistant.Harness
                 var resultJson = resultMessage.Content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal)
                     ? resultMessage.Content.Substring("TOOL_RESULT:\n".Length) : resultMessage.Content;
                 var resultWire = JObject.Parse(resultJson);
-                AssertEqual(accepted.ToolCallId, (string)resultWire["tool_call_id"],
-                    "every probe result role correlates to the stored runtime ID");
+                AssertEqual(role == ToolResultRoles.Tool ? null : "T1", (string)resultWire["tool_call_id"],
+                    "probes use actual wire correlation, without duplicate native IDs");
                 AssertEqual(ToolResultWire.CurrentVersion, accepted.ToolResultProtocolVersion, "probe call carries the active result marker");
                 AssertEqual(ToolResultWire.CurrentVersion, resultMessage.ToolResultProtocolVersion, "probe result carries the active result marker");
                 AssertEqual("ok", (string)resultWire["status"], "probe result uses the v1 terminal status");
                 AssertTrue(resultWire["ok"] == null && resultWire["error"] == null && resultWire["retryable"] == null && resultWire["version"] == null,
                     "probe result has no legacy or embedded-version fields");
-                ToolResultWireReadResult read;
-                string error;
-                AssertTrue(ToolResultHistoryReader.TryRead(resultMessage, out read, out error), "probe result is strict history: " + error);
-                ConversationProtocolContext.EnsureCurrentHistory(new ChatSession { Messages = new List<ChatMessage> { accepted, resultMessage } });
                 if (role == ToolResultRoles.Tool)
                 {
+                    AssertEqual("T1", accepted.ToolCallId, "probe uses the issued-style model reference");
                     AssertEqual(accepted.ToolCallId, accepted.ToolCalls.Single().Id, "native call id");
                     AssertEqual(accepted.ToolCallId, resultMessage.ToolCallId, "matched native result id");
                     AssertEqual("compat.echo", accepted.ToolCalls[0].Name, "native wire keeps the exact public id");
+                    var decision = JObject.Parse(accepted.Content);
+                    AssertEqual("execute", (string)decision["action"], "probe keeps the action in content");
+                    AssertEqual("Probe one compatible tool call.", (string)decision["reason"], "probe keeps the reason in content");
+                    AssertTrue(decision["tool_calls"] == null, "calls occur only in native tool_calls");
                 }
-                else AssertEqual(toolJson, accepted.Content, "shared transcript writer preserves JSON envelope");
+                else
+                {
+                    var expected = JObject.Parse(toolJson);
+                    ((JObject)expected["tool_calls"][0]).AddFirst(new JProperty("id", "T1"));
+                    AssertTrue(JToken.DeepEquals(expected, JObject.Parse(accepted.Content)), "JSON history includes runtime call aliases");
+                }
             }
         }
 

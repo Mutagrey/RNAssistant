@@ -33,7 +33,7 @@ def main():
                         latest_id = call["id"]
                 if message["role"] == "tool":
                     tool_results[message["tool_call_id"]] = json.loads(content)["marker"]
-                elif content.startswith("TOOL_RESULT ("):
+                elif content.startswith("TOOL_RESULT:\n"):
                     value = json.loads(content.split("\n", 1)[1])
                     latest_id = value["tool_call_id"]
                     tool_results[latest_id] = value["data"]["marker"]
