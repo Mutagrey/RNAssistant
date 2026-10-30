@@ -191,33 +191,27 @@
   font-weight: var(--title-font-weight);
 }
 
-.agent-protocol-content {
-  display: grid;
-  grid-template-columns: 1fr;
-}
-
 .agent-instruction-settings,
 .agent-settings-grid {
   padding: 0 1px;
 }
 
 .agent-protocol-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px 16px;
   min-width: 0;
+  align-items: start;
 }
 
-.agent-protocol-control {
-  display: grid;
-  gap: 5px;
+.agent-protocol-controls > .form-grid {
+  gap: 12px;
   min-width: 0;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: var(--label-font-weight);
 }
 
-.agent-protocol-control select,
+.settings-page[data-settings-page="agent"] .form-grid label {
+  align-content: start;
+  min-width: 0;
+}
+
 .prompt-role-control select {
   width: 100%;
   min-width: 0;
@@ -231,7 +225,6 @@
   font-weight: 400;
 }
 
-.agent-protocol-control small,
 .prompt-role-control small {
   color: var(--muted);
   font-size: 10px;
@@ -239,13 +232,22 @@
 }
 
 .agent-protocol-fallback {
-  grid-column: 1 / -1;
   font-size: 12px;
+  align-items: flex-start;
+}
+
+.agent-protocol-fallback input {
+  flex: 0 0 auto;
+  margin-top: 2px;
 }
 
 .agent-protocol-fallback.hidden {
   display: none !important;
 }
+
+.agent-protocol-example .form-grid > div { min-width: 0; }
+.agent-protocol-example .rn-json-viewer { margin-top: 6px; max-height: 280px; }
+.agent-protocol-example > summary span { font-weight: 400; overflow-wrap: anywhere; }
 
 .prompt-settings-bar {
   display: flex;
@@ -608,18 +610,6 @@
 
   .form-grid.two-columns {
     grid-template-columns: 1fr;
-  }
-
-  .agent-protocol-content {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-protocol-controls {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-protocol-fallback {
-    grid-column: auto;
   }
 
 }

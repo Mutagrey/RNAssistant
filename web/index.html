@@ -30,7 +30,7 @@
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-models.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="css/app-workspace.css?v=v8-lab-20261030-2">
+  <link rel="stylesheet" href="css/app-workspace.css?v=agent-protocol-20261030-2">
   <link rel="stylesheet" href="css/app-plugins.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-preview-surface.css?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=shared-palette-20261025-2">
@@ -51,9 +51,9 @@
   <link rel="stylesheet" href="css/app-responsive.css?v=shared-action-menu-20261019-1">
   <link rel="stylesheet" href="css/app-agent.css?v=aligned-feed-20261029-5">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
-  <link rel="stylesheet" href="css/app-theme.css?v=compact-tool-card-20261029-1">
+  <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20261030-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=rail-popovers-20261019-2-project-shell-1-inspector-track-20261025-1">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=agent-protocol-20261030-1">
   <link rel="stylesheet" href="css/app-product-components.css?v=v8-lab-20261030-2">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
@@ -852,7 +852,7 @@
                   <h3 id="agentInstructionsTitle">Инструкции</h3>
                 </div>
                 <div class="form-grid two-columns agent-instruction-settings">
-                  <label><span>Роль Markdown-инструкций</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Для Agent, Plan и служебных запросов.</small></label>
+                  <label><span>Роль инструкций агента</span><select id="systemPromptRoleInput"><option value="developer">developer — по умолчанию</option><option value="system">system</option><option value="user">user</option></select><small>Для Agent, Plan и служебных запросов.</small></label>
                 </div>
               </section>
               <section class="agent-protocol-panel agent-parameter-section" aria-labelledby="agentProtocolTitle">
@@ -861,36 +861,52 @@
                     <h3 id="agentProtocolTitle">Протокол</h3>
                   </div>
                 </div>
-                <div class="agent-protocol-content">
-                  <div class="agent-protocol-controls">
-                    <label class="agent-protocol-control">
-                      <span>Формат ответа модели</span>
-                      <select id="agentResponseModeInput">
-                        <option value="json_object">json_object — совместимый</option>
-                        <option value="json_schema">json_schema — строгий</option>
+                <div class="form-grid two-columns agent-protocol-controls">
+                  <div class="form-grid">
+                    <label>
+                      <span>Формат нового ответа</span>
+                      <select id="agentResponseModeInput" aria-describedby="agentResponseModeNote">
+                        <option value="json_object">json_object · JSON в content</option>
+                        <option value="json_schema">json_schema · строгая схема</option>
                       </select>
-                    </label>
-                    <label class="agent-protocol-control">
-                      <span>Формат истории вызовов</span>
-                      <select id="agentHistoryFormatInput" aria-describedby="agentHistoryFormatNote">
-                        <option value="json_content">JSON в content</option>
-                        <option value="native_tools">Native tools · tool_calls + tool</option>
-                      </select>
-                      <small id="agentHistoryFormatNote">Представление принятых вызовов в следующих запросах.</small>
-                    </label>
-                    <label class="agent-protocol-control" id="toolResultRoleField">
-                      <span>Роль результата tool</span>
-                      <select id="toolResultRoleInput">
-                        <option value="user">user · TOOL_RESULT — совместимый</option>
-                        <option value="developer">developer · TOOL_RESULT</option>
-                      </select>
+                      <small id="agentResponseModeNote">Новый execute всегда содержит непустой tool_calls внутри JSON.</small>
                     </label>
                     <label class="checkline agent-protocol-fallback" id="agentJsonFallbackField">
                       <input id="fallbackJsonObjectInput" type="checkbox">
-                      <span>При отказе endpoint повторить через json_object</span>
+                      <span>Если сервер не поддерживает схему, повторить через json_object</span>
+                    </label>
+                  </div>
+                  <div class="form-grid">
+                    <label>
+                      <span>Формат истории</span>
+                      <select id="agentHistoryFormatInput" aria-describedby="agentHistoryFormatNote">
+                        <option value="json_content">JSON в content</option>
+                        <option value="native_tools">Native tools + JSON решения</option>
+                      </select>
+                      <small id="agentHistoryFormatNote">Представление принятых вызовов в следующих запросах.</small>
+                    </label>
+                    <label id="toolResultRoleField">
+                      <span>Роль результата инструмента</span>
+                      <select id="toolResultRoleInput" aria-describedby="toolResultRoleNote">
+                        <option value="user">user · TOOL_RESULT</option>
+                        <option value="developer">developer · TOOL_RESULT</option>
+                        <option value="tool" hidden disabled>tool · native-история</option>
+                      </select>
+                      <small id="toolResultRoleNote">Для роли tool выберите Native tools в истории.</small>
                     </label>
                   </div>
                 </div>
+                <p class="setting-note" id="agentProtocolApplyNote" role="status"></p>
+                <details class="product-settings-advanced agent-protocol-example" id="agentProtocolExample">
+                  <summary>Пример обмена · <span id="agentProtocolExampleSummary"></span></summary>
+                  <div>
+                    <div class="form-grid two-columns">
+                      <div><p class="setting-note">1. Новый ответ модели</p><div id="agentResponseExample"></div></div>
+                      <div><p class="setting-note">2. История в следующем запросе</p><div id="agentHistoryExample"></div></div>
+                    </div>
+                    <p class="setting-note">Пример execute. Инструкции, схема и результат сокращены. Finish и reflection в истории сохраняют полный JSON; вызовов в native-части у них нет.</p>
+                  </div>
+                </details>
               </section>
               <section class="agent-parameter-section" aria-labelledby="agentExecutionTitle">
                 <div class="settings-subheading">
@@ -898,16 +914,16 @@
                 </div>
                 <div class="agent-setting-toggles">
                   <label class="checkline"><input id="autoConfirmToolActionsInput" type="checkbox" aria-describedby="autoConfirmToolActionsNote"><span>Автоподтверждение действий</span></label>
-                  <label class="checkline"><input id="enableAgentJavaScriptInput" type="checkbox"><span>JavaScript инструменты агента (экспериментально)</span></label>
-                  <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Создавать summary при заполнении контекста</span></label>
+                  <div class="setting-note" id="autoConfirmToolActionsNote">Изменения и запуск кода без отдельных подтверждений. Действует для новых запусков; режим Plan и запрет изменений имеют приоритет.</div>
+                  <label class="checkline"><input id="enableAgentJavaScriptInput" type="checkbox"><span>JavaScript-инструменты (экспериментально)</span></label>
+                  <label class="checkline"><input id="autoCompressContextInput" type="checkbox"><span>Сжимать контекст автоматически</span></label>
                 </div>
                 <div class="form-grid two-columns agent-settings-grid">
-                  <label><span>Макс. итераций запуска</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
-                  <label><span>Попыток формата (включая первую)</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20" title="Для каждого ответа агента или сжатия контекста: 1–20 попыток, включая первую. Сетевые повторы (до двух) и schema fallback (один) ответа агента считаются отдельно."></label>
-                  <label><span>Глубина рефлексии</span><input id="maxConsecutiveReflectionsInput" type="number" min="0" max="20" step="1" title="Принятых reflection подряд без нового результата инструмента или ввода пользователя. 0 — отключить, по умолчанию 2. Ошибки формата и сетевые повторы не считаются. После лимита модель получает просьбу перейти к действию или завершению."></label>
-                  <label><span>Макс. tool шагов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
+                  <label><span>Лимит итераций запуска</span><input id="maxAgentIterationsInput" type="number" min="1"></label>
+                  <label><span>Попыток ответа (включая первую)</span><input id="maxAgentFormatRetriesInput" type="number" min="1" max="20" title="Для каждого ответа агента или сжатия контекста: 1–20 попыток исправить формат, включая первую. Сетевые повторы (до двух) и schema fallback (один) ответа агента считаются отдельно."></label>
+                  <label><span>Рефлексий подряд</span><input id="maxConsecutiveReflectionsInput" type="number" min="0" max="20" step="1" title="Принятых reflection подряд без нового результата инструмента или ввода пользователя. 0 — отключить, по умолчанию 2. Ошибки формата и сетевые повторы не считаются. После лимита модель получает просьбу перейти к действию или завершению."></label>
+                  <label><span>Лимит вызовов инструментов</span><input id="maxAgentToolStepsInput" type="number" min="1"></label>
                 </div>
-                <div class="setting-note" id="autoConfirmToolActionsNote">Изменения и запуск кода — без отдельных подтверждений для новых запусков. Plan и запрет изменений имеют приоритет.</div>
               </section>
               <section class="model-compatibility-panel" aria-labelledby="modelCompatibilityTitle">
                 <div class="model-compatibility-head">
@@ -1199,7 +1215,7 @@
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
-  <script src="js/app-settings.js?v=v8-lab-20261030-2"></script>
+  <script src="js/app-settings.js?v=agent-protocol-20261030-2"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics.js?v=v8-lab-20261030-2"></script>
   <script src="js/app-model-diagnostics.js?v=v8-lab-20261030-2"></script>
@@ -1273,6 +1289,6 @@
   <script src="js/app-workspace-chat.js?v=message-window-20261029-1"></script>
   <script src="js/app-plugins.js?v=right-sections-sent-20261024-1-shared-dock-1-project-shell-1-pane-header-20261025-1-annotate-action-1-annotation-followup-20261026-1-pane-resize-20261026-1"></script>
   <script src="js/app-project-chats.js?v=run-truth-20261029-1"></script>
-  <script src="js/app.js?v=screen-timing-20261029-1"></script>
+  <script src="js/app.js?v=settings-drafts-20261030-1"></script>
 </body>
 </html>

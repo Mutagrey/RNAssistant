@@ -4,8 +4,8 @@ RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 
 ## Response format and accepted history — 2026-10-30
 
-Agent settings expose two independent choices: **Формат ответа модели**
-(`json_object` or `json_schema`) and **Формат истории вызовов** (JSON in content or
+Agent settings expose two independent choices: **Формат нового ответа**
+(`json_object` or `json_schema`) and **Формат истории** (JSON in content or
 Native tools). The model still generates the V8 decision as JSON in `content`.
 After acceptance, native history serializes execute calls as `assistant.tool_calls`
 and matching `role: tool` results, for either response format. Assistant `content`
@@ -18,22 +18,54 @@ rewrite stored events or parse the projected partial execute as a new response.
 Native function generation by the provider is a separate capability and is not required here.
 
 JSON history uses accepted execute JSON in assistant content and `TOOL_RESULT`
-messages with a user/developer role. That role selector appears only for JSON
-history. The form maps these valid combinations to the existing typed
+messages with a user/developer role. Native history shows the fixed `tool` role;
+JSON history lets the user choose user/developer. The form maps these combinations to the existing typed
 `ToolResultRole`: tool for native, user/developer for JSON. There is no duplicate
 persisted switch that can disagree with the transport, and existing settings keep
 their behavior on reopening. Response-format fallback does not change history.
 
-Prompt schema 63 projects only the selected history guidance into the owned Agent
+| New content response | Accepted call history | Result message |
+|---|---|---|
+| `json_object` or `json_schema` | JSON in `assistant.content` | `user` + `TOOL_RESULT` |
+| `json_object` or `json_schema` | JSON in `assistant.content` | `developer` + `TOOL_RESULT` |
+| `json_object` or `json_schema` | Decision in content + native `assistant.tool_calls` | `tool` paired by `tool_call_id` |
+
+An unpaired `role:tool` after a call existing only inside a content string is not
+an additional portable mode. OpenAI's [Chat Completions tool message contract](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+requires the corresponding call ID; the [function-calling flow](https://developers.openai.com/api/docs/guides/function-calling)
+appends the assistant call before its tool result. [Ollama's tool-calling examples](https://docs.ollama.com/capabilities/tool-calling)
+also retain assistant `tool_calls` before tool messages. Endpoint-specific acceptance
+and model behavior require separate qualification; merely selecting a role cannot
+establish either. No extra persisted flag or duplicate native/content calls is added.
+
+Prompt schema 64 projects only the selected history guidance into the owned Agent
 Contract. Native history omits the fallback `TOOL_RESULT`, `tool_call_id` and
 runtime-added JSON `id` explanation; output V8 fields remain required. The frozen
 source, user content, accepted calls and loaded skills are unchanged. Strict
 output removes duplicate shape examples; object fallback restores the object
-contract while keeping the same history guidance. Harness covers all six
-response/history-role combinations plus repair/fallback; the shipped form test
-checks selection and save/reopen without calling an endpoint.
+contract while keeping the same history guidance. Harness covers 36 combinations
+of response format, history role, Office instruction role and reflection on/off,
+plus repair/explicit fallback across 18 settings combinations. This wire-level
+matrix does not remove the existing Workspace restriction to system/developer
+instructions. The shipped form checks selection, matching examples and save/reopen
+without calling an endpoint.
+New execute decisions must include nonempty `tool_calls` in their content JSON;
+the historical projection is explicitly not a template for a fresh response.
+The photo-shaped `action/reason/message` reply is checked with JSON/SSE, both
+response modes and with/without separate provider-native calls. Native presence
+is captured as `NativeToolCallsObserved`; it does not enable native dispatch.
 Reason/decision/criterion brevity rules are identical in object instructions and
 strict field descriptions; they do not introduce truncation or a character limit.
+
+The expandable example shows a fresh model response and the next request's
+accepted history through the shared JSON viewer. It follows unsaved controls and
+labels them as a draft; it is not a captured request or endpoint probe.
+Successful saves apply to the next run, including reprojecting earlier accepted
+history. Sent requests and stored Inspector snapshots remain unchanged. The
+synthetic save → run check reuses one SettingsService, executor, conversation
+service and chat across four changes. In-flight control edits survive a save
+response and tab navigation; failed saves remain visible and do not update the
+acknowledged settings. The user's Windows restart symptom is not yet reproduced.
 
 A retained native call has `content` equivalent to
 `{"action":"execute","reason":"Inspect the requested module.","message":"Reading Module1."}`

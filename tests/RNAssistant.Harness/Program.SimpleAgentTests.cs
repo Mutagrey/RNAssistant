@@ -1804,8 +1804,8 @@ namespace RNAssistant.Harness
                     "repair explains the exact invalid combination");
                 AssertContains(FlattenSimple(requests[1]), "Never relabel a promise as finish",
                     "format repair cannot instruct the model to abandon unfinished work by changing only action");
-                AssertContains(FlattenSimple(requests[1]), ModelProtocolWire.ActionGuidance,
-                    "both response formats receive the same work-or-answer decision rules");
+                AssertContains(FlattenSimple(requests[1]), ModelProtocolWire.ResponseGuidance(responseMode == AgentResponseModes.JsonSchema, true),
+                    "repair receives the selected response contract, with the shared mandatory execute calls rule");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains(promise)),
                     "invalid no-tool response is not accepted into durable history");
                 if (needsTool)

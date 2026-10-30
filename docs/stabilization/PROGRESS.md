@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Execute, настройки протокола и применение — 2026-10-30
+
+Owner: Core ModelProtocol/LLM parser, Office settings publication и Web settings.
+Prompt schema 64 явно требует непустой tool_calls внутри JSON каждого нового
+execute, включая native history. Историческое сокращённое content не является
+шаблоном нового ответа; repair объясняет отсутствующие вызовы. JSON/SSE capture
+показывает NativeToolCallsObserved, без скрытого native dispatch или достраивания calls.
+36 сочетаний формата/истории/роли инструкции/reflection и 18 repair/fallback
+сочетаний прошли локально; photo-shaped ответ проверен в восьми вариантах.
+
+Форма выровнена общими элементами проекта; роль результата находится под историей.
+Есть обновляемый пример нового ответа и следующего запроса, с пометкой черновика.
+Правки во время сохранения и смены вкладки больше не теряются, ошибки сохранения
+видны уведомлением. Один живой чат/executor прошёл четыре сохранения и новых запуска
+без перезапуска; реальная Windows-причина наблюдения пользователя не установлена.
+Browser checks и prompt-editor checks прошли. Модели/Office не запускались.
+
 ## Загрузка по требованию UI — 2026-10-30
 
 Owner: Office ChatSessionService/controller, Application inbox и Web presentation.

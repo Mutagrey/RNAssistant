@@ -1,4 +1,7 @@
 var settingsDirty = false;
+var settingsFormRevision = 0;
+var settingsSaveInProgress = false;
+var agentProtocolExampleViewers = {};
 
 var modelSettingsDefaults = {
   model: "",
@@ -120,11 +123,66 @@ function updateAgentProtocolControls() {
   field.classList.toggle("hidden", !visible);
   field.setAttribute("aria-hidden", visible ? "false" : "true");
   var nativeHistory = $("agentHistoryFormatInput").value === "native_tools";
-  $("toolResultRoleField").classList.toggle("hidden", nativeHistory);
-  $("toolResultRoleInput").disabled = nativeHistory;
+  var roleInput = $("toolResultRoleInput");
+  if (nativeHistory && roleInput.value !== "tool") roleInput.dataset.jsonRole = roleInput.value;
+  var toolOption = roleInput.querySelector('option[value="tool"]');
+  toolOption.hidden = !nativeHistory;
+  toolOption.disabled = !nativeHistory;
+  if (nativeHistory) roleInput.value = "tool";
+  else if (roleInput.value === "tool") roleInput.value = roleInput.dataset.jsonRole === "developer" ? "developer" : "user";
+  roleInput.disabled = nativeHistory;
   $("agentHistoryFormatNote").textContent = nativeHistory
-    ? "Решение action/reason/message сохраняется в content; вызовы переходят в tool_calls + tool. Finish и reflection сохраняют все поля."
-    : "Принятые вызовы остаются JSON в assistant.content; результаты передаются отдельными TOOL_RESULT сообщениями.";
+    ? "После принятия ответа action, reason и message остаются в content; вызовы переходят в native tool_calls."
+    : "Принятые решения и вызовы остаются JSON в assistant.content. Результаты — отдельные сообщения TOOL_RESULT.";
+  $("toolResultRoleNote").textContent = nativeHistory
+    ? "Роль фиксирована: результат связан с native-вызовом через tool_call_id."
+    : "Для роли tool выберите Native tools в истории.";
+  updateAgentProtocolExample();
+}
+
+function updateAgentProtocolExample() {
+  var mode = $("agentResponseModeInput").value;
+  var native = $("agentHistoryFormatInput").value === "native_tools";
+  var role = native ? "tool" : $("toolResultRoleInput").value;
+  var instructionRole = $("systemPromptRoleInput").value;
+  var saved = state.settings || {};
+  var changed = mode !== compatibilityValue(saved, "AgentResponseMode", "agentResponseMode", agentSettingsDefaults.agentResponseMode) ||
+    role !== compatibilityValue(saved, "ToolResultRole", "toolResultRole", agentSettingsDefaults.toolResultRole) ||
+    instructionRole !== compatibilityValue(saved, "SystemPromptRole", "systemPromptRole", agentSettingsDefaults.systemPromptRole);
+  $("agentProtocolExampleSummary").textContent = mode + " → " + (native ? "native tools" : "JSON") + " / " + role;
+  $("agentProtocolApplyNote").textContent = changed
+    ? "Показан черновик настроек. Нажмите «Применить», чтобы использовать его в следующем запуске."
+    : "Сохранённый формат для следующего запуска. Уже отправленные запросы и их снимки не меняются.";
+  if (!$("agentProtocolExample").open) return;
+  var call = { name: "core.tools.search", arguments: { query: "VBA" } };
+  var decision = { action: "execute", reason: "Найти инструменты.", tool_calls: [call], message: "" };
+  var response = { role: "assistant", content: JSON.stringify(mode === "json_schema" ? { response: decision } : decision) };
+  var historical = { action: decision.action, reason: decision.reason };
+  if (!native) historical.tool_calls = [{ id: "T1", name: call.name, arguments: call.arguments }];
+  historical.message = decision.message;
+  var assistant = { role: "assistant", content: JSON.stringify(historical) };
+  var result = { role: role, content: "… результат инструмента …" };
+  if (native) {
+    assistant.tool_calls = [{ id: "T1", type: "function", function: { name: call.name, arguments: JSON.stringify(call.arguments) } }];
+    result.tool_call_id = "T1";
+  } else {
+    result.content = 'TOOL_RESULT:\n{"tool_call_id":"T1","name":"core.tools.search","status":"ok","message":"…","data":"…"}';
+  }
+  var format = { type: mode };
+  if (mode === "json_schema") format.json_schema = { name: "rnassistant_conversation_response_v8", strict: true, schema: "…" };
+  var request = { response_format: format, messages: [{ role: instructionRole, content: "… инструкции выбранного формата …" }, assistant, result] };
+  [["agentResponseExample", response], ["agentHistoryExample", request]].forEach(function (entry) {
+    var text = JSON.stringify(entry[1], null, 2), viewer = agentProtocolExampleViewers[entry[0]];
+    if (viewer) viewer.setSource(text);
+    else {
+      viewer = window.RNAssistantJsonViewer.create({ text: text, compact: true, expandedPaths: [
+        '$["content"]', '$["content"]::<json>["response"]', '$["content"]::<json>["tool_calls"]',
+        '$["content"]::<json>["response"]["tool_calls"]', '$["messages"]', '$["messages"][1]', '$["messages"][2]'],
+        onCopy: window.copyTextResult });
+      agentProtocolExampleViewers[entry[0]] = viewer;
+      $(entry[0]).replaceChildren(viewer.element);
+    }
+  });
 }
 
 function updateHistoryProtectionControls() {
@@ -381,7 +439,8 @@ function readSettings() {
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
-    ToolResultRole: $("agentHistoryFormatInput").value === "native_tools" ? "tool" : $("toolResultRoleInput").value,
+    ToolResultRole: $("agentHistoryFormatInput").value === "native_tools" ? "tool" :
+      ($("toolResultRoleInput").value === "developer" ? "developer" : "user"),
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     SystemPromptRole: $("systemPromptRoleInput").value,
     ModelImageSupportOverrides: modelImageSupportOverrides(),
@@ -394,32 +453,47 @@ function readSettings() {
 }
 
 async function persistSettingsFromForm() {
+  if (settingsSaveInProgress) throw new Error("Сохранение настроек уже выполняется.");
   var apiKey = $("apiKeyInput").value;
   var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
+  var submittedRevision = settingsFormRevision;
   var javascriptWasEnabled = compatibilityValue(state.settings, "EnableAgentJavaScript", "enableAgentJavaScript", false) === true;
-  var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret);
-  state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
-  state.settings = response.settings;
-  if (typeof resetModelCatalog === "function") resetModelCatalog();
-  state.prompts = response.prompts;
-  state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
-  state.hasHistorySecret = !!(response.hasHistorySecret || response.HasHistorySecret);
-  $("apiKeyInput").value = "";
-  $("historySecretInput").value = "";
-  renderSettings();
-  if (typeof refreshModelDiagnosticsSettings === "function") refreshModelDiagnosticsSettings();
-  if (typeof renderChatModePicker === "function") renderChatModePicker();
-  if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
-      typeof applyLibraryCatalogState === "function") {
-    try {
-      applyLibraryCatalogState({ tools: await send("getTools", {}) });
-    } catch (error) {
-      log("Настройка сохранена, но список инструментов не обновился: " + error.message, "error");
+  settingsSaveInProgress = true;
+  updateSettingsSaveButton();
+  try {
+    var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret);
+    state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
+    state.settings = response.settings;
+    if (typeof resetModelCatalog === "function") resetModelCatalog();
+    state.prompts = response.prompts;
+    state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
+    state.hasHistorySecret = !!(response.hasHistorySecret || response.HasHistorySecret);
+    if ($("apiKeyInput").value === apiKey) $("apiKeyInput").value = "";
+    if ($("historySecretInput").value === historySecret) $("historySecretInput").value = "";
+    if (submittedRevision === settingsFormRevision) renderSettings();
+    else {
+      // A confirmed save applies its captured values, not edits made while it was in flight.
+      if (typeof renderPromptSettings === "function") renderPromptSettings(state.prompts);
+      settingsDirty = true;
+      updateAgentProtocolExample();
     }
+    if (typeof refreshModelDiagnosticsSettings === "function") refreshModelDiagnosticsSettings();
+    if (typeof renderChatModePicker === "function") renderChatModePicker();
+    if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
+        typeof applyLibraryCatalogState === "function") {
+      try {
+        applyLibraryCatalogState({ tools: await send("getTools", {}) });
+      } catch (error) {
+        log("Настройка сохранена, но список инструментов не обновился: " + error.message, "error");
+      }
+    }
+    renderContextMeter();
+    return state.settings;
+  } finally {
+    settingsSaveInProgress = false;
+    updateSettingsSaveButton();
   }
-  renderContextMeter();
-  return state.settings;
 }
 
 function compatibilityValue(source, pascal, camel, fallback) {
@@ -428,6 +502,7 @@ function compatibilityValue(source, pascal, camel, fallback) {
 }
 
 function markSettingsDirty() {
+  settingsFormRevision++;
   settingsDirty = true;
   updateSettingsSaveButton();
 }
@@ -601,6 +676,9 @@ function bindSettingsActions() {
   $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
   $("agentResponseModeInput").addEventListener("change", updateAgentProtocolControls);
   $("agentHistoryFormatInput").addEventListener("change", updateAgentProtocolControls);
+  $("toolResultRoleInput").addEventListener("change", updateAgentProtocolExample);
+  $("systemPromptRoleInput").addEventListener("change", updateAgentProtocolExample);
+  $("agentProtocolExample").addEventListener("toggle", updateAgentProtocolExample);
   $("historyHmacInput").addEventListener("change", updateHistoryProtectionControls);
   $("historyEncryptionInput").addEventListener("change", updateHistoryProtectionControls);
   $("historyKeySourceInput").addEventListener("change", updateHistoryProtectionControls);
@@ -638,8 +716,7 @@ function bindSettingsActions() {
       if (control.id === "promptSearchInput" || control.id === "settingsNavSearch" || control.id === "modelCapabilitySearch") {
         return;
       }
-      settingsDirty = true;
-      updateSettingsSaveButton();
+      markSettingsDirty();
     });
   });
 
@@ -649,11 +726,14 @@ function bindSettingsActions() {
       button.disabled = true;
       await persistSettingsFromForm();
       log("Настройки сохранены.");
+      showChatCopyFeedback(settingsDirty ? "Сохранено. В форме остались новые неприменённые правки." :
+        "Настройки сохранены. Следующий запуск использует их без перезапуска приложения.");
       loadModelCatalog(false);
     } catch (error) {
       settingsDirty = true;
       updateSettingsSaveButton();
       log(error.message, "error");
+      showChatCopyFeedback("Настройки не сохранены: " + error.message, true);
     }
   });
   $("testModelCompatibilityButton").addEventListener("click", async function () {
@@ -691,5 +771,5 @@ function updateSettingsSaveButton() {
 
   row.hidden = !visible;
   button.hidden = !visible;
-  button.disabled = !visible;
+  button.disabled = !visible || settingsSaveInProgress;
 }

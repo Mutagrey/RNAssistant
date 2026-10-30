@@ -377,6 +377,8 @@ namespace RNAssistant.Harness
                 Test("model protocol: fallback stays within one run", ModelProtocolFallbackStaysWithinRun),
                 Test("history protocol: content response and history formats are independent", HistoryProtocolSeparatesResponseAndHistory),
                 Test("history protocol: native guidance survives repair and fallback", HistoryProtocolSurvivesRepairAndFallback),
+                Test("history protocol: new execute requires content calls", HistoryProtocolRequiresNewExecuteCalls),
+                Test("history protocol: saved settings apply without restart", HistoryProtocolSettingsApplyWithoutRestart),
                 Test("model protocol: fallback is explicit and bounded", ModelProtocolFallbackIsBounded),
                 Test("model protocol: invalid schema does not trigger fallback", ModelProtocolInvalidSchemaDoesNotTriggerFallback),
                 Test("model protocol: fallback works during format repair", ModelProtocolFallbackDuringRepair),

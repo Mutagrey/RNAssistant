@@ -99,7 +99,6 @@
 .shell #tab-settings .settings-full-toggle { margin: 10px 0 0; }
 .shell #tab-settings .settings-page[data-settings-page="context"] .model-request-fields > label { align-content: start; }
 .shell #tab-settings .context-window-summary { margin: 10px 0 0; color: var(--ink-muted); }
-.shell #tab-settings .agent-protocol-control select { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
 .shell #tab-settings .model-compatibility-panel:not(.trajectory-panel) { padding: 14px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; }
 .shell #tab-settings .settings-page[data-settings-page="protection"] > .model-compatibility-panel:first-of-type,
 .shell #tab-settings .diagnostics-overview > .model-compatibility-panel:first-child { padding-top: 0; border-top: 0; }

@@ -20,11 +20,19 @@ Web checks: `context-usage`, `agent-timeline-order`, `chat-inbox`, `stream-rende
 `live-run-projection`, and Chromium `agent-activity-layout` / `chat-transcript-layout`.
 The separate composer unknown-warning mismatch remains in the risk register.
 
-`history protocol:` checks the six content-response/history-role combinations,
+`history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,
 shared concise-field guidance, unchanged user data and frozen
-repair/explicit fallback. `node tests/web/agent-history-settings.test.js` exercises
-the shipped form's independent response/history controls and save/reopen behavior.
+repair/explicit fallback in 18 settings combinations. `saved settings apply without
+restart` changes controls through the real SettingsService/publication path and
+runs the same chat four times through one executor/conversation service, inspecting
+the actual wire history and current instructions. `node tests/web/agent-history-settings.test.js`
+checks the shipped form, JSON examples, 1100/740/390/320 px layout, save/reopen,
+edits during pending saves, tab navigation and visible save failures. Optional
+`AGENT_SETTINGS_SCREENSHOTS` writes previews. These do not qualify Windows delivery.
+`new execute requires content calls` reproduces the photographed missing-call
+response through JSON/SSE in both response modes, with/without provider-native
+calls; repair accepts only the corrected new content JSON and preserves history.
 Both are synthetic; provider-native generation is a separate diagnostics capability.
 
 `model diagnostics UI:` covers the typed catalog/run bridge, shared automatic controls

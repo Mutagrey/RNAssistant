@@ -2,7 +2,7 @@
 
 Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
 Response protocol is 8, reference contract revision is 3, new chat stream format
-is 8, and built-in prompt schema is 63. Formats 6 and 7 remain read-only history;
+is 8, and built-in prompt schema is 64. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
 Earlier format-8 histories with missing/older ReferenceContractVersion are read-only;
 new chats persist revision 3. Incompatible continuations are not hydrated or resumed;
@@ -146,6 +146,16 @@ admissible new model response.
 The native-history instruction describes `assistant.tool_calls` and matching tool
 messages; fallback-only JSON ID/envelope explanations are omitted. Repair and
 schema fallback retain this history choice and the frozen accepted messages.
+
+Every **new** execute proposal must still include nonempty `tool_calls` inside
+its decision JSON in content (inside `response` in schema mode). The reduced
+historical `action/reason/message` object is explicitly not a response template.
+Object/schema instructions, schema description and format repair share this rule.
+`empty_execute_calls` never borrows a call from history, accepts a narration as
+execution or silently converts provider-native calls into a V8 proposal.
+JSON/SSE captures retain `NativeToolCallsObserved` even outside diagnostic native
+assembly; when true, the missing-call repair explains that calls arrived in the
+wrong field. This presence flag neither validates nor authorizes those calls.
 
 P5 admission resolves selected E against retained same-chat canonical terminal events,
 trusted eligibility and the successful request's delivered set. T/R, unknown and

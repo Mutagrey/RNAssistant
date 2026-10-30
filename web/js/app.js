@@ -92,7 +92,7 @@ function switchTab(name) {
   } else if (name === "instructions" && typeof renderInstructions === "function") {
     renderInstructions();
   } else if (name === "settings") {
-    renderSettings();
+    if (!settingsDirty) renderSettings();
     loadSettingsModelCatalogIfNeeded();
     if (window.RNAssistantPerformanceDiagnostics) window.RNAssistantPerformanceDiagnostics.render();
   } else if (name === "plugins" && window.RNAssistantPlugins) {

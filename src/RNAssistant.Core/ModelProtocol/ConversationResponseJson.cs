@@ -87,7 +87,8 @@ namespace RNAssistant.Core.ModelProtocol
         {
             var calls = root["tool_calls"] as JArray;
             if (calls == null || calls.Count == 0)
-                return Fail(ConversationResponseError.EmptyExecuteCalls, "execute requires a nonempty tool_calls array.");
+                return Fail(ConversationResponseError.EmptyExecuteCalls,
+                    "execute requires a nonempty tool_calls array inside the decision JSON. action/reason/message alone is invalid.");
             if (calls.Count > ConversationResponseSchemaBuilder.MaximumToolCalls)
                 return Fail(ConversationResponseError.TooManyCalls, "tool_calls exceeds the maximum of " + ConversationResponseSchemaBuilder.MaximumToolCalls + ".");
             var parsedCalls = new List<ConversationToolCall>();

@@ -53,9 +53,14 @@ namespace RNAssistant.Core.ModelProtocol
         private const string DisabledReflectionInstruction =
             "Only execute and finish are available. Reflection is disabled for this run. ";
 
+        public const string ExecuteGuidance =
+            "Every new execute decision must contain a nonempty tool_calls array inside its JSON in content. " +
+            "Each call contains name and object arguments. action/reason/message alone is invalid: a progress sentence is not a tool call. " +
+            "Do not send provider-native calls instead of this array. ";
+
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last. " +
-            ReasonGuidance + "Choose execute with nonempty tool_calls when an authorized tool step remains. " +
+            ReasonGuidance + "Choose execute when an authorized tool step remains. " + ExecuteGuidance +
             "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns T1 to a call and E1 only to an eligible terminal result; R1@v2 identifies an observed resource version. T/R are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. New calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
             ReflectionInstruction +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has criterion (an original user requirement), evidence (issued eligible references such as E1 from terminal results of this chat delivered in this request), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
@@ -74,7 +79,7 @@ namespace RNAssistant.Core.ModelProtocol
         public const string SchemaGuidance =
             "Return the supplied json_schema exactly: the response property contains the conversation-response-v8 decision. " +
             ReasonGuidance + CriterionGuidance +
-            "Choose execute when a useful authorized tool step remains; batch only independent local reads. " +
+            "Choose execute when a useful authorized tool step remains; batch only independent local reads. " + ExecuteGuidance +
             SchemaReflectionInstruction +
             "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria; cite issued eligible evidence (E1, E2) from terminal results of this chat delivered in this request. Discovery/schema/skill loading can finish with empty evidence. " +
             "Model assessments do not prove effects; failed or unknown outcomes cannot be reported as verified changes. " +
@@ -93,10 +98,10 @@ namespace RNAssistant.Core.ModelProtocol
 
         public const string NativeHistoryGuidance =
             "## Accepted history\n\n" +
-            "Accepted execute decisions keep action, reason and message as JSON in assistant content; " +
-            "their tool_calls appear only in the native assistant.tool_calls field with matching tool messages. " +
+            "Only AFTER accepting your JSON response, runtime moves its tool_calls to the native assistant.tool_calls field and pairs tool results. " +
+            "The historical content keeps action, reason and message so you can see the earlier decision; it is not a valid template for a new execute response. " +
             "Accepted finish and reflection decisions retain all their JSON fields in content. " +
-            "Return your next decision as JSON in content using the response contract above.\n\n";
+            "For your NEW execute response, put nonempty tool_calls back inside the decision JSON in content, using the response contract above.\n\n";
 
         public const string MessageGuidance =
             "message is useful user-facing text; only execute/reflection may use an empty string. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +
@@ -172,6 +177,7 @@ namespace RNAssistant.Core.ModelProtocol
                 ["instruction"] = JsonObjectGuidance + " " + MessageGuidance + " " +
                     "Repair only the rejected proposal against the same current task and callable schemas. No call from the rejected response was accepted or executed. " +
                     "Do not replay previously accepted operations. Never relabel a promise as finish to repair empty_execute_calls. " +
+                    "For empty_execute_calls, supply the intended next calls inside the new decision JSON; do not copy the reduced content of native history. " +
                     "Inside a call, arguments is already the root object described by its schema; do not nest arguments, parameters or a wrapper. " +
                     "For an undeclared property, remove it; if it wrongly wraps declared fields, move those fields up first. " +
                     StringEscapingGuidance + " No Markdown or surrounding prose."

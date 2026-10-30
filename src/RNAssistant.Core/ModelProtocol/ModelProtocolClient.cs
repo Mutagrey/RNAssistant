@@ -145,6 +145,8 @@ namespace RNAssistant.Core.ModelProtocol
                     }
                     lastError = parsed.Error;
                     lastErrorKind = parsed.ErrorKind;
+                    if (parsed.ErrorKind == ConversationResponseError.EmptyExecuteCalls && completion.NativeToolCallsObserved)
+                        lastError += " Provider-native tool_calls were observed separately; return them as name/arguments entries inside the decision JSON, without provider IDs or function wrappers.";
                     // Preserve the existing zero-based diagnostic index; the limit and
                     // repair instruction count total protocol responses, starting at one.
                     TraceRejected(options, completion, parsed.ErrorCode + ": " + lastError, attempt - 1, progress);

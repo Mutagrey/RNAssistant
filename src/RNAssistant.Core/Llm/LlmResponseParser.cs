@@ -283,6 +283,7 @@ namespace RNAssistant.Core.Llm
             private bool _embeddedReasoningTruncated;
             private bool _embeddedProgressReported;
             private readonly bool _inspectNativeToolCalls;
+            private bool _nativeCallsObserved;
             private readonly SortedDictionary<int, JObject> _nativeCalls = new SortedDictionary<int, JObject>();
             private int _nativeChars;
 
@@ -326,6 +327,7 @@ namespace RNAssistant.Core.Llm
                     return;
                 }
 
+                _nativeCallsObserved |= HasNativeCallPayload(delta["tool_calls"]);
                 if (_inspectNativeToolCalls && delta["tool_calls"] != null)
                 {
                     var calls = delta["tool_calls"] as JArray;
@@ -390,6 +392,7 @@ namespace RNAssistant.Core.Llm
                 };
                 if (_nativeCalls.Count > 0) message["tool_calls"] = new JArray(_nativeCalls.Values);
                 var result = BuildCompletionResult(message, _usage, _finishReason, _inspectNativeToolCalls);
+                result.NativeToolCallsObserved |= _nativeCallsObserved;
                 result.IsEventStream = true;
                 result.ReasoningTruncated = _reasoning.Length > 0
                     ? _reasoningTruncated
@@ -675,6 +678,7 @@ namespace RNAssistant.Core.Llm
             return new LlmCompletionResult
             {
                 NativeToolCalls = inspectNativeToolCalls ? ReadNativeCalls(message["tool_calls"]) : null,
+                NativeToolCallsObserved = HasNativeCallPayload(message["tool_calls"]),
                 Termination = string.IsNullOrWhiteSpace(finishReason) ? LlmCompletionTermination.Unspecified :
                     finishReason == "length" ? LlmCompletionTermination.OutputLimit :
                     finishReason == "stop" ? LlmCompletionTermination.Completed :
@@ -692,6 +696,9 @@ namespace RNAssistant.Core.Llm
                 UsageJson = BoundedUsageJson(usage)
             };
         }
+
+        private static bool HasNativeCallPayload(JToken value)
+        { return value != null && value.Type != JTokenType.Null && (!(value is JArray) || value.HasValues); }
 
         private static List<LlmToolCall> ReadNativeCalls(JToken value)
         {

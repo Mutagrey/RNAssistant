@@ -17,6 +17,9 @@ namespace RNAssistant.Core.Llm
     {
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public List<LlmToolCall> NativeToolCalls { get; set; }
+        // Presence only, even when diagnostic native-call assembly is disabled.
+        // This never makes provider-native generation an accepted v8 proposal.
+        public bool NativeToolCallsObserved { get; set; }
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool IsEventStream { get; set; }
         public LlmCompletionTermination Termination { get; set; }

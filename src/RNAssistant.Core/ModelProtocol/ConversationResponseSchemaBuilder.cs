@@ -38,6 +38,7 @@ namespace RNAssistant.Core.ModelProtocol
                 var calls = reads.Count > 0 && singleCalls.Count > 0
                     ? new JObject { ["anyOf"] = new JArray(CallArray(singleCalls, 1), CallArray(reads, MaximumToolCalls)) }
                     : reads.Count > 0 ? CallArray(reads, MaximumToolCalls) : CallArray(singleCalls, 1);
+                calls["description"] = ModelProtocolWire.ExecuteGuidance;
                 branches.Add(Branch(ConversationResponse.ExecuteAction, "tool_calls", calls, context.ReflectionEnabled));
             }
             if (context.ReflectionEnabled)
