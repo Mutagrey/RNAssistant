@@ -72,81 +72,26 @@ namespace RNAssistant.Core.Llm
                 actualPromptTokens.HasValue, settings, "request", actualPromptTokens, actualCompletionTokens, actualTotalTokens);
         }
 
+        // UI snapshots need the last provider usage, not another projection of the
+        // entire history. Full estimates belong to request compilation/preview.
         public static object FromSession(ChatSession session, AppSettings settings)
         {
-            var limit = ModelContextBudget.InputBudgetTokens(settings);
-            var usedChars = 0;
-            var usedTokens = 0;
-            var baseTokens = 0;
-            var count = 0;
-            if (session != null && session.Messages != null)
+            ChatMessage lastUsage = null;
+            var messages = session == null ? null : session.Messages;
+            for (var index = messages == null ? -1 : messages.Count - 1; index >= 0; index--)
             {
-                var startIndex = 0;
-                var checkpoint = session.ContextCheckpoints == null || string.IsNullOrWhiteSpace(session.ActiveContextCheckpointId)
-                    ? null
-                    : session.ContextCheckpoints.FirstOrDefault(item => item != null &&
-                        string.Equals(item.Id, session.ActiveContextCheckpointId, StringComparison.OrdinalIgnoreCase));
-                if (checkpoint != null)
-                {
-                    usedChars += (checkpoint.SummaryMarkdown ?? string.Empty).Length;
-                    usedTokens += ModelContextBudget.EstimateTextTokens(checkpoint.SummaryMarkdown, settings);
-                    baseTokens += ModelContextBudget.EstimateTextTokens(checkpoint.SummaryMarkdown);
-                    count += 1;
-                    var throughIndex = session.Messages.FindIndex(message => message != null &&
-                        string.Equals(message.Id, checkpoint.ThroughMessageId, StringComparison.OrdinalIgnoreCase));
-                    if (throughIndex >= 0) startIndex = throughIndex + 1;
-                }
-                foreach (var message in session.Messages.Skip(startIndex))
-                {
-                    var protocolTool = message != null && message.ProtocolMessage &&
-                        (string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
-                         string.Equals(message.Role, "developer", StringComparison.OrdinalIgnoreCase));
-                    if (message == null || message.ExcludeFromModelContext || message.Activity != null ||
-                        !protocolTool && (string.IsNullOrWhiteSpace(message.Content) ||
-                        (!string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) &&
-                         !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase))))
-                    {
-                        continue;
-                    }
-
-                    var projectedMessage = HistoricalContextProjector.Project(message);
-                    usedChars += (projectedMessage.Content ?? string.Empty).Length;
-                    usedTokens += ModelContextBudget.EstimateMessageTokens(projectedMessage, settings, null, false);
-                    baseTokens += ModelContextBudget.EstimateMessageTokens(projectedMessage, null, null, false);
-                    count += 1;
-                }
+                var message = messages[index];
+                if (message == null || message.RuntimeProjection ||
+                    !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) ||
+                    message.AcceptedCallOrigin != null && message.AcceptedCallOrigin.CallIndex != 0)
+                    continue;
+                if (!message.ProtocolMessage && !message.PromptTokens.HasValue &&
+                    !message.CompletionTokens.HasValue && !message.TotalTokens.HasValue) continue;
+                lastUsage = message;
+                break;
             }
-            if (session != null && session.Context != null && session.Context.Notes != null)
-            {
-                var included = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var note in session.Context.Notes)
-                {
-                    if (note == null)
-                    {
-                        continue;
-                    }
-
-                    var text = note.Text ?? note.Preview ?? string.Empty;
-                    var identity = !string.IsNullOrWhiteSpace(note.Reference)
-                        ? note.Host + "|" + note.Kind + "|" + note.Reference
-                        : note.Id;
-                    if (string.IsNullOrWhiteSpace(text) || !included.Add(identity))
-                    {
-                        continue;
-                    }
-                    usedChars += text.Length;
-                    usedTokens += ModelContextBudget.EstimateTextTokens(text, settings);
-                    baseTokens += ModelContextBudget.EstimateTextTokens(text);
-                }
-            }
-
-            usedTokens = TokenEstimateCalibration.PredictPromptTokens(settings, baseTokens);
-            var lastUsage = (session == null ? null : session.Messages)?.LastOrDefault(message =>
-                message != null && (message.PromptTokens.HasValue || message.CompletionTokens.HasValue ||
-                    message.TotalTokens.HasValue));
-            return Usage(usedChars, usedTokens, limit, count, false, settings, "chat_context",
+            return Usage(0, lastUsage?.PromptTokens ?? 0, ModelContextBudget.InputBudgetTokens(settings), 0,
+                lastUsage?.PromptTokens.HasValue == true, settings, "last_response",
                 lastUsage?.PromptTokens, lastUsage?.CompletionTokens, lastUsage?.TotalTokens);
         }
 

@@ -392,12 +392,12 @@ namespace RNAssistant.Office
 
         private void ReportExternalChatState(
             Action<ChatStateResponse> chatStateChanged,
-            ChatSession session)
+            ChatSession session, bool includeCatalog = true)
         {
             if (chatStateChanged == null) return;
             try
             {
-                chatStateChanged(ChatState(session));
+                chatStateChanged(ChatState(session, includeCatalog));
             }
             catch
             {

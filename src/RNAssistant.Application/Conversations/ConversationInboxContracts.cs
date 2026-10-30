@@ -29,5 +29,6 @@ namespace RNAssistant.Application.Conversations
         internal string PauseReason { get; set; }
         internal string Phase { get; set; }
         internal bool Running { get; set; }
+        internal bool ActiveRun { get; set; }
     }
 }

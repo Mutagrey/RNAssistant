@@ -130,7 +130,7 @@ namespace RNAssistant.Office
                 {
                     // Kernel persistence precedes this callback. Publish the complete
                     // revisioned projection before the next model step.
-                    ReportExternalChatState(chatStateChanged, session);
+                    ReportExternalChatState(chatStateChanged, session, includeCatalog: false);
                 }
                 ReportExternalProgress(progress, phase, message, activity);
             };

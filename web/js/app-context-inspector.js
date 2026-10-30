@@ -199,8 +199,9 @@ function renderPromptContextInspector(snapshot) {
       : "");
   notice.classList.toggle("is-over-budget", overBudget);
 
-  renderPromptContextUsage(modelUsageFromContext(snapshot),
-    promptContextInspectorValue(snapshot, "lastPromptUtc", "LastPromptUtc", ""));
+  var currentRequest = typeof currentModelContextRequest === "function" && currentModelContextRequest();
+  renderPromptContextUsage(currentRequest ? lastModelUsage() : modelUsageFromContext(snapshot),
+    currentRequest ? "" : promptContextInspectorValue(snapshot, "lastPromptUtc", "LastPromptUtc", ""));
 
   var sections = promptContextInspectorValue(snapshot, "sections", "Sections", []);
   renderPromptContextSummary(sections, used);

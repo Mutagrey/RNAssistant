@@ -535,10 +535,14 @@ at 100 ms without dropping deltas. A chat change uses the current full projectio
 This changes presentation cost only, not event/CAS persistence or commit barriers.
 
 Streamed text and reasoning belong to the active run article. The text uses normal
-contrast and a quiet “Формируется…” status, replacing the ambient thinking label
+contrast and a quiet request-stage status, replacing the ambient thinking label
 while a draft is visible. Only an accepted final answer receives the divider after
 actions. An attempt reset immediately removes its unaccepted text/reasoning in both
-foreground and background chats. A repeated attempt before step acceptance shows
+foreground and background chats, before waiting for the first replacement token.
+Stop immediately clears unaccepted drafts and ignores late deltas while cancellation
+is pending; the runtime still owns terminal lifecycle and effect evidence.
+An active-chat terminal snapshot retires the live run even without a chat catalog.
+A repeated attempt before step acceptance shows
 “Повторная попытка…” even before replacement output arrives; ordinary next steps
 do not acquire that label. Accepted text continues as step narration or a final
 answer; transient drafts are never an additional durable message.
@@ -669,7 +673,9 @@ history edit or deletion may remove it from the current chat without invalidatin
 the original receipt; missing messages without that removal still fail. A colliding
 non-user/duplicate ID is not delivery evidence. Office resume uses the
 same check before resolving `delivering` and before writing `applied`. Restart
-pauses retained input independently of the last saved pause flag. Replay rejects
+pauses retained input independently of the last saved pause flag. A newly submitted
+idle input can run without resuming retained older work; an empty old pause is
+cleared in that input's own durable intake event. Replay rejects
 one operation ID assigned to multiple inputs or changes to an
 input's immutable request fingerprint, run/question IDs or runtime target across
 transitions; neither Office nor workspace may acknowledge that history as accepted.

@@ -153,6 +153,11 @@ function isActiveTimelineStatus(status) {
   return status === "running" || status === "waiting";
 }
 
+function isAmbientAgentActivity(activity) {
+  return activityKind(activity) === "notice" && !activityStepId(activity) &&
+    !activityToolCallId(activity) && isActiveTimelineStatus(activityStatus(activity));
+}
+
 function recordActivityTimeline(items, activity) {
   if (!activity) {
     return null;
@@ -171,6 +176,13 @@ function recordActivityTimeline(items, activity) {
     }
 
     var existingStatus = activityStatus(existing);
+    if (isAmbientAgentActivity(copy) && isAmbientAgentActivity(existing)) {
+      // This is the current phase, not a historical notice. A new model wait
+      // belongs after the accepted step/tool results, even when its key repeats.
+      items.splice(i, 1);
+      items.push(copy);
+      return copy;
+    }
     if (activityToolCallId(copy) && !isActiveTimelineStatus(existingStatus) && isActiveTimelineStatus(nextStatus)) return existing;
     if (activityToolCallId(copy) || activityKind(copy) === "step" || isActiveTimelineStatus(existingStatus) ||
         (existingStatus === nextStatus && activityResultMessage(existing) === activityResultMessage(copy))) {

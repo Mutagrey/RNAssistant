@@ -225,7 +225,7 @@ function messageUsageText(message) {
   var prompt = validChatTokenCount(messagePromptTokens(message));
   var completion = validChatTokenCount(messageCompletionTokens(message));
   if (total === null && prompt === null && completion === null) {
-    return "";
+    return message && message.UsageIncomplete ? "API не сообщил расход токенов" : "";
   }
 
   var parts = [];
@@ -238,7 +238,7 @@ function messageUsageText(message) {
   if (completion !== null) {
     parts.push("ответ " + chatTokenNumber(completion));
   }
-  return parts.join(" · ");
+  return (message && message.UsageIncomplete ? "неполные данные API: " : "") + parts.join(" · ");
 }
 
 function chatRunTokenUsage(messages, startIndex, endIndex) {
@@ -251,15 +251,25 @@ function chatRunTokenUsage(messages, startIndex, endIndex) {
   for (var index = first; index < endIndex; index += 1) {
     var message = messages[index];
     if (messageRole(message) !== "assistant" || runId && messageRunId(message) !== runId) continue;
+    if (messageProtocolMessage(message)) {
+      var origin = message.AcceptedCallOrigin || message.acceptedCallOrigin;
+      // A batch has one provider response; only its first call carries usage.
+      if (!origin || Number(origin.CallIndex !== undefined ? origin.CallIndex : origin.callIndex) === 0) protocol.push(message);
+      continue;
+    }
     var values = [messagePromptTokens(message), messageCompletionTokens(message), messageTotalTokens(message)];
     if (!values.some(function (value) { return validChatTokenCount(value) !== null; })) continue;
-    (messageProtocolMessage(message) ? protocol : visible).push(message);
+    visible.push(message);
   }
   // A terminal runtime projection may repeat the final accepted response's
   // usage. The accepted protocol records count each provider answer once.
   var source = protocol.length ? protocol : visible;
   if (!source.length) return null;
-  var usage = { PromptTokens: null, CompletionTokens: null, TotalTokens: null };
+  var usage = { PromptTokens: null, CompletionTokens: null, TotalTokens: null,
+    UsageIncomplete: source.some(function (message) {
+      return [messagePromptTokens(message), messageCompletionTokens(message), messageTotalTokens(message)]
+        .some(function (value) { return validChatTokenCount(value) === null; });
+    }) };
   [["PromptTokens", messagePromptTokens], ["CompletionTokens", messageCompletionTokens],
     ["TotalTokens", messageTotalTokens]].forEach(function (field) {
     source.forEach(function (message) {
@@ -784,7 +794,8 @@ function refreshLiveAgentOutput(node) {
     content: state.liveStreamContent || "",
     reasoning: state.liveReasoning || "",
     reasoningComplete: !!state.liveReasoningComplete,
-    retrying: !!(run && run.streamRetrying)
+    retrying: !!(run && run.streamRetrying),
+    statusText: typeof chatModelStageText === "function" ? chatModelStageText(run) : ""
   });
 }
 
@@ -832,7 +843,8 @@ function paintLiveModelOutput(section, output) {
       // The accepted message is rendered as Markdown once it is saved.
     } else if (body) section.removeChild(body);
   }
-  var label = output.retrying ? "Повторная попытка…" : content || output.showStatus ? "Формируется…" : "";
+  var label = output.retrying ? "Повторная попытка…" : content || output.showStatus
+    ? output.statusText || "Получаю ответ модели…" : "";
   if (status.hidden !== !label) status.hidden = !label;
   if (status.textContent !== label) status.textContent = label;
   section.liveOutput = { content: content, reasoning: reasoning,

@@ -13,6 +13,8 @@ class Element {
   appendChild(node) { return this.insertBefore(node, null); }
   insertBefore(node, cursor) { if (node.parentNode) node.parentNode.removeChild(node); this.childNodes.splice(cursor ? this.childNodes.indexOf(cursor) : this.childNodes.length, 0, node); node.parentNode = this; return node; }
   removeChild(node) { this.childNodes.splice(this.childNodes.indexOf(node), 1); node.parentNode = null; }
+  replaceChildren(...nodes) { this.childNodes.slice().forEach(node => this.removeChild(node)); nodes.forEach(node => this.appendChild(node)); }
+  replaceWith(node) { const parent = this.parentNode; parent.insertBefore(node, this); parent.removeChild(this); }
   setAttribute(key, value) { this.attributes[key] = String(value); }
   getAttribute(key) { return this.attributes[key]; }
   addEventListener(type, listener) { (this.listeners || (this.listeners = {}))[type] = listener; }
@@ -23,7 +25,7 @@ class Element {
 }
 const walk = node => [node].concat(node.childNodes.flatMap(walk));
 const visibleStepMessages = root => walk(root).filter(node => {
-  if (!node.classList.contains("agent-step-message")) return false;
+  if (!node.classList.contains("agent-step-message") && !node.classList.contains("agent-reflection-body")) return false;
   for (let parent = node.parentNode; parent; parent = parent.parentNode) {
     if (parent.tagName === "details" && !parent.open) return false;
   }
@@ -42,7 +44,7 @@ const ctx = vm.createContext({
   $: () => box, renderChatResourceNavigation: () => {}, isPanelActive: () => true
 });
 ctx.window = ctx;
-for (const name of ["app-utils.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-messages.js"]) {
+for (const name of ["app-utils.js", "app-run-view-state.js", "app-conversation-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-messages.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), ctx);
 }
 ctx.enhanceActivity = () => {};
@@ -321,7 +323,7 @@ const streamRun = box.firstChild;
 assert.equal(streamRun.classList.contains("pending"), false, "the run and draft are not faded");
 assert.equal(streamRun.querySelector(".agent-run-actions").classList.contains("has-actions"), false,
   "an unfinished draft has no final-answer divider");
-assert.equal(streamRun.querySelector(".agent-stream-status").textContent, "Формируется…");
+assert.equal(streamRun.querySelector(".agent-stream-status").textContent, "Получаю ответ модели…");
 assert.ok(!streamRun.textContent.includes("Думаю…"), "streaming replaces the ambient thinking label");
 const retainedAction = streamRun.querySelector(".kind-tool");
 const draftBody = streamRun.querySelector(".agent-stream-message");

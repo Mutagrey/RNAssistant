@@ -87,7 +87,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         const tooltip = await page.locator("#contextMeterTooltip").boundingBox();
         assert.ok(tooltip && tooltip.x >= 0 && tooltip.x + tooltip.width <= width && tooltip.y >= 0);
 
-        assert.match(await page.locator("#contextMeterSummary").textContent(), /Осталось 54%/);
+        assert.match(await page.locator("#contextMeterSummary").textContent(), /Последний ответ API:.*заполнено 46%/);
         assert.equal(await page.locator("#contextMeter").textContent().then(t => t.trim()), "");
         const ring = await page.locator("#contextMeter").boundingBox();
         const model = await page.locator("#chatModelButton").boundingBox();
@@ -105,7 +105,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       state.contextUsage = {}; renderContextMeter();
       document.getElementById("messages").innerHTML = "<div style='min-height:2400px'>Длинный диалог</div>";
     });
-    assert.equal(await page.locator("#contextMeterWrap").isVisible(), false, "unknown context occupies no toolbar space");
+    assert.equal(await page.locator("#contextMeterWrap").isVisible(), true, "unknown context keeps an accessible explanation");
     for (const height of [760, 560]) {
       await page.setViewportSize({ width: 360, height });
       const contained = await page.locator("#chatForm").evaluate(form => {

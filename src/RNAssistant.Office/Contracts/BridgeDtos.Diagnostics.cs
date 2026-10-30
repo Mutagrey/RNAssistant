@@ -95,6 +95,25 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ModelRequestDiagnosticsDto
     {
+        [JsonProperty("chatId", NullValueHandling = NullValueHandling.Ignore)]
+        public string ChatId { get; set; }
+        [JsonProperty("runId", NullValueHandling = NullValueHandling.Ignore)]
+        public string RunId { get; set; }
+        [JsonProperty("purpose", NullValueHandling = NullValueHandling.Ignore)]
+        public string Purpose { get; set; }
+        [JsonProperty("estimatedPromptTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int? EstimatedPromptTokens { get; set; }
+        [JsonProperty("promptTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int? PromptTokens { get; set; }
+        [JsonProperty("completionTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int? CompletionTokens { get; set; }
+        [JsonProperty("totalTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int? TotalTokens { get; set; }
+        [JsonProperty("contextWindowTokens")]
+        public int ContextWindowTokens { get; set; }
+        [JsonProperty("outputLimitTokens", NullValueHandling = NullValueHandling.Ignore)]
+        public int? OutputLimitTokens { get; set; }
+
         [JsonProperty("requestId")]
         public string RequestId { get; set; }
 
@@ -142,6 +161,15 @@ namespace RNAssistant.Office.Contracts
             if (source == null) return null;
             return new ModelRequestDiagnosticsDto
             {
+                ChatId = source.ChatId,
+                RunId = source.RunId,
+                Purpose = source.Purpose,
+                EstimatedPromptTokens = source.EstimatedPromptTokens,
+                PromptTokens = source.PromptTokens,
+                CompletionTokens = source.CompletionTokens,
+                TotalTokens = source.TotalTokens,
+                ContextWindowTokens = source.ContextWindowTokens,
+                OutputLimitTokens = source.OutputLimitTokens,
                 RequestId = source.RequestId,
                 Phase = source.Phase,
                 Model = source.Model,

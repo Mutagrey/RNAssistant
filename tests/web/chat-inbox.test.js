@@ -36,6 +36,9 @@ vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
 context.renderChatSessions = () => {};
 (async () => {
   assert.equal(context.runningMessageDelivery(), "Steer");
+  const pending = { Id: "new", Status: "Pending", Delivery: "Queue" };
+  assert.equal(context.pendingInputStatus(pending, { items: [pending], running: true, activeRun: false }), "Передаю агенту…");
+  assert.equal(context.pendingInputStatus(pending, { items: [pending], running: true, activeRun: true }), "В очереди");
   context.state.settings.RunningMessageDelivery = "Queue";
   assert.equal(context.runningMessageDelivery(), "Queue");
   context.$("chatInput").value = "keep me";

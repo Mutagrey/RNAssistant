@@ -68,6 +68,7 @@ var performanceDiagnostics = (function () {
       var value = entry.value, phase = String(value.phase || "");
       var stage = phase === "preparing" ? "подготовка HTTP" : phase === "sending" ? "ожидание заголовков" :
         phase === "headers" ? "ожидание данных" : phase === "first_chunk" ? "получение ответа" :
+        phase === "persisting" ? "сохранение ответа" :
         phase === "completed" ? "завершён" : phase === "cancelled" ? "отменён" : "ошибка";
       var summary = "подготовка " + duration(value.preparationMs) +
         ", заголовки " + (value.responseHeadersMs == null || value.preparationMs == null ? "—" :

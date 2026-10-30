@@ -2788,27 +2788,39 @@ namespace RNAssistant.Harness
         {
             var requestUpdates = new List<LlmRequestDiagnosticUpdate>();
             var globalUpdates = new List<LlmRequestDiagnosticUpdate>();
+            var tracedSession = new ChatSession { Id = "usage-chat", LastRun = new ChatRunRecord { RunId = "usage-run" } };
             var tracker = new LlmRequestDiagnosticsTracker(
-                new AppSettings { Model = "diagnostic-model", StreamResponses = true },
+                new AppSettings { Model = "diagnostic-model", StreamResponses = true, ContextWindowOverrideTokens = 900000 },
                 requestUpdates.Add,
                 globalUpdates.Add,
-                null);
+                null, options: new LlmRequestOptions { TraceSession = tracedSession, TracePurpose = "agent" });
 
-            tracker.Sending(123);
+            tracker.Sending(123, 14999, 4096);
             tracker.Headers(202);
             tracker.FirstChunk();
             tracker.FirstChunk();
-            tracker.Completed();
+            tracker.Persisting();
+            tracker.Completed(new LlmCompletionResult { PromptTokens = 15001, CompletionTokens = 542, TotalTokens = 15543 });
             tracker.Failed(new InvalidOperationException("ignored after completion"));
 
             AssertEqual(
-                "preparing,sending,headers,first_chunk,completed",
+                "preparing,sending,headers,first_chunk,persisting,completed",
                 string.Join(",", requestUpdates.Select(update => update.Phase).ToArray()),
                 "diagnostic lifecycle phases");
             AssertEqual(requestUpdates.Count, globalUpdates.Count, "request and global diagnostics receive each phase");
             AssertEqual(123L, requestUpdates.Last().RequestBytes.Value, "request size retained");
             AssertEqual(202, requestUpdates.Last().StatusCode.Value, "response status retained");
             AssertTrue(requestUpdates.Last().TotalMs.HasValue, "terminal duration retained");
+            AssertEqual(14999, requestUpdates[1].EstimatedPromptTokens.Value, "actual outgoing estimate is published before response");
+            AssertTrue(!requestUpdates[1].PromptTokens.HasValue, "an estimate cannot be labeled API usage");
+            var dto = RNAssistant.Office.Contracts.ModelRequestDiagnosticsDto.From(requestUpdates.Last());
+            AssertEqual("usage-chat", dto.ChatId, "usage is scoped to the exact chat");
+            AssertEqual("usage-run", dto.RunId, "usage is scoped to the exact run");
+            AssertEqual("agent", dto.Purpose, "helper requests remain distinguishable");
+            AssertEqual(15001, dto.PromptTokens.Value, "completed usage is exact");
+            AssertEqual(542, dto.CompletionTokens.Value, "output usage stays separate from input");
+            AssertEqual(900000, dto.ContextWindowTokens, "RNAssistant window accompanies this request");
+            AssertEqual(4096, dto.OutputLimitTokens.Value, "output cap is distinct from actual output");
 
             var cancelledUpdates = new List<LlmRequestDiagnosticUpdate>();
             var cancelled = new LlmRequestDiagnosticsTracker(new AppSettings(), cancelledUpdates.Add, null, null);

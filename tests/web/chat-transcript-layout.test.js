@@ -80,7 +80,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         assert.equal(layout.injected, false);
         assert.equal(layout.clipped, "none", "all queued text remains readable");
         assert.notEqual(layout.background, "rgba(0, 0, 0, 0)", "queued text retains its user bubble background");
-        assert.equal(layout.streamStatus, "Формируется…");
+        assert.equal(layout.streamStatus, "Получаю ответ модели…");
         assert.equal(layout.streamColor, layout.paragraphColor, "the draft uses ordinary readable text color");
         assert.equal(layout.streamOpacity, "1", "streamed text is not faded");
         assert.equal(layout.divider, "0px", "a draft has no final-answer divider");

@@ -64,7 +64,7 @@ namespace RNAssistant.Application.Conversations
         internal sealed class Inbox
         {
             internal readonly object Sync = new object();
-            internal readonly HashSet<string> ExplicitSteers = new HashSet<string>(StringComparer.Ordinal);
+            internal readonly HashSet<string> ExplicitInputs = new HashSet<string>(StringComparer.Ordinal);
             internal readonly List<ConversationInput> Inputs = new List<ConversationInput>();
             internal readonly Dictionary<string, AcceptedInput> Accepted =
                 new Dictionary<string, AcceptedInput>(StringComparer.Ordinal);
@@ -161,7 +161,7 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync) return new ConversationInboxSnapshot
             {
                 ChatId = session.Id, Epoch = _epoch, Revision = box.ViewRevision, Phase = box.Session.LastRun == null ? null : box.Session.LastRun.Phase, Running = box.Running || box.Worker,
-                Paused = box.Paused, PauseReason = box.PauseReason,
+                ActiveRun = box.Running, Paused = box.Paused, PauseReason = box.PauseReason,
                 Items = Undelivered(box.Session, box.Inputs, null).Select(Clone).ToList(),
                 Receipts = requested.Count == 0 ? new List<ConversationInboxReceipt>() : box.Inputs.Where(input => requested.Contains(input.OperationId))
                     .Select(input => new ConversationInboxReceipt { Id = input.Id, OperationId = input.OperationId,
@@ -265,8 +265,13 @@ namespace RNAssistant.Application.Conversations
                 i.Status != ConversationInputStatus.Removed && i.AnswerRunId == input.AnswerRunId && i.QuestionSetId == input.QuestionSetId)))
                 throw new InvalidOperationException("The questions already have accepted input or the conversation has moved on.");
             input.Revision = 1;
-            var fact = Write(box, input);
-            if (input.Delivery == InputDelivery.Steer) box.ExplicitSteers.Add(input.Id);
+            // Pressing Send in an idle chat starts this new input. An empty queue's
+            // old stop/error flag must not require a second confirmation. Retained
+            // older inputs stay paused; fresh input does not authorize their replay.
+            var idleInput = !box.Running && PendingConfirmationId(box.Session) == null;
+            var clearEmptyPause = idleInput && !box.Inputs.Any(IsPending);
+            var fact = Write(box, input, clearEmptyPause ? (bool?)false : null);
+            if (input.Delivery == InputDelivery.Steer || idleInput) box.ExplicitInputs.Add(input.Id);
             if (input.Delivery == InputDelivery.Steer && box.Accepting) box.Interrupt.Cancel();
             return fact;
         }
@@ -344,7 +349,7 @@ namespace RNAssistant.Application.Conversations
                 }
                 input.Revision++;
                 Write(box, input);
-                if (action == "steer") box.ExplicitSteers.Add(input.Id);
+                if (action == "steer") box.ExplicitInputs.Add(input.Id);
                 if (action == "steer" && box.Accepting) box.Interrupt.Cancel();
                 return input;
             }
@@ -362,7 +367,7 @@ namespace RNAssistant.Application.Conversations
                 // A failed journal append must still stop scheduling in this process.
                 // Recovery also pauses unconditionally, so no durable replay is authorized.
                 box.Paused = true; box.PauseReason = reason;
-                box.ExplicitSteers.Clear(); box.ViewRevision++;
+                box.ExplicitInputs.Clear(); box.ViewRevision++;
             }
         }
         internal void Resume(ChatSession session)
@@ -444,7 +449,7 @@ namespace RNAssistant.Application.Conversations
         private static bool HasSteerLocked(Inbox box)
         {
             return box.Accepting && box.Inputs.Any(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending && i.Delivery == InputDelivery.Steer &&
-                (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
+                (!box.Paused || box.ExplicitInputs.Contains(i.Id)));
         }
         internal CancellationToken InterruptToken(ChatSession session)
         {
@@ -467,7 +472,7 @@ namespace RNAssistant.Application.Conversations
             lock (box.Sync)
             {
                 var pending = box.Accepting ? box.Inputs.Where(i => AppliesToRun(box, i) && i.Status == ConversationInputStatus.Pending &&
-                    i.Delivery == InputDelivery.Steer && (!box.Paused || box.ExplicitSteers.Contains(i.Id))).Select(Clone).ToList() : new List<ConversationInput>();
+                    i.Delivery == InputDelivery.Steer && (!box.Paused || box.ExplicitInputs.Contains(i.Id))).Select(Clone).ToList() : new List<ConversationInput>();
                 foreach (var input in pending)
                 {
                     input.Status = ConversationInputStatus.Delivering;
@@ -498,7 +503,7 @@ namespace RNAssistant.Application.Conversations
             var box = Get(session);
             lock (box.Sync)
             {
-                if (box.Worker || box.Running || !HasRunnableLocked(box, session)) return false;
+                if (box.Worker || box.Running || !HasRunnableLocked(box, box.Session)) return false;
                 box.Worker = true;
                 box.ViewRevision++;
                 return true;
@@ -512,8 +517,9 @@ namespace RNAssistant.Application.Conversations
                 var awaiting = PendingConfirmationId(session) != null;
                 var next = box.Inputs.FirstOrDefault(i => i.Status == ConversationInputStatus.Pending &&
                     i.Delivery == InputDelivery.Steer && CanSchedule(session, i, awaiting) &&
-                    (!box.Paused || box.ExplicitSteers.Contains(i.Id))) ?? (awaiting || box.Paused ? null : box.Inputs.FirstOrDefault(i =>
-                        i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending));
+                    (!box.Paused || box.ExplicitInputs.Contains(i.Id))) ?? (awaiting ? null : box.Inputs.FirstOrDefault(i =>
+                        i.AcceptedRunId == null && i.Status == ConversationInputStatus.Pending &&
+                        (!box.Paused || box.ExplicitInputs.Contains(i.Id))));
                 if (next == null) return null;
                 // A waiting approval is resumed through the same kernel continuation.
                 // Its steer remains pending for that continuation to consume.
@@ -527,19 +533,19 @@ namespace RNAssistant.Application.Conversations
         {
             var box = Get(session);
             lock (box.Sync)
-                if (box.Paused && !box.ExplicitSteers.Contains(inputId)) throw new OperationCanceledException("Очередь приостановлена.");
+                if (box.Paused && !box.ExplicitInputs.Contains(inputId)) throw new OperationCanceledException("Очередь приостановлена.");
         }
         internal bool HasRunnable(ChatSession session)
         {
             var box = Get(session);
-            lock (box.Sync) return HasRunnableLocked(box, session);
+            lock (box.Sync) return HasRunnableLocked(box, box.Session);
         }
         private static bool HasRunnableLocked(Inbox box, ChatSession session)
         {
             var awaiting = PendingConfirmationId(session) != null;
             return box.Inputs.Any(i => i.Status == ConversationInputStatus.Pending &&
                 CanSchedule(session, i, awaiting) && (!awaiting || i.Delivery == InputDelivery.Steer) &&
-                (!box.Paused || box.ExplicitSteers.Contains(i.Id)));
+                (!box.Paused || box.ExplicitInputs.Contains(i.Id)));
         }
         private static bool CanSchedule(ChatSession session, ConversationInput input, bool awaiting)
         {

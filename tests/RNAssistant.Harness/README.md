@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+`inbox: stop freezes queue and retains target` also checks idle Send after an empty
+cancelled queue and fresh input bypassing only its own retained pause. `conversation:
+application queue owns FIFO and drain` checks that the empty tail does not reload
+the full chat. `model diagnostics: tracker lifecycle`, `token estimate: actual usage
+is authoritative` and `conversation: streams` / `conversation: resets stream` cover
+scoped live usage, batch attribution, missing usage and immediate retry invalidation.
+Web checks: `context-usage`, `agent-timeline-order`, `chat-inbox`, `stream-render-cost`,
+`live-run-projection`, and Chromium `agent-activity-layout` / `chat-transcript-layout`.
+The separate composer unknown-warning mismatch remains in the risk register.
+
 `history protocol:` checks the six content-response/history-role combinations,
 native pairing, history-specific instructions, unchanged user data and frozen
 repair/explicit fallback. `node tests/web/agent-history-settings.test.js` exercises

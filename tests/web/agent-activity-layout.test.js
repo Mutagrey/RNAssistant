@@ -421,6 +421,21 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     }
     await page.emulateMedia({ reducedMotion: "no-preference" });
     await page.evaluate(() => {
+      const activities = [], think = { Kind: "notice", RunId: "wait-run", Status: "running", Title: "Думаю…" };
+      recordActivityTimeline(activities, think);
+      recordActivityTimeline(activities, { Kind: "tool", RunId: "wait-run", StepId: "read", ToolCallId: "read-1",
+        ToolId: "core.read", Status: "completed", StepMessage: "Читаю модули" });
+      recordActivityTimeline(activities, think);
+      recordActivityTimeline(activities, { Kind: "step", RunId: "wait-run", StepId: "reflection",
+        Status: "completed", Title: "Промежуточное решение", StepMessage: "Нашёл ошибки. Исправляю." });
+      recordActivityTimeline(activities, think);
+      const node = renderAgentRunArticle({ live: true, items: activities.map(activity => ({ activity, index: -1 })) });
+      node.id = "model-wait"; document.querySelector("main").appendChild(node);
+    });
+    assert.match(await page.locator("#model-wait").innerText(), /Нашёл ошибки\. Исправляю\.[\s\S]*Думаю…/);
+    assert.equal(await page.locator("#model-wait .is-live-current:visible").count(), 1,
+      "the model wait stays visible after the photographed read/reflection sequence");
+    await page.evaluate(() => {
       const items = JSON.parse(JSON.stringify(sparseItems));
       items[items.length - 1].activity.StepMessage = items[0].activity.StepMessage;
       items.forEach(item => { item.activity.Status = "completed"; item.message.RunViewState.Lifecycle = "completed"; });

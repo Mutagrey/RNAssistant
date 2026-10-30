@@ -146,3 +146,21 @@ progress({ contentReset: true, reasoningReset: true });
 assert.equal(bridge.state.chatRuns.foreground.streamRetrying, false, "a new step after reflection is not a format retry");
 assert.equal(acceptedReflection.__reasoningMessage.ReasoningContent, "Accepted reflection reasoning", "new attempt cannot erase accepted reasoning");
 console.log("PASS reflection: accepted reasoning handoff survives next attempt reset");
+
+progress({ contentDelta: "Unaccepted draft" });
+bridge.setChatRunCancelling("foreground", true);
+assert.equal(bridge.state.liveStreamContent, null);
+progress({ contentDelta: "late chunk", reasoningDelta: "late reasoning" });
+assert.equal(bridge.state.liveStreamContent, null, "late model data cannot revive a cancelled draft");
+assert.equal(bridge.chatModelStageText(bridge.state.chatRuns.foreground), "Останавливаю…");
+bridge.state.chats = [];
+bridge.state.activeRunViewState = { runId: "run", lifecycle: "cancelled" };
+bridge.reconcileTerminalChatRuns();
+assert.equal(bridge.state.chatRuns.foreground, undefined,
+  "a terminal active-chat snapshot retires the draft without a catalog refresh");
+assert.equal(bridge.state.liveStreamContent, null);
+for (const [phase, expected] of [["preparing_context", /контекст/], ["sending", /Ожидаю/],
+  ["first_chunk", /Получаю/], ["persisting", /Сохраняю/], ["completed", /Проверяю/]]) {
+  assert.match(bridge.chatModelStageText({ requestContext: { phase } }), expected);
+}
+console.log("PASS stream: staged status and cancellation retire unaccepted output without a catalog round trip");

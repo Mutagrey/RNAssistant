@@ -259,7 +259,7 @@ function pendingInputStatus(item, box) {
   if (box.paused && !box.running) return "В очереди · приостановлено";
   if (item.Status === "Delivering") return "Передаю агенту…";
   if (item.Delivery === "Steer" && box.running) return box.phase === "executing" ? "Применится после текущего действия" : "Ожидает применения";
-  return "В очереди";
+  return box.activeRun ? "В очереди" : "Передаю агенту…";
 }
 function renderPendingInput(item, chatId, editing) {
   var node = document.createElement("article"); node.className = "message user pending inbox-message";

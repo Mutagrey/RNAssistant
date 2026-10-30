@@ -46,5 +46,6 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("pauseReason")] public string PauseReason { get; set; }
         [JsonProperty("phase")] public string Phase { get; set; }
         [JsonProperty("running")] public bool Running { get; set; }
+        [JsonProperty("activeRun")] public bool ActiveRun { get; set; }
     }
 }

@@ -11,6 +11,7 @@ namespace RNAssistant.Core.Llm
         public const string Sending = "sending";
         public const string Headers = "headers";
         public const string FirstChunk = "first_chunk";
+        public const string Persisting = "persisting";
         public const string Completed = "completed";
         public const string Cancelled = "cancelled";
         public const string Failed = "failed";
@@ -28,6 +29,15 @@ namespace RNAssistant.Core.Llm
     public sealed class LlmRequestDiagnosticUpdate
     {
         public string RequestId { get; set; }
+        public string ChatId { get; set; }
+        public string RunId { get; set; }
+        public string Purpose { get; set; }
+        public int? EstimatedPromptTokens { get; set; }
+        public int? PromptTokens { get; set; }
+        public int? CompletionTokens { get; set; }
+        public int? TotalTokens { get; set; }
+        public int ContextWindowTokens { get; set; }
+        public int? OutputLimitTokens { get; set; }
         public string Phase { get; set; }
         public string Model { get; set; }
         public bool StreamRequested { get; set; }
@@ -53,6 +63,12 @@ namespace RNAssistant.Core.Llm
         private readonly Action<LlmRequestDiagnosticUpdate> _globalProgress;
         private readonly Action<string> _debugLog;
         private readonly LlmContextPreparationTiming _contextPreparation;
+        private readonly string _chatId;
+        private readonly string _runId;
+        private readonly string _purpose;
+        private int? _estimatedPromptTokens;
+        private int? _outputLimitTokens;
+        private LlmCompletionResult _completion;
         private long? _preparationMs;
         private long? _responseHeadersMs;
         private long? _firstChunkMs;
@@ -66,22 +82,28 @@ namespace RNAssistant.Core.Llm
             Action<LlmRequestDiagnosticUpdate> requestProgress,
             Action<LlmRequestDiagnosticUpdate> globalProgress,
             Action<string> debugLog,
-            LlmContextPreparationTiming contextPreparation = null)
+            LlmContextPreparationTiming contextPreparation = null,
+            LlmRequestOptions options = null)
         {
             _settings = settings ?? new AppSettings();
             _requestProgress = requestProgress;
             _globalProgress = globalProgress;
             _debugLog = debugLog;
             _contextPreparation = contextPreparation;
+            _chatId = options?.TraceSession?.Id;
+            _runId = options?.TraceSession?.LastRun?.RunId;
+            _purpose = options?.TracePurpose;
             RequestId = Guid.NewGuid().ToString("N").Substring(0, 12);
             Report(LlmRequestDiagnosticPhases.Preparing, null, null);
         }
 
         public string RequestId { get; private set; }
 
-        public void Sending(long? requestBytes)
+        public void Sending(long? requestBytes, int? estimatedPromptTokens = null, int? outputLimitTokens = null)
         {
             _requestBytes = requestBytes;
+            _estimatedPromptTokens = estimatedPromptTokens;
+            _outputLimitTokens = outputLimitTokens;
             Report(LlmRequestDiagnosticPhases.Sending, null, null);
         }
 
@@ -99,9 +121,15 @@ namespace RNAssistant.Core.Llm
             }
         }
 
-        public void Completed()
+        public void Completed(LlmCompletionResult completion = null)
         {
+            _completion = completion;
             Report(LlmRequestDiagnosticPhases.Completed, null, null);
+        }
+
+        public void Persisting()
+        {
+            Report(LlmRequestDiagnosticPhases.Persisting, null, null);
         }
 
         public void Failed(Exception error)
@@ -130,6 +158,15 @@ namespace RNAssistant.Core.Llm
                 update = new LlmRequestDiagnosticUpdate
                 {
                     RequestId = RequestId,
+                    ChatId = _chatId,
+                    RunId = _runId,
+                    Purpose = _purpose,
+                    EstimatedPromptTokens = _estimatedPromptTokens,
+                    PromptTokens = _completion?.PromptTokens,
+                    CompletionTokens = _completion?.CompletionTokens,
+                    TotalTokens = _completion?.TotalTokens,
+                    ContextWindowTokens = ModelContextBudget.ContextWindowTokens(_settings),
+                    OutputLimitTokens = _outputLimitTokens,
                     Phase = phase,
                     Model = _settings.Model ?? string.Empty,
                     StreamRequested = _settings.StreamResponses,

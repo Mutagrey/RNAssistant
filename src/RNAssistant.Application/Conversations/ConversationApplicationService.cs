@@ -52,6 +52,9 @@ namespace RNAssistant.Application.Conversations
                     {
                         while (!token.IsCancellationRequested && !port.IsClosing)
                         {
+                            // Avoid reloading the entire conversation after its last
+                            // input completes, or after Stop has paused retained work.
+                            if (!_inbox.HasRunnable(session)) break;
                             session = port.Reload(session.Id);
                             var input = _inbox.TakeNext(session);
                             if (input == null) break;

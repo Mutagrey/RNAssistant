@@ -1044,7 +1044,31 @@ function modelUsageFromContext(base) {
 }
 
 function lastModelUsage() {
+  var request = currentModelContextRequest();
+  if (request) return modelUsageFromContext({ lastPromptTokens: request.promptTokens,
+    lastCompletionTokens: request.completionTokens, lastTotalTokens: request.totalTokens });
   return modelUsageFromContext(state.contextUsage);
+}
+
+function currentModelContextRequest() {
+  var run = state.chatRuns && state.chatRuns[state.activeChatId];
+  return run && run.requestContext || null;
+}
+
+function applyModelContextDiagnostics(update) {
+  if (!update || ["chat", "agent", "plan"].indexOf(update.purpose) < 0) return;
+  var run = state.chatRuns && state.chatRuns[update.chatId];
+  if (!run || !update.runId || run.runId !== update.runId ||
+      typeof chatRunTerminalView === "function" && chatRunTerminalView(update.chatId, update.runId)) return;
+  // Only a request start can replace another request. A delayed terminal frame
+  // must not overwrite a newer repair/continuation estimate.
+  var previous = run.requestContext;
+  if (previous && previous.requestId && previous.requestId !== update.requestId && update.phase !== "preparing") return;
+  run.requestContext = update;
+  if (typeof updateChatModelStage === "function") updateChatModelStage(update.chatId);
+  if (update.chatId !== state.activeChatId) return;
+  renderContextMeter();
+  if (typeof renderPromptContextUsage === "function") renderPromptContextUsage(lastModelUsage(), "");
 }
 
 function renderContextMeter() {
@@ -1056,17 +1080,27 @@ function renderContextMeter() {
   }
   var last = lastModelUsage();
   var usage = state.contextUsage || {};
-  var windowTokens = Number(usage.contextWindowTokens || usage.ContextWindowTokens || 0);
-  var used = last && last.prompt !== null ? Number(last.prompt) : null;
+  var request = currentModelContextRequest();
+  var windowTokens = Number(request ? request.contextWindowTokens : usage.contextWindowTokens || usage.ContextWindowTokens || 0);
+  var estimated = !!request && request.promptTokens == null && request.estimatedPromptTokens != null;
+  var used = estimated ? Number(request.estimatedPromptTokens) : last && last.prompt !== null ? Number(last.prompt) : null;
   var knownInput = used !== null && isFinite(used) && used >= 0;
   var knownWindow = isFinite(windowTokens) && windowTokens > 0;
   var percent = knownInput && knownWindow ? Math.min(100, used * 100 / windowTokens) : null;
-  if ($("contextMeterWrap")) $("contextMeterWrap").hidden = percent === null;
-  if (percent === null && $("contextMeterTooltip")) $("contextMeterTooltip").hidden = true;
-  summary.textContent = !knownInput ? "API ещё не сообщил число входных токенов"
-    : !knownWindow ? "Использовано " + formatNumber(used) + " токенов · размер окна неизвестен"
-    : "Осталось " + Math.round(100 - percent) + "% · использовано " + formatNumber(used) +
-      " / " + formatNumber(windowTokens) + " токенов";
+  if ($("contextMeterWrap")) $("contextMeterWrap").hidden = false;
+  var prefix = request ? "Текущий запрос" : (usage.scope || usage.Scope) === "last_response"
+    ? "Последний принятый ответ" : "Последний ответ API";
+  var count = (estimated ? "≈ " : "") + formatNumber(used);
+  summary.textContent = !knownInput ? request && (request.phase === "preparing" || request.phase === "preparing_context")
+    ? "Готовлю контекст запроса…" : "API ещё не сообщил число входных токенов"
+    : !knownWindow ? prefix + ": вход " + count + " токенов · размер окна неизвестен"
+    : prefix + ": вход " + count + " / " + formatNumber(windowTokens) +
+      " токенов · заполнено " + (estimated ? "≈ " : "") + Math.round(percent) + "%";
+  if (knownInput && knownWindow) summary.textContent += ". Размер окна — лимит RNAssistant; вход включает историю, инструкции и результаты действий.";
+  if (request && request.outputLimitTokens != null)
+    summary.textContent += " Лимит ответа: " + formatNumber(request.outputLimitTokens) + " токенов (не заполнение).";
+  if (last && last.completion != null) summary.textContent += " Ответ API: " + formatNumber(last.completion) + " токенов.";
+  if (estimated) summary.textContent += " Оценка отправленного входа; точное число появится с ответом API.";
   meter.dataset.level = percent === null ? "unknown" : percent >= 95 ? "danger" : percent >= 80 ? "warn" : "ok";
   meter.style.setProperty("--context-meter-offset", percent === null ? "100" : String(100 - percent));
   meter.setAttribute("aria-label", "Контекстное окно. " + summary.textContent + ". Открыть подробное использование");

@@ -85,16 +85,19 @@ function exactOfficeSteerTarget(chatId) {
 
 function stopActiveSend() {
   var activeSend = currentActiveSend();
+  var chatId = state.activeChatId;
   if (!activeSend || activeSend.canceling) {
     return;
   }
 
   activeSend.canceling = true;
+  setChatRunCancelling(chatId, true);
   renderSendControls();
   if (activeSend.inbox) {
-    chatInbox().canceling = true;
-    send("stopChatInbox", { chatId: state.activeChatId }).then(applyChatInbox).catch(function (error) {
-      chatInbox().canceling = false; log(error.message, "error"); renderSendControls();
+    chatInbox(chatId).canceling = true;
+    send("stopChatInbox", { chatId: chatId }).then(applyChatInbox).catch(function (error) {
+      setChatRunCancelling(chatId, false);
+      chatInbox(chatId).canceling = false; log(error.message, "error"); renderSendControls();
     });
     return;
   }
@@ -103,8 +106,43 @@ function stopActiveSend() {
     ? cancelChatRun(state.activeChatId, run.runId)
     : cancelBridgeRequest(activeSend.requestId);
   cancellation.catch(function (error) {
+    activeSend.canceling = false;
+    setChatRunCancelling(chatId, false);
     log(error.detail || error.message, "error");
+    renderSendControls();
   });
+}
+
+function chatModelStageText(run) {
+  if (run && run.cancelRequested) return "Останавливаю…";
+  var phase = run && run.requestContext && run.requestContext.phase;
+  return ({ preparing_context: "Подготавливаю контекст…", preparing: "Собираю запрос…",
+    sending: "Думаю… Ожидаю ответ модели", headers: "Думаю… Ожидаю данные модели",
+    first_chunk: "Получаю ответ модели…", persisting: "Сохраняю ответ модели…",
+    completed: "Проверяю ответ и сохраняю шаг…", cancelled: "Запрос модели отменён",
+    failed: "Запрос модели завершился ошибкой" })[phase] || "Получаю ответ модели…";
+}
+
+function updateChatModelStage(chatId) {
+  var run = state.chatRuns && state.chatRuns[chatId];
+  if (!run) return;
+  var activity = { Kind: "notice", RunId: run.runId, Status: "running", Title: chatModelStageText(run) };
+  var stored = recordChatRunActivityState(chatId, activity);
+  if (chatId !== state.activeChatId) return;
+  state.liveActivity = stored || activity;
+  state.liveAgentRun = run.activities;
+  if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender(true);
+}
+
+function setChatRunCancelling(chatId, cancelling) {
+  var run = state.chatRuns && state.chatRuns[chatId];
+  if (!run) return;
+  run.cancelRequested = cancelling;
+  if (cancelling) {
+    run.stream = ""; run.reasoning = ""; run.reasoningComplete = false; run.streamRetrying = false;
+    if (chatId === state.activeChatId) { state.liveStreamContent = null; resetLiveReasoning(); }
+  }
+  updateChatModelStage(chatId);
 }
 
 function currentActiveSend() {
@@ -176,9 +214,8 @@ function chatRunTerminalView(chatId, runId) {
 }
 
 function reconcileTerminalChatRuns() {
-  (state.chats || []).forEach(function (chat) {
-    var id = chat.Id || chat.id;
-    var tracked = id && state.chatRuns[id];
+  Object.keys(state.chatRuns || {}).forEach(function (id) {
+    var tracked = state.chatRuns[id];
     if (tracked && chatRunTerminalView(id, tracked.runId)) endChatRunTracking(id);
   });
 }

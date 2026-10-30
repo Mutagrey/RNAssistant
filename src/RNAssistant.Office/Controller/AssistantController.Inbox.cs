@@ -33,7 +33,7 @@ namespace RNAssistant.Office
         {
             return new ChatInboxResponse { ChatId = snapshot.ChatId, Epoch = snapshot.Epoch,
                 Revision = snapshot.Revision, Items = snapshot.Items, Paused = snapshot.Paused,
-                PauseReason = snapshot.PauseReason, Phase = snapshot.Phase, Running = snapshot.Running,
+                PauseReason = snapshot.PauseReason, Phase = snapshot.Phase, Running = snapshot.Running, ActiveRun = snapshot.ActiveRun,
                 Receipts = snapshot.Receipts.Select(item => new ChatInputReceipt { Id = item.Id,
                     OperationId = item.OperationId, Revision = item.Revision, Status = item.Status }).ToList() };
         }

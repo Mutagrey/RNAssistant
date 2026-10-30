@@ -1396,6 +1396,15 @@ Shimmer активной группы, её выполняемого дейст�
 
 ## Reflection and model progress — 2026-10-24
 
+2026-10-30: Office shows separate context preparation, request construction, model
+wait, response reception, response persistence and step validation stages. These
+come from runtime progress and the existing HTTP diagnostics, including when the
+provider has produced no visible text. A draft is not a committed answer. Retry
+invalidates it immediately; Stop shows cancellation and prevents late tokens from
+reviving it. The context tooltip follows each sent request with an explicit estimate
+until API usage arrives; input/window, response tokens and cumulative run usage
+remain distinct. Idle Send starts fresh input without an extra Resume click.
+
 Settings → Agent exposes **Глубина рефлексии**, 0–20 (default 2). It counts accepted
 reflection decisions between terminal tool results/user inputs, independently of
 format and transport retries. The tooltip explains zero and the corrective request.

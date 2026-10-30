@@ -777,14 +777,21 @@ partial and structured bodies have explicit budget notices or typed admission
 failure, never a content-free success presented as delivered source. Omitted bytes
 grant no write authority; original durable calls/results/CAS are unchanged.
 
-Token reporting separates three quantities. The context ring's tooltip shows the
-remaining percentage and exact input / window size. The inspector's primary
+Token reporting separates three quantities. The context ring's tooltip shows input
+occupancy and input / RNAssistant window size. During an Office request, the existing
+typed model diagnostics carry its exact chat/run/request identity, purpose, serialized
+input estimate, output limit and terminal API usage. Only conversation requests for
+the current run update the ring; helper requests and stale completions cannot replace
+it. Before dispatch it says that context is being prepared; during generation the
+estimate has an explicit `≈`. API input replaces that estimate when available.
+The output limit is reserved capacity, not used input. The inspector's primary
 counter shows exact input and output counts from API usage, without an
 approximation mark or calibration. Missing usage is shown explicitly;
 partial usage never substitutes a total or an estimate for missing input.
-The ring uses exact input divided by RNAssistant's effective context window, clamps its
-fill to 0–100%, and shows an unknown state if either value is unavailable. Its
-remaining percentage describes that window, including room reserved for output.
+The ring divides input by RNAssistant's effective context window, clamps its fill
+to 0–100%, and keeps an accessible unknown state if either value is unavailable.
+Outside a live request it labels the last available API input explicitly. The
+RNAssistant window does not assert the provider's configured context size.
 Live model results carry all supplied usage fields; the UI neither recomputes counts
 from drafts nor searches paged history for usage. When a newer chat revision arrives, an open
 inspector updates its usage counter while its next-request preview stays a manual
@@ -799,7 +806,11 @@ are shown as local resource sizes; only their model-visible representations, oft
 compact references, count toward the next request.
 The chat run footer sums provider usage attached to accepted responses in that run;
 it is not one request's context size and does not claim usage from rejected repair
-or transport attempts whose response was never accepted.
+or transport attempts whose response was never accepted. Missing usage in any accepted
+response labels the aggregate as incomplete. Reload uses the latest accepted model
+response, including one with absent usage, and ignores duplicate runtime projections.
+This UI snapshot reads backwards to that response without projecting or estimating
+the entire history again; complete context estimation stays in request/preview compilation.
 
 ### Model context window
 
@@ -1181,7 +1192,7 @@ created directly from that tree. For handler dispatch, `ToolRuntime` remains the
 single JSON-to-typed-arguments handoff. No intermediate dictionary normalization
 or object re-materialization is part of response acceptance.
 
-With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the decision's `message` string (root in `json_object`, inside `response` in strict mode) and never exposes `tool_calls` or other raw JSON. A new model attempt marks the previous provisional projection for replacement, but UI applies that reset only with the first new content/reasoning delta so a format repair cannot create an empty blink. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends. `[DONE]` and EOF remain normal transport terminals; a non-empty `choices[0].finish_reason` also starts a one-second bounded drain for an optional final usage chunk, after which an OpenAI-compatible endpoint cannot hold the completed response open until the request timeout.
+With SSE enabled, transport chunks still contain that raw JSON envelope. The live UI projection incrementally decodes only the decision's `message` string (root in `json_object`, inside `response` in strict mode) and never exposes `tool_calls` or other raw JSON. A new model attempt immediately invalidates its previous provisional text/reasoning before waiting for replacement tokens; a retry keeps an explicit waiting status instead of displaying a rejected draft. Provider reasoning and one leading `<think>` block use the separate reasoning projection; its terminal update is emitted before visible message content starts or when the stream ends. `[DONE]` and EOF remain normal transport terminals; a non-empty `choices[0].finish_reason` also starts a one-second bounded drain for an optional final usage chunk, after which an OpenAI-compatible endpoint cannot hold the completed response open until the request timeout.
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; ModelProtocol removes those optional nulls before schema validation; the executor later applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
@@ -2076,8 +2087,9 @@ identical visible comments share one paragraph and a repeat count; intervening
 silent steps preserve that group. Distinct comments start a new group. Explicit expansion survives
 live updates by activity identity; rendering never merges model steps or stored
 calls. Groups without silent steps retain the ordinary visible action rows.
-The current running action owns the text shimmer; an icon-free thinking status
-appears between calls. Waiting typed lifecycles keep the feed open. On completion,
+The current running action owns the text shimmer; an icon-free model status
+appears between calls. Its repeated notice moves to the current timeline tail;
+historical warnings retain their positions. Waiting typed lifecycles keep the feed open. On completion,
 failure, cancellation, reload and an applied user input that splits the run,
 accepted progress comments fold with their technical activities into the existing
 `Действия · N` overview. Expanding it restores each original comment with its own
@@ -2088,7 +2100,7 @@ A zero-call run emits no empty
 overview. Independent runtime warnings remain visible. Progress phase names
 (`thinking`, `working`) are not target captions. A nonempty action block gains a thin
 divider and a 6 px gap only before an accepted final answer. Streaming drafts remain
-inside the live run at normal text contrast with “Формируется…” beneath them; they
+inside the live run at normal text contrast with the current request stage beneath them; they
 replace the ambient thinking label until accepted. Attempt resets immediately clear
 unaccepted text/reasoning and show “Повторная попытка…” for retries. See
 [transient rendering](session-events.md#transient-stream-rendering) for update and
@@ -2772,8 +2784,16 @@ and included in bridge shutdown draining. Original document-session keys are rec
 before execution; switching windows never retargets work. Failed/cancelled runs,
 non-clean execution health and runtime/document loss pause retained work. Approval
 holds queued work. After restart, all retained input is paused and requires explicit
-resumption; no possible effect is replayed. A new explicit steer can run while older
-queued work remains paused. Removal changes queue state; it does not erase history.
+resumption; no possible effect is replayed. A fresh explicit input in an idle chat
+starts without a second Resume command. Its atomic intake clears an empty queue's
+old pause; when older work is retained, only the new input may bypass that pause.
+An active run still queues Queue input, and pending tool approval remains a gate.
+Worker startup is separate from an active run in the snapshot: the first message
+says it is being delivered, rather than implying a second send is required.
+Removal changes queue state; it does not erase history.
+The worker checks for runnable input before reloading the chat; an empty/paused
+tail does not trigger another full reload. Tool-result pushes include the current
+chat/artifacts without rereading the full chat/document catalog on every call.
 
 Controllers using one data root in the same process share one live inbox projection,
 run session cursor and model-interrupt token. Intake from another window therefore

@@ -69,6 +69,15 @@ function collapseAgentTimelineItems(timeline) {
     var key = activityTimelineKey(item.activity);
     var existingIndex = latestByKey[key];
     if (existingIndex !== undefined) {
+      if (isAmbientAgentActivity(item.activity) && isAmbientAgentActivity(result[existingIndex].activity)) {
+        result.splice(existingIndex, 1);
+        Object.keys(latestByKey).forEach(function (knownKey) {
+          if (latestByKey[knownKey] > existingIndex) latestByKey[knownKey] -= 1;
+        });
+        latestByKey[key] = result.length;
+        result.push(nextItem);
+        return;
+      }
       var existingStatus = activityStatus(result[existingIndex].activity);
       var nextStatus = activityStatus(item.activity);
       if (activityToolCallId(item.activity) && !isActiveTimelineStatus(existingStatus) && isActiveTimelineStatus(nextStatus)) return;

@@ -196,10 +196,20 @@ namespace RNAssistant.Harness
                 CompletionTokens = 12, TotalTokens = 333
             });
             var reloaded = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
-            AssertTrue(!reloaded["actual"].Value<bool>(), "reloaded history remains an estimate");
-            AssertEqual("chat_context", reloaded["scope"].Value<string>(), "reloaded partial context scope is explicit");
+            AssertTrue(reloaded["actual"].Value<bool>(), "reloaded API usage remains exact");
+            AssertEqual("last_response", reloaded["scope"].Value<string>(), "last response scope is explicit");
+            AssertEqual(0, reloaded["usedChars"].Value<int>(), "UI usage does not project history bodies again");
             AssertEqual(321, reloaded["lastPromptTokens"].Value<int>(), "reloaded API input stays exact");
             AssertEqual(12, reloaded["lastCompletionTokens"].Value<int>(), "reloaded API output stays exact");
+            session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true,
+                AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 1), Content = "second call of one response" });
+            var batch = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
+            AssertEqual(321, batch["lastPromptTokens"].Value<int>(), "later calls in one response do not erase its usage");
+            session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, Content = "new response without usage" });
+            session.Messages.Add(new ChatMessage { Role = "assistant", RuntimeProjection = true, Content = "old projected response", PromptTokens = 321 });
+            var missing = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
+            AssertTrue(missing["lastPromptTokens"].Type == JTokenType.Null,
+                "a newer response without usage cannot inherit older or runtime-projected tokens");
         }
 
         private static void AssertNear(double expected, double actual, double tolerance, string message)

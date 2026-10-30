@@ -401,6 +401,20 @@ namespace RNAssistant.Harness
                 AssertEqual("b", inbox.TakeNext(session).Id, "new request may run while old queue stays paused");
                 AssertEqual("doc-1", inbox.Find(session, "a").DocumentRuntimeKey, "original target retained");
                 AssertTrue(inbox.Snapshot(session).Paused, "old queue remains paused");
+                inbox.Submit(session, InboxInput("c", "ordinary new message", InputDelivery.Queue, "doc-1"));
+                AssertEqual("c", inbox.TakeNext(session).Id, "a fresh idle queue submission runs without resuming older work");
+                inbox.EnsureCanDispatch(session, "c");
+                AssertTrue(inbox.TakeNext(session) == null, "the new message does not replay paused older input");
+
+                var empty = NewSession(FakeOfficeAdapter.ForHost("Excel")); store.Save(empty);
+                inbox.Bind(empty); inbox.End(empty, false, false);
+                AssertTrue(inbox.Snapshot(empty).Paused, "cancellation leaves a pause even when no input remains");
+                inbox.Submit(empty, InboxInput("fresh", "continue", InputDelivery.Queue));
+                AssertTrue(!inbox.Snapshot(empty).Paused, "one Send clears the empty queue's old pause");
+                AssertTrue(inbox.TryStartWorker(empty), "fresh idle input schedules immediately");
+                AssertTrue(inbox.Snapshot(empty).Running && !inbox.Snapshot(empty).ActiveRun,
+                    "worker startup is distinct from an executing run");
+                AssertEqual("fresh", inbox.TakeNext(empty).Id, "no second resume command is needed");
             });
         }
 
@@ -520,10 +534,11 @@ namespace RNAssistant.Harness
                 new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             internal readonly ConversationInboxService Inbox;
             internal readonly ChatStore Store;
+            internal int ReloadCount;
             internal ConversationQueueFake(ConversationInboxService inbox, ChatStore store)
             { Inbox = inbox; Store = store; }
             public bool IsClosing { get { return false; } }
-            public ChatSession Reload(string chatId) { return Store.Load(chatId); }
+            public ChatSession Reload(string chatId) { ReloadCount++; return Store.Load(chatId); }
             public void ValidateBinding(ChatSession session, ConversationInput input) { }
             public Task ContinuePendingAsync(ChatSession session, string pendingId, CancellationToken token)
             { throw new InvalidOperationException("No pending confirmation in the queue fixture."); }
@@ -561,6 +576,7 @@ namespace RNAssistant.Harness
                 AssertTrue(port.Completed.Task.Wait(3000) && application.Drained.Wait(3000),
                     "one Application worker drains accepted FIFO input");
                 AssertEqual("first,second", string.Join(",", port.Seen), "the owner selects FIFO order");
+                AssertEqual(2, port.ReloadCount, "an empty completed queue does not reload the entire chat again");
                 AssertEqual(2, store.Load(session.Id).Messages.Count(message => message.Role == "user"),
                     "each input has one persisted user message");
                 AssertTrue(!inbox.Snapshot(session).Running, "worker is no longer presented as an active run");

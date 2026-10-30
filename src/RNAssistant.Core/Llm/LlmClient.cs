@@ -76,7 +76,7 @@ namespace RNAssistant.Core.Llm
                 requestOptions.DiagnosticProgress,
                 _diagnosticProgress,
                 _debugLog,
-                requestOptions.ContextPreparation);
+                requestOptions.ContextPreparation, requestOptions);
             var requestTraceRecorded = false;
             var terminalTraceRecorded = false;
             var traceEndpoint = string.Empty;
@@ -175,7 +175,8 @@ namespace RNAssistant.Core.Llm
                     try
                     {
                         requestCancellation.Token.ThrowIfCancellationRequested();
-                        requestDiagnostics.Sending(content.Headers.ContentLength);
+                        requestDiagnostics.Sending(content.Headers.ContentLength, estimatedRequestTokens,
+                            ModelContextBudget.EffectiveOutputTokens(settings, estimatedRequestTokens));
                         var response = await LlmHttpTransport.SendAsync(
                             HttpMethod.Post,
                             requestUri,
@@ -263,6 +264,7 @@ namespace RNAssistant.Core.Llm
                                             });
                                         }
                                     }
+                                    requestDiagnostics.Persisting();
                                     if (streamTrace != null) streamTrace.Flush(true);
                                     AttachPromptEstimate(
                                         streamed,
@@ -273,7 +275,7 @@ namespace RNAssistant.Core.Llm
                                         settings, traceMessageCount, traceEstimatedPromptTokens, (int)response.StatusCode,
                                         streamed, JsonConvert.SerializeObject(streamed, Formatting.None));
                                     terminalTraceRecorded = true;
-                                    requestDiagnostics.Completed();
+                                    requestDiagnostics.Completed(streamed);
                                     return streamed;
                                 }
                             }
@@ -287,6 +289,7 @@ namespace RNAssistant.Core.Llm
                             // Preserve the actual provider payload even if its envelope cannot be parsed.
                             failurePayload = responseJson;
                             var parsed = LlmResponseParser.ParseCompletionResponse(responseJson, requestOptions.InspectNativeToolCalls);
+                            requestDiagnostics.Persisting();
                             AttachPromptEstimate(
                                 parsed,
                                 baseEstimatedRequestTokens,
@@ -296,7 +299,7 @@ namespace RNAssistant.Core.Llm
                                 settings, traceMessageCount, traceEstimatedPromptTokens, (int)response.StatusCode,
                                 parsed, responseJson);
                             terminalTraceRecorded = true;
-                            requestDiagnostics.Completed();
+                            requestDiagnostics.Completed(parsed);
                             return parsed;
                         }
                     }

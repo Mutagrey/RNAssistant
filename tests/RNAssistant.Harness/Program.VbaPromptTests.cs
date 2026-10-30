@@ -4225,7 +4225,7 @@ namespace RNAssistant.Harness
                 "session usage counts historical attachment references, not extracted bodies");
             AssertTrue(sessionUsage["usedTokens"].Value<int>() < 200,
                 "session usage does not reserve historical image tokens");
-            AssertEqual(1, sessionUsage["messageCount"].Value<int>(), "session message count");
+            AssertEqual(0, sessionUsage["messageCount"].Value<int>(), "last-usage snapshots do not count history again");
             AssertTrue(!sessionUsage["actual"].Value<bool>(), "session actual");
         }
     }

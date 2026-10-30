@@ -290,7 +290,7 @@ namespace RNAssistant.Office.Services
         {
             if (_progress == null) return;
             if (fact.Kind == AgentRunEventKind.ModelStepStarted)
-                _progress("thinking", "Модель выбирает следующий шаг...", null);
+                _progress("preparing_context", "Подготавливаю контекст…", null);
             else if (fact.Kind == AgentRunEventKind.ResponseAccepted &&
                 fact.Response.Action == ConversationResponse.ReflectionAction)
                 _progress("reflection", string.IsNullOrWhiteSpace(_stepMessage)

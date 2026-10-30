@@ -450,6 +450,7 @@ if (window.chrome && window.chrome.webview) {
     if (response && response.type === "modelDiagnostics") {
       if (window.RNAssistantPerformanceDiagnostics)
         window.RNAssistantPerformanceDiagnostics.recordModel(response.payload);
+      if (typeof applyModelContextDiagnostics === "function") applyModelContextDiagnostics(response.payload);
       return;
     }
     if (response && response.type === "bridgeTiming") {
@@ -491,6 +492,9 @@ if (window.chrome && window.chrome.webview) {
       var reasoningDelta = progress.reasoningDelta || "";
       var reasoningComplete = !!(progress.reasoningComplete);
       var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
+      var cancellingRun = isChatProgress && progressChatId && state.chatRuns[progressChatId];
+      if (cancellingRun && cancellingRun.cancelRequested &&
+          (contentReset || reasoningReset || contentDelta || hasReasoningProgress)) return;
       if ((contentReset || reasoningReset) && isChatProgress) {
         // A reset invalidates the draft immediately, including while a retry has no output.
         var resetRun = progressChatId ? state.chatRuns[progressChatId] : null;
@@ -560,6 +564,11 @@ if (window.chrome && window.chrome.webview) {
       }
       if (isChatProgress) {
         var activityPhase = String(progress.phase || "").toLowerCase();
+        if ((activityPhase === "thinking" || activityPhase === "preparing_context") && !progress.activity && progressChatId) {
+          // The next request is being compiled; the previous request is no longer current.
+          state.chatRuns[progressChatId].requestContext = { phase: "preparing_context" };
+          if (progressChatId === state.activeChatId && typeof renderContextMeter === "function") renderContextMeter();
+        }
         var acceptedStepReasoning = null;
         if ((activityPhase === "acting" || activityPhase === "reflection") && progressChatId) {
           var acceptedRun = state.chatRuns[progressChatId];
@@ -580,6 +589,8 @@ if (window.chrome && window.chrome.webview) {
           state.liveActivity = storedActivity || normalizedActivity;
           state.liveAgentRun = state.chatRuns[progressChatId].activities;
         }
+        if (state.chatRuns[progressChatId] && state.chatRuns[progressChatId].cancelRequested &&
+            typeof updateChatModelStage === "function") updateChatModelStage(progressChatId);
       }
       if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
       if (isChatProgress) {

@@ -41,10 +41,10 @@ namespace RNAssistant.Harness
             projector.Start(true);
             projector.OnUpdate(new LlmStreamUpdate
                 { ContentDelta = "{\"action\":\"finish\",\"reason\":\"Answer.\",\"outcome\":\"completed\",\"results\":[],\"message\":\" " });
-            AssertEqual(0, delayed.Count, "an attempt without visible output does not clear the prior draft");
+            AssertEqual(1, delayed.Count, "a new attempt clears the prior draft before any visible output arrives");
             projector.OnUpdate(new LlmStreamUpdate { ContentDelta = "Visible\"}" });
             projector.Complete();
-            AssertEqual(string.Empty, delayed[0].Item2, "the first visible delta starts with one reset");
+            AssertEqual(string.Empty, delayed[0].Item2, "attempt start emits exactly one immediate reset");
             AssertEqual(" Visible", delayed[1].Item2, "replacement text follows that reset");
 
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

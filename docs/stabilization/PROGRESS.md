@@ -1,5 +1,28 @@
 # Stabilization progress
 
+## Статус модели, токены и отправка после отмены — 2026-10-30
+
+Owner: Core LLM diagnostics/usage, Application inbox и Web live presentation.
+По фото воспроизведены потеря повторного статуса за предыдущими шагами,
+устаревший черновик до первого токена повторной попытки и пауза пустой очереди,
+задерживающая новый ввод после отмены. Исправлены порядок статуса, немедленный
+reset/Stop и запуск нового idle input без дополнительного Resume. Старые
+остановленные inputs, tool approval и unknown-effect/no-replay не обходятся.
+UI различает подготовку контекста/запроса, ожидание/получение модели,
+сохранение ответа и проверку шага. Текущий запрос обновляет кольцо оценкой входа,
+затем точным API usage; неполные суммы и отсутствующий новый usage явны.
+Удалены полный reload пустого хвоста очереди и чтение общего каталога чатов/окон
+при каждом tool-result push. Снимок API usage больше не проецирует и не оценивает
+всю историю заново; полный расчёт остаётся в request/preview compiler.
+Durable barriers сохранены.
+
+Целевые inbox, queue, token/diagnostics и stream checks, browserless live projection
+и Chromium action/transcript checks проверены локально. Общий composer layout
+проходит контекст/геометрию, но имеет отдельное прежнее расхождение unknown-warning
+([risk register](RISK_REGISTER.md#предупреждение-unknown-в-composer--2026-10-30)).
+Факт зависания провайдера и время Windows/Office/WebView2 по фото не установлены;
+реальная qualification открыта, новые стадии дают экранную диагностику причины.
+
 ## Ответ модели и представление истории — 2026-10-30
 
 Owner: Core ModelProtocol wire guidance; existing Agent settings UI is the consumer.
