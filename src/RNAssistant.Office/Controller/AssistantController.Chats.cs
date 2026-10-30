@@ -357,7 +357,8 @@ namespace RNAssistant.Office
 
         public ChatStateResponse GetChatDetail(string chatId, Action<string, long> reportStage = null)
         {
-            return LoadChatDetail(chatId, false, reportStage);
+            // An unaddressed read completes the deferred startup with its catalog.
+            return LoadChatDetail(chatId, string.IsNullOrWhiteSpace(chatId), reportStage);
         }
 
         private ChatStateResponse LoadChatDetail(string chatId, bool includeCatalog,

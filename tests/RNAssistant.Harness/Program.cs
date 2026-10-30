@@ -534,6 +534,7 @@ namespace RNAssistant.Harness
                 Test("storage: session read waits for document writer", SessionReadUsesDocumentBoundary),
                 Test("storage: busy chat stays visible and recovers after lock release", BusyChatDoesNotBecomeNewChat),
                 Test("storage: sqlite projection pages messages", SqliteProjectionPagesMessages),
+                Test("storage: sqlite cold catalog defers message indexes", ColdCatalogDefersMessageIndexes),
                 Test("storage: sqlite page preserves tombstone context", SqlitePagePreservesTombstoneContext),
                 Test("storage: sqlite metadata commit avoids full diff", SqliteMetadataCommitAvoidsFullDiff),
                 Test("kernel: inspection requires affected target evidence", KernelInspectionRequiresTargetEvidence),

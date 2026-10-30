@@ -1,5 +1,18 @@
 # Stabilization risk register
 
+## Recovery незавершённого чата с утраченным runtime body — 2026-10-30
+
+Соседний риск, найденный при исправлении холодного каталога: глобальный
+`ChatSessionService.ReconcileInterruptedRuns` загружает каждый unfinished chat,
+а `RuntimePayloadService` отказывает при отсутствующем exact pending/in-flight
+payload. Такой отказ не входит в обработку busy-document и может прервать общий
+recovery; controller `Lazy<bool>` сохраняет исключение до пересоздания controller.
+Фото с `projectionIndexBuild` не доказывает этот сценарий. Ранний bootstrap уже
+сохраняет доступ к настройкам при ошибке истории, но изоляция этого отказа между
+чатами остаётся открытой. Owner: Office ChatSessionService / Core runtime payload;
+следующий срез — воспроизведение двух чатов с утраченным pending payload, отказ
+только затронутого чата и сохранение unknown/no-replay guard без замены тела.
+
 ## Последовательные patch: видимость предыдущего результата — 2026-10-29
 
 На фото Scene3D исходные строки E12 совпадают с результатом E11: второй patch

@@ -33,7 +33,7 @@ function createContext() {
     }
   };
   vm.runInContext(source, context, { filename: "app-core.js" });
-  const contract = { version: 2, operations: ["init", "listChats", "getChatState", "runTool", "clearRuntimeData", "selectChat", "createOfficeHostChat"].map(name =>
+  const contract = { version: 2, operations: ["init", "getSettings", "listChats", "getChatState", "runTool", "clearRuntimeData", "selectChat", "createOfficeHostChat"].map(name =>
     ({ name, idleTimeoutMs: name === "init" ? 30000 : 120000, cancellable: name === "runTool" })) };
   context.acceptBridgeContract(contract);
   return { context, posted, contract, timers, deliver: data => messageListener({ data }),
@@ -63,6 +63,62 @@ function appInit(host, chatId) {
 }
 
 (async function () {
+  for (const outcome of ["success", "failure", "timeout"]) {
+    const { context, posted, contract, deliver, timers, expire } = createContext();
+    installChatProjection(context);
+    context.RNAssistantChatDrafts = { hydrate: async () => {}, hydrationFailed: () => {} };
+    let settingsRendered = false, quickActions = 0;
+    context.renderSettings = () => { settingsRendered = true; };
+    context.runQuickAction = () => { quickActions++; };
+    const loading = context.initialize();
+    await new Promise(resolve => setImmediate(resolve));
+    const shell = { ...appInit("Excel", ""), detailDeferred: true,
+      settings: { model: "saved-model" }, quickAction: "summarize" };
+    deliver({ id: posted.at(-1).id, ok: true,
+      payload: { bridgeToken: "early-token", bridgeContract: contract, init: shell } });
+    await new Promise(resolve => setImmediate(resolve));
+    const history = posted.at(-1);
+    assert.equal(history.type, "getChatState");
+    assert.equal(context.state.chatDetailPending, true);
+    assert.equal(settingsRendered, true, "settings render while history is still pending");
+    assert.equal(context.state.settings.model, "saved-model");
+    assert.equal(quickActions, 0, "quick actions wait for the exact chat binding");
+    const settings = context.send("getSettings", {});
+    assert.equal(posted.at(-1).bridgeToken, "early-token", "settings can use the bridge during history load");
+    deliver({ id: settings.requestId, ok: true, payload: shell.settings });
+    await settings;
+    if (outcome === "success") {
+      deliver({ id: history.id, ok: true, payload: appInit("Excel", "restored-chat") });
+    } else if (outcome === "failure") {
+      deliver({ id: history.id, ok: false, error: "History unavailable" });
+    } else {
+      expire([...timers.keys()][0]);
+    }
+    await loading;
+    assert.equal(context.state.bridgeToken, "early-token");
+    assert.equal(context.state.bridgeUnavailable, false, "history failure cannot disable settings");
+    assert.equal(context.state.chatDetailPending, false);
+    if (outcome === "success") {
+      assert.equal(context.state.activeChatId, "restored-chat");
+      assert.equal(quickActions, 1);
+      assert.equal(context.state.chatDetailError, "");
+    } else {
+      assert.ok(context.state.chatDetailError, "history failure has a visible retryable error");
+      assert.equal(quickActions, 0);
+      const retry = context.retryChatDetail();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(posted.at(-1).type, "init", "startup history can be retried without an active chat id");
+      deliver({ id: posted.at(-1).id, ok: true,
+        payload: { bridgeToken: "retry-token", bridgeContract: contract, init: shell } });
+      await new Promise(resolve => setImmediate(resolve));
+      deliver({ id: posted.at(-1).id, ok: true, payload: appInit("Excel", "retried-chat") });
+      await retry;
+      assert.equal(context.state.activeChatId, "retried-chat");
+      assert.equal(context.state.chatDetailError, "");
+    }
+    console.log("PASS bridge bootstrap: settings precede history and survive " + outcome);
+  }
+
   {
     const { context, posted, contract, deliver } = createContext();
     installChatProjection(context);

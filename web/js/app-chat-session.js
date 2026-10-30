@@ -467,7 +467,7 @@ function applyInitState(init) {
   renderSettings();
   renderVisibleSecondarySurfaces();
   log("Initialized " + init.host);
-  if (init.quickAction) {
+  if (init.quickAction && !init.detailDeferred) {
     runQuickAction(init.quickAction);
   }
 }
@@ -603,7 +603,8 @@ async function loadChatState(chatIdValue) {
 }
 
 async function retryChatDetail() {
-  if (!state.chatDetailError || !state.activeChatId || state.chatNavigationPending) return;
+  if (!state.chatDetailError || state.chatNavigationPending) return;
+  if (!state.activeChatId) return initialize();
   var targetChatId = state.activeChatId;
   var version = state.chatNavigationVersion;
   state.chatDetailPending = true;
@@ -681,11 +682,24 @@ async function initialize() {
   }
   state.initializePromise = (async function () {
     try {
-      await navigateChat("init");
+      var init = await navigateChat("init");
       try { await window.RNAssistantChatDrafts.hydrate(); }
       catch (error) {
         window.RNAssistantChatDrafts.hydrationFailed(error);
         log("Не удалось восстановить черновики: " + (error.detail || error.message), "error");
+      }
+      if (init.detailDeferred) {
+        try {
+          await navigateChat("getChatState", {});
+          if (init.quickAction) runQuickAction(init.quickAction);
+        } catch (error) {
+          // A slow/unavailable history must not revoke the handshake or settings.
+          state.chatDetailPending = false;
+          state.chatDetailError = error.detail || error.message || "Не удалось загрузить историю чатов";
+          renderChatSessions();
+          renderMessages();
+          log(state.chatDetailError, "error");
+        }
       }
     } catch (error) {
       applyBridgeUnavailableState(error);

@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Запуск панели с большой историей — 2026-10-30
+
+Owner: Core ChatStore — ленивый SQLite index; Office controller/bridge и Web —
+двухэтапный старт. Фото показывает последовательные `projectionIndexBuild` до
+ответа `init`, отдельные проходы до ~27,5 с при 30-секундном таймауте bootstrap.
+Код подтверждает построение полных индексов всех чатов через startup catalog;
+эти строки сами по себе не доказывают чтение CAS bodies.
+
+Каталог теперь сохраняет только header reducer; полный индекс сообщений/artifacts
+строится при открытии конкретного чата. Начальный bridge handshake отдаёт настройки
+до recovery/истории. Ошибка или таймаут последующей загрузки не отключает настройки;
+UI показывает повтор загрузки. JSONL и blobs не удаляются и не переписываются.
+Первое построение заголовков всё ещё требует проверки полного JSONL.
+
+13 целевых Harness checks (SQLite, headers, bootstrap) и browserless
+`bridge-bootstrap.test.js` прошли, включая шифрование, отсутствующий diagnostic blob,
+restart, suffix, повреждённый index, pagination и UI timeout/retry. Полный Harness,
+Office/VSTO builds и Windows validation не запускались. Harness bridge использует
+controller stub; реальный Windows/Office/WebView2 запуск с историей пользователя
+остаётся открытым evidence. Контракты — [Session events](../session-events.md) и
+[Desktop runtime](../desktop-runtime.md).
+
 ## core.patch: финальный contract 3 и error results — 2026-10-30
 
 Owner: Core Tools — schema/единственный resolver/diagnostics; прежние Workspace,

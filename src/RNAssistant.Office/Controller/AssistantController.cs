@@ -246,12 +246,14 @@ namespace RNAssistant.Office
         public string DocumentKey { get { return _adapter.DocumentKey; } }
         public string DocumentTitle { get { return _adapter.DocumentTitle; } }
 
-        public InitResponse Initialize()
+        public InitResponse Initialize(bool includeChatState = true)
         {
             var timer = Stopwatch.StartNew();
-            EnsureStartupRecovery();
+            // The initial bridge handshake must not wait for history/index recovery.
+            // Host switches still request the complete state in the same operation.
+            if (includeChatState) EnsureStartupRecovery();
             var recoveryMs = timer.ElapsedMilliseconds;
-            var session = _chatSessions.GetActiveSessionForOfficeState();
+            var session = includeChatState ? _chatSessions.GetActiveSessionForOfficeState() : null;
             var sessionMs = timer.ElapsedMilliseconds - recoveryMs;
             var settings = _settingsService.Load();
             var settingsMs = timer.ElapsedMilliseconds - recoveryMs - sessionMs;
@@ -266,6 +268,7 @@ namespace RNAssistant.Office
             var librariesMs = promptsMs + toolsMs + skillsMs;
             var response = new InitResponse
             {
+                DetailDeferred = !includeChatState,
                 AppVersion = ApplicationVersionService.Current,
                 Host = _adapter.HostName,
                 DocumentKey = _adapter.DocumentKey,
@@ -281,7 +284,7 @@ namespace RNAssistant.Office
                 SkillsPath = _paths.SkillsDirectory,
                 QuickAction = DequeueQuickAction()
             };
-            PopulateChatState(session, response, settings: settings);
+            if (includeChatState) PopulateChatState(session, response, settings: settings);
             if (timer.ElapsedMilliseconds >= 500)
                 RuntimeLog.Info("Startup timing: recovery=" + recoveryMs + "ms, session=" + sessionMs + "ms, settings=" + settingsMs + "ms, office=" + officeMs + "ms, libraries=" + librariesMs +
                     "ms (prompts=" + promptsMs + "ms, tools=" + toolsMs + "ms, skills=" + skillsMs + "ms)," +

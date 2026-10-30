@@ -106,10 +106,11 @@ namespace RNAssistant.Office
         internal Action NavigationWork { get; set; }
         internal Func<string, ChatStateResponse> CurrentDocumentChatSelection { get; set; }
 
-        public InitResponse Initialize()
+        public InitResponse Initialize(bool includeChatState = true)
         {
             return new InitResponse
             {
+                DetailDeferred = !includeChatState,
                 Host = "Excel",
                 Title = "Harness.xlsx",
                 Tools = EmptyToolLibrary(),

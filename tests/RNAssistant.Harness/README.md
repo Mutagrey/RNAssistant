@@ -678,6 +678,13 @@ admission. These checks do not qualify Excel COM throughput or atomic consistenc
 `storage: damaged sqlite metadata preserves startup and history` checks ten
 sidecar corruption variants through catalog, load, pagination and startup recovery,
 plus a healthy chat beside malformed JSONL. Every rebuild preserves event bytes.
+`storage: sqlite cold catalog defers message indexes` checks plain/encrypted cold
+startup, absent diagnostic blobs, persisted header-only indexes, append/suffix
+catch-up and lazy full materialization of only the selected chat with pagination.
+`bridge: init returns token` and `node tests/web/bridge-bootstrap.test.js` cover
+the early settings handshake, delayed history, failure/timeout isolation and retry.
+The bridge Harness uses its controller stub; real controller/Office delivery
+remains a Windows qualification gap.
 `live-run-projection.test.js` checks folded progress after completion/failure/steer
 and restores every original comment on expansion/reload.
 

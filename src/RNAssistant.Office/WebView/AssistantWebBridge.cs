@@ -324,7 +324,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.Init:
                         RuntimeLog.Info("Bridge init started.");
                         responsePayload = await RunBridgeWorkAsync(
-                            () => Bootstrap(_controller.Initialize()),
+                            () => Bootstrap(_controller.Initialize(includeChatState: false)),
                             cancellationToken).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.ListChats:

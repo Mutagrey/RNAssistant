@@ -152,6 +152,13 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
 - Сканирование незавершённых runs выполняется однократно при первом запросе чата,
   до чтения/изменения его состояния. Конструктор controller не сканирует историю
   на UI-потоке до появления WebView. Медленный этап пишет `Chat startup recovery timing`.
+- Начальный `init` возвращает bridge token, настройки и библиотеки с typed
+  `detailDeferred`, не читая историю и не запуская recovery. Затем UI запрашивает
+  `getChatState` без chat id: существующий owner выбирает активный чат и возвращает
+  его состояние вместе с каталогом. Пока история загружается, настройки доступны;
+  ошибка/таймаут истории оставляет bridge рабочим и показывает повтор загрузки.
+  Quick action ждёт выбранного чата. Полная инициализация при смене host и очистке
+  остаётся частью соответствующей операции.
 - Bridge request разбирается один раз как typed envelope. Любая terminal response,
   включая внешний аварийный путь, сериализуется штатным `BridgeResponse` и сохраняет
   request id. Если повреждение envelope не позволяет восстановить id, UI помечает
@@ -159,8 +166,8 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
   `bridge_transport_failed`; mutation автоматически не повторяется.
 - Фоновая синхронизация чатов в WebView использует catalog-only projection
   `listChats`: summaries чатов/документов, active id и run view. Страница transcript,
-  context, artifacts и HTML workspace загружаются только через `init`, явный выбор
-  или действие чата, либо через `getChatState`, когда требуется обновить более
+  context, artifacts и HTML workspace загружаются при завершении старта, явном выборе
+  или действии чата, либо через `getChatState`, когда требуется обновить более
   новую revision активного чата. При фокусе/возврате вкладки проверка запускается
   сразу при отсутствии навигации, инициализации и активной отправки сообщения;
   DOM-событие focus не считается принудительным обновлением. Обычный фоновый
@@ -168,7 +175,7 @@ path/title, folder/mail id и selection reference. Долгоживущие COM-
 - Выбор чата после точной привязки отправляет связанный с request id короткий
   `selection` state: UI очищает прежний transcript/HTML и показывает загрузку.
   Полный ответ строится из того же загруженного `ChatSession`; поздний shell после
-  terminal response игнорируется. `getChatState` для UI не повторяет сканирование
+  terminal response игнорируется. Адресный `getChatState` для UI не повторяет сканирование
   каталога, уже полученного через `listChats`. Смена модели и reasoning возвращает
   только revision и настройки чата (для модели также оценку контекста), без
   повторной сборки transcript, artifact library и HTML metadata.
@@ -275,6 +282,8 @@ Desktop не требует ClickOnce. `install-desktop-local.cmd` сохран�
 `Chat storage timing` разделяет ожидание storage gate, холодный replay, попадание
 в кеш и подготовку/запись save; `Chat state timing` разделяет сообщения, библиотеку,
 каталог, контекст, оценку usage и HTML metadata.
+`headerIndexBuild`/`headerIndexSuffix` показывают построение/догон заголовка;
+`projectionIndexBuild`/`projectionIndexSuffix` — полного индекса открываемого чата.
 Записи содержат время и размеры, без текста чата или запроса.
 
 Состояние чата передаёт WebView только последние 80 сообщений; предыдущие

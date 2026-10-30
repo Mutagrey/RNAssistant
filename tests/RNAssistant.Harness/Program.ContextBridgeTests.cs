@@ -763,6 +763,8 @@ namespace RNAssistant.Harness
                 "{\"contractVersion\":2,\"id\":\"contract\",\"type\":\"init\"}").GetAwaiter().GetResult());
             var contract = initialized["payload"]["bridgeContract"];
             AssertTrue(initialized["payload"]["init"] is JObject, "bootstrap contains typed application state");
+            AssertTrue((bool)initialized["payload"]["init"]["detailDeferred"],
+                "bridge bootstrap requests shell/settings before chat history");
             AssertTrue(initialized["payload"]["init"]["bridgeToken"] == null &&
                 initialized["payload"]["init"]["bridgeContract"] == null,
                 "application state cannot replace the transport handshake");

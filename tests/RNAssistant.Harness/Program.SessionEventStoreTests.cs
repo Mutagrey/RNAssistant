@@ -783,6 +783,79 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ColdCatalogDefersMessageIndexes()
+        {
+            foreach (var encrypted in new[] { false, true }) WithTempPaths(paths =>
+            {
+                var protector = encrypted ? new StorageProtector(HistoryIntegrityModes.Sha256,
+                    HistoryEncryptionModes.Aes256CbcHmacSha256, "cold catalog secret",
+                    Enumerable.Range(1, 32).Select(value => (byte)value).ToArray()) : StorageProtector.None;
+                var writer = new ChatStore(paths, () => protector);
+                var chats = new List<ChatSession>();
+                for (var index = 0; index < 2; index++)
+                {
+                    var chat = writer.Create("Word", "cold-catalog-" + index, "Catalog.docx", "History " + index);
+                    for (var message = 0; message < 120; message++)
+                        chat.Messages.Add(new ChatMessage { Role = "user", Content = "message-" + message });
+                    writer.Save(chat);
+                    writer.AppendTrace(chat, SessionEventTypes.AssistantChunk, new { chunkCount = 1 },
+                        new string('b', 128 * 1024), "text/plain", "catalog-run", "turn", "step");
+                    chats.Add(chat);
+                    File.Delete(SessionEventFile(paths, chat) + ".projection.sqlite");
+                }
+                // A missing historical diagnostic body cannot block the catalog or UI.
+                foreach (var blob in Directory.GetFiles(paths.ChatBlobDirectory, "*.blob", SearchOption.AllDirectories))
+                    File.Delete(blob);
+                var eventBytes = chats.Select(chat => File.ReadAllBytes(SessionEventFile(paths, chat))).ToArray();
+                var reader = new ChatStore(paths, () => protector);
+                new ChatSessionService(FakeOfficeAdapter.ForHost("Word"), ConversationStore(reader))
+                    .ReconcileInterruptedRuns("cold-start");
+                var headers = reader.ListHeaders();
+                AssertEqual(2, headers.Count, "cold startup retains both chats without historical blobs");
+                AssertTrue(headers.All(header => header.MessageCount == 120 && header.CasMissingBlobCount == 1),
+                    "header metadata and missing-body diagnostics survive cold replay");
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount,
+                    "catalog/recovery must not build full indexes for inactive chats");
+                AssertEqual(2L, reader.HeaderFullReplayCount, "one reducer build per cold chat");
+                foreach (var chat in chats)
+                using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder {
+                    DataSource = SessionEventFile(paths, chat) + ".projection.sqlite", Pooling = false }.ToString()))
+                {
+                    connection.Open();
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = "SELECT materialized + (SELECT COUNT(*) FROM messages) + " +
+                            "(SELECT COUNT(*) FROM artifacts) FROM projection";
+                        AssertEqual(0L, Convert.ToInt64(command.ExecuteScalar()),
+                            "catalog persists no message or artifact rows");
+                    }
+                }
+                reader = new ChatStore(paths, () => protector);
+                AssertEqual(2, reader.ListHeaders().Count, "restart reuses the persisted reducer");
+                AssertEqual(0L, reader.HeaderFullReplayCount, "restart does not replay indexed history");
+                var indexPath = SessionEventFile(paths, chats[0]) + ".projection.sqlite";
+                var oldIndex = File.ReadAllBytes(indexPath);
+                writer.AppendTrace(chats[0], SessionEventTypes.AssistantChunk, new { chunkCount = 2 },
+                    null, null, "catalog-run", "turn", "step");
+                AssertEqual(chats[0].Revision, reader.ListHeaders().Single(header => header.Id == chats[0].Id).Revision,
+                    "owned append advances a header-only index");
+                File.WriteAllBytes(indexPath, oldIndex);
+                reader = new ChatStore(paths, () => protector);
+                AssertEqual(chats[0].Revision, reader.ListHeaders().Single(header => header.Id == chats[0].Id).Revision,
+                    "lagged header index validates and applies only the suffix");
+                AssertEqual(1L, reader.HeaderIncrementalReplayCount, "lagged header uses a suffix replay");
+                AssertEqual(0L, reader.SqliteProjectionFullBuildCount, "suffix indexing remains metadata-only");
+                var loaded = reader.Load(chats[0].Id);
+                AssertEqual("message-119", loaded.Messages.Last().Content, "selected chat materializes exact history");
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount, "only the selected chat builds message rows");
+                var page = reader.ReadMessageWindow(chats[0].Id, 40, 20);
+                AssertEqual(20, page.PageMessages.Count, "selected history supports existing pagination");
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount, "pagination reuses the complete index");
+                AssertTrue(File.ReadAllBytes(SessionEventFile(paths, chats[1])).SequenceEqual(eventBytes[1]),
+                    "catalog/index builds never rewrite inactive history");
+            });
+        }
+
         private static void SqliteProjectionPagesMessages()
         {
             WithTempPaths(paths =>

@@ -21,7 +21,8 @@ function renderChatSessions() {
   if (!chats.length) {
     var empty = document.createElement("option");
     empty.value = "";
-    empty.textContent = state.bridgeUnavailable ? "Панель недоступна" : "Нет чатов";
+    empty.textContent = state.bridgeUnavailable ? "Панель недоступна" :
+      state.chatDetailPending ? "Загрузка чатов…" : state.chatDetailError ? "Ошибка загрузки чатов" : "Нет чатов";
     select.appendChild(empty);
   }
   chats.forEach(function (chat) {
