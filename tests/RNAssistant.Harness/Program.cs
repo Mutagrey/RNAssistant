@@ -54,6 +54,9 @@ namespace RNAssistant.Harness
                 return TabularSourceHost(args.Length == 2 ? args[1] : null);
             var tests = new List<HarnessTest>
             {
+                Test("model diagnostics: exact history probes", ModelDiagnosticsHistory),
+                Test("model diagnostics: false success and HTTP failures", ModelDiagnosticsFailures),
+                Test("model diagnostics: timeout and cancellation", ModelDiagnosticsCancellation),
                 Test("universal mutations: exact original hunks", UniversalHunksUseOriginalSnapshot),
                 Test("universal mutations: published patch examples apply", UniversalPatchSchemaExamplesApply),
                 Test("universal mutations: streamed file and shared matcher", UniversalFileHunksStageOnce),

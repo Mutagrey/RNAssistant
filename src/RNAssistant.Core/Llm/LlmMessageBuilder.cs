@@ -67,7 +67,7 @@ namespace RNAssistant.Core.Llm
                     .ToList();
                 if (toolCalls.Count > 0)
                 {
-                    build.Messages.Add(new JObject
+                    var native = new JObject
                     {
                         ["role"] = message.Role,
                         ["content"] = message.Content ?? string.Empty,
@@ -81,7 +81,21 @@ namespace RNAssistant.Core.Llm
                                 ["arguments"] = string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson
                             }
                         }))
-                    });
+                    };
+                    var mode = requestOptions == null ? NativeToolCallContentMode.Preserve : requestOptions.NativeToolCallContent;
+                    if (mode != NativeToolCallContentMode.Preserve)
+                    {
+                        if (!string.IsNullOrEmpty(message.Content))
+                            throw new InvalidOperationException("Native call content variants require an empty synthetic call; narration must not be dropped.");
+                        switch (mode)
+                        {
+                            case NativeToolCallContentMode.Null: native["content"] = JValue.CreateNull(); break;
+                            case NativeToolCallContentMode.Empty: native["content"] = string.Empty; break;
+                            case NativeToolCallContentMode.Omitted: native.Remove("content"); break;
+                            default: throw new ArgumentOutOfRangeException(nameof(requestOptions.NativeToolCallContent));
+                        }
+                    }
+                    build.Messages.Add(native);
                     build.MessageParts.Add(SkippedNativeAttachments(message));
                     build.AddEstimate(item.Estimate(null), item.Estimate(settings));
                     continue;

@@ -1,5 +1,31 @@
 # Stabilization progress
 
+## V8 context / Diagnostics: начало P0/D0 и P1/D1 — 2026-10-30
+
+Owner: Core LLM/ModelProtocol/context; CLI — первый consumer. По запросу пользователя
+сохранены [целевой контракт](../proposals/RNAssistant_V8_Context_Protocol_Target.md)
+и [план диагностики](../proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md).
+Baseline `9e7eccb5`: captured HTTP read/read/patch/read и второй user/run через
+production CLI/Workspace, семь запросов и отдельный title request. Office и
+compaction baseline ещё открыты; текущий wire остаётся revision 2 с E/summary.
+
+Добавлен `rna diagnostics`: девять синтетических сценариев B1–B7/C5/C6 через
+существующий `LlmClient`, exact request bytes, раздельные assertions, negative
+control, seed/repeat, безопасный экспорт. Null/empty/omitted задаются только на
+запрос диагностики. Ошибка разбора HTTP 200 теперь сохраняет исходное тело/status.
+Default transport, model loop и формат истории не менялись.
+
+Реальный `gemma4:31b-cloud` через локальный Ollama: null/empty/omitted принимаются,
+одиночные маркеры видны, но native call ID неверны. B5 pairing — 0/4; B6 — 0/4
+полных assertions. User/developer fallback прошли по одному прогону. Это не
+квалификация native generation, V8/schema/SSE или Office. [Методика, результаты и
+открытый scope](../model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
+
+Host-neutral: 8 diagnostics + 2 compatibility + source inclusion Harness checks и
+CLI export smoke прошли; CLI build без ошибок. Следующий срез — оставшиеся A/C
+transport probes и P0/D2 context baselines до перехода T/E/R/criterion. UI Lab,
+Inspector и Windows/Office/WebView2 qualification остаются открытыми.
+
 ## Structured `core.patch` v2 — 2026-10-29
 
 Owner: Core Tools, Application Workspace, Office source owners. Публичный вызов

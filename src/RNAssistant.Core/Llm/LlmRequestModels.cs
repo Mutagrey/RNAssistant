@@ -56,8 +56,12 @@ namespace RNAssistant.Core.Llm
         public const string JsonSchema = "json_schema";
     }
 
+    // Explicit per-request diagnostic variants. Default production projection is unchanged.
+    public enum NativeToolCallContentMode { Preserve, Null, Empty, Omitted }
+
     public sealed class LlmRequestOptions
     {
+        public NativeToolCallContentMode NativeToolCallContent { get; set; }
         public string ResponseFormat { get; set; }
         public string ResponseSchemaName { get; set; }
         public string ResponseSchemaJson { get; set; }

@@ -66,6 +66,7 @@ namespace RNAssistant.Cli
                 if (templateAction == "open") { Required(options, "id"); Required(options, "head"); }
             }
             else options = Parse(args.Skip(1).ToArray());
+            if (args[0] == "diagnostics") return ModelDiagnosticsCommand.Run(options);
             if (options.ContainsKey("mutation-policy") && args[0] != "run" && args[0] != "answer" && args[0] != "env")
                 throw new ArgumentException("--mutation-policy applies only to run, answer or env; approval keeps the accepted policy.");
             if (options.ContainsKey("auto-confirm") && args[0] != "run" && args[0] != "answer")
@@ -827,7 +828,7 @@ namespace RNAssistant.Cli
                 var key = args[i].Substring(2);
                 if (key == "jsonl" || key == "read-only" || key == "create" ||
                     key == "require-web-verify" || key == "continue" || key == "follow" ||
-                    key == "interactive" || key == "no-interactive" || key == "headless" || key == "raw") result[key] = "true";
+                    key == "interactive" || key == "no-interactive" || key == "headless" || key == "raw" || key == "synthetic") result[key] = "true";
                 else
                 {
                     if (i + 1 >= args.Length || args[i + 1].StartsWith("--", StringComparison.Ordinal))
@@ -991,6 +992,7 @@ namespace RNAssistant.Cli
 
         private static void Help()
         {
+            Console.WriteLine("rna diagnostics --base-url <url> --model <name> --output <new-directory> [--cases B1,B2,B3,B4,B5,B6,B7,C5,C6] [--seed <text>] [--repeat <1..10>] [--timeout <10..300>] [--synthetic]");
             Console.WriteLine("RNAssistant workspace CLI (development profile)");
             Console.WriteLine("run/answer/approve/deny/resume show bounded progress, file effects and verification summaries. Terminal input + output enable prompts automatically; --interactive requires a terminal; --no-interactive disables prompts; --jsonl never prompts.");
             Console.WriteLine("Approval requires explicit yes or no; Enter leaves it pending. Questions accept listed numbers (comma-separated for multiple choice) or text: <answer> when allowed. Esc/Ctrl+D leaves input pending; Ctrl+C exits 130. Recommended options are not selected automatically.");

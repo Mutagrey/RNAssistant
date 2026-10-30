@@ -83,6 +83,7 @@ namespace RNAssistant.Core.Llm
             var traceMessageCount = 0;
             int? traceEstimatedPromptTokens = null;
             string failurePayload = null;
+            int? responseStatusCode = null;
             LlmStreamTraceBuffer streamTrace = null;
             try
             {
@@ -186,6 +187,7 @@ namespace RNAssistant.Core.Llm
 
                         using (response)
                         {
+                            responseStatusCode = (int)response.StatusCode;
                             requestDiagnostics.Headers((int)response.StatusCode);
                             if (!response.IsSuccessStatusCode)
                             {
@@ -263,6 +265,8 @@ namespace RNAssistant.Core.Llm
                                 requestCancellation.Token,
                                 requestDiagnostics.FirstChunk).ConfigureAwait(false);
                             LogModelJson(settings, trafficId, "RESPONSE HTTP " + (int)response.StatusCode, responseJson);
+                            // Preserve the actual provider payload even if its envelope cannot be parsed.
+                            failurePayload = responseJson;
                             var parsed = LlmResponseParser.ParseCompletionResponse(responseJson);
                             AttachPromptEstimate(
                                 parsed,
@@ -331,7 +335,7 @@ namespace RNAssistant.Core.Llm
                         ResponseFormat = requestOptions.ResponseFormat,
                         MessageCount = traceMessageCount,
                         EstimatedPromptTokens = traceEstimatedPromptTokens,
-                        StatusCode = requestException == null ? null : requestException.StatusCode,
+                        StatusCode = requestException == null ? responseStatusCode : requestException.StatusCode ?? responseStatusCode,
                         FailureKind = requestException == null ? ex.GetType().Name : requestException.Kind.ToString(),
                         Error = ex.Message,
                         PayloadJson = failurePayload,

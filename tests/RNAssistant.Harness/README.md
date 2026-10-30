@@ -1,5 +1,16 @@
 # RNAssistant Harness
 
+`model diagnostics:` covers exact native-history probe requests (null/empty/omitted
+content), shuffled pairing, absent-result control, fallback roles, strict marker/ID
+assertions, HTTP 500 and malformed HTTP 200 capture, timeout/cancellation and the
+existing diagnostics tracker/stream cases. These are synthetic checks, not endpoint
+qualification. `python3 -B tests/cli/model_diagnostics_smoke.py` exercises the built
+CLI's nine probes, exact request files, redaction and no-overwrite/no-retry behavior.
+`python3 -B tests/cli/v8_context_baseline.py --output <new-directory> --role tool`
+captures a scripted production read/read/patch/read and second-run HTTP baseline;
+neither script builds automatically. Real probes use `rna diagnostics`; scope and
+usage are in [endpoint compatibility](../../docs/model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
+
 `--capability-inventory /tmp/rna-capabilities.json` writes the built-in catalog
 union and per-host tool/skill IDs from isolated stores (JS off/on, Workspace and
 plugin source additions; conditional browser ID is source-declared). It does not
