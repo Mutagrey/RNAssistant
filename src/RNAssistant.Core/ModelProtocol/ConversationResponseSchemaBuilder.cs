@@ -41,13 +41,14 @@ namespace RNAssistant.Core.ModelProtocol
                 branches.Add(Branch(ConversationResponse.ExecuteAction, "tool_calls", calls, context.ReflectionEnabled));
             }
             if (context.ReflectionEnabled)
-                branches.Add(Branch(ConversationResponse.ReflectionAction, "decision", NonblankString(), true));
+                branches.Add(Branch(ConversationResponse.ReflectionAction, "decision",
+                    new JObject(NonblankString()) { ["description"] = ModelProtocolWire.DecisionGuidance }, true));
             branches.Add(Branch(ConversationResponse.FinishAction, "results", new JObject
             {
                 ["type"] = "array",
                 ["items"] = ClosedObject(new JObject
                 {
-                    ["criterion"] = NonblankString(),
+                    ["criterion"] = new JObject(NonblankString()) { ["description"] = ModelProtocolWire.CriterionGuidance },
                     ["evidence"] = new JObject
                     {
                         ["type"] = "array", ["items"] = NonblankString(),
@@ -73,7 +74,7 @@ namespace RNAssistant.Core.ModelProtocol
             var properties = new JObject
             {
                 ["action"] = new JObject { ["type"] = "string", ["const"] = action },
-                ["reason"] = new JObject(NonblankString()) { ["description"] = "Brief reason for choosing this action; for finish, why the run ends now. Not private reasoning." }
+                ["reason"] = new JObject(NonblankString()) { ["description"] = ModelProtocolWire.ReasonGuidance }
             };
             if (action == ConversationResponse.FinishAction)
                 properties["outcome"] = new JObject { ["type"] = "string",

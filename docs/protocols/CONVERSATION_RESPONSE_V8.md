@@ -2,7 +2,7 @@
 
 Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
 Response protocol is 8, reference contract revision is 3, new chat stream format
-is 8, and built-in prompt schema is 59. Formats 6 and 7 remain read-only history;
+is 8, and built-in prompt schema is 63. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
 Earlier format-8 histories with missing/older ReferenceContractVersion are read-only;
 new chats persist revision 3. Incompatible continuations are not hydrated or resumed;
@@ -15,6 +15,23 @@ In `json_object` mode the model returns one raw JSON object with fields in this 
 basis, not private reasoning. `message` is user-facing text; only `execute` and
 `reflection` may leave it empty. `finish.message` must contain a nonblank answer.
 No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
+
+Prose guidance is shared by object-mode instructions and strict-schema field
+descriptions (`ModelProtocolWire` owns it):
+
+| Field | Writing rule | Runtime constraint |
+| --- | --- | --- |
+| `reason` | One short sentence explaining this action; no extended analysis, plan, logs or copied arguments. | Nonblank string. |
+| `decision` | One or two short sentences stating the interpretation and next step. | Nonblank string, reflection only. |
+| `results[].criterion` | Short statement of one original user requirement. | Nonblank string, finish only. |
+| `execute/reflection.message` | Empty for routine continuation; otherwise one or two short progress sentences. | String; may be empty. |
+| `finish.message` | Useful final answer, explanation and limitations, proportional to the user's request. | Nonblank string. |
+
+These are writing instructions, not hard character limits: schema and parser do
+not impose `maxLength` or truncate accepted strings. Overall response output is
+bounded by the configured token budget. Required source/code in tool arguments and
+requested full deliverables are not shortened to satisfy prose guidance. Runtime
+still validates action-specific fields, evidence, batching and outcomes independently.
 
 | Action | Required action-specific field | Meaning |
 | --- | --- | --- |
@@ -120,6 +137,12 @@ Output response format and accepted history are independent. Both `json_object`
 and `json_schema` generate the V8 decision in response `content`; either can use
 native history after runtime acceptance. Agent settings expose the history format
 separately, with user/developer result roles available for JSON history only.
+Native execute content is JSON containing `action`, `reason`, `message`; only
+`tool_calls` moves to the outer API field. Finish and reflection retain their full
+inner V8 decisions, including outcome/results or decision. Full retained history
+must never downgrade these decisions to plain narration. This wire-only conversion
+does not change canonical accepted records or make the partial execute content an
+admissible new model response.
 The native-history instruction describes `assistant.tool_calls` and matching tool
 messages; fallback-only JSON ID/envelope explanations are omitted. Repair and
 schema fallback retain this history choice and the frozen accepted messages.

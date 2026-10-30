@@ -55,11 +55,8 @@ namespace RNAssistant.Core.Services
                     message.ArgumentPayload = null;
                     message.AcceptedCallNarration = null;
                 }
-                else if (parsed.Response.Action == ConversationResponse.FinishAction)
-                {
-                    message.Content = SanitizeOperationalText(parsed.Response.Message);
-                    message.ProtocolMessage = false;
-                }
+                // No-call decisions retain action/reason/decision or outcome/results.
+                // A finish is model assessment, not disposable display-only prose.
             }
             else if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant")
             {
@@ -96,6 +93,8 @@ namespace RNAssistant.Core.Services
                 StringComparison.OrdinalIgnoreCase))
             {
                 projected.Content = SanitizeAcceptedAssistantContent(source);
+                if (source.ToolResultRole == ToolResultRoles.Tool)
+                    projected.ResponseReason = SanitizeOperationalText(source.ResponseReason);
                 return projected;
             }
 

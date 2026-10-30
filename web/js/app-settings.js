@@ -123,7 +123,7 @@ function updateAgentProtocolControls() {
   $("toolResultRoleField").classList.toggle("hidden", nativeHistory);
   $("toolResultRoleInput").disabled = nativeHistory;
   $("agentHistoryFormatNote").textContent = nativeHistory
-    ? "Принятый JSON-ответ преобразуется в tool_calls + tool. Следующий ответ модели остаётся в выбранном формате JSON."
+    ? "Решение action/reason/message сохраняется в content; вызовы переходят в tool_calls + tool. Finish и reflection сохраняют все поля."
     : "Принятые вызовы остаются JSON в assistant.content; результаты передаются отдельными TOOL_RESULT сообщениями.";
 }
 

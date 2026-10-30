@@ -7,9 +7,16 @@ Owner: Core ModelProtocol wire guidance; existing Agent settings UI is the consu
 Native history остаётся `assistant.tool_calls → role:tool` после принятия V8 JSON
 из content; provider-native generation для этого не нужна. JSON history показывает
 роль результата user/developer. Форма использует существующий ToolResultRole без
-второго противоречащего storage-флага. Prompt schema 62 оставляет только выбранное
+второго противоречащего storage-флага. Prompt schema 63 оставляет только выбранное
 описание истории, сохраняя V8 output contract при repair/fallback.
-Шесть сочетаний response/history, repair/fallback и сохранение формы проверены
+Native execute сохраняет JSON `action/reason/message` в content, отдельно от
+native tool_calls; finish/reflection остаются полными решениями в следующем запросе.
+Wire-проекция не меняет canonical bodies; прежнее превращение finish в plain text удалено.
+Reason — одно короткое предложение; decision и промежуточный message — 1–2;
+criterion — короткая формулировка требования. Правила общие для prompt/schema,
+без нового maxLength, обрезки аргументов или полного итогового ответа.
+Шесть сочетаний response/history, сохранение трёх решений через compiler,
+repair/fallback и сохранение формы проверены
 синтетически. Реальные модели и Windows/Office не запускались.
 Следующий отдельный срез — работоспособность, структура и выбор результатов
 экрана «Протокол модели», включая проверки его runner/bridge.

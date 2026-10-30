@@ -144,7 +144,11 @@ namespace RNAssistant.Harness
                 {
                     AssertEqual("T7", wire[0].ToolCalls.Single().Id, "native transport uses the call alias");
                     AssertEqual("T7", wire[1].ToolCallId, "native result pairs literally with the call alias");
-                    AssertEqual(call.Content, wire[0].Content, "native narration has no duplicate reference marker");
+                    var decision = JObject.Parse(wire[0].Content);
+                    AssertEqual("execute", (string)decision["action"], "native call preserves its decision");
+                    AssertEqual(call.ResponseReason, (string)decision["reason"], "native call preserves its reason");
+                    AssertEqual(call.Content, (string)decision["message"], "native decision preserves narration");
+                    AssertTrue(decision["tool_calls"] == null && decision["tool_call_id"] == null, "native decision has no duplicate call fields");
                     var http = JArray.FromObject(new LlmMessageBuilder().Build(wire, new AppSettings()).Messages);
                     AssertEqual("T7", (string)http[0]["tool_calls"][0]["id"], "serialized native call uses T");
                     AssertEqual("T7", (string)http[1]["tool_call_id"], "serialized native result pairs exactly");

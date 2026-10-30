@@ -279,7 +279,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 62;
+        public const int CurrentAgentPromptSchemaVersion = 63;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

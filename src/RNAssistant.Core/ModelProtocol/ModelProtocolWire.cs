@@ -12,6 +12,14 @@ namespace RNAssistant.Core.ModelProtocol
     {
         internal const int MaximumFormatRepairErrorCharacters = 1024;
 
+        public const string ReasonGuidance =
+            "reason is one short sentence stating the basis for this action; for finish, why the run can end now. " +
+            "Do not put extended explanations, a plan, tool arguments, logs or private reasoning in reason. ";
+        public const string DecisionGuidance =
+            "decision states the chosen interpretation and next step in one or two short sentences, not an essay or a transcript of deliberation. ";
+        public const string CriterionGuidance =
+            "criterion is a short statement of one original user requirement, without copied source, logs or repeated explanation. ";
+
         public const string UnknownEffectGuidance =
             "An unknown effect requires investigation. Before finish, successfully read the affected current state after the unconfirmed operation. " +
             "Compare it with the requested outcome, then continue feasible authorized work. Do not repeat the uncertain call unchanged or disguise a retry by changing arguments. " +
@@ -37,9 +45,9 @@ namespace RNAssistant.Core.ModelProtocol
             "For partial or unable_to_complete, explain the concrete obstacle to further work.";
 
         private const string ReflectionInstruction =
-            "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. ";
+            "Choose reflection with a nonblank decision only when a useful interpretation is needed before the next model request. Reflection executes nothing, creates no tool result and grants no permissions; it is optional and bounded by REFLECTION_BUDGET; once an approach is chosen, execute the next useful step. " + DecisionGuidance;
         private const string SchemaReflectionInstruction =
-            "Choose reflection only to settle uncertainty within the remaining allowance, then act on the decision. ";
+            "Choose reflection only to settle uncertainty within the remaining allowance, then act on the decision. " + DecisionGuidance;
         private const string ReflectionExample =
             "{\"action\":\"reflection\",\"reason\":\"Choose the approach.\",\"decision\":\"Read the exact procedure before patching.\",\"message\":\"\"}\n";
         private const string DisabledReflectionInstruction =
@@ -47,10 +55,11 @@ namespace RNAssistant.Core.ModelProtocol
 
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last. " +
-            "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
+            ReasonGuidance + "Choose execute with nonempty tool_calls when an authorized tool step remains. " +
             "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns T1 to a call and E1 only to an eligible terminal result; R1@v2 identifies an observed resource version. T/R are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. New calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
             ReflectionInstruction +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has criterion (an original user requirement), evidence (issued eligible references such as E1 from terminal results of this chat delivered in this request), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
+            CriterionGuidance +
             "Without eligible evidence results or evidence may be empty, including after discovery/schema/skill loading. When eligible results exist, cite at least one delivered E reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
             "execute forbids decision/results/outcome; reflection forbids tool_calls/results/outcome; finish forbids tool_calls/decision. No extra root fields. " +
             FinishGuidance + " Keep the envelope even when the task cannot be fulfilled.";
@@ -64,6 +73,7 @@ namespace RNAssistant.Core.ModelProtocol
 
         public const string SchemaGuidance =
             "Return the supplied json_schema exactly: the response property contains the conversation-response-v8 decision. " +
+            ReasonGuidance + CriterionGuidance +
             "Choose execute when a useful authorized tool step remains; batch only independent local reads. " +
             SchemaReflectionInstruction +
             "Choose finish only to deliver the answer or honest outcomes now. Assess original user criteria; cite issued eligible evidence (E1, E2) from terminal results of this chat delivered in this request. Discovery/schema/skill loading can finish with empty evidence. " +
@@ -78,18 +88,24 @@ namespace RNAssistant.Core.ModelProtocol
         public const string JsonHistoryGuidance =
             "## Accepted history\n\n" +
             "Accepted calls in assistant content use execute JSON with runtime-added id T1. " +
-            "TOOL_RESULT messages match that id through tool_call_id and carry outcomes and data.\n\n";
+            "TOOL_RESULT messages match that id through tool_call_id and carry outcomes and data. " +
+            "Accepted finish and reflection decisions retain their JSON fields in content.\n\n";
 
         public const string NativeHistoryGuidance =
             "## Accepted history\n\n" +
-            "Executed calls appear as assistant.tool_calls with matching tool messages. " +
+            "Accepted execute decisions keep action, reason and message as JSON in assistant content; " +
+            "their tool_calls appear only in the native assistant.tool_calls field with matching tool messages. " +
+            "Accepted finish and reflection decisions retain all their JSON fields in content. " +
             "Return your next decision as JSON in content using the response contract above.\n\n";
 
         public const string MessageGuidance =
             "message is useful user-facing text; only execute/reflection may use an empty string. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +
+            "Keep execute/reflection progress to one or two short sentences. " +
             "On later turns report only new relevant findings, decisions, contradictions, blockers or meaningful stage changes. " +
             "Use message=\"\" for routine execute/reflection continuation, including skill/schema loading. Do not repeat earlier progress, arguments or the plan. " +
-            "For finish, give a nonblank final answer/result, concise explanation of the conclusion and any limitations; no questions to the user or offers to continue. Give decision reasons, not private reasoning or invented findings.";
+            "For finish, give a nonblank final answer/result, concise explanation of the conclusion and any limitations; scale detail to the user's request. " +
+            "Do not shorten required tool arguments or requested deliverables to satisfy these prose guidelines. " +
+            "No questions to the user or offers to continue. Give decision reasons, not private reasoning or invented findings.";
 
         public static string ResponseGuidance(bool schemaTransport, bool reflectionEnabled)
         {
@@ -122,6 +138,16 @@ namespace RNAssistant.Core.ModelProtocol
             if (call == null) throw new ArgumentNullException(nameof(call));
             return new ConversationResponse(ConversationResponse.ExecuteAction, reason,
                 message ?? string.Empty, calls: new[] { call }).ToJson();
+        }
+
+        // Wire history keeps the model's decision while the call moves to the
+        // native API field. This partial envelope is never raw model admission.
+        public static string WriteNativeHistoryDecision(string reason, string message)
+        {
+            if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
+            if (message == null) throw new ArgumentNullException(nameof(message));
+            return new JObject { ["action"] = ConversationResponse.ExecuteAction,
+                ["reason"] = reason, ["message"] = message }.ToString(Formatting.None);
         }
 
         public static string WriteAcceptedDecision(string action, string reason, string message,

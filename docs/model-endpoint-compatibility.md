@@ -8,8 +8,14 @@ Agent settings expose two independent choices: **Формат ответа мо�
 (`json_object` or `json_schema`) and **Формат истории вызовов** (JSON in content or
 Native tools). The model still generates the V8 decision as JSON in `content`.
 After acceptance, native history serializes execute calls as `assistant.tool_calls`
-and matching `role: tool` results, for either response format. Native function
-generation by the provider is a separate capability and is not required here.
+and matching `role: tool` results, for either response format. Assistant `content`
+retains the accepted decision as JSON: `action:execute`, `reason`, `message`.
+Only the calls move to the native field; they are not duplicated inside content.
+Finish keeps `action`, `reason`, `outcome`, `results`, `message`; reflection keeps
+`action`, `reason`, `decision`, `message`, including across user turns.
+The final wire projection builds this from canonical accepted facts; it does not
+rewrite stored events or parse the projected partial execute as a new response.
+Native function generation by the provider is a separate capability and is not required here.
 
 JSON history uses accepted execute JSON in assistant content and `TOOL_RESULT`
 messages with a user/developer role. That role selector appears only for JSON
@@ -18,7 +24,7 @@ history. The form maps these valid combinations to the existing typed
 persisted switch that can disagree with the transport, and existing settings keep
 their behavior on reopening. Response-format fallback does not change history.
 
-Prompt schema 62 projects only the selected history guidance into the owned Agent
+Prompt schema 63 projects only the selected history guidance into the owned Agent
 Contract. Native history omits the fallback `TOOL_RESULT`, `tool_call_id` and
 runtime-added JSON `id` explanation; output V8 fields remain required. The frozen
 source, user content, accepted calls and loaded skills are unchanged. Strict
@@ -26,6 +32,16 @@ output removes duplicate shape examples; object fallback restores the object
 contract while keeping the same history guidance. Harness covers all six
 response/history-role combinations plus repair/fallback; the shipped form test
 checks selection and save/reopen without calling an endpoint.
+Reason/decision/criterion brevity rules are identical in object instructions and
+strict field descriptions; they do not introduce truncation or a character limit.
+
+A retained native call has `content` equivalent to
+`{"action":"execute","reason":"Inspect the requested module.","message":"Reading Module1."}`
+and a separate `tool_calls:[{"id":"T1","type":"function","function":{"name":"core.read","arguments":"..."}}]`.
+Finish and reflection stay complete JSON decisions without native calls.
+Budget folding may replace an older call/result with an explicitly labelled
+assistant update and operation receipt; it never presents that receipt as a full
+original decision. Selected full decisions use the shapes above.
 
 ## Current P2 contract — 2026-10-30
 

@@ -8,7 +8,8 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Core.ModelProtocol
 {
     // Wire-only history DTO. Canonical envelopes continue through the strict raw
-    // history reader unchanged. Only owned correlation fields are rewritten.
+    // history reader unchanged. Native calls expose their accepted decision in
+    // content, and owned correlation fields use request-local aliases.
     public static class ModelReferenceProjection
     {
         public static IReadOnlyList<ChatMessage> Project(IReadOnlyList<ChatMessage> messages)
@@ -106,6 +107,8 @@ namespace RNAssistant.Core.ModelProtocol
                 if (source.ToolCalls?.Count > 0)
                 {
                     // Runtime aliases own the wire pair only; canonical IDs/events stay unchanged.
+                    projected.Content = ModelProtocolWire.WriteNativeHistoryDecision(
+                        accepted.Response.Reason, accepted.Response.Message);
                     projected.ToolCalls.Single().Id = alias;
                     projected.ToolCallId = alias;
                 }
