@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Microsoft.Data.Sqlite;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Agent;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.ModelProtocol;
@@ -160,8 +161,14 @@ namespace RNAssistant.Harness
                 {
                     var blobs = new ChatBlobStore(paths);
                     var result = ContinuityResult("selected", "test.read", RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read."), storedRole);
-                    var call = ContinuityCall(result);
-                    call.ArgumentPayload = PayloadRef.FromBlob(blobs.StoreText("{}", "application/json"));
+                    var arguments = new JObject { ["query"] = "Line 1\n\"quoted\" \\n \\path Привет",
+                        ["id"] = "application-id", ["function"] = new JObject { ["name"] = "data", ["arguments"] = "{\"key\":1}" },
+                        ["items"] = new JArray(1, true, JValue.CreateNull()) };
+                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                        Id = result.ToolCallId, Name = result.ToolName, Arguments = arguments.ToObject<Dictionary<string, object>>() },
+                        "Read.", "Inspect.", null, storedRole, FixtureCallOrigin(result.ToolCallId));
+                    call.RunId = result.RunId;
+                    call.ArgumentPayload = PayloadRef.FromBlob(blobs.StoreText(arguments.ToString(Formatting.None), "application/json"));
                     AcceptedCallPayloadService.Externalize(call, blobs);
                     var omittedResult = ContinuityResult("omitted", "test.read", RNAssistant.Core.Tools.Contracts.ToolResult.Error("Old error."), storedRole);
                     var omittedCall = ContinuityCall(omittedResult);
@@ -188,6 +195,14 @@ namespace RNAssistant.Harness
                     AssertEqual(requestRole, wireResult.Role, "selected result uses the current request transport");
                     AssertEqual(requestRole == "tool" ? 1 : 0, wireCall.ToolCalls.Count, "native and fallback call shape matches the result");
                     AssertTrue(ConversationResponseHistoryReader.Read(wireCall).Success, "selected accepted arguments remain a valid exact call");
+                    var serialized = JArray.FromObject(new LlmMessageBuilder().Build(new[] { wireCall, wireResult },
+                        new AppSettings { ToolResultRole = requestRole }).Messages);
+                    var argumentToken = requestRole == "tool" ? serialized[0]["tool_calls"][0]["function"]["arguments"]
+                        : JObject.Parse((string)serialized[0]["content"])["tool_calls"][0]["arguments"];
+                    AssertEqual(requestRole == "tool" ? JTokenType.String : JTokenType.Object, argumentToken.Type,
+                        "only native function.arguments is a string; content-call arguments is an object");
+                    AssertTrue(JToken.DeepEquals(arguments, requestRole == "tool" ? JObject.Parse((string)argumentToken) : argumentToken),
+                        "all nine storage/request transports preserve nested data and exactly one JSON escaping layer");
                     AssertEqual(1, compiled.Receipt.HydratedPayloads, "unselected archive never hydrates an accepted body");
                     AssertEqual(durable, JsonConvert.SerializeObject(session.Messages), "request normalization cannot rewrite durable roles or payloads");
                 });

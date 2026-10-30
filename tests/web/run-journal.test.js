@@ -172,6 +172,7 @@ function openParents(element) {
   assert.deepEqual(payloadEventIds, ["evt-2", "evt-3"]);
   assert.match(responseRow.textContent, /Ответ модели/);
   assert.match(root.textContent, /tool_calls/);
+  assert.equal(mounts.at(-1).options.expandedPaths, undefined, "ordinary API bodies keep the usual expansion");
   assert.ok(findButton(responseRow, "Показать ответ модели"));
   assert.doesNotMatch(root.textContent, /attempt attempt-1/);
   responseRow.open = false;
@@ -209,6 +210,15 @@ function openParents(element) {
   assert.equal(mounts.at(-1).options.completeness, "preview");
   assert.match(rejected.textContent, /9007199254740993123456789/);
   assert.match(rejected.textContent, /попытка отклонена/i);
+  findButton(rejected, "Показать отклонённый ответ").click();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(payloadEventIds.at(-1), "evt-4", "rejected payload uses its exact persisted event");
+  const rejectionPaths = Array.from(mounts.at(-1).options.expandedPaths);
+  assert.ok(rejectionPaths.includes('$["tool_calls"]') && rejectionPaths.includes('$["tool_calls"][0]'),
+    "the first rejected call exposes its fields without another collapsed branch");
+  assert.ok(rejectionPaths.includes('$["response"]') && rejectionPaths.includes('$["response"]["tool_calls"][0]'),
+    "strict response wrapper also exposes the first call");
+  assert.ok(!rejectionPaths.some(path => path.includes("arguments")), "large argument bodies remain collapsed");
   rejected.open = false; rejected.dispatch("toggle");
   assert.ok(unmounts >= 2);
   console.log("PASS run journal: inline expansion lazily mounts exact JSON/evidence and unmounts on collapse");

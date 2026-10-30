@@ -39,6 +39,18 @@ still validates action-specific fields, evidence, batching and outcomes independ
 | `reflection` | Nonblank `decision` | Record a useful interpretation and request another bounded model step. No tool dispatch, result or new authority. |
 | `finish` | `outcome`, `results` array, nonblank `message` | Assert the final answer and assessed task outcome. No questions, approval requests, offers to continue or promises of future work. |
 
+The API message's `content` is a JSON string containing this envelope. After one
+decode, `tool_calls` must be an array of objects and each `arguments` an object;
+JSON-encoded calls or arguments are not accepted. Native history instead uses a
+string in `tool_calls[].function.arguments`; this transport representation does
+not change the fresh response contract. The parser validates new content before
+any accepted-history projection. Rejection traces preserve that content exactly.
+`invalid_tool_call` diagnostics identify the call index (including `response.` in
+schema mode), unexpected field names or the actual JSON type. Names are bounded
+and escaped; argument values are omitted. Repair receives the same diagnosis.
+The shared run-journal viewer initially expands the first rejected call, leaving
+argument bodies collapsed so the shape is visible in a screen photo.
+
 `results[]` entries contain exactly `criterion`, `evidence` (issued eligible
 terminal references such as `E1`) and `assessment`: `satisfied`,
 `partially_satisfied`, `unverified` or `not_satisfied`. Criteria describe original

@@ -450,6 +450,48 @@ namespace RNAssistant.Harness
 
         private static void ConversationV8RequiresExactCallShape()
         {
+            foreach (var strict in new[] { false, true })
+            {
+                Func<JToken, ConversationResponseParseResult> readCall = candidate =>
+                {
+                    var envelope = JObject.Parse(V8Envelope(V8Call()));
+                    ((JArray)envelope["tool_calls"]).Add(candidate);
+                    var json = envelope.ToString(Formatting.Indented);
+                    return ConversationResponseJson.Read(strict ? "{\"response\":" + json + "}" : json, strict);
+                };
+                var path = (strict ? "response." : "") + "tool_calls[1]";
+                foreach (var token in new JToken[] { new JValue(V8Call().ToString(Formatting.None)), JValue.CreateNull(), new JArray(), new JValue(7) })
+                {
+                    var rejected = readCall(token);
+                    AssertEqual(ConversationResponseError.InvalidToolCall, rejected.ErrorKind, "non-object call is rejected");
+                    AssertContains(rejected.Error, path + " must be an object", "error locates the actual call, including strict wrapper");
+                    AssertContains(rejected.Error, "received " + token.Type.ToString().ToLowerInvariant(), "error identifies JSON type, not its rendered appearance");
+                    if (token.Type == JTokenType.String) AssertContains(rejected.Error, "Do not JSON-encode a call", "repair distinguishes encoded calls from content transport");
+                }
+                foreach (var field in new[] { "id", "type", "function", "Name" })
+                {
+                    var extra = V8Call(); extra[field] = "VALUE_NOT_FOR_ERROR";
+                    var rejected = readCall(extra);
+                    AssertEqual(ConversationResponseError.InvalidToolCall, rejected.ErrorKind, "outer metadata is not normalized away");
+                    AssertContains(rejected.Error, path + " has unsupported fields \"" + field + "\"", "diagnostic identifies the exact extra field");
+                    AssertTrue(!rejected.Error.Contains("VALUE_NOT_FOR_ERROR"), "diagnostic omits values");
+                }
+                var encodedArguments = V8Call(); encodedArguments["arguments"] = "{\"query\":\"VALUE_NOT_FOR_ERROR\"}";
+                var argumentError = readCall(encodedArguments).Error;
+                AssertContains(argumentError, path + ".arguments must be an object; received string", "encoded arguments have a separate diagnosis");
+                AssertContains(argumentError, "only native function.arguments", "repair explains the transport distinction");
+                AssertTrue(!argumentError.Contains("VALUE_NOT_FOR_ERROR"), "encoded values stay out of diagnostics");
+                var bounded = V8Call();
+                for (var i = 0; i < 10; i++) bounded[new string('\u0001', 200) + i] = "VALUE_NOT_FOR_ERROR";
+                var boundedError = readCall(bounded).Error;
+                AssertTrue(boundedError.Length < 1024 && !boundedError.Contains("\u0001") && !boundedError.Contains("VALUE_NOT_FOR_ERROR"),
+                    "many long/control-containing names produce bounded escaped diagnostics");
+                var arguments = new JObject { ["id"] = "application-id", ["function"] = new JObject { ["name"] = "data" },
+                    ["text"] = "Line 1\n\"quoted\" \\n \\path Привет", ["items"] = new JArray(1, true, JValue.CreateNull()) };
+                var accepted = readCall(new JObject { ["arguments"] = arguments, ["name"] = "test.read" });
+                AssertTrue(accepted.Success && JToken.DeepEquals(arguments, accepted.Response.ToolCalls[1].Arguments),
+                    "envelope validation preserves nested data named id/function, escaping and property order");
+            }
             foreach (var field in new[] { "name", "arguments" })
             {
                 var call = V8Call();

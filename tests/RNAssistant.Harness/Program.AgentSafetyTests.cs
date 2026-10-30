@@ -712,6 +712,11 @@ namespace RNAssistant.Harness
                 var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
                 {
                     if (calls > 0) AssertContains(messages.Last().Content, "conversation-response-v8", "all repairs use the active contract");
+                    if (calls == 2)
+                    {
+                        AssertContains(messages.Last().Content, "tool_calls[0] has unsupported fields", "repair locates the malformed call");
+                        AssertContains(messages.Last().Content, "history/transport, not new content calls", "repair distinguishes fresh calls from historical IDs");
+                    }
                     return Task.FromResult(new LlmCompletionResult { Content = strict ? "{\"response\":" + values[calls++] + "}" : values[calls++] });
                 });
                 var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
@@ -723,6 +728,9 @@ namespace RNAssistant.Harness
                 AssertEqual(4, trace.Count(record => record.Type == "rejected"), "rejected attempts remain diagnostic only");
                 AssertContains(trace[0].Error, "forbids root field status", "no status fallback");
                 AssertContains(trace[1].Error, "only name and arguments", "model-owned id is rejected rather than stripped");
+                AssertContains(trace[1].Error, "tool_calls[0] has unsupported fields \"id\"", "screen diagnostic identifies the cause");
+                AssertEqual(strict ? "{\"response\":" + values[1] + "}" : values[1], trace[1].PayloadJson,
+                    "rejected payload is exactly the new content, never a historical projection");
                 AssertContains(trace[2].Error, "one at a time", "mutation batch fails");
                 AssertContains(trace[3].Error, "one at a time", "external/unclassified batch fails");
                 AssertEqual(0, trace.Single(record => record.Type == "accepted").ToolCallIds.Length,

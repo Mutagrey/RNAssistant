@@ -1,5 +1,20 @@
 # Stabilization risk register
 
+## Отклонённый tool_calls: форма на Windows — 2026-10-30
+
+Owner: Core ModelProtocol; Web run journal — отображение. На фото ошибка
+`invalid_tool_call: Each call contains only name and arguments; runtime assigns call IDs.`
+при свёрнутом `tool_calls[0]`. Эта ветка означает не объект или лишнее прямое поле
+вызова; строковый `arguments` имеет другую ветку. Точная форма и источник отклонения
+на Windows остаются открыты: нужен только экран с раскрытым элементом, не выгрузка.
+Адресная диагностика и раскрытие первого вызова добавлены; контракт приёма сохранён.
+
+Соседний web gap: `node tests/web/run-journal.test.js` проходит проверки дерева,
+payload и нового раскрытия, затем падает на старом source assertion строки вызова
+`appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage))`.
+Production уже передаёт четвёртый аргумент `!run.workspace`. Тот же отказ воспроизведён
+на версии теста из HEAD до текущего diff; это не проверка поведения нового раскрытия.
+
 ## Применение настроек агента на Windows — 2026-10-30
 
 Owner: Office settings/controller, Web settings; evidence — экран Windows.

@@ -261,7 +261,7 @@
     else host.replaceChildren();
   }
 
-  function mountJson(host, text, completeness) {
+  function mountJson(host, text, completeness, expandedPaths) {
     var registry = window.RNAssistantViewerRegistry;
     if (!registry || !registry.has("json")) {
       host.textContent = "JSON viewer недоступен.";
@@ -271,6 +271,7 @@
       text: text === null || text === undefined ? "" : String(text),
       completeness: completeness || "full",
       mode: "tree", compact: true,
+      expandedPaths: expandedPaths,
       onCopy: window.copyTextResult
     });
   }
@@ -333,6 +334,7 @@
         eventId: ids[0],
         label: "Показать отклонённый ответ",
         title: "Отклонённый ответ модели",
+        rejected: true,
         api: false
       };
     }
@@ -384,7 +386,10 @@
         var truncated = !!value(response, "TextTruncated", "textTruncated", false);
         var contentType = String(value(response, "ContentType", "contentType", "") || "");
         if (/json/i.test(contentType)) {
-          mountJson(host, text, truncated ? "preview" : "full");
+          mountJson(host, text, truncated ? "preview" : "full", definition.rejected ? [
+            '$["response"]', '$["tool_calls"]', '$["tool_calls"][0]',
+            '$["response"]["tool_calls"]', '$["response"]["tool_calls"][0]'
+          ] : undefined);
         } else {
           host.textContent = text + (truncated ? "\n\n[Показан фрагмент.]" : "");
         }

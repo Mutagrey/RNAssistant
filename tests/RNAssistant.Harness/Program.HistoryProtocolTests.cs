@@ -125,6 +125,7 @@ namespace RNAssistant.Harness
 
         private static async Task HistoryProtocolRequiresNewExecuteCalls()
         {
+            foreach (var invalidShape in new[] { "missing", "string_call", "string_arguments", "native_wrapper" })
             foreach (var strict in new[] { false, true })
             foreach (var nativeReply in new[] { false, true })
             foreach (var streaming in new[] { false, true })
@@ -146,6 +147,7 @@ namespace RNAssistant.Harness
                 request.ProjectReferences = ModelReferenceProjection.Project;
                 request.CompileRepair = notice => request.AcceptedMessages.Concat(new[] { notice }).ToArray();
                 var attempts = 0;
+                string rejectedContent = null;
                 var client = new ModelProtocolClient(async (settings, messages, options, progress, cancellation) => {
                     attempts++;
                     AssertContains(messages.First().Content, ModelProtocolWire.ExecuteGuidance, "both formats state the fresh-response rule");
@@ -156,15 +158,30 @@ namespace RNAssistant.Harness
                     if (attempts == 2)
                     {
                         var repair = JObject.Parse(messages.Last().Content.Substring("FORMAT_REPAIR:\n".Length));
-                        AssertEqual("empty_execute_calls", (string)repair["code"], "photo-shaped execute is rejected before acceptance");
-                        AssertContains((string)repair["instruction"], "supply the intended next calls inside the new decision JSON", "repair explains the missing field");
-                        AssertEqual(nativeReply, ((string)repair["error"]).Contains("Provider-native tool_calls were observed"),
+                        AssertEqual(invalidShape == "missing" ? "empty_execute_calls" : "invalid_tool_call", (string)repair["code"], "malformed execute is rejected before acceptance");
+                        AssertContains((string)repair["instruction"], "supply the intended next calls inside the new decision JSON", "repair retains the fresh-call rule");
+                        AssertEqual(nativeReply && invalidShape == "missing", ((string)repair["error"]).Contains("Provider-native tool_calls were observed"),
                             "only observed native generation gets the separate-field explanation");
+                        if (invalidShape != "missing") AssertContains((string)repair["error"],
+                            invalidShape == "string_call" ? "tool_calls[0] must be an object with name and arguments; received string" :
+                            invalidShape == "string_arguments" ? "tool_calls[0].arguments must be an object; received string" :
+                            "tool_calls[0] has unsupported fields \"id\", \"type\", \"function\"", "repair identifies the actual incoming shape");
                     }
                     var content = attempts == 1
                         ? ModelProtocolWire.WriteNativeHistoryDecision("Исправляю найденные баги в VBA-модулях.", "Применяю исправления к Module1 и SceneParser.")
                         : V8Envelope(V8Call(arguments: new JObject { ["query"] = "next" }));
+                    if (attempts == 1 && invalidShape != "missing")
+                    {
+                        var envelope = JObject.Parse(V8Envelope(V8Call()));
+                        var calls = (JArray)envelope["tool_calls"];
+                        if (invalidShape == "string_call") calls[0] = calls[0].ToString(Formatting.None);
+                        else if (invalidShape == "string_arguments") calls[0]["arguments"] = calls[0]["arguments"].ToString(Formatting.None);
+                        else calls[0] = new JObject { ["id"] = "copied-id", ["type"] = "function",
+                            ["function"] = new JObject { ["name"] = "test.read", ["arguments"] = "{\"query\":\"A\"}" } };
+                        content = envelope.ToString(Formatting.None);
+                    }
                     if (strict) content = "{\"response\":" + content + "}";
+                    if (attempts == 1) rejectedContent = content;
                     var message = new JObject { ["role"] = "assistant", ["content"] = content };
                     if (nativeReply && attempts == 1) message["tool_calls"] = new JArray(new JObject {
                         ["index"] = 0, ["id"] = "provider-id", ["type"] = "function",
@@ -178,14 +195,18 @@ namespace RNAssistant.Harness
                             completion = await LlmResponseParser.ReadStreamingOrJsonResponseAsync(stream, null, cancellation, null);
                     }
                     else completion = LlmResponseParser.ParseCompletionResponse(payload);
+                    AssertEqual(content, completion.Content, "HTTP JSON/SSE decoding preserves content exactly before admission");
                     AssertEqual(nativeReply && attempts == 1, completion.NativeToolCallsObserved, "JSON/SSE retain native presence without assembling calls");
                     AssertTrue(completion.NativeToolCalls == null, "native-call assembly stays diagnostic-only");
                     return completion;
                 });
                 var accepted = await client.GetResponseAsync(request, null, CancellationToken.None);
-                AssertTrue(accepted.Failure == null && accepted.Response != null && attempts == 2, "complete execute is accepted after one repair");
+                AssertTrue(accepted.Failure == null && accepted.Response != null && attempts == 2,
+                    "complete execute is accepted after one repair (" + invalidShape + ", strict=" + strict + ", native=" + nativeReply +
+                    ", streaming=" + streaming + "): " + accepted.Failure?.Message);
                 AssertEqual("next", (string)accepted.Response.ToolCalls.Single().Arguments["query"], "neither historical nor provider-native calls are executed as the new proposal");
                 AssertEqual(1, trace.Count(item => item.Type == "accepted"), "only the corrected JSON is accepted");
+                AssertEqual(rejectedContent, trace.Single(item => item.Type == "rejected").PayloadJson, "trace preserves the raw rejected content, including encoded calls");
                 AssertEqual(frozen, JsonConvert.SerializeObject(request.AcceptedMessages), "repair never rewrites accepted history");
             }
         }

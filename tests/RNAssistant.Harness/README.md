@@ -30,9 +30,10 @@ the actual wire history and current instructions. `node tests/web/agent-history-
 checks the shipped form, JSON examples, 1100/740/390/320 px layout, save/reopen,
 edits during pending saves, tab navigation and visible save failures. Optional
 `AGENT_SETTINGS_SCREENSHOTS` writes previews. These do not qualify Windows delivery.
-`new execute requires content calls` reproduces the photographed missing-call
-response through JSON/SSE in both response modes, with/without provider-native
-calls; repair accepts only the corrected new content JSON and preserves history.
+`new execute requires content calls` checks missing calls, JSON-encoded calls or
+arguments and copied native wrappers through JSON/SSE in both response modes,
+with/without provider-native calls (32 cases). Repair accepts only corrected new
+content JSON; raw rejection payloads and accepted history are preserved.
 Both are synthetic; provider-native generation is a separate diagnostics capability.
 
 `model diagnostics UI:` covers the typed catalog/run bridge, shared automatic controls
@@ -66,7 +67,8 @@ captures a scripted production read/read/patch/read and second-run HTTP baseline
 without another tool call. `model refs:` checks indexed canonical admission across
 runs/restart/fork, history membership, selected versus unrelated missing payloads
 and disposable-index repair. `context continuity: transport after bounded materialization`
-covers all nine stored/request role combinations without reading unselected CAS.
+covers all nine stored/request role combinations without reading unselected CAS,
+including nested argument types, JSON strings, Unicode and exact source escaping.
 Add `--case all` for two consecutive patches, failed-patch correction and the existing
 compaction/skill-package fixtures. Exact request/response files include compaction
 and titles; the manifest records body coverage/hashes, native pairing, retained-result

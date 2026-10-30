@@ -76,14 +76,15 @@ namespace RNAssistant.Core.ModelProtocol
                 return Fail(ConversationResponseError.MissingMessage, "A string message is required; finish requires a nonblank answer.");
             var reason = (string)root["reason"];
             var message = (string)root["message"];
-            if (action == ConversationResponse.ExecuteAction) return ReadExecute(root, reason, message);
+            if (action == ConversationResponse.ExecuteAction) return ReadExecute(root, reason, message,
+                schemaTransport ? "response.tool_calls" : "tool_calls");
             if (action == ConversationResponse.FinishAction) return ReadFinish(root, reason, message);
             if (!Nonblank(root["decision"]))
                 return Fail(ConversationResponseError.MissingDecision, "reflection requires a nonblank string decision.");
             return ConversationResponseParseResult.Ok(new ConversationResponse(action, reason, message, decision: (string)root["decision"]));
         }
 
-        private static ConversationResponseParseResult ReadExecute(JObject root, string reason, string message)
+        private static ConversationResponseParseResult ReadExecute(JObject root, string reason, string message, string callsPath)
         {
             var calls = root["tool_calls"] as JArray;
             if (calls == null || calls.Count == 0)
@@ -92,19 +93,45 @@ namespace RNAssistant.Core.ModelProtocol
             if (calls.Count > ConversationResponseSchemaBuilder.MaximumToolCalls)
                 return Fail(ConversationResponseError.TooManyCalls, "tool_calls exceeds the maximum of " + ConversationResponseSchemaBuilder.MaximumToolCalls + ".");
             var parsedCalls = new List<ConversationToolCall>();
-            foreach (var token in calls)
+            for (var index = 0; index < calls.Count; index++)
             {
+                var token = calls[index];
+                var path = callsPath + "[" + index + "]";
                 var call = token as JObject;
-                if (call == null || call.Properties().Any(property => property.Name != "name" && property.Name != "arguments"))
-                    return Fail(ConversationResponseError.InvalidToolCall, "Each call contains only name and arguments; runtime assigns call IDs.");
+                if (call == null)
+                    return Fail(ConversationResponseError.InvalidToolCall, path + " must be an object with name and arguments; received " + TokenKind(token) + "." +
+                        (token.Type == JTokenType.String ? " Do not JSON-encode a call as a string inside the decision JSON." : string.Empty));
+                var unsupported = call.Properties().Where(property => property.Name != "name" && property.Name != "arguments")
+                    .Select(property => property.Name).ToArray();
+                if (unsupported.Length > 0)
+                    return Fail(ConversationResponseError.InvalidToolCall, path + " has unsupported fields " + DescribeFieldNames(unsupported) +
+                        ". Each new call contains only name and arguments (an object). IDs and native function wrappers belong to history/transport, not new content calls.");
+                if (!Nonblank(call["name"]))
+                    return Fail(ConversationResponseError.InvalidToolCall, path + ".name must be a nonblank string; received " + TokenKind(call["name"]) + ".");
                 var arguments = call["arguments"] as JObject;
-                if (!Nonblank(call["name"]) || arguments == null)
-                    return Fail(ConversationResponseError.InvalidToolCall, "Each call requires a nonblank string name and object arguments.");
-                if (arguments.Properties().GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
-                    return Fail(ConversationResponseError.InvalidToolCall, "Tool arguments must not contain duplicate names that differ only by case.");
+                if (arguments == null)
+                    return Fail(ConversationResponseError.InvalidToolCall, path + ".arguments must be an object; received " + TokenKind(call["arguments"]) + "." +
+                        (call["arguments"]?.Type == JTokenType.String ? " Put the object directly inside the decision JSON; only native function.arguments uses a JSON-encoded string." : string.Empty));
+                var duplicate = arguments.Properties().GroupBy(property => property.Name, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault(group => group.Count() > 1);
+                if (duplicate != null)
+                    return Fail(ConversationResponseError.InvalidToolCall, path + ".arguments contains duplicate names differing only by case: " +
+                        DescribeFieldNames(duplicate.Select(property => property.Name)) + ".");
                 parsedCalls.Add(new ConversationToolCall { Name = (string)call["name"], Arguments = arguments });
             }
             return ConversationResponseParseResult.Ok(new ConversationResponse(ConversationResponse.ExecuteAction, reason, message, calls: parsedCalls));
+        }
+
+        private static string TokenKind(JToken token)
+        { return token == null ? "missing" : token.Type.ToString().ToLowerInvariant(); }
+
+        // Diagnostics/repair identify the offending shape without copying argument
+        // values or allowing arbitrary model property names to flood the UI/prompt.
+        private static string DescribeFieldNames(IEnumerable<string> names)
+        {
+            var bounded = names.Take(4).ToArray();
+            return string.Join(", ", bounded.Take(3).Select(name => JsonConvert.ToString(
+                name.Length > 32 ? name.Substring(0, 32) + "…" : name))) + (bounded.Length > 3 ? ", …" : string.Empty);
         }
 
         private static ConversationResponseParseResult ReadFinish(JObject root, string reason, string message)
