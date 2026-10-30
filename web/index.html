@@ -871,11 +871,18 @@
                       </select>
                     </label>
                     <label class="agent-protocol-control">
+                      <span>Формат истории вызовов</span>
+                      <select id="agentHistoryFormatInput" aria-describedby="agentHistoryFormatNote">
+                        <option value="json_content">JSON в content</option>
+                        <option value="native_tools">Native tools · tool_calls + tool</option>
+                      </select>
+                      <small id="agentHistoryFormatNote">Представление принятых вызовов в следующих запросах.</small>
+                    </label>
+                    <label class="agent-protocol-control" id="toolResultRoleField">
                       <span>Роль результата tool</span>
                       <select id="toolResultRoleInput">
                         <option value="user">user · TOOL_RESULT — совместимый</option>
                         <option value="developer">developer · TOOL_RESULT</option>
-                        <option value="tool">tool · native pair</option>
                       </select>
                     </label>
                     <label class="checkline agent-protocol-fallback" id="agentJsonFallbackField">

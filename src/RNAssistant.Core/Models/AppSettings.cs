@@ -207,11 +207,11 @@ namespace RNAssistant.Core.Models
             "Pending calls are intentions. Separate interpretations from facts; do not repeat tool arguments or the full Task List in `message`. Omit private reasoning, boilerplate and invented evidence. " +
             "Titles and snippets are discovery aids, not source proof. Reuse known semantic targets; find only unknown or unresolved targets. Missing or incomplete search cannot establish absence. " +
             "After unknown, inspect the affected current state and continue feasible authorized work; uncertainty alone is not a reason to stop or ask the user to verify it. " +
-            ModelProtocolWire.StringEscapingGuidance + "\n\n";
+            ModelProtocolWire.StringEscapingGuidance + "\n\n" + ModelProtocolWire.JsonHistoryGuidance;
 
         private const string ToolResultContract =
             "## Tool results\n\n" +
-            "`TOOL_RESULT` supplies an outcome and result data. " +
+            "Each tool result supplies an outcome and result data. " +
             "Use returned semantic targets to address resources; do not construct internal identifiers. " +
             "`status` is exactly `ok`, `error`, or `unknown`. " +
             "`status=ok` reports tool success; it does not by itself prove an applied effect. An ok result may describe a verified no-op. " +
@@ -279,7 +279,7 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 61;
+        public const int CurrentAgentPromptSchemaVersion = 62;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;

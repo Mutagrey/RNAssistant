@@ -66,7 +66,7 @@ namespace RNAssistant.Core.ModelProtocol
                         var strict = string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal);
                         wireMessages = strict && request.ProjectJsonSchemaMessages != null
                             ? request.ProjectJsonSchemaMessages(attemptMessages) : attemptMessages;
-                        wireMessages = ModelProtocolWire.ProjectGuidance(wireMessages, strict, request.CallContext.ReflectionEnabled);
+                        wireMessages = ModelProtocolWire.ProjectGuidance(wireMessages, strict, request.CallContext.ReflectionEnabled, settings.ToolResultRole);
                         if (request.ProjectReferences != null) wireMessages = request.ProjectReferences(wireMessages);
                         options.TraceMessageContentChanged = ChangedWireMessages(attemptMessages, wireMessages);
                         string budgetError;

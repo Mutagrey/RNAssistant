@@ -1,5 +1,11 @@
 # RNAssistant Harness
 
+`history protocol:` checks the six content-response/history-role combinations,
+native pairing, history-specific instructions, unchanged user data and frozen
+repair/explicit fallback. `node tests/web/agent-history-settings.test.js` exercises
+the shipped form's independent response/history controls and save/reopen behavior.
+Both are synthetic; provider-native generation is a separate diagnostics capability.
+
 `model diagnostics UI:` covers the typed catalog/run bridge, shared automatic controls
 and SSE parity, exact request forwarding, settings isolation, endpoint drift rejection,
 bounded redaction before truncation and cancellation without another request.

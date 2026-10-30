@@ -613,7 +613,7 @@ namespace RNAssistant.Harness
             var defaults = new AppSettings();
             foreach (var prompt in new[] { defaults.SystemPrompt, defaults.ChatSystemPrompt, defaults.PlanSystemPrompt })
             {
-                AssertContains(prompt, "`TOOL_RESULT` supplies an outcome and result data",
+                AssertContains(prompt, "Each tool result supplies an outcome and result data",
                     "every mode explains how to interpret the result");
                 AssertContains(prompt, "`status` is exactly `ok`, `error`, or `unknown`", "no extra model-facing result states");
                 AssertContains(prompt, "does not by itself prove an applied effect", "defaults require actual effect evidence");

@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Ответ модели и представление истории — 2026-10-30
+
+Owner: Core ModelProtocol wire guidance; existing Agent settings UI is the consumer.
+Формат ответа `json_object`/`json_schema` и формат истории выбираются отдельно.
+Native history остаётся `assistant.tool_calls → role:tool` после принятия V8 JSON
+из content; provider-native generation для этого не нужна. JSON history показывает
+роль результата user/developer. Форма использует существующий ToolResultRole без
+второго противоречащего storage-флага. Prompt schema 62 оставляет только выбранное
+описание истории, сохраняя V8 output contract при repair/fallback.
+Шесть сочетаний response/history, repair/fallback и сохранение формы проверены
+синтетически. Реальные модели и Windows/Office не запускались.
+Следующий отдельный срез — работоспособность, структура и выбор результатов
+экрана «Протокол модели», включая проверки его runner/bridge.
+
 ## V8 P5: historical evidence и аудит сборки контекста — 2026-10-30
 
 P4 закоммичен и отправлен: `973429a4`. Owner — Core finish admission/ChatStore и

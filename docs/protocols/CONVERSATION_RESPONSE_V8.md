@@ -116,6 +116,14 @@ pair to `assistant.tool_calls[].id == tool.tool_call_id == "T1"`. It has no
 result content includes `evidence:"E1"`; service-only results omit it. Original
 accepted response bodies and runtime call IDs remain unchanged.
 
+Output response format and accepted history are independent. Both `json_object`
+and `json_schema` generate the V8 decision in response `content`; either can use
+native history after runtime acceptance. Agent settings expose the history format
+separately, with user/developer result roles available for JSON history only.
+The native-history instruction describes `assistant.tool_calls` and matching tool
+messages; fallback-only JSON ID/envelope explanations are omitted. Repair and
+schema fallback retain this history choice and the frozen accepted messages.
+
 P5 admission resolves selected E against retained same-chat canonical terminal events,
 trusted eligibility and the successful request's delivered set. T/R, unknown and
 undelivered references fail closed. A `satisfied` claim cannot cite a failed,

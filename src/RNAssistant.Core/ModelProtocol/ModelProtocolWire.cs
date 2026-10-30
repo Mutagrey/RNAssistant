@@ -48,7 +48,7 @@ namespace RNAssistant.Core.ModelProtocol
         public const string ActionGuidance =
             "Return exactly one conversation-response-v8 JSON object directly, without a response wrapper. Order fields: action, reason, action-specific fields, message last. " +
             "reason is a brief decision basis, not private reasoning. Choose execute with nonempty tool_calls when an authorized tool step remains. " +
-            "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns T1 to a call and E1 only to an eligible terminal result; R1@v2 identifies an observed resource version. T/R are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. Historical calls may include runtime-added id T1, but new calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
+            "Each call has only name and object arguments; arguments is the tool schema's root object, without another wrapper. Runtime assigns T1 to a call and E1 only to an eligible terminal result; R1@v2 identifies an observed resource version. T/R are not finish evidence; R is not a tool argument. Reference lookup is case-insensitive; targets and source text are unchanged. New calls must never include id. Batch only independent local reads; return other calls alone and wait for their results. " +
             ReflectionInstruction +
             "Choose finish with a results array to end the run; deliver the answer or outcomes now, not a promise. Each result has criterion (an original user requirement), evidence (issued eligible references such as E1 from terminal results of this chat delivered in this request), and assessment (satisfied, partially_satisfied, unverified or not_satisfied). " +
             "Without eligible evidence results or evidence may be empty, including after discovery/schema/skill loading. When eligible results exist, cite at least one delivered E reference. Never invent evidence or convert failed/unknown outcomes into verified effects. " +
@@ -74,6 +74,16 @@ namespace RNAssistant.Core.ModelProtocol
         public const string StringEscapingGuidance =
             "Use exactly one JSON escaping layer in every string, including nested tool arguments: encode a real line break as \\n and one literal source backslash as \\\\. " +
             "Runtime decodes the envelope once and preserves argument text; never strip or pre-unescape a backslash.";
+
+        public const string JsonHistoryGuidance =
+            "## Accepted history\n\n" +
+            "Accepted calls in assistant content use execute JSON with runtime-added id T1. " +
+            "TOOL_RESULT messages match that id through tool_call_id and carry outcomes and data.\n\n";
+
+        public const string NativeHistoryGuidance =
+            "## Accepted history\n\n" +
+            "Executed calls appear as assistant.tool_calls with matching tool messages. " +
+            "Return your next decision as JSON in content using the response contract above.\n\n";
 
         public const string MessageGuidance =
             "message is useful user-facing text; only execute/reflection may use an empty string. On the first execute of a substantial task, state the approach briefly and include the next concrete call. " +

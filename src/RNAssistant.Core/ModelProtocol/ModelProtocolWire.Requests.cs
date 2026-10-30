@@ -12,9 +12,10 @@ namespace RNAssistant.Core.ModelProtocol
         // Wire-only projection: retain the complete frozen prompt for explicit
         // json_object fallback. Never rewrite user/history or accepted responses.
         public static IReadOnlyList<ChatMessage> ProjectGuidance(IReadOnlyList<ChatMessage> messages,
-            bool schemaTransport = true, bool reflectionEnabled = true)
+            bool schemaTransport = true, bool reflectionEnabled = true, string toolResultRole = ToolResultRoles.User)
         {
-            if (!schemaTransport && reflectionEnabled) return messages;
+            var nativeHistory = toolResultRole == ToolResultRoles.Tool;
+            if (!schemaTransport && reflectionEnabled && !nativeHistory) return messages;
             var result = messages.ToArray();
             for (var index = 0; index < result.Length; index++)
             {
@@ -32,6 +33,7 @@ namespace RNAssistant.Core.ModelProtocol
                 // escaped canonical fragment as well as ordinary prompt prose.
                 var projected = ReplaceGuidance(instruction, JsonObjectGuidance, ResponseGuidance(schemaTransport, reflectionEnabled));
                 projected = ReplaceGuidance(projected, MessageGuidance, MessageGuidanceFor(reflectionEnabled));
+                projected = ReplaceGuidance(projected, JsonHistoryGuidance, nativeHistory ? NativeHistoryGuidance : JsonHistoryGuidance);
                 if (projected == content) continue;
                 result[index] = new ChatMessage { Id = source.Id, Role = source.Role, Content = projected,
                     ProtocolMessage = source.ProtocolMessage, CreatedUtc = source.CreatedUtc,

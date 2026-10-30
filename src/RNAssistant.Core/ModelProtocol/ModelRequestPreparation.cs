@@ -33,7 +33,7 @@ namespace RNAssistant.Core.ModelProtocol
         {
             var strict = Options.ResponseFormat == LlmResponseFormats.JsonSchema;
             return ModelReferenceProjection.Project(ModelProtocolWire.ProjectGuidance(
-                strict ? ProjectSchemaMessages(messages) : messages, strict, _context.ReflectionEnabled));
+                strict ? ProjectSchemaMessages(messages) : messages, strict, _context.ReflectionEnabled, _settings.ToolResultRole));
         }
 
         private IReadOnlyList<ChatMessage> ProjectSchemaMessages(IReadOnlyList<ChatMessage> messages)

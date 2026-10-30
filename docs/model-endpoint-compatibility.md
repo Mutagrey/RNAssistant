@@ -2,6 +2,31 @@
 
 RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 
+## Response format and accepted history — 2026-10-30
+
+Agent settings expose two independent choices: **Формат ответа модели**
+(`json_object` or `json_schema`) and **Формат истории вызовов** (JSON in content or
+Native tools). The model still generates the V8 decision as JSON in `content`.
+After acceptance, native history serializes execute calls as `assistant.tool_calls`
+and matching `role: tool` results, for either response format. Native function
+generation by the provider is a separate capability and is not required here.
+
+JSON history uses accepted execute JSON in assistant content and `TOOL_RESULT`
+messages with a user/developer role. That role selector appears only for JSON
+history. The form maps these valid combinations to the existing typed
+`ToolResultRole`: tool for native, user/developer for JSON. There is no duplicate
+persisted switch that can disagree with the transport, and existing settings keep
+their behavior on reopening. Response-format fallback does not change history.
+
+Prompt schema 62 projects only the selected history guidance into the owned Agent
+Contract. Native history omits the fallback `TOOL_RESULT`, `tool_call_id` and
+runtime-added JSON `id` explanation; output V8 fields remain required. The frozen
+source, user content, accepted calls and loaded skills are unchanged. Strict
+output removes duplicate shape examples; object fallback restores the object
+contract while keeping the same history guidance. Harness covers all six
+response/history-role combinations plus repair/fallback; the shipped form test
+checks selection and save/reopen without calling an endpoint.
+
 ## Current P2 contract — 2026-10-30
 
 Reference revision 3 separates T calls from eligible E results, accepts case-insensitive
