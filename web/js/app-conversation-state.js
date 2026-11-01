@@ -1,5 +1,25 @@
 (function () {
   "use strict";
+  var messageWindowLimit = 240;
+
+  function boundedWindow(snapshot, keepStart) {
+    if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length <= messageWindowLimit) return snapshot;
+    var offset = keepStart ? 0 : snapshot.messages.length - messageWindowLimit;
+    snapshot.messages = snapshot.messages.slice(offset, offset + messageWindowLimit);
+    snapshot.messageStartIndex += offset;
+    return snapshot;
+  }
+
+  function prependMessageWindow(current, page) {
+    var messages = page && page.messages, start = page && page.startIndex;
+    if (!current || !Array.isArray(messages) || !messages.length ||
+        !Number.isSafeInteger(start) || start < 0 ||
+        start + messages.length !== current.messageStartIndex ||
+        page.totalCount !== current.messageTotalCount)
+      throw new Error("Неверная граница страницы истории чата.");
+    return boundedWindow({ messages: messages.concat(current.messages || []),
+      messageStartIndex: start, messageTotalCount: page.totalCount }, true);
+  }
 
   // A saved kernel checkpoint records lifecycle, but cannot prove that its
   // owner is still executing after a reconnect. Both chat shells use this rule.
@@ -22,11 +42,11 @@
   // or discard pages already loaded by the reader. Both shells use this rule.
   function messageWindow(current, incoming, sameRevision) {
     if (!sameRevision || !current || !incoming ||
-        !Array.isArray(current.messages) || !Array.isArray(incoming.messages)) return incoming;
+        !Array.isArray(current.messages) || !Array.isArray(incoming.messages)) return boundedWindow(incoming, false);
     var oldStart = current.messageStartIndex, nextStart = incoming.messageStartIndex;
     var oldTotal = current.messageTotalCount, nextTotal = incoming.messageTotalCount;
     if (!Number.isSafeInteger(oldStart) || !Number.isSafeInteger(nextStart) ||
-        !Number.isSafeInteger(oldTotal) || !Number.isSafeInteger(nextTotal)) return incoming;
+        !Number.isSafeInteger(oldTotal) || !Number.isSafeInteger(nextTotal)) return boundedWindow(incoming, false);
     function id(message) { return message && (message.Id || message.id || ""); }
     if (oldStart === nextStart && oldTotal === nextTotal &&
         (current.messages.length > incoming.messages.length ||
@@ -34,7 +54,14 @@
             return id(message) !== id(incoming.messages[index]);
           }))) {
       incoming.messages = current.messages;
-      return incoming;
+      return boundedWindow(incoming, true);
+    }
+    // An unchanged snapshot may contain only the latest page, outside the
+    // reader's bounded window. Keep the reading position until an explicit jump.
+    if (oldStart < nextStart && oldTotal === nextTotal && current.messages.length) {
+      incoming.messages = current.messages;
+      incoming.messageStartIndex = oldStart;
+      return boundedWindow(incoming, true);
     }
     if (oldStart < nextStart && nextTotal >= oldTotal) {
       var prependCount = nextStart - oldStart;
@@ -45,10 +72,12 @@
           })) {
         incoming.messages = current.messages.slice(0, prependCount).concat(incoming.messages);
         incoming.messageStartIndex = oldStart;
+        return boundedWindow(incoming, true);
       }
     }
-    return incoming;
+    return boundedWindow(incoming, false);
   }
 
-  window.RNAssistantConversationState = { status: status, lifecycle: lifecycle, messageWindow: messageWindow };
+  window.RNAssistantConversationState = { status: status, lifecycle: lifecycle,
+    messageWindow: messageWindow, prependMessageWindow: prependMessageWindow };
 })();

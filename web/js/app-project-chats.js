@@ -264,8 +264,10 @@
     el("Create").disabled = catalogBusy;
     el("ConnectionSubmit").disabled = catalogBusy;
     if (!ownsView()) return;
+    var editing = !!window.RNAssistantWorkspaceChat.currentMessageEdit();
+    var readOnly = window.RNAssistantWorkspaceChat.readOnly(active);
     if (composer) composer.lock(window.RNAssistantWorkspaceChat.readOnly(active) || selectedBusy || pluginBusy ||
-      !active || !!active.pendingId || status === "running");
+      !active || !project() || !project().available || !!active.pendingId || status === "running" || editing);
     var target = active && active.sessionId ? { workspaceId: projectId(), sessionId: currentId() } : null;
     var draft = target && window.RNAssistantChatDrafts.readWorkspace(target);
     var hasAttachments = !!(draft && draft.attachments && draft.attachments.length);
@@ -273,13 +275,15 @@
       !project() || !project().available || !active || (!el("Input").value.trim() && !hasAttachments) ||
       !!(draft && draft.pendingVisualAnnotation) || !!active.pendingId || status === "running" &&
         (!field(runState(), "canSteer", "CanSteer") || hasAttachments);
-    var steering = status === "running" && field(runState(), "canSteer", "CanSteer");
-    el("Input").placeholder = steering ? "Уточните текущую задачу…" :
-      window.RNAssistantWorkspaceChat.owner() === "plugin" ? "Опишите изменение плагина" : "Спросите о проекте…";
-    el("Send").title = steering ? (hasAttachments ? "Уточнение доступно без новых вложений" : "Уточнить текущую задачу") : "Отправить";
-    el("Send").setAttribute("aria-label", el("Send").title);
+    if (editing && status === "running") el("Send").disabled = true;
+    renderComposerPresentation({ editing: editing, editBusy: selectedBusy,
+      running: status === "running", canceling: cancelBusy(), readOnly: readOnly,
+      awaitingReply: status === "awaiting_user" && !selectedBusy && !readOnly,
+      awaitingApproval: !!(active && active.pendingId), noChat: !active,
+      unavailable: !!(project() && !project().available) || state.bridgeUnavailable,
+      inputReadOnly: readOnly || !active || !project() || !project().available || state.bridgeUnavailable });
   }
-  function render() {
+  function render(options) {
     runObserver.select(ownsView() && project() && project().available ? active : null, chatBusy());
     updateControls();
     renderTree();
@@ -300,7 +304,6 @@
       return submitProjectInput(questionTarget, { sessionId: questionTarget.sessionId,
         requestId: requestId, answers: answers }, null, null, true);
     });
-    el("Stop").disabled = cancelBusy();
     var messages = el("Messages");
     var emptyOptions = null;
     if (!active || (!(active.messages || []).length && runStatus() !== "running")) {
@@ -331,7 +334,7 @@
     }
     window.RNAssistantWorkspaceChat.renderMessages(messages, active || {
       project: { workspaceId: projectId() }, sessionId: null, messages: [], state: {}
-    }, emptyOptions);
+    }, emptyOptions, options);
     window.RNAssistantChatInspector.render();
     if (!chatBusy() && window.RNAssistantWorkspaceChat.runNotice(active)) notice(statusText(), true);
     else if (!chatBusy() && !noticeError && statusText()) notice(statusText());
@@ -652,14 +655,28 @@
       suspend: function () { runObserver.select(null, false); },
       loadPrevious: async function () {
         if (!active || !active.messageStartIndex) return;
-        var pid = projectId(), sid = currentId(), beforeIndex = active.messageStartIndex;
+        var pid = projectId(), sid = currentId(), beforeIndex = active.messageStartIndex, version = serial;
         try {
           var page = await send("getPreviousProjectChatMessages", {
             workspaceId: pid, sessionId: sid, beforeIndex: beforeIndex });
-          if (projectId() === pid && currentId() === sid && active.messageStartIndex === beforeIndex) {
-            window.RNAssistantWorkspaceChat.prependMessages(active, page); render();
+          if (version === serial && projectId() === pid && currentId() === sid && active.messageStartIndex === beforeIndex) {
+            window.RNAssistantWorkspaceChat.prependMessages(active, page); render({ preserveTop: true });
           }
-        } catch (error) { if (projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
+        } catch (error) { if (version === serial && projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
+      },
+      loadLatest: async function () {
+        if (!active) return;
+        var pid = projectId(), sid = currentId(), version = serial, revision = field(runState(), "revision", "Revision");
+        try {
+          var result = await readProjectChat({ workspaceId: pid, sessionId: sid });
+          if (version !== serial || projectId() !== pid || currentId() !== sid ||
+              field(runState(), "revision", "Revision") !== revision || result.sessionId !== sid ||
+              !result.project || result.project.workspaceId !== pid ||
+              field(result.state, "revision", "Revision") < revision) return;
+          active = window.RNAssistantConversationState.messageWindow(null, result, false);
+          render();
+          if (ownsView()) scrollMessagesToBottom(false);
+        } catch (error) { if (version === serial && projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
       },
       canMessageAction: function (name, message) {
         return (name === "fork" || name === "delete" || name === "edit") && !!active && !!message && !!message.Id &&

@@ -17,7 +17,7 @@ fs.mkdirSync(captures, {recursive:true});
   const browser = await chromium.launch({headless:true, ...(process.env.BROWSER_EXECUTABLE ? {executablePath:process.env.BROWSER_EXECUTABLE} : {})});
   try {
     const page = await browser.newPage({viewport:{width:1360,height:900}}), errors=[];
-    page.on('pageerror', error => errors.push(error.message));
+    page.on('pageerror', error => errors.push(error.stack || error.message));
     await page.goto(address+'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId==='preview-chat' && !state.initializePromise);
     const checkToggleFocus = async selector => {
@@ -40,6 +40,11 @@ fs.mkdirSync(captures, {recursive:true});
         messages:styles(document.querySelector(list))};
     },[form,list]);
     const office = await dimensions('#chatForm','#messages');
+    const composerLabels = () => page.evaluate(() => ['chatInput','sendButton','stopButton'].map(id => {
+      const node=document.getElementById(id);
+      return [node.getAttribute('aria-label'),node.placeholder || '',node.title || ''];
+    }));
+    const officeLabels = await composerLabels();
     await page.locator('#chatInput').fill('Черновик Office до перехода');
     const composerIdentity = await page.evaluate(() => {
       const form = document.querySelector('#chatForm'); form.dataset.testIdentity = crypto.randomUUID();
@@ -148,6 +153,37 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await page.locator('#messages').textContent(),projectTranscript,
       'background Office render cannot replace the project transcript');
     assert.deepEqual(await dimensions('#chatForm','#messages'), office, 'workspace uses the same message/composer metrics');
+    assert.deepEqual(await composerLabels(),officeLabels,'idle labels are shared across Office and Workspace');
+    const states = await page.evaluate(() => {
+      const snapshot=RNAssistantProjectChats.snapshot(), previous=snapshot.state;
+      const input=document.getElementById('chatInput'), send=document.getElementById('sendButton');
+      const result={};
+      snapshot.state={...previous,status:'awaiting_user',runId:'parity-run',runViewState:null};
+      RNAssistantProjectChats.refreshControls();
+      result.waiting=[document.getElementById('composerReplyPrompt').hidden,input.placeholder,send.title];
+      snapshot.state={...previous,readOnly:true};
+      RNAssistantProjectChats.refreshControls();
+      result.readOnly=[input.readOnly,input.placeholder,send.disabled];
+      snapshot.state=previous;
+      document.getElementById('clearInputButton').disabled=true;
+      RNAssistantProjectChats.refreshControls();
+      result.restored=[input.readOnly,document.getElementById('clearInputButton').disabled];
+      const previousMode=state.activeChatMode, plan=document.getElementById('chatPlanButton');
+      const before=plan.getAttribute('aria-pressed');
+      state.activeChatMode=before==='true'?'agent':'plan';
+      renderChatModePicker();
+      result.foreignMode=plan.getAttribute('aria-pressed')===before;
+      state.activeChatMode=previousMode;
+      RNAssistantWorkspaceChat.startMessageEdit(snapshot.messages[0]);
+      input.value+=' — правка'; input.dispatchEvent(new Event('input',{bubbles:true}));
+      result.editing=[send.title,document.getElementById('messageEditBar').classList.contains('hidden')];
+      RNAssistantWorkspaceChat.cancelMessageEdit(true);
+      RNAssistantProjectChats.render();
+      return result;
+    });
+    assert.deepEqual(states,{waiting:[false,'Напишите ответ, чтобы продолжить…','Отправить ответ'],
+      readOnly:[true,'История чата · создайте новый чат…',true],restored:[false,false],foreignMode:true,
+      editing:['Отправить заново',false]},'shared composer owns waiting/read-only/edit states and rejects stale Office presentation');
     await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
     await page.locator('#messages .message.user').first().waitFor();
     assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
@@ -169,9 +205,13 @@ fs.mkdirSync(captures, {recursive:true});
     await page.evaluate(() => startMessageEdit(state.messages[0], 0));
     await page.locator('#chatInput').fill('Правка сообщения Office');
     await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
+    await page.evaluate(() => RNAssistantWorkspaceChat.startMessageEdit(RNAssistantProjectChats.snapshot().messages[0]));
+    await page.locator('#chatInput').fill('Правка сообщения Workspace');
+    await page.locator('#cancelMessageEditButton').click();
+    assert.equal(await page.evaluate(() => !!RNAssistantWorkspaceChat.currentMessageEdit()),false);
     await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
     assert.equal(await page.locator('#chatInput').inputValue(), 'Правка сообщения Office',
-      'switching surfaces preserves the Office edit in the shared composer');
+      'cancelling a Workspace edit preserves the suspended Office edit');
     await page.locator('#cancelMessageEditButton').click();
     assert.equal(await page.locator('#chatInput').inputValue(), 'Поздний черновик Office',
       'cancelling the edit restores the Office draft');

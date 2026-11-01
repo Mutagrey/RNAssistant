@@ -30,8 +30,6 @@
 .shell #tab-chat .workspace-chat-pending { overflow-wrap: anywhere; white-space: pre-wrap; }
 .shell #tab-chat .workspace-chat-pending .inline-change { white-space: normal; margin: 8px 0; }
 .shell #tab-chat .workspace-chat-control button { margin-right: 8px; }
-.shell #tab-chat .project-chat-composer .composer-input-wrap { width: 100%; }
-.shell #tab-chat .project-chat-composer textarea { resize: none; }
 .shell #tab-chat .chat-workspace.with-inspector { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--inspector-width); }
 .shell .chat-inspector { display: flex; grid-column: 5; grid-row: 1; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; visibility: hidden; opacity: 0; background: var(--surface-subtle); }
 .shell .with-inspector .chat-inspector { visibility: visible; opacity: 1; }

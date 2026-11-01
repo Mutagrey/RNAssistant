@@ -512,6 +512,11 @@ the shared panel buttons (geometry, Enter/Space/Escape, pointer focus after keyb
 plugin name/icon/color editing and creation (including rendered SVG color pixels and neutral defaults following the theme), new source chats, navigation through the main history tree,
 history access during a run, draft restoration and late replies after switching chats.
 `RNA_CHAT_SCREENSHOTS` saves the visual review captures.
+`node tests/web/chat-history-paging.test.js` checks the common 240-message window;
+`node tests/web/chat-window-layout.test.js` checks Office/Workspace data and DOM
+bounds, explicit return to the latest 80 messages and late owner-switch responses.
+The shared layout check also covers composer labels, read-only/reply/edit states
+and rejection of background Office mode presentation in Workspace.
 `node tests/web/workspace-inspector.test.js` checks the shared Office/project/plugin
 Inspector DOM, exact workspace/session/run/step routing, stale owner rejection,
 draft and live preview frame preservation, and narrow/light/dark layouts. It also

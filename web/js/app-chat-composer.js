@@ -31,6 +31,9 @@ function bindComposerTooltip(wrap, trigger, tooltip, canShow) {
 }
 
 function renderChatModePicker() {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
+    window.RNAssistantWorkspaceChat.refreshComposer(); return;
+  }
   var button = $("chatPlanButton");
   if (!button) return;
   var plan = state.activeChatMode === "plan";
@@ -118,6 +121,44 @@ function renderChatRunNotice() {
   notice.appendChild(copy); root.appendChild(notice);
 }
 
+// Domain owners supply capabilities and activity; one renderer owns the shared
+// composer's labels, editing, reply prompt and stop presentation.
+function renderComposerPresentation(view) {
+  var form = $("chatForm"), input = $("chatInput"), send = $("sendButton"), stop = $("stopButton");
+  form.classList.toggle("is-message-editing", !!view.editing);
+  form.classList.toggle("is-preparing-attachments", !!view.preparing);
+  $("messageEditBar").classList.toggle("hidden", !view.editing);
+  $("messageEditBar").setAttribute("aria-hidden", String(!view.editing));
+  $("cancelMessageEditButton").disabled = !view.editing || !!view.editBusy || !!view.running;
+  $("composerReplyPrompt").hidden = !view.awaitingReply || !!view.editing;
+  $("focusReplyButton").disabled = !!view.inputReadOnly;
+  send.classList.remove("hidden");
+  send.title = view.preparing ? "Подготовка вложения" : view.editing ? "Отправить заново" :
+    view.running ? (view.queue ? "В очередь" : "Уточнить текущую задачу") :
+    view.awaitingReply ? "Отправить ответ" : "Отправить";
+  send.setAttribute("aria-label", send.title);
+  stop.hidden = !view.running;
+  stop.classList.toggle("hidden", !view.running);
+  stop.disabled = !!view.canceling;
+  stop.title = view.canceling ? "Останавливаю запрос" : "Остановить запрос";
+  stop.setAttribute("aria-label", stop.title);
+  input.readOnly = !!view.inputReadOnly;
+  input.setAttribute("aria-label", "Сообщение в чат");
+  input.placeholder = view.readOnly ? "История чата · создайте новый чат…" :
+    view.loading ? "Обновляю чат…" : view.loadError ? "Повторите загрузку чата…" :
+    view.unavailable ? "Чат недоступен…" : view.noChat ? "Выберите или создайте чат…" :
+    view.editing ? "Измените сообщение или отправьте его заново…" :
+    view.running || view.awaitingApproval ? "Уточните задачу или добавьте сообщение…" :
+    view.awaitingReply ? "Напишите ответ, чтобы продолжить…" : "Напишите сообщение…";
+  $("clearInputButton").disabled = !!view.preparing || !!view.editBusy;
+}
+
+function renderComposerInputState(hasContent) {
+  $("chatForm").classList.toggle("has-input", !!hasContent);
+  $("clearInputButton").hidden = !$("chatInput").value.trim();
+  resizeComposerInput($("chatInput"));
+}
+
 function renderSendControls() {
   if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
   renderChatRunNotice();
@@ -133,62 +174,19 @@ function renderSendControls() {
   var awaitingReply = !!state.activeChatId && !navigating && !detailUnavailable &&
     !isSending && !isPreparingAttachments && !isEditing && !state.bridgeUnavailable &&
     !!state.activeRunViewState && state.activeRunViewState.lifecycle === "awaiting_user";
-  var replyPrompt = $("composerReplyPrompt");
-  var sendButton = $("sendButton");
-  var stopButton = $("stopButton");
-  var input = $("chatInput");
-  var clearButton = $("clearInputButton");
-  var form = $("chatForm");
-  var editBar = $("messageEditBar");
-  var cancelEditButton = $("cancelMessageEditButton");
   var currentDocumentAvailable = typeof activeChatUsesCurrentDocument !== "function" || activeChatUsesCurrentDocument();
 
   if ($("newChatButton")) $("newChatButton").disabled = navigating || !!state.bridgeUnavailable;
 
-  if (form) {
-    form.classList.toggle("is-message-editing", isEditing);
-    form.classList.toggle("is-preparing-attachments", isPreparingAttachments);
-  }
-  if (editBar) {
-    editBar.classList.toggle("hidden", !isEditing);
-    editBar.setAttribute("aria-hidden", isEditing ? "false" : "true");
-  }
-  if (cancelEditButton) {
-    cancelEditButton.disabled = !isEditing || state.editingBusy || isSending;
-  }
-  if (replyPrompt) replyPrompt.hidden = !awaitingReply;
-  if ($("focusReplyButton")) $("focusReplyButton").disabled = !!(state.modeSaving || state.reasoningSaving);
-
-  if (sendButton) {
-    sendButton.classList.remove("hidden");
-    sendButton.title = isPreparingAttachments ? "Подготовка вложения" : (isEditing ? "Отправить заново" : (isSending ?
-      (runningMessageDelivery() === "Queue" || typeof exactOfficeSteerTarget !== "function" ||
-        !exactOfficeSteerTarget(state.activeChatId).runId ? "В очередь" : "Отправить сразу") :
-      (awaitingReply ? "Отправить ответ" : "Отправить")));
-    sendButton.setAttribute("aria-label", sendButton.title);
-  }
-  if (stopButton) {
-    stopButton.classList.toggle("hidden", !isSending);
-    stopButton.disabled = isCanceling;
-    stopButton.title = isCanceling ? "Останавливаю запрос" : "Остановить запрос";
-    stopButton.setAttribute("aria-label", stopButton.title);
-  }
-  if (input) {
-    input.readOnly = state.chatReadOnly || navigating || detailUnavailable || isPreparingAttachments || state.modeSaving || state.reasoningSaving ||
-      state.bridgeUnavailable;
-    input.placeholder = state.chatReadOnly ? "История чата · создайте новый чат…" : navigating || state.chatDetailPending ? "Обновляю чат…" : state.chatDetailError
-      ? "Повторите загрузку чата…" : isEditing
-      ? "Измените сообщение или отправьте его заново..."
-      : (state.bridgeUnavailable
-        ? "Откройте RNAssistant внутри Office, чтобы начать чат..."
-        : (isSending || approvalPending
-          ? "Уточните задачу или добавьте сообщение в очередь…"
-          : (awaitingReply ? "Напишите ответ, чтобы продолжить…"
-            : (currentDocumentAvailable ? "Спросите про текущий документ..." : "Обсудите сохранённый контекст..."))));
-  }
-  if (clearButton) {
-    clearButton.disabled = isPreparingAttachments || state.editingBusy;
-  }
+  renderComposerPresentation({ editing: isEditing, editBusy: state.editingBusy,
+    preparing: isPreparingAttachments, running: isSending, canceling: isCanceling,
+    awaitingReply: awaitingReply, awaitingApproval: approvalPending,
+    readOnly: state.chatReadOnly, loading: navigating || state.chatDetailPending,
+    loadError: !!state.chatDetailError, unavailable: state.bridgeUnavailable, noChat: !state.activeChatId,
+    inputReadOnly: state.chatReadOnly || navigating || detailUnavailable || isPreparingAttachments ||
+      state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId,
+    queue: isSending && (runningMessageDelivery() === "Queue" || typeof exactOfficeSteerTarget !== "function" ||
+      !exactOfficeSteerTarget(state.activeChatId).runId) });
   setComposerPickerDisabled($("composerAddPicker"), navigating || detailUnavailable ||
     isPreparingAttachments || isEditing || state.bridgeUnavailable || !state.activeChatId);
   renderChatModePicker();
@@ -219,8 +217,6 @@ function renderSendControls() {
 function updateComposerInputState() {
   if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
   var input = $("chatInput");
-  var form = $("chatForm");
-  var clearButton = $("clearInputButton");
   var hasText = !!(input && input.value.trim());
   var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
   var hasPendingAttachments = !!(state.chatResourceIngestions && state.activeChatId &&
@@ -230,14 +226,8 @@ function updateComposerInputState() {
     state.editingText = input.value;
   }
 
-  if (form) {
-    form.classList.toggle("has-input", hasText || hasAttachments || hasPendingAttachments);
-  }
-  if (clearButton) {
-    clearButton.hidden = !hasText;
-  }
+  renderComposerInputState(hasText || hasAttachments || hasPendingAttachments);
   updateSendButtonAvailability(hasText || hasAttachments || hasPendingAttachments);
-  resizeChatInput();
 }
 
 function updateSendButtonAvailability(hasContent) {

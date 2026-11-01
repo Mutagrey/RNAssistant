@@ -111,9 +111,11 @@ evidence и ADR — только когда нужны причина, точн�
   [Design System](docs/ui/UI_DESIGN_SYSTEM.md) и нужный срез
   [Migration Plan](docs/ui/UI_MIGRATION_PLAN.md). Согласования —
   [Decisions](docs/ui/UI_DECISIONS.md). Старые UI_LAYOUT_UX и ui-design — история.
-- Текущий gate: аудит и предложение готовы к ревью; production implementation
-  начинается после согласования карты и границ первого среза. Это разрешение
-  модернизировать UI по согласованному scope, а не runtime/Bridge/storage rewrite.
+- Пользователь разрешил продолжение после аудита: Office/Workspace/plugin должны
+  иметь единое поведение чата. Сначала устранить конкретные расхождения общего
+  компонента, затем перенести его в Dockview; большой предварительный рефакторинг
+  не нужен. Различия target/capabilities не должны создавать отдельные chat UI.
+  Каждый срез проходит визуальное ревью; runtime/Bridge/storage не переписывать.
 - Сначала ищи существующего владельца и компонент. Office/Workspace/plugin уже
   используют общий composer и ленту; не создавай параллельные chat UI/stores.
   Dockview владеет placement, view — presentation, domain — данными, host — APIs.

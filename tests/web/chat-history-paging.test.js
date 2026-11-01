@@ -31,6 +31,7 @@ async function testPageBoundary() {
   context.renderMessages = options => { renderOptions = options; };
   context.renderChatSessions = () => {};
   context.log = () => {};
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-conversation-state.js"), "utf8"), context);
   vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-session.js"), "utf8"), context);
 
   await context.loadPreviousChatMessages({ currentTarget: button });
@@ -63,6 +64,37 @@ async function testPageBoundary() {
   await context.loadPreviousChatMessages({ currentTarget: button });
   assert.equal(context.state.messageStartIndex, 80,
     "a page from the previous revision cannot be prepended to a newer transcript");
+}
+
+function testSharedWindowBounds() {
+  const context = vm.createContext({ console }); context.window = context;
+  for (const file of ["app-run-view-state.js", "app-conversation-state.js", "app-workspace-chat.js"])
+    vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context);
+  const rows = (start, count) => Array.from({ length: count }, (_, index) => ({ Id: "m-" + (start + index) }));
+  let snapshot = { project: { workspaceId: "project" }, sessionId: "chat", state: { revision: 7 },
+    messageStartIndex: 920, messageTotalCount: 1000, messages: rows(920, 80) };
+  while (snapshot.messageStartIndex) {
+    const start = Math.max(0, snapshot.messageStartIndex - 80);
+    context.RNAssistantWorkspaceChat.prependMessages(snapshot, { chatId: "chat", sessionRevision: 7,
+      startIndex: start, totalCount: 1000, messages: rows(start, snapshot.messageStartIndex - start) });
+    assert.ok(snapshot.messages.length <= 240, "Workspace uses the same bounded history as Office");
+    assert.equal(snapshot.messages[0].Id, "m-" + start);
+    assert.equal(snapshot.messages.at(-1).Id, "m-" + (start + snapshot.messages.length - 1));
+    snapshot = context.RNAssistantWorkspaceChat.latestSnapshot(snapshot, {
+      project: { workspaceId: "project" }, sessionId: "chat", state: { revision: 7 },
+      messageStartIndex: 920, messageTotalCount: 1000, messages: rows(920, 80) });
+    assert.equal(snapshot.messageStartIndex, start, "same-revision refresh keeps the reading window, even without overlap");
+    assert.ok(snapshot.messages.length <= 240, "refresh cannot grow the bounded window again");
+  }
+  assert.equal(snapshot.messages.length, 240);
+  const latest = context.RNAssistantConversationState.messageWindow(null, {
+    messageStartIndex: 0, messageTotalCount: 1000, messages: rows(0, 1000) }, false);
+  assert.equal(latest.messageStartIndex, 760, "oversized initial snapshot retains the most recent messages");
+  assert.equal(latest.messages.length, 240);
+  const previous = snapshot.messages;
+  assert.throws(() => context.RNAssistantWorkspaceChat.prependMessages(snapshot, {
+    chatId: "chat", sessionRevision: 6, startIndex: 0, totalCount: 1000, messages: [] }), /История изменилась/);
+  assert.equal(snapshot.messages, previous, "stale page cannot mutate history");
 }
 
 async function testStaleRefreshDoesNotSelectOldChat() {
@@ -146,6 +178,7 @@ function testClosedRunIsLazy() {
 (async () => {
   await testPageBoundary();
   await testStaleRefreshDoesNotSelectOldChat();
+  testSharedWindowBounds();
   testClosedRunIsLazy();
   console.log("OK chat history paging and lazy run details");
 })().catch(error => { console.error(error); process.exitCode = 1; });

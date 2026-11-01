@@ -202,10 +202,7 @@ async function loadPreviousChatMessages(event) {
         applyChatState(refreshed);
       return;
     }
-    var older = page.messages || [];
-    if (page.startIndex < 0 || page.startIndex + older.length !== beforeIndex) {
-      throw new Error("Неверная граница страницы истории чата.");
-    }
+    var windowed = window.RNAssistantConversationState.prependMessageWindow(state, page);
     var box = $("messages");
     var previousScrollHeight = box ? box.scrollHeight : 0;
     state.artifacts = state.artifacts || [];
@@ -224,9 +221,9 @@ async function loadPreviousChatMessages(event) {
       if (key && !knownRemoved[key]) { removed.push(uri); knownRemoved[key] = true; }
     });
     library.removedResourceUris = removed;
-    state.messages = older.concat(state.messages || []).slice(0, 240);
-    state.messageStartIndex = page.startIndex;
-    state.messageTotalCount = page.totalCount;
+    state.messages = windowed.messages;
+    state.messageStartIndex = windowed.messageStartIndex;
+    state.messageTotalCount = windowed.messageTotalCount;
     renderMessages({ preserveTop: true, previousScrollHeight: previousScrollHeight });
     renderChatSessions();
   } catch (error) {
@@ -246,7 +243,7 @@ async function jumpToLatestChatMessages() {
     var response = await loadChatState(chatIdValue);
     if (state.activeChatId === chatIdValue && state.chatNavigationVersion === navigationVersion &&
         state.chatProjectionRevisions[chatIdValue] === revision) {
-      applyChatState(response);
+      applyChatState(response, false, { latestMessages: true });
       if (typeof renderMessages === "function") renderMessages({ forceScroll: true });
     }
   } catch (error) {

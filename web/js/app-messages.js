@@ -10,6 +10,18 @@ var chatScrollFollowing = true;
 var chatScrollInteraction = 0;
 var chatScrollPosition = 0;
 var suspendedOfficeTranscript = null;
+function createChatHistoryButton(direction, action) {
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "chat-history-more";
+  button.textContent = direction === "latest" ? "Вернуться к последним сообщениям" : "Показать предыдущие сообщения";
+  button.addEventListener("click", function (event) {
+    button.disabled = true;
+    Promise.resolve().then(function () { return action(event); })
+      .finally(function () { button.disabled = false; });
+  });
+  return button;
+}
 function officeTranscriptActive() {
   return !window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office";
 }
@@ -979,12 +991,7 @@ function buildMessageUnits() {
   var units = [];
   if (state.messageStartIndex > 0) {
     appendMessageUnit(units, "older-messages", String(state.messageStartIndex), function () {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "chat-history-more";
-      button.textContent = "Показать предыдущие сообщения";
-      button.addEventListener("click", loadPreviousChatMessages);
-      return button;
+      return createChatHistoryButton("previous", loadPreviousChatMessages);
     }, "", null);
   }
   var actionsSignature = messageActionsSignature();
@@ -1019,12 +1026,7 @@ function buildMessageUnits() {
 
   if (state.messageStartIndex + state.messages.length < state.messageTotalCount) {
     appendMessageUnit(units, "latest-messages", String(state.messageTotalCount), function () {
-      var button = document.createElement("button");
-      button.type = "button";
-      button.className = "chat-history-more";
-      button.textContent = "Вернуться к последним сообщениям";
-      button.addEventListener("click", jumpToLatestChatMessages);
-      return button;
+      return createChatHistoryButton("latest", jumpToLatestChatMessages);
     }, "", null);
   }
 

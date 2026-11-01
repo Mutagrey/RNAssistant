@@ -1,13 +1,14 @@
 # Архитектура UI RNAssistant
 
 Обновлено: 2026-11-02. Owner: Web presentation; host/runtime contracts — их текущие
-domain owners. Стратегия утверждена пользователем; карта и первый срез **Proposed**.
+domain owners. Стратегия и продолжение общего chat-среза разрешены пользователем;
+детали визуальных решений остаются на ревью.
 Это canonical document владения, зависимостей и lifecycle UI.
 
 Основание: запрос «UI Strategy Transition» и предоставленный
 RNAssistant_UI_Architecture_and_Agent_Rules.md, v1.0 от 2026-11-01.
 Документ-источник задаёт цель, а не доказательство наличия архитектуры.
-Факты ниже проверены по исходникам на baseline **4ea3d6e4**.
+Исходный аудит ниже относится к baseline **4ea3d6e4**; изменения S1a отмечены явно.
 
 ## Единственные владельцы документации
 
@@ -53,17 +54,18 @@ chatForm.data-owner project → office при единственном chatForm 
 | UI-02 | .composer/.messages оформляются в app-composer/app-chat и переопределяются в app-product-screens/app-responsive; старые aliases остаются в app.css/app-product-tokens | Каскад не равен двум приложениям, но ответственность размыта. Консолидировать только затронутые компоненты, удаляя заменённые selectors |
 | UI-03 | Размещение сейчас распределено между app-layout, ChatInspector, ChatBrowser, plugin preview и switchTab | Workspace/Dockview получает размещение; виды сохраняют контент/lifecycle. Навигация вызывает один маршрут команд |
 | UI-04 | Global state.activeChatId, один activeOwner, глобальные DOM IDs и renderer cache | Первый срез — один живой conversation view. Несколько одновременных чатов требуют отдельного среза scoping; копии UI запрещены |
-| UI-05 | Office prepend ограничен slice(0, 240) в [chat-session](../../web/js/app-chat-session.js); Workspace [prependMessages](../../web/js/app-workspace-chat.js) делает concat без аналогичного лимита | Подтверждённое различие кода, риск роста UI-памяти при долгом чтении. Замер и общий bounded window — отдельная явная работа до multiple chat views |
+| UI-05 | В baseline Office ограничивал prepend 240 сообщениями, Workspace накапливал страницы без лимита | Исправлено в S1a: один bounded window в ConversationState для Office/Workspace/plugin; возврат к последним и сохранение позиции. Evidence — Migration Plan |
 | UI-06 | Office [GetChatSummaries](../../src/RNAssistant.Office/Services/ChatSessionService.cs) читает ListHeaders; Workspace [refreshCatalog](../../web/js/app-project-chats.js) запрашивает getProjectChats целиком | Metadata-only не означает paged catalog. Не объявлять целевую пагинацию списка уже реализованной |
 | UI-07 | Разные generation/serial counters и active snapshots в Office/Workspace; общий observer уже есть | Убирать только доказанное дублирование presentation, сохраняя domain-specific binding/receipt semantics |
 | UI-08 | Data Templates [browser.css](../../web/data-templates/styles/browser.css) имеет собственные standalone defaults, host передаёт appearance | Общие tokens/API нужны для реальных двух consumers; не ломать standalone режим и не строить SDK заранее |
 | UI-09 | P3 iframe может сбросить mock-переписку при пересоздании; две ошибки MutationObserver в browser log не локализованы | Ограничение Demo, не доказанный production-дефект и не основание править runtime |
+| UI-10 | Один DOM composer имел разных владельцев labels/edit/reply/stop/reasoning; модель и вложения всё ещё подключены по-разному | S1a объединяет presentation и bounds, но не закрывает полную parity. Следом — единые model/context/attachment capabilities и размещение; domain identity/receipts сохраняются |
 
 NavigationTree + TreeAdapter — компонент и resource adapter, не два дерева.
 Office и Workspace — разные domain owners общего UI, не обязательно дубли.
 Внутренние EditorTabs, Diagnostics tabs и Data Templates tabs не заменяют Dockview:
 они выбирают режим содержимого, а Dockview размещает независимые виды.
-Открытые UI-05/UI-06/UI-09 внесены в [BACKLOG](../stabilization/BACKLOG.md).
+Статусы UI-05/UI-06/UI-09/UI-10 — в [BACKLOG](../stabilization/BACKLOG.md).
 
 ## Целевые границы
 
@@ -132,7 +134,7 @@ L3 — host capabilities. File API/worker/module/storage/file:// поддерж�
 При изменении shared UI нужен standalone пример с Tree/Toolbar/Progress/theme,
 на существующих assets; ещё одна инфраструктура сборки/loader не создаётся.
 
-Миграция начинается после согласования карты и первого среза. Временный dual path
+Продолжение общего chat-среза разрешено; следующие срезы сохраняют визуальные gates. Временный dual path
 допустим только с owner, флагом при необходимости и условием удаления в
 [Migration Map](../stabilization/MIGRATION_MAP.md). После проверки старый путь
 удаляется вместе с consumers и мёртвыми зависимостями.

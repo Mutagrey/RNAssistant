@@ -5,15 +5,22 @@
 Owner: Web presentation; catalog protocol — соответствующий domain owner.
 [Аудит и source evidence](../ui/UI_ARCHITECTURE.md), [приоритет срезов](../ui/UI_MIGRATION_PLAN.md).
 
-- UI-05: Workspace prependMessages накапливает историю без Office cap 240.
-  Снять repeated-page memory/DOM baseline; в отдельном явном scope определить
-  общий bounded window и jump/anchor behavior до multiple chat views.
+- UI-05: исправлено S1a — один cap 240, common prepend/refresh и explicit latest
+  для Office/Workspace/plugin. Browser data/DOM bounds проверены; это не RSS/heap
+  qualification. До multiple chat views сохранить те же bounds на каждый view.
 - UI-06: catalogs используют metadata, но Office ListHeaders и getProjectChats
   не дают постраничный UI. До объявления paged catalog проверить объёмы и
   минимальный typed query contract; не читать bodies ради дерева.
 - UI-09: в P3 browser log два MutationObserver.observe TypeError без
   локализованного источника; повтор не воспроизвёл. Не объявлено production-багом
   или исправлением; исследовать при воспроизведении, не расширять Demo ради этого.
+- UI-10: S1a объединил composer labels/edit/reply/stop/reasoning. Остались различия
+  model selection (Office per-chat override, Workspace shared settings), attachments,
+  context meter и confirmation presentation. Объединять через существующие domain
+  capabilities/typed contracts, не клонировать controls и не скрывать отсутствие API.
+- UI-11: старый VM test workspace-chat-v8.test.js падает на baseline 119aff97
+  (`$ is not defined`) до проверки renderer. Восстановить fixture отдельно при
+  следующем renderer-срезе; текущий browser coverage проходит.
 
 ## Стоимость подготовки длинного контекста — 2026-10-30
 

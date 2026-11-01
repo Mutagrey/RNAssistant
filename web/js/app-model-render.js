@@ -102,9 +102,14 @@ function renderReasoningToggle() {
     !!state.chatNavigationPending || !!state.initializePromise ||
     hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId || support === false;
 
+  renderReasoningControl(button, active, disabled, support);
+}
+
+function renderReasoningControl(button, enabled, disabled, support) {
+  var active = !!enabled && support !== false;
   button.classList.toggle("active", active);
   button.classList.toggle("is-unknown", support === null);
-  button.disabled = disabled;
+  button.disabled = !!disabled || support === false;
   button.setAttribute("aria-pressed", active ? "true" : "false");
   if (support === false) {
     button.title = "Выбранная модель не поддерживает reasoning";

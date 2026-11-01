@@ -1,7 +1,9 @@
 # Карта экранов, навигации и состояний
 
 Обновлено: 2026-11-02. Owner: Web presentation.
-Текущее состояние — source audit baseline 4ea3d6e4; целевые ID/места **Proposed**.
+Исходная карта — source audit baseline 4ea3d6e4; целевые ID/места **Proposed**.
+Продолжение общего чата разрешено. S1a уже объединяет bounds и composer presentation;
+размещение в Dockview и полная parity capabilities ещё не реализованы.
 Canonical карта UI; владение/lifecycle — [Architecture](UI_ARCHITECTURE.md),
 компоненты — [Design System](UI_DESIGN_SYSTEM.md).
 

@@ -25,16 +25,6 @@
     if (!canMessageAction(name, message, index)) return;
     return dispatch("messageAction", { name: name, message: message, index: index });
   }
-  function paintMessageEdit() {
-    var editing = activeOwner !== "office" && !!workspaceMessageEdit;
-    var form = node("Form"), bar = document.getElementById("messageEditBar");
-    form.classList.toggle("is-message-editing", editing);
-    bar.classList.toggle("hidden", !editing);
-    bar.setAttribute("aria-hidden", String(!editing));
-    document.getElementById("cancelMessageEditButton").disabled = !editing;
-    node("Send").title = editing ? "Отправить заново" : "Отправить";
-    node("Send").setAttribute("aria-label", editing ? "Отправить заново" : "Отправить");
-  }
   function cancelWorkspaceMessageEdit(restore) {
     if (!workspaceMessageEdit) return;
     var prior = workspaceMessageEdit;
@@ -42,8 +32,7 @@
     if (restore !== false && activeOwner === prior.owner) {
       node("Input").value = prior.draft;
       node("Input").dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    paintMessageEdit();
+    } else dispatch("input");
   }
   function startWorkspaceMessageEdit(message) {
     if (activeOwner === "office" || !message || !message.Id) return;
@@ -55,7 +44,6 @@
       messageId: message.Id, revision: revision, draft: node("Input").value };
     node("Input").value = messageContent(message);
     node("Input").dispatchEvent(new Event("input", { bubbles: true }));
-    paintMessageEdit();
     node("Input").focus();
   }
   function currentMessageEdit() {
@@ -85,7 +73,8 @@
     node("Approve").addEventListener("click", function () { dispatch("resolve", true); });
     node("Reject").addEventListener("click", function () { dispatch("resolve", false); });
     document.getElementById("cancelMessageEditButton").addEventListener("click", function () {
-      if (activeOwner !== "office") { cancelWorkspaceMessageEdit(true); dispatch("refresh"); }
+      if (activeOwner === "office") dispatch("cancelEdit");
+      else { cancelWorkspaceMessageEdit(true); dispatch("refresh"); }
     });
   }
   function mount(owner, container) {
@@ -123,13 +112,10 @@
     document.getElementById("attachmentDrafts").hidden = owner !== "office";
     var pluginDrafts = document.getElementById("pluginAnnotationDrafts");
     if (pluginDrafts) pluginDrafts.hidden = owner !== "plugin" || pluginDrafts.childElementCount === 0;
-    form.classList.toggle("project-chat-composer", owner !== "office");
     if (owner === "office") {
       form.title = "";
       if (form.parentNode !== document.getElementById("chatDropZone"))
         document.getElementById("chatDropZone").insertBefore(form, officeComposerAnchor);
-      document.getElementById("stopButton").hidden = false;
-      input.setAttribute("aria-label", "Сообщение в чат Office");
       if (changed) {
         var editText = hasActiveMessageEdit() ? state.editingText : null;
         restoreChatDraft(state.activeChatId);
@@ -142,20 +128,14 @@
     }
     if (view.parentNode !== container) container.appendChild(view);
     if (form.parentNode !== view) view.appendChild(form);
-    form.classList.remove("is-message-editing", "is-preparing-attachments", "is-dragging");
-    document.getElementById("stopButton").classList.remove("hidden");
-    document.getElementById("sendButton").title = "Отправить";
-    document.getElementById("sendButton").setAttribute("aria-label", "Отправить");
-    input.readOnly = false;
+    form.classList.remove("is-dragging");
     if (changed && sharedComposer) sharedComposer.select(null);
     view.dataset.owner = owner;
     view.classList.add("chat-main");
     view.classList.remove("plugin-workspace-chat-view");
-    input.placeholder = owner === "plugin" ? "Опишите изменение плагина" : "Спросите о проекте…";
-    input.setAttribute("aria-label", "Сообщение в чат проекта");
-    list.setAttribute("aria-label", "Сообщения чата проекта");
+    list.setAttribute("aria-label", "Сообщения чата");
     if (sharedComposer) sharedComposer.refresh();
-    paintMessageEdit();
+    dispatch("input");
     window.RNAssistantChatInspector.mount(owner);
     return changed;
   }
@@ -177,7 +157,8 @@
   }
   function latestSnapshot(current, incoming) {
     if (!current || field(current, "sessionId") !== field(incoming, "sessionId") ||
-        field(field(current, "project"), "workspaceId") !== field(field(incoming, "project"), "workspaceId")) return incoming;
+        field(field(current, "project"), "workspaceId") !== field(field(incoming, "project"), "workspaceId"))
+      return window.RNAssistantConversationState.messageWindow(null, incoming, false);
     var previousRevision = field(field(current, "state"), "revision");
     var nextRevision = field(field(incoming, "state"), "revision");
     if (Number.isSafeInteger(previousRevision) && (!Number.isSafeInteger(nextRevision) || nextRevision < previousRevision))
@@ -204,8 +185,10 @@
         field(page, "sessionRevision") !== revision || field(page, "totalCount") !== total ||
         field(page, "startIndex") + (page.messages || []).length !== start)
       throw new Error("История изменилась. Обновите чат и повторите загрузку.");
-    current.messages = page.messages.concat(current.messages || []);
-    current.messageStartIndex = page.startIndex;
+    var windowed = window.RNAssistantConversationState.prependMessageWindow(current, page);
+    current.messages = windowed.messages;
+    current.messageStartIndex = windowed.messageStartIndex;
+    current.messageTotalCount = windowed.messageTotalCount;
     return current;
   }
   function createRunObserver(read, changed, failed, progressChanged) {
@@ -260,11 +243,11 @@
       !!message.ReflectionDecision || !!message.ReasoningContent ||
       !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
   }
-  function renderMessages(list, chat, emptyOptions) {
+  function renderMessages(list, chat, emptyOptions, options) {
     chat = chat || { messages: [], state: {} };
     var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     if (changed) resetChatScrollTracking(list);
-    var following = changed || shouldFollowChatScroll(list);
+    var following = !(options && options.preserveTop) && (changed || shouldFollowChatScroll(list));
     var snapshot = field(chat, "state"), status = runStatus(snapshot), live = field(snapshot, "modelProgress");
     if (status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
     var start = field(chat, "messageStartIndex") || 0;
@@ -279,14 +262,7 @@
     var units = [];
     if (start > 0) {
       appendMessageUnit(units, "history:older", String(start), function () {
-        var more = document.createElement("button");
-        more.type = "button"; more.className = "chat-history-more";
-        more.textContent = "Показать предыдущие сообщения";
-        more.onclick = function () {
-          more.disabled = true;
-          Promise.resolve(dispatch("loadPrevious")).finally(function () { more.disabled = false; });
-        };
-        return more;
+        return createChatHistoryButton("previous", function () { return dispatch("loadPrevious"); });
       });
     }
     var visible = messages.filter(visibleMessage);
@@ -323,6 +299,11 @@
         return renderAgentRunArticle(liveRun);
       }, "", null, function (node) {
         paintLiveModelOutput(node.querySelector(".agent-stream-step"), liveProgress);
+      });
+    }
+    if (start + messages.length < field(chat, "messageTotalCount")) {
+      appendMessageUnit(units, "history:latest", String(field(chat, "messageTotalCount")), function () {
+        return createChatHistoryButton("latest", function () { return dispatch("loadLatest"); });
       });
     }
     (field(snapshot, "pendingInputs") || []).forEach(function (pending) {
@@ -370,7 +351,6 @@
   function renderWorkspaceControls(chat, submitQuestions) {
     if (activeOwner === "office") return;
     var snapshot = field(chat, "state") || {}, pending = field(chat, "pendingId");
-    node("Stop").hidden = runStatus(snapshot) !== "running";
     node("Control").hidden = !pending;
     node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
       (field(chat, "pendingArguments") || "") : "";
@@ -405,7 +385,6 @@
       form.title = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
         activeRun ? "Office: документ не привязан" : "Office: при отправке";
     }
-    var clear = document.getElementById("clearInputButton");
     var picker = document.getElementById("composerAddPicker"), plan = document.getElementById("chatPlanButton");
     var fileAction = document.getElementById("attachFileButton"), fileInput = document.createElement("input");
     var modelPicker = document.getElementById("chatModelPicker"), modelLabel = document.getElementById("chatModelButtonLabel");
@@ -441,15 +420,14 @@
     }
     function update() {
       if (activeOwner === "office") return;
-      clear.hidden = !input.value; resizeComposerInput(input);
+      renderComposerInputState(input.value.trim() || loaded && loaded.attachments && loaded.attachments.length);
       setComposerPickerDisabled(picker, locked || !current);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
       fileAction.disabled = locked || !current || !fileOptions ||
         activeOwner !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
-      think.setAttribute("aria-pressed", String(reasoning)); think.title = reasoning ? "Reasoning включён" : "Reasoning выключен";
-      think.setAttribute("aria-label", reasoning ? "Выключить reasoning" : "Включить reasoning");
-      think.classList.toggle("active", reasoning); think.disabled = locked;
-      modelLabel.textContent = field(state.settings, "model") || "Модель";
+      renderReasoningControl(think, reasoning, locked || !current, effectiveModelSupportsReasoning(settingsModel()));
+      var model = findModel(settingsModel());
+      modelLabel.textContent = model && model.title || settingsModel() || "Модель";
       modelPicker.title = "Модель из общих настроек";
       setComposerPickerDisabled(modelPicker, locked || !current);
       modelMenu.modelRenderState = null;
@@ -464,7 +442,7 @@
       refresh: update,
       pickFiles: pickFiles,
       togglePlan: function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); } },
-      toggleReasoning: function () { if (!locked) { reasoning = !reasoning; save(); update(); } },
+      toggleReasoning: function () { if (!think.disabled) { reasoning = !reasoning; save(); update(); } },
       select: function (target, snapshot) {
         showOfficeContext(snapshot);
         var next = target && target.workspaceId && target.sessionId
@@ -479,7 +457,8 @@
         input.value = saved ? saved.text : ""; mode = saved ? saved.mode : field(snapshot, "mode") || "agent";
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
-      options: function () { return { Mode: mode, ReasoningEnabled: reasoning }; },
+      options: function () { return { Mode: mode,
+        ReasoningEnabled: reasoning && effectiveModelSupportsReasoning(settingsModel()) !== false }; },
       prepareInput: function (target, text, edit, activeRun) {
         var options = activeRun ? { SteerRunId: field(activeRun, "runId"), Mode: field(activeRun, "mode"),
           ReasoningEnabled: !!field(field(activeRun, "modelConfiguration"), "reasoningEnabled") } : this.options();

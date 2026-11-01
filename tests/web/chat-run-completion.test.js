@@ -96,6 +96,10 @@ function assertStoppedIndicator(ctx, id) {
     messages: [accepted], messageStartIndex: 1, messageTotalCount: 2 });
   assert.deepEqual(ctx.state.messages.map(message => message.Id), ["older", "accepted"],
     "a same-revision refresh retains the reader's earlier page");
+  ctx.applyChatState({ activeChatId: "a", sessionRevision: 5,
+    messages: [accepted], messageStartIndex: 1, messageTotalCount: 2 }, false, { latestMessages: true });
+  assert.equal(ctx.state.messageStartIndex, 1, "explicit jump to latest bypasses older-window retention");
+  assert.equal(ctx.state.messages.length, 1);
   ctx.applyChatState({ activeChatId: "a", sessionRevision: 6,
     messages: [{ Id: "replacement", Role: "assistant", Content: "Новая версия" }],
     messageStartIndex: 0, messageTotalCount: 1 });

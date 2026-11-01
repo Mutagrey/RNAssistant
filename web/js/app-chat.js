@@ -102,12 +102,12 @@ function bindChatActions() {
   bindComposerPickers();
   $("compactContextButton").addEventListener("click", compactChatContext);
   $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
-  $("cancelMessageEditButton").addEventListener("click", cancelMessageEdit);
   window.addEventListener("resize", resizeChatInput);
   window.RNAssistantWorkspaceChat.registerActions("office", {
     submit: submitChatInput,
     stop: stopActiveSend,
     clear: function () { setChatInputText("", true); },
+    cancelEdit: cancelMessageEdit,
     input: function () {
       updateComposerInputState();
       if (!hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);

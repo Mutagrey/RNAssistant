@@ -545,7 +545,7 @@ function retainHtmlWorkspaceSources(current, incoming) {
   return current;
 }
 
-function applyChatState(response, skipDraftCapture) {
+function applyChatState(response, skipDraftCapture, options) {
   response = response || {};
   var detailDeferred = !!(response.detailDeferred || response.DetailDeferred);
   var previousChatId = state.activeChatId || "";
@@ -637,7 +637,7 @@ function applyChatState(response, skipDraftCapture) {
       messages: state.messages, messageStartIndex: state.messageStartIndex,
       messageTotalCount: state.messageTotalCount
     }, { messages: incomingMessages, messageStartIndex: incomingStart,
-      messageTotalCount: incomingTotal }, !chatChanged && !detailDeferred &&
+      messageTotalCount: incomingTotal }, !(options && options.latestMessages) && !chatChanged && !detailDeferred &&
       Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision);
     state.messages = windowed.messages;
     state.messageStartIndex = windowed.messageStartIndex;

@@ -1,7 +1,8 @@
 # План модернизации production UI
 
 Обновлено: 2026-11-02. Owner: Web presentation; согласование карты/scope — пользователь.
-Стратегия Approved; первый production-срез **Proposed**, реализация не начата.
+Стратегия и продолжение общего chat-среза разрешены пользователем. S1a реализован
+и передан на визуальное ревью; S1b — перенос общего view в Dockview.
 Canonical план последовательности, проверки, baseline, rollback и удаления.
 Границы — [Architecture](UI_ARCHITECTURE.md); маршруты — [Screen Map](UI_SCREEN_MAP.md).
 
@@ -47,7 +48,7 @@ fixtures. P4 автоматически не запускается. P3 не у�
 | Инвариант | Реальная реализация / evidence | Что проверять при миграции |
 |---|---|---|
 | Metadata catalog, без чтения всех тел на открытии дерева | ChatSessionService.ListHeaders, ChatStore SQLite projection/event locators | Число запросов и body reads; каталог пока не paged |
-| Recent/previous messages, bounded Office window | [ChatMessageViewDto](../../src/RNAssistant.Core/Models/ChatMessageViewDto.cs): page 80; [chat-session](../../web/js/app-chat-session.js): cap 240 | start/total/revision, jump-to-latest, viewport anchor; Workspace gap UI-05 не скрывать |
+| Recent/previous messages, общий bounded window | [ChatMessageViewDto](../../src/RNAssistant.Core/Models/ChatMessageViewDto.cs): page 80; [ConversationState](../../web/js/app-conversation-state.js): cap 240 для Office/Workspace/plugin с S1a | start/total/revision, явный jump-to-latest, viewport anchor |
 | Incremental live output | [messages](../../web/js/app-messages.js): keyed/signature reconcile, rAF batching, refreshLiveAgentOutput | Token updates не пересоздают историю; hidden view не делает лишний render |
 | Stale/duplicate protection | navigation queue + selection versions; Workspace serial; ConversationObserver in-flight dedup | Быстро A→B→A, late errors, repeated send, reconnect receipt |
 | Durable drafts / receipts | ChatDrafts, ConversationInput, existing protected runtime store | Смена owner, late acknowledgement, attachment preparation, draft reload |
@@ -84,7 +85,51 @@ storage: 300 сообщений / 23 MiB, прежний input scan 128 ms, но
 | Repeated open/close: listeners, timers, pending operations, retained DOM/leases | Targeted lifecycle checks + heap/DOM observation | Общего точного счётчика всех listeners сейчас нет; evidence собирать по изменяемым owners |
 | WebView2 process memory, real Office/session transitions, zoom | Windows x64 / Office x64; диагностика читаема на экране | Open evidence; пользователь передаёт только фотографии, не логи/дампы |
 
-## Предложенный первый production-срез S1
+## S1a — единое поведение перед переносом
+
+После «Коммит и далее» аудит сохранён как **119aff97**. Пользователь потребовал
+единый чат и доверил порядок подготовки/переноса агенту. Выбран небольшой
+рефакторинг непосредственно затронутых владельцев; полный rewrite не нужен.
+
+- ConversationState владеет cap 240 для prepend и refresh обоих consumers.
+  Фоновый snapshot той же revision не вытесняет читаемую страницу. Явный переход
+  к последним сообщениям обходит сохранение старого окна; он добавлен Workspace
+  и исправлен Office. Поздний ответ не возвращает прежнего owner.
+- Один composer renderer владеет idle/edit/read-only/reply/stop labels и состояниями.
+  Подсказка ответа перемещается вместе с composer. Удалены отдельные Workspace
+  подписи, edit renderer и два CSS overrides; сбрасываются устаревшие disabled/
+  hidden flags. Фоновый Office mode render не меняет Workspace mode.
+  Кнопка отмены правки имеет один dispatch по owner: отмена в Workspace больше
+  не сбрасывает приостановленную правку Office из-за второго обработчика.
+- Reasoning control общий, учитывает известную неподдерживаемую модель;
+  выбор модели показывает title из общего каталога. Draft/receipt и domain commands
+  сохранены. Меню выбора модели, вложения, context meter и confirmation ещё требуют
+  унификации capabilities; один DOM не объявляется полной parity.
+
+Замер одинакового fixture до/после (baseline 119aff97): 1000 сообщений, 12 предыдущих
+страниц — пик сохранённых в Workspace сообщений **1000 → 240**, первые сообщения
+остаются доступны. Это размер массива, не измерение RSS/heap. Browser check на пяти
+подгрузках отдельно подтвердил ≤240 сообщений в данных и DOM для Office/Workspace;
+возврат к последним даёт 80. Native WebView2 и полный startup baseline открыты.
+
+Проверки: chat-history-paging, chat-run-completion, chat-window-layout,
+workspace-chat-layout, chat-composer-layout, workspace-shared-draft,
+workspace-chat-progress. Проверены drafts/late ack/retry, scope, mode, streaming,
+границы и узкая ширина. Старый VM fixture workspace-chat-v8 падает на baseline
+до изменений (`$ is not defined`); это открытый test gap, не проходящая проверка.
+Релевантная browser-проверка общего renderer пройдена.
+
+Для ревью открыть [production preview](http://127.0.0.1:8897/product-preview.html?review=shared-chat):
+1. Написать разные черновики в Office/Workspace и переключить контекст через дерево.
+2. Проверить общие placeholder, clear, mode/reasoning и редактирование сообщения.
+3. В узком окне проверить рост ввода и доступность действий.
+
+[Office](review/s1a-chat-office.png), [Workspace](review/s1a-chat-workspace.png) —
+снимки настоящего production UI на synthetic bridge; модель и Office не запускались.
+Визуальные детали In Review. Откат S1a — revert, durable history не менялась;
+второй composer/window implementation и временный adapter не добавлены.
+
+## S1b — размещение общего чата и Inspector
 
 **Одна существующая conversation workspace для Office и Workspace + настоящий
 Inspector в одном Dockview**, внутри текущей production Shell.
@@ -121,16 +166,15 @@ manifest/package entry. Точный diff уточняется после утв
 draft не теряется при owner switch, move, hide/reopen; старый ответ не попадает в
 новый chat; resize/maximize не вызывает init/повторных reads; performance не хуже
 измеренного baseline сверх согласованного разброса; узкий режим/keyboard/zoom
-проверены. Workspace unbounded history — открытый UI-05, не объявляется
-исправленным сменой Dockview; до расширения на multiple chat views нужен bounded
-window с реальной проверкой.
+проверены. Общий bounded window уже введён в S1a; его проверки остаются
+обязательными при Dockview и последующем расширении на multiple chat views.
 
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |
 |---|---|---|
-| S1 | Chat workspace + Inspector placement, Office и Workspace вместе | Старый grid/split/open-width path этих областей и его consumers; остальные splitters пока нужны |
-| S2 | View-scoped chat presentation, общий bounded window, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
+| S1a / S1b | Общие chat rules (S1a на ревью), затем Chat workspace + Inspector placement, Office и Workspace вместе | Дубли composer presentation удалены; далее старый grid/split/open-width path этих областей. Остальные splitters пока нужны |
+| S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
 | S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
 | S4 | Library/VBA/settings/project navigation; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
 | S5 | Оставшиеся plugin views, portability fixture, общий registry/команды | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
@@ -160,6 +204,5 @@ P3 iframe adapter остаётся только в замороженном Demo
 условие удаления старого switchTab placement — переключение последнего его
 consumer с проверкой старых route aliases и deactivation side effects.
 
-**Текущее решение для согласования:** карта Screen Map и граница S1 — один общий
-Chat View + Inspector для Office/Workspace, без одновременных экземпляров чата.
-До этого решения production implementation не начинается.
+**Текущее ревью:** поведение общего чата S1a. Следом — перенос этого же view и
+Inspector в Dockview по S1b, без одновременных экземпляров чата и второго UI.

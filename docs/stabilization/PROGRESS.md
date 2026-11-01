@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Общий чат: bounded history и composer presentation — 2026-11-02
+
+Owner: Web presentation. После commit аудита 119aff97 пользователь разрешил
+продолжение и потребовал единое поведение Office/Workspace. S1a вводит общий
+cap 240/prepend/refresh и общий renderer состояний composer; убраны Workspace
+копии labels/edit, исправлены latest-page jump и stale mode presentation.
+Fixture 1000 сообщений/12 previous pages: пик Workspace array 1000 → 240.
+Browser data/DOM cap, latest 80, draft/late ack/retry, mode, scoped streaming,
+узкий UI проверены семью целевыми JS/browser checks; Windows/Office не запускались.
+Старый VM fixture workspace-chat-v8 уже падал до изменений, gap UI-11 открыт.
+S1a на визуальном ревью; далее перенос общего view + Inspector в Dockview.
+Model/attachment/context capabilities и полная parity не объявлены завершёнными.
+Runtime, bridge, storage не менялись. [Scope/evidence/rollback](../ui/UI_MIGRATION_PLAN.md).
+
 ## UI strategy transition: аудит и карта — 2026-11-02
 
 Owner: Web presentation. По прямому запросу пользователя Demo P0–P3 заморожен

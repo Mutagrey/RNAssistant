@@ -26,7 +26,7 @@
   <link rel="stylesheet" href="css/app.css?v=diagnostics-20261101">
   <link rel="stylesheet" href="css/app-chat.css?v=diagnostics-20261101">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1-visuals-20261025-4">
-  <link rel="stylesheet" href="css/app-composer.css?v=shared-palette-20261025-2-unified-chat-20261026-2">
+  <link rel="stylesheet" href="css/app-composer.css?v=shared-chat-20261102">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-models.css?v=shared-palette-20261025-2">
@@ -57,7 +57,7 @@
   <link rel="stylesheet" href="css/app-product-components.css?v=v8-lab-20261030-2">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=questions-20261023-1-shared-dock-1-project-shell-1-pane-header-20261025-1-annotate-action-1-visual-icons-20261025-3-annotation-followup-20261026-1-unified-chat-1-pane-resize-20261026-1">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=shared-chat-20261102">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-chat-browser.css?v=annotate-hover-20261024-1-request-layout-2-pane-header-20261025-1">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
@@ -124,6 +124,8 @@
           <div class="agent-plan-dock hidden" id="agentPlanDock" aria-live="polite"></div>
         </div>
         <div class="chat-run-notice" id="chatRunNotice" role="status" hidden></div>
+        <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
+        <form class="composer" id="chatForm" data-owner="office">
           <div class="composer-reply-prompt" id="composerReplyPrompt" hidden>
             <div class="composer-reply-copy" role="status" aria-live="polite">
               <strong>Нужен ваш ответ</strong>
@@ -131,8 +133,6 @@
             </div>
             <button type="button" class="link-button" id="focusReplyButton" aria-controls="chatInput">Ответить</button>
           </div>
-        <div class="agent-approval-dock hidden" id="agentApprovalDock" aria-live="polite"></div>
-        <form class="composer" id="chatForm" data-owner="office">
           <span id="inboxAnnouncer" class="inbox-sr-only" aria-live="polite"></span>
           <span id="inboxStatus" class="inbox-status" role="status" aria-live="polite"></span>
           <div class="composer-edit-bar hidden" id="messageEditBar" aria-hidden="true">
@@ -142,7 +142,7 @@
             </button>
           </div>
           <div class="composer-input-wrap">
-            <textarea id="chatInput" rows="2" placeholder="Спросите про текущий документ..."></textarea>
+            <textarea id="chatInput" rows="2" placeholder="Напишите сообщение…"></textarea>
             <button type="button" class="icon-btn composer-clear-button" id="clearInputButton" title="Очистить ввод" aria-label="Очистить ввод" hidden>
               <svg data-rna-icon="close" viewBox="0 0 24 24" aria-hidden="true"></svg>
             </button>
@@ -1116,7 +1116,7 @@
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-rail-popovers.js"></script>
   <script src="js/app-navigation-tree.js?v=shared-tree-20261027-1"></script>
-  <script src="js/app-conversation-state.js?v=message-window-20261029-1"></script>
+  <script src="js/app-conversation-state.js?v=shared-chat-20261102"></script>
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
@@ -1149,10 +1149,10 @@
   <script src="js/app-model-data.js?v=media-routing-20260824-1"></script>
   <script src="js/app-model-picker.js?v=model-modules-20260823-2-panel-model-20261002-1-unified-chat-1"></script>
   <script src="js/app-model-capabilities.js?v=model-capability-inline-20260826-1"></script>
-  <script src="js/app-model-render.js?v=model-settings-20260930-1-panel-model-20261002-1-unified-chat-1"></script>
+  <script src="js/app-model-render.js?v=shared-chat-20261102"></script>
   <script src="js/app-models.js?v=single-composer-20261023-1-unified-chat-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=diagnostics-20261101"></script>
+  <script src="js/app-chat-state.js?v=shared-chat-20261102"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1193,18 +1193,18 @@
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=compact-tool-card-20261029-2"></script>
   <script src="js/app-agent.js?v=reflection-feed-20261029-2"></script>
-  <script src="js/app-messages.js?v=reflection-feed-20261029-1"></script>
+  <script src="js/app-messages.js?v=shared-chat-20261102"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=addressed-pending-20261027-1"></script>
-  <script src="js/app-chat-session.js?v=chat-demand-20261030-1"></script>
-  <script src="js/app-chat-composer.js?v=diagnostics-20261101"></script>
+  <script src="js/app-chat-session.js?v=shared-chat-20261102"></script>
+  <script src="js/app-chat-composer.js?v=shared-chat-20261102"></script>
   <script src="js/app-chat-inbox.js?v=chat-demand-20261030-1"></script>
   <script src="js/app-chat-run.js?v=terminal-progress-20261028-1"></script>
-  <script src="js/app-chat.js?v=diagnostics-20261101"></script>
+  <script src="js/app-chat.js?v=shared-chat-20261102"></script>
   <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
-  <script src="js/app-workspace-chat.js?v=message-window-20261029-1"></script>
+  <script src="js/app-workspace-chat.js?v=shared-chat-20261102"></script>
   <script src="js/app-plugins.js?v=right-sections-sent-20261024-1-shared-dock-1-project-shell-1-pane-header-20261025-1-annotate-action-1-annotation-followup-20261026-1-pane-resize-20261026-1"></script>
-  <script src="js/app-project-chats.js?v=diagnostics-20261101"></script>
+  <script src="js/app-project-chats.js?v=shared-chat-20261102"></script>
   <script src="js/app.js?v=diagnostics-20261101"></script>
 </body>
 </html>

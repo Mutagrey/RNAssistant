@@ -3,7 +3,7 @@
 Обновлено: 2026-11-02. Owner: Web presentation; визуальные решения утверждает
 пользователь. Canonical document tokens, компонентов и их повторного использования.
 Стратегия — [Architecture](UI_ARCHITECTURE.md), экраны — [Screen Map](UI_SCREEN_MAP.md).
-Направление Approved; конкретные production-изменения и первый срез Proposed.
+Направление Approved; продолжение общего chat-среза разрешено. Детали S1a In Review.
 
 ## Визуальная основа
 
@@ -21,6 +21,7 @@
 | Крестики и split icons меньше, область нажатия остаётся удобной | Approved — направление; точные размеры In Review |
 | Имя документа в topbar, конкретная компоновка настроек, responsive thresholds | In Review |
 | P3 production-чат в Dockview без повторного заголовка | In Review; iframe только Demo evidence |
+| S1a: общие подписи ввода, edit/reply/stop, reasoning и окно истории Office/Workspace/plugin | Реализовано, детали presentation In Review; не полная унификация capabilities |
 
 ## Источники tokens
 
@@ -74,6 +75,8 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 | [OperationView](../../web/data-templates/ui/operation-view.js) | Готовый presentation-only progress: create/render/dispose, callbacks cancel/dismiss; L1 candidate | Фактический snapshot; unknown total indeterminate, без таймерной симуляции |
 | [Questions](../../web/js/app-questions.js), [RunChanges](../../web/js/app-run-changes.js) | Общие conversation composites, пока domain-aware | awaiting/submitting/rejected/failed, owner/receipt сохраняются |
 | [WorkspaceChat](../../web/js/app-workspace-chat.js), [Messages](../../web/js/app-messages.js), composer | Уже общий domain UI Office/Workspace/plugin; не primitive UI Kit | single active owner, draft/scroll, keyed reconcile/live batching |
+| [Composer presentation](../../web/js/app-chat-composer.js), [reasoning control](../../web/js/app-model-render.js) | Один renderer состояний ввода и controls; owners передают факты и capabilities | idle/edit/awaiting reply/read-only/running/cancelling; не хранит второй draft |
+| [ConversationState](../../web/js/app-conversation-state.js), history buttons в Messages | Один cap 240 и prepend/refresh для обоих доменов; explicit latest bypass | stale page rejection, bounded data, reading anchor; durable history не обрезается |
 | [ChatInspector](../../web/js/app-chat-inspector.js) | Один domain view, настоящие context/capabilities/usage/run | Scope/generation, lazy detail, disclosure/focus, suspend |
 | [ModelContext](../../web/js/app-model-context.js) | Domain reader, сохранять существующие cache/abort/bounds | metadata → lazy body, retained views, stale guards |
 | [RNPlugin SDK](../../web/plugin-host/sdk.js) | Существующий Ready/command/files/results protocol; не новый SDK | L3 host, L2 browser adapter отдельно; permissions у host |
