@@ -9,6 +9,10 @@
     var dockStyle = document.createElement("link");
     dockStyle.rel = "stylesheet"; dockStyle.href = "/preview/docked-chat.css";
     document.head.appendChild(dockStyle);
+    // The frozen reference owns its outer Dockview; embed only the real chat DOM.
+    document.addEventListener("DOMContentLoaded", function () {
+      window.RNAssistantDockWorkspace.bind = function () {};
+    });
   }
   var fixtures = window.PrototypeFixtures;
   if (!fixtures) throw new Error("Preview fixtures are required before the mock bridge.");

@@ -123,10 +123,11 @@
       }
       renderSendControls();
       list.setAttribute("aria-label", "Сообщения чата");
+      if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.mount(owner);
       window.RNAssistantChatInspector.mount(owner);
       return changed;
     }
-    if (view.parentNode !== container) container.appendChild(view);
+    if (!window.RNAssistantDockWorkspace && view.parentNode !== container) container.appendChild(view);
     if (form.parentNode !== view) view.appendChild(form);
     form.classList.remove("is-dragging");
     if (changed && sharedComposer) sharedComposer.select(null);
@@ -136,6 +137,7 @@
     list.setAttribute("aria-label", "Сообщения чата");
     if (sharedComposer) sharedComposer.refresh();
     dispatch("input");
+    if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.mount(owner);
     window.RNAssistantChatInspector.mount(owner);
     return changed;
   }
@@ -244,6 +246,7 @@
       !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
   }
   function renderMessages(list, chat, emptyOptions, options) {
+    if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.canRenderConversation()) return;
     chat = chat || { messages: [], state: {} };
     var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
     if (changed) resetChatScrollTracking(list);
@@ -502,7 +505,7 @@
   }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
     mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
-    registerActions: registerActions, bindActions: bindActions,
+    registerActions: registerActions, bindActions: bindActions, refreshPresentation: function () { dispatch("refresh"); },
     canMessageAction: canMessageAction, messageAction: messageAction,
     startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
     currentMessageEdit: currentMessageEdit,

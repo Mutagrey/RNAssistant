@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Production Dockview по эталону Demo — 2026-11-02
+
+Owner: Web Shell/presentation. S1b размещает общий Office/Workspace/plugin chat и
+настоящий Inspector в одном Dockview. Shared DOM/drafts/history/receipts и runtime
+сохранены; старое Inspector grid/overlay/width и per-owner toggles удалены.
+После замечания пользователя оформление/компоновка берутся из завершённого P1/P2;
+описание перенесено в четыре canonical UI-docs, прежний UI_LAYOUT_UX — история.
+Результат проходит визуальное ревью; S2 автоматически не начинается.
+Проверки/измерения/ограничения и rollback — в [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md).
+Несколько одновременно открытых чатов, полная model/attachment/context parity,
+остальные Dockview screens и реальное Windows/Office evidence остаются открытыми.
+
 ## Общий чат: bounded history и composer presentation — 2026-11-02
 
 Owner: Web presentation. После commit аудита 119aff97 пользователь разрешил

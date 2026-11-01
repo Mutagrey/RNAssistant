@@ -61,7 +61,7 @@ function switchTab(name, options) {
   if (changed && active && active.id === "tab-settings" && typeof discardModelCatalogPreview === "function") {
     discardModelCatalogPreview();
   }
-  Array.prototype.slice.call(document.querySelectorAll(".section-rail [data-section]")).forEach(function (tab) {
+  Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     var selected = tab.dataset.section === section && (!tab.dataset.pluginId || window.RNAssistantPlugins.selectedId() === tab.dataset.pluginId);
     tab.classList.toggle("active", selected);
     if (selected) tab.setAttribute("aria-current", "page");
@@ -82,6 +82,7 @@ function switchTab(name, options) {
     refreshSplitPanes();
   }
   if (changed && window.RNAssistantDiagnostics) RNAssistantDiagnostics.onTabChange(name);
+  if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.onTabChange(name);
   if (!changed) return;
   if (name === "chat") {
     if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.show(options);
@@ -140,7 +141,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   scheduleFocusStateReport();
 
-  Array.prototype.slice.call(document.querySelectorAll(".section-rail [data-section]")).forEach(function (tab) {
+  Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     tab.addEventListener("click", function () {
       switchTab(tab.dataset.defaultTab || tab.dataset.tab);
     });
@@ -161,6 +162,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindSkillActions();
   bindProductNavSearches();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
+  window.RNAssistantDockWorkspace.bind();
   if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.bind();
   if (typeof initializeSplitPanes === "function") {
     initializeSplitPanes();

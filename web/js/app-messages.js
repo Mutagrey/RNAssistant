@@ -1237,6 +1237,7 @@ function scheduleLiveStreamRender(fullProjection) {
 }
 
 function renderStreamingMessages(outputOnly) {
+  if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.canRenderConversation()) return;
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   if (!officeTranscriptActive()) return;
   var live = renderedMessageUnits["live:agent-run"];
@@ -1260,6 +1261,7 @@ function renderStreamingMessages(outputOnly) {
 }
 
 function renderMessages(options) {
+  if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.canRenderConversation()) return;
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   if (!officeTranscriptActive()) return;
   options = options || {};

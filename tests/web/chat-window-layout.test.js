@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '../..');
 
 (async () => {
   const server = spawn('python3', ['-B', 'prototypes/serve_ui.py', '--port', '0'], {cwd:root});
+  server.stderr.resume();
   const address = await new Promise((resolve,reject) => {
     server.stdout.on('data', chunk => {
       const match=/RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(chunk));

@@ -294,6 +294,7 @@
 
     el("Context").textContent = project() ? "Проекты / " + project().name : "Проект не выбран";
     el("Title").textContent = active && active.state ? field(active.state, "title", "Title") : "Чат проекта";
+    if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.updateContext();
     updateControls();
     var fileNotice = active && fileNotices.get(chatRequestKey(projectId(), currentId()));
     el("FileStatus").textContent = fileNotice ? fileNotice.message : "";
@@ -381,6 +382,7 @@
     var startedAt = clock();
     if (projectId() !== workspaceId) { ++serial; selectedWorkspaceId = workspaceId; active = null; render(); }
     if (!project() || !project().available) return;
+    if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.show("conversation");
     var timing = window.RNAssistantPerformanceDiagnostics;
     var timingId = timing ? timing.beginNavigation(window.RNAssistantWorkspaceChat.owner() + "Chat") : null;
     var version = ++serial, pid = projectId();

@@ -3,7 +3,7 @@
 Обновлено: 2026-11-02. Owner: Web presentation; визуальные решения утверждает
 пользователь. Canonical document tokens, компонентов и их повторного использования.
 Стратегия — [Architecture](UI_ARCHITECTURE.md), экраны — [Screen Map](UI_SCREEN_MAP.md).
-Направление Approved; продолжение общего chat-среза разрешено. Детали S1a In Review.
+Направление Approved; продолжение общего chat-среза разрешено. S1b проходит визуальное ревью по эталону завершённого Demo.
 
 ## Визуальная основа
 
@@ -22,6 +22,49 @@
 | Имя документа в topbar, конкретная компоновка настроек, responsive thresholds | In Review |
 | P3 production-чат в Dockview без повторного заголовка | In Review; iframe только Demo evidence |
 | S1a: общие подписи ввода, edit/reply/stop, reasoning и окно истории Office/Workspace/plugin | Реализовано, детали presentation In Review; не полная унификация capabilities |
+
+## Эталон оболочки: завершённый Dockview Demo
+
+Пользователь уточнил 2026-11-02: **Demo — эталон стиля и компоновки Dockview**,
+и попросил перенести его описание в текущие документы. Основа — завершённые
+P1/P2 (`95afa3b8`, `3e2433c9`), после возврата оформления до A/B и уменьшения
+крестиков/кнопок. Это уточняет прежний статус «Approved — направление»:
+оболочку не переосмысляем заново. Приёмка её production-адаптации остаётся In Review.
+
+Источники переноса: исторические разделы [Оболочка](UI_LAYOUT_UX.md#оболочка),
+[Раскладки и состояние](UI_LAYOUT_UX.md#раскладки-и-состояние),
+[Проверка P2](UI_LAYOUT_UX.md#проверка-p2) и [журнал решений](UI_DECISIONS.md).
+Визуальные опоры: [P1 Shell](review/p1-shell.jpg),
+[P2 вкладки и действия](review/p2-tab-actions.jpg), [тема/акцент](review/p2-accent-dark.jpg).
+Фактические старые значения доступны в `prototypes/ui/tokens.css` и `ui.css`;
+источник новых production-значений — только `app-product-tokens.css`.
+
+- Верхняя полоса без бренда: слева документ/проект или название текущего раздела;
+  справа компактная группа navigation / Inspector / maximize, затем «Панели»,
+  «Компоновка», настройки. Отступы и иконки соответствуют reference.
+- Узкая вертикальная полоса разделов и отдельное дерево слева. У активного раздела
+  спокойная заливка и тонкий акцентный маркер. Дерево не является Dockview-группой.
+- Светлая нейтральная подложка, небольшие отступы вокруг рабочей области и между
+  группами, тонкие разделители, небольшие радиусы. Без новой A/B-палитры и без
+  плоской сетки S1b, которую пользователь отклонил.
+- Компактная строка вкладок. Название чата находится во вкладке; ниже остаются
+  полезные сведения о документе/проекте. Второй крупный заголовок чата не нужен.
+- Заголовок группы: «+», оригинальные Codicons справа/снизу, «⋯»; уменьшенный
+  крестик вкладки. «Закрыть группу» находится в меню, не дублирует крестик рядом.
+- «+» открывает **вкладку выбора с поиском**, а не прежнее popup-меню. Поведение
+  описано в [Screen Map](UI_SCREEN_MAP.md#команды-оболочки-s1b).
+- Нижняя строка сохраняет роль reference: источник/режим интерфейса, состав
+  компоновки, переход в диагностику. Mock обозначается только в preview;
+  успешность модели или Office по состоянию layout не выводится.
+- Содержимое сообщений, composer, подтверждения, материалы и настоящий Inspector
+  остаются production-компонентами. Статический Inspector P1 не переносится.
+
+Срез использует общий набор нейтральных цветов, исходные accent/theme controls,
+и `--shell-*` для размеров оболочки. Публичные `--dv-*` только связывают Dockview
+с этими tokens. [app-dock-workspace.css](../../web/css/app-dock-workspace.css)
+владеет размещением и оформлением Shell/Dockview, не заменяет feature CSS экранов.
+Размеры hit targets и знаков разделены; точные production breakpoints и поведение
+на реальной Office-панели ещё проверяются.
 
 ## Источники tokens
 
@@ -51,9 +94,9 @@ portable token entry, после чего host и standalone использую�
 
 Исторические снимки P2: [светлая тема](review/p2-settings.jpg),
 [тёмная с акцентом](review/p2-accent-dark.jpg), [tab controls](review/p2-tab-actions.jpg).
-P1/P2 значения остаются reference, а не автоматически принятыми production tokens.
-Малый адаптер close icon к Dockview 8.8.3 в Demo требует повторной проверки при
-переносе; не распространять его глубокие selectors на другие компоненты.
+P1/P2 оболочка выбрана пользователем эталоном; её значения перенесены в общие
+production tokens. Адаптер размера close icon ограничен Dockview 8.8.3 и повторно
+проверяется при обновлении vendor; другие компоненты от него не зависят.
 
 ## Каталог существующих компонентов
 
@@ -63,6 +106,7 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 
 | Компонент / источник | Повторное использование и граница | Состояния / lifecycle |
 |---|---|---|
+| [Dock Workspace](../../web/js/app-dock-workspace.js) | Одна production Shell/Dockview; descriptors conversation/inspector и временный chooser; не chat store | move/resize/close/restore, narrow, pending layout save, DOM lifecycle |
 | [Icons](../../web/js/app-icons.js), [accent](../../web/js/app-accent.js) | Общие уже сейчас; кандидаты L1 без Shell | Theme/size/accessible label у consumer; shared catalog |
 | Buttons/toolbar/forms/menu CSS: app-product-components, app-theme, app-composer | Сохранять привычные controls; извлечь затронутые rules, не копировать по views | default/hover/focus/pressed/disabled/invalid/loading |
 | [NavigationTree](../../web/js/app-navigation-tree.js) | Реальный общий renderer, options/callbacks + icons; L1 candidate | selected/expanded/filter/keyboard; unmount освобождает state |

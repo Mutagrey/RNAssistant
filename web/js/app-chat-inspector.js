@@ -5,21 +5,14 @@
   var icons = { context: "paperclip", abilities: "spark", usage: "chart", activity: "clock" };
   var view = "context";
   var open = false;
-  var width = 292;
-  var widthKey = "rnassistant.ui.inspector.width";
-  var openKey = "rnassistant.ui.inspector.open";
+  var visible = false;
   var abilitiesKey = "", abilities = null, abilitiesError = "", abilitiesGeneration = 0;
-  var inspectorTransitionTimer = null;
   var panelToggle = null;
-  var workspaceToggle = null, owner = "office", ownerPanels = {};
+  var owner = "office", ownerViews = {};
   var usageKey = "", usageSnapshot = null, usageError = "", usageRequest = null;
   var presentationChat = "", viewState = {};
   var activitySelection = null, activityFocusPending = false, returnFocus = null, returnFocusKey = "";
 
-  try {
-    width = Number(window.localStorage.getItem(widthKey)) || width;
-    open = window.localStorage.getItem(openKey) === "1";
-  } catch (error) { /* Presentation preferences are optional. */ }
 
   function node(tag, className, value) {
     var element = document.createElement(tag);
@@ -124,20 +117,15 @@
     return current.owner === "office" ? { chatId: current.chatId } :
       { owner: current.owner, workspaceId: current.workspaceId, sessionId: current.sessionId };
   }
-  function layoutNode() { return document.getElementById(owner === "office" ? "chatLayout" : "projectChatLayout"); }
-  function toggleNode() { return document.getElementById(owner === "office" ? "toggleChatInspectorButton" : "workspaceInspectorToggle"); }
+  function toggleNode() { return document.getElementById("toggleChatInspectorButton"); }
   function previewSurface() { return owner === "office" ? window.RNAssistantChatBrowser : owner === "plugin" && window.RNAssistantPlugins && window.RNAssistantPlugins.preview; }
   function mount(nextOwner) {
     if (nextOwner === owner) return;
-    ownerPanels[owner] = { open: open, view: view };
-    var previous = layoutNode();
-    previous.classList.remove("with-inspector", "inspector-transition");
+    ownerViews[owner] = view;
     cancelUsage(); abilitiesGeneration++; abilitiesKey = "";
     owner = nextOwner;
-    var saved = ownerPanels[owner];
-    open = !!(saved && saved.open); view = saved ? saved.view : "context";
+    view = ownerViews[owner] || "context";
     presentationChat = ""; viewState = {}; activitySelection = null; activityFocusPending = false; returnFocus = null;
-    layoutNode().append(document.getElementById("chatInspectorSplitter"), document.getElementById("chatInspector"));
     sync();
   }
 
@@ -556,7 +544,7 @@
   function render() {
     var panel = document.getElementById("chatInspector");
     var body = document.getElementById("chatInspectorBody");
-    if (!panel || !body || !open) return;
+    if (!panel || !body || !open || !visible) return;
     var current = source();
     if (presentationChat !== current.key) {
       presentationChat = current.key; viewState = {}; cancelUsage(); usageKey = ""; usageSnapshot = null;
@@ -608,52 +596,42 @@
   }
 
   function sync() {
-    var layout = layoutNode();
     var panel = document.getElementById("chatInspector");
-    var divider = document.getElementById("chatInspectorSplitter");
-    var toggle = toggleNode();
-    if (!layout || !panel || !divider || !toggle) return;
-    layout.classList.toggle("with-inspector", open);
-    setWidth(width, false, true);
-    panel.hidden = false;
-    panel.inert = !open;
-    panel.setAttribute("aria-hidden", String(!open));
-    divider.hidden = window.innerWidth <= 1100;
-    divider.inert = !open;
-    document.getElementById("contextMeter").setAttribute("aria-expanded", String(open && view === "usage" && owner === "office"));
+    if (!panel) return;
+    panel.inert = !visible;
+    panel.setAttribute("aria-hidden", String(!visible));
+    document.getElementById("contextMeter").setAttribute("aria-expanded", String(visible && view === "usage" && owner === "office"));
     if (panelToggle) panelToggle.sync();
-    if (workspaceToggle) workspaceToggle.sync();
-    if (owner === "plugin" && window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
-    if (open) render();
+    if (visible) render();
     syncSwitcher();
   }
 
-  function setOpen(value) {
-    if (open === !!value) return;
-    var layout = layoutNode();
-    clearTimeout(inspectorTransitionTimer);
-    if (layout) {
-      layout.classList.add("inspector-transition");
-      inspectorTransitionTimer = setTimeout(function () { layout.classList.remove("inspector-transition"); }, 280);
-    }
-    open = !!value;
+  function prepareOpen() {
     var preview = previewSurface();
-    if (open && preview) preview.hide();
-    if (!open) cancelUsage();
-    if (owner === "office") try { window.localStorage.setItem(openKey, open ? "1" : "0"); } catch (error) { /* Optional. */ }
+    if (preview) preview.hide();
+  }
+  function setOpen(value) {
+    if (!window.RNAssistantDockWorkspace) return;
+    if (value) window.RNAssistantDockWorkspace.show("inspector");
+    else window.RNAssistantDockWorkspace.close("inspector");
+  }
+  function onDockState(present, active) {
+    if (open === present && visible === active) return;
+    open = present; visible = active;
+    if (!visible) cancelUsage();
     sync();
   }
 
   function browserToggleOwner() {
     var preview = previewSurface();
-    return !open && preview && preview.hasSource();
+    return !visible && preview && preview.hasSource();
   }
 
   function syncSwitcher() {
     var switcher = document.getElementById("chatInspectorSwitcher");
     var browser = previewSurface();
     var preview = switcher.querySelector('[data-chat-inspector-view="preview"]');
-    var browserOpen = !open && browser && browser.isOpen();
+    var browserOpen = !visible && browser && browser.isOpen();
     var host = browserOpen
       ? document.querySelector((owner === "plugin" ? "#pluginPreviewMount" : "#chatBrowser") + " .preview-surface-section")
       : document.querySelector("#chatInspector .chat-inspector-head");
@@ -674,38 +652,6 @@
     });
   }
 
-  function widthBounds() {
-    var layout = layoutNode();
-    var available = layout ? layout.clientWidth : window.innerWidth;
-    return { min: 220, max: Math.max(220, Math.min(480, available - 330)) };
-  }
-
-  function setWidth(value, persist, layoutOnly) {
-    var layout = layoutNode(), bounds = widthBounds();
-    if (layoutOnly && layout && !layout.clientWidth) return;
-    var next = Math.max(bounds.min, Math.min(bounds.max, value));
-    // Responsive clamping changes the visible size, not the user's chosen width.
-    if (!layoutOnly) width = next;
-    if (layout) layout.style.setProperty("--inspector-width", next + "px");
-    window.RNAssistantSplitter.update(document.getElementById("chatInspectorSplitter"), next, bounds);
-    if (persist) try { window.localStorage.setItem(widthKey, String(width)); } catch (error) { /* Optional. */ }
-  }
-
-  function bindResize() {
-    var divider = document.getElementById("chatInspectorSplitter");
-    window.RNAssistantSplitter.bind(divider, {
-      getValue: function () {
-        var bounds = widthBounds(), value = width;
-        return Math.max(bounds.min, Math.min(bounds.max, value));
-      },
-      setValue: setWidth,
-      bounds: widthBounds,
-      defaultValue: function () { return 292; },
-      direction: -1,
-      enabled: function () { return open && window.innerWidth > 1100; }
-    });
-  }
-
   function openActivity(options, trigger) {
     var current = source();
     if (!options || !options.runId) return false;
@@ -717,7 +663,7 @@
     activityFocusPending = true;
     returnFocus = trigger || document.activeElement; returnFocusKey = current.key;
     view = "activity"; cancelUsage();
-    if (open) render(); else setOpen(true);
+    if (visible) render(); else setOpen(true);
     return true;
   }
 
@@ -726,12 +672,13 @@
     window.RNAssistantShellLayout.refresh();
     var focusTarget = returnFocus && returnFocus.isConnected && returnFocusKey === source().key
       ? returnFocus : toggleNode();
-    if (!focusTarget.getClientRects().length) focusTarget = toggleNode();
+    if (focusTarget.closest("#conversationView") && window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.show("conversation");
+    if (!focusTarget.getClientRects().length || focusTarget.closest("[inert]")) focusTarget = toggleNode();
     focusTarget.focus({ preventScroll: true });
   }
 
   function panelControls() { return browserToggleOwner() ? owner === "plugin" ? "pluginPreviewMount" : "chatBrowser" : "chatInspector"; }
-  function panelOpen() { return browserToggleOwner() ? previewSurface().isOpen() : open; }
+  function panelOpen() { return browserToggleOwner() ? previewSurface().isOpen() : visible; }
   function togglePanel(value) { if (browserToggleOwner()) previewSurface().setOpen(value); else setOpen(value); }
 
   function bind() {
@@ -740,19 +687,11 @@
       label: function (expanded) { return expanded ? "Свернуть боковую панель" : "Показать боковую панель"; },
       setOpen: togglePanel
     });
-    workspaceToggle = window.RNAssistantPanelToggle.bind(document.getElementById("workspaceInspectorToggle"), {
-      controls: panelControls, isOpen: panelOpen, setOpen: togglePanel,
-      label: function (expanded) { return expanded ? "Свернуть боковую панель" : "Показать боковую панель"; }
-    });
     document.querySelectorAll("[data-chat-inspector-view]").forEach(function (button) {
       // Menu icons already belong to index.html and app-icons; do not append a second SVG.
       button.setAttribute("role", "menuitemradio");
     });
     var panel = document.getElementById("chatInspector");
-    document.getElementById("closeChatInspectorButton").addEventListener("click", function () {
-      setOpen(false);
-      restoreFocus();
-    });
     panel.addEventListener("keydown", function (event) {
       if (event.key !== "Escape" || !open) return;
       var switcher = document.getElementById("chatInspectorSwitcher");
@@ -779,17 +718,11 @@
       view = button.dataset.chatInspectorView;
       if (view !== "usage") cancelUsage();
       document.getElementById("chatInspectorSwitcher").open = false;
-      if (!open) setOpen(true);
+      if (!visible) setOpen(true);
       else render();
       document.querySelector("#chatInspectorSwitcher summary").focus({ preventScroll: true });
     });
-    bindResize();
     window.addEventListener("pagehide", cancelUsage);
-    window.addEventListener("resize", function () {
-      clearTimeout(inspectorTransitionTimer);
-      layoutNode().classList.remove("inspector-transition");
-      sync();
-    });
     sync();
   }
 
@@ -805,8 +738,8 @@
     return item ? item.Status === "unavailable" ? "Недоступен" : "Подключён" : null;
   }
   window.RNAssistantChatInspector = { libraryCapabilityStatus: libraryCapabilityStatus, bind: bind, render: render, refreshLayout: sync, setOpen: setOpen, openActivity: openActivity,
-    mount: mount, target: target, isOpen: function () { return open; }, panelControls: panelControls, panelOpen: panelOpen, togglePanel: togglePanel,
+    mount: mount, target: target, isOpen: function () { return visible; }, prepareOpen: prepareOpen, onDockState: onDockState, panelControls: panelControls, panelOpen: panelOpen, togglePanel: togglePanel,
     syncToggle: function () { if (panelToggle) panelToggle.sync(); },
     syncSwitcher: syncSwitcher,
-    openUsage: function () { returnFocus = document.activeElement; returnFocusKey = source().key; view = "usage"; if (open) sync(); else setOpen(true); document.querySelector("#chatInspectorSwitcher summary").focus(); } };
+    openUsage: function () { returnFocus = document.activeElement; returnFocusKey = source().key; view = "usage"; if (visible) sync(); else setOpen(true); document.querySelector("#chatInspectorSwitcher summary").focus(); } };
 }());

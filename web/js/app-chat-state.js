@@ -49,6 +49,7 @@ function renderChatSessions() {
     subtitle = subtitle.concat([chatDocumentTitle(activeChat), chatHost(activeChat)].filter(Boolean));
   }
   $("activeChatSubtitle").textContent = subtitle.join(" · ");
+  if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.updateContext();
   $("documentNotice").classList.toggle("hidden", isCurrentDocument);
   $("openDocumentButton").hidden = isCurrentDocument || !chatDocumentPath(activeChat);
 

@@ -161,6 +161,7 @@ async function createDocumentChat(documentItem) {
 }
 
 async function selectChat(id) {
+  if (id && window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.show("conversation");
   if (!id || (id === state.activeChatId && !state.chatNavigationPending && activeChatUsesCurrentDocument())) {
     return;
   }

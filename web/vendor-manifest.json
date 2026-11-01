@@ -554,6 +554,23 @@
           "sha256": "ec9fb67dcb25eccc416ed56e1aab819222c805a2a4bfe4cb19e7556bf2ffde80"
         }
       ]
+    },
+    {
+      "id": "dockview-core",
+      "npmPackage": "dockview-core",
+      "version": "8.8.3",
+      "license": "MIT",
+      "npmTarball": "https://registry.npmjs.org/dockview-core/-/dockview-core-8.8.3.tgz",
+      "npmIntegrity": "sha512-B9v+ibiXnZ5qgFJ7VEqMcNxpG0S5Y7Yx7uuGqqSyEFSC3bRZktUoXWo3HCrFp+QTdFmA1dJD1ye/gI4yL3hU2g==",
+      "packageDependencies": {},
+      "browserRuntimeDependencies": [],
+      "licenseFiles": [
+        {
+          "path": "licenses/dockview-8.8.3/LICENSE",
+          "sha256": "1d56757fdc06c9b33c0f80821efe4f4b11960dd7fb6544232cff61752101f513"
+        }
+      ],
+      "gitHead": "6035014bca619c5aeb2076e13b8538bbc0a9ae6c"
     }
   ],
   "files": [
@@ -909,6 +926,13 @@
       "bytes": 5494801,
       "sha256": "a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f",
       "provenanceUrl": "https://unpkg.com/mermaid@12.2.0/dist/mermaid.min.js"
+    },
+    {
+      "path": "js/vendor/dockview-core.min.js",
+      "package": "dockview-core",
+      "bytes": 561173,
+      "sha256": "e4b6a433d5af93cef6bfcb456906844d1fc048679979dd2f540bce68b8488f55",
+      "provenanceUrl": "https://unpkg.com/dockview-core@8.8.3/dist/dockview-core.min.js"
     }
   ]
 }

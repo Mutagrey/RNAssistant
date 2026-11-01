@@ -272,11 +272,6 @@
     el('SurfaceSplitter').hidden=!visible;
     el('Workbench').hidden=!visible;
     layout.classList.toggle('plugin-surface-open',visible);
-    var toggle=document.getElementById('workspaceInspectorToggle');
-    var target=visible&&overlay?el('PreviewMount').querySelector('.preview-surface-panel-head'):
-      document.querySelector('#workspaceChatView .workspace-chat-head');
-    if(toggle.parentElement!==target){var focused=document.activeElement===toggle;target.appendChild(toggle);
-      if(focused)toggle.focus({preventScroll:true});}
     if(visible)setPluginWidth(pluginWidthPreference,false);
     syncRailSelection();
     syncPanelView();

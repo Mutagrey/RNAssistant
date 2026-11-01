@@ -1196,5 +1196,49 @@
         "carrierField": null
       }
     ]
+  },
+  {
+    "manifest": {
+      "formatVersion": 1,
+      "id": "dockview-core",
+      "version": "8.8.3",
+      "description": "dockview-core",
+      "source": "https://registry.npmjs.org/dockview-core/-/dockview-core-8.8.3.tgz",
+      "license": "MIT",
+      "licenses": [
+        "licenses/dockview-8.8.3/LICENSE"
+      ],
+      "files": [
+        {
+          "path": "dockview-core.min.js",
+          "sha256": "e4b6a433d5af93cef6bfcb456906844d1fc048679979dd2f540bce68b8488f55"
+        },
+        {
+          "path": "licenses/dockview-8.8.3/LICENSE",
+          "sha256": "1d56757fdc06c9b33c0f80821efe4f4b11960dd7fb6544232cff61752101f513"
+        }
+      ],
+      "entrypoints": [
+        {
+          "path": "dockview-core.min.js",
+          "kind": "Script"
+        }
+      ],
+      "dependencies": []
+    },
+    "sources": [
+      {
+        "path": "dockview-core.min.js",
+        "sourcePath": "js/vendor/dockview-core.min.js",
+        "sourceSha256": "e4b6a433d5af93cef6bfcb456906844d1fc048679979dd2f540bce68b8488f55",
+        "carrierField": null
+      },
+      {
+        "path": "licenses/dockview-8.8.3/LICENSE",
+        "sourcePath": "licenses/dockview-8.8.3/LICENSE",
+        "sourceSha256": "1d56757fdc06c9b33c0f80821efe4f4b11960dd7fb6544232cff61752101f513",
+        "carrierField": null
+      }
+    ]
   }
 ]

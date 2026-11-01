@@ -1,16 +1,30 @@
 # Current-to-target migration map
 
+## Production UI S1b — 2026-11-02
+
+Owner: Web Shell / DockWorkspace. Conversation и Inspector используют один Dockview;
+два DOM mounts живут с текущим global active owner. Temporary boundary: остальные
+root sections ещё размещает switchTab; HTML/plugin preview имеют прежние splitters.
+Removal gate: соответствующий функциональный срез перенёс всех consumers, сохранил
+lazy/deactivation, native frame identity и проверил old route aliases. После этого
+его прежние placement/CSS удаляются; постоянный dual path не вводится.
+Global IDs/active owner снимаются только S2 с полноценным view-scoping и проверкой
+exact session/receipt ownership; до этого simultaneous chat clones запрещены.
+Старые Inspector grid/overlay/width/open и перемещаемые header toggles удалены уже
+в S1b. [Scope/review/rollback](../ui/UI_MIGRATION_PLAN.md).
+
 ## Demo-only chat embedding — 2026-11-02
 
 Owner: Demo presentation (`prototypes/ui/`). Consumers: Dockview chat views.
 `chat-views.js` and `docked-chat.css` temporarily embed the existing product preview
-with its mock bridge; production sources stay unchanged. No second chat renderer
+with its mock bridge; the reference frame reuses production sources. No second chat renderer
 or runtime is introduced. Removal gate: replace or retire this visual prototype
 after explicit approval of the production phase; do not carry the iframe adapter
 into production. Scope and limits: [UI Layout / UX](../ui/UI_LAYOUT_UX.md).
 P3 is frozen at 4ea3d6e4 after the strategy transition; current migration gates
 are in [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md). Production has no dependency
-on this adapter; no new production migration adapter has been introduced yet.
+on this adapter; the production migration boundary is recorded above. The frozen reference shares
+the vendored asset and skips inner DockWorkspace binding in its mock-only frame.
 
 ## Compact multi-target patch — 2026-10-29
 

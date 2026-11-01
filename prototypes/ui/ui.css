@@ -9,8 +9,8 @@ button:hover, summary:hover { background: var(--surface-hover); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .demo-icon { width: 17px; height: 17px; flex-shrink: 0; vertical-align: middle; }
 .codicon-split { display: inline-block; background: currentColor; mask: var(--split-icon) center / contain no-repeat; -webkit-mask: var(--split-icon) center / contain no-repeat; }
-.split-right { --split-icon: url('vendor/codicons-split/split-horizontal.svg'); }
-.split-below { --split-icon: url('vendor/codicons-split/split-vertical.svg'); }
+.split-right { --split-icon: url('/preview/web/icons/codicons-split/split-horizontal.svg'); }
+.split-below { --split-icon: url('/preview/web/icons/codicons-split/split-vertical.svg'); }
 [hidden] { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .shell { width: 100%; height: 100%; max-width: var(--preview-width, 100%); margin: auto; display: flex; flex-direction: column; border-inline: 1px solid var(--border); }

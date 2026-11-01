@@ -34,10 +34,7 @@
     if (!bound) return;
     var layout = el("chatLayout"), overlay = overlayMode();
     layout.classList.toggle("browser-overlay", overlay);
-    var toggle = el("toggleChatInspectorButton");
-    var toggleTarget = open && overlay ? el("htmlWorkspacePreview").querySelector(".preview-surface-panel-head") :
-      document.querySelector("#chatDropZone > .chatbar .chatbar-actions");
-    if (toggleTarget && toggle.parentElement !== toggleTarget) toggleTarget.appendChild(toggle);
+
     layout.style.setProperty("--browser-width", Math.round(paneWidth()) + "px");
     el("chatBrowserSplitter").hidden = !open || overlay;
     window.RNAssistantSplitter.update(el("chatBrowserSplitter"), paneWidth(), bounds());

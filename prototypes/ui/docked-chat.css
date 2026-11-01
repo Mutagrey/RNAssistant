@@ -1,6 +1,6 @@
 /* Demo-only composition adapter for /preview/web/?dockChat=….
    The chat, messages, menus and composer keep their production CSS. */
-html[data-dock-chat] .app-shell { min-width: 0; }
+html[data-dock-chat] .app-shell { min-width: 0; display: block; border: 0; }
 html[data-dock-chat] .app-shell > :not(.content),
 html[data-dock-chat] .chat-workspace > :not(.chat-main),
 html[data-dock-chat] .chat-main > .chatbar { display: none !important; }

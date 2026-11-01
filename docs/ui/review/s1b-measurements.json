@@ -1,0 +1,161 @@
+{
+  "scope": "Chrome/macOS synthetic ready fixture; 1280x900; saved single conversation view, Inspector initially closed; 3 fresh pages; no Office/model calls",
+  "baseline": "fd474f91",
+  "method": "Same fixture and actions: readiness time, synchronous 20 Inspector open/close cycles, draft edit, one Workspace chat switch. Heap from performance.memory without forced GC; not RSS. Current runner: tests/web/dock-workspace-performance.test.js. Before samples captured before S1b changes.",
+  "summary": {
+    "readyMs": {
+      "before": {
+        "median": 238.19999980926514,
+        "min": 228.90000009536743,
+        "max": 249.39999961853027
+      },
+      "after": {
+        "median": 242.40000009536743,
+        "min": 236.7000002861023,
+        "max": 242.89999961853027
+      }
+    },
+    "inspector20CyclesMs": {
+      "before": {
+        "median": 35.5,
+        "min": 35,
+        "max": 36
+      },
+      "after": {
+        "median": 151.30000019073486,
+        "min": 150.5,
+        "max": 152.30000019073486
+      }
+    },
+    "heapBytes": {
+      "before": {
+        "median": 10863116,
+        "min": 9953888,
+        "max": 10863356
+      },
+      "after": {
+        "median": 14176049,
+        "min": 14125829,
+        "max": 14180605
+      }
+    },
+    "finalDomNodes": {
+      "before": {
+        "median": 2171,
+        "min": 2171,
+        "max": 2171
+      },
+      "after": {
+        "median": 2252,
+        "min": 2252,
+        "max": 2252
+      }
+    }
+  },
+  "before": [
+    {
+      "cold": 249.39999961853027,
+      "cycles": {
+        "ms": 36,
+        "before": 2151,
+        "after": 2173
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2171,
+      "identity": true,
+      "heap": 10863356,
+      "errors": []
+    },
+    {
+      "cold": 238.19999980926514,
+      "cycles": {
+        "ms": 35.5,
+        "before": 2151,
+        "after": 2173
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2171,
+      "identity": true,
+      "heap": 9953888,
+      "errors": []
+    },
+    {
+      "cold": 228.90000009536743,
+      "cycles": {
+        "ms": 35,
+        "before": 2151,
+        "after": 2173
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2171,
+      "identity": true,
+      "heap": 10863116,
+      "errors": []
+    }
+  ],
+  "after": [
+    {
+      "cold": 242.40000009536743,
+      "cycles": {
+        "ms": 150.5,
+        "before": 2233,
+        "after": 2255
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2252,
+      "identity": true,
+      "heap": 14180605,
+      "errors": []
+    },
+    {
+      "cold": 236.7000002861023,
+      "cycles": {
+        "ms": 152.30000019073486,
+        "before": 2233,
+        "after": 2255
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2252,
+      "identity": true,
+      "heap": 14176049,
+      "errors": []
+    },
+    {
+      "cold": 242.89999961853027,
+      "cycles": {
+        "ms": 151.30000019073486,
+        "before": 2233,
+        "after": 2255
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2252,
+      "identity": true,
+      "heap": 14125829,
+      "errors": []
+    }
+  ]
+}

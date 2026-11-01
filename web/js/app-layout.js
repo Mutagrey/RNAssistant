@@ -41,7 +41,7 @@
     shell.classList.toggle("navigation-closed", !open);
     var button = document.getElementById("productMobileMenuButton");
     if (navigationToggle) navigationToggle.sync();
-    shell.querySelectorAll(".split-layout[data-default-left] > .splitter:not(.chat-inspector-splitter)").forEach(function (handle) {
+    shell.querySelectorAll(".split-layout[data-default-left] > .splitter").forEach(function (handle) {
       handle.hidden = mode === "single";
     });
     var active = shell.querySelector(".panel.active .global-nav");
@@ -50,7 +50,7 @@
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
     }
-    var main = shell.querySelector(".panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content)");
+    var main = shell.querySelector(".panel.active :is(.chat-dock-host, .chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content)");
     if (main) main.inert = mode === "single" && open;
     var rail = shell.querySelector(".section-rail");
     if (rail) {
@@ -191,7 +191,7 @@
 
   function navigationBounds(layout) {
     var available = layout.getBoundingClientRect().width || Math.max(0, window.innerWidth - 52);
-    var minimum = Math.max(240, numberAttr(layout, "data-min-left", 180));
+    var minimum = Math.max(180, numberAttr(layout, "data-min-left", 180));
     return { min: minimum, max: Math.max(minimum, Math.min(460, available - 280)) };
   }
 

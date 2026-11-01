@@ -1,0 +1,111 @@
+/* One production Shell; existing section content stays under its current owner. */
+.shell.app-shell { display: grid; grid-template-columns: var(--shell-rail-width) minmax(0, 1fr); grid-template-rows: var(--shell-top-height) minmax(0, 1fr) var(--shell-status-height); border-inline: 1px solid var(--line); background: var(--canvas); }
+.shell > .workspace-topbar { grid-column: 1 / -1; grid-row: 1; }
+.shell > .section-rail { grid-column: 1; grid-row: 2; height: 100%; padding: 8px 3px; gap: 8px; background: var(--surface-subtle); }
+.shell > .section-rail .rail-button { position: relative; width: 36px; min-height: 36px; padding: 8px; border-radius: var(--shell-radius); }
+.shell > .section-rail .rail-button[aria-current="page"] { background: var(--surface-selected); box-shadow: none; }
+.shell > .section-rail .rail-button[aria-current="page"]::before { content: ""; position: absolute; left: -3px; width: 2px; height: 20px; border-radius: 1px; background: var(--accent); }
+.shell > .section-rail > [data-section="diagnostics"] { margin-top: auto; }
+.shell > .content { grid-column: 2; grid-row: 2; min-height: 0; }
+.workspace-topbar { display: flex; align-items: center; gap: 24px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface-subtle); color: var(--ink-muted); z-index: 30; }
+.workspace-context { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; color: var(--ink); font-size: 12px; font-weight: 500; }
+#workspaceContextIcon { display: flex; color: var(--accent); }
+#workspaceContextIcon svg { width: 17px; height: 17px; }
+#workspaceSectionTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.workspace-topbar-actions, .workspace-view-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.workspace-panel-controls { display: flex; align-items: center; gap: 1px; padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--line); }
+.workspace-topbar .icon-btn, .workspace-topbar .rail-settings { flex: 0 0 var(--shell-control); display: grid; place-items: center; width: var(--shell-control); height: var(--shell-control); min-height: var(--shell-control); padding: 5px; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); }
+.workspace-topbar .icon-btn:hover, .workspace-topbar .rail-settings:hover, .workspace-menu-button:hover { color: var(--ink); background: var(--surface-hover); }
+.workspace-topbar .icon-btn svg, .workspace-topbar .rail-settings svg { width: 17px; height: 17px; }
+.workspace-menu-button { display: flex; align-items: center; gap: 6px; height: var(--shell-control); padding: 0 8px; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); font-size: 12px; }
+.workspace-menu-button svg { width: 17px; height: 17px; }
+.shell .workspace-topbar .product-mobile-menu-button { position: static; flex-shrink: 0; }
+.workspace-topbar [hidden] { display: none !important; }
+.workspace-statusbar { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-top: 1px solid var(--line); background: var(--surface-subtle); color: var(--ink-muted); font-size: 11px; }
+#workspaceLayoutStatus { margin-left: auto; }
+#workspaceLayoutNotice { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
+.workspace-statusbar button { display: flex; align-items: center; gap: 5px; height: 100%; padding: 0 0 0 6px; border: 0; background: transparent; color: inherit; font-size: inherit; }
+.workspace-statusbar svg { width: 13px; height: 13px; }
+.chat-dock-host { grid-column: 3; grid-row: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 4px 4px 0 0; overflow: hidden; background: var(--canvas); }
+.chat-dock { width: 100%; height: 100%; }
+.shell.navigation-closed .chat-dock-host { padding-left: 4px; }
+.dock-view, .dock-conversation { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
+.shell #tab-chat .dock-conversation > .chat-main { width: 100%; height: 100%; min-height: 0; }
+.shell #tab-chat .dock-conversation > .chat-main[hidden] { display: none !important; }
+.shell #tab-chat .dock-conversation .chatbar { flex-basis: 33px; min-height: 33px; padding: 0 12px !important; }
+.dock-conversation #activeChatTitle, .dock-conversation #projectChatTitle { display: none; }
+.shell .chat-inspector-head { flex-basis: 33px; min-height: 33px; padding: 0 12px; }
+.shell .chat-inspector { background: var(--surface); }
+.rna-product-dock {
+  --dv-group-view-background-color: var(--surface);
+  --dv-tabs-and-actions-container-background-color: var(--surface-subtle);
+  --dv-tabs-and-actions-container-height: var(--shell-tab-height);
+  --dv-tabs-and-actions-container-font-size: 12px;
+  --dv-tab-font-size: 12px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--surface);
+  --dv-activegroup-visiblepanel-tab-color: var(--accent);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--surface-subtle);
+  --dv-activegroup-hiddenpanel-tab-color: var(--ink-muted);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--surface);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--ink);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--surface-subtle);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--ink-muted);
+  --dv-tab-divider-color: var(--line);
+  --dv-tab-border-radius: 0;
+  --dv-tab-margin: 0;
+  --dv-separator-border: var(--line);
+  --dv-active-sash-color: var(--accent);
+  --dv-sash-color: var(--canvas);
+  --dv-icon-hover-background-color: var(--surface-hover);
+  --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  --dv-drag-over-border: 1px solid var(--accent);
+  --dv-border-radius: var(--shell-radius);
+  --dv-scrollbar-background-color: var(--line-strong);
+  --dv-tabs-container-scrollbar-color: var(--ink-muted);
+  --dv-overlay-z-index: 20;
+}
+/* Version-pinned adapter for Dockview's bundled tab close control. */
+.rna-product-dock .dv-default-tab-action { width: 20px; height: 20px; }
+.rna-product-dock .dv-default-tab-action .dv-svg { width: var(--shell-tab-close); height: var(--shell-tab-close); color: var(--ink-muted); }
+.dock-group-actions { display: flex; align-items: center; gap: 1px; padding: 0 3px; }
+.dock-group-actions .icon-btn { width: var(--shell-group-action); height: var(--shell-group-action); padding: 4px; border-radius: var(--shell-radius); }
+.dock-group-actions .icon-btn svg, .dock-split-icon { width: 14px; height: 14px; }
+.dock-split-icon { display: block; background: currentColor; mask: var(--split-icon) center / contain no-repeat; }
+.split-right { --split-icon: url('../icons/codicons-split/split-horizontal.svg'); }
+.split-below { --split-icon: url('../icons/codicons-split/split-vertical.svg'); }
+.dock-chooser { position: fixed; z-index: 100; display: grid; gap: 4px; width: 300px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); color: var(--ink); }
+.dock-chooser > strong { font-size: 12px; font-weight: 500; padding: 4px; }
+.dock-chooser > button { display: flex; gap: 8px; width: 100%; height: auto; min-height: 34px; padding: 7px; font-size: 12px; text-align: left; }
+.dock-chooser > button svg { flex: none; width: 16px; height: 16px; }
+.dock-chooser small { margin-left: auto; font-size: 10px; color: var(--ink-muted); }
+.dock-chooser p { margin: 6px 4px 2px; font-size: 11px; color: var(--ink-muted); line-height: 1.5; }
+.dock-empty { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 10px; width: 100%; height: 100%; color: var(--ink-muted); }
+.dock-empty > p { flex: 0 0 100%; text-align: center; font-size: 12px; }
+.dock-empty > button { display: flex; gap: 6px; width: auto; padding: 6px 12px; font-size: 12px; }
+@media (max-width: 620px) {
+  .shell.app-shell { grid-template-columns: minmax(0, 1fr); }
+  .shell > .content { grid-column: 1; }
+  .shell.navigation-open > .section-rail { top: var(--shell-top-height); height: calc(100% - var(--shell-top-height) - var(--shell-status-height)); padding-top: 8px; }
+  .shell.navigation-single #tab-chat .chat-workspace { grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important; }
+  .shell .chat-dock-host { grid-column: 3 !important; }
+  .shell.navigation-single.navigation-open .chat-dock-host { visibility: hidden; }
+  .shell.navigation-open .panel.active .global-nav { top: var(--shell-top-height); height: calc(100% - var(--shell-top-height) - var(--shell-status-height)); }
+}
+
+.dock-screen-chooser { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 24px; overflow: auto; color: var(--ink); background: var(--surface); }
+.dock-screen-chooser-body { width: min(100%, 440px); }
+.dock-screen-chooser h2 { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
+.dock-screen-chooser input { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--shell-radius); background: var(--surface); color: var(--ink); font-size: 12px; }
+.dock-screen-list { display: grid; gap: 6px; margin-top: 12px; }
+.dock-screen-list button { display: flex; gap: 8px; width: 100%; height: auto; min-height: 36px; padding: 8px; border: 1px solid var(--line); border-radius: var(--shell-radius); font-size: 12px; text-align: left; }
+.dock-screen-list button[hidden] { display: none; }
+.dock-screen-list svg { width: 17px; height: 17px; }
+.dock-screen-chooser p { font-size: 11px; line-height: 1.6; color: var(--ink-muted); margin: 14px 0 0; }
+.dock-action-menu { width: 248px; padding: 4px; gap: 0; border-radius: var(--shell-radius); }
+.dock-action-menu > button { min-height: 32px; padding: 7px 8px; border-radius: var(--shell-radius); }
+@media (max-width: 760px) {
+  .workspace-topbar { gap: 8px; padding-inline: 8px; }
+  .workspace-menu-button > span, .workspace-statusbar button > span, #workspaceLayoutStatus { display: none; }
+  .workspace-menu-button { width: 28px; padding: 5px; }
+  .workspace-statusbar button { margin-left: auto; }
+}

@@ -26,13 +26,44 @@ Package сохраняются как история/evidence. Их старые
 storage contracts остаются в domain docs из [README](../README.md).
 Новые документы про SDK, компоненты или performance отдельно пока не нужны.
 
+## S1b: фактическая граница переноса
+
+Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)
+размещает существующие `chatDropZone` / `workspaceChatView` как один `conversation`
+и существующий `chatInspector`. Одни messages/chatForm/input, один активный owner.
+Прототипный iframe не является production dependency. Shell reference перенесён
+в [Design System](UI_DESIGN_SYSTEM.md#эталон-оболочки-завершённый-dockview-demo),
+команды — в [Screen Map](UI_SCREEN_MAP.md#команды-оболочки-s1b).
+
+Dockview — единственный владелец групп, вкладок, split, maximize и serialization.
+Старые Inspector grid/overlay/splitter, width/open preference и перенос двух
+кнопок между chat/preview headers удалены. Навигационный splitter и ещё не
+перенесённые HTML/plugin preview splitters остаются до их среза.
+`switchTab` размещает остальные sections той же Shell, временная граница описана
+в [Migration Map](../stabilization/MIGRATION_MAP.md).
+
+Два bounded views сохраняют свои DOM nodes: renderer `always` выбран только для
+них, не как глобальная политика. Закрытие паркует узел, а не уничтожает controller,
+черновик или run. Listener компонента Dockview удаляется на dispose. На скрытом
+conversation transcript paint откладывается; возвращение применяет актуальное
+состояние и восстанавливает scroll/follow position того же exact owner/chat.
+Фоновый mount не открывает скрытый чат. Inspector отменяет lazy usage request
+при deactivation; resize не вызывает повторный render или bridge read.
+Chooser — обычный дешёвый view без retained domain data. Полный view-scoping
+глобального chat renderer остаётся S2; дубли экземпляров запрещены.
+
+Опора lifecycle: [Dockview rendering API](https://dockview.dev/docs/core/panels/rendering/).
+Локальная pinned версия 8.8.3, лицензия/provenance и hashes включены в существующие
+vendor manifests. Demo использует тот же файл; второго loader нет. Host проектов
+уже включает `web/**`, C# project/bridge/runtime/storage не менялись.
+
 ## Фактический аудит
 
 | Область | Что существует | Следствие для переноса |
 |---|---|---|
 | Production entry | Один [web/index.html](../../web/index.html), 7 корневых tab-секций; 116 внешних script-тегов и 43 stylesheet-тега | Это подсчёт подключений, не замер загрузки и не причина переписывать приложение |
 | Host | [AssistantPaneControl](../../src/RNAssistant.Office/WebView/AssistantPaneControl.cs) + [AssistantWebBridge](../../src/RNAssistant.Office/WebView/AssistantWebBridge.cs); Desktop и Office shells используют этот UI | Не создавать Office UI и Desktop/Workspace UI отдельно; host boundaries сохраняются |
-| Shell/navigation | [switchTab](../../web/js/app.js), [ShellLayout/splitters](../../web/js/app-layout.js), [PanelToggle](../../web/js/app-panel-toggle.js), rail/popovers | Dockview в production пока нет; текущий route switch содержит render/deactivation side effects |
+| Shell/navigation | [switchTab](../../web/js/app.js), [ShellLayout/splitters](../../web/js/app-layout.js), [PanelToggle](../../web/js/app-panel-toggle.js), rail/popovers | S1b: app-dock-workspace владеет conversation/inspector placement; route switch ещё сохраняет side effects остальных sections |
 | Office/Workspace/plugin chat | Один messages, chatForm и chatInput; [WorkspaceChat.mount](../../web/js/app-workspace-chat.js) перемещает существующие узлы между owners office/project/plugin | Уже есть общий UI. Клонирование DOM создаст конфликт глобальных IDs и состояния |
 | Data owners | Office: [chat-session](../../web/js/app-chat-session.js), [chat-state](../../web/js/app-chat-state.js), [inbox](../../web/js/app-chat-inbox.js). Workspace: [project-chats](../../web/js/app-project-chats.js), Application [WorkspaceConversationService](../../src/RNAssistant.Application/Workspace/WorkspaceConversationService.cs) | Различия target/receipts допустимы; не заменять их универсальным UI-store |
 | Общие conversation rules | [ConversationState](../../web/js/app-conversation-state.js), [ConversationInput](../../web/js/app-conversation-input.js), [ConversationObserver](../../web/js/app-conversation-observer.js), [RunViewState](../../web/js/app-run-view-state.js) | Повторно использовать identity, revision, receipt и stale-response guards |
@@ -50,7 +81,7 @@ chatForm.data-owner project → office при единственном chatForm 
 
 | ID | Наблюдение / доказательство | Решение |
 |---|---|---|
-| UI-01 | Demo [tokens.css](../../prototypes/ui/tokens.css) и production [app-product-tokens.css](../../web/css/app-product-tokens.css) имеют разные значения и имена | Production palette — исходная база; перенести согласованные shell-токены, затем убрать runtime-зависимость от Demo tokens |
+| UI-01 | Demo [tokens.css](../../prototypes/ui/tokens.css) и production [app-product-tokens.css](../../web/css/app-product-tokens.css) имеют разные значения и имена | S1b переносит reference-палитру и shell-токены в app-product-tokens; production не зависит от Demo tokens |
 | UI-02 | .composer/.messages оформляются в app-composer/app-chat и переопределяются в app-product-screens/app-responsive; старые aliases остаются в app.css/app-product-tokens | Каскад не равен двум приложениям, но ответственность размыта. Консолидировать только затронутые компоненты, удаляя заменённые selectors |
 | UI-03 | Размещение сейчас распределено между app-layout, ChatInspector, ChatBrowser, plugin preview и switchTab | Workspace/Dockview получает размещение; виды сохраняют контент/lifecycle. Навигация вызывает один маршрут команд |
 | UI-04 | Global state.activeChatId, один activeOwner, глобальные DOM IDs и renderer cache | Первый срез — один живой conversation view. Несколько одновременных чатов требуют отдельного среза scoping; копии UI запрещены |
@@ -59,7 +90,7 @@ chatForm.data-owner project → office при единственном chatForm 
 | UI-07 | Разные generation/serial counters и active snapshots в Office/Workspace; общий observer уже есть | Убирать только доказанное дублирование presentation, сохраняя domain-specific binding/receipt semantics |
 | UI-08 | Data Templates [browser.css](../../web/data-templates/styles/browser.css) имеет собственные standalone defaults, host передаёт appearance | Общие tokens/API нужны для реальных двух consumers; не ломать standalone режим и не строить SDK заранее |
 | UI-09 | P3 iframe может сбросить mock-переписку при пересоздании; две ошибки MutationObserver в browser log не локализованы | Ограничение Demo, не доказанный production-дефект и не основание править runtime |
-| UI-10 | Один DOM composer имел разных владельцев labels/edit/reply/stop/reasoning; модель и вложения всё ещё подключены по-разному | S1a объединяет presentation и bounds, но не закрывает полную parity. Следом — единые model/context/attachment capabilities и размещение; domain identity/receipts сохраняются |
+| UI-10 | Один DOM composer имел разных владельцев labels/edit/reply/stop/reasoning; модель и вложения всё ещё подключены по-разному | S1a объединяет presentation и bounds, но не закрывает полную parity. S1b объединяет размещение; следующий срез — единые model/context/attachment capabilities. Domain identity/receipts сохраняются |
 
 NavigationTree + TreeAdapter — компонент и resource adapter, не два дерева.
 Office и Workspace — разные domain owners общего UI, не обязательно дубли.

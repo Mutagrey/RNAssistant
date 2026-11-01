@@ -1,16 +1,16 @@
 /* One visual palette for the prototype and every product screen. */
 :root, .theme-preview-light {
   color-scheme: light;
-  --canvas: #eef0ef;
+  --canvas: #eef0f2;
   --surface: #ffffff;
-  --surface-subtle: #f7f8f7;
-  --surface-hover: color-mix(in srgb, var(--accent) 2%, #eff1ef);
-  --surface-selected: color-mix(in srgb, var(--accent) 5%, #edf0ee);
-  --ink: #252b28;
-  --ink-muted: #68716c;
+  --surface-subtle: #f7f8f9;
+  --surface-hover: #e8edf0;
+  --surface-selected: color-mix(in srgb, var(--accent) 8%, #f4f8f7);
+  --ink: #263238;
+  --ink-muted: #69777e;
   --ink-faint: #7a837e;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2368736b' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --line: #e2e6e3;
+  --line: #dce2e5;
   --line-strong: #c9d0cc;
   --palette-green: #35684b;
   --palette-blue: #355fba;
@@ -61,11 +61,19 @@
   --radius: 10px;
   --radius-lg: 16px;
   --control: 34px;
-  --nav-width: 310px;
+  --nav-width: 224px;
+  /* Approved Demo shell proportions; one canonical production token source. */
+  --shell-top-height: 40px;
+  --shell-rail-width: 44px;
+  --shell-status-height: 24px;
+  --shell-tab-height: 34px;
+  --shell-radius: 6px;
+  --shell-control: 28px;
+  --shell-tab-close: 10px;
+  --shell-group-action: 25px;
   --page-header-height: 52px;
   --page-inset: 18px;
   --list-width: 250px;
-  --inspector-width: 292px;
   --user-bubble-bg: color-mix(in srgb, var(--accent) 8%, var(--surface));
   --user-bubble-text: color-mix(in srgb, var(--accent) 25%, var(--ink));
   --shimmer: #ffffffb3;
@@ -77,16 +85,16 @@
 }
 html[data-theme="dark"], .theme-preview-dark {
   color-scheme: dark;
-  --canvas: #16181b;
-  --surface: #202328;
-  --surface-subtle: #1b1e22;
-  --surface-hover: color-mix(in srgb, var(--accent) 3%, #2a2f34);
+  --canvas: #151a1e;
+  --surface: #21262b;
+  --surface-subtle: #1c2126;
+  --surface-hover: #2b343c;
   --surface-selected: color-mix(in srgb, var(--accent) 8%, #2b3035);
-  --ink: #e5e7e8;
-  --ink-muted: #a8afb4;
+  --ink: #e0e6e9;
+  --ink-muted: #9ba9b2;
   --ink-faint: #99a2a8;
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a5b0a4' stroke-width='1.55' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --line: #353a3f;
+  --line: #343d45;
   --line-strong: #515960;
   --accent: #9bc8a5;
   --accent-hover: color-mix(in srgb, var(--accent) 82%, white);

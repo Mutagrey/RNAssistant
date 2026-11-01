@@ -2,7 +2,7 @@
 
 Обновлено: 2026-11-02. Owner: Web presentation; согласование карты/scope — пользователь.
 Стратегия и продолжение общего chat-среза разрешены пользователем. S1a реализован
-и передан на визуальное ревью; S1b — перенос общего view в Dockview.
+и сохранён в fd474f91; S1b реализован и проходит визуальное ревью по эталону Demo.
 Canonical план последовательности, проверки, baseline, rollback и удаления.
 Границы — [Architecture](UI_ARCHITECTURE.md); маршруты — [Screen Map](UI_SCREEN_MAP.md).
 
@@ -79,7 +79,7 @@ storage: 300 сообщений / 23 MiB, прежний input scan 128 ms, но
 
 | Метрика | Доступный механизм | Статус |
 |---|---|---|
-| Cold startup / chat open / switch | RNAssistantPerformanceDiagnostics, existing client timings | Instrumentation есть; актуальный before S1 ещё не снят |
+| Cold startup / chat open / switch | RNAssistantPerformanceDiagnostics, existing client timings | Browser before/after S1b ниже; реальный Office startup открыт |
 | First streamed paint / long tasks / DOM nodes / JS heap | Existing diagnostics + целевой browser trace/fixture | Before/after нужен; не подменять backend/model timing |
 | Metadata/body calls и duplicate operations | Существующие mock/bridge observers и tests | До/после один сценарий, один owner |
 | Repeated open/close: listeners, timers, pending operations, retained DOM/leases | Targeted lifecycle checks + heap/DOM observation | Общего точного счётчика всех listeners сейчас нет; evidence собирать по изменяемым owners |
@@ -155,12 +155,16 @@ Inspector в одном Dockview**, внутри текущей production Shell
 нужно сделать view-scoped отдельным срезом. Ограничение видно в chooser; новые
 области не предлагают ложную копию чата.
 
-Минимальные предполагаемые файлы: web/index.html, app.js, app-layout.js,
-app-workspace-chat.js, app-chat-inspector.js; один тематический app-workspace
-Dockview adapter; затронутые production tokens/navigation/screens CSS и vendor
-manifest/package entry. Точный diff уточняется после утверждения карты.
-Новые C# contracts, bridge/storage/model changes не нужны для размещения views;
-если аудит реализации выявит необходимость — scope пересогласовывается.
+Реализованы Shell/topbar/statusbar, один DockWorkspace, два существующих DOM views,
+вкладка выбора, перенос/размер/maximize, group-local close, пресеты и сохранение.
+Старые Inspector placement/width/overlay и per-owner toggles удалены. Plugin/HTML
+preview сохраняют свои владельцы и общий верхний контрол. Никаких новых C#,
+bridge/storage/model contracts. Все изменения среза — static UI, assets и docs.
+
+По замечанию пользователя плоская первая оболочка S1b отклонена. Реализация
+приведена к P1/P2 reference: [перенесённое описание](UI_DESIGN_SYSTEM.md#эталон-оболочки-завершённый-dockview-demo),
+[команды](UI_SCREEN_MAP.md#команды-оболочки-s1b). Старый popup «+» заменён
+согласованной вкладкой выбора; тема/акцент остаются в реальных настройках.
 
 Критерии S1: фактическая отправка/stream/stop/confirmation/receipt semantics прежние;
 draft не теряется при owner switch, move, hide/reopen; старый ответ не попадает в
@@ -173,7 +177,7 @@ draft не теряется при owner switch, move, hide/reopen; старый
 
 | Срез | Содержание | Что удаляется после проверки |
 |---|---|---|
-| S1a / S1b | Общие chat rules (S1a на ревью), затем Chat workspace + Inspector placement, Office и Workspace вместе | Дубли composer presentation удалены; далее старый grid/split/open-width path этих областей. Остальные splitters пока нужны |
+| S1a / S1b | Общие chat rules и production Chat workspace + Inspector реализованы; визуальное ревью S1b по эталону Demo | Дубли composer presentation и старый Inspector grid/split/open-width удалены. Остальные splitters пока нужны |
 | S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
 | S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
 | S4 | Library/VBA/settings/project navigation; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
@@ -204,5 +208,53 @@ P3 iframe adapter остаётся только в замороженном Demo
 условие удаления старого switchTab placement — переключение последнего его
 consumer с проверкой старых route aliases и deactivation side effects.
 
-**Текущее ревью:** поведение общего чата S1a. Следом — перенос этого же view и
-Inspector в Dockview по S1b, без одновременных экземпляров чата и второго UI.
+## Проверка S1b и визуальное ревью
+
+Сравнение на Chrome/macOS, одинаковый ready fixture, 1280×900, один начальный чат
+и закрытый Inspector (в S1b сохранён single-view preset), по три свежих страницы.
+Before — fd474f91 до изменений; after — текущий S1b.
+Медианы/разброс и raw samples сохраняются в [browser measurements](review/s1b-measurements.json).
+`dock-workspace-performance.test.js` повторяет fixture: boot, 20 циклов Inspector,
+черновик, открытие одного Workspace-чата. JS heap — приблизительный `performance.memory`,
+без forced GC; это не RSS и не доказательство отсутствия всех утечек.
+
+| Метрика, медиана (диапазон) | До | После |
+|---|---|---|
+| Готовность fixture, мс | 238,2 (228,9–249,4) | 242,4 (236,7–242,9) |
+| 20 открытий/закрытий Inspector, мс | 35,5 (35–36) | 151,3 (150,5–152,3) |
+| JS heap после переключения, MB | 10,86 (9,95–10,86) | 14,18 (14,13–14,18) |
+| DOM после переключения | 2171 | 2252 |
+
+Это цена нового Dockview: локальный bundle 561 KB, около 3,3 MB дополнительного
+измеренного heap и 5,8 мс на цикл открытия/закрытия. Начальная готовность остаётся
+в прежнем диапазоне трёх проб; ускорение или отсутствие регрессии на Windows не
+заявляются. После 20 циклов retained DOM увеличивается на те же 22 узла Inspector
+в обеих версиях; запросы данных и identity composer/transcript не меняются.
+
+Проверки среза: dock-workspace (настоящий pointer drag, клавиатурный размер группы,
+chooser/search/Enter, close/restore, тот же DOM/draft/selection/scroll, скрытый paint,
+узкий/широкий режим), chat-inspector, workspace-chat-layout/shared-draft/progress,
+chat-window-layout, chat-composer-layout и vendor-gate. Старые assertions размещения
+переключены на Dockview; domain/send/retry/receipt assertions сохранены.
+Resize не пересоздаёт Inspector; изменения layout не делают domain reads.
+Один project switch сохраняет один getProjectChats и один getProjectChat.
+
+Реальные Office/WebView2, browser zoom Windows, COM и native frame positioning
+не квалифицированы этой проверкой. Браузерная ширина проверяет адаптацию;
+полная memory qualification и несколько независимых чатов остаются открытыми.
+
+Ревью: [production preview](http://127.0.0.1:8897/product-preview.html?review=dock-s1b).
+1. Сравнить Shell с [эталоном P2](review/p2-tab-actions.jpg): пропорции, вкладки,
+   topbar, меню группы; содержимое чата остаётся production.
+2. Нажать «+» или область справа/снизу: найти Инспектор, открыть через Enter,
+   перетащить вкладку; «⋯ → Закрыть группу» не затрагивает соседнюю группу.
+3. Написать черновик, закрыть/вернуть чат через «Панели», переключить Office/Workspace.
+4. Сузить окно: выбранная вкладка сохраняется; затем восстановить широкое окно.
+
+[Office](review/s1b-chat-office.png), [узкий вид](review/s1b-chat-narrow.png),
+[Workspace](review/s1b-chat-workspace.png) — локальный production UI на mock bridge.
+Результат In Review. S2 не начинается автоматически.
+Откат — revert атомарного UI-среза. Layout keys `rnassistant.ui.dock.s1.v1`
+и `.saved` не мигрируют durable chat data; старые Inspector width/open keys больше
+не читаются. Замороженному P3 понадобилось лишь обновить ссылки на общий vendor и
+пропустить внутренний Dockview в preview-frame, чтобы не получить вложенную Shell.

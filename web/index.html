@@ -52,20 +52,33 @@
   <link rel="stylesheet" href="css/app-agent.css?v=aligned-feed-20261029-5">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20261030-1">
-  <link rel="stylesheet" href="css/app-product-tokens.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=diagnostics-20261101">
+  <link rel="stylesheet" href="css/app-product-tokens.css?v=dock-s1b-20261102">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=dock-s1b-20261102">
   <link rel="stylesheet" href="css/app-product-components.css?v=v8-lab-20261030-2">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=shared-chat-20261102">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=dock-s1b-20261102">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
-  <link rel="stylesheet" href="css/app-chat-browser.css?v=annotate-hover-20261024-1-request-layout-2-pane-header-20261025-1">
+  <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-s1b-20261102">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-20261101">
+  <link rel="stylesheet" href="css/app-dock-workspace.css?v=dock-s1b-20261102">
 </head>
 <body>
   <div class="shell app-shell">
-    <button class="product-mobile-menu-button" id="productMobileMenuButton"></button>
+    <header class="workspace-topbar" aria-label="Управление рабочей областью">
+      <div class="workspace-context"><span id="workspaceContextIcon" aria-hidden="true"></span><span id="workspaceSectionTitle">Рабочая область</span></div>
+      <div class="workspace-topbar-actions">
+        <div class="workspace-panel-controls"><button class="product-mobile-menu-button" id="productMobileMenuButton"></button>
+          <button type="button" class="panel-toggle" id="toggleChatInspectorButton"></button>
+          <button type="button" class="icon-btn" id="workspaceMaximize" aria-label="Развернуть группу" title="Развернуть группу"><svg data-rna-icon="fit" aria-hidden="true"></svg></button>
+        </div>
+        <div class="workspace-view-actions" id="workspaceViewActions">
+          <button type="button" class="workspace-menu-button" id="workspacePanels" aria-label="Панели" title="Панели" aria-haspopup="dialog"><svg data-rna-icon="layers" aria-hidden="true"></svg><span>Панели</span></button>
+          <button type="button" class="workspace-menu-button" id="workspaceLayout" aria-label="Компоновка" title="Компоновка" aria-haspopup="menu"><svg data-rna-icon="panel" aria-hidden="true"></svg><span>Компоновка</span></button>
+        </div>
+      </div>
+    </header>
     <nav class="section-rail" aria-label="Разделы ассистента">
       <button class="rail-button active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg data-rna-icon="home" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" data-section="artifacts" data-tab="artifacts" aria-label="Материалы" title="Материалы"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -78,9 +91,10 @@
       <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
+    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
     <main class="content">
       <section class="panel active" id="tab-chat">
-        <div class="chat-workspace split-layout" id="chatLayout" data-default-left="310" data-min-left="240">
+        <div class="chat-workspace split-layout" id="chatLayout" data-default-left="224" data-min-left="180">
           <aside class="chat-sidebar global-nav" aria-label="Документы и чаты">
             <div class="chat-sidebar-head product-search-heading">
               <details class="panel-switcher chat-scope-switcher product-nav-heading" id="chatScopeSwitcher"><summary aria-label="Раздел рабочей области"><span id="chatScopeIcon" aria-hidden="true"></span><span>Документы Office</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
@@ -101,9 +115,7 @@
             <strong id="activeChatTitle">Новый чат</strong>
             <span id="activeChatSubtitle"></span>
           </div>
-          <div class="chatbar-actions">
-            <button id="toggleChatInspectorButton"></button>
-          </div>
+          <div class="chatbar-actions"></div>
         </div>
         <div class="document-notice hidden" id="documentNotice">
           <span>Документ закрыт или не подключён: чат, HTML и локальные инструменты доступны. Для работы с Office откройте документ и выберите чат повторно.</span>
@@ -241,10 +253,8 @@
         </form>
 
           </div>
-          <div class="splitter chat-inspector-splitter" id="chatInspectorSplitter" role="separator" aria-orientation="vertical" aria-label="Ширина боковой панели" aria-controls="chatInspector" hidden></div>
           <aside class="chat-inspector" id="chatInspector" aria-label="Боковая панель чата" hidden>
             <div class="chat-inspector-head">
-              <button type="button" class="chat-inspector-back icon-btn" id="closeChatInspectorButton" aria-label="Вернуться к чату" title="Вернуться к чату"><svg data-rna-icon="left" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
               <details class="panel-switcher chat-inspector-switcher" id="chatInspectorSwitcher">
                 <summary aria-label="Раздел боковой панели" aria-haspopup="menu"><span id="chatInspectorViewTitle">Контекст</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
                 <div class="popover-menu" role="menu" aria-label="Раздел боковой панели">
@@ -262,7 +272,7 @@
           <div class="splitter chat-browser-splitter" id="chatBrowserSplitter" role="separator" aria-orientation="vertical" aria-controls="chatBrowser" aria-label="Ширина браузера" tabindex="0"></div>
           <aside class="chat-browser" id="chatBrowser" aria-label="Предпросмотр HTML" aria-hidden="true"><div class="chat-browser-frame-mount" id="chatBrowserFrameMount"></div></aside>
         </div>
-        <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="310" data-min-left="240" hidden>
+        <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="224" data-min-left="180" hidden>
           <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
             <div class="chat-sidebar-head product-search-heading">
               <details class="panel-switcher chat-scope-switcher product-nav-heading" id="projectScopeSwitcher"><summary aria-label="Раздел рабочей области"><span data-project-scope-icon aria-hidden="true"></span><span>Проекты</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
@@ -274,7 +284,7 @@
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину дерева проектов"></div>
           <div class="chat-main project-chat-main workspace-chat-view" id="workspaceChatView">
-            <div class="chatbar workspace-chat-head"><div class="chat-title-block" id="projectChatTitleBlock"><span id="projectChatContext">Проект не выбран</span><strong id="projectChatTitle">Чат проекта</strong></div><button type="button" class="panel-toggle" id="workspaceInspectorToggle" aria-label="Показать боковую панель" aria-controls="chatInspector" aria-expanded="false"><svg data-rna-icon="panel" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div>
+            <div class="chatbar workspace-chat-head"><div class="chat-title-block" id="projectChatTitleBlock"><span id="projectChatContext">Проект не выбран</span><strong id="projectChatTitle">Чат проекта</strong></div></div>
             <div class="workspace-chat-notice" id="workspaceChatNotice" role="status" aria-live="polite"></div>
             <div class="chat-scroll-region" id="workspaceChatTranscriptMount"></div>
             <div class="workspace-chat-control" id="workspaceChatControl" hidden><div class="workspace-chat-pending" id="workspaceChatPending"></div><button type="button" id="workspaceChatApprove">Разрешить</button><button type="button" id="workspaceChatReject">Отклонить</button></div>
@@ -1123,8 +1133,8 @@
   <script src="js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=effect-facts-20261029-1"></script>
-  <script src="js/app-layout.js?v=diagnostics-20261101"></script>
-  <script src="js/app-chat-inspector.js?v=diagnostics-20261101"></script>
+  <script src="js/app-layout.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-chat-inspector.js?v=dock-s1b-20261102"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
@@ -1152,7 +1162,7 @@
   <script src="js/app-model-render.js?v=shared-chat-20261102"></script>
   <script src="js/app-models.js?v=single-composer-20261023-1-unified-chat-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=shared-chat-20261102"></script>
+  <script src="js/app-chat-state.js?v=dock-s1b-20261102"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1175,7 +1185,7 @@
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1"></script>
   <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1"></script>
-  <script src="js/app-chat-browser.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1-annotation-surface-20261026-1-pane-resize-20261026-1"></script>
+  <script src="js/app-chat-browser.js?v=dock-s1b-20261102"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
   <script src="js/app-model-context.js?v=diagnostics-20261101"></script>
   <script src="js/app-context-meter.js?v=diagnostics-20261101"></script>
@@ -1193,18 +1203,20 @@
   <script src="js/app-agent-approval.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-changes.js?v=compact-tool-card-20261029-2"></script>
   <script src="js/app-agent.js?v=reflection-feed-20261029-2"></script>
-  <script src="js/app-messages.js?v=shared-chat-20261102"></script>
+  <script src="js/app-messages.js?v=dock-s1b-20261102"></script>
   <script src="js/app-reasoning.js?v=chat-projection-20260907-1"></script>
   <script src="js/app-attachments.js?v=addressed-pending-20261027-1"></script>
-  <script src="js/app-chat-session.js?v=shared-chat-20261102"></script>
+  <script src="js/app-chat-session.js?v=dock-s1b-20261102"></script>
   <script src="js/app-chat-composer.js?v=shared-chat-20261102"></script>
   <script src="js/app-chat-inbox.js?v=chat-demand-20261030-1"></script>
   <script src="js/app-chat-run.js?v=terminal-progress-20261028-1"></script>
   <script src="js/app-chat.js?v=shared-chat-20261102"></script>
   <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
-  <script src="js/app-workspace-chat.js?v=shared-chat-20261102"></script>
-  <script src="js/app-plugins.js?v=right-sections-sent-20261024-1-shared-dock-1-project-shell-1-pane-header-20261025-1-annotate-action-1-annotation-followup-20261026-1-pane-resize-20261026-1"></script>
-  <script src="js/app-project-chats.js?v=shared-chat-20261102"></script>
-  <script src="js/app.js?v=diagnostics-20261101"></script>
+  <script src="js/app-workspace-chat.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-plugins.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-project-chats.js?v=dock-s1b-20261102"></script>
+  <script src="js/vendor/dockview-core.min.js"></script>
+  <script src="js/app-dock-workspace.js?v=dock-s1b-20261102"></script>
+  <script src="js/app.js?v=dock-s1b-20261102"></script>
 </body>
 </html>

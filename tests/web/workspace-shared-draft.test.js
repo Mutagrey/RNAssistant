@@ -42,10 +42,10 @@ const root = path.resolve(__dirname, '../..');
     await page.locator('#chatPlanButton').click();
     await page.locator('#chatReasoningToggle').click();
     await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
-    await page.locator('#projectChatTitle').waitFor({state:'visible'});
+    await page.locator('[data-tab-panel-id=conversation]').waitFor({state:'visible'});
     assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('#workspaceChatView').length,
       document.querySelectorAll('#chatForm').length, document.querySelector('#workspaceChatView').dataset.testIdentity,
-      document.querySelector('#workspaceChatView').parentElement.id]), [1, 1, viewIdentity, 'projectChatLayout'],
+      document.querySelector('#workspaceChatView').parentElement.id]), [1, 1, viewIdentity, 'conversationView'],
       'project and plugin mount the same view and composer');
     assert.deepEqual(await page.evaluate(() => ['composerAddPicker', 'chatModelPicker', 'chatPlanButton',
       'chatReasoningToggle'].map(id => document.querySelectorAll('#' + id).length)), [1, 1, 1, 1],

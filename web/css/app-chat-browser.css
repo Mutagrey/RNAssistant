@@ -5,7 +5,6 @@
 .shell #tab-chat .chat-workspace.with-browser>.chat-browser-splitter:not([hidden]){display:block}
 .shell #tab-chat .chat-browser{position:relative;grid-column:5;grid-row:1;min-width:0;min-height:0;overflow:hidden;visibility:hidden;opacity:0;background:var(--surface)}
 .shell #tab-chat .chat-workspace.with-browser>.chat-browser{visibility:visible;opacity:1}
-.shell #tab-chat .chat-workspace.with-browser>.chat-inspector,.shell #tab-chat .chat-workspace.with-browser>.chat-inspector-splitter{display:none}
 .chat-browser-frame-mount{height:100%;min-height:0}
 .chat-browser-frame-mount>.html-workspace-preview{height:100%;min-height:0}
 .preview-surface-actions>#chatBrowserExpand[hidden]{display:none}
@@ -33,7 +32,8 @@
   .shell #tab-chat .chat-workspace.browser-transition>.chat-browser{transition:opacity 160ms ease,visibility 0s linear 220ms}
   .shell #tab-chat .chat-workspace.browser-transition.with-browser>.chat-browser{transition:opacity 160ms ease,visibility 0s}
 }
-.shell #tab-chat .chat-workspace.with-browser.browser-overlay{position:relative;grid-template-columns:var(--split-left,var(--nav-width)) 1px minmax(0,1fr) 0px 0px}
+.shell #tab-chat .chat-workspace.browser-overlay{position:relative}
+.shell #tab-chat .chat-workspace.with-browser.browser-overlay{grid-template-columns:var(--split-left,var(--nav-width)) 1px minmax(0,1fr) 0px 0px}
 .shell.navigation-closed #tab-chat .chat-workspace.with-browser.browser-overlay{grid-template-columns:0px 0px minmax(0,1fr) 0px 0px!important}
 .shell #tab-chat .chat-workspace.browser-overlay>.chat-browser-splitter{display:none!important}
 .shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{position:absolute;grid-column:auto;grid-row:auto;z-index:12;top:0;right:0;bottom:0;width:calc(100% - var(--split-left,var(--nav-width)) - 1px);border-left:1px solid var(--line);box-shadow:-12px 0 30px #142a151a;transform:translateX(100%)}

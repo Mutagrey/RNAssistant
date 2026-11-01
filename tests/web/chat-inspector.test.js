@@ -21,6 +21,7 @@ const { chromium } = require("playwright");
     const errors = []; page.on("pageerror", error => { errors.push(error.message); console.error(error.message); });
     await page.goto(address + "preview/web/?scenario=ready");
     await page.waitForFunction(() => state.activeChatId === "preview-chat" && !state.initializePromise);
+    await page.evaluate(() => RNAssistantChatInspector.setOpen(false));
     await page.locator("#toggleChatInspectorButton").click();
     const view = async name => {
       await page.locator("#chatInspectorSwitcher summary").click();
@@ -153,7 +154,11 @@ const { chromium } = require("playwright");
       RNAssistantChatInspector.render();
     });
     await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
-    await page.setViewportSize({ width: 420, height: 780 }); await screenshot("activity-narrow-dark");
+    await page.setViewportSize({ width: 420, height: 780 });
+    await page.waitForFunction(() => document.querySelectorAll(".dock-group-actions").length === 1 &&
+      !document.getElementById("chatInspector").inert);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await screenshot("activity-narrow-dark");
     assert.equal(await page.locator("#chatInspectorBody").evaluate(n => n.scrollWidth > n.clientWidth + 1), false);
     await page.locator(".chat-inspector-step-detail > summary").last().focus();
     await page.keyboard.press("Enter");
