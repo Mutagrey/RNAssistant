@@ -28,7 +28,7 @@
 .workspace-statusbar svg { width: 13px; height: 13px; }
 .chat-dock-host { grid-column: 3; grid-row: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 4px 4px 0 0; overflow: hidden; background: var(--canvas); }
 .chat-dock { width: 100%; height: 100%; }
-.shell.navigation-closed .chat-dock-host { padding-left: 4px; }
+.shell:is(.navigation-closed, .navigation-overlay) .chat-dock-host { padding-left: 4px; }
 .dock-view, .dock-conversation { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
 .shell #tab-chat .dock-conversation > .chat-main { width: 100%; height: 100%; min-height: 0; }
 .shell #tab-chat .dock-conversation > .chat-main[hidden] { display: none !important; }
@@ -67,7 +67,7 @@
 /* Version-pinned adapter for Dockview's bundled tab close control. */
 .rna-product-dock .dv-default-tab-action { width: 20px; height: 20px; }
 .rna-product-dock .dv-default-tab-action .dv-svg { width: var(--shell-tab-close); height: var(--shell-tab-close); color: var(--ink-muted); }
-.dock-group-actions { display: flex; align-items: center; gap: 1px; padding: 0 3px; }
+.dock-group-actions { --control: var(--shell-group-action); display: flex; align-items: center; gap: 1px; padding: 0 3px; }
 .dock-group-actions .icon-btn { width: var(--shell-group-action); height: var(--shell-group-action); padding: 4px; border-radius: var(--shell-radius); }
 .dock-group-actions .icon-btn svg, .dock-split-icon { width: 14px; height: 14px; }
 .dock-split-icon { display: block; background: currentColor; mask: var(--split-icon) center / contain no-repeat; }
@@ -82,15 +82,6 @@
 .dock-empty { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 10px; width: 100%; height: 100%; color: var(--ink-muted); }
 .dock-empty > p { flex: 0 0 100%; text-align: center; font-size: 12px; }
 .dock-empty > button { display: flex; gap: 6px; width: auto; padding: 6px 12px; font-size: 12px; }
-@media (max-width: 620px) {
-  .shell.app-shell { grid-template-columns: minmax(0, 1fr); }
-  .shell > .content { grid-column: 1; }
-  .shell.navigation-open > .section-rail { top: var(--shell-top-height); height: calc(100% - var(--shell-top-height) - var(--shell-status-height)); padding-top: 8px; }
-  .shell.navigation-single #tab-chat .chat-workspace { grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important; }
-  .shell .chat-dock-host { grid-column: 3 !important; }
-  .shell.navigation-single.navigation-open .chat-dock-host { visibility: hidden; }
-  .shell.navigation-open .panel.active .global-nav { top: var(--shell-top-height); height: calc(100% - var(--shell-top-height) - var(--shell-status-height)); }
-}
 
 .dock-screen-chooser { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 24px; overflow: auto; color: var(--ink); background: var(--surface); }
 .dock-screen-chooser-body { width: min(100%, 440px); }

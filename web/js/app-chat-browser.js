@@ -16,7 +16,7 @@
   function current() { return sameBinding(previewOwner().binding()); }
   function availableWidth() {
     var layout = el("chatLayout"), navigation = layout.querySelector(".chat-sidebar");
-    var nav = window.RNAssistantShellLayout && window.RNAssistantShellLayout.isNavigationOpen()
+    var nav = window.RNAssistantShellLayout && window.RNAssistantShellLayout.occupiesSpace()
       ? navigation.getBoundingClientRect().width + 1 : 0;
     return Math.max(0, layout.clientWidth - nav);
   }

@@ -1,6 +1,5 @@
 /* One authored HTML preview can live beside the shared Office ChatView. */
-.shell #tab-chat .chat-workspace.with-browser{grid-template-columns:var(--split-left,var(--nav-width)) 1px minmax(0,1fr) 1px var(--browser-width,420px)}
-.shell.navigation-closed #tab-chat .chat-workspace.with-browser{grid-template-columns:0px 0px minmax(0,1fr) 1px var(--browser-width,420px)!important}
+.shell #tab-chat .chat-workspace.with-browser{grid-template-columns:var(--navigation-column) var(--navigation-divider) minmax(0,1fr) 1px var(--browser-width,420px)}
 .shell #tab-chat .chat-browser-splitter{display:none;grid-column:4;grid-row:1}
 .shell #tab-chat .chat-workspace.with-browser>.chat-browser-splitter:not([hidden]){display:block}
 .shell #tab-chat .chat-browser{position:relative;grid-column:5;grid-row:1;min-width:0;min-height:0;overflow:hidden;visibility:hidden;opacity:0;background:var(--surface)}
@@ -33,11 +32,9 @@
   .shell #tab-chat .chat-workspace.browser-transition.with-browser>.chat-browser{transition:opacity 160ms ease,visibility 0s}
 }
 .shell #tab-chat .chat-workspace.browser-overlay{position:relative}
-.shell #tab-chat .chat-workspace.with-browser.browser-overlay{grid-template-columns:var(--split-left,var(--nav-width)) 1px minmax(0,1fr) 0px 0px}
-.shell.navigation-closed #tab-chat .chat-workspace.with-browser.browser-overlay{grid-template-columns:0px 0px minmax(0,1fr) 0px 0px!important}
+.shell #tab-chat .chat-workspace.with-browser.browser-overlay{grid-template-columns:var(--navigation-column) var(--navigation-divider) minmax(0,1fr) 0px 0px}
 .shell #tab-chat .chat-workspace.browser-overlay>.chat-browser-splitter{display:none!important}
-.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{position:absolute;grid-column:auto;grid-row:auto;z-index:12;top:0;right:0;bottom:0;width:calc(100% - var(--split-left,var(--nav-width)) - 1px);border-left:1px solid var(--line);box-shadow:-12px 0 30px #142a151a;transform:translateX(100%)}
-.shell.navigation-closed #tab-chat .chat-workspace.browser-overlay>.chat-browser{width:100%}
+.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{position:absolute;grid-column:auto;grid-row:auto;z-index:12;top:0;right:0;bottom:0;width:calc(100% - var(--navigation-column) - var(--navigation-divider));border-left:1px solid var(--line);box-shadow:-12px 0 30px #142a151a;transform:translateX(100%)}
 .shell #tab-chat .chat-workspace.browser-overlay.with-browser>.chat-browser{transform:translateX(0)}
 @media(prefers-reduced-motion:no-preference){.shell #tab-chat .chat-workspace.browser-overlay.browser-transition>.chat-browser{transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 160ms ease,visibility 0s linear 220ms}.shell #tab-chat .chat-workspace.browser-overlay.browser-transition.with-browser>.chat-browser{transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 160ms ease,visibility 0s}}
 @media(max-width:620px){.shell #tab-chat .chat-workspace.browser-overlay>.chat-browser{width:100%}.chat-browser .preview-surface-actions>.button{max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}

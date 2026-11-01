@@ -52,6 +52,13 @@ conversation transcript paint откладывается; возвращение
 Chooser — обычный дешёвый view без retained domain data. Полный view-scoping
 глобального chat renderer остаётся S2; дубли экземпляров запрещены.
 
+Навигация также перенесена по поведению Demo: один ShellLayout управляет wide/overlay,
+rail repeat, scrim/Escape, выбором экрана и широким предпочтением. Старые проверки
+820/620 px и fullscreen-дерево удалены; feature content breakpoints остаются у экранов.
+Общий Tree сообщает о принятом выборе, не знает Shell и не держит второй state.
+Dockview скрывает самостоятельную группу Inspector без dispose/повторного mount;
+смешанная и единственная видимая группы защищены от случайного скрытия.
+
 Опора lifecycle: [Dockview rendering API](https://dockview.dev/docs/core/panels/rendering/).
 Локальная pinned версия 8.8.3, лицензия/provenance и hashes включены в существующие
 vendor manifests. Demo использует тот же файл; второго loader нет. Host проектов

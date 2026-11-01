@@ -115,19 +115,11 @@ document.addEventListener("DOMContentLoaded", function () {
     var creationMenu = event.target.closest(".product-create-menu, .product-material-menu");
     if (creationMenu && event.target.closest("button")) {
       creationMenu.removeAttribute("open");
-      if (creationMenu.classList.contains("product-create-menu") && window.innerWidth <= 620) setMobileNavigationOpen(false);
     }
     var officeMenu = document.querySelector(".chat-office-launch-list[open]");
     if (officeMenu && !event.target.closest(".chat-office-launch-list") && !officeMenu.contains(event.target)) {
       officeMenu.open = false;
       state.officeHostLaunchOpen = false;
-    }
-    var treeItem = event.target.closest(".global-nav [role='treeitem']");
-    var treeControl = event.target.closest(".navigation-tree-expander, .tree-action");
-    if (window.innerWidth <= 820 && document.querySelector(".shell").classList.contains("navigation-open") &&
-        (event.target.closest(".global-nav .dt-tabs button") ||
-          (treeItem && !treeControl))) {
-      setMobileNavigationOpen(false);
     }
   });
   ["focusin", "focusout", "selectionchange", "mouseup", "keyup"].forEach(function (name) {
@@ -143,7 +135,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     tab.addEventListener("click", function () {
-      switchTab(tab.dataset.defaultTab || tab.dataset.tab);
+      RNAssistantShellLayout.selectSection(function () { switchTab(tab.dataset.defaultTab || tab.dataset.tab); }, tab.getAttribute("aria-current") === "page");
     });
   });
 

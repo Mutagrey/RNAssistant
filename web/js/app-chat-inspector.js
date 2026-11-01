@@ -616,6 +616,7 @@
     else window.RNAssistantDockWorkspace.close("inspector");
   }
   function onDockState(present, active) {
+    if (panelToggle) panelToggle.sync();
     if (open === present && visible === active) return;
     open = present; visible = active;
     if (!visible) cancelUsage();
@@ -679,12 +680,12 @@
 
   function panelControls() { return browserToggleOwner() ? owner === "plugin" ? "pluginPreviewMount" : "chatBrowser" : "chatInspector"; }
   function panelOpen() { return browserToggleOwner() ? previewSurface().isOpen() : visible; }
-  function togglePanel(value) { if (browserToggleOwner()) previewSurface().setOpen(value); else setOpen(value); }
+  function togglePanel(value) { if (browserToggleOwner()) previewSurface().setOpen(value); else window.RNAssistantDockWorkspace.toggleTools(); }
 
   function bind() {
     panelToggle = window.RNAssistantPanelToggle.bind(document.getElementById("toggleChatInspectorButton"), {
       controls: panelControls, isOpen: panelOpen,
-      label: function (expanded) { return expanded ? "Свернуть боковую панель" : "Показать боковую панель"; },
+      label: function (expanded) { return browserToggleOwner() ? expanded ? "Свернуть боковую панель" : "Показать боковую панель" : window.RNAssistantDockWorkspace.inspectorToggleLabel(); },
       setOpen: togglePanel
     });
     document.querySelectorAll("[data-chat-inspector-view]").forEach(function (button) {

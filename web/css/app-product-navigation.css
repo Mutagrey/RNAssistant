@@ -33,17 +33,21 @@
 .shell > .content { min-width: 0; height: 100%; }
 .shell > .content > .panel { padding: 0; overflow: hidden; }
 .shell > .content > .panel.active { background: var(--surface); color: var(--ink); font-family: var(--font); }
-@media (min-width: 621px) {
-  .shell.navigation-open > .content > .panel.active .split-layout[data-default-left]:not(.chat-workspace) { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) !important; }
-  .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left]:not(.chat-workspace) { grid-template-columns: 0px 0px minmax(0, 1fr) !important; }
-  .shell.navigation-closed > .content > .panel.active .global-nav { visibility: hidden; opacity: 0; pointer-events: none; overflow: hidden; }
-  .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left] > .splitter { visibility: hidden; opacity: 0; pointer-events: none; width: 0; min-width: 0; }
-  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 3 !important; }
-}
+/* Navigation columns have one owner; preview layouts consume these values too. */
+.shell .split-layout[data-default-left] { --navigation-column: var(--split-left, var(--nav-width)); --navigation-divider: 1px; }
+.shell.navigation-closed .split-layout[data-default-left],
+.shell.navigation-overlay .split-layout[data-default-left] { --navigation-column: 0px; --navigation-divider: 0px; }
+.shell .panel.active .split-layout[data-default-left]:not(.chat-workspace) { display: grid; grid-template-columns: var(--navigation-column) var(--navigation-divider) minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr); }
+.shell .panel.active :is(.instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 3 !important; grid-row: 1; min-width: 0; }
+.shell.navigation-closed .panel.active .global-nav { visibility: hidden; opacity: 0; pointer-events: none; }
+.shell:is(.navigation-closed, .navigation-overlay) .global-nav + .splitter { display: none !important; }
+.shell.navigation-overlay .panel.active .global-nav { position: fixed; top: var(--shell-top-height); bottom: var(--shell-status-height); left: calc(var(--shell-rail-width) + 1px); z-index: 25; width: min(var(--split-left, var(--nav-width)), calc(100% - var(--shell-rail-width) - 20px)); height: auto; max-height: none; box-shadow: var(--shadow); border-right: 1px solid var(--line); }
+.shell .navigation-scrim { position: fixed; inset: var(--shell-top-height) 1px var(--shell-status-height) calc(var(--shell-rail-width) + 1px); z-index: 24; padding: 0; border: 0; border-radius: 0; background: #0003; }
+.shell .navigation-scrim[hidden] { display: none; }
 @media (prefers-reduced-motion: no-preference) {
-  .shell.navigation-transition > .content > .panel.active .split-layout[data-default-left] { transition: grid-template-columns var(--motion-duration) var(--motion-ease); }
-  .shell.navigation-transition > .content > .panel.active .global-nav { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s linear var(--motion-duration); }
-  .shell.navigation-transition.navigation-open > .content > .panel.active .global-nav { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s; }
+  .shell.navigation-wide.navigation-transition > .content > .panel.active .split-layout[data-default-left] { transition: grid-template-columns var(--motion-duration) var(--motion-ease); }
+  .shell.navigation-wide.navigation-transition > .content > .panel.active .global-nav { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s linear var(--motion-duration); }
+  .shell.navigation-wide.navigation-transition.navigation-open > .content > .panel.active .global-nav { transition: opacity var(--motion-fast) var(--motion-ease), visibility 0s; }
   .shell .rail-button { transition: background-color var(--motion-fast), color var(--motion-fast); }
 }
 .shell.navigation-wide :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--page-inset)) !important; }
@@ -136,9 +140,6 @@
   .shell #tab-settings .product-model-disclosure > div > p { margin: 0; color: var(--ink-muted); font-size: 12px; }
 }
 @media (max-width: 820px) {
-  .shell.navigation-compact.navigation-open > .content > .panel.active .split-layout[data-default-left] { display: grid; grid-template-columns: minmax(220px, var(--split-left, var(--nav-width))) 1px minmax(0, 1fr); }
-  .shell.navigation-compact.navigation-open #tab-chat .chat-workspace { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
-  .shell.navigation-compact.navigation-open > .content > .panel.active .split-layout[data-default-left] > .splitter { display: block; }
   .shell.navigation-compact :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--page-inset)) !important; }
   .shell #tab-workspace .dt-navigation { padding: 0; border-bottom: 0; }
   .shell #tab-workspace .dt-nav-content { padding: 0 8px 6px; }
@@ -146,19 +147,9 @@
   .shell #tab-workspace .dt-mobile-nav { display: none; }
 }
 @media (max-width: 620px) {
-  .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left] { grid-template-columns: minmax(0, 1fr) !important; }
-  .shell.navigation-closed > .content > .panel.active .global-nav,
-  .shell.navigation-closed > .content > .panel.active .split-layout[data-default-left] > .splitter { display: none !important; }
-  .shell.navigation-closed > .content > .panel.active :is(.chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main) { grid-column: 1 !important; }
   .shell { --panel-toggle-inset: 8px; position: relative; min-width: 0; }
-  .shell > .section-rail { display: none; }
   .shell > .content { width: 100%; }
   .shell > .content > .panel.active { padding: 0; overflow: hidden; }
-  .shell .global-nav, .shell .split-layout[data-default-left] > .splitter { display: none !important; }
-  .shell .chat-workspace, .shell .instruction-layout, .shell .vba-layout, .shell .html-workspace-layout,
-  .shell .settings-shell { display: grid; grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
-  .shell .chat-main, .shell .instruction-editor, .shell .vba-editor, .shell .html-workspace-editor,
-  .shell .settings-pages { grid-column: 1 !important; grid-row: 1 !important; min-width: 0; }
   .shell #tab-workspace .dt-navigation { display: none; }
   .shell #tab-workspace .product-dt-main { padding-inline: var(--page-inset); }
   .shell.navigation-single :is(.chatbar, .resource-editor-head, .dt-header, .settings-heading, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--page-inset)) !important; }
@@ -170,15 +161,6 @@
   .shell #tab-settings .settings-heading-with-action > div { display: flex; flex-direction: column; }
   .shell #tab-settings .settings-heading-with-action > button { width: auto; min-height: 30px; padding: 4px 8px; white-space: nowrap; }
   .shell #tab-chat .composer-add-menu { width: min(320px, calc(100vw - 40px)); }
-  .shell.navigation-open > .section-rail { position: absolute; inset: 0 auto 0 0; z-index: 39; display: flex; height: 100%; padding-top: 52px; }
   .shell.navigation-single.navigation-open .panel.active .global-nav :is(.product-nav-heading, .workspace-heading, .settings-nav-heading, .dt-nav-heading, .artifact-catalog-toolbar) { padding-left: calc(var(--page-inset)); }
   .shell.navigation-single.navigation-open .panel.active .global-nav .chat-sidebar-head .product-nav-heading { gap: 6px; padding-left: calc(var(--page-inset)); }
-  .shell.navigation-open > .content > .panel.active { overflow: visible; }
-  .shell.navigation-open .panel.active .global-nav { position: absolute; top: 0; right: 0; bottom: 0; left: var(--shell-rail-width); z-index: 38; display: flex !important; width: calc(100% - var(--shell-rail-width)); height: 100%; max-height: 100%; overflow: auto; }
-  .shell.navigation-open .panel.active .tool-list-panel.global-nav,
-  .shell.navigation-open .panel.active .settings-nav.global-nav { display: grid !important; }
-  .shell.navigation-open .panel.active .chat-main, .shell.navigation-open .panel.active .instruction-editor,
-  .shell.navigation-open .panel.active .vba-editor, .shell.navigation-open .panel.active .html-workspace-editor,
-  .shell.navigation-open .panel.active .settings-pages, .shell.navigation-open #tab-workspace .product-dt-main { display: none !important; }
-  .shell.navigation-open #tab-workspace .dt-navigation.global-nav { display: flex !important; }
 }

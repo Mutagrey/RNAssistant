@@ -1,6 +1,6 @@
 /* Product-only composition around the shared prototype palette and components. */
 .shell #tab-chat .chat-main { padding: 0; background: var(--surface); }
-.shell #tab-chat .chat-workspace { grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px; }
+.shell #tab-chat .chat-workspace { grid-template-columns: var(--navigation-column) var(--navigation-divider) minmax(0, 1fr) 0px 0px; }
 .shell #tab-chat .chat-scope-switcher { position: relative; padding: 0 4px 0 8px; border-bottom: 0; }
 .shell #tab-chat .chat-scope-switcher > summary { width: 100%; min-height: 40px; padding: 4px 2px; gap: 6px; font-size: 12px; }
 .shell #tab-chat .chat-scope-switcher > summary > span:first-child,
@@ -46,8 +46,6 @@
 .shell .chat-inspector-action { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 34px; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--ink); font-size: 11px; text-align: left; }
 .shell .chat-inspector-action:hover { background: var(--surface-hover); }
 .shell .chat-inspector-action svg { width: 15px; height: 15px; }
-.shell.navigation-closed #tab-chat .chat-workspace { grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important; }
-.shell.navigation-closed #tab-chat .chat-workspace .chat-main { grid-column: 3 !important; }
 
 .shell #tab-chat .chatbar { flex-basis: 52px; min-height: 52px; margin: 0; padding: 0 var(--panel-toggle-inset); border-bottom-color: var(--line); }
 .shell .chat-main .messages { padding: 22px var(--page-inset) 16px; }
@@ -190,16 +188,10 @@
 }
 body.resizing-pane .shell #tab-chat .chat-workspace { transition: none !important; }
 /* Plugin development uses the project chat tree and one right preview dock. */
-.shell.navigation-open > .content > #tab-chat.active #projectChatLayout.plugin-surface-open {
-  grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 1px var(--plugin-surface-width, 520px) !important;
-}
-.shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-open {
-  grid-template-columns: 0px 0px minmax(0, 1fr) 1px var(--plugin-surface-width, 520px) !important;
+.shell > .content > #tab-chat.active #projectChatLayout.plugin-surface-open {
+  grid-template-columns: var(--navigation-column) var(--navigation-divider) minmax(0, 1fr) 1px var(--plugin-surface-width, 520px) !important;
 }
 .shell #tab-chat #projectChatLayout > .plugin-surface-splitter { grid-column: 4; grid-row: 1; width: 1px; }
-.shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-open > .plugin-surface-splitter {
-  visibility: visible; opacity: 1; pointer-events: auto; width: 1px; min-width: 1px;
-}
 .shell #tab-chat #projectChatLayout > .plugin-workbench {
   position: relative; grid-column: 5; grid-row: 1; display: flex; flex-direction: column;
   min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--line); background: var(--surface);
@@ -232,12 +224,8 @@ body.resizing-pane .shell #tab-chat .chat-workspace { transition: none !importan
 }
 .shell #tab-chat .plugin-workbench .plugin-status:empty { display: none; }
 .shell #tab-chat .plugin-workbench > .html-workspace-inspect-status:not(:empty) { position: absolute; z-index: 35; right: 12px; bottom: 12px; max-width: min(320px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); pointer-events: none; }
-.shell.navigation-open > .content > #tab-chat.active #projectChatLayout.plugin-surface-overlay.plugin-surface-open,
-.shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-overlay.plugin-surface-open {
-  position: relative; grid-template-columns: var(--split-left, var(--nav-width)) 1px minmax(0, 1fr) 0px 0px !important;
-}
-.shell.navigation-closed > .content > #tab-chat.active #projectChatLayout.plugin-surface-overlay.plugin-surface-open {
-  grid-template-columns: 0px 0px minmax(0, 1fr) 0px 0px !important;
+.shell > .content > #tab-chat.active #projectChatLayout.plugin-surface-overlay.plugin-surface-open {
+  position: relative; grid-template-columns: var(--navigation-column) var(--navigation-divider) minmax(0, 1fr) 0px 0px !important;
 }
 .shell #tab-chat #projectChatLayout.plugin-surface-overlay > .plugin-workbench {
   position: absolute; grid-column: auto; grid-row: auto; inset: 0 0 0 auto;

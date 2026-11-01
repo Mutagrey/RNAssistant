@@ -7,6 +7,8 @@ Owner: Web Shell/presentation. S1b размещает общий Office/Workspac
 сохранены; старое Inspector grid/overlay/width и per-owner toggles удалены.
 После замечания пользователя оформление/компоновка берутся из завершённого P1/P2;
 описание перенесено в четыре canonical UI-docs, прежний UI_LAYOUT_UX — история.
+Уточнение S1b переносит wide/overlay-поведение дерева и hide/restore группы Inspector;
+исправлен размер кнопок до Demo-эталона. Старые navigation paths удалены.
 Результат проходит визуальное ревью; S2 автоматически не начинается.
 Проверки/измерения/ограничения и rollback — в [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md).
 Несколько одновременно открытых чатов, полная model/attachment/context parity,

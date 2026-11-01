@@ -11,7 +11,10 @@ lazy/deactivation, native frame identity и проверил old route aliases. 
 Global IDs/active owner снимаются только S2 с полноценным view-scoping и проверкой
 exact session/receipt ownership; до этого simultaneous chat clones запрещены.
 Старые Inspector grid/overlay/width/open и перемещаемые header toggles удалены уже
-в S1b. [Scope/review/rollback](../ui/UI_MIGRATION_PLAN.md).
+в S1b. Уточнение навигации удалило fullscreen/compact CSS и эвристики выбора
+из app.js: один ShellLayout получает событие общего NavigationTree, preview
+потребляет общие navigation columns. Отдельного временного nav adapter нет.
+[Scope/review/rollback](../ui/UI_MIGRATION_PLAN.md).
 
 ## Demo-only chat embedding — 2026-11-02
 

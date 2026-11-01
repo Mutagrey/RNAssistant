@@ -115,7 +115,10 @@
   async function refresh(){var result=await send('getPlugins',{});items=result.items;var rail=el('Rail');
     if(result.defaultSourceParent)el('DefaultSourcePath').textContent=result.defaultSourceParent;
     if(window.RNAssistantRailPopovers)window.RNAssistantRailPopovers.hide();rail.replaceChildren();items.forEach(function(item){
-    var node=button('',function(){select(item.pluginId);});node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconSvg,item.iconColor);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
+    var node=button('',function(){
+      if(node.getAttribute('aria-current')==='page'){window.RNAssistantShellLayout.setNavigationOpen(!window.RNAssistantShellLayout.isNavigationOpen());return;}
+      select(item.pluginId,null,true);
+    });node.innerHTML=window.RNAssistantIcons.renderPlugin(item.icon || (item.pluginId==='data-templates'?'dataTemplates':'puzzle'),item.iconSvg,item.iconColor);node.className='rail-button';node.setAttribute('aria-label',item.name);node.dataset.railLabel=item.name;node.dataset.railPopover='plugin-item';node.dataset.railError=item.iconError||'';node.dataset.pluginId=item.pluginId;node.dataset.section='plugins';rail.appendChild(node);
   });syncRailSelection();if(result.error)status(result.error,true);else if(items.some(function(item){return item.iconError;}))status('У одного из плагинов некорректная SVG-иконка. Исправьте исходник и проверьте пакет.',true);return items;}
   function currentChat(){var snapshot=window.RNAssistantProjectChats.snapshot();
     return ownsChat()&&selected&&snapshot&&snapshot.project&&
@@ -250,7 +253,7 @@
   }
   function pluginAvailableWidth(){
     var layout=document.getElementById('projectChatLayout'),nav=layout.querySelector('.chat-sidebar');
-    var navWidth=window.RNAssistantShellLayout.isNavigationOpen()?nav.getBoundingClientRect().width+1:0;
+    var navWidth=window.RNAssistantShellLayout.occupiesSpace()?nav.getBoundingClientRect().width+1:0;
     return Math.max(0,layout.clientWidth-navWidth);
   }
   function pluginWidthBounds(){return window.RNAssistantSplitter.rightPaneBounds(pluginAvailableWidth());}
@@ -289,7 +292,7 @@
     refreshPanelLayout();
     if(open||window.RNAssistantChatInspector.isOpen())refreshSplitPanes();
     if(refresh&&open&&!browsingRelease){if(!view)checkAndPreview();else pollSource();}}
-  async function select(id,sessionId){
+  async function select(id,sessionId,fromRail){
     var item=items.find(function(value){return value.pluginId===id;});
     if(!item||busy)return;
     var wasPluginOwner=ownsChat();
@@ -300,6 +303,7 @@
       await window.RNAssistantProjectChats.open(item.sourceWorkspaceId,sessionId);
       if(route!==selectionSerial||window.RNAssistantProjectChats.workspaceId()!==item.sourceWorkspaceId||
           !document.getElementById('tab-chat').classList.contains('active'))return;
+      if(fromRail)window.RNAssistantShellLayout.setNavigationOpen(true);
       if(selected&&selected.pluginId===id){
         if(!sessionId||!wasPluginOwner)previewOpen=true;
         updateSurface(false);window.RNAssistantChatInspector.setOpen(false);

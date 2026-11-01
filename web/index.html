@@ -53,16 +53,16 @@
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20261030-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=dock-s1b-20261102">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=dock-s1b-20261102">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-product-components.css?v=v8-lab-20261030-2">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=dock-s1b-20261102">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
-  <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-s1b-20261102">
+  <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-20261101">
-  <link rel="stylesheet" href="css/app-dock-workspace.css?v=dock-s1b-20261102">
+  <link rel="stylesheet" href="css/app-dock-workspace.css?v=dock-sidebar-20261102">
 </head>
 <body>
   <div class="shell app-shell">
@@ -92,6 +92,7 @@
     </nav>
 
     <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
+    <button type="button" class="navigation-scrim" id="productNavigationScrim" aria-label="Закрыть навигацию" tabindex="-1" hidden></button>
     <main class="content">
       <section class="panel active" id="tab-chat">
         <div class="chat-workspace split-layout" id="chatLayout" data-default-left="224" data-min-left="180">
@@ -1125,7 +1126,7 @@
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-rail-popovers.js"></script>
-  <script src="js/app-navigation-tree.js?v=shared-tree-20261027-1"></script>
+  <script src="js/app-navigation-tree.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-conversation-state.js?v=shared-chat-20261102"></script>
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
@@ -1133,8 +1134,8 @@
   <script src="js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=effect-facts-20261029-1"></script>
-  <script src="js/app-layout.js?v=dock-s1b-20261102"></script>
-  <script src="js/app-chat-inspector.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-layout.js?v=dock-sidebar-20261102"></script>
+  <script src="js/app-chat-inspector.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
@@ -1185,7 +1186,7 @@
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1"></script>
   <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1"></script>
-  <script src="js/app-chat-browser.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-chat-browser.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
   <script src="js/app-model-context.js?v=diagnostics-20261101"></script>
   <script src="js/app-context-meter.js?v=diagnostics-20261101"></script>
@@ -1213,10 +1214,10 @@
   <script src="js/app-chat.js?v=shared-chat-20261102"></script>
   <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
   <script src="js/app-workspace-chat.js?v=dock-s1b-20261102"></script>
-  <script src="js/app-plugins.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-plugins.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-project-chats.js?v=dock-s1b-20261102"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
-  <script src="js/app-dock-workspace.js?v=dock-s1b-20261102"></script>
-  <script src="js/app.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-dock-workspace.js?v=dock-sidebar-20261102"></script>
+  <script src="js/app.js?v=dock-sidebar-20261102"></script>
 </body>
 </html>

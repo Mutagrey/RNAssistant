@@ -13,7 +13,7 @@
   function navigationMode() {
     var shell = document.querySelector(".shell");
     var width = shell ? shell.getBoundingClientRect().width : window.innerWidth;
-    return width <= 620 ? "single" : width <= 820 ? "compact" : "wide";
+    return width <= 640 ? "single" : width <= 1000 ? "compact" : "wide";
   }
 
   function navigationIsOpen() {
@@ -24,9 +24,11 @@
     var shell = document.querySelector(".shell");
     if (!shell) return;
     var mode = navigationMode();
+    if ((mode === "wide") !== (productLayoutMode === "wide")) {
+      compactNavigationOpen = false;
+    }
     if (mode !== productLayoutMode) {
       productLayoutMode = mode;
-      compactNavigationOpen = false;
     }
     var open = navigationIsOpen();
     if (shell.classList.contains("layout-ready") && shell.classList.contains("navigation-open") !== open) {
@@ -37,27 +39,31 @@
     shell.classList.toggle("navigation-wide", mode === "wide");
     shell.classList.toggle("navigation-compact", mode === "compact");
     shell.classList.toggle("navigation-single", mode === "single");
+    shell.classList.toggle("navigation-overlay", mode !== "wide");
     shell.classList.toggle("navigation-open", open);
     shell.classList.toggle("navigation-closed", !open);
     var button = document.getElementById("productMobileMenuButton");
     if (navigationToggle) navigationToggle.sync();
-    shell.querySelectorAll(".split-layout[data-default-left] > .splitter").forEach(function (handle) {
-      handle.hidden = mode === "single";
+    shell.querySelectorAll(".split-layout[data-default-left] > .global-nav + .splitter").forEach(function (handle) {
+      handle.hidden = mode !== "wide";
     });
     var active = shell.querySelector(".panel.active .global-nav");
-    if (button) button.hidden = mode !== "single" && !active;
+    var focusedInNavigation = active && active.contains(document.activeElement);
+    if (button) button.hidden = !active;
     if (active) {
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
     }
-    var main = shell.querySelector(".panel.active :is(.chat-dock-host, .chat-main, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content)");
-    if (main) main.inert = mode === "single" && open;
-    var rail = shell.querySelector(".section-rail");
-    if (rail) {
-      rail.inert = mode === "single" && !open;
-      rail.setAttribute("aria-hidden", String(mode === "single" && !open));
+    shell.querySelectorAll(".panel.active :is(.chat-dock-host, .chat-browser, .plugin-workbench, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content)").forEach(function (main) {
+      main.inert = mode !== "wide" && open && !!active;
+    });
+    var scrim = document.getElementById("productNavigationScrim"), section = shell.querySelector(".panel.active");
+    if (scrim) {
+      // Keep the scrim and navigation in the same stacking context during section transitions.
+      if (section && scrim.parentElement !== section) section.appendChild(scrim);
+      scrim.hidden = mode === "wide" || !open || !active;
     }
-    if (!open && active && active.contains(document.activeElement) && button) button.focus({ preventScroll: true });
+    if (!open && focusedInNavigation && button) button.focus({ preventScroll: true });
     if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.refresh();
   }
 
@@ -71,10 +77,24 @@
     if (typeof refreshCodeEditors === "function") refreshCodeEditors();
   }
 
+  function dismissNavigation() {
+    if (navigationMode() !== "wide" && navigationIsOpen()) {
+      setProductNavigationOpen(false);
+      if (document.activeElement === document.body) document.getElementById("productMobileMenuButton").focus({ preventScroll: true });
+    }
+  }
+
   window.RNAssistantShellLayout = {
     isNavigationOpen: function () { return navigationIsOpen(); },
     mode: navigationMode,
+    occupiesSpace: function () { return navigationMode() === "wide" && navigationIsOpen(); },
     setNavigationOpen: setProductNavigationOpen,
+    dismissNavigation: dismissNavigation,
+    selectSection: function (activate, repeated) {
+      var wasOpen = navigationIsOpen();
+      activate();
+      if (document.querySelector(".panel.active .global-nav")) setProductNavigationOpen(!repeated || !wasOpen);
+    },
     refresh: syncProductNavigation
   };
 
@@ -192,7 +212,7 @@
   function navigationBounds(layout) {
     var available = layout.getBoundingClientRect().width || Math.max(0, window.innerWidth - 52);
     var minimum = Math.max(180, numberAttr(layout, "data-min-left", 180));
-    return { min: minimum, max: Math.max(minimum, Math.min(460, available - 280)) };
+    return { min: minimum, max: Math.max(minimum, Math.min(460, available - (navigationMode() === "wide" ? 280 : 20))) };
   }
 
   function splitBounds(layout) {
@@ -300,7 +320,20 @@
       side: "left",
       controls: function () { var panel = document.querySelector(".panel.active .global-nav"); return panel && panel.id; },
       isOpen: navigationIsOpen,
-      setOpen: setProductNavigationOpen
+      setOpen: function (open) {
+        setProductNavigationOpen(open);
+        if (open && navigationMode() !== "wide") {
+          var target = document.querySelector(".panel.active .global-nav :is(button, summary, input):not([disabled]):not([hidden])");
+          if (target) target.focus({ preventScroll: true });
+        }
+      }
+    });
+    document.getElementById("productNavigationScrim").addEventListener("click", dismissNavigation);
+    document.addEventListener("rna-navigation-select", function (event) {
+      if (event.target.closest(".global-nav")) dismissNavigation();
+    });
+    document.querySelector(".content").addEventListener("click", function (event) {
+      if (event.target.closest(".global-nav .dt-tabs button, .global-nav .product-create-menu button")) dismissNavigation();
     });
     syncProductNavigation();
     requestAnimationFrame(function () {
@@ -328,10 +361,9 @@
     }
   });
   document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape" && !event.defaultPrevented && navigationMode() !== "wide" && navigationIsOpen() &&
-        document.querySelector(".panel.active .global-nav")?.contains(document.activeElement)) {
+    if (event.key === "Escape" && !event.defaultPrevented && navigationMode() !== "wide" && navigationIsOpen()) {
       event.preventDefault();
-      setProductNavigationOpen(false);
+      dismissNavigation();
     }
   });
 }());

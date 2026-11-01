@@ -68,6 +68,12 @@ Owner: Web settings navigation tests. `settings-navigation-layout.test.js:79`
 в рабочем дереве Diagnostics UI. Сверить ожидание с действующим UI; runtime или
 дизайн ради устаревшего assertion не менять.
 
+Уточнение 2026-11-02: теперь тот же fixture останавливается раньше, на ожидании
+семи разделов вместо текущих шести; он также ищет прежний вход Settings внутри rail.
+Настройки и их список этим исправлением Shell не менялись. Современный сценарий
+выбора страницы и overlay dismissal покрыт `shell-navigation.test.js`; старый fixture
+нужно привести к текущей структуре до дальнейшего использования как gate.
+
 ## Интеграционные fixtures после перехода на Core tools — 2026-10-28
 
 Owner: Harness / Core Tools / Office Tools. Полный набор не запускался. В оставшихся catalog

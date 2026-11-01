@@ -242,6 +242,12 @@ fs.mkdirSync(captures, {recursive:true});
       'the project and chat tree remains open');
     assert.equal(await page.locator('#pluginRail [data-plugin-id="data-templates"]').getAttribute('aria-current'),'page',
       'the plugin icon identifies the selected project shell');
+    await page.evaluate(()=>{window.railReads=0;const original=send;send=function(type,...args){if(type==='getPluginChat')railReads++;return original(type,...args);};});
+    await page.locator('#pluginRail [data-plugin-id="data-templates"]').click();
+    assert.equal(await page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen()),false);
+    await page.locator('#pluginRail [data-plugin-id="data-templates"]').click();
+    assert.equal(await page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen()),true);
+    assert.equal(await page.evaluate(()=>railReads),0,'repeated active plugin rail clicks toggle navigation without re-reading the chat');
     assert.equal(await pluginToggle.getAttribute('aria-controls'),'pluginPreviewMount');
     assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true');
     assert.equal(await pluginToggle.evaluate(node=>node.parentElement.classList.contains('workspace-panel-controls')),true,

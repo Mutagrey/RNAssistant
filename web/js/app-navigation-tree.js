@@ -161,7 +161,9 @@
       if (!node || node.disabled) return;
       if (node.kind === "group" || (node.kind === "parent" && !node.selectable)) { toggle(item, !node.expanded); return; }
       var accepted = typeof options.onSelect === "function" ? options.onSelect(node) : true;
-      if (accepted === false || !root.contains(item)) return;
+      if (accepted === false) return;
+      root.dispatchEvent(new CustomEvent("rna-navigation-select", { bubbles: true }));
+      if (!root.contains(item)) return;
       record.rows.forEach(function (row) {
         row.removeAttribute("aria-current");
         row.setAttribute("aria-selected", "false");

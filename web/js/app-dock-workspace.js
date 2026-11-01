@@ -25,7 +25,7 @@
   function setText(id, value) { var node = document.getElementById(id); if (node.textContent !== value) node.textContent = value; }
   function setIcon(node, name) { if (node.dataset.icon !== name) { node.dataset.icon = name; node.innerHTML = RNAssistantIcons.render(name); } }
   function panel(id) { return api && api.getPanel(id); }
-  function visible(id) { var item = panel(id); return section === "chat" && !!item && item.api.isVisible; }
+  function visible(id) { var item = panel(id); return section === "chat" && !!item && item.group.api.isVisible && item.api.isVisible; }
   function conversationKey() {
     var current = owner === "office" ? null : RNAssistantWorkspaceChat.snapshot();
     return owner + ":" + (owner === "office" ? state.activeChatId : current && current.project && current.project.workspaceId) + ":" + (current && current.sessionId || "");
@@ -47,7 +47,7 @@
     max.title = api.hasMaximizedGroup() ? "Восстановить компоновку" : "Развернуть группу";
     max.setAttribute("aria-label", max.title); setIcon(max, api.hasMaximizedGroup() ? "compress" : "fit");
     updateContext();
-    setText("workspaceLayoutStatus", "Вкладки: " + api.panels.length + " · группы: " + api.groups.length);
+    setText("workspaceLayoutStatus", "Вкладки: " + api.panels.length + " · группы: " + api.groups.filter(function (group) { return group.api.isVisible; }).length);
     if (activate && conversationPosition && conversationPosition.key === conversationKey()) {
       var position = conversationPosition, version = ++activation;
       requestAnimationFrame(function () {
@@ -113,7 +113,29 @@
       item = add(id, position);
       if (!compact && id === "inspector" && !direction) item.api.setSize({ width: 292 });
     }
-    item.api.setActive(); changed();
+    item.group.api.setVisible(true); item.api.setActive(); changed();
+  }
+  function toolGroups() {
+    return api ? api.groups.filter(function (group) { return group.panels.length && group.panels.every(function (item) { return item.id === "inspector"; }); }) : [];
+  }
+  function inspectorToggleLabel() {
+    var groups = toolGroups();
+    if (compact || !groups.length) return "Открыть инспектор";
+    return groups.some(function (group) { return group.api.isVisible; }) ? "Свернуть инструменты" : "Развернуть инструменты";
+  }
+  function toggleTools() {
+    if (!api) return;
+    var groups = toolGroups();
+    if (compact || !groups.length) { show("inspector"); return; }
+    var hide = groups.some(function (group) { return group.api.isVisible; });
+    if (hide && !api.groups.some(function (group) { return !groups.includes(group) && group.api.isVisible; })) {
+      notice("Это единственная рабочая область. Откройте чат рядом."); return;
+    }
+    api.exitMaximizedGroup();
+    groups.forEach(function (group) { group.api.setVisible(!hide); });
+    var focusGroup = hide ? api.groups.find(function (group) { return group.api.isVisible; }) : groups[0];
+    if (focusGroup) focusGroup.api.setActive();
+    changed();
   }
   function close(id) {
     var item = panel(id); if (!item) return;
@@ -194,7 +216,7 @@
   function header(group) {
     var root = element("div", "dock-group-actions"), splitButtons = []; root.dataset.groupId = group.id;
     function updateButtons() { splitButtons.forEach(function (entry) {
-      entry.button.disabled = host.clientWidth < 560 || (entry.direction === "right" ? group.api.width < 560 : group.api.height < 420);
+      entry.button.disabled = compact || host.clientWidth < 560 || (entry.direction === "right" ? group.api.width < 560 : group.api.height < 420);
       entry.button.title = entry.button.disabled ? "Недостаточно места для ещё одной области" : entry.button.getAttribute("aria-label");
     }); }
     [["Выбрать экран", "plus", "within"], ["Открыть экран справа", "split-right", "right"], ["Открыть экран снизу", "split-below", "below"]].forEach(function (item) {
@@ -217,7 +239,7 @@
   }
   function reset() {
     restoring = true; wideLayout = null; api.clear();
-    var chat = add("conversation"); add("inspector", { referencePanel: chat, direction: host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: 300 });
+    var chat = add("conversation"); add("inspector", { referencePanel: chat, direction: compact || host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: 300 });
     chat.api.setActive(); restoring = false; changed();
   }
   function join() {
@@ -239,10 +261,11 @@
   }
   function resize(width) {
     if (!width) return;
-    var next = width < 560;
+    var next = RNAssistantShellLayout.mode() === "single" || width < 560;
     if (next === compact) return;
     var focused = host.contains(document.activeElement) ? document.activeElement : null;
     compact = next; closeChooser(); restoring = true;
+    api.updateOptions({ disableDnd: compact });
     if (compact && api.groups.length > 1) {
       wideLayout = api.toJSON(); api.exitMaximizedGroup();
       var group = api.activeGroup || api.groups[0], active = api.activePanel;
@@ -297,6 +320,7 @@
     document.getElementById("workspaceDiagnostics").addEventListener("click", function () { switchTab("diagnostics"); });
     document.addEventListener("pointerdown", function (event) { if (chooser && !chooser.contains(event.target) && event.target !== returnFocus) closeChooser(); });
     document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && event.defaultPrevented) return;
       var tab = event.target.closest && event.target.closest("[data-tab-panel-id]");
       if (tab && host.contains(tab) && event.altKey && event.shiftKey && /^Arrow(Left|Right|Up|Down)$/.test(event.key) && !api.hasMaximizedGroup()) {
         var item = panel(tab.dataset.tabPanelId), group = item && item.group;
@@ -321,6 +345,7 @@
   }
   window.RNAssistantDockWorkspace = {
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext,
+    toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel,
     canRenderConversation: function () { if (!api || conversationVisible) return true; dirtyConversation = true; return false; },
     onTabChange: function (name) {
       section = name; if (!api) return;

@@ -98,6 +98,27 @@ P1/P2 оболочка выбрана пользователем эталоно�
 production tokens. Адаптер размера close icon ограничен Dockview 8.8.3 и повторно
 проверяется при обновлении vendor; другие компоненты от него не зависят.
 
+## Применение правил сейчас
+
+Общие tokens, Icons/Accents, PanelToggle, NavigationTree, composer/transcript,
+Inspector и ViewerRegistry уже используются в production. Это действующие правила
+каждого среза, а не отдельная финальная чистка. При замене переключаем consumers
+и удаляем старый путь в том же изменении. Отдельный пакет UI Kit не создаётся заранее.
+Полная переносимость controls и оставшиеся дубли форм/меню/CSS уточняются в S2–S5
+по реальному второму consumer, а не объявляются завершёнными.
+
+В уточнении S1b удалены дубли закрытия дерева из `app.js` и прежние fullscreen/compact
+CSS paths. Preview layouts получают общие navigation columns; величина занимаемого
+места приходит из ShellLayout. NavigationTree сообщает `rna-navigation-select`
+(bubbling, без domain payload) после принятого выбора мышью/клавиатурой, включая
+синхронную перерисовку дерева; toggle папки и отказ `onSelect === false` не дают событие.
+Shell слушает его только внутри `.global-nav`; сам Tree не импортирует Shell/bridge.
+
+Оригинальные Codicons не перерисовывались. Причина увеличенных кнопок — унаследованные
+`flex-basis`/`min-height` общего `.icon-btn`: 34 px вместо Demo 25 px. Группа теперь
+передаёт общий `--control` из shell token; SVG/mask остаётся 14 px. Второй button
+component или копия SVG не создавались.
+
 ## Каталог существующих компонентов
 
 L1 = host-independent component; L2 = browser requirements; L3 = host integration.
