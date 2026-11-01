@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## UI strategy transition: аудит и карта — 2026-11-02
+
+Owner: Web presentation. По прямому запросу пользователя Demo P0–P3 заморожен
+на 4ea3d6e4; обязательный P0–P4 и прежний запрет production superseded.
+Новая цель — модернизация единого production UI, без копии Office/Workspace.
+Подготовлены [архитектурный аудит](../ui/UI_ARCHITECTURE.md),
+[экранная карта](../ui/UI_SCREEN_MAP.md), [компоненты](../ui/UI_DESIGN_SYSTEM.md)
+и [план с baseline/rollback](../ui/UI_MIGRATION_PLAN.md).
+Первый срез Proposed: общий conversation view + Inspector в Dockview, без
+одновременных копий чата. Implementation ждёт согласования карты и границ;
+production-код этим аудитом не менялся. Открыты Workspace history bounds,
+catalog paging, полные performance baseline и Windows/Office evidence.
+Основной runtime/storage baseline и существующие ограничения остаются прежними.
+
 ## Единая диагностика: маршруты, данные и UI — 2026-11-01
 
 Owner: Office diagnostics services / Web diagnostics presentation.

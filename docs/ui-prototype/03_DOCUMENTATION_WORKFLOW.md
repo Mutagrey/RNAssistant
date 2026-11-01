@@ -1,5 +1,10 @@
 # RNAssistant — Design Documentation Lifecycle
 
+> Historical UX/design source. User strategy changed on 2026-11-02:
+> [UI Architecture](../ui/UI_ARCHITECTURE.md) and [Migration Plan](../ui/UI_MIGRATION_PLAN.md)
+> now govern work. Prototype-only production prohibition and mandatory P0–P4
+> sequence are superseded; retain this package as design evidence.
+
 ## Principle
 Documentation is a maintained design record, not an independent implementation and not a generator platform. Agent must distinguish **Proposed**, **In Review**, **Approved**, **Superseded** and **Open Decision**. Never promote a design to Approved without explicit user approval.
 

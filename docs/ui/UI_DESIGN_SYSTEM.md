@@ -1,110 +1,97 @@
-# Дизайн-система визуального Demo
+# Дизайн-система и компоненты RNAssistant
 
-Обновлено: 2026-11-02. Статус: **In Review**; по выбору пользователя сохранён вид P1,
-настройки акцента добавлены в P2.
-Owner: Demo presentation (`prototypes/ui/`); утверждает пользователь.
-Поддерживать вместе с кодом прототипа до отдельно разрешённой production-фазы;
-при замене переключить ссылки и удалить устаревший документ.
-[Решения](UI_DECISIONS.md) отделяют согласованное от экспериментов;
-[компоновка](UI_LAYOUT_UX.md) определяет навигацию и docking.
+Обновлено: 2026-11-02. Owner: Web presentation; визуальные решения утверждает
+пользователь. Canonical document tokens, компонентов и их повторного использования.
+Стратегия — [Architecture](UI_ARCHITECTURE.md), экраны — [Screen Map](UI_SCREEN_MAP.md).
+Направление Approved; конкретные production-изменения и первый срез Proposed.
 
-## Визуальная основа экранов
+## Визуальная основа
 
-По уточнению пользователя 2026-11-02 внутренние экраны опираются на действующий
-production UI: привычные сообщения, composer, меню и компактные материалы.
-Оболочка Dockview сохраняется. Каждое отличие должно решать названное неудобство
-и проходить отдельное ревью. Самостоятельное оформление чата/инспектора первого
-черновика P3 отклонено и не входит в согласованную дизайн-систему.
-Для сравнения используется существующий `product-preview.html`; его production-чат
-на mock-данных также встроен в Dockview без копирования исходников `web/`.
-Внутренние стили чата остаются production; `docked-chat.css` меняет только
-композицию и узкие отступы. Сценарии и критерии — в [компоновке](UI_LAYOUT_UX.md).
+Действующий production UI — основа сообщений, composer, материалов, форм и меню.
+Согласованные изменения оболочки берём из Demo, улучшения связываем с конкретным
+неудобством. Самостоятельный редизайн экранов и возвращение отклонённых A/B не нужны.
+Макет P3-инспектора не является утверждённым образцом настоящего Inspector.
 
-## Оформление и акцент
-
-Компактная оболочка вокруг содержимого: системная типографика, одна верхняя строка,
-различимые выбор, hover и keyboard focus. Статусы сопровождаются текстом.
-Пользователь предпочёл оболочку Dockview **до A/B**. Её поверхности, размеры,
-радиусы и оформление вкладок восстановлены. Экспериментальные варианты и их
-переключатель удалены; сохранять их как утверждённые темы нельзя.
-
-Настройки сверху справа открывают вкладку «Внешний вид»: светлая/тёмная тема и
-палитра акцентов прежнего Demo. Акцент меняет кнопки, выбранные элементы, focus и
-подпись активной вкладки; цвет всей оболочки и смысловые статусы от него не зависят.
-«Исходный» возвращает точные значения P1. Смена темы или акцента не пересоздаёт
-экраны и не меняет раскладку. Настройки запоминаются в этом браузере.
-Верхняя кнопка темы синхронизирована с выбором в настройках.
-
-Направление согласовано; конкретный вид новых контролов и подробные экраны
-остаются на ревью. Набор полей и сценарии экранов будут уточняться в P3.
-
-**Согласовано:** управление сворачиванием/разворачиванием — сверху;
-название приложения в верхней строке убрано; «+» открывает вкладку выбора экрана
-в текущей группе, две соседние кнопки — в новой области справа/снизу.
-Контекст документа слева и настройки справа пока примеряются.
+| Решение | Статус |
+|---|---|
+| Кнопки сворачивания/разворачивания областей сверху; бренд в topbar убран | Approved |
+| «+» выбирает экран; две кнопки создают область справа/снизу с выбором | Approved |
+| «Закрыть группу» действует только на эту группу | Approved |
+| Вид Dockview до A/B, возможность выбрать тему/акцент | Approved — направление |
+| Крестики и split icons меньше, область нажатия остаётся удобной | Approved — направление; точные размеры In Review |
+| Имя документа в topbar, конкретная компоновка настроек, responsive thresholds | In Review |
+| P3 production-чат в Dockview без повторного заголовка | In Review; iframe только Demo evidence |
 
 ## Источники tokens
 
-Точные значения — только [tokens.css](../../prototypes/ui/tokens.css), без копии
-цветов и размеров в документации. Группы: поверхности, текст, границы, акцент,
-focus и статусы; spacing; радиусы; системные шрифты; размеры типографики и оболочки.
-Светлая и тёмная базы (`data-theme`) находятся там же. `setAccent` в `app.js`
-переопределяет только `--accent`, `--accent-text`, `--focus`, `--surface-selected`.
-Каталог и расчёт контрастного текста переиспользуются из неизменённого
-[app-accent.js](../../web/js/app-accent.js). `data-ui-prototype` отключает его
-автоматическое применение production-preferences; Demo сохраняет собственный
-выбор, production storage не затрагивается. [ui.css](../../prototypes/ui/ui.css) задаёт
-компоненты и соответствие семантических tokens публичным `--dv-*` Dockview.
-Стартовые docking-размеры и пороги адаптации принадлежат `app.js`.
+Исходная production-база — [app-product-tokens.css](../../web/css/app-product-tokens.css):
+семантические поверхности, текст, границы, accent/status, spacing, типографика,
+радиусы, размеры и обе темы. CSS хранит фактические значения; таблицы значений
+в Markdown не дублируем. [app-accent.js](../../web/js/app-accent.js) уже общий
+каталог акцентов и foreground calculation.
 
-Локальные иконки переиспользуются из production `app-icons.js` без изменения его
-consumers; класс `.demo-icon` ограничивает оформление иконками Demo и не меняет
-SVG-кнопки Dockview. Внешние шрифты и assets не загружаются.
-Две кнопки создания областей используют локальные оригинальные
-[VS Code Codicons](../../prototypes/ui/vendor/codicons-split/README.md), CC-BY-4.0;
-SVG без изменений, цвет задан CSS mask. Остальной набор иконок остаётся общим.
+Сейчас [app.css](../../web/css/app.css), [app-theme.css](../../web/css/app-theme.css),
+app-product-components/screens и feature CSS образуют каскад; aliases text/ink,
+line/border нельзя удалять до переключения consumers. В срезе компонента:
+найти его правила → назначить один источник → переключить consumers → удалить
+заменённые selectors, не добавляя ещё один override sheet.
 
-По пожеланию пользователя крестик вкладки и иконки новых областей уменьшены.
-Размер знака отделён от области нажатия: `--tab-close-icon-size` /
-`--tab-close-target-size`, `--group-action-icon-size` / `--group-action-target-size`.
-Крестик использует вторичный цвет текста, при наведении — основной; иконки действий
-группы выровнены по одному размеру. Конкретная настройка размеров **In Review**.
-В `ui.css` изолирован небольшой адаптер `.rna-dock .dv-default-tab-action` для
-закреплённой версии Dockview 8.8.3: её close-size token действует в именованных
-vendor-темах, но не в нашей custom-теме. При обновлении Dockview перепроверить
-размер SVG и hit area. [Вид заголовков](review/p2-tab-actions.jpg).
+[Demo tokens](../../prototypes/ui/tokens.css) — зафиксированный эксперимент,
+не второй источник для production. Нужные Dockview tokens добавляются к общей
+production-базе и связываются с публичными --dv-* hooks. Отдельная тема каждого
+вида запрещена. Data Templates сохраняет standalone defaults до общего
+portable token entry, после чего host и standalone используют один источник.
 
-## Компоненты
+## Оформление и акцент
 
-Ниже — инвентарь оболочки P1/P2 и текущего P3. Отдельный renderer первого черновика
-P3 удалён; `chat-views.js` теперь только адаптер существующего product preview.
+Светлая/тёмная темы, компактная читаемая иерархия, умеренные границы, общий focus.
+Статус передаётся текстом/иконкой вместе с цветом; reduced-motion учитывается.
+Выбор темы/акцента не пересоздаёт views и не меняет runtime settings или layout.
 
-| Компонент | Владелец / использование | Состояния и ограничения |
+Исторические снимки P2: [светлая тема](review/p2-settings.jpg),
+[тёмная с акцентом](review/p2-accent-dark.jpg), [tab controls](review/p2-tab-actions.jpg).
+P1/P2 значения остаются reference, а не автоматически принятыми production tokens.
+Малый адаптер close icon к Dockview 8.8.3 в Demo требует повторной проверки при
+переносе; не распространять его глубокие selectors на другие компоненты.
+
+## Каталог существующих компонентов
+
+L1 = host-independent component; L2 = browser requirements; L3 = host integration.
+Указанная пригодность — source-аудит, не полная standalone qualification.
+Новые public interfaces вводятся только для реального второго consumer.
+
+| Компонент / источник | Повторное использование и граница | Состояния / lifecycle |
 |---|---|---|
-| Topbar, activity rail, навигация, statusbar | `index.html`, `app.js`, `ui.css` | Контекст документа вместо бренда; настройки сверху справа; компактные подписи |
-| Верхние кнопки областей | `syncUI`, `navigationVisibility`, `toggleTools` в `app.js` | Подсказки и ARIA меняются; maximize выключен без активной панели |
-| Dock-группы, вкладки, split | Локальный `dockview-core` | Active/inactive/close/drag; меню через официальный header extension |
-| «+» / выбор экрана | `header`, `openChooser`, `createChooser` в `app.js` | Новая вкладка выбора в текущей группе, включая узкий режим; прежнее меню удалено |
-| Меню оболочки / группы | HTML details / popover в `app.js` | Escape, объединение, закрытие вкладки / всей её группы; соседние группы сохраняются |
-| Новая область справа / снизу | `openChooser`, `splitUnavailable` в `app.js`; `ui.js`, `.codicon-split` в `ui.css` | Тот же chooser, новая область; исходная вкладка остаётся; выключены при недостатке места |
-| Вкладка выбора | `createChooser`, общий `panelChoices` в `app.js`; `.screen-chooser` в `ui.css` | Поиск, Enter, пустой результат; выбранный экран заменяет chooser, открытый переносится сюда |
-| Icon/button/Markdown | `ui.js` | Иконки с подписью; Markdown проходит DOMPurify |
-| Чат и composer | Production `web/` через `chat-views.js` и `docked-chat.css` | Существующий mock; In Review, ограничения iframe — в UI_LAYOUT_UX |
-| Материалы и инспектор | `panels.js`, `ui.css` | Preview/source; инспектор P1 закреплён за примером анализа, не связан с текущим mock-запуском |
-| Resource row, badge, empty state, callout | Общие функции в `panels.js` | Один шаблон для разных mock-представлений; статус не только цветом |
-| Тема, акцент и уведомления | `tokens.css`, `setAccent` / `setTheme` в `app.js`; `settings` в `panels.js` | Светлая/тёмная, исходный акцент и общая палитра; aria-pressed, свотчи, сохранение в Demo preferences |
+| [Icons](../../web/js/app-icons.js), [accent](../../web/js/app-accent.js) | Общие уже сейчас; кандидаты L1 без Shell | Theme/size/accessible label у consumer; shared catalog |
+| Buttons/toolbar/forms/menu CSS: app-product-components, app-theme, app-composer | Сохранять привычные controls; извлечь затронутые rules, не копировать по views | default/hover/focus/pressed/disabled/invalid/loading |
+| [NavigationTree](../../web/js/app-navigation-tree.js) | Реальный общий renderer, options/callbacks + icons; L1 candidate | selected/expanded/filter/keyboard; unmount освобождает state |
+| [TreeAdapter](../../web/js/app-tree-adapter.js) | Resource/domain adapter поверх NavigationTree, не второй widget | read/loading/error, destroy; host calls не уходят в UI Core |
+| [EditorTabs](../../web/js/app-editor-tabs.js), [ActionMenu](../../web/js/app-action-menu.js) | Внутренние режимы/меню; не docking engine | focus/keyboard/active; callback actions |
+| [ViewerRegistry](../../web/js/app-viewer-registry.js), [ViewerUI](../../web/js/app-viewer-ui.js) | Сохранить register/mount/unmount форматов | destroy старого controller и decorations при замене |
+| [JSON](../../web/js/app-json-viewer.js), [text/Markdown](../../web/js/app-text-viewer.js), text-diff | Повторно используют registry; portable rendering выделять без bridge | bounded DOM/depth, search/copy/source, unmount |
+| [ResourceViewer](../../web/js/app-resource-viewer.js), [SequenceViewer](../../web/js/app-sequence-viewer.js) | Общие PDF/image/sequence/task-list; resource/lease adapter остаётся L3 | lazy pages, zoom, unavailable, destroy/release; не загружать всё заранее |
+| [PreviewSurface](../../web/js/app-preview-surface.js) | Общая шапка/локация/reload для HTML и plugin preview | load/error/reload; frame owner не принадлежит chrome-компоненту |
+| [OperationView](../../web/data-templates/ui/operation-view.js) | Готовый presentation-only progress: create/render/dispose, callbacks cancel/dismiss; L1 candidate | Фактический snapshot; unknown total indeterminate, без таймерной симуляции |
+| [Questions](../../web/js/app-questions.js), [RunChanges](../../web/js/app-run-changes.js) | Общие conversation composites, пока domain-aware | awaiting/submitting/rejected/failed, owner/receipt сохраняются |
+| [WorkspaceChat](../../web/js/app-workspace-chat.js), [Messages](../../web/js/app-messages.js), composer | Уже общий domain UI Office/Workspace/plugin; не primitive UI Kit | single active owner, draft/scroll, keyed reconcile/live batching |
+| [ChatInspector](../../web/js/app-chat-inspector.js) | Один domain view, настоящие context/capabilities/usage/run | Scope/generation, lazy detail, disclosure/focus, suspend |
+| [ModelContext](../../web/js/app-model-context.js) | Domain reader, сохранять существующие cache/abort/bounds | metadata → lazy body, retained views, stale guards |
+| [RNPlugin SDK](../../web/plugin-host/sdk.js) | Существующий Ready/command/files/results protocol; не новый SDK | L3 host, L2 browser adapter отдельно; permissions у host |
 
-`D.views` владеет стабильными ID, заголовками, типом и признаком инструмента;
-`D.createView(id)` возвращает renderer Dockview. Состояние представления не
-дублируется в docking layout. Не добавлять собственный tab/split engine.
-Компоненты пока достаточно компактны для этого раздела;
-отдельный `UI_COMPONENTS.md` не нужен.
+Нельзя обобщать Chat/Inspector в UI Core только из-за общих кнопок. Сначала
+выделяются независимые controls с реальными consumers и инъекцией зависимостей.
+Не создавать универсальный VirtualList/DataTable, если существующих bounded
+renderers/Tabulator достаточно для конкретного сценария.
 
-## Evidence и открытые решения
+## Контракт компонента и ревью
 
-[Настройки, светлая тема](review/p2-settings.jpg),
-[пример синего акцента в тёмной теме](review/p2-accent-dark.jpg).
-[Снимок P1](review/p1-shell.jpg) — основа текущего оформления.
-Снимки фиксируют реализацию; новый вид настроек не считается автоматически
-утверждённым. Полный accessibility audit и подробные состояния экранов не входят
-в эту проверку.
+Для выделяемого компонента здесь фиксировать source/public API, реальные consumers,
+владельца данных, states, keyboard/focus, tokens, события, cleanup, portability и
+пример. Mount не стартует domain operation без команды пользователя/владельца.
+Версия public API нужна при появлении внешнего consumer, не для каждого helper.
+
+Узкий режим, увеличение текста, menu clipping, hit areas, tooltip и Escape
+проверяются на конкретном срезе. Не путать хороший screenshot с исправлением
+late responses, утечек или Office qualification. После согласования обновлять
+компонент и tokens в том же срезе; эксперимент остаётся Proposed/In Review.
+Отдельный UI_COMPONENT_CATALOG.md сейчас не нужен: этот каталог имеет одного owner.

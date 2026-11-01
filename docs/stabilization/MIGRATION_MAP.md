@@ -8,6 +8,9 @@ with its mock bridge; production sources stay unchanged. No second chat renderer
 or runtime is introduced. Removal gate: replace or retire this visual prototype
 after explicit approval of the production phase; do not carry the iframe adapter
 into production. Scope and limits: [UI Layout / UX](../ui/UI_LAYOUT_UX.md).
+P3 is frozen at 4ea3d6e4 after the strategy transition; current migration gates
+are in [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md). Production has no dependency
+on this adapter; no new production migration adapter has been introduced yet.
 
 ## Compact multi-target patch — 2026-10-29
 

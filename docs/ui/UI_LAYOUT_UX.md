@@ -1,6 +1,11 @@
 # UI прототип: компоновка и навигация
 
-Обновлено: 2026-11-02. Статус: **In Review**; P3 переориентирован на production UI.
+> **Исторический reference P0–P3, заморожен на 4ea3d6e4.**
+> Дальнейшая стратегия — [UI Architecture](UI_ARCHITECTURE.md), актуальная карта —
+> [UI Screen Map](UI_SCREEN_MAP.md), этапы — [Migration Plan](UI_MIGRATION_PLAN.md).
+> Ни P0–P4, ни прежний запрет production ниже не являются действующим gate.
+
+Обновлено: 2026-11-02. Исторический статус визуальных экспериментов: **In Review**.
 Owner: Demo presentation (`prototypes/ui/`); визуальное утверждение — пользователь.
 Область — независимый browser prototype по [заданию](../ui-prototype/00_START_HERE.md).
 Поддерживать до отдельно разрешённой production-фазы; при замене переключить

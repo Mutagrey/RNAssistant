@@ -1,5 +1,20 @@
 # RNAssistant backlog
 
+## UI audit follow-ups — 2026-11-02
+
+Owner: Web presentation; catalog protocol — соответствующий domain owner.
+[Аудит и source evidence](../ui/UI_ARCHITECTURE.md), [приоритет срезов](../ui/UI_MIGRATION_PLAN.md).
+
+- UI-05: Workspace prependMessages накапливает историю без Office cap 240.
+  Снять repeated-page memory/DOM baseline; в отдельном явном scope определить
+  общий bounded window и jump/anchor behavior до multiple chat views.
+- UI-06: catalogs используют metadata, но Office ListHeaders и getProjectChats
+  не дают постраничный UI. До объявления paged catalog проверить объёмы и
+  минимальный typed query contract; не читать bodies ради дерева.
+- UI-09: в P3 browser log два MutationObserver.observe TypeError без
+  локализованного источника; повтор не воспроизвёл. Не объявлено production-багом
+  или исправлением; исследовать при воспроизведении, не расширять Demo ради этого.
+
 ## Стоимость подготовки длинного контекста — 2026-10-30
 
 Owner: Application Workspace preparation / Core context и kernel admission.

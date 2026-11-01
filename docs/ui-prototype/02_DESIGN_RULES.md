@@ -1,5 +1,10 @@
 # RNAssistant — Prototype Design and Component Rules
 
+> Historical UX/design source. User strategy changed on 2026-11-02:
+> [UI Architecture](../ui/UI_ARCHITECTURE.md) and [Migration Plan](../ui/UI_MIGRATION_PLAN.md)
+> now govern work. Prototype-only production prohibition and mandatory P0–P4
+> sequence are superseded; retain this package as design evidence.
+
 Status: initial constraints; visual values remain provisional until user approval.
 
 ## Visual direction

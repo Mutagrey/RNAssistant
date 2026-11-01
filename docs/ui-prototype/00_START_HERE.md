@@ -1,5 +1,10 @@
 # RNAssistant — Visual Prototype Phase: Agent Assignment
 
+> Historical UX/design source. User strategy changed on 2026-11-02:
+> [UI Architecture](../ui/UI_ARCHITECTURE.md) and [Migration Plan](../ui/UI_MIGRATION_PLAN.md)
+> now govern work. Prototype-only production prohibition and mandatory P0–P4
+> sequence are superseded; retain this package as design evidence.
+
 Status: implementation instructions for prototype phase only. Date: 2026-11-01.
 
 ## Mission

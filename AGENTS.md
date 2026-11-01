@@ -98,42 +98,39 @@ evidence и ADR — только когда нужны причина, точн�
   Обычный commit не меняет product version, не запускает release workflow и не
   создаёт tag.
 
-## UI: визуальный прототип
+## UI: модернизация production
 
-- Перед изменением `prototypes/ui/` прочитай
-  [задание](docs/ui-prototype/00_START_HERE.md),
-  [UX](docs/ui-prototype/01_PROTOTYPE_UX_SPEC.md),
-  [дизайн-правила](docs/ui-prototype/02_DESIGN_RULES.md) и
-  [порядок документации](docs/ui-prototype/03_DOCUMENTATION_WORKFLOW.md).
-  Текущее предложение — [компоновка](docs/ui/UI_LAYOUT_UX.md), согласования —
-  [журнал решений](docs/ui/UI_DECISIONS.md).
-- Scope — существующий Demo `prototypes/ui/`. Не меняй production `web/`, C#,
-  runtime, Office Bridge, storage и механизмы оптимизации. `product-preview.html`
-  и `demo/RNAssistant.MockDemo/` не являются новой оболочкой. Перенос в production
-  начинается только по отдельному явному запросу пользователя.
-- Сначала осмотр и предложение компоновки (P0), затем согласованные этапы:
-  Dockview-оболочка (P1), варианты оформления (P2), экраны небольшими порциями (P3).
-  После каждого этапа — запускаемый результат и визуальное ревью до следующего.
-- Уточнение пользователя 2026-11-02: внутренние экраны берут действующий production
-  UI за визуальную основу; согласованную оболочку Dockview сохраняй. Улучшения
-  привязывай к конкретной проблеме, не предлагай самостоятельный редизайн экранов.
-  Результат — согласованные вид, поведение и критерии проверки для будущего
-  внедрения. Demo содержит только минимальные интерактивные примеры; не копируй
-  production-приложение и не строй второй runtime, store или симулятор исполнения.
-  Сложные сценарии показывай переключаемыми состояниями. Фиксируй в существующем
-  UI_LAYOUT_UX: проблема → ожидаемое поведение → пример → проверка → статус;
-  неподтверждённый риск не называй найденным production-багом.
-- Повторно используй подходящие локальные assets без изменения их production
-  consumers. Dockview владеет вкладками/докингом; не создавай второй docking engine,
-  vendor loader, UI framework или платформу документации. Сохраняй offline-запуск.
-- Эксперименты остаются `Proposed` / `In Review` до явного согласия пользователя.
-  По мере согласования обновляй затронутые UI-документы и исходные tokens;
-  фактические CSS-значения живут в коде. Создавай документы только с содержанием,
-  с owner и ссылкой из `docs/README.md`, по порядку из пакета.
-- На ревью укажи запуск, 2–5 действий для проверки, визуальный результат,
-  ограничения и конкретный выбор. Mock-выполнение явно помечай; проверка в
-  браузере не доказывает Office/WebView2 qualification. Проверки — только по
-  изменённому Demo, без лишних builds, Office validation и production migration.
+- Пользователь 2026-11-02 сменил стратегию: один production UI, одна Shell и один
+  Dockview, общие tokens/components, постепенная миграция функциональными срезами.
+  Demo P0–P3 заморожен как UX-reference, не развивается в копию приложения.
+  Prototype Package — источник UX/дизайна; его запрет production и порядок P0–P4
+  больше не управляют работой. P4 автоматически не начинается.
+- Перед UI-изменением прочитай canonical
+  [Architecture](docs/ui/UI_ARCHITECTURE.md),
+  [Screen Map](docs/ui/UI_SCREEN_MAP.md),
+  [Design System](docs/ui/UI_DESIGN_SYSTEM.md) и нужный срез
+  [Migration Plan](docs/ui/UI_MIGRATION_PLAN.md). Согласования —
+  [Decisions](docs/ui/UI_DECISIONS.md). Старые UI_LAYOUT_UX и ui-design — история.
+- Текущий gate: аудит и предложение готовы к ревью; production implementation
+  начинается после согласования карты и границ первого среза. Это разрешение
+  модернизировать UI по согласованному scope, а не runtime/Bridge/storage rewrite.
+- Сначала ищи существующего владельца и компонент. Office/Workspace/plugin уже
+  используют общий composer и ленту; не создавай параллельные chat UI/stores.
+  Dockview владеет placement, view — presentation, domain — данными, host — APIs.
+- Сохраняй pagination/bounds, incremental streaming, lazy payload/media, caches,
+  receipts, async generations, exact session/run ownership и оптимизации.
+  Для heavy views задай mount/activate/deactivate/dispose; close UI не отменяет run.
+  Shared UI не зависит от Shell/private bridge. Не создавай второй registry,
+  docking engine, vendor loader, SDK/framework или платформу документации.
+- До среза сними релевантный baseline; после — проверь behavior/performance,
+  focus/narrow/zoom, open/close/move/split/restore, stale responses и cleanup.
+  Используй минимальные нужные проверки; Windows/Office evidence остаётся отдельным.
+- Каждый срез обратим и сохраняет работоспособный UI. Временный adapter/dual path
+  имеет owner, флаг при необходимости и условие удаления в MIGRATION_MAP.
+  После проверки переключи consumers и удали заменённые реализации/зависимости.
+- Эксперименты Proposed/In Review до явного согласия. На ревью: запуск, 2–5 действий,
+  конкретные изменения и открытые ограничения. Обновляй четыре canonical UI-docs
+  по ответственности; не создавай параллельные нормативные документы.
 
 ## Definition of Done
 

@@ -1,5 +1,10 @@
 # AGENTS.md integration — instructions for the agent
 
+> Historical UX/design source. User strategy changed on 2026-11-02:
+> [UI Architecture](../ui/UI_ARCHITECTURE.md) and [Migration Plan](../ui/UI_MIGRATION_PLAN.md)
+> now govern work. Prototype-only production prohibition and mandatory P0–P4
+> sequence are superseded; retain this package as design evidence.
+
 Do not overwrite the existing root `AGENTS.md`. Inspect it, preserve unrelated rules, and add a short section (or link to a scoped `AGENTS.md` under Demo if repository conventions favor that). Use actual repo paths after inspection. Do not add references to missing files as though they already exist.
 
 ## Suggested section

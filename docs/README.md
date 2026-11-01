@@ -105,10 +105,11 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Data Templates: independent app workspace, export, UI/core and host adapters | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
-| Действующий production UI и прежний перенос | [UI design](ui-design.md) — product presentation, not runtime contract |
-| Новый визуальный Demo: scope, этапы и ревью | [Задание P0–P4](ui-prototype/00_START_HERE.md); [UX](ui-prototype/01_PROTOTYPE_UX_SPEC.md), [дизайн-правила](ui-prototype/02_DESIGN_RULES.md), [документация](ui-prototype/03_DOCUMENTATION_WORKFLOW.md) |
-| Компоновка, навигация и решения нового Demo | [UI Layout / UX](ui/UI_LAYOUT_UX.md), [UI Decisions](ui/UI_DECISIONS.md) — Dockview P1/P2; P3 на основе production UI, минимальные примеры поведения и критерии проверки; согласования отдельно |
-| Tokens и компоненты визуального Demo | [UI Design System](ui/UI_DESIGN_SYSTEM.md) — сохранён вид P1, в P2 возвращён выбор акцента; CSS владеет значениями |
+| UI architecture, аудит и ownership | [UI Architecture](ui/UI_ARCHITECTURE.md) — одна production Shell, один Dockview; карта и первый срез ждут согласования |
+| Экраны, навигация и состояния Office/Workspace | [UI Screen Map](ui/UI_SCREEN_MAP.md) — текущие реализации и целевое размещение |
+| Общие tokens, компоненты и визуальные решения | [UI Design System](ui/UI_DESIGN_SYSTEM.md); согласования — [UI Decisions](ui/UI_DECISIONS.md) |
+| Порядок UI-миграции, performance, rollback | [UI Migration Plan](ui/UI_MIGRATION_PLAN.md) — результаты P0–P3, baseline, первый production-срез |
+| Исторические UI/UX источники | [Прежний UI design](ui-design.md), [Demo P0–P3](ui/UI_LAYOUT_UX.md), [Prototype Package](ui-prototype/00_START_HERE.md); не параллельные нормативные планы |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |
@@ -177,12 +178,12 @@ workspace Office-чата теперь можно открыть
 и строкой ресурса/загрузки/обновления;
 их frame owners и права доступа остаются у HTML и плагина.
 После реализации документы остаются историей решения; текущие контракты переходят в
-UI design, Plugins, Resource Fabric и Session events, статус — в PROGRESS.
+UI Architecture / Screen Map, Plugins, Resource Fabric и Session events, статус — в PROGRESS.
 
 [Предложение диагностики](proposals/RNAssistant_Diagnostics_UIUX_Plan.md) сохранено
 по запросу пользователя. После уточнения по фотографиям основой выбрана
 существующая правая панель с четырьмя разделами; отдельный макет отклонён.
-Owner и текущие правила — [UI design: диагностика](ui-design.md#диагностика-в-существующей-правой-панели--2026-10-23).
+Owner и текущие правила — [Diagnostics](diagnostics.md); размещение — [UI Screen Map](ui/UI_SCREEN_MAP.md).
 Предложение остаётся исходным материалом до переноса согласованных пунктов
 в canonical UI document, а не вторым runtime-контрактом.
 
