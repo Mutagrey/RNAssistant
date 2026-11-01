@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  const D = window.RnaDemo, E = D.escape, I = D.icon, views = D.views;
+  const D = window.RnaDemo, E = D.escape, I = D.icon, views = D.views, accents = window.RNAssistantAccents;
   const shell = document.getElementById('shell'), nav = document.getElementById('navigation');
   document.getElementById('workspace-document').textContent = D.fixtures.document;
   document.getElementById('workspace-context').title = 'Документ: ' + D.fixtures.document;
@@ -17,18 +17,37 @@
   popup.id = 'group-menu'; popup.className = 'group-menu'; popup.setAttribute('popover', 'auto');
   popup.innerHTML = '<button class="dock-menu-action" data-group-action="join" title="Перенести вкладку в другую группу">' + I('compress') + '<span>Объединить</span></button><button class="dock-menu-action" data-group-action="close">' + I('close') + '<span>Закрыть вкладку</span></button><hr><button class="dock-menu-action" data-group-action="close-group" title="Закрыть группу вместе со всеми её вкладками">' + I('close') + '<span>Закрыть группу</span></button>';
   document.body.appendChild(popup);
-  const panelPicker = document.createElement('div');
-  panelPicker.id = 'add-panel-menu'; panelPicker.className = 'group-menu panel-picker';
-  panelPicker.setAttribute('popover', 'auto'); panelPicker.setAttribute('role', 'dialog');
-  panelPicker.setAttribute('aria-label', 'Открыть экран в группе');
-  document.body.appendChild(panelPicker);
 
   function toast(message) { const el = document.getElementById('toast'); el.textContent = message; el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 4500); }
   function setTheme(value) {
     document.documentElement.dataset.theme = value === 'dark' ? 'dark' : 'light';
     const button = document.getElementById('theme-toggle'), dark = value === 'dark';
     button.innerHTML = I(dark ? 'sun' : 'moon'); button.setAttribute('aria-label', dark ? 'Включить светлую тему' : 'Включить тёмную тему');
+    document.querySelectorAll('[data-theme-choice]').forEach(select => { select.value = document.documentElement.dataset.theme; });
+    setAccent(document.documentElement.dataset.accent);
   }
+  function setAccent(value) {
+    const root = document.documentElement, choice = accents.choices.find(item => item.id === value), theme = root.dataset.theme;
+    root.dataset.accent = choice ? choice.id : 'default';
+    ['--accent', '--accent-text', '--focus', '--surface-selected'].forEach(name => root.style.removeProperty(name));
+    if (choice) {
+      root.style.setProperty('--accent', choice[theme]);
+      root.style.setProperty('--accent-text', accents.foregroundFor(choice[theme]));
+      root.style.setProperty('--focus', choice[theme]);
+      root.style.setProperty('--surface-selected', 'color-mix(in srgb, var(--accent) 14%, var(--surface))');
+    }
+    document.querySelectorAll('[data-accent-choice]').forEach(button => {
+      const item = accents.choices.find(entry => entry.id === button.dataset.accentChoice);
+      button.setAttribute('aria-pressed', String(button.dataset.accentChoice === root.dataset.accent));
+      if (item) {
+        const label = theme === 'light' && item.lightLabel ? item.lightLabel : item.label;
+        button.style.setProperty('--swatch', item[theme]);
+        button.querySelector('.accent-label').textContent = label;
+        button.setAttribute('aria-label', 'Акцент: ' + label);
+      }
+    });
+  }
+  document.documentElement.dataset.accent = preferences.accent || 'default';
   setTheme(preferences.theme);
   function navigationVisibility(focus) {
     shell.classList.toggle('nav-closed', !navOpen);
@@ -40,7 +59,7 @@
     if (!navOpen && nav.contains(document.activeElement)) button.focus();
     else if (focus) (navOpen ? nav.querySelector('button') : button).focus();
   }
-  function closeMenus() { document.querySelectorAll('details.menu[open]').forEach(menu => { menu.open = false; }); popup.hidePopover(); panelPicker.hidePopover(); }
+  function closeMenus() { document.querySelectorAll('details.menu[open]').forEach(menu => { menu.open = false; }); popup.hidePopover(); }
   function panelChoices(attribute) {
     return Object.entries(views).map(([id, view]) => '<button ' + attribute + '="' + id + '">' + I(view.icon) + '<span>' + E(view.title) + '</span>' + (api.getPanel(id) ? '<span class="open-dot" aria-label="Открыта">●</span>' : '') + '</button>').join('');
   }
@@ -85,7 +104,8 @@
     clearTimeout(saveTimer);
     try {
       localStorage.setItem(storageKey, JSON.stringify({ version: 1, layout: api.toJSON(), mode: narrow ? 'narrow' : 'wide', wideLayout, savedLayout,
-        navWidth, navOpen: compact ? preferences.navOpen !== false : navOpen, theme: document.documentElement.dataset.theme }));
+        navWidth, navOpen: compact ? preferences.navOpen !== false : navOpen,
+        theme: document.documentElement.dataset.theme, accent: document.documentElement.dataset.accent }));
     } catch (_) { toast('Браузер не разрешил сохранить раскладку. Она останется до закрытия вкладки.'); }
   }
   function changed() { if (saving) return; syncUI(); clearTimeout(saveTimer); saveTimer = setTimeout(savePreferences, 180); }
@@ -136,9 +156,11 @@
     });
     return { element, init: render, onShow: render, focus() { input.focus({ preventScroll: true }); } };
   }
-  function splitGroup(group, direction) {
-    if (!group.activePanel || !['right', 'below'].includes(direction) || splitUnavailable(group, direction)) return;
-    closeMenus(); api.exitMaximizedGroup();
+  function openChooser(group, direction = 'within') {
+    if (!group.activePanel || !['within', 'right', 'below'].includes(direction)) return;
+    if (direction !== 'within' && splitUnavailable(group, direction)) return;
+    closeMenus();
+    if (direction !== 'within') api.exitMaximizedGroup();
     while (api.getPanel('choose-' + nextChooser)) nextChooser++;
     const chooser = open('choose-' + nextChooser++, { referencePanel: group.activePanel.id, direction });
     requestAnimationFrame(() => {
@@ -182,17 +204,14 @@
   }
   function header(group) {
     const element = document.createElement('div'); element.className = 'group-actions'; element.dataset.groupId = group.id;
-    element.innerHTML = D.iconButton('Открыть экран в этой группе', 'data-group-add aria-haspopup="dialog" aria-controls="add-panel-menu"', 'plus') + D.iconButton('Новая область справа', 'data-group-split="right"', 'splitRight') + D.iconButton('Новая область снизу', 'data-group-split="below"', 'splitBelow') + D.iconButton('Действия с вкладкой', 'data-group-menu aria-haspopup="menu"', 'more');
+    element.innerHTML = D.iconButton('Выбрать экран в новой вкладке', 'data-group-add', 'plus') + D.iconButton('Новая область справа', 'data-group-split="right"', 'splitRight') + D.iconButton('Новая область снизу', 'data-group-split="below"', 'splitBelow') + D.iconButton('Действия с вкладкой', 'data-group-menu aria-haspopup="menu"', 'more');
     const updateButtons = () => element.querySelectorAll('[data-group-split]').forEach(button => updateSplitButton(button, group));
     const sizeListener = group.api.onDidDimensionsChange(updateButtons);
     element.addEventListener('click', event => {
       const add = event.target.closest('[data-group-add]'), actions = event.target.closest('[data-group-menu]'), split = event.target.closest('[data-group-split]');
-      if (split) splitGroup(group, split.dataset.groupSplit);
-      else if (add) {
-        groupTarget = group;
-        panelPicker.innerHTML = '<span class="menu-label">Открыть в этой группе</span>' + panelChoices('data-add-panel') + '<p>● Уже открыт — перейти к нему.</p>';
-        showGroupMenu(panelPicker, add);
-      } else if (actions) {
+      if (split) openChooser(group, split.dataset.groupSplit);
+      else if (add) openChooser(group);
+      else if (actions) {
         groupTarget = group;
         popup.querySelector('[data-group-action="join"]').disabled = api.groups.length < 2;
         showGroupMenu(popup, actions);
@@ -228,12 +247,6 @@
     createComponent: options => options.name === 'chooser' ? createChooser(options.id) : D.createView(options.id),
     createRightHeaderActionComponent: header,
     createWatermarkComponent() { const element = document.createElement('div'); element.className = 'workspace-empty'; element.innerHTML = '<div class="empty-state">' + I('layers') + '<h2>Ваше рабочее пространство</h2><p>Откройте чат, материал или инструмент. Каждая панель может стать основной.</p>' + D.button('Открыть отчёт', 'data-open="report"', 'file', 'primary') + '</div>'; return { element, init() {} }; }
-  });
-  panelPicker.addEventListener('click', event => {
-    const button = event.target.closest('[data-add-panel]'); if (!button) return;
-    const anchor = api.groups.includes(groupTarget) && groupTarget.activePanel;
-    open(button.dataset.addPanel, anchor ? { referencePanel: anchor.id, direction: 'within' } : undefined);
-    closeMenus();
   });
   popup.addEventListener('click', event => {
     const button = event.target.closest('[data-group-action]'), group = groupTarget;
@@ -281,6 +294,8 @@
   renderNavigation(); respond();
   new ResizeObserver(respond).observe(shell);
   document.addEventListener('click', event => {
+    const accentChoice = event.target.closest('[data-accent-choice]');
+    if (accentChoice) { setAccent(accentChoice.dataset.accentChoice); savePreferences(); }
     const opener = event.target.closest('[data-open]'), sectionButton = event.target.closest('[data-section]'), layout = event.target.closest('[data-layout]'), command = event.target.closest('[data-command]');
     if (opener) { open(opener.dataset.open); closeMenus(); }
     if (sectionButton) { const repeated = section === sectionButton.dataset.section; section = sectionButton.dataset.section; navOpen = repeated ? !navOpen : true; renderNavigation(); navigationVisibility(); changed(); }
@@ -290,7 +305,6 @@
         case 'toggle-navigation': navOpen = !navOpen; navigationVisibility(true); changed(); break;
         case 'toggle-tools': toggleTools(); break;
         case 'maximize': if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); else if (api.activePanel) api.activePanel.api.maximize(); break;
-        case 'theme': toggleTheme(); break;
         case 'save-layout': savedLayout = { layout: api.toJSON(), wideLayout, narrow }; savePreferences(); syncUI(); closeMenus(); toast('Раскладка сохранена в этом браузере.'); break;
         case 'restore-layout':
           if (savedLayout) { saving = true; try { restore(savedLayout.layout); wideLayout = savedLayout.wideLayout; narrow = savedLayout.narrow; } catch (_) { toast('Эта раскладка недоступна.'); } saving = false; respond(); changed(); closeMenus(); }
@@ -302,6 +316,7 @@
   document.querySelectorAll('details.menu').forEach(menu => menu.addEventListener('toggle', () => { if (menu.open) document.querySelectorAll('details.menu').forEach(other => { if (other !== menu) other.open = false; }); }));
   function toggleTheme() { setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'); savePreferences(); }
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+  document.addEventListener('change', event => { if (event.target.matches('[data-theme-choice]')) { setTheme(event.target.value); savePreferences(); } });
   document.getElementById('preview-width').addEventListener('change', event => { shell.style.setProperty('--preview-width', event.target.value === 'auto' ? '100%' : event.target.value + 'px'); closeMenus(); });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') { closeMenus(); if (compact && navOpen) { navOpen = false; navigationVisibility(true); } else if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); }

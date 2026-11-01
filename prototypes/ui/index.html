@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ru" data-theme="light">
+<html lang="ru" data-theme="light" data-ui-prototype>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>RNAssistant — рабочее пространство · Demo P1</title>
+  <title>RNAssistant — рабочее пространство · Demo P2</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="ui.css">
@@ -26,9 +26,9 @@
           <hr><button data-command="save-layout">Сохранить раскладку</button><button data-command="restore-layout">Вернуть сохранённую</button>
         </div></details>
         <details class="menu"><summary aria-label="Демо"><span data-icon="play"></span><span class="action-label">Демо</span></summary><div class="menu-body">
-          <span class="menu-label">Визуальное ревью · P1</span>
+          <span class="menu-label">Визуальное ревью · P2</span>
           <label for="preview-width">Ширина оболочки</label><select id="preview-width"><option value="auto">По ширине окна</option><option value="900">900 px · окно</option><option value="560">560 px · панель</option><option value="360">360 px · панель</option></select>
-          <p>Ревью оболочки: расположение действий, открытие экранов и свободное место. Содержимое экранов пока примерное.</p>
+          <p>Тема и цвет акцента — в настройках справа сверху. Содержимое экранов пока примерное.</p>
           <p>Локальные примеры. Модель и Office не подключены.</p>
         </div></details>
         <button class="icon-button" id="theme-toggle" aria-label="Включить тёмную тему" title="Сменить тему"><span data-icon="moon"></span></button>
@@ -60,6 +60,7 @@
   <div id="toast" class="toast" role="status" hidden></div>
   <script src="vendor/dockview-8.8.3/dockview-core.min.js"></script>
   <script src="../../web/js/app-icons.js"></script>
+  <script src="../../web/js/app-accent.js"></script>
   <script src="../../web/js/vendor/marked.min.js"></script>
   <script src="../../web/js/vendor/purify.min.js"></script>
   <script src="fixtures.js"></script>

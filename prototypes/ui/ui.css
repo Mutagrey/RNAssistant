@@ -8,7 +8,7 @@ button:disabled { opacity: .45; cursor: default; }
 button:hover, summary:hover { background: var(--surface-hover); }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .demo-icon { width: 17px; height: 17px; flex-shrink: 0; vertical-align: middle; }
-.codicon-split { display: inline-block; background: currentColor; mask: var(--split-icon) center / 16px 16px no-repeat; -webkit-mask: var(--split-icon) center / 16px 16px no-repeat; }
+.codicon-split { display: inline-block; background: currentColor; mask: var(--split-icon) center / contain no-repeat; -webkit-mask: var(--split-icon) center / contain no-repeat; }
 .split-right { --split-icon: url('vendor/codicons-split/split-horizontal.svg'); }
 .split-below { --split-icon: url('vendor/codicons-split/split-vertical.svg'); }
 [hidden] { display: none !important; }
@@ -31,7 +31,7 @@ button:hover, summary:hover { background: var(--surface-hover); }
 .menu[open] > summary { background: var(--surface-hover); color: var(--text); }
 .menu-body { position: absolute; right: 0; top: calc(100% + 6px); width: 248px; max-height: 70vh; overflow: auto; z-index: 100; padding: var(--space-1); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 .menu-body button { display: flex; align-items: center; gap: var(--space-2); padding: 7px var(--space-2); border-radius: var(--radius); text-align: left; width: 100%; }
-.menu-body button .open-dot, .panel-picker .open-dot { margin-left: auto; color: var(--accent); font-size: 10px; }
+.menu-body button .open-dot { margin-left: auto; color: var(--accent); font-size: 10px; }
 .menu-label { display: block; color: var(--text-muted); font-size: var(--text-small); padding: var(--space-2); }
 .menu-body label { display: block; padding: var(--space-2); }
 .menu-body select { margin: 0 var(--space-2); width: calc(100% - 16px); height: var(--control-height); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
@@ -92,7 +92,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-1) 0; }
   --dv-tab-divider-color: var(--border);
   --dv-tab-border-radius: 0;
   --dv-tab-margin: 0;
-  --dv-tab-close-icon-size: 12px;
   --dv-separator-border: var(--border);
   --dv-active-sash-color: var(--accent);
   --dv-sash-color: var(--surface-shell);
@@ -104,9 +103,14 @@ hr { border: 0; border-top: 1px solid var(--border); margin: var(--space-1) 0; }
   --dv-tabs-container-scrollbar-color: var(--text-muted);
   --dv-overlay-z-index: 20;
 }
+/* Dockview 8.8.3 default-tab sizing: its stock close-size token only styles
+   named vendor themes. Keep this adapter scoped to the bundled close control. */
+.rna-dock .dv-default-tab-action { width: var(--tab-close-target-size); height: var(--tab-close-target-size); }
+.rna-dock .dv-default-tab-action .dv-svg { width: var(--tab-close-icon-size); height: var(--tab-close-icon-size); color: var(--text-muted); }
+.rna-dock .dv-default-tab-action:hover .dv-svg { color: var(--text); }
 .group-actions { display: flex; align-items: center; gap: 1px; padding-right: 3px; }
-.group-actions .icon-button, .group-actions .menu > summary { width: 25px; height: 25px; padding: 4px; }
-.group-actions svg { width: 14px; height: 14px; }
+.group-actions .icon-button, .group-actions .menu > summary { width: var(--group-action-target-size); height: var(--group-action-target-size); padding: var(--space-1); }
+.group-actions .demo-icon { width: var(--group-action-icon-size); height: var(--group-action-icon-size); }
 /* Content does not depend on Dockview DOM internals. */
 .panel-content { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; background: var(--surface); color: var(--text); }
 .view-context { height: 33px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 0 var(--space-3); color: var(--text-muted); border-bottom: 1px solid var(--border); font-size: var(--text-small); }
@@ -216,6 +220,14 @@ h3 { font-size: 13px; font-weight: 600; margin: var(--space-4) 0 var(--space-3);
 .event-list strong { font-weight: 500; }
 .setting-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--border); padding: var(--space-4) 0; }
 .setting-row strong { font-weight: 500; }
+.setting-row select { min-height: var(--control-height); padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.accent-settings { margin: var(--space-4) 0 0; padding: 0 0 var(--space-4); border: 0; border-bottom: 1px solid var(--border); }
+.accent-settings legend { font-weight: 500; margin-bottom: var(--space-2); }
+.accent-settings p { color: var(--text-muted); font-size: var(--text-small); margin-bottom: var(--space-3); }
+.accent-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(124px, 1fr)); gap: var(--space-2); }
+.accent-choice { display: flex; align-items: center; gap: var(--space-2); min-height: 34px; padding: var(--space-1) var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); text-align: left; }
+.accent-choice[aria-pressed="true"] { background: var(--surface-selected); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.accent-swatch { width: 14px; height: 14px; flex-shrink: 0; border-radius: 50%; background: var(--swatch); border: 1px solid var(--border); }
 .toast { position: fixed; bottom: 38px; left: 50%; transform: translateX(-50%); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); z-index: 200; max-width: calc(100% - 32px); }
 .shell.compact .navigation { position: absolute; z-index: 25; left: var(--rail-width); top: 0; bottom: 0; box-shadow: var(--shadow); width: min(var(--navigation-width), calc(100% - var(--rail-width) - 20px)); }
 .shell.compact .navigation-resize { display: none; }
@@ -243,8 +255,6 @@ h3 { font-size: 13px; font-weight: 600; margin: var(--space-4) 0 var(--space-3);
 .group-menu button { display: block; padding: 8px; width: 100%; border-radius: var(--radius); text-align: left; }
 .group-menu .dock-menu-action { display: flex; align-items: center; gap: var(--space-2); }
 .dock-menu-action .demo-icon { color: var(--text-muted); }
-.panel-picker button { display: flex; align-items: center; gap: var(--space-2); }
-.panel-picker p { margin: var(--space-2); color: var(--text-muted); font-size: var(--text-small); }
 .screen-chooser { overflow: auto; }
 .chooser-body { width: 100%; max-width: 520px; margin-inline: auto; padding: var(--space-5); }
 .chooser-body h2 { margin: 0 0 var(--space-4); font-size: var(--text-title); font-weight: 600; }

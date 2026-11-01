@@ -33,6 +33,10 @@
   --control-height: 28px;
   --top-height: 40px;
   --tab-height: 34px;
+  --tab-close-icon-size: 10px;
+  --tab-close-target-size: 20px;
+  --group-action-icon-size: 14px;
+  --group-action-target-size: 25px;
   --rail-width: 44px;
   --status-height: 24px;
   --navigation-width: 224px;
