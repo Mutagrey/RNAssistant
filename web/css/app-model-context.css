@@ -1,8 +1,6 @@
-/* Request reading shares the chat dock, controls and shipped document viewers. */
+/* Request reader in Diagnostics; shared product controls and document viewers. */
 .model-context-dialog { display: flex; flex: 1; min-width: 0; min-height: 0; flex-direction: column; background: var(--surface); color: var(--ink); overflow: hidden; container: request / inline-size; }
 .model-context-dialog.hidden { display: none; }
-.shell #tab-chat .chat-inspector.is-request > :is(.chat-inspector-head, .chat-inspector-body) { display: none; }
-.shell #tab-chat .chat-inspector.is-request.is-request-focus { position: fixed; inset: 0; z-index: 1500; width: auto; border: 0; box-shadow: none; transform: none; }
 .model-context-head { display: flex; flex: 0 0 auto; align-items: center; gap: 4px; min-height: var(--page-header-height); padding: 6px 10px; border-bottom: 1px solid var(--line); }
 .model-context-head strong { flex: 1; min-width: 0; font-size: var(--text-sm); font-weight: 600; }
 .model-context-dialog select, .model-context-dialog input[type="search"] { min-width: 0; min-height: 32px; padding: 6px 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background-color: var(--surface); color: var(--ink); font: 12px var(--font); }
@@ -161,5 +159,3 @@
   .model-context-head select { margin-left: 36px; flex-basis: calc(100% - 36px); width: auto; }
   .shell .model-context-dialog .model-context-tabs { gap: 0 12px; }
 }
-@media (max-width: 1100px) { .shell #tab-chat .chat-workspace .chat-inspector.is-request-wide { width: min(var(--inspector-width), 92%); } }
-@media (max-width: 620px) { .shell #tab-chat .chat-workspace .chat-inspector.is-request.is-request-wide { width: 100%; } }

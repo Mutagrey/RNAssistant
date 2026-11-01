@@ -17,10 +17,8 @@ var performanceDiagnostics = (function () {
     if (list.length > limit) list.length = limit;
   }
   function visible() {
-    var settings = $("tab-settings"), page = document.querySelector('.settings-page[data-settings-page="service"]');
-    var overview = document.querySelector('[data-diagnostics-panel="overview"]');
-    return settings && settings.classList.contains("active") && page && page.classList.contains("active") &&
-      overview && overview.classList.contains("active");
+    return $("tab-diagnostics").classList.contains("active") && state.diagnosticsTab === "application" &&
+      $("diagnosticsAppView").value === "health";
   }
   function duration(value) { return value !== null && value !== undefined && Number.isFinite(Number(value))
     ? formatDiagnosticDuration(value) : "—"; }
@@ -131,7 +129,7 @@ var performanceDiagnostics = (function () {
 })();
 window.RNAssistantPerformanceDiagnostics = performanceDiagnostics;
 
-function appendConnectionMetric(root, label, value) {
+function appendDiagnosticMetric(root, label, value) {
   if (value === null || value === undefined || value === "") return;
   var item = document.createElement("div");
   var name = document.createElement("span");
@@ -141,48 +139,6 @@ function appendConnectionMetric(root, label, value) {
   item.appendChild(name);
   item.appendChild(metric);
   root.appendChild(item);
-}
-
-function renderModelConnectionTestResult(result) {
-  var root = $("modelConnectionResults");
-  if (!root) return;
-  root.replaceChildren();
-  var success = !!modelDiagnosticValue(result, "Success", "success", false);
-  var summary = document.createElement("div");
-  summary.className = "model-compatibility-summary " + (success ? "passed" : "failed");
-  summary.textContent = modelDiagnosticValue(result, "Summary", "summary", success ? "Модель ответила." : "Проверка не пройдена.");
-  root.appendChild(summary);
-
-  var diagnostics = modelDiagnosticValue(result, "Diagnostics", "diagnostics", null) || {};
-  var metrics = document.createElement("div");
-  metrics.className = "model-connection-metrics";
-  appendConnectionMetric(metrics, "Подготовка", diagnosticMetric(diagnostics, "PreparationMs", "preparationMs"));
-  appendConnectionMetric(metrics, "API", diagnosticStageMetric(diagnostics, "ResponseHeadersMs", "responseHeadersMs", "PreparationMs", "preparationMs"));
-  appendConnectionMetric(metrics, "Первые данные", diagnosticStageMetric(diagnostics, "FirstChunkMs", "firstChunkMs", "ResponseHeadersMs", "responseHeadersMs"));
-  appendConnectionMetric(metrics, "Всего", formatDiagnosticDuration(modelDiagnosticValue(result, "DurationMs", "durationMs", 0)));
-  var status = modelDiagnosticValue(diagnostics, "StatusCode", "statusCode", null);
-  appendConnectionMetric(metrics, "HTTP", status === null ? null : String(status));
-  root.appendChild(metrics);
-
-  var error = modelDiagnosticValue(result, "Error", "error", "");
-  if (error) {
-    var errorNode = document.createElement("div");
-    errorNode.className = "model-connection-error";
-    errorNode.textContent = error;
-    root.appendChild(errorNode);
-  }
-}
-
-function diagnosticMetric(source, pascal, camel) {
-  var value = modelDiagnosticValue(source, pascal, camel, null);
-  return value === null ? null : formatDiagnosticDuration(value);
-}
-
-function diagnosticStageMetric(source, endPascal, endCamel, startPascal, startCamel) {
-  var end = modelDiagnosticValue(source, endPascal, endCamel, null);
-  if (end === null) return null;
-  var start = Number(modelDiagnosticValue(source, startPascal, startCamel, 0) || 0);
-  return formatDiagnosticDuration(Math.max(0, Number(end) - start));
 }
 
 var lastCasHealthReport = null;
@@ -214,29 +170,29 @@ function renderCasHealthReport(report, actionMessage) {
   var summary = document.createElement("div");
   if (!complete) {
     summary.className = "model-compatibility-summary failed";
-    summary.textContent = "Reachability неполный — удаление заблокировано.";
+    summary.textContent = "Проверка ссылок неполна — удаление заблокировано.";
   } else if (missing || corrupt) {
     summary.className = "model-compatibility-summary failed";
-    summary.textContent = "Найдены отсутствующие или повреждённые referenced blobs.";
+    summary.textContent = "Сохранённые данные отсутствуют или повреждены.";
   } else if (orphan) {
     summary.className = "model-compatibility-summary warning";
     summary.textContent = "Найдены безопасные кандидаты на очистку: " + orphan + ".";
   } else {
     summary.className = "model-compatibility-summary passed";
-    summary.textContent = "CAS и все ссылки целы; orphan blobs нет.";
+    summary.textContent = "Сохранённые данные и ссылки целы; неиспользуемых файлов нет.";
   }
   if (actionMessage) summary.textContent = actionMessage + " " + summary.textContent;
   root.appendChild(summary);
 
   var metrics = document.createElement("div");
-  metrics.className = "model-connection-metrics";
-  appendConnectionMetric(metrics, "Chat streams", String(modelDiagnosticValue(report, "ChatStreamCount", "chatStreamCount", 0)));
-  appendConnectionMetric(metrics, "VBA journals", String(modelDiagnosticValue(report, "VbaJournalCount", "vbaJournalCount", 0)));
-  appendConnectionMetric(metrics, "Referenced", String(modelDiagnosticValue(report, "ReferencedBlobCount", "referencedBlobCount", 0)));
-  appendConnectionMetric(metrics, "CAS", String(modelDiagnosticValue(report, "StoredBlobCount", "storedBlobCount", 0)) + " · " +
+  metrics.className = "diagnostic-metrics";
+  appendDiagnosticMetric(metrics, "Чаты", String(modelDiagnosticValue(report, "ChatStreamCount", "chatStreamCount", 0)));
+  appendDiagnosticMetric(metrics, "Журналы VBA", String(modelDiagnosticValue(report, "VbaJournalCount", "vbaJournalCount", 0)));
+  appendDiagnosticMetric(metrics, "По ссылкам", String(modelDiagnosticValue(report, "ReferencedBlobCount", "referencedBlobCount", 0)));
+  appendDiagnosticMetric(metrics, "CAS", String(modelDiagnosticValue(report, "StoredBlobCount", "storedBlobCount", 0)) + " · " +
     formatStorageBytes(modelDiagnosticValue(report, "StoredByteLength", "storedByteLength", 0)));
-  appendConnectionMetric(metrics, "Missing / corrupt", missing + " / " + corrupt);
-  appendConnectionMetric(metrics, "Orphan", orphan + " · " +
+  appendDiagnosticMetric(metrics, "Нет / повреждено", missing + " / " + corrupt);
+  appendDiagnosticMetric(metrics, "Без ссылок", orphan + " · " +
     formatStorageBytes(modelDiagnosticValue(report, "OrphanStoredByteLength", "orphanStoredByteLength", 0)));
   root.appendChild(metrics);
 
@@ -315,64 +271,11 @@ async function collectCasGarbage() {
   }
 }
 
-function setDiagnosticsTab(name, refreshRecords) {
-  name = name === "overview" || name === "trajectory" || name === "model-lab" ? name : "runtime-log";
-  state.diagnosticsTab = name;
-  Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (button) {
-    var active = button.getAttribute("data-diagnostics-tab") === name;
-    button.classList.toggle("active", active);
-    if (active) button.setAttribute("aria-current", "page");
-    else button.removeAttribute("aria-current");
-  });
-  Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-panel")).forEach(function (panel) {
-    var target = panel.getAttribute("data-diagnostics-panel");
-    var active = target === name || target === "records" && name === "trajectory";
-    panel.classList.toggle("active", active);
-  });
-  if (name === "trajectory" && typeof setTrajectoryDiagnosticsMode === "function") {
-    setTrajectoryDiagnosticsMode("trajectory", refreshRecords !== false);
-  }
-  if (name === "runtime-log" && typeof updateLogScrollButton === "function") {
-    requestAnimationFrame(updateLogScrollButton);
-  }
-  if (name === "overview") performanceDiagnostics.render();
-  if (name === "model-lab" && typeof openModelDiagnosticsLab === "function") openModelDiagnosticsLab(true);
-}
-
 function bindDiagnosticsActions() {
-  if (typeof bindModelDiagnosticsLab === "function") bindModelDiagnosticsLab();
+  RNAssistantDiagnostics.bind();
+  bindModelDiagnosticsLab();
   performanceDiagnostics.observeLongTasks();
-  Array.prototype.slice.call(document.querySelectorAll(".diagnostics-tab-button")).forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      setDiagnosticsTab(tab.getAttribute("data-diagnostics-tab"), true);
-    });
-  });
-  setDiagnosticsTab(state.diagnosticsTab || "runtime-log", false);
-  var button = $("testModelConnectionButton");
-  var timingRefresh = $("refreshPerformanceDiagnosticsButton");
-  if (timingRefresh) timingRefresh.addEventListener("click", performanceDiagnostics.render);
-  if (button) button.addEventListener("click", async function () {
-    var root = $("modelConnectionResults");
-    try {
-      button.disabled = true;
-      button.textContent = "Проверяю…";
-      if (root) root.textContent = "Отправляю короткий запрос текущей модели…";
-      await persistSettingsFromForm();
-      var result = await send("testModelConnection", {});
-      renderModelConnectionTestResult(result);
-      log("Проверка связи с моделью завершена.");
-    } catch (error) {
-      if (root) root.textContent = "Тест не выполнен: " + error.message;
-      log(error.message, "error");
-    } finally {
-      button.disabled = false;
-      button.textContent = "Проверить модель";
-    }
-  });
-  var auditCas = $("auditCasButton");
-  var collectCas = $("collectCasButton");
-  if (auditCas) auditCas.addEventListener("click", auditCasHealth);
-  if (collectCas) collectCas.addEventListener("click", collectCasGarbage);
+  $("refreshPerformanceDiagnosticsButton").addEventListener("click", performanceDiagnostics.render);
+  $("auditCasButton").addEventListener("click", auditCasHealth);
+  $("collectCasButton").addEventListener("click", collectCasGarbage);
 }
-
-window.setDiagnosticsTab = setDiagnosticsTab;

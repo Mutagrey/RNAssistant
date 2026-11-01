@@ -9,12 +9,16 @@ an expandable host-neutral chat history:
 Existing query/export authority and raw pagination remain intact; the journal is not
 a second durable log.
 
-The current Diagnostics UI opens at **Ход работы**, a bounded in-memory stream for
-the current app session. **История чата** loads the saved `run-causal` view only when
-opened and shows the latest run first; **Показать весь чат** in its action menu
-removes that run filter. A single toolbar contains the view selector, scope, refresh and action menu; the history search field is removed.
-The action menu opens additional event filters and export. The VBA editor owns the convenient code diff; the journal view is retained
-for mutation recovery evidence. Large event bodies are fetched only on demand.
+The [Diagnostics entry](diagnostics.md) opens **Запуски** for the selected document /
+workspace and chat. It loads the saved `run-causal` view on demand, starting with
+the latest run. **Показать весь чат** removes that run filter. The same toolbar
+owns view selection, additional filters and export. **Приложение** contains the
+separate, ephemeral application log and performance/maintenance tools.
+Requests open in the same diagnostics area; returning preserves the journal DOM,
+filters, expansions and scroll. Evidence → journal has **К запросу** to restore
+the suspended reader. Correlation Back restores the same-source selection and
+scroll, loading only the prior bounded range. Large bodies remain on-demand.
+The VBA editor owns the code diff; journal mutation evidence remains available.
 
 ## Query contract
 

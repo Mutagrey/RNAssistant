@@ -1311,22 +1311,6 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static void BridgeRunsModelCompatibilityTest()
-        {
-            var controller = new AssistantController();
-            var bridge = new AssistantWebBridge(controller, null);
-            var token = BridgeToken(bridge);
-            var responseJson = bridge.HandleMessageAsync(
-                "{\"contractVersion\":2,\"id\":\"compat1\",\"type\":\"testModelCompatibility\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
-                .GetAwaiter()
-                .GetResult();
-
-            var response = JObject.Parse(responseJson);
-            AssertTrue(response["ok"].Value<bool>(), "compatibility bridge response ok");
-            AssertTrue(response["payload"]["compatible"].Value<bool>(), "compatibility result forwarded");
-            AssertEqual("user_role", response["payload"]["checks"][0]["id"].Value<string>(), "typed compatibility check forwarded");
-        }
-
         private static void BridgeUsesTypedDocumentPayload()
         {
             var controller = new AssistantController();
@@ -1590,22 +1574,18 @@ namespace RNAssistant.Harness
                 "uninstall uses the same package result contract");
         }
 
-        private static void BridgeReportsModelConnectionDiagnostics()
+        private static void BridgeForwardsModelDiagnostics()
         {
             var controller = new AssistantController();
             var messages = new List<string>();
             using (var bridge = new AssistantWebBridge(controller, messages.Add))
             {
-                var token = BridgeToken(bridge);
-                var responseJson = bridge.HandleMessageAsync(
-                    "{\"contractVersion\":2,\"id\":\"ping1\",\"type\":\"testModelConnection\",\"bridgeToken\":\"" + token + "\",\"payload\":{}}")
-                    .GetAwaiter().GetResult();
-
-                var response = JObject.Parse(responseJson);
-                AssertTrue(response["ok"].Value<bool>(), "model connection bridge response ok");
-                AssertTrue(response["payload"]["success"].Value<bool>(), "model connection succeeds");
-                AssertEqual("modelDiagnostics", JObject.Parse(messages[0])["type"].Value<string>(), "diagnostics event type");
-                AssertEqual("completed", JObject.Parse(messages[0])["payload"]["phase"].Value<string>(), "diagnostics phase");
+                controller.PublishModelDiagnostics(new LlmRequestDiagnosticUpdate {
+                    RequestId = "saved-request", Phase = LlmRequestDiagnosticPhases.Completed, TotalMs = 25 });
+                var message = JObject.Parse(messages.Single());
+                AssertEqual("modelDiagnostics", (string)message["type"], "existing telemetry channel is retained");
+                AssertEqual("completed", (string)message["payload"]["phase"], "typed phase is forwarded");
+                AssertEqual("saved-request", (string)message["payload"]["requestId"], "request identity is retained");
             }
         }
 

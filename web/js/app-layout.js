@@ -45,6 +45,7 @@
       handle.hidden = mode === "single";
     });
     var active = shell.querySelector(".panel.active .global-nav");
+    if (button) button.hidden = mode !== "single" && !active;
     if (active) {
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));

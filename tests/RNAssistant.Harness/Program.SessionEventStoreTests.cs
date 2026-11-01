@@ -4086,6 +4086,12 @@ namespace RNAssistant.Harness
                 "diagnostic provenance is never model-facing");
             AssertTrue(payload["RequestComposition"] == null && payload["requestComposition"] == null,
                 "composition metadata is never sent to the provider");
+            AssertTrue(trace.Settings != null, "request freezes a non-secret settings snapshot before dispatch");
+            AssertEqual(LlmResponseFormats.JsonObject, trace.Settings.ResponseFormat, "new response format is frozen");
+            AssertEqual(ToolResultRoles.User, trace.Settings.ToolResultRole, "history role remains independent");
+            AssertEqual((int?)payload["max_tokens"], trace.Settings.MaxOutputTokens, "actual output limit is frozen");
+            AssertEqual((double?)payload["temperature"], trace.Settings.Temperature, "actual sampling setting is frozen");
+            AssertTrue(!JsonConvert.SerializeObject(trace.Settings).Contains(secret), "settings snapshot contains no credentials");
             AssertEqual("trace-model", (string)payload["model"], "materialized model recorded");
             AssertEqual("materialized prompt", (string)payload.SelectToken("messages[0].content"),
                 "materialized message recorded");

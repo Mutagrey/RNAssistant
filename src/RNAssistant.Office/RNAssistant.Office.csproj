@@ -86,7 +86,6 @@
     <Compile Include="Contracts\BridgeDtos.Trajectory.cs" />
     <Compile Include="Contracts\BridgeDtos.Vba.cs" />
     <Compile Include="Controller\AssistantController.cs" />
-    <Compile Include="Controller\AssistantController.Compatibility.cs" />
     <Compile Include="Controller\AssistantController.Agent.cs" />
     <Compile Include="Controller\AssistantController.ArtifactViewer.cs" />
     <Compile Include="Controller\AssistantController.ChatExecution.cs" />
@@ -305,6 +304,7 @@
     <Compile Include="Services\PromptContextInspectorService.cs" />
     <Compile Include="Services\ModelContextInspectorService.cs" />
     <Compile Include="Services\ModelContextEvidenceProjection.cs" />
+    <Compile Include="Services\ModelContextRequestProjection.cs" />
     <Compile Include="Services\ChatDiagnosticsScope.cs" />
     <Compile Include="Contracts\BridgeDtos.ModelContext.cs" />
     <Compile Include="Services\PromptContextInspectorDownloadService.cs" />
@@ -313,9 +313,7 @@
     <Compile Include="Services\AttachmentModelRoutingService.cs" />
     <Compile Include="Services\ModelAttachmentService.cs" />
     <Compile Include="Services\ModelCapabilityService.cs" />
-    <Compile Include="Services\ModelConnectionTestService.cs" />
     <Compile Include="Services\ModelDiagnosticsService.cs" />
-    <Compile Include="Services\ModelCompatibilityService.cs" />
     <Compile Include="Services\ChatSessionService.cs" />
     <Compile Include="Services\RunCausalTrace.cs" />
     <Compile Include="Services\HtmlNetworkService.cs" />

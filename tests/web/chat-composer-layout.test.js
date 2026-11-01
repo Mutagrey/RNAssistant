@@ -31,16 +31,16 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.saveChatMode = mode => { state.activeChatMode = mode; renderSendControls(); };
       window.findEditingMessage = () => null;
     });
-    for (const file of ["app-icons.js", "app-run-view-state.js", "app-accent.js", "app-utils.js", "app-model-picker.js", "app-conversation-input.js", "app-chat-composer.js", "app-chat-state.js", "app-context-inspector.js", "app-diagnostics.js"])
+    for (const file of ["app-icons.js", "app-run-view-state.js", "app-accent.js", "app-utils.js", "app-model-picker.js", "app-conversation-input.js", "app-chat-composer.js", "app-chat-state.js", "app-context-meter.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       RNAssistantAccents.apply("blue", false);
       window.activeChatUsesCurrentDocument = () => !state.foreign;
       window.renderChatModelPicker = () => {};
-      window.loadPromptContextInspector = () => { window.inspections = (window.inspections || 0) + 1; };
+      window.RNAssistantChatInspector = { openUsage: () => { window.inspections = (window.inspections || 0) + 1; } };
       $("chatModelButtonLabel").textContent = "Модель с длинным названием";
       $("compactContextButton").hidden = false;
-      bindComposerPickers(); bindContextInspectorActions(); bindDiagnosticsActions(); renderSendControls(); renderContextMeter();
+      bindComposerPickers(); bindContextMeterActions(); renderSendControls(); renderContextMeter();
     });
 
     for (const width of [1800, 1100, 740, 360]) {
@@ -126,13 +126,15 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       renderSendControls();
     });
     assert.equal(await page.locator("#chatRunNotice").isVisible(), true);
-    assert.match(await page.locator("#chatRunNotice").innerText(), /не подтверждён/);
+    assert.match(await page.locator("#chatRunNotice").innerText(), /Работа остановлена/);
+    await page.evaluate(() => { state.activeRunViewState.lifecycle = "cancelled"; renderSendControls(); });
+    assert.match(await page.locator("#chatRunNotice").innerText(), /Результат действия неизвестен/);
     assert.equal(await page.locator("#chatRunNotice button").count(), 0, "unknown effects offer no automatic retry");
     await page.evaluate(() => { state.activeRunViewState = null; renderSendControls(); });
     assert.equal(await page.locator("#chatRunNotice").isVisible(), false, "next chat/run clears the notice");
     console.log("PASS composer: menu and context tooltip fit 1800/1100/740/360px; ring precedes plain model label, ping is absent");
-    assert.equal(await page.locator("#testModelConnectionButton").count(), 1,
-      "manual model connection check remains in settings");
+    assert.equal(await page.locator("#testModelConnectionButton").count(), 0,
+      "duplicate connection probe is retired; the lab owns explicit model checks");
 
     await page.evaluate(() => {
       state.settings.AutoConfirmToolActions = true; state.mutationPolicy = "Deny"; renderSendControls();
@@ -188,12 +190,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#contextMeter").focus();
     assert.equal(await page.locator("#contextMeterTooltip").isVisible(), true);
     await page.locator("#contextMeter").press("Enter");
-    assert.equal(await page.locator("#promptContextInspector").isVisible(), true);
     assert.equal(await page.locator("#contextMeterTooltip").isVisible(), false);
     assert.equal(await page.evaluate(() => window.inspections), 1);
-    assert.equal(await page.locator("#openModelContextFromTokens").isVisible(), true);
-    await page.locator("#closePromptContextInspectorButton").click();
-    assert.equal(await page.locator("#promptContextInspector").isVisible(), false);
     assert.equal(await page.evaluate(() => document.activeElement.id), "contextMeter");
     await page.addScriptTag({ content: read("js/app-settings.js") });
     await page.evaluate(() => {
@@ -230,7 +228,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.locator("#chatMutationPolicy, #chatPolicyStatus").count(), 0);
     console.log("PASS settings: auto-confirm defaults off, saves/reloads both values and resets to Ask");
     assert.deepEqual(errors, []);
-    console.log("PASS composer: ring opens the existing usage panel and restores keyboard focus on close");
+    console.log("PASS composer: ring routes to the shared usage presentation");
     if (process.env.COMPOSER_SCREENSHOT) {
       await page.locator("#contextMeter").blur();
       await page.setViewportSize({ width: 740, height: 760 });

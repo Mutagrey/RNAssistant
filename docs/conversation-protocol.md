@@ -820,12 +820,15 @@ model's known `MaxContextTokens`. Zero uses the known model window. If the model
 window is unknown, a positive limit is the planning window; otherwise the
 fallback estimate is 32,768 tokens. This setting does not reconfigure the provider.
 
-The composer’s **Контекст модели** button and the token inspector open the same
-window. Its default view follows the latest saved model request; selecting an older
-attempt pauses following. Requests are paged newest first, including repair/helper
-attempts. The window keeps the original message order and renders messages lazily
-as lossless JSON or Markdown/source, with request parameters separate from messages.
-Changing chats closes the window and invalidates pending reads.
+The composer’s **Контекст модели** action opens **Диагностика → Запуски → Запрос**.
+The token ring opens the single sidebar **Токены и прогноз**: exact API usage,
+then an opt-in next-request estimate. There is no second estimate popup.
+[Diagnostics architecture and routes](diagnostics.md) own navigation; this document
+owns protocol/data semantics. A saved request opens metadata-only **Итог** before
+any CAS body read. **Вход / Ответ / Доказательства / Ресурсы / Сравнение / Исходник**
+use the same reader. Run/step filtering happens before the 50-request page limit.
+Selecting an older request pauses following; changing source cancels pending reads.
+Messages default to wire order; grouping is optional and lazily paged.
 
 **Фактический запрос / ответ** reads the immutable `llm.request` body, its correlated
 response/failure and optional SSE batches from the event stream/CAS. A prepared
@@ -836,6 +839,18 @@ Bodies use verified chunked downloads, without the older diagnostic 512 KiB prev
 clipping. The inspector's Web downloader still has an explicit 50 MiB ceiling;
 rendering bounds do not truncate downloads. Large text has a labelled bounded
 rendering with full-source copy/download.
+
+
+Summary distinguishes parser trace acceptance/rejection from canonical committed
+runtime acceptance. Neither establishes a verified document effect. UI does not
+reparse V8 to invent a decision. Decoded `content` remains explicitly a string,
+including historical JSON; exact wire JSON preserves original types and bytes.
+New request traces freeze non-secret response format, history role, instruction
+role and generation parameters. Older traces show absent settings rather than
+using the current form. Read-only comparison verifies two CAS bodies from the
+same run (8 MiB / 8000 messages each, first 200 changes); it compares JSON structure,
+not semantic equivalence or exact bytes. Original hashes and bodies stay available.
+Duplicate JSON members, absent bodies and limits produce unavailable/partial states.
 
 **Предварительный контекст** uses the existing compiler snapshot with current draft
 and attachment metadata. It is explicitly not a sent HTTP body; transport materializes

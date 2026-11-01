@@ -740,7 +740,10 @@
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);
-  window.RNAssistantProjectChats = { show: function () {
+  window.RNAssistantProjectChats = { show: function (options) {
+    if (options && options.preserveChatOwner && window.RNAssistantWorkspaceChat.owner() === "plugin") {
+      render(); if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout(); return;
+    }
     if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); }
     else if (window.RNAssistantWorkspaceChat.mount("office")) resumeOfficeTranscript();
     if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();

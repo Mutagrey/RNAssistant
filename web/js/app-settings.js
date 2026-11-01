@@ -551,62 +551,13 @@ function resetAgentSettingsToDefaults() {
   markSettingsDirty();
 }
 
-function renderModelCompatibilityResult(result) {
-  var root = $("modelCompatibilityResults");
-  if (!root) return;
-  root.replaceChildren();
-
-  var compatible = !!compatibilityValue(result, "Compatible", "compatible", false);
-  var summary = document.createElement("div");
-  summary.className = "model-compatibility-summary " + (compatible ? "passed" : "failed");
-  summary.textContent = compatibilityValue(result, "Summary", "summary", compatible ? "Совместимо." : "Есть несовместимости.");
-  root.appendChild(summary);
-
-  var meta = document.createElement("div");
-  meta.className = "model-compatibility-meta";
-  meta.textContent = [
-    compatibilityValue(result, "Model", "model", ""),
-    "instruction: " + compatibilityValue(result, "InstructionRole", "instructionRole", ""),
-    "agent: " + compatibilityValue(result, "ResponseMode", "responseMode", ""),
-    "tool result: " + compatibilityValue(result, "ToolResultRole", "toolResultRole", "")
-  ].filter(Boolean).join(" · ");
-  root.appendChild(meta);
-
-  var list = document.createElement("div");
-  list.className = "model-compatibility-list";
-  (compatibilityValue(result, "Checks", "checks", []) || []).forEach(function (check) {
-    var passed = !!compatibilityValue(check, "Passed", "passed", false);
-    var required = !!compatibilityValue(check, "Required", "required", false);
-    var row = document.createElement("div");
-    row.className = "model-compatibility-check " + (passed ? "passed" : "failed") + (required ? " required" : " optional");
-
-    var mark = document.createElement("span");
-    mark.className = "model-compatibility-mark";
-    mark.textContent = passed ? "✓" : "×";
-    row.appendChild(mark);
-
-    var copy = document.createElement("div");
-    var title = document.createElement("div");
-    title.className = "model-compatibility-check-title";
-    title.textContent = compatibilityValue(check, "Title", "title", "Проверка") + (required ? " · используется сейчас" : " · необязательно");
-    copy.appendChild(title);
-    var message = document.createElement("div");
-    message.className = "model-compatibility-check-message";
-    message.textContent = compatibilityValue(check, "Message", "message", "") + " · " + Number(compatibilityValue(check, "DurationMs", "durationMs", 0) || 0) + " мс";
-    copy.appendChild(message);
-    row.appendChild(copy);
-    list.appendChild(row);
-  });
-  root.appendChild(list);
-}
 
 function bindSettingsActions() {
   var navSearch = $("settingsNavSearch");
   var navRoot = $("settingsNavTree");
   var navItems = [
     ["connection", "Подключение"], ["model", "Модель"], ["context", "Контекст и вложения"],
-    ["agent", "Агент"], ["interface", "Интерфейс"], ["protection", "Защита"],
-    ["service", "Помощь и обслуживание"]
+    ["agent", "Агент"], ["interface", "Интерфейс"], ["protection", "Защита"]
   ];
 
   function selectSettingsPage(page) {
@@ -618,8 +569,6 @@ function bindSettingsActions() {
     renderSettingsNavigation();
     updateSettingsSaveButton();
     loadSettingsModelCatalogIfNeeded();
-    if (page === "service" && window.RNAssistantPerformanceDiagnostics)
-      window.RNAssistantPerformanceDiagnostics.render();
   }
 
   function renderSettingsNavigation() {
@@ -736,25 +685,7 @@ function bindSettingsActions() {
       showChatCopyFeedback("Настройки не сохранены: " + error.message, true);
     }
   });
-  $("testModelCompatibilityButton").addEventListener("click", async function () {
-    var button = $("testModelCompatibilityButton");
-    var root = $("modelCompatibilityResults");
-    try {
-      button.disabled = true;
-      button.textContent = "Проверяю…";
-      root.textContent = "Выполняются безопасные запросы к endpoint…";
-      await persistSettingsFromForm();
-      var response = await send("testModelCompatibility", {});
-      renderModelCompatibilityResult(response);
-      log("Проверка совместимости модели завершена.");
-    } catch (error) {
-      root.textContent = "Тест не выполнен: " + error.message;
-      log(error.message, "error");
-    } finally {
-      button.disabled = false;
-      button.textContent = "Запустить тест";
-    }
-  });
+  $("openModelLabFromSettings").addEventListener("click", function () { RNAssistantDiagnostics.open("model-lab"); });
   $("clearRuntimeDataButton").addEventListener("click", clearRuntimeData);
   if (typeof bindPromptSettingsActions === "function") {
     bindPromptSettingsActions();

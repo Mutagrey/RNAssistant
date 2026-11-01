@@ -134,6 +134,14 @@ namespace RNAssistant.Core.Llm
                     Endpoint = traceEndpoint,
                     Model = settings.Model,
                     ResponseFormat = requestOptions.ResponseFormat,
+                    Settings = new LlmRequestSettingsSnapshot {
+                        ResponseFormat = requestOptions.ResponseFormat,
+                        ToolResultRole = ToolResultRoles.Normalize(settings.ToolResultRole),
+                        InstructionRole = settings.SystemPromptRole,
+                        MaxOutputTokens = (int?)(body["max_tokens"] ?? body["max_completion_tokens"]),
+                        Temperature = (double?)body["temperature"], TopP = (double?)body["top_p"],
+                        Streaming = settings.StreamResponses
+                    },
                     MessageCount = apiMessages.Count,
                     EstimatedPromptTokens = estimatedRequestTokens,
                     PayloadUtf8Bytes = requestPayloadBytes,

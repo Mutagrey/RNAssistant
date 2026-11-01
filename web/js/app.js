@@ -44,7 +44,7 @@ function bindProductNavSearches() {
   });
 }
 
-function switchTab(name) {
+function switchTab(name, options) {
   if (window.RNAssistantShellLayout && window.RNAssistantShellLayout.mode() !== "wide") setMobileNavigationOpen(false);
   if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
     syncSelectedLibraryItem();
@@ -81,9 +81,10 @@ function switchTab(name) {
   if (typeof refreshSplitPanes === "function") {
     refreshSplitPanes();
   }
+  if (changed && window.RNAssistantDiagnostics) RNAssistantDiagnostics.onTabChange(name);
   if (!changed) return;
   if (name === "chat") {
-    if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.show();
+    if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.show(options);
     renderChatSessions();
     renderMessages();
     renderContext();

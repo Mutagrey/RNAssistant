@@ -686,8 +686,8 @@ function applyChatState(response, skipDraftCapture) {
   if (typeof renderHtmlWorkspace === "function") {
     renderHtmlWorkspace();
   }
-  if (typeof syncPromptContextInspectorState === "function") {
-    syncPromptContextInspectorState();
+  if (window.RNAssistantModelContext) {
+    RNAssistantModelContext.sync();
   }
   return true;
 }

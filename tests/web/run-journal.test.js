@@ -388,7 +388,7 @@ function openParents(element) {
   assert.match(trajectory, /refreshTrajectory\(false, true\)/);
   assert.match(trajectory, /window\.openRunJournal = openRunJournal/);
   assert.match(activity, /Причина и детали/);
-  assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\)\)/);
+  assert.match(agent, /appendAgentRunViewState\(body, runViewState, agentRunId\(items, finalMessage\), !run\.workspace\)/);
   assert.equal(/JSON\.parse|fetch\(|XMLHttpRequest|WebSocket|EventSource/.test(source), false);
   console.log("PASS run journal: integration defaults to bounded run-causal and exposes direct failed-activity navigation");
   console.log("OK run journal");

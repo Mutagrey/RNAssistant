@@ -667,6 +667,78 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void ModelContextRequestSummaryAndComparison()
+        {
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.Create("Word", "diagnostics", "Diagnostics.docx", "Diagnostics");
+                var blobs = new ChatBlobStore(paths);
+                var first = store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new LlmTraceRecord { RequestId = "first", ModelAttemptId = "attempt", RunId = "run", StepId = "step",
+                        ResponseFormat = "json_object", Settings = new LlmRequestSettingsSnapshot {
+                            ResponseFormat = "json_object", ToolResultRole = "tool", InstructionRole = "developer" } },
+                    "{\"model\":\"fixture\",\"messages\":[{\"role\":\"user\",\"content\":\"{\\\"a\\\":1}\"}]}",
+                    "application/json", "run", "turn", "step");
+                const string rejection = "invalid_tool_call: tool_calls[0].arguments must be an object; received string.";
+                store.AppendTrace(session, SessionEventTypes.AgentResponseRejected,
+                    new LlmTraceRecord { RequestId = "first", Error = rejection }, "{}", "application/json", "run", "turn", "step");
+                var next = store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new LlmTraceRecord { RequestId = "next", ModelAttemptId = "attempt", RunId = "run", StepId = "step" },
+                    "{\"model\":\"fixture\",\"messages\":[{\"role\":\"user\",\"content\":\"{\\\"a\\\":1}\"},{\"role\":\"developer\",\"content\":\"repair\"}]}",
+                    "application/json", "run", "turn", "step");
+                store.AppendTrace(session, SessionEventTypes.ModelResponseAccepted,
+                    new LlmTraceRecord { RequestId = "next" }, null, null, "run", "turn", "step");
+                var foreign = store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                    new LlmTraceRecord { RequestId = "foreign", RunId = "other", StepId = "other" }, "{}", "application/json", "other", "turn", "other");
+                using (var plane = new ResourceDataPlaneService(new ResourceGatewayService()))
+                {
+                    var service = new ModelContextInspectorService(new ChatEventStoreAdapter(store), blobs, plane);
+                    var page = service.Query(session, new ModelContextQuery { RunId = "run", StepId = "step" }, CancellationToken.None);
+                    AssertEqual(2, page.Events.Count, "scope applied before pagination");
+                    var rejected = service.Query(session, new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None);
+                    AssertEqual(ModelContextAcceptance.Rejected, rejected.Summary.Parser, "canonical rejection");
+                    AssertEqual(rejection, rejected.Summary.Reason, "exact field and reason preserved");
+                    AssertEqual("tool", rejected.Events[0].Trace.Settings.ToolResultRole, "history setting is separate from response format");
+                    AssertEqual(ModelContextAcceptance.NotRecorded, rejected.Summary.Runtime, "parser trace is not runtime acceptance");
+                    AssertTrue(rejected.Comparison == null, "comparison is opt-in");
+                    var compared = service.Query(session, new ModelContextQuery { RequestEventId = next.EventId,
+                        CompareRequestEventId = first.EventId }, CancellationToken.None);
+                    AssertEqual(ModelContextAcceptance.Accepted, compared.Summary.Parser, "next parser attempt is accepted");
+                    AssertEqual(ModelContextAcceptance.NotRecorded, compared.Summary.Runtime, "no fabricated commit from accepted parser");
+                    AssertEqual(first.EventId, compared.Summary.PreviousRequestEventId, "previous request stays in run");
+                    AssertTrue(compared.Comparison.Available, "saved JSON compared");
+                    AssertEqual(1, compared.Comparison.UnchangedPrefix, "JSON string is unchanged");
+                    AssertEqual("added", compared.Comparison.Changes.Single().Kind, "repair instruction appended");
+                    AssertEqual("content", compared.Comparison.Changes.Single().Fields.Last(), "changed message fields identified");
+                    AssertEqual(next.Payload.Sha256, compared.Comparison.AfterSha256, "comparison points at exact saved bytes");
+                    RuntimeThrows<InvalidOperationException>(() => service.Query(session, new ModelContextQuery {
+                        RequestEventId = foreign.EventId, CompareRequestEventId = first.EventId }, CancellationToken.None));
+                    RuntimeThrows<InvalidOperationException>(() => service.Query(session, new ModelContextQuery {
+                        RequestEventId = first.EventId, RunId = "other" }, CancellationToken.None));
+                    RuntimeThrows<OperationCanceledException>(() => service.Query(session, new ModelContextQuery {
+                        RequestEventId = next.EventId, CompareRequestEventId = first.EventId }, new CancellationToken(true)));
+                    foreach (var malformedBody in new[] {
+                        "{\"messages\":[{\"role\":{},\"content\":\"x\"}]}",
+                        "{\"messages\":[],\"messages\":[]}", "{\"messages\":[]} {}" })
+                    {
+                        var malformed = store.AppendTrace(session, SessionEventTypes.LlmRequest,
+                            new LlmTraceRecord { RequestId = Guid.NewGuid().ToString("N") }, malformedBody,
+                            "application/json", "run", "turn", "step");
+                        AssertTrue(!service.Query(session, new ModelContextQuery { RequestEventId = malformed.EventId,
+                            CompareRequestEventId = first.EventId }, CancellationToken.None).Comparison.Available,
+                            "malformed stored JSON cannot produce a successful comparison");
+                    }
+                    System.IO.File.Delete(blobs.PathFor(first.Payload.Sha256));
+                    var missing = service.Query(session, new ModelContextQuery { RequestEventId = next.EventId,
+                        CompareRequestEventId = first.EventId }, CancellationToken.None);
+                    AssertTrue(!missing.Comparison.Available, "missing CAS is unavailable, never equal/success");
+                    AssertTrue(service.Query(session, new ModelContextQuery { RequestEventId = first.EventId }, CancellationToken.None).Summary != null,
+                        "summary requires no CAS hydration");
+                }
+            });
+        }
+
         private static void ModelContextExactExchange()
         {
             WithTempPaths(paths =>
@@ -1284,7 +1356,8 @@ namespace RNAssistant.Harness
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(2, folded.Messages.Count, "latest operation is a pair");
-                AssertEqual(ContextPresentationKind.Full, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).Presentation, "short recent result is complete, not a summary");
+                AssertTrue(folded.Messages[1].Content != mutation.Content, "canonical mutation presentation changes the original text");
+                AssertEqual(ContextPresentationKind.Unknown, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).Presentation, "changed mutation text without body evidence must not claim full source delivery");
                 AssertEqual(mutation.ToolCallId, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).ToolCallId,
                     "exact tool operation ID reaches the result receipt");
             });

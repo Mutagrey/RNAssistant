@@ -3,8 +3,8 @@
   var current = null, limit = 50 * 1024 * 1024;
   var labels = { Full: "Полностью", Fragment: "Фрагмент", Summary: "Сводка / описание ресурса",
     Excluded: "Не включено", Unknown: "Нет сведений" };
-  var tabs = { messages: "modelContextMessagesTab", resources: "modelContextResourcesTab",
-    evidence: "modelContextEvidenceTab", response: "modelContextResponseTab", json: "modelContextJsonTab" };
+  var tabs = { summary: "modelContextSummaryTab", messages: "modelContextMessagesTab", response: "modelContextResponseTab",
+    evidence: "modelContextEvidenceTab", resources: "modelContextResourcesTab", compare: "modelContextCompareTab", json: "modelContextJsonTab" };
   function el(tag, text, cls) {
     var node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -40,12 +40,7 @@
   function field(list, key) { var found = list.find(function (m) { return m.key === key; }); return found && found.raw; }
   function decoded(raw) { try { return JSON.parse(raw); } catch (_) { return null; } }
   function snapshotField(value, key) { return value && (value[key] !== undefined ? value[key] : value[key[0].toUpperCase() + key.slice(1)]); }
-  function source() {
-    var workspace = window.RNAssistantWorkspaceChat, owner = workspace ? workspace.owner() : "office";
-    if (owner === "office") return { owner: owner, chatId: state.activeChatId };
-    var chat = workspace.snapshot();
-    return { owner: owner, workspaceId: snapshotField(snapshotField(chat, "project"), "workspaceId"), chatId: snapshotField(chat, "sessionId") };
-  }
+  function source() { return window.RNAssistantDiagnostics.source(); }
   function matches(c, response) {
     return response && response.chatId === c.chatId && (response.workspaceId || null) === (c.workspaceId || null);
   }
@@ -53,7 +48,7 @@
   function live(c) {
     var selected = source();
     return current === c && c.owner === selected.owner && matches(c, selected) && !c.abort.signal.aborted &&
-      $("tab-chat").classList.contains("active") && (c.owner !== "office" || typeof officeTranscriptActive !== "function" || officeTranscriptActive());
+      window.RNAssistantDiagnostics.requestVisible();
   }
   function valid(c, version) { return live(c) && c.version === version; }
   function status(c, text) { if (live(c)) $("modelContextStatus").textContent = text; }
@@ -62,12 +57,81 @@
       var control = $(tabs[key]), selected = c.tab === key;
       control.classList.toggle("active", selected);
       control.setAttribute("aria-selected", String(selected)); control.tabIndex = selected ? 0 : -1;
-      control.disabled = c.mode === "preview" && (key === "response" || key === "resources" || key === "evidence");
+      control.disabled = c.mode === "preview" && (key === "summary" || key === "compare" || key === "response" || key === "resources" || key === "evidence");
     });
     $("modelContextBody").setAttribute("aria-labelledby", tabs[c.tab]);
   }
   function dateText(value) {
     return new Date(value).toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
+  function cancelReads(c) {
+    c.version++; c.abort.abort(); c.abort = new AbortController();
+    c.requests.forEach(function (id) { cancelBridgeRequest(id).catch(function () {}); });
+    c.pending = {}; c.listRequest = null;
+  }
+  function discardViews(c) {
+    if (!c.viewCache) return;
+    c.viewCache.forEach(function (view) { view.mounts.forEach(function (host) { RNAssistantViewerRegistry.unmount(host); }); });
+    c.viewCache.clear();
+  }
+  function disclosureKey(detail, root) {
+    var parts = [], current = detail;
+    while (current && current !== root) {
+      if (current.tagName === "DETAILS") parts.unshift(current.firstElementChild.textContent);
+      if (current.dataset && current.dataset.responseEvent) parts.unshift(current.dataset.responseEvent);
+      current = current.parentElement;
+    }
+    return parts.join("\u0000");
+  }
+  function savePresentation(c) {
+    if (["summary", "resources", "response"].indexOf(c.tab) < 0) return;
+    var root = $("modelContextBody");
+    c.presentation[c.tab] = { scroll: root.scrollTop,
+      expanded: Array.from(root.querySelectorAll("details[open]")).map(function (detail) { return disclosureKey(detail, root); }) };
+  }
+  function restorePresentation(c) {
+    var saved = c.presentation[c.tab]; if (!saved) return;
+    var root = $("modelContextBody");
+    root.querySelectorAll("details").forEach(function (detail) {
+      if (saved.expanded.indexOf(disclosureKey(detail, root)) >= 0 && !detail.open) detail.open = true;
+    });
+    root.scrollTop = saved.scroll;
+  }
+  function retainView(c) {
+    if (!c.viewCache || c.loading || c.requests.size || Object.keys(c.pending).length || !$("modelContextBody").firstChild) return;
+    savePresentation(c);
+    if (c.captureMessages) c.captureMessages();
+    if (c.captureEvidence) c.captureEvidence();
+    var root = $("modelContextBody"), fragment = document.createDocumentFragment();
+    var view = { fragment: fragment, scroll: root.scrollTop, mounts: c.mounts,
+      captureMessages: c.captureMessages, captureEvidence: c.captureEvidence };
+    while (root.firstChild) fragment.appendChild(root.firstChild);
+    c.viewCache.set(c.tab, view); c.mounts = []; c.captureMessages = c.captureEvidence = null;
+    while (c.viewCache.size > 2) {
+      var oldest = c.viewCache.keys().next().value, removed = c.viewCache.get(oldest);
+      removed.mounts.forEach(function (host) { RNAssistantViewerRegistry.unmount(host); }); c.viewCache.delete(oldest);
+    }
+  }
+  function chooseTab(key, messageIndex) {
+    var c = current; if (!c || !live(c) || !tabs[key]) return;
+    if (key === c.tab && messageIndex == null) return;
+    retainView(c); c.tab = key;
+    if (messageIndex != null) { discardViews(c); c.focusMessageIndex = messageIndex; }
+    syncTabs(c);
+    if (key === "evidence" && c.mode === "actual" && c.selected && !(c.detail && c.detail.evidenceReport)) select(c, c.selected, true);
+    else render(c);
+  }
+  function pause() {
+    if (!current || current.paused) return;
+    clearTimeout(current.timer); current.paused = true;
+    current.resumeLoad = current.loading || current.requests.size > 0 || Object.keys(current.pending).length > 0;
+    if (current.resumeLoad) { clearView(current); discardViews(current); cancelReads(current); }
+  }
+  function resume() {
+    var c = current; if (!c || !c.paused || !live(c)) return;
+    c.paused = false;
+    if (c.resumeLoad && c.selected) select(c, c.selected, true);
+    tick(c);
   }
   function clearView(c) {
     if (c.captureMessages) { c.captureMessages(); c.captureMessages = null; }
@@ -88,11 +152,10 @@
     if (c) {
       clearTimeout(c.timer); c.abort.abort();
       c.requests.forEach(function (id) { cancelBridgeRequest(id).catch(function () {}); });
-      clearView(c); c.cache = {};
+      clearView(c); discardViews(c); c.cache = {};
     }
     $("modelContextDialog").classList.add("hidden");
-    $("openModelContextFromTokens").setAttribute("aria-expanded", "false");
-    window.RNAssistantChatInspector.hideRequest();
+    window.RNAssistantDiagnostics.hideRequest(restore);
     if (returnToSource && typeof c.onClose === "function") c.onClose();
   }
   async function call(c, type, payload) {
@@ -135,14 +198,14 @@
     var a = el("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
-  function mount(c, node, text, json) {
+  function mount(c, node, text, json, expandedPaths, kindOverride) {
     // Viewer bounds limit rendering only; copy/download keep the complete source.
     if (text.length > 2000000) {
       node.appendChild(el("p", "Большой текст: показаны первые 200 000 символов. Копирование и скачивание сохраняют полный исходник."));
       node.appendChild(button("Копировать полностью", function () { copyTextResult(text); }));
       node.appendChild(el("pre", text.slice(0, 200000))); return;
     }
-    if (!json) {
+    if (!json && !kindOverride) {
       var newline = text.indexOf("\n"), suffix = newline >= 0 ? text.slice(newline + 1).trim() : "";
       if (newline >= 0 && /^[A-Z_]+/.test(text) && /^[\[{]/.test(suffix) && decoded(suffix) !== null) {
         node.appendChild(el("p", text.slice(0, newline)));
@@ -150,10 +213,10 @@
         var structured = el("div"); node.appendChild(structured); mount(c, structured, suffix, true); return;
       }
     }
-    var kind = json || /^[\s]*[\[{]/.test(text) && decoded(text) !== null ? "json" : "markdown";
+    var kind = kindOverride || (json || /^[\s]*[\[{]/.test(text) && decoded(text) !== null ? "json" : "markdown");
     node.classList.add("product-viewer");
     window.RNAssistantViewerRegistry.mount(kind, node, { text: text, fullText: text, complete: true,
-      completeness: "full", mode: "tree", limits: { maxChars: 2000000 }, onCopy: window.copyTextResult });
+      completeness: "full", mode: "tree", expandedPaths: expandedPaths, limits: { maxChars: 2000000 }, onCopy: window.copyTextResult });
     c.mounts.push(node);
   }
   function lazy(c, parent, title, read, json, renderBody) {
@@ -170,7 +233,7 @@
         body.replaceChildren();
         if (renderBody) renderBody(c, body, result);
         else mount(c, body, typeof result === "string" ? result : result.text, json);
-        loaded = true;
+        loaded = true; restorePresentation(c);
       } catch (error) { if (valid(c, version)) body.textContent = error.message || String(error); }
       finally { loading = false; }
     });
@@ -478,13 +541,14 @@
     var raw = field(fields, "messages");
     if (!raw) { root.appendChild(el("p", "В payload нет массива messages. Откройте JSON запроса.")); return; }
     var listRoot = el("section", undefined, "model-context-messages"); root.appendChild(listRoot);
-    var list = members(raw), count = 0, byIndex = new Map();
+    var list = c.parsedMessages && c.parsedMessages.text === text ? c.parsedMessages.list : members(raw), count = 0, byIndex = new Map();
+    c.parsedMessages = { text: text, list: list };
     (entries || []).filter(Boolean).forEach(function (entry) {
       if (!Number.isInteger(entry.MessageIndex) || entry.MessageIndex < 0 || entry.MessageIndex >= list.length) return;
       var at = byIndex.get(entry.MessageIndex) || []; at.push(entry); byIndex.set(entry.MessageIndex, at);
     });
     var mode = c.mode, source = mode === "preview" ? c.previewVersion : c.selected, rows = [];
-    var grouped = mode === "actual" && c.messageLayout !== "wire", costs = new Map();
+    var grouped = mode === "actual" && c.messageLayout === "groups", costs = new Map();
     var saved = c.messageViews && c.messageViews[mode];
     if (saved && saved.source !== source) saved = null;
     c.captureMessages = function () {
@@ -524,10 +588,6 @@
         summary.title = message.raw.length.toLocaleString("ru-RU") + " символов в JSON сообщения";
         heading.appendChild(label);
         var excerptValue = contentValue;
-        if (role === "assistant" && typeof contentValue === "string") {
-          var envelope = modelDecision(contentValue);
-          if (envelope) excerptValue = envelope.message || envelope.reason || envelope.decision || contentValue;
-        }
         var excerpt = typeof excerptValue === "string" ? excerptValue.slice(0, 300).replace(/\s+/g, " ").trim() :
           Array.isArray(contentValue) ? "Составное содержимое: текст и вложения" : "Служебные поля сообщения";
         if (excerpt) heading.appendChild(el("span", excerpt, "model-context-message-preview"));
@@ -542,10 +602,10 @@
         detail.addEventListener("toggle", function () {
           if (!detail.open || loaded || !live(c) || !detail.isConnected) return; loaded = true;
           messageSources(c, body, entry, "message/" + index, saved, candidates.length > 1, contentValue, role === "tool" ? decoded(field(parts, "tool_call_id")) : null);
-          if (role === "assistant" && typeof contentValue === "string" && modelDecision(contentValue)) {
-            modelMessage(c, body, contentValue);
-          } else if (typeof contentValue === "string") {
-            var contentNode = el("div"); body.appendChild(contentNode); mount(c, contentNode, contentValue, false);
+          if (typeof contentValue === "string") {
+            body.appendChild(el("p", role === "assistant" ? "Историческая проекция · content является строкой. Это не новый ответ модели." :
+              "content · строка" + (role === "tool" ? " · результат инструмента" : ""), "diagnostic-body-note"));
+            var contentNode = el("div"); body.appendChild(contentNode); mount(c, contentNode, contentValue, false, undefined, /^[\s]*[\[{]/.test(contentValue) ? "text" : "markdown");
           } else if (content) lazy(c, body, "Части содержимого · JSON", function () { return content; }, true);
           var metadata = el("details", undefined, "model-context-meta");
           metadata.appendChild(el("summary", "Данные сообщения")); body.appendChild(metadata);
@@ -674,45 +734,9 @@
       setTimeout(function () { if (live(c) && c.viewVersion === viewVersion) root.scrollTop = saved.scroll; }, 0);
     }
   }
-  function modelDecision(text) {
-    var value = decoded(text);
-    if (value && Object.keys(value).length === 1 && value.response && typeof value.response === "object") value = value.response;
-    return value && typeof value.message === "string" && typeof value.action === "string" ? value : null;
-  }
   function modelMessage(c, body, text) {
-    var decision = modelDecision(text), narration = decision ? decision.message : text;
-    if (narration.trim()) {
-      var view = el("div"); body.appendChild(view); mount(c, view, narration, false);
-    }
-    if (decision) {
-      var labels = { execute: "Запрос вызова инструментов", reflection: "Промежуточное решение", finish: "Завершение по ответу модели" };
-      var info = el("details", undefined, "model-context-decision");
-      info.appendChild(el("summary", labels[decision.action] || "Действие модели: " + decision.action));
-      if (typeof decision.reason === "string" && decision.reason.trim()) info.appendChild(el("p", decision.reason));
-      if (typeof decision.decision === "string" && decision.decision.trim()) info.appendChild(el("p", decision.decision));
-      if (Array.isArray(decision.tool_calls) && decision.tool_calls.length) {
-        var calls = el("ul");
-        decision.tool_calls.forEach(function (call) {
-          if (call && typeof call.name === "string") calls.appendChild(el("li", call.name));
-        });
-        info.appendChild(calls);
-      }
-      if (Array.isArray(decision.results) && decision.results.length) {
-        var outcomes = el("ul"), assessments = { satisfied: "выполнено", partially_satisfied: "выполнено частично",
-          unverified: "не проверено", not_satisfied: "не выполнено" };
-        decision.results.forEach(function (result) {
-          if (!result || typeof result.criterion !== "string") return;
-          var row = el("li", result.criterion);
-          if (typeof result.assessment === "string") row.appendChild(el("small",
-            "Оценка модели: " + (assessments[result.assessment] || result.assessment), "model-context-result-assessment"));
-          outcomes.appendChild(row);
-        });
-        info.appendChild(outcomes);
-      }
-      if (!narration.trim()) info.open = true;
-      body.appendChild(info);
-    } else if (!narration.trim()) body.appendChild(el("p", "Текстовое сообщение отсутствует.", "model-context-note"));
-    return !!decision;
+    body.appendChild(el("p", "Исходный content · строка. Решение parser и runtime показано в итоге; здесь сохранённый текст модели.", "diagnostic-body-note"));
+    var view = el("div"); body.appendChild(view); mount(c, view, text, false, undefined, /^[\s]*[\[{]/.test(text) ? "text" : "markdown");
   }
   function responseBody(c, body, value) {
     var text = value.text, fields = members(text), content = field(fields, "Content") || field(fields, "content");
@@ -723,7 +747,7 @@
     }
     var messageText = decoded(content);
     if (typeof messageText !== "string") { mount(c, body, text, true); return; }
-    if (modelMessage(c, body, messageText)) lazy(c, body, "Сообщение модели · исходный JSON", function () { return messageText; }, true);
+    modelMessage(c, body, messageText);
     lazy(c, body, "Полный ответ · исходный JSON", function () { return text; }, true);
   }
 
@@ -810,13 +834,13 @@
           var links = el("div", undefined, "model-context-toolbar"); body.appendChild(links);
           (row.messageIndices || []).forEach(function (index) {
             links.appendChild(button("Сообщение " + (index + 1), function () {
-              c.focusMessageIndex = index; c.messageLayout = "wire"; c.tab = "messages"; render(c);
+              c.messageLayout = "wire"; chooseTab("messages", index);
             }));
           });
           (c.detail.resources || []).filter(function (resource) {
             return resource.alias && row.operationAlias && (resource.observations || []).some(function (item) { return item.operationAlias === row.operationAlias; });
           }).forEach(function (resource) {
-            links.appendChild(button(resource.alias, function () { c.focusResource = resource.alias; c.tab = "resources"; render(c); }));
+            links.appendChild(button(resource.alias, function () { c.focusResource = resource.alias; discardViews(c); chooseTab("resources"); }));
           });
           if (row.runId && typeof window.openRunJournal === "function") links.appendChild(button("Ход выполнения", function () {
             if (live(c)) window.openRunJournal({ owner: c.owner, workspaceId: c.workspaceId, sessionId: c.chatId,
@@ -1038,10 +1062,21 @@
   }
 
   async function render(c) {
+    var selected = c.selected, tab = c.tab;
+    await renderCurrent(c);
+    if (live(c) && c.selected === selected && c.tab === tab) restorePresentation(c);
+  }
+  async function renderCurrent(c) {
     if (!live(c)) return;
     syncTabs(c);
     clearView(c);
     var root = $("modelContextBody"), version = c.version;
+    var retained = c.viewCache && c.viewCache.get(c.tab);
+    if (retained) {
+      c.viewCache.delete(c.tab); root.appendChild(retained.fragment); c.mounts = retained.mounts;
+      c.captureMessages = retained.captureMessages; c.captureEvidence = retained.captureEvidence;
+      root.scrollTop = retained.scroll; return;
+    }
     if (c.mode === "preview") {
       if (!c.preview) {
         notice(c, state.chatReadOnly ? "Чат доступен только для чтения" : c.previewError ? "Предпросмотр недоступен" : "Подготовка предпросмотра…",
@@ -1062,6 +1097,34 @@
     }
     if (c.tab === "resources") { resources(c, root); return; }
     if (c.tab === "evidence") { executionEvidence(c, root); return; }
+    function navigate(view, target) {
+      if (view === "request") { c.follow = false; c.tab = "summary";
+        // Previous dispatch may belong to another step of this same run.
+        if (c.scope && c.scope.stepId) c.scope = { runId: c.scope.runId };
+        select(c, target, true).then(function () {
+        if (!live(c) || !c.detail) return;
+        var item = c.detail.events.find(function (event) { return event.type === "llm.request"; });
+        if (item && !c.attempts.some(function (event) { return event.eventId === item.eventId; })) c.attempts.push(item);
+        attemptPicker(c).value = c.selected;
+      }); }
+      else chooseTab(view, target);
+    }
+    if (c.tab === "summary") { RNAssistantModelContextDetails.summary(root, c.detail, navigate); return; }
+    if (c.tab === "compare") {
+      var previous = c.detail.summary && c.detail.summary.previousRequestEventId;
+      if (!previous) { notice(c, "Предыдущий запрос не найден", "Сравниваются сохранённые запросы одного запуска. Отсутствие записи не означает совпадение."); return; }
+      if (!c.detail.comparison) {
+        notice(c, "Сравниваю запросы…", "Чтение двух сохранённых тел, до 8 МБ каждое.", "loading");
+        try {
+          var compared = await call(c, "getModelContext", { requestEventId: c.selected, compareRequestEventId: previous });
+          if (!valid(c, version) || c.tab !== "compare") return;
+          if (!matches(c, compared) || !compared.comparison || compared.comparison.afterEventId !== c.selected)
+            throw new Error("Сравнение не соответствует выбранному запросу.");
+          c.detail.comparison = compared.comparison;
+        } catch (error) { if (valid(c, version) && c.tab === "compare") notice(c, "Сравнение недоступно", error.message, "error"); return; }
+      }
+      root.replaceChildren(); RNAssistantModelContextDetails.compare(root, c.detail.comparison, navigate); return;
+    }
     var request = c.detail.events.find(function (e) { return e.eventId === c.selected; });
     if (c.tab === "response") {
       var events = c.detail.events.filter(function (e) { return e.type !== "llm.request"; });
@@ -1069,16 +1132,21 @@
       events.forEach(function (event) {
         var streaming = request.trace.Streaming === true || c.detail.events.some(function (e) { return e.type === "assistant.chunk"; });
         var title = event.type === "llm.response" ? (streaming ? "Собранный потоковый ответ" : request.trace.Streaming === false ? "Ответ провайдера" : "Сохранённый ответ · формат записи не указан") :
-          event.type === "assistant.chunk" ? "Исходные SSE data-фрагменты" : event.type;
-        var body = el("section", undefined, "model-context-response"); root.appendChild(body);
+          event.type === "assistant.chunk" ? "Исходные SSE data-фрагменты" : event.type === "agent.response.rejected" ? "Отклонённый ответ модели" :
+          event.type === "model.response.accepted" ? "Parser принял форму ответа" : event.type === "llm.failure" ? "Ошибка обращения к модели" : event.type;
+        var body = el("section", undefined, "model-context-response"); body.dataset.responseEvent = event.eventId; root.appendChild(body);
         var head = el("div", undefined, "model-context-response-head"), heading = el("div");
         heading.appendChild(el("h3", title));
         heading.appendChild(el("small", dateText(event.createdUtc)));
         head.appendChild(heading); body.appendChild(head);
-        if (event.trace.Error) body.appendChild(el("p", event.trace.Error));
+        if (event.trace.Error) body.appendChild(el("p", event.trace.Error, "diagnostic-reason"));
+        if (event.trace.CaptureTruncated || event.trace.Completed === false) body.appendChild(el("p", "Запись неполная: " +
+          (event.trace.CaptureTruncated ? "достигнут лимит захвата." : "полнота ответа не подтверждена."), "diagnostic-body-note"));
         if (event.hasPayload) {
-          var content = lazy(c, body, "Содержимое", function () { return payload(c, event.eventId, undefined, version); }, true, event.type === "llm.response" ? responseBody : null);
-          if (event.type === "llm.response") { content.parentElement.classList.add("model-context-response-content"); content.parentElement.open = true; }
+          var content = lazy(c, body, event.type === "agent.response.rejected" ? "Точный отклонённый ответ" : "Сохранённое содержимое", function () { return payload(c, event.eventId, undefined, version); }, true,
+            event.type === "llm.response" ? responseBody : event.type === "agent.response.rejected" ? function (context, target, value) {
+              mount(context, target, value.text, true, ["$", "$.tool_calls", "$.tool_calls[0]", "$.response", "$.response.tool_calls", "$.response.tool_calls[0]"]);
+            } : null);
           head.appendChild(button("Скачать", function () { downloadEvent(c, event.eventId); }));
         } else body.appendChild(el("p", "Тело не сохранено."));
       }); return;
@@ -1126,7 +1194,7 @@
   }
   async function select(c, eventId, forceRender) {
     var same = c.selected === eventId && c.detail;
-    if (!same) { c.version++; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.selected = eventId; c.detail = null; c.focusResource = null; c.focusMessageIndex = null; c.focusEvidence = null; }
+    if (!same) { cancelReads(c); discardViews(c); c.parsedMessages = null; c.presentation = {}; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {}; c.selected = eventId; c.detail = null; c.focusResource = null; c.focusMessageIndex = null; c.focusEvidence = null; }
     if (!same || forceRender) {
       c.loading = true; c.emptyMessage = ""; c.selectionError = "";
       notice(c, "Загрузка запроса…", "Чтение сохранённого обмена.", "loading");
@@ -1135,7 +1203,7 @@
     var version = c.version;
     status(c, "Чтение сохранённого обмена…");
     try {
-      var detail = await call(c, "getModelContext", { requestEventId: eventId, includeEvidence: c.tab === "evidence" });
+      var detail = await call(c, "getModelContext", Object.assign({ requestEventId: eventId, includeEvidence: c.tab === "evidence" }, c.scope || {}));
       if (!valid(c, version)) return;
       var request = (detail.events || []).find(function (e) { return e.type === "llm.request" && e.eventId === eventId; });
       if (!matches(c, detail) || !request || !request.trace || c.scope &&
@@ -1144,14 +1212,20 @@
       var changed = !c.detail || JSON.stringify(c.detail.events.map(function (e) { return e.eventId; })) !== JSON.stringify(detail.events.map(function (e) { return e.eventId; }));
       var resourcesChanged = !c.detail || JSON.stringify(c.detail.resources) !== JSON.stringify(detail.resources);
       var evidenceChanged = !c.detail || JSON.stringify(c.detail.evidenceReport) !== JSON.stringify(detail.evidenceReport);
+      var summaryChanged = !c.detail || JSON.stringify(c.detail.summary) !== JSON.stringify(detail.summary);
+      var invalidated = { summary: summaryChanged, response: changed, resources: resourcesChanged, evidence: evidenceChanged };
+      Object.keys(invalidated).forEach(function (tab) {
+        var cached = c.viewCache.get(tab);
+        if (invalidated[tab] && cached) { cached.mounts.forEach(function (host) { RNAssistantViewerRegistry.unmount(host); }); c.viewCache.delete(tab); }
+      });
+      if (same && c.detail.comparison) detail.comparison = c.detail.comparison;
       c.detail = detail;
       var response = detail.events.find(function (e) { return e.type === "llm.response" || e.type === "llm.failure"; });
       $("modelContextAttempt").title = request.trace.Purpose || "Сохранённый запрос";
-      status(c, (request.trace.Model || "Модель не указана") + " · " + dateText(request.createdUtc) + "\n" +
-        (response ? response.type === "llm.response" ? "Ответ сохранён" : "Ошибка запроса" : "Ответ пока не сохранён") +
+      status(c, (detail.summary && detail.summary.parser === "Rejected" ? "Отклонённый ответ сохранён" : response ? response.type === "llm.response" ? "Ответ сохранён" : "Ошибка запроса" : "Ответ пока не сохранён") +
         (c.follow ? " · обновляется автоматически" : c.scope ? c.scope.stepId ? " · выбранный шаг" : " · выбранный запуск" : " · выбранный запрос"));
       c.loading = false; previewAvailability(c);
-      if (!same || forceRender || changed && c.tab === "response" || resourcesChanged && c.tab === "resources" || evidenceChanged && c.tab === "evidence") await render(c);
+      if (!same || forceRender || invalidated[c.tab]) await render(c);
     } catch (error) {
       if (valid(c, version)) {
         status(c, error.message);
@@ -1173,7 +1247,7 @@
     if (!live(c) || c.mode !== "actual" || c.listRequest && c.listRequest.version === c.version) return;
     var operation = { version: c.version }; c.listRequest = operation;
     try {
-      var response = await call(c, "getModelContext", older ? { beforeSequence: c.before } : { knownRevision: c.revision });
+      var response = await call(c, "getModelContext", Object.assign({}, c.scope || {}, older ? { beforeSequence: c.before } : { knownRevision: c.revision }));
       if (!valid(c, operation.version) || c.mode !== "actual") return;
       if (!matches(c, response)) throw new Error("История запросов не соответствует выбранному чату.");
       if (response.unchanged) return;
@@ -1218,7 +1292,7 @@
   }
   async function findAlias(c) {
     if (!c || !live(c) || c.mode !== "actual") return;
-    var name = $("modelContextAliasSearch").value.trim();
+    var name = $("modelContextAliasSearch").value.trim().toUpperCase().replace(/@V/g, "@v");
     if (!name) return;
     c.version++; var version = c.version;
     c.pending = {}; c.follow = false;
@@ -1248,7 +1322,7 @@
     }
   }
   function composerText() { return typeof officeChatDraftText === "function" ? officeChatDraftText() : $("chatInput").value; }
-  function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), promptContextResourceDraftIds(), chat && (chat.revision || chat.Revision)]); }
+  function draft() { var chat = activeChatSummary(); return JSON.stringify([composerText(), contextDraftResourceIds(), chat && (chat.revision || chat.Revision)]); }
   function previewAvailability(c) {
     $("modelContextDialog").classList.toggle("is-workspace", !!c.workspaceId);
     $("modelContextDialog").classList.toggle("is-preview", c.mode === "preview");
@@ -1276,7 +1350,7 @@
     notice(c, "Подготовка предпросмотра…", "Запрос ещё не отправляется.", "loading");
     try {
       var response = await call(c, "inspectModelContextPreview", { text: composerText(),
-        resourceDraftIds: promptContextResourceDraftIds(), includeRaw: true });
+        resourceDraftIds: contextDraftResourceIds(), includeRaw: true });
       var value = await download(c, response, "context-inspector", version);
       if (!valid(c, version)) return;
       c.preview = value; c.previewEntries = response.resourceContextReceipt && response.resourceContextReceipt.Messages;
@@ -1291,7 +1365,7 @@
     }
   }
   function tick(c) {
-    if (!live(c)) { if (current === c) close(); return; }
+    if (!live(c)) return;
     if (c.mode === "actual" && c.follow) list(c, false);
     if (c.mode === "preview" && c.preview && c.previewDraft !== draft()) status(c, c.previewStatus + " · Снимок устарел — обновите.");
     c.timer = setTimeout(function () { tick(c); }, 2000);
@@ -1307,22 +1381,23 @@
     var scope = options && options.runId ? { runId: options.runId, stepId: options.stepId || "" } : null;
     var trigger = document.activeElement;
     if (current) close(false);
-    if (typeof closePromptContextInspector === "function") closePromptContextInspector();
     current = { owner: selected.owner, chatId: selected.chatId, workspaceId: selected.workspaceId,
       abort: new AbortController(), requests: new Set(), version: 0,
-      mounts: [], cache: {}, pending: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "messages", follow: !scope && !(options && options.requestEventId), attempts: [],
+      mounts: [], cache: {}, pending: {}, viewCache: new Map(), presentation: {}, inventory: {}, inventoryBusy: {}, mode: "actual", tab: "summary", follow: !scope && !(options && options.requestEventId), attempts: [],
       scope: scope, onClose: options && options.onClose };
     $("modelContextDialog").classList.remove("hidden");
-    window.RNAssistantChatInspector.showRequest(trigger);
-    $("openModelContextFromTokens").setAttribute("aria-expanded", "true");
+    window.RNAssistantDiagnostics.showRequest(Object.assign({}, selected, scope || {}));
     $("modelContextMode").value = "actual"; syncTabs(current); attemptPicker(current);
     notice(current, "Загрузка запросов…", "Чтение истории этого чата.", "loading");
     $("modelContextHistory").open = false;
     previewAvailability(current);
     $("modelContextActualControls").classList.remove("hidden"); $("closeModelContextButton").focus();
-    $("closeModelContextButton").title = current.onClose ? "Вернуться к истории" : "Вернуться к боковой панели";
+    $("closeModelContextButton").title = "Вернуться к запуску";
     $("closeModelContextButton").setAttribute("aria-label", $("closeModelContextButton").title);
-    if (options && options.requestEventId) {
+    if (options && options.mode === "preview" && !current.workspaceId) {
+      current.mode = "preview"; current.tab = "messages"; $("modelContextMode").value = "preview";
+      $("modelContextActualControls").classList.add("hidden"); preview(current);
+    } else if (options && options.requestEventId) {
       var opened = current;
       select(opened, options.requestEventId, true).then(function () {
         if (!live(opened) || !opened.detail) return;
@@ -1333,16 +1408,12 @@
     tick(current);
   }
   function bind() {
-    $("openModelContextFromTokens").addEventListener("click", open);
     $("closeModelContextButton").addEventListener("click", close);
-    $("modelContextLayout").addEventListener("change", function () {
-      window.RNAssistantChatInspector.setRequestLayout(this.value);
-    });
     $("modelContextMode").addEventListener("change", function () {
       if (!current || current.workspaceId) { this.value = "actual"; return; }
-      var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {};
+      var c = current; c.mode = this.value; c.version++; c.revision = null; c.detail = null; c.presentation = {}; c.cache = {}; c.pending = {}; c.inventory = {}; c.inventoryBusy = {};
       c.loading = false; c.emptyMessage = ""; c.selectionError = ""; clearView(c);
-      if (c.mode === "preview" && (c.tab === "response" || c.tab === "resources" || c.tab === "evidence")) c.tab = "messages";
+      if (c.mode === "preview" && (c.tab === "summary" || c.tab === "compare" || c.tab === "response" || c.tab === "resources" || c.tab === "evidence")) c.tab = "messages";
       syncTabs(c);
       $("modelContextActualControls").classList.toggle("hidden", c.mode !== "actual");
       previewAvailability(c);
@@ -1350,13 +1421,6 @@
         notice(c, "Загрузка запросов…", "Чтение сохранённой истории.", "loading"); list(c, false);
       }
     });
-    function chooseTab(key) {
-      var c = current; if (!c) return;
-      c.tab = key; syncTabs(c);
-      if (key === "evidence" && c.mode === "actual" && c.selected && !(c.detail && c.detail.evidenceReport))
-        select(c, c.selected, true);
-      else render(c);
-    }
     Object.keys(tabs).forEach(function (key) {
       var control = $(tabs[key]);
       control.addEventListener("click", function () { chooseTab(key); });
@@ -1400,30 +1464,15 @@
       } else status(c, "Экспорт диагностики недоступен для этого чата.");
     });
     $("modelContextDialog").addEventListener("keydown", function (event) {
-      if (event.key === "Escape") {
-        event.preventDefault(); event.stopPropagation();
-        if ($("modelContextLayout").value === "focus") window.RNAssistantChatInspector.restoreRequestLayout(); else close();
-      }
-      if (event.key === "Tab" && $("modelContextLayout").value === "focus") {
-        var focusable = Array.from(this.querySelectorAll("button, select, summary, input, textarea, a[href], [tabindex]")).filter(function (node) {
-          if (node.disabled || node.tabIndex < 0 || !node.getClientRects().length) return false;
-          // Descendants of closed details can still have layout boxes, but cannot receive focus.
-          for (var parent = node.parentElement; parent; parent = parent.parentElement) {
-            if (parent.tagName === "DETAILS" && !parent.open && !parent.firstElementChild.contains(node)) return false;
-          }
-          return true;
-        });
-        var first = focusable[0], last = focusable[focusable.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-      }
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
     });
   }
   window.bindModelContextActions = bind;
   window.RNAssistantModelContext = { members: members, open: open, close: close,
+    pause: pause, resume: resume,
     sync: function () {
       if (!current) return;
-      if (!live(current) || state.bridgeUnavailable) { close(); return; }
+      if (RNAssistantDiagnostics.key(current) !== RNAssistantDiagnostics.key(source()) || state.bridgeUnavailable) { close(false); return; }
       previewAvailability(current);
       if (state.chatReadOnly && current.mode === "preview") preview(current);
     } };

@@ -210,8 +210,8 @@ function renderSendControls() {
   if ($("attachFileButton")) {
     $("attachFileButton").disabled = navigating || isPreparingAttachments || isEditing || state.bridgeUnavailable || !state.activeChatId;
   }
-  if (typeof renderPromptContextInspectorAvailability === "function") {
-    renderPromptContextInspectorAvailability();
+  if (typeof renderContextMeterAvailability === "function") {
+    renderContextMeterAvailability();
   }
   updateComposerInputState();
 }

@@ -24,13 +24,6 @@ namespace RNAssistant.Office
                 .RunAsync(settings, request, key, cancellationToken);
         }
 
-        public Task<ModelConnectionTestResponse> TestModelConnectionAsync(CancellationToken cancellationToken)
-        {
-            return new ModelConnectionTestService(_llmCompletion).TestAsync(
-                _settingsService.Load(),
-                cancellationToken);
-        }
-
         public CasHealthResponse GetCasHealth()
         {
             return CasHealthResponse.From(_casMaintenanceService.Audit());

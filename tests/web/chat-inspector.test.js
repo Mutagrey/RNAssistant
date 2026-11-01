@@ -8,6 +8,7 @@ const { chromium } = require("playwright");
 
 (async () => {
   const server = spawn("python3", ["-B", "prototypes/serve_ui.py", "--port", "0"], { cwd: path.resolve(__dirname, "../..") });
+  server.stderr.resume(); // Drain the preview access log; an unread pipe can stall asset delivery.
   let browser;
   try {
     const address = await new Promise((resolve, reject) => {
@@ -17,7 +18,7 @@ const { chromium } = require("playwright");
     browser = await chromium.launch({ headless: true,
       ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
     const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
-    const errors = []; page.on("pageerror", error => errors.push(error.message));
+    const errors = []; page.on("pageerror", error => { errors.push(error.message); console.error(error.message); });
     await page.goto(address + "preview/web/?scenario=ready");
     await page.waitForFunction(() => state.activeChatId === "preview-chat" && !state.initializePromise);
     await page.locator("#toggleChatInspectorButton").click();
@@ -38,6 +39,7 @@ const { chromium } = require("playwright");
       "preview is offered only while its exact browser source is available");
     await page.locator("#chatInspectorSwitcher summary").click(); await screenshot("menu");
     await page.locator('[data-chat-inspector-view="usage"]').click();
+    await page.locator('[data-inspector-key="estimate"] > summary').click();
     await page.locator(".chat-inspector-composition-chart").waitFor();
     assert.equal(await page.locator(".chat-inspector-composition-chart > span").count(), 5);
     assert.match(await page.locator("#chatInspectorBody").textContent(), /следующего запроса/);
@@ -46,13 +48,13 @@ const { chromium } = require("playwright");
     assert.equal(sum, 6000, "composition never rescales estimates to provider usage");
     await screenshot("usage");
     await page.locator('[data-inspector-key="composition:0"] > summary').click();
-    await page.locator('[data-inspector-key="composition:0"] .prompt-context-item > summary').first().click();
+    await page.locator('[data-inspector-key="composition:0"] [data-inspector-key^="context-item:"] > summary').first().click();
     await screenshot("usage-details");
     await page.evaluate(() => RNAssistantChatInspector.render());
     assert.equal(await page.locator('[data-inspector-key="composition:0"]').evaluate(n => n.open), true);
     await view("abilities");
     await page.locator(".chat-inspector-tool-group").first().waitFor();
-    assert.equal(await page.locator(".chat-inspector-tool-group").count(), 3, "dot segments form nested groups");
+    assert.equal(await page.locator(".chat-inspector-tool-group").count(), 2, "shared library groups organize tools");
     await page.locator(".chat-inspector-tool-group > summary").first().click();
     const tool = page.locator('[data-inspector-key="tool:core.find"]');
     assert.equal(await tool.evaluate(n => n.open), false);
@@ -75,7 +77,7 @@ const { chromium } = require("playwright");
       };
       window.restoreInspectorPreview = () => { send = original; };
     });
-    await page.getByRole("button", { name: "Обновить состав", exact: true }).click();
+    await page.getByRole("button", { name: "Обновить оценку", exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[data-inspector-key="excluded"]'));
     assert.equal(await page.locator(".chat-inspector-composition-chart > span").evaluateAll(nodes => nodes.reduce((n, node) => n + Number(node.style.flexGrow), 0)), 90, "reserves and excluded bodies never enter the shares");
     assert.match(await page.locator('[data-inspector-key="composition:3"] > summary').textContent(), /неполная оценка/);
@@ -92,7 +94,7 @@ const { chromium } = require("playwright");
         promise.requestId = "pending-inspector"; return promise;
       };
     });
-    await page.getByRole("button", { name: "Обновить состав", exact: true }).click();
+    await page.getByRole("button", { name: "Обновить оценку", exact: true }).click();
     await view("context");
     await page.evaluate(() => {
       state.activeChatId = "another-chat"; RNAssistantChatInspector.render();

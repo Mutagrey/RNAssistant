@@ -613,12 +613,6 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CancelPromptMutationUpload:
                         responsePayload = _controller.CancelPromptMutationUpload(Payload<ResourceUploadLeaseRequest>(payload));
                         break;
-                    case BridgeOperationId.TestModelCompatibility:
-                        responsePayload = await _controller.TestModelCompatibilityAsync(cancellationToken).ConfigureAwait(false);
-                        break;
-                    case BridgeOperationId.TestModelConnection:
-                        responsePayload = await _controller.TestModelConnectionAsync(cancellationToken).ConfigureAwait(false);
-                        break;
                     case BridgeOperationId.GetModelDiagnosticScenarios:
                         responsePayload = _controller.GetModelDiagnosticScenarios();
                         break;

@@ -55,10 +55,6 @@ contextManager.classList.add("hidden");
 const contextDetails = add("contextJsonDetails", "details", contextManager);
 const contextHost = add("contextBox", "div", contextDetails);
 add("openContextTabButton", "button", body);
-const rawDetails = add("promptContextInspectorRaw", "details", body);
-rawDetails.classList.add("hidden");
-const rawHost = add("promptContextInspectorRawText", "div", rawDetails);
-const rawButton = add("loadPromptContextRawButton", "button", body);
 const toolHost = add("toolRunOutput", "div", body);
 toolHost.classList.add("tool-run-output", "is-text");
 
@@ -71,7 +67,7 @@ const context = vm.createContext({
   $: id => elements[id] || null
 });
 context.window = context;
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-context.js", "app-context-inspector.js"]) {
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-context.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 context.setControlBusy = () => {};
@@ -118,29 +114,6 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.equal(contextHost.childNodes.length, 0, "closing manager releases viewer DOM");
   console.log("PASS context JSON viewer: state projection is explicit, safe and lazy");
 
-  const raw = '{"request":9007199254740993123456789,"tail":';
-  const snapshot = { rawTruncated: true };
-  context.promptContextInspectorRawText = raw;
-  context.promptContextInspectorSnapshot = snapshot;
-  context.renderPromptContextRaw(snapshot);
-  assert.ok(rawHost.firstElementChild.classList.contains("rn-json-viewer"));
-  assert.equal(rawHost.firstElementChild.getAttribute("data-completeness"), "preview");
-  assert.match(rawHost.textContent, /Позиция:/);
-  assert.equal(rawButton.textContent, "JSON сокращён · скрыть");
-  button(rawHost, "Копировать фрагмент").click();
-  await settle();
-  assert.equal(copied.at(-1), raw, "materialized request preview copy stays exact");
-  context.togglePromptContextRaw();
-  assert.equal(rawHost.childNodes.length, 0);
-  assert.equal(rawButton.textContent, "Показать сокращённый JSON");
-  context.togglePromptContextRaw();
-  assert.ok(rawHost.firstElementChild.classList.contains("rn-json-viewer"));
-  context.promptContextInspectorRawText = "";
-  context.renderPromptContextRaw({});
-  assert.equal(rawHost.childNodes.length, 0);
-  assert.ok(rawDetails.classList.contains("hidden"));
-  console.log("PASS context JSON viewer: raw request preserves preview completeness and lifecycle");
-
   const toolResult = { status: "ok", data: { html: "<main>exact</main>" } };
   const expectedToolResult = JSON.stringify(toolResult, null, 2);
   context.renderToolRunJson(toolResult);
@@ -178,10 +151,8 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
 
   const indexSource = fs.readFileSync(path.join(__dirname, "../../web/index.html"), "utf8");
   const contextSource = fs.readFileSync(path.join(__dirname, "../../web/js/app-context.js"), "utf8");
-  const inspectorSource = fs.readFileSync(path.join(__dirname, "../../web/js/app-context-inspector.js"), "utf8");
-  assert.equal(/<pre[^>]+(?:contextBox|promptContextInspectorRawText|toolRunOutput)/.test(indexSource), false);
+  assert.equal(/<pre[^>]+(?:contextBox|toolRunOutput)/.test(indexSource), false);
   assert.equal(/contextBox"\)\.textContent/.test(contextSource), false);
-  assert.equal(/promptContextInspectorRawText"\)\.textContent/.test(inspectorSource), false);
   console.log("PASS context JSON viewer: replaced plain-pre paths are absent");
-  console.log("OK 5/5");
+
 })().catch(error => { console.error(error); process.exitCode = 1; });

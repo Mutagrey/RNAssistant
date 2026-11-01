@@ -274,7 +274,7 @@ on the user's real machine. No live model was called for scenario revision 2.
 
 ### Diagnostics UI — 2026-10-30
 
-Settings → **Помощь и обслуживание → Протокол модели** exposes the shared A/B/C
+**Диагностика → Лаборатория** exposes the shared A/B/C
 runner: a shared navigation tree selects a group, a single scenario or all checks
 (20 scenarios and three automatic controls), 1–3 repetitions,
 reproducible seed and a 10–60 second per-request timeout. Opening or refreshing
@@ -286,13 +286,14 @@ JSON history, native generation and SSE. Native generation is not a prerequisite
 for native history. Scenario revision 4 makes B4 carry the actual execute decision
 JSON in content while calls stay native. C5/C6 use accepted call aliases and the
 production `TOOL_RESULT` envelope, without repeating arguments in the result.
-The Agent-page compatibility probe now uses the same final history projection too.
+The former Agent compatibility and connection-only probes were removed. Settings
+link to this runner; there is one implementation of the diagnostic scenarios.
 
 `ModelDiagnosticsService` owns the UI use case with typed catalog/run/exchange DTOs.
 The endpoint and credentials come from the saved connection; the model can be
 overridden for a diagnostic run. The saved endpoint is read-only context, not a
-duplicate input. Catalog snapshots refresh when reopening the panel or saving
-settings, so a previously loaded endpoint cannot keep breaking new runs after a
+duplicate input. Catalog snapshots refresh explicitly or after saved settings invalidate the catalog;
+hidden panels do not fetch it, so a previously loaded endpoint cannot keep breaking new runs after a
 connection change. Existing results retain their own run/model/endpoint label. Repeat,
 timeout and seed live in the collapsed **Параметры прогона** disclosure. Endpoint
 drift is rejected before dispatch. Each
@@ -308,8 +309,9 @@ scenario names, explicit verdicts, HTTP status and duration. The scenario select
 collapses on Run; advanced settings stay collapsed by default. Clicking any part of
 a row, or activating its native button with the keyboard, selects the result.
 Manual selection stays stable while subsequent results arrive. The details separate
-the verdict and readable reason, assertions, expected/actual content, ordered request
-messages, raw HTTP request text and received response text. The original request
+the verdict and readable reason, assertions, expected/actual text and on-demand
+HTTP request/response through the shared JSON/text viewers. There is no second
+request-message renderer. The original request
 hash is retained. The UI and its JSON report use previews bounded to 65,536 characters
 per text field; truncation, redaction and incomplete SSE capture are distinct and
 visible. API key and saved custom-header values are redacted before truncation.
@@ -320,8 +322,10 @@ model-assertion failures. Controls preserve their seed in the report. The malfor
 schema case explicitly explains why an HTTP 400/422 can be a passing result.
 
 This is the minimum runnable UI, not the complete D3/D4 laboratory. Custom scenario
-editing/import, persistent run history, endpoint comparison, request diff and
-further block/composition attribution remain open. The actual-conversation Inspector
+editing/import, persistent run history, endpoint comparison and further
+block/composition attribution remain open. Bounded comparison of saved real-run
+requests is implemented in [Diagnostics](diagnostics.md); it does not implement
+a laboratory endpoint matrix. The actual-conversation Inspector
 now includes canonical T/E outcomes, delivery and accepted finish criteria in its
 **Доказательства** tab, alongside the existing resource and composition views.
 T/E/R/criterion now follows P2 reference revision 3; real-model qualification remains NotRun. Host-neutral service/bridge and mocked-browser

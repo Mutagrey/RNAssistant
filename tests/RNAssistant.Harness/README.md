@@ -184,7 +184,7 @@ visible attempt targets, distinct skills and separate actual/planned counts.
 roles, exact canonical read vs unrelated activity preview, scoped R resolution,
 missing CAS, ambiguity, Error/Unknown, unbound search captions and tree presentation.
 `tool-result-presentation.test.js` checks inert captions and exact slice disclosure;
-`model-context-layout.test.js` checks actual-request captions and chat layout.
+`diagnostics-navigation.test.js` checks unified request routes, partial/rejected bodies and responsive layout.
 The historical [result matrix](../../docs/audits/tool-result-presentation-matrix.md)
 records the earlier 91 static IDs and presentation paths; current counts are in
 the inventory above. Neither claims real Office execution for every handler.
@@ -212,8 +212,8 @@ Workspace accepted/strict history, discovery admission, `tool pack:`, conversati
 Inspector and unknown-effect/confirmation checks cover the existing consumers.
 Four scripted profile scenarios and eight live runs of the withdrawn lowercase candidate are recorded in the
 [comparison](../../docs/audits/tool-profile-comparison.md#typed-short-reference-repeat--2026-10-26).
-`tests/web/model-context-layout.test.js` additionally verifies the short reference
-legend and resource navigation in Chrome; screenshots are linked from ADR-0018.
+`tests/web/model-context-layout.test.js` verifies resource navigation, source
+coverage and preview in Chrome; screenshots are linked from ADR-0018.
 No VSTO/Office validation is performed by these host-neutral checks.
 
 `--workspace-profile-live <fresh-evidence-directory> <broad|compact> <edit|copy>`
@@ -518,7 +518,7 @@ draft and live preview frame preservation, and narrow/light/dark layouts. It als
 checks saved workspace capabilities, previous-run attribution, confirmation and
 unavailable-skill reasons, missing/incomplete receipts and session isolation.
 Saved request/response checks cover exact workspace routes, pending-read cancellation,
-Focus isolation, return focus, resizing without rereads and narrow plugin responses.
+return focus, owner preservation, resizing without rereads and narrow plugin responses.
 `model context: workspace exchange and scope` checks the existing event/CAS reader,
 foreign workspace/event rejection, lease ownership, unchanged history and reads
 while the source folder is unavailable, plus scoped journal payload and ZIP export.
@@ -535,7 +535,9 @@ restored expansion without a payload reread in both themes at narrow width.
 calls, historical delivery, future bindings, ambiguous receipts and canonical finish
 ownership across repair attempts. The same Web tests cover lazy evidence metadata,
 criteria → E → exact-message navigation, preserved disclosure state, live acceptance
-and 420/320/205 px layouts without model or Office calls.
+and narrow layouts without model or Office calls. `diagnostics-navigation.test.js`
+checks the new routes at 1440/420/320 px; `diagnostics-performance.test.js` compares
+a 2000-message request on baseline/current assets. See [diagnostics evidence](../../docs/diagnostics.md).
 `model context: saved request composition`, `storage: model request trace precedes
 dispatch` and `storage: mixed attachment manifest matches saved request` check
 disjoint baseline costs, exact compiler attribution, selected media estimates and
@@ -1894,7 +1896,7 @@ old argument. Existing Outlook tool cases also check bound-STA/closed-window sea
 | Chats, context and bridge | `Program.ChatSessionTests.cs`, `Program.ChatEditTests.cs`, `Program.ContextBridgeTests.cs`, `Program.PromptContextInspectorTests.cs` | `chat:`, `chat sessions:`, `context:`, `bridge:` |
 | Composer add menu, mode availability, context ring, shared context/connection tooltips and usage panel | `tests/web/context-usage.test.js`; `tests/web/chat-composer-layout.test.js` (Playwright, both themes at 1100/740/360 px, keyboard dismissal and long/live diagnostics; optional `BROWSER_EXECUTABLE`) | Web only; no Office qualification |
 | Model-context request/response window, provenance and full payload | `Program.ModelContextInspectorTests.cs`, request-before-dispatch, attachment-part and mixed saved-request golden checks; `tests/web/model-context.test.js` | `model context:`, `storage: model request trace precedes dispatch`, `storage: request attachment parts match payload`, `storage: mixed attachment manifest matches saved request` |
-| Inspector raw request download / metadata-only bridge | `Program.PromptContextInspectorTests.cs`, `Program.ContextBridgeTests.cs`; `tests/web/context-inspector-download.test.js`, `tests/web/context-json-viewer.test.js`, shared `tests/web/resource-download.test.js` | `context inspector:`, `bridge: typed prompt context inspector` |
+| Inspector raw request download / metadata-only bridge | `Program.PromptContextInspectorTests.cs`, `Program.ContextBridgeTests.cs`; `tests/web/context-json-viewer.test.js`, shared `tests/web/resource-download.test.js` | `context inspector:`, `bridge: typed prompt context inspector` |
 | Binary view discovery, early admission, retained limits and missing/corrupt metadata/part refusal without recapture | `Program.ResourceAuthorityTests.cs`; existing image/PDF cases in `Program.ResourceGatewayTests.cs` | `resource cutover: canonical binary`, `resource cutover: binary capabilities`, `resource cutover: binary metadata`, `artifact viewer: exact image`, `artifact viewer: exact PDF` |
 | Raw attachment/stored artifact/workspace file bytes / exact member and historical CAS identity / inert binary delivery / no inline or broken-attachment fallback / binding-vs-data refusal | `Program.ResourceAuthorityTests.cs`; shared browser consumers in `tests/web/resource-data-plane.test.js`, `tests/web/html-workspace-export.test.js` | `resource cutover: raw`, `html editor: exact source`, `html tools: native ownership and typed binding` |
 | Binary chunks / shared reservation / busy close / verified viewer blobs | `Program.ResourceAuthorityTests.cs`, `Program.ResourceDownloadTests.cs`; `tests/web/resource-download.test.js`, `resource-data-plane.test.js`, `html-workspace-export.test.js`, `artifact-text-viewer.test.js`, `artifact-media-gallery.test.js` | `resource cutover: binary`, `resource cutover: canonical binary`, `trajectory export: bounded capture`, `attachments: upload lease` |

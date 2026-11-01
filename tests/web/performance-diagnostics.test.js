@@ -6,10 +6,10 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../..');
 const result = {textContent: ''};
-const active = {classList: {contains: name => name === 'active'}};
+const active = {value: 'health', classList: {contains: name => name === 'active'}};
 let longTaskCallback;
 const context = vm.createContext({
-  window: {},
+  window: {}, state: { diagnosticsTab: "application" },
   $: id => id === 'performanceDiagnosticsResults' ? result : active,
   document: {
     getElementById: id => id === 'performanceDiagnosticsResults' ? result : active,

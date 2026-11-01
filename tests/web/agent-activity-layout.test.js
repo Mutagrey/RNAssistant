@@ -29,7 +29,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.enhanceActivity = () => {};
       window.logOnce = () => {};
       window.appendMessageArtifactCards = () => {};
-      window.setPromptContextInspectorOpen = open => { window.inspectorOpened = open; };
     });
     for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-icons.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: read("js/" + file) });

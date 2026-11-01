@@ -8,6 +8,7 @@ const { chromium } = require("playwright");
 
 (async () => {
   const server = spawn("python3", ["-B", "prototypes/serve_ui.py", "--port", "0"], { cwd: path.resolve(__dirname, "../..") });
+  server.stderr.resume(); // Drain the preview access log; an unread pipe can stall asset delivery.
   let browser;
   try {
     const address = await new Promise((resolve, reject) => {
@@ -91,7 +92,7 @@ const { chromium } = require("playwright");
     const reportStep = () => page.locator('.chat-inspector-step').filter({ hasText: "Чтение отчёта" });
     await page.locator("#chatInput").fill("Черновик Office");
     await page.locator("#toggleChatInspectorButton").click();
-    await page.evaluate(() => { RNAssistantModelContext.open(); RNAssistantChatInspector.setRequestLayout("focus"); });
+    await page.evaluate(() => { RNAssistantModelContext.open(); });
     await page.evaluate(() => RNAssistantProjectChats.open("preview-data-workspace", "preview-project-review"));
     assert.equal(await page.locator("#modelContextDialog").isHidden(), true, "moving the dock closes the Office request and releases focus isolation");
     await page.evaluate(() => { workspaceInspectorRequests.length = 0; RNAssistantModelContext.open(); });
@@ -109,7 +110,7 @@ const { chromium } = require("playwright");
     assert.match(await page.locator('[data-inspector-key="skill:archive"] > summary').textContent(), /Недоступен/);
     assert.equal(await page.getByText("Выбранная версия навыка больше недоступна.", { exact: true }).isVisible(), true,
       "an unavailable skill keeps its reason even when a description exists");
-    await page.locator('[data-inspector-key="tools:common"] > summary').click();
+    await page.locator('[data-inspector-key="library:tools:office"] > summary').click();
     assert.match(await page.locator('[data-inspector-key="tool:office.macro.run"] > summary').textContent(), /С разрешения/);
     await capture("project-abilities");
     await page.evaluate(() => {
@@ -169,27 +170,26 @@ const { chromium } = require("playwright");
     await capture("project-activity");
     const openRequest = reportStep().getByRole("button", { name: "Запрос / ответ модели", exact: true });
     await openRequest.click();
+    await page.locator("#modelContextMessagesTab").click();
     await page.locator("#modelContextBody .is-message").first().waitFor();
-    assert.ok((await page.locator("#chatInspector").boundingBox()).width >= 280,
-      "the project dock retains its own grid track after fixed-width summary content is hidden");
     assert.equal(await page.locator("#modelContextMode").isDisabled(), true, "workspace cannot use the Office preview compiler");
     assert.equal(await page.locator("#modelContextMode").isHidden(), true, "workspace does not show a source selector with only one choice");
     assert.equal(await page.locator("#modelContextAttempt").inputValue(), "preview-request");
     const readCount = await page.evaluate(() => workspaceModelRequests.filter(item => item.type === "getModelContextPayload").length);
-    await page.locator("#modelContextLayout").selectOption("wide");
+
     await page.locator("#modelContextBody .is-message").first().locator(":scope > summary").click();
     await capture("project-request-wide");
-    await page.locator("#modelContextLayout").selectOption("focus");
-    assert.equal(await page.locator("#workspaceChatView").evaluate(node => node.inert), true);
-    await page.locator("#modelContextDialog").press("Escape");
-    assert.equal(await page.locator("#modelContextLayout").inputValue(), "wide");
+    await page.locator("#modelContextJsonTab").click();
+    await page.locator("#modelContextMessagesTab").click();
     assert.equal(await page.evaluate(() => workspaceModelRequests.filter(item => item.type === "getModelContextPayload").length), readCount,
-      "resizing retains the selected payload");
+      "view changes retain the selected payload");
     await page.locator("#modelContextResponseTab").click();
-    await page.locator("#modelContextBody .rn-markdown-viewer-rendered").first().waitFor();
+    await page.getByText("Сохранённое содержимое", { exact: true }).first().click();
+    await page.locator("#modelContextBody .rn-text-viewer").first().waitFor();
     await capture("project-response-wide");
     await page.locator("#closeModelContextButton").click();
-    assert.equal(await page.evaluate(() => document.activeElement.textContent), "Запрос / ответ модели");
+    await page.locator("#diagnosticsReturnChat").click();
+    assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Текущий запуск");
     await page.evaluate(() => { window.holdWorkspaceModel = new Promise(resolve => { window.releaseWorkspaceModel = resolve; }); });
     await openRequest.click();
     await page.evaluate(() => RNAssistantProjectChats.open("preview-plan-workspace", "preview-plan-chat"));
@@ -243,22 +243,21 @@ const { chromium } = require("playwright");
     assert.match(await reportStep().textContent(), /Чтение отчёта/);
     await capture("plugin-activity");
     await openRequest.click();
+    await page.locator("#modelContextMessagesTab").click();
     await page.locator("#modelContextBody .is-message").first().waitFor();
-    await page.locator("#modelContextLayout").selectOption("wide");
-    const pluginRequestWidth = (await page.locator("#chatInspector").boundingBox()).width;
-    await page.locator("#chatInspectorSplitter").focus();
-    await page.keyboard.press("ArrowRight");
-    assert.ok((await page.locator("#chatInspector").boundingBox()).width < pluginRequestWidth,
-      "the plugin reader uses the shared resize divider");
+
     await page.locator("#closeModelContextButton").click();
+    await page.locator("#diagnosticsReturnChat").click();
     await page.evaluate(() => document.documentElement.dataset.theme = "dark");
     await page.setViewportSize({ width: 390, height: 844 });
     await capture("plugin-activity-dark-narrow");
     assert.ok(await page.locator("#chatInspector").evaluate(node => node.getBoundingClientRect().right <= innerWidth));
     await openRequest.click();
+    await page.locator("#modelContextMessagesTab").click();
     await page.locator("#modelContextBody .is-message").first().waitFor();
     await page.locator("#modelContextResponseTab").click();
-    await page.locator("#modelContextBody .rn-markdown-viewer-rendered").first().waitFor();
+    await page.getByText("Сохранённое содержимое", { exact: true }).first().click();
+    await page.locator("#modelContextBody .rn-text-viewer").first().waitFor();
     await capture("plugin-response-dark-narrow");
     const requestRow = await page.locator("#modelContextAttempt").boundingBox();
     const refresh = await page.locator("#modelContextRefresh").boundingBox();
@@ -266,10 +265,11 @@ const { chromium } = require("playwright");
     assert.ok(Math.abs(requestRow.y - refresh.y) <= 2 && Math.abs(requestRow.y - download.y) <= 2,
       "request selection and its actions share one narrow row");
     assert.ok((await page.locator("#modelContextBody").boundingBox()).y -
-      (await page.locator("#modelContextDialog").boundingBox()).y <= 220,
-      "the narrow header leaves more than 600px for reading at 390 by 844");
+      (await page.locator("#modelContextDialog").boundingBox()).y <= 330,
+      "request controls leave room for reading in a narrow pane");
     assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
     await page.locator("#closeModelContextButton").click();
+    await page.locator("#diagnosticsReturnChat").click();
     await view("preview");
     assert.equal(await page.evaluate(() => document.querySelector("#pluginPreviewMount iframe") === previewFrame && previewFrame.contentDocument === previewDocument), true, "diagnostics never reloads the plugin frame");
     assert.equal(await page.locator("#chatInput").inputValue(), "Черновик плагина");
@@ -319,6 +319,7 @@ const { chromium } = require("playwright");
     await page.evaluate(() => { foreignJournalReply = false; });
     assert.equal(await page.evaluate(target => openRunJournal({ ...target, workspaceId: "foreign-workspace" }), pluginTarget), false);
     await page.evaluate(() => { switchTab("chat"); RNAssistantProjectChats.setScope("office"); RNAssistantModelContext.open(); });
+    await page.locator("#modelContextMessagesTab").click();
     await page.locator("#modelContextBody .is-message").first().waitFor();
     assert.equal(await page.locator("#modelContextMode").isVisible(), true, "returning to Office restores the source selector");
     assert.equal(await page.locator("#modelContextAttempt").isVisible(), true);

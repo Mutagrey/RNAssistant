@@ -14,6 +14,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("knownRevision")] public long? KnownRevision { get; set; }
         [JsonProperty("requestEventId")] public string RequestEventId { get; set; }
         [JsonProperty("includeEvidence")] public bool IncludeEvidence { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("stepId")] public string StepId { get; set; }
+        [JsonProperty("compareRequestEventId")] public string CompareRequestEventId { get; set; }
         [JsonProperty("alias")] public string Alias { get; set; }
         [JsonProperty("verifyResourceAlias")] public string VerifyResourceAlias { get; set; }
         [JsonProperty("verifyRetainedView")] public string VerifyRetainedView { get; set; }
@@ -182,6 +185,51 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("operations")] public IReadOnlyList<ModelContextIdentityDto> Operations { get; set; }
         [JsonProperty("evidence")] public IReadOnlyList<ModelContextIdentityDto> Evidence { get; set; }
         [JsonProperty("evidenceReport")] public ModelContextEvidenceReportDto EvidenceReport { get; set; }
+        [JsonProperty("summary")] public ModelContextSummaryDto Summary { get; set; }
+        [JsonProperty("comparison")] public ModelContextComparisonDto Comparison { get; set; }
+    }
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum ModelContextAcceptance { NotRecorded, Accepted, Rejected }
+
+    public sealed class ModelContextSummaryDto
+    {
+        [JsonProperty("parser")] public ModelContextAcceptance Parser { get; set; }
+        [JsonProperty("runtime")] public ModelContextAcceptance Runtime { get; set; }
+        [JsonProperty("reason")] public string Reason { get; set; }
+        [JsonProperty("responseEventId")] public string ResponseEventId { get; set; }
+        [JsonProperty("rejectedEventId")] public string RejectedEventId { get; set; }
+        [JsonProperty("previousRequestEventId")] public string PreviousRequestEventId { get; set; }
+        [JsonProperty("requestBytes")] public long? RequestBytes { get; set; }
+        [JsonProperty("requestSha256")] public string RequestSha256 { get; set; }
+        [JsonProperty("responseComplete")] public bool? ResponseComplete { get; set; }
+        [JsonProperty("captureTruncated")] public bool CaptureTruncated { get; set; }
+    }
+    public sealed class ModelContextMessageChangeDto
+    {
+        [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("beforeIndex")] public int? BeforeIndex { get; set; }
+        [JsonProperty("afterIndex")] public int? AfterIndex { get; set; }
+        [JsonProperty("beforeRole")] public string BeforeRole { get; set; }
+        [JsonProperty("afterRole")] public string AfterRole { get; set; }
+        [JsonProperty("fields")] public IReadOnlyList<string> Fields { get; set; }
+    }
+    public sealed class ModelContextComparisonDto
+    {
+        [JsonProperty("beforeEventId")] public string BeforeEventId { get; set; }
+        [JsonProperty("afterEventId")] public string AfterEventId { get; set; }
+        [JsonProperty("available")] public bool Available { get; set; }
+        [JsonProperty("reason")] public string Reason { get; set; }
+        [JsonProperty("beforeBytes")] public long? BeforeBytes { get; set; }
+        [JsonProperty("afterBytes")] public long? AfterBytes { get; set; }
+        [JsonProperty("beforeSha256")] public string BeforeSha256 { get; set; }
+        [JsonProperty("afterSha256")] public string AfterSha256 { get; set; }
+        [JsonProperty("beforeMessages")] public int BeforeMessages { get; set; }
+        [JsonProperty("afterMessages")] public int AfterMessages { get; set; }
+        [JsonProperty("unchangedPrefix")] public int UnchangedPrefix { get; set; }
+        [JsonProperty("unchangedSuffix")] public int UnchangedSuffix { get; set; }
+        [JsonProperty("settingsChanged")] public IReadOnlyList<string> SettingsChanged { get; set; }
+        [JsonProperty("changes")] public IReadOnlyList<ModelContextMessageChangeDto> Changes { get; set; }
+        [JsonProperty("truncated")] public bool Truncated { get; set; }
     }
     public sealed class ModelContextPayloadResponse
     {

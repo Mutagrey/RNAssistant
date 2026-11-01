@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Единая диагностика: маршруты, данные и UI — 2026-11-01
+
+Owner: Office diagnostics services / Web diagnostics presentation.
+После аудита перенесены Запуски, Лаборатория и Приложение в единый раздел.
+Reader запроса показывает metadata summary, конкретный отказ, отдельные факты
+parser/runtime, frozen settings и сравнение предыдущего запроса. Тела и сценарии
+загружаются/запускаются только по действию. Правая панель остаётся рабочим
+контекстом; кольцо использует её общий usage renderer. Старые popup, dock modes,
+Settings Service и самостоятельные probes удалены вместе с consumers/контрактами.
+Сохранены scope, filters, scroll, раскрытия и Office/workspace/plugin owner.
+
+14 model-context + 4 diagnostics UI + 1 trace-before-dispatch Harness checks прошли;
+целевые browser проверки — на synthetic bridge, обе темы и узкая панель.
+На одинаковом fixture 2000 сообщений / 4,47 MB медиана трёх Input/Raw roundtrips
+6503 → 1803 ms; открытие summary — без body read. JS heap не уменьшился.
+[Карта, владельцы, screenshots, измерения и ограничения](../diagnostics.md).
+Полная D3 provenance, D4 scenario editor/endpoint matrix, backend full event scan
+и реальные Windows/Office/WebView2/model qualification остаются открытыми.
+
 ## Переключение чатов: повторные чтения — 2026-10-30
 
 Owner: Core ChatStore/SQLite и Office session initialization; UI — consumer.
@@ -31,8 +50,8 @@ JSON viewer, большие arguments остаются свёрнуты. Пра�
 по фото пока не подтверждён: внутренний элемент массива на фото свёрнут.
 Локально прошли точная форма вызова, schema/parser parity, raw trace/repair,
 32 JSON/SSE сценария и девять переходов ролей с сохранением типов/экранирования.
-Web-проверки нового раскрытия прошли; полный файл теста имеет прежний source-assertion
-сбой, описанный в RISK_REGISTER. Реальные модели и Office не запускались.
+Web-проверки нового раскрытия прошли; позднее при переносе диагностики обновлено
+устаревшее source-ожидание, полный `run-journal.test.js` проходит. Реальные модели и Office не запускались.
 
 ## Execute, настройки протокола и применение — 2026-10-30
 

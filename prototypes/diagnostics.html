@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Диагностика — проект структуры</title>
+<link rel="stylesheet" href="../web/css/app-product-tokens.css">
+<link rel="stylesheet" href="../web/css/app.css">
+<link rel="stylesheet" href="../web/css/app-product-components.css">
+<style>
+body { margin:0; padding:24px; font:14px var(--font); background:var(--canvas); color:var(--ink); }
+.controls { display:flex; flex-wrap:wrap; gap:12px; margin-bottom:16px; }
+main { max-width:1000px; margin:auto; background:var(--surface); min-height:620px; }
+main.narrow { max-width:340px; } header,article { padding:16px; } header { border-bottom:1px solid var(--line); }
+nav { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; } h1 { font-size:20px; } h2 { font-size:16px; }
+p,li { line-height:1.6; overflow-wrap:anywhere; } .muted { color:var(--ink-muted); }
+.reason { border-left:3px solid var(--warning); padding:4px 12px; } .states { display:grid; grid-template-columns:minmax(160px,1fr) minmax(0,2fr); gap:24px; }
+.narrow .states { grid-template-columns:1fr; } .row { width:100%; text-align:left; padding:12px; margin-bottom:4px; display:block; }
+.selected { background:var(--surface-selected); color:var(--ink); } code { font-family:var(--mono); overflow-wrap:anywhere; }
+@media(max-width:620px) { body { padding:8px; } .states { grid-template-columns:1fr; } }
+</style>
+<div class="controls"><button id="width" type="button">Узкая панель</button><button id="theme" type="button">Сменить тему</button><label>Состояние <select id="state"><option value="reject">Отказ и повтор</option><option value="partial">Неполная запись</option><option value="empty">Нет запросов</option><option value="lab">Ожидаемый отказ сценария</option></select></label></div>
+<main id="mock"><header><h1>Диагностика</h1><nav aria-label="Разделы"><button type="button" data-page="run">Запуски</button><button type="button" data-page="lab">Лаборатория</button><button type="button" data-page="app">Приложение</button></nav><p class="muted" id="scope">Отчёт о продажах.xlsm · Сверка двух месяцев · Запуск 12</p></header><article id="body"></article></main>
+<script>
+const main=document.getElementById('mock'),body=document.getElementById('body'),state=document.getElementById('state');
+function render(){
+ const name=state.value;
+ document.getElementById('scope').textContent=name==='lab'?'Тестовые данные · документ не используется':'Отчёт о продажах.xlsm · Сверка двух месяцев · Запуск 12';
+ if(name==='empty'){body.innerHTML='<h2>Сохранённых запросов пока нет</h2><p>Выбранный чат ещё не отправлял запросы модели.</p><button type="button">Вернуться в чат</button>';return;}
+ if(name==='lab'){body.innerHTML='<h2>Ошибочная схема отклонена — проверка пройдена</h2><p>Сценарий C3 проверяет реакцию endpoint на невалидную схему. Ожидался HTTP 400 или 422; получен HTTP 400.</p><p class="muted">Это результат assertion. Совместимость с Office не проверялась.</p><nav><button type="button">Ожидалось / получено</button><button type="button">Сохранённый HTTP-запрос</button><button type="button">HTTP-ответ</button></nav><details><summary>Параметры этого прогона</summary><p>Модель: scripted · формат: json_schema · seed: demo-12</p></details>';return;}
+ body.innerHTML='<button type="button" id="back">← К запуску</button><h2>Запрос 8 · попытка 1</h2><div class="reason"><strong>'+(name==='partial'?'Ответ получен частично':'Вызовы отклонены')+'</strong><p>'+(name==='partial'?'Запись прервана. Отсутствующие данные не означают успех.':'<code>tool_calls[0].arguments</code>: ожидался объект, получена строка. Инструменты этой попытки не выполнялись.')+'</p></div><nav aria-label="Детали запроса"><button type="button">Итог</button><button type="button">Вход</button><button type="button">Ответ</button><button type="button">Сравнение</button><button type="button">Исходник</button></nav><div class="states"><section><h2>Связанные события</h2><button type="button" class="row selected">Попытка 1 · отклонена</button><button type="button" class="row">Попытка 2 · parser принял</button><button type="button" class="row">core.patch · изменение подтверждено</button></section><section><h2>Что изменилось в следующей попытке</h2><p>Добавлено сообщение с причиной отказа. История и параметры запроса сохранены.</p><p class="muted">Исходный ответ модели, решение runtime и историческая проекция показаны отдельно.</p><details><summary>Настройки выбранного запроса</summary><p>Новый ответ: json_object<br>История: native tool<br>Инструкции: developer</p></details><details><summary>Технические сведения</summary><p>Точное тело, время, scope, payload hash. Секреты и неполная запись имеют явную пометку.</p></details></section></div>';
+ document.getElementById('back').onclick=()=>{body.innerHTML='<h2>Запуск завершён с ограничениями</h2><p>Изменение подтверждено; оценка полноты задачи принадлежит модели.</p><button type="button" class="row">Шаг 1 · модель: отказ → исправление</button><button type="button" class="row">Шаг 2 · core.patch: read-back подтверждён</button>';body.querySelector('button').onclick=render;};
+}
+state.onchange=render;document.getElementById('width').onclick=()=>main.classList.toggle('narrow');document.getElementById('theme').onclick=()=>document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';
+document.querySelectorAll('[data-page]').forEach(button=>button.onclick=()=>{if(button.dataset.page==='app'){body.innerHTML='<h2>Состояние приложения</h2><p>Журнал текущей панели · Задержки · Обслуживание хранилища</p><p class="muted">Измерения не являются результатом выбранного запуска.</p>';return;}state.value=button.dataset.page==='lab'?'lab':'reject';render();});render();
+</script></html>

@@ -147,6 +147,8 @@ namespace RNAssistant.Core.Llm
         public string Endpoint { get; set; }
         public string Model { get; set; }
         public string ResponseFormat { get; set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public LlmRequestSettingsSnapshot Settings { get; set; }
         public int MessageCount { get; set; }
         public int? Attempt { get; set; }
         public int? EstimatedPromptTokens { get; set; }
@@ -187,6 +189,19 @@ namespace RNAssistant.Core.Llm
         {
             get { return _payloadJson != null; }
         }
+    }
+
+    // Frozen, non-secret settings of this dispatch, including repair/fallback.
+    // Absent on older traces; consumers must never substitute current settings.
+    public sealed class LlmRequestSettingsSnapshot
+    {
+        public string ResponseFormat { get; set; }
+        public string ToolResultRole { get; set; }
+        public string InstructionRole { get; set; }
+        public int? MaxOutputTokens { get; set; }
+        public double? Temperature { get; set; }
+        public double? TopP { get; set; }
+        public bool Streaming { get; set; }
     }
 
     public sealed class LlmRunCache

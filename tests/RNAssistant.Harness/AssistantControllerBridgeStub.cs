@@ -17,6 +17,7 @@ namespace RNAssistant.Office
         public AssistantController() : this(RNAssistant.Core.Storage.AppDataPaths.CreateDefault()) { }
         public AssistantController(RNAssistant.Core.Storage.AppDataPaths paths) { StoragePaths = paths; }
         internal event Action<LlmRequestDiagnosticUpdate> ModelRequestDiagnostics;
+        public void PublishModelDiagnostics(LlmRequestDiagnosticUpdate update) { ModelRequestDiagnostics?.Invoke(update); }
         public Task InboxWorkersDrained { get { return Task.CompletedTask; } }
         public void StopInboxWorkers() { }
         public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId) { return new ChatResourceDraftResponse(); }
@@ -297,23 +298,6 @@ namespace RNAssistant.Office
         public ResourceDataCloseResponse CancelPromptMutationUpload(ResourceUploadLeaseRequest request)
         { return new ResourceDataCloseResponse { Closed = true }; }
 
-        public Task<ModelCompatibilityResponse> TestModelCompatibilityAsync(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            return Task.FromResult(new ModelCompatibilityResponse
-            {
-                Compatible = true,
-                Model = "harness-model",
-                InstructionRole = "developer",
-                ResponseMode = AgentResponseModes.JsonObject,
-                ToolResultRole = ToolResultRoles.User,
-                Checks = new[]
-                {
-                    new ModelCompatibilityCheckDto { Id = "user_role", Title = "Роль user", Passed = true, Required = true }
-                }
-            });
-        }
-
         public ModelDiagnosticCatalogDto GetModelDiagnosticScenarios()
         { return Services.ModelDiagnosticsService.Catalog(new AppSettings { BaseUrl = "http://fixture", Model = "scripted" }); }
 
@@ -324,35 +308,6 @@ namespace RNAssistant.Office
                 Seed = request.Seed, Exchanges = new List<ModelDiagnosticExchangeDto> { new ModelDiagnosticExchangeDto {
                     Result = new ModelDiagnosticResult { ScenarioId = request.ScenarioId, Model = request.Model,
                         ExecutionKind = ModelDiagnosticExecutionKind.Synthetic, Verdict = ModelDiagnosticVerdict.Inconclusive } } } });
-        }
-
-        public Task<ModelConnectionTestResponse> TestModelConnectionAsync(CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var update = new LlmRequestDiagnosticUpdate
-            {
-                RequestId = "probe-1",
-                Phase = LlmRequestDiagnosticPhases.Completed,
-                Model = "harness-model",
-                StreamRequested = true,
-                ElapsedMs = 25,
-                PreparationMs = 2,
-                ResponseHeadersMs = 15,
-                FirstChunkMs = 20,
-                TotalMs = 25,
-                StatusCode = 200
-            };
-            var handler = ModelRequestDiagnostics;
-            if (handler != null) handler(update);
-            return Task.FromResult(new ModelConnectionTestResponse
-            {
-                Success = true,
-                Summary = "Модель ответила.",
-                Model = "harness-model",
-                StreamRequested = true,
-                DurationMs = 25,
-                Diagnostics = ModelRequestDiagnosticsDto.From(update)
-            });
         }
 
         public InitResponse ClearRuntimeData() { return Initialize(); }

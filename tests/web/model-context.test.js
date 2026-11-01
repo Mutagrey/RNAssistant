@@ -10,10 +10,11 @@ class Node {
   }; }
   set textContent(value) { this.text = value; this.children = []; }
   get textContent() { return this.text || ""; }
-  appendChild(node) { this.children.push(node); node.parent = this; return node; }
+  get firstChild() { return this.children[0] || null; }
+  appendChild(node) { if (node.tag === "fragment") { while (node.firstChild) this.appendChild(node.firstChild); return node; } if (node.parent) node.parent.children = node.parent.children.filter(n => n !== node); this.children.push(node); node.parent = this; node.isConnected = true; return node; }
   insertBefore(node, before) { const index = this.children.indexOf(before); this.children.splice(index < 0 ? this.children.length : index, 0, node); node.parent = this; return node; }
   get parentElement() { return this.parent; }
-  replaceChildren() { this.children.forEach(n => n.isConnected = false); this.children = []; this.text = ""; }
+  replaceChildren(...nodes) { this.children.forEach(n => { n.isConnected = false; n.parent = null; }); this.children = []; this.text = ""; nodes.forEach(n => this.appendChild(n)); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(n => n !== this); this.isConnected = false; }
   setAttribute() {}
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
@@ -34,9 +35,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   const c = vm.createContext({ AbortController, TextDecoder, TextEncoder, Uint8Array, Blob, URL, Response,
     setTimeout: (fn, ms) => { timers.set(++timer, { fn, ms }); return timer; }, clearTimeout: id => timers.delete(id),
     crypto: crypto.webcrypto, state: { activeChatId: "chat", draftAttachments: [] }, $: get,
-    document: { createElement: tag => new Node(tag), body: new Node(), activeElement: new Node() },
-    activeChatSummary: () => ({ revision }), promptContextResourceDraftIds: () => [], closePromptContextInspector() {},
-    cancelBridgeRequest: async () => {}, copyTextResult() {},
+    document: { createDocumentFragment: () => new Node("fragment"), createElement: tag => new Node(tag), body: new Node(), activeElement: new Node() },
+    activeChatSummary: () => ({ revision }), contextDraftResourceIds: () => [],
+    cancelBridgeRequest: async () => {}, copyTextResult() {}, formatStorageBytes: n => String(n),
     send: async (type, query) => {
       calls.push({ type, query });
       if (type === "resourceDataClose") { closes.push(query); return {}; }
@@ -157,10 +158,19 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   c.window = c;
   c.RNAssistantIcons = { render: name => '<svg data-icon="' + name + '"></svg>' };
   get("tab-chat").classList.add("active");
-  c.RNAssistantChatInspector = { showRequest() {}, hideRequest() {}, setRequestLayout() {}, restoreRequestLayout() {} };
+  let requestVisible = false;
+  c.RNAssistantDiagnostics = {
+    source() { const w = c.RNAssistantWorkspaceChat, owner = w ? w.owner() : "office", snapshot = owner !== "office" ? w.snapshot() : null;
+      return { owner, chatId: snapshot ? snapshot.sessionId : c.state.activeChatId, workspaceId: snapshot?.project?.workspaceId || null }; },
+    key(target) { return JSON.stringify([target.owner, target.workspaceId || null, target.chatId || target.sessionId || null]); },
+    showRequest() { requestVisible = true; }, hideRequest() { requestVisible = false; },
+    requestVisible() { return requestVisible && get("tab-chat").classList.contains("active"); }
+  };
   c.RNAssistantViewerRegistry = { mount(kind, node, options) { mounts.push({ kind, node, options }); }, unmount() {} };
-  for (const name of ["app-resource-download.js", "app-model-context.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
+  for (const name of ["app-resource-download.js", "app-model-context.js", "app-model-context-details.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
   c.bindModelContextActions();
+  const open = c.RNAssistantModelContext.open;
+  c.RNAssistantModelContext.open = options => { open(options); get("modelContextMessagesTab").fire("click"); };
   return { c, get, mounts, calls, closes, requestText, events, timers, verification,
     bump() { revision++; }, hold(value) { hold = value; }, response(value) { responseText = value; },
     async tick() { const entry = Array.from(timers).find(([, t]) => t.ms === 2000); timers.delete(entry[0]); entry[1].fn(); await flush(); }
@@ -418,6 +428,8 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   grouped.events[0].trace.RequestComposition = { Version: 1, Method: "base_text_media_v1", HasMedia: false, TotalEstimatedTokens: 1120,
     Items: groupedRequest.map((_, index) => ({ MessageIndex: index, Group: index < 111 ? "Conversation" : "ResourceReferences", EstimatedTokens: 10 })) };
   grouped.c.RNAssistantModelContext.open(); await flush();
+  const initialLayout = descendants(grouped.get("modelContextBody")).find(node => node.className === "model-context-message-layout");
+  initialLayout.value = "groups"; await initialLayout.fire("change"); await flush();
   const groups = descendants(grouped.get("modelContextBody"));
   const groupedHistory = groups.find(node => node.dataset.compositionGroup === "Conversation");
   const references = groups.find(node => node.dataset.compositionGroup === "ResourceReferences");
@@ -700,7 +712,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.ok(descendants(proofRow).some(node => node.textContent === "Эффект неизвестен"));
   assert.ok(descendants(proofRow).some(node => node.textContent === "E доставлен в этом запросе."));
   await descendants(proofRow).find(node => node.textContent === "Ход выполнения").fire("click");
-  assert.deepEqual(JSON.parse(JSON.stringify(journalRoute)), { owner: "office", sessionId: "chat", chatId: "chat",
+  assert.deepEqual(JSON.parse(JSON.stringify(journalRoute)), { owner: "office", workspaceId: null, sessionId: "chat", chatId: "chat",
     runId: "run", stepId: "step", toolCallId: "call-2" });
   await descendants(proofRow).find(node => node.textContent === "Сообщение 3").fire("click"); await flush();
   assert.equal(proof.get("modelContextMessagesTab").classList.contains("active"), true);
@@ -741,19 +753,17 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     decision.c.RNAssistantModelContext.open(); await flush();
     await decision.get("modelContextResponseTab").fire("click");
     const content = decision.get("modelContextBody").children[0].children.find(node => node.tag === "details");
-    assert.equal(content.open, true, "saved response opens without another disclosure click");
+    assert.ok(!content.open, "response bodies stay lazy");
+    content.open = true;
     await content.fire("toggle"); await flush();
-    const nodes = descendants(content), info = nodes.find(node => node.className === "model-context-decision");
-    assert.equal(info.open, true, "an empty v8 message exposes its recorded action and decision basis");
-    assert.ok(descendants(info).some(node => node.textContent === inner.reason));
-    assert.ok(descendants(info).some(node => node.textContent === (action === "finish" ? inner.results[0].criterion :
-      action === "reflection" ? inner.decision : "core.read")));
-    if (action === "finish") assert.ok(descendants(info).some(node => /Оценка модели: выполнено частично/.test(node.textContent)));
-    assert.equal(decision.mounts.some(mount => mount.kind === "markdown" && !mount.options.text), false);
+    const nodes = descendants(content);
+    assert.ok(nodes.some(node => /Исходный content · строка/.test(node.textContent)));
+    assert.equal(nodes.some(node => node.className === "model-context-decision"), false, "UI does not re-admit V8");
+    assert.ok(decision.mounts.some(mount => mount.kind === "text" && mount.options.text === JSON.stringify(wrapped ? { response: inner } : inner)));
     const raw = nodes.find(node => node.tag === "details" && node.children[0]?.textContent === "Полный ответ · исходный JSON");
     raw.open = true; await raw.fire("toggle"); await flush();
     assert.equal(decision.mounts.at(-1).options.text, source, "readable v8 projection preserves the exact transport");
     decision.c.RNAssistantModelContext.close();
   }
-  console.log("PASS model context: readable v8 empty messages, strict wrapper and exact raw response");
+  console.log("PASS model context: explicit content strings, no protocol inference and exact raw response");
 })().catch(error => { console.error(error); process.exitCode = 1; });

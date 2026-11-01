@@ -7,6 +7,7 @@ const { spawn } = require("node:child_process");
 const { chromium } = require("playwright");
 (async () => {
   const server = spawn("python3", ["-B", "prototypes/serve_ui.py", "--port", "0"], { cwd: path.resolve(__dirname, "../..") });
+  server.stderr.resume(); // Drain the preview access log; an unread pipe can stall asset delivery.
   let browser;
   try {
     const address = await new Promise((resolve, reject) => {
@@ -142,21 +143,22 @@ const { chromium } = require("playwright");
     await readAction.locator(":scope > summary").click();
     await firstStep.locator(".branch-models > summary").click();
     await firstStep.getByRole("button", { name: "Состав запроса и ответа", exact: true }).click();
+    await page.locator("#modelContextMessagesTab").click();
     await page.locator("#modelContextBody section > .model-context-message").first().waitFor({ timeout: 5000 }).catch(async error => {
       console.error(await page.locator("#modelContextStatus").textContent(), await page.locator("#modelContextBody").textContent(), errors); throw error;
     });
     assert.equal((await page.evaluate(() => historyContextQueries.at(-1))).requestEventId, "preview-request", "history opens the exact recorded exchange");
-    await page.locator("#modelContextLayout").selectOption("focus");
     await capture("request-composition");
     await page.locator("#modelContextResponseTab").click();
+    await page.getByText("Сохранённое содержимое", { exact: true }).first().click();
     await page.waitForFunction(() => document.getElementById("modelContextBody").textContent.includes("18,4%"));
     await capture("model-response");
     await page.locator("#modelContextJsonTab").click();
     await page.locator("#modelContextBody .rn-json-viewer").waitFor();
     await capture("model-json");
-    await page.getByLabel("Вернуться к истории", { exact: true }).click();
+    await page.getByLabel("Вернуться к запуску", { exact: true }).click();
     await firstStep.locator(".branch-models > summary").waitFor();
-    assert.equal(await page.locator("#tab-settings").evaluate(node => node.classList.contains("active")), true);
+    assert.equal(await page.locator("#tab-diagnostics").evaluate(node => node.classList.contains("active")), true);
     assert.equal(await firstStep.evaluate(node => node.open), true, "return keeps the history branch open");
     const request = page.locator('[data-row-id="event-2"]');
     await request.locator(":scope > summary").click();
@@ -286,6 +288,7 @@ const { chromium } = require("playwright");
     await page.waitForFunction(() => document.getElementById("trajectoryStatus").textContent.includes("Не удалось"));
     assert.equal(await page.locator("#trajectoryWorkspace").isHidden(), true);
     await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator('.rail-button[data-tab="settings"]').click();
     await page.locator('[data-settings-page="model"]').first().click();
     await page.locator("#modelInput").fill("test-model-change");
     assert.equal(await page.evaluate(() => settingsDirty), true, "real settings still become dirty");

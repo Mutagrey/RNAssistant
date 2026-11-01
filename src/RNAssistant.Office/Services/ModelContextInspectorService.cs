@@ -29,6 +29,9 @@ namespace RNAssistant.Office.Services
         {
             token.ThrowIfCancellationRequested();
             ChatDiagnosticsScope.Require(session, query.ChatId, query.WorkspaceId);
+            if (!string.IsNullOrEmpty(query.StepId) && string.IsNullOrEmpty(query.RunId) ||
+                !string.IsNullOrEmpty(query.CompareRequestEventId) && string.IsNullOrEmpty(query.RequestEventId))
+                throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: exact run/request scope required.");
             if (!string.IsNullOrEmpty(query.VerifyResourceAlias) &&
                 (string.IsNullOrEmpty(query.RequestEventId) || !string.IsNullOrEmpty(query.Alias) || query.BeforeSequence.HasValue))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: payload verification requires an exact saved request and its resource alias.");
@@ -76,6 +79,9 @@ namespace RNAssistant.Office.Services
                 var request = all.SingleOrDefault(e => e.EventId == requestEventId && e.Type == SessionEventTypes.LlmRequest);
                 if (request == null) throw new InvalidOperationException("RESOURCE_SNAPSHOT_UNAVAILABLE: request event not found.");
                 var trace = Trace(request);
+                if (!string.IsNullOrEmpty(query.RunId) && request.RunId != query.RunId ||
+                    !string.IsNullOrEmpty(query.StepId) && trace.StepId != query.StepId)
+                    throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: request is outside the selected run/step.");
                 // Never correlate unrelated historical events with absent identifiers.
                 var next = all.FirstOrDefault(e => e.Sequence > request.Sequence && e.Type == SessionEventTypes.LlmRequest &&
                     !string.IsNullOrEmpty(trace.RequestId) && Trace(e).RequestId == trace.RequestId);
@@ -83,6 +89,15 @@ namespace RNAssistant.Office.Services
                     e.Sequence > request.Sequence && (next == null || e.Sequence < next.Sequence) && IsModelEvent(e.Type) &&
                     !string.IsNullOrEmpty(trace.RequestId) && e.RunId == request.RunId && Trace(e).RequestId == trace.RequestId)
                     .Select(e => Describe(e, true, aliases.Request(e.EventId))).ToArray();
+                response.Summary = ModelContextRequestProjection.Summary(all, request, response.Events, token);
+                if (!string.IsNullOrEmpty(query.CompareRequestEventId))
+                {
+                    var previous = all.SingleOrDefault(e => e.EventId == query.CompareRequestEventId &&
+                        e.Type == SessionEventTypes.LlmRequest && e.Sequence < request.Sequence &&
+                        e.RunId == request.RunId && !string.IsNullOrEmpty(request.RunId));
+                    if (previous == null) throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: earlier request from the same run required.");
+                    response.Comparison = ModelContextRequestProjection.Compare(previous, request, _payloads, token);
+                }
                 response.Resources = DescribeResources(session, trace, aliases, request.EventId);
                 if (!string.IsNullOrEmpty(query.ViewInventoryAlias))
                     response.ViewInventory = DescribeViewInventory(response.Resources, query);
@@ -107,6 +122,8 @@ namespace RNAssistant.Office.Services
             else
             {
                 var requests = all.Where(e => e.Type == SessionEventTypes.LlmRequest &&
+                    (string.IsNullOrEmpty(query.RunId) || e.RunId == query.RunId) &&
+                    (string.IsNullOrEmpty(query.StepId) || Trace(e).StepId == query.StepId) &&
                     (!query.BeforeSequence.HasValue || e.Sequence < query.BeforeSequence.Value))
                     .OrderByDescending(e => e.Sequence).Take(51).ToArray();
                 response.Events = requests.Take(50).Select(e => Describe(e, false, aliases.Request(e.EventId))).ToArray();

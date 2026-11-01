@@ -1,5 +1,18 @@
 # Stabilization risk register
 
+## Диагностика: оставшиеся границы — 2026-11-01
+
+Owner: Office diagnostics services / Web diagnostics presentation.
+Единый UI, typed summary/comparison, lazy bodies и отмена скрытых чтений проверены
+синтетически; [результаты и измерения](../diagnostics.md). Ограниченная выдача
+Inspector всё ещё требует полного validated event scan; браузерный замер его не
+оценивает. Синхронный scan/сборка preview не прерываются внутри вызова;
+отмена UI/bridge отсекает их доставку и отменяет поддерживаемые чтения тел. D3 provenance отдельных смысловых blocks, D4 пользовательский редактор
+сценариев/endpoint matrix и preview следующего workspace-запроса остаются открыты.
+Сравнение ограничено одним запуском, 8 MiB/8000 messages, 200 изменениями и 40
+полями; неполнота обозначена. Новый UI не закрывает real endpoint и Windows /
+Office / WebView2 qualification; допустимое Windows evidence — только фото.
+
 ## Отклонённый tool_calls: форма на Windows — 2026-10-30
 
 Owner: Core ModelProtocol; Web run journal — отображение. На фото ошибка
@@ -9,11 +22,9 @@ Owner: Core ModelProtocol; Web run journal — отображение. На фо
 на Windows остаются открыты: нужен только экран с раскрытым элементом, не выгрузка.
 Адресная диагностика и раскрытие первого вызова добавлены; контракт приёма сохранён.
 
-Соседний web gap: `node tests/web/run-journal.test.js` проходит проверки дерева,
-payload и нового раскрытия, затем падает на старом source assertion строки вызова
-`appendAgentRunViewState(body, runViewState, agentRunId(items, finalMessage))`.
-Production уже передаёт четвёртый аргумент `!run.workspace`. Тот же отказ воспроизведён
-на версии теста из HEAD до текущего diff; это не проверка поведения нового раскрытия.
+Старое source-ожидание трёх аргументов `appendAgentRunViewState` обновлено
+при переносе диагностики. `run-journal.test.js` проходит целиком; Windows-форма
+отклонённого вызова при этом остаётся открытым evidence.
 
 ## Применение настроек агента на Windows — 2026-10-30
 

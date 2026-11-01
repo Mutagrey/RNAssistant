@@ -7,6 +7,7 @@ const { chromium } = require("playwright");
 
 (async () => {
   const server = spawn("python3", ["-B", "prototypes/serve_ui.py", "--port", "0"], { cwd: path.resolve(__dirname, "../..") });
+  server.stderr.resume(); // Drain the preview access log; an unread pipe can stall asset delivery.
   let browser;
   try {
     const address = await new Promise((resolve, reject) => {
@@ -17,6 +18,7 @@ const { chromium } = require("playwright");
       ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = []; page.on("pageerror", error => errors.push(error.message));
+    page.on("requestfailed", request => console.error("Failed asset", request.url(), request.failure()));
     await page.goto(address + "preview/web/?scenario=ready");
     await page.waitForFunction(() => state.activeChatId === "preview-chat" && !state.initializePromise);
     const screenshot = async name => {
@@ -28,170 +30,18 @@ const { chromium } = require("playwright");
       await page.mouse.move(0, 0);
       await page.screenshot({ path: path.join(process.env.INSPECTOR_SCREENSHOTS, name + ".png"), animations: "disabled" });
     };
+    const body = page.locator("#modelContextBody"), messages = body.locator(".is-message");
+    assert.equal(await page.locator("#modelContextBody").evaluate(node => getComputedStyle(node).overflowY), "auto", "request stylesheet loads");
     await page.evaluate(() => {
-      const original = send; window.layoutPayloadReads = 0;
-      send = async (type, args) => {
-        if (type === "getModelContextPayload") layoutPayloadReads++;
-        const response = await original(type, args);
-        if (type === "getModelContext" && args.includeEvidence) response.evidenceReport = {
-          hasContextTrace: true, tools: [{ callId: "preview-call", operationAlias: "T1", evidenceAlias: "E1",
-            toolName: "core.read", outcome: "Ok", eligibility: "Eligible", delivery: "Delivered", messageIndices: [3],
-            runId: "preview-run", stepId: "preview-step", callEventId: "call-event", resultEventId: "result-event" },
-          { callId: "unknown-call", operationAlias: "T2", evidenceAlias: "E2", toolName: "core.patch",
-            outcome: "Unknown", eligibility: "Eligible", delivery: "Excluded", messageIndices: [] },
-          { callId: "service-call", operationAlias: "T3", toolName: "core.tools.read", outcome: "Ok", eligibility: "None", messageIndices: [] }],
-          finishes: [{ outcome: "partial", claims: [{ criterion: "Сравнить показатели двух месяцев и проверить результат",
-            assessment: "partially_satisfied", evidence: ["E1", "E2"] }] }]
-        };
-        return response;
-      };
-      state.activeRunViewState = { runId: "preview-run", lifecycle: "completed", executionHealth: "clean", currentAction: "Сравнение готово" };
-      state.liveAgentRun = [{ Kind: "tool", RunId: "preview-run", StepId: "preview-step", ToolCallId: "preview-call",
-        StepMessage: "Сравню показатели продаж", ToolId: "core.read", Status: "completed" }];
-      RNAssistantChatInspector.openActivity({ chatId: state.activeChatId, runId: "preview-run", stepId: "preview-step" });
+      const old = send; window.layoutPayloadReads = 0;
+      send = (type, args) => { if (type === "getModelContextPayload") layoutPayloadReads++; return old(type, args); };
     });
-    const source = page.getByRole("button", { name: "Запрос / ответ модели", exact: true });
-    await source.click();
-    await page.locator("#modelContextBody section > .model-context-message").first().waitFor();
-    assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.parentElement.id), "chatInspector");
-    assert.equal(await page.locator("#chatInspectorBody").isVisible(), false, "only the request view occupies the dock");
-    assert.equal(await page.locator("#modelContextAttempt").inputValue(), "preview-request");
-    assert.equal(await page.locator("#modelContextMode").isVisible(), true);
-    assert.equal(await page.locator("#modelContextHistory").evaluate(node => node.open), false);
-    assert.equal(await page.locator("#modelContextTabs [role=tab]").count(), 5);
-    await screenshot("request-overview");
-    const size = page.locator("#modelContextLayout"), body = page.locator("#modelContextBody");
-    const panel = page.locator("#chatInspector");
-    const dockWidth = (await panel.boundingBox()).width;
-    const messages = page.locator("#modelContextBody section > .model-context-message");
-    await messages.nth(3).locator(":scope > summary").click();
-    await messages.nth(3).locator(".rn-markdown-viewer-rendered").waitFor();
-    await page.evaluate(() => {
-      window.requestBodyNode = document.getElementById("modelContextBody").firstElementChild;
-      const body = document.getElementById("modelContextBody"), selected = body.querySelector(".is-message[open]");
-      body.scrollTop += selected.getBoundingClientRect().top - body.getBoundingClientRect().top - 14;
-      window.requestDockScroll = body.scrollTop;
-    });
-    assert.ok(await page.evaluate(() => requestDockScroll > 0));
-    await screenshot("request-docked");
-    await size.selectOption("wide");
-    assert.ok((await panel.boundingBox()).width > dockWidth + 100);
-    const splitter = page.locator("#chatInspectorSplitter");
-    const beforeResize = Number(await splitter.getAttribute("aria-valuenow"));
-    await splitter.focus(); await page.keyboard.press("ArrowRight");
-    assert.ok(Number(await splitter.getAttribute("aria-valuenow")) < beforeResize);
-    const wideWidth = (await panel.boundingBox()).width;
-    await screenshot("request-wide");
-    await size.selectOption("focus");
-    assert.equal(await page.locator("#modelContextDialog").getAttribute("aria-modal"), "true");
-    assert.equal(await page.locator("#chatLayout > .chat-main").evaluate(node => node.inert), true);
-    const full = await panel.boundingBox();
-    assert.deepEqual({ x: full.x, y: full.y, width: full.width, height: full.height }, { x: 0, y: 0, width: 1440, height: 900 });
-    assert.equal(await page.evaluate(() => requestBodyNode === document.getElementById("modelContextBody").firstElementChild), true);
-    assert.equal(await messages.nth(3).evaluate(node => node.open), true);
-    assert.equal(await page.evaluate(() => layoutPayloadReads), 1, "changing size never reloads the payload");
-    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
-    await screenshot("request-focus-dark");
-    await page.locator("#closeModelContextButton").focus(); await page.keyboard.press("Shift+Tab");
-    assert.equal(await page.evaluate(() => document.getElementById("modelContextDialog").contains(document.activeElement)), true);
-    await page.keyboard.press("Tab");
-    assert.equal(await page.locator("#closeModelContextButton").evaluate(node => node === document.activeElement), true);
-    await page.keyboard.press("Escape");
-    assert.equal(await size.inputValue(), "wide", "Escape restores the prior size without closing the request");
-    assert.equal((await panel.boundingBox()).width, wideWidth);
-    assert.equal(await page.locator("#chatLayout > .chat-main").evaluate(node => node.inert), false);
-    await size.selectOption("docked");
-    assert.equal((await panel.boundingBox()).width, dockWidth);
-    assert.equal(await body.evaluate(node => node.scrollTop), await page.evaluate(() => requestDockScroll));
-    await page.setViewportSize({ width: 420, height: 780 });
-    await size.selectOption("focus"); await screenshot("request-focus-narrow");
-    assert.equal(await body.evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
-    assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
-    await page.locator("#modelContextMessagesTab").focus(); await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator("#modelContextResourcesTab").getAttribute("aria-selected"), "true");
-    assert.match(await body.innerText(), /нет сохранённых связей с ресурсами/);
-    await screenshot("request-resources-empty");
-    await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator("#modelContextEvidenceTab").getAttribute("aria-selected"), "true");
-    const toolEvidence = body.locator('[data-evidence-call="preview-call"]');
-    await toolEvidence.locator(":scope > summary").click();
-    await toolEvidence.getByText("E доставлен в этом запросе.", { exact: true }).waitFor();
-    await body.getByText("Сравнить показатели двух месяцев и проверить результат", { exact: true }).click();
-    assert.equal(await page.evaluate(() => layoutPayloadReads), 1, "evidence uses metadata without loading model or tool payloads");
-    for (const width of [420, 320, 205]) {
-      await page.setViewportSize({ width, height: 780 });
-      assert.equal(await body.evaluate(node => node.scrollWidth > node.clientWidth + 1), false, "evidence fits " + width);
-      assert.equal(await page.locator("#modelContextTabs").evaluate(node => node.scrollWidth > node.clientWidth + 1), false, "tabs fit " + width);
-    }
-    await page.setViewportSize({ width: 420, height: 780 });
-    await screenshot("request-evidence-narrow-dark");
-    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"));
-    await screenshot("request-evidence-narrow-light");
-    await toolEvidence.getByRole("button", { name: "Сообщение 4", exact: true }).click();
-    await page.locator('.is-message[data-message-index="3"][open]').waitFor();
-    assert.equal(await page.evaluate(() => layoutPayloadReads), 1, "exact-message jump reuses saved bytes");
-    await page.locator("#modelContextEvidenceTab").click();
-    assert.equal(await toolEvidence.evaluate(node => node.open), true, "evidence expansion survives navigation");
-    await page.locator("#modelContextEvidenceTab").focus(); await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator("#modelContextResponseTab").getAttribute("aria-selected"), "true");
-    await body.locator(".rn-markdown-viewer-rendered").waitFor();
-    assert.match(await body.locator(".rn-markdown-viewer-rendered").innerText(), /Выручка выросла на 18,4%/);
-    assert.equal(await body.getByText("Сообщение модели · исходный JSON", { exact: true }).isVisible(), true);
-    await screenshot("request-response-narrow");
-    await page.locator("#modelContextResponseTab").focus(); await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator("#modelContextJsonTab").getAttribute("aria-selected"), "true");
-    await body.locator(".rn-json-viewer").waitFor();
-    assert.equal(await page.evaluate(() => layoutPayloadReads), 2, "tabs reuse the request and read only the chosen response");
-    await page.locator("#modelContextMessagesTab").click();
-    await messages.nth(3).locator(".rn-markdown-viewer-rendered").waitFor();
-    assert.equal(await messages.nth(3).evaluate(node => node.open), true, "reading the response preserves expanded input messages");
-    await page.locator("#modelContextHistory > summary").click();
-    assert.equal(await page.locator("#modelContextAliasSearch").isVisible(), true);
-    await page.locator("#modelContextAliasSearch").fill("Q1");
-    assert.match(await page.locator("#modelContextReferenceLegend").innerText(),
-      /T — вызов; E — допустимое доказательство; R — ресурс; O — наблюдение; Q — запрос модели/);
-    await screenshot("references-legend");
-    await page.locator("#modelContextAliasFind").click();
-    await page.waitForFunction(() => document.getElementById("modelContextStatus").textContent.includes("Найдено Q1"));
-    await page.locator("#modelContextMode").selectOption("preview");
-    await page.waitForFunction(() => document.getElementById("modelContextStatus").textContent.includes("Предпросмотр, ещё не отправлено"));
-    assert.equal(await page.locator("#modelContextAttempt").isHidden(), true, "preview hides the saved-request selector");
-    assert.equal(await page.locator("#modelContextResponseTab").isDisabled(), true);
-    assert.equal(await page.locator("#modelContextResourcesTab").isDisabled(), true);
-    assert.equal(await page.locator("#modelContextEvidenceTab").isDisabled(), true);
-    assert.equal(await page.locator("#modelContextDownload").isDisabled(), false);
-    assert.equal(await body.locator(".model-context-composition").count(), 0, "preview cannot reuse saved request composition");
-    await screenshot("request-preview");
-    await page.locator("#modelContextMode").selectOption("actual");
-    assert.equal(await page.locator("#modelContextAttempt").isVisible(), true, "saved-request selection returns with actual mode");
-    await page.locator("#modelContextBody .is-message").first().waitFor();
-    await page.setViewportSize({ width: 500, height: 380 });
-    assert.ok((await body.boundingBox()).height > 80, "expanded history must leave room for reading in a short window");
-    assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.scrollHeight > node.clientHeight + 1), false);
-    await screenshot("request-short");
-    await page.setViewportSize({ width: 320, height: 640 });
-    await page.evaluate(() => document.documentElement.setAttribute("data-text-size", "large"));
-    assert.equal(await page.locator("#modelContextDialog").evaluate(node => node.scrollWidth > node.clientWidth + 1), false);
-    await screenshot("request-large-text");
-    await page.evaluate(() => document.documentElement.removeAttribute("data-text-size"));
-    await page.setViewportSize({ width: 1440, height: 900 });
-    await size.selectOption("wide");
-    await page.waitForFunction(() => !document.querySelector(".shell").classList.contains("navigation-transition"));
-    assert.equal((await panel.boundingBox()).width, wideWidth, "responsive clamping does not overwrite the chosen wide size");
-    await size.selectOption("docked");
-    assert.equal((await panel.boundingBox()).width, dockWidth, "the original dock width survives a narrow viewport");
-    await size.selectOption("focus");
-    await page.locator("#closeModelContextButton").focus(); await page.keyboard.press("Escape");
-    await page.keyboard.press("Escape");
-    assert.equal(await page.locator("#modelContextDialog").isVisible(), false);
-    assert.equal(await source.evaluate(node => node === document.activeElement), true);
-    assert.equal(await page.locator(".chat-inspector-step.is-selected details").evaluate(node => node.open), true);
-    await source.click(); await size.selectOption("focus");
-    await page.evaluate(() => { document.getElementById("tab-chat").classList.remove("active"); RNAssistantModelContext.sync(); });
-    assert.equal(await page.locator("#modelContextDialog").isVisible(), false);
-    assert.equal(await page.locator("#chatLayout > .chat-main").evaluate(node => node.inert), false);
-    await page.evaluate(() => document.getElementById("tab-chat").classList.add("active"));
-    assert.equal((await panel.boundingBox()).width, dockWidth, "a hidden chat does not let the closed HTML browser override the Inspector columns");
+    const openInput = async () => {
+      await page.evaluate(() => RNAssistantModelContext.open({ requestEventId: "preview-request" }));
+      await page.locator("#modelContextSummaryTab[aria-selected=true]").waitFor();
+      await page.locator("#modelContextMessagesTab").click();
+      await messages.first().waitFor();
+    };
     await page.evaluate(() => {
       const original = send;
       send = async (type, args) => {
@@ -227,12 +77,13 @@ const { chromium } = require("playwright");
         return reply;
       };
     });
-    await source.click(); await size.selectOption("focus");
+    await openInput();
     const composition = body.locator(".model-context-composition");
     assert.match(await composition.innerText(), /213 ток\. · базовая оценка/);
     assert.doesNotMatch(await composition.innerText(), /260|310/, "composition is not normalized to admission or API usage");
     const grouping = body.getByLabel("Группировка контекста");
-    assert.equal(await grouping.inputValue(), "groups");
+    assert.equal(await grouping.inputValue(), "wire");
+    await grouping.selectOption("groups");
     const historyGroup = composition.locator('[data-composition-group="Conversation"]');
     assert.equal(await historyGroup.locator(":scope > summary").isVisible(), true, "composition is visible without opening an extra disclosure");
     assert.match(await historyGroup.locator(":scope > summary").innerText(), /История сообщений[\s\S]*Сообщений: 2[\s\S]*70 ток/);
@@ -292,8 +143,19 @@ const { chromium } = require("playwright");
       await screenshot("request-composition-" + theme + "-narrow");
       await evidence.scrollIntoViewIfNeeded();
     }
-    await page.locator("#closeModelContextButton").click();
-    await source.click(); await size.selectOption("focus");
+    await page.locator("#modelContextHistory > summary").click();
+    await page.locator("#modelContextAliasSearch").fill("Q1");
+    await page.locator("#modelContextAliasFind").click();
+    await page.waitForFunction(() => document.getElementById("modelContextStatus").textContent.includes("Найдено Q1"));
+    await page.locator("#modelContextMode").selectOption("preview");
+    await page.waitForFunction(() => document.getElementById("modelContextStatus").textContent.includes("Предпросмотр, ещё не отправлено"));
+    assert.equal(await page.locator("#modelContextAttempt").isHidden(), true);
+    for (const id of ["modelContextSummaryTab", "modelContextResponseTab", "modelContextResourcesTab", "modelContextEvidenceTab", "modelContextCompareTab"])
+      assert.equal(await page.locator("#" + id).isDisabled(), true, "preview has no saved evidence: " + id);
+    assert.equal(await page.locator("#modelContextDownload").isDisabled(), false);
+    assert.equal(await body.locator(".model-context-composition").count(), 0, "preview cannot reuse saved request composition");
+    await page.locator("#modelContextMode").selectOption("actual");
+    await messages.first().waitFor();
     await page.evaluate(() => {
       RNAssistantModelContext.close();
       const oldSend = send, oldRead = RNAssistantResourceDownload.read;
@@ -324,9 +186,8 @@ const { chromium } = require("playwright");
         return reply;
       };
     });
-    await source.click();
+    await openInput();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await size.selectOption("focus");
     const exactMessage = body.locator(".is-message").first();
     await exactMessage.locator(":scope > summary").click();
     await exactMessage.locator('[data-context-source="message/0"] > summary').click();
@@ -335,8 +196,7 @@ const { chromium } = require("playwright");
     await exactSource.locator(":scope > summary").click();
     await screenshot("source-caption-diagnostics");
     await page.evaluate(() => { RNAssistantModelContext.close(); captionFixturePdf = true; });
-    await source.click();
-    await size.selectOption("focus");
+    await openInput();
     await exactMessage.locator(":scope > summary").click();
     await exactMessage.locator('[data-context-source="message/0"] > summary').click();
     assert.match(await exactSource.locator(":scope > summary").innerText(), /R3@v1 — report.pdf, страница 2, символы \[4, 17\)/,
@@ -355,6 +215,7 @@ const { chromium } = require("playwright");
       const card = renderActivityNode(activity, false, false, { message: { RunId: "preview-run" } });
       card.id = "caption-activity"; document.getElementById("messages").replaceChildren(card);
     });
+    await page.locator("#diagnosticsReturnChat").click();
     await page.locator("#caption-activity > details > summary").click();
     await page.locator("#caption-activity .tool-source-caption").waitFor();
     await screenshot("source-caption-chat");
@@ -367,12 +228,12 @@ const { chromium } = require("playwright");
       "source caption fits narrow chat without horizontal overflow");
     await screenshot("source-caption-chat-narrow");
     await page.evaluate(() => RNAssistantChatInspector.setOpen(true));
-    await source.click();
+    await openInput();
     await page.evaluate(() => { state.activeChatId = "other-chat"; RNAssistantModelContext.sync(); });
+    await page.locator("#modelContextDialog").waitFor({ state: "hidden" });
     assert.equal(await page.locator("#modelContextDialog").isVisible(), false);
-    assert.equal(await panel.evaluate(node => node.classList.contains("is-request-focus")), false);
     assert.equal(await page.locator("#chatLayout > .chat-main").evaluate(node => node.inert), false);
     assert.deepEqual(errors, []);
-    console.log("PASS model context layout: stable dock/resize/payload/scroll, keyboard tabs, response/raw JSON, preview/search, Focus/Escape, short/narrow/large text, section/chat switch");
+    console.log("PASS model context layout: recorded composition, source coverage, omissions, exact resource/message links, retained state, typed PDF captions and narrow themes");
   } finally { if (browser) await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

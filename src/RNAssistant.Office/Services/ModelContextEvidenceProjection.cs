@@ -81,28 +81,43 @@ namespace RNAssistant.Office.Services
             SessionEvent request, LlmTraceRecord trace, CancellationToken token)
         {
             var result = new List<ModelContextFinishDto>();
-            if (string.IsNullOrWhiteSpace(trace.ModelAttemptId) || string.IsNullOrWhiteSpace(request.RunId)) return result;
+            foreach (var accepted in AcceptedMessages(events, request, trace, token))
+            {
+                var read = ConversationResponseHistoryReader.Read(accepted.Message);
+                if (!read.Success || read.Response.Action != ConversationResponse.FinishAction) continue;
+                result.Add(new ModelContextFinishDto { EventId = accepted.EventId, MessageId = accepted.Message.Id,
+                    Outcome = ConversationFinishContract.Name(read.Response.Outcome.Value),
+                    Claims = read.Response.Results.Select(claim => new ModelContextFinishClaimDto {
+                        Criterion = claim.Criterion, Assessment = claim.AssessmentName, Evidence = claim.Evidence }).ToArray() });
+            }
+            return result;
+        }
+
+        internal sealed class AcceptedMessage
+        {
+            internal string EventId { get; set; }
+            internal ChatMessage Message { get; set; }
+        }
+
+        internal static IEnumerable<AcceptedMessage> AcceptedMessages(IEnumerable<SessionEvent> events,
+            SessionEvent request, LlmTraceRecord trace, CancellationToken token)
+        {
+            if (string.IsNullOrWhiteSpace(trace.ModelAttemptId) || string.IsNullOrWhiteSpace(request.RunId)) yield break;
             foreach (var item in events.Where(item => item.Sequence > request.Sequence && item.RunId == request.RunId))
             {
                 token.ThrowIfCancellationRequested();
-                // A repair/fallback request in the same attempt owns any later accepted decision.
-                if (item.Type == SessionEventTypes.LlmRequest && item.Data?.ToObject<LlmTraceRecord>().ModelAttemptId == trace.ModelAttemptId) break;
+                // A later repair/fallback dispatch owns its subsequent canonical decisions.
+                if (item.Type == SessionEventTypes.LlmRequest && item.Data?.ToObject<LlmTraceRecord>()?.ModelAttemptId == trace.ModelAttemptId) yield break;
                 if (item.Type != SessionEventTypes.SessionCommit) continue;
                 var commit = item.Data?.ToObject<CommitData>();
                 foreach (var operation in commit?.Operations ?? new List<SessionOperation>())
                 {
                     if (operation.Type != SessionOperationTypes.AssistantMessageAppended) continue;
                     var message = operation.Data?.ToObject<MessageData>()?.Value;
-                    if (message?.ResponseModelAttemptId != trace.ModelAttemptId || message.RunId != request.RunId || message.RuntimeProjection) continue;
-                    var read = ConversationResponseHistoryReader.Read(message);
-                    if (!read.Success || read.Response.Action != ConversationResponse.FinishAction) continue;
-                    result.Add(new ModelContextFinishDto { EventId = item.EventId, MessageId = message.Id,
-                        Outcome = ConversationFinishContract.Name(read.Response.Outcome.Value),
-                        Claims = read.Response.Results.Select(claim => new ModelContextFinishClaimDto {
-                            Criterion = claim.Criterion, Assessment = claim.AssessmentName, Evidence = claim.Evidence }).ToArray() });
+                    if (message == null || message.ResponseModelAttemptId != trace.ModelAttemptId || message.RunId != request.RunId || message.RuntimeProjection) continue;
+                    yield return new AcceptedMessage { EventId = item.EventId, Message = message };
                 }
             }
-            return result;
         }
 
         private sealed class CommitData { public List<SessionOperation> Operations { get; set; } }

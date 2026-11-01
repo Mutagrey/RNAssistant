@@ -1,5 +1,9 @@
 # RNAssistant V8 — Model Diagnostics & Compatibility Lab
 
+> Структура экранов ниже историческая. С 2026-10-30 текущие маршруты, владельцы,
+> реализованный scope и открытые D3/D4/D5 — в [Диагностике](../diagnostics.md).
+> Новая структура UI не закрывает qualification этого плана.
+
 **Дата:** 2026-10-30 · **Статус:** план для агента  
 **Зависимость:** `RNAssistant_V8_Context_Protocol_Target.md`
 
