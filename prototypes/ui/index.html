@@ -1,98 +1,70 @@
 <!doctype html>
-<html lang="ru" data-theme="light" data-ui-prototype>
+<html lang="ru" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>RNAssistant — прототип интерфейса</title>
-  <script src="../../web/js/app-accent.js?v=shared-palette-20261025-2"></script>
-  <link rel="stylesheet" href="../../web/css/vendor/codemirror/codemirror.min.css?v=compact-layout-20261018-7">
-  <link rel="stylesheet" href="../../web/css/vendor/viewer.min.css?v=compact-layout-20261018-7">
-  <link rel="stylesheet" href="../../web/css/app-json-viewer.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="../../web/css/app-text-viewer.css?v=compact-layout-20261018-7">
-  <link rel="stylesheet" href="../../web/css/app-resource-viewer.css?v=compact-layout-20261018-7">
-  <link rel="stylesheet" href="../../web/css/app-sequence-viewer.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="../../web/css/app-product-tokens.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="../../web/css/app-product-navigation.css?v=ui-cutover-20261018-1">
-  <link rel="stylesheet" href="ui.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="../../web/css/app-product-components.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="../../web/css/app-product-viewers.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="diff-ui.css?v=compact-layout-20261018-7">
+  <title>RNAssistant — рабочее пространство · Demo P1</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="ui.css">
 </head>
 <body>
-  <header class="review-bar" aria-label="Управление прототипом">
-    <a class="prototype-mark" href="#/chat/main"><span class="prototype-dot"></span>RN / DESIGN <span class="version">01</span></a>
-    <nav class="review-nav" aria-label="Материалы дизайна">
-      <button data-review="app" aria-pressed="true">Интерфейс</button>
-      <button data-review="map" aria-pressed="false">Карта экранов</button>
-      <button data-review="system" aria-pressed="false">Компоненты</button>
-      <button data-review="handoff" aria-pressed="false">Внедрение</button>
-    </nav>
-    <div class="review-controls">
-      <label class="sr-only" for="viewport">Ширина прототипа</label>
-      <select id="viewport"><option value="auto">По ширине окна</option><option value="1600">Desktop · 1600</option><option value="900">Окно · 900</option><option value="560">Панель · 560</option><option value="360">Панель · 360</option></select>
-      <button class="icon-btn" id="theme-toggle" aria-label="Включить тёмную тему"></button>
+  <div id="shell" class="shell">
+    <header class="topbar">
+      <div class="workspace-context" id="workspace-context"><span data-icon="table"></span><span id="workspace-document"></span></div>
+      <div class="top-actions">
+        <div class="panel-controls" aria-label="Управление областями">
+          <button id="navigation-open" class="icon-button" data-command="toggle-navigation" aria-label="Свернуть навигацию" title="Свернуть навигацию" aria-controls="navigation"><span data-icon="panelLeft"></span></button>
+          <button id="tools-toggle" class="icon-button" data-command="toggle-tools" aria-label="Скрыть инструменты" title="Скрыть инструменты"><span data-icon="panel"></span></button>
+          <button id="maximize-toggle" class="icon-button" data-command="maximize" aria-label="Развернуть активную группу" title="Развернуть активную группу"><span data-icon="fit"></span></button>
+        </div>
+        <details class="menu" id="panels-menu"><summary aria-label="Панели"><span data-icon="layers"></span><span class="action-label">Панели</span></summary><div class="menu-body" id="panel-list"></div></details>
+        <details class="menu"><summary aria-label="Компоновка"><span data-icon="panel"></span><span class="action-label">Компоновка</span></summary><div class="menu-body">
+          <span class="menu-label">Рабочее пространство</span>
+          <button data-layout="analysis">Чат и инспектор</button><button data-layout="research">Материал и браузер</button><button data-layout="single">Одна группа вкладок</button>
+          <hr><button data-command="save-layout">Сохранить раскладку</button><button data-command="restore-layout">Вернуть сохранённую</button>
+        </div></details>
+        <details class="menu"><summary aria-label="Демо"><span data-icon="play"></span><span class="action-label">Демо</span></summary><div class="menu-body">
+          <span class="menu-label">Визуальное ревью · P1</span>
+          <label for="preview-width">Ширина оболочки</label><select id="preview-width"><option value="auto">По ширине окна</option><option value="900">900 px · окно</option><option value="560">560 px · панель</option><option value="360">360 px · панель</option></select>
+          <p>Ревью оболочки: расположение действий, открытие экранов и свободное место. Содержимое экранов пока примерное.</p>
+          <p>Локальные примеры. Модель и Office не подключены.</p>
+        </div></details>
+        <button class="icon-button" id="theme-toggle" aria-label="Включить тёмную тему" title="Сменить тему"><span data-icon="moon"></span></button>
+        <button class="icon-button" data-open="settings" aria-label="Настройки" title="Настройки"><span data-icon="settings"></span></button>
+      </div>
+    </header>
+    <div class="workbench">
+      <nav class="activity" id="activity" aria-label="Разделы">
+        <button data-section="workspace" aria-label="Рабочая область" title="Рабочая область"><span data-icon="chat"></span></button>
+        <button data-section="files" aria-label="Файлы" title="Файлы"><span data-icon="folder"></span></button>
+        <button data-section="materials" aria-label="Материалы" title="Материалы"><span data-icon="files"></span></button>
+        <button data-section="library" aria-label="Библиотека" title="Библиотека"><span data-icon="book"></span></button>
+        <span class="rail-spacer"></span>
+        <button data-open="diagnostics" aria-label="Диагностика" title="Диагностика"><span data-icon="chart"></span></button>
+      </nav>
+      <aside id="navigation" class="navigation" aria-label="Навигация">
+        <div class="navigation-head"><strong id="navigation-title">Рабочая область</strong></div>
+        <div id="navigation-content" class="navigation-content"></div>
+        <div class="navigation-foot"><span class="status-dot"></span>Локальное пространство</div>
+      </aside>
+      <div id="navigation-resize" class="navigation-resize" role="separator" tabindex="0" aria-label="Ширина навигации" aria-orientation="vertical" aria-valuemin="180" aria-valuemax="340" aria-valuenow="224"></div>
+      <main id="workspace-region" class="workspace-region" aria-label="Рабочее пространство">
+        <div id="dock" class="dock"></div>
+      </main>
+      <button id="navigation-scrim" class="navigation-scrim" data-command="toggle-navigation" aria-label="Закрыть навигацию"></button>
     </div>
-  </header>
-  <div class="demo-strip"><span>Интерактивный прототип · демонстрационные данные</span><div class="demo-playback" id="chat-demo-controls" aria-label="Демонстрация чата"></div><label>Состояние <select id="scenario" aria-label="Демонстрационное состояние"><option value="ready">Обычное</option><option value="empty">Пустое</option><option value="loading">Загрузка</option><option value="running">Выполнение</option><option value="approval">Подтверждение</option><option value="needs-input">Нужен ответ</option><option value="unknown">Результат неизвестен</option><option value="error">Ошибка</option><option value="offline">Документ недоступен</option><option value="dirty">Несохранённые изменения</option></select></label></div>
-  <div class="preview-stage" id="stage">
-    <div class="app-shell" id="app-shell">
-      <button id="demoNavigationToggle"></button>
-      <nav class="section-rail" id="section-rail" aria-label="Разделы"></nav>
-      <aside class="global-nav" id="global-nav" aria-label="Дерево раздела"></aside>
-      <main id="main" class="main-region" tabindex="-1"></main>
-    </div>
-    <section id="review-content" class="review-content" hidden tabindex="-1"></section>
+    <footer class="statusbar"><span class="status-dot"></span><span>Демо · без подключения к Office</span><span id="layout-status" class="layout-status">Компоновка</span><button data-open="diagnostics"><span data-icon="chart"></span><span class="status-diagnostics-label">Диагностика</span></button></footer>
   </div>
-  <dialog id="dialog" aria-labelledby="dialog-title"><div id="dialog-body"></div></dialog>
-  <div class="toast" id="toast" role="status" hidden></div>
-  <div class="sr-only" id="announcer" aria-live="polite"></div>
-  <input id="demo-file" type="file" multiple hidden>
-  <script src="../../web/js/vendor/codemirror/codemirror.min.js"></script>
-  <script src="../../web/js/vendor/codemirror/mode/vb/vb.min.js"></script>
-  <script src="../../web/js/vendor/codemirror/mode/javascript/javascript.min.js"></script>
-  <script src="../../web/js/vendor/codemirror/mode/markdown/markdown.min.js"></script>
-  <script src="../../web/js/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
-  <script src="../../web/js/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
-  <script src="../../web/js/vendor/codemirror/addon/selection/active-line.min.js"></script>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="vendor/dockview-8.8.3/dockview-core.min.js"></script>
+  <script src="../../web/js/app-icons.js"></script>
   <script src="../../web/js/vendor/marked.min.js"></script>
   <script src="../../web/js/vendor/purify.min.js"></script>
-  <script src="../../web/js/vendor/viewer.min.js"></script>
-  <script src="../../web/js/app-viewer-registry.js"></script>
-  <script src="../../web/js/app-json-viewer.js"></script>
-  <script src="../../web/js/app-text-viewer.js"></script>
-  <script src="../../web/js/app-sequence-viewer.js"></script>
-  <script src="../../web/js/app-resource-viewer.js"></script>
-  <script src="../../web/js/app-text-diff.js"></script>
-  <script src="../../web/js/app-run-changes.js"></script>
-  <script src="screen-map.js?v=style-system-20261018-9"></script>
-  <script src="fixtures.js?v=shared-preview-20261019-1"></script>
-  <script src="../../web/js/app-icons.js?v=shared-icons-20261019-1"></script>
-  <script src="../../web/js/app-panel-toggle.js"></script>
-  <script src="../../web/js/app-navigation-tree.js?v=shared-tree-20261018-1"></script>
-  <script src="../../web/js/app-library-groups.js"></script>
-  <script src="../../web/js/app-editor-tabs.js?v=shared-editor-tabs-20261019-1"></script>
-  <script src="../../web/js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
-  <script src="../../web/js/app-skill-fields-view.js?v=shared-skill-fields-20261018-1"></script>
-  <script src="ui.js?v=shared-action-menu-20261019-1"></script>
-  <script src="edit-state.js?v=compact-layout-20261018-7"></script>
-  <script src="workspace-tree.js?v=compact-layout-20261018-7"></script>
-  <script src="navigation.js?v=compact-layout-20261018-7"></script>
-  <script src="appearance.js?v=shared-palette-20261025-2"></script>
-  <script src="chat-timeline.js?v=compact-layout-20261018-7-shared-history-style-20261025-1"></script>
-  <script src="motion.js?v=style-system-20261018-9"></script>
-  <script src="chat-ui.js?v=compact-layout-20261018-7"></script>
-  <script src="materials-ui.js?v=compact-layout-20261018-7"></script>
-  <script src="chat-scroll.js?v=compact-layout-20261018-7"></script>
-  <script src="chat-demo.js?v=compact-layout-20261018-7"></script>
-  <script src="screens.js?v=style-system-20261018-9"></script>
-  <script src="split-layout.js?v=style-system-20261018-9"></script>
-  <script src="product-tree.js?v=shared-tree-20261018-1"></script>
-  <script src="../../web/js/app-viewer-ui.js?v=shared-viewers-20261019-1"></script>
-  <script src="diff-ui.js?v=compact-layout-20261018-7"></script>
-  <script src="product-components.js?v=compact-layout-20261018-7"></script>
-  <script src="settings-ui.js?v=compact-layout-20261018-7"></script>
-  <script src="integration-map.js?v=compact-layout-20261018-7"></script>
-  <script src="app.js?v=style-system-20261018-9"></script>
+  <script src="fixtures.js"></script>
+  <script src="ui.js"></script>
+  <script src="panels.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

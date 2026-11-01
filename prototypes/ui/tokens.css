@@ -1,0 +1,57 @@
+/* P1 working values, In Review. These tokens are Demo-only. */
+:root {
+  color-scheme: light;
+  --surface: #ffffff;
+  --surface-subtle: #f7f8f9;
+  --surface-shell: #eef0f2;
+  --surface-hover: #e8edf0;
+  --surface-selected: #e6f0ed;
+  --text: #263238;
+  --text-muted: #69777e;
+  --border: #dce2e5;
+  --accent: #35765f;
+  --accent-text: #ffffff;
+  --focus: #37866e;
+  --success: #33775a;
+  --danger: #b54545;
+  --warning: #966b25;
+  --shadow: 0 8px 28px #20303b1a;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --radius: 6px;
+  --radius-large: 10px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, monospace;
+  --text-small: 11px;
+  --text-ui: 12px;
+  --text-body: 14px;
+  --text-title: 20px;
+  --control-height: 28px;
+  --top-height: 40px;
+  --tab-height: 34px;
+  --rail-width: 44px;
+  --status-height: 24px;
+  --navigation-width: 224px;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #21262b;
+  --surface-subtle: #1c2126;
+  --surface-shell: #151a1e;
+  --surface-hover: #2b343c;
+  --surface-selected: #283e36;
+  --text: #e0e6e9;
+  --text-muted: #9ba9b2;
+  --border: #343d45;
+  --accent: #96c5ad;
+  --accent-text: #182c22;
+  --focus: #a1d3b9;
+  --success: #96c5ad;
+  --danger: #f0a0a0;
+  --warning: #dbba7b;
+  --shadow: 0 8px 28px #0006;
+}

@@ -98,6 +98,34 @@ evidence и ADR — только когда нужны причина, точн�
   Обычный commit не меняет product version, не запускает release workflow и не
   создаёт tag.
 
+## UI: визуальный прототип
+
+- Перед изменением `prototypes/ui/` прочитай
+  [задание](docs/ui-prototype/00_START_HERE.md),
+  [UX](docs/ui-prototype/01_PROTOTYPE_UX_SPEC.md),
+  [дизайн-правила](docs/ui-prototype/02_DESIGN_RULES.md) и
+  [порядок документации](docs/ui-prototype/03_DOCUMENTATION_WORKFLOW.md).
+  Текущее предложение — [компоновка](docs/ui/UI_LAYOUT_UX.md), согласования —
+  [журнал решений](docs/ui/UI_DECISIONS.md).
+- Scope — существующий Demo `prototypes/ui/`. Не меняй production `web/`, C#,
+  runtime, Office Bridge, storage и механизмы оптимизации. `product-preview.html`
+  и `demo/RNAssistant.MockDemo/` не являются новой оболочкой. Перенос в production
+  начинается только по отдельному явному запросу пользователя.
+- Сначала осмотр и предложение компоновки (P0), затем согласованные этапы:
+  Dockview-оболочка (P1), варианты оформления (P2), экраны небольшими порциями (P3).
+  После каждого этапа — запускаемый результат и визуальное ревью до следующего.
+- Повторно используй подходящие локальные assets без изменения их production
+  consumers. Dockview владеет вкладками/докингом; не создавай второй docking engine,
+  vendor loader, UI framework или платформу документации. Сохраняй offline-запуск.
+- Эксперименты остаются `Proposed` / `In Review` до явного согласия пользователя.
+  По мере согласования обновляй затронутые UI-документы и исходные tokens;
+  фактические CSS-значения живут в коде. Создавай документы только с содержанием,
+  с owner и ссылкой из `docs/README.md`, по порядку из пакета.
+- На ревью укажи запуск, 2–5 действий для проверки, визуальный результат,
+  ограничения и конкретный выбор. Mock-выполнение явно помечай; проверка в
+  браузере не доказывает Office/WebView2 qualification. Проверки — только по
+  изменённому Demo, без лишних builds, Office validation и production migration.
+
 ## Definition of Done
 
 Scope и owner однозначны; responsibilities не смешаны; новый contract typed и без

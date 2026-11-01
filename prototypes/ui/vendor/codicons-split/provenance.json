@@ -1,0 +1,19 @@
+{
+  "project": "microsoft/vscode-codicons",
+  "commit": "ceaa8663a7e63e2bac7f1ecac128ce31404b7487",
+  "license": "CC-BY-4.0",
+  "files": {
+    "split-horizontal.svg": {
+      "source": "https://raw.githubusercontent.com/microsoft/vscode-codicons/ceaa8663a7e63e2bac7f1ecac128ce31404b7487/src/icons/split-horizontal.svg",
+      "sha256": "329ac127b76c970e283e8c573b71e6cafd8f555c9198d9b41ab2cb99ad88d9bc"
+    },
+    "split-vertical.svg": {
+      "source": "https://raw.githubusercontent.com/microsoft/vscode-codicons/ceaa8663a7e63e2bac7f1ecac128ce31404b7487/src/icons/split-vertical.svg",
+      "sha256": "82c749b8c70e229dfaf051d855b9aa51e124bef527bbe46f137351e7d40932c8"
+    },
+    "LICENSE": {
+      "source": "https://raw.githubusercontent.com/microsoft/vscode-codicons/ceaa8663a7e63e2bac7f1ecac128ce31404b7487/LICENSE",
+      "sha256": "af5e030844efddbc7ab00dcfea8b019703753d4d9f5172d727c533a492aec665"
+    }
+  }
+}

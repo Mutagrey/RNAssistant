@@ -105,7 +105,10 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Data Templates: independent app workspace, export, UI/core and host adapters | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
-| UI design, interactive prototype and migration ownership | [UI design](ui-design.md) — product presentation, not runtime contract |
+| Действующий production UI и прежний перенос | [UI design](ui-design.md) — product presentation, not runtime contract |
+| Новый визуальный Demo: scope, этапы и ревью | [Задание P0–P4](ui-prototype/00_START_HERE.md); [UX](ui-prototype/01_PROTOTYPE_UX_SPEC.md), [дизайн-правила](ui-prototype/02_DESIGN_RULES.md), [документация](ui-prototype/03_DOCUMENTATION_WORKFLOW.md) |
+| Компоновка, навигация и решения нового Demo | [UI Layout / UX](ui/UI_LAYOUT_UX.md), [UI Decisions](ui/UI_DECISIONS.md) — P1 на визуальном ревью, согласования отмечены отдельно |
+| Tokens и компоненты визуального Demo | [UI Design System](ui/UI_DESIGN_SYSTEM.md) — рабочий вариант P1, CSS владеет значениями |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |
 | Targeted checks | [Harness guide](../tests/RNAssistant.Harness/README.md) |

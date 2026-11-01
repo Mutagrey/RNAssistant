@@ -1,0 +1,19 @@
+{
+  "package": "dockview-core",
+  "version": "8.8.3",
+  "license": "MIT",
+  "source": "https://registry.npmjs.org/dockview-core/-/dockview-core-8.8.3.tgz",
+  "integrity": "sha512-B9v+ibiXnZ5qgFJ7VEqMcNxpG0S5Y7Yx7uuGqqSyEFSC3bRZktUoXWo3HCrFp+QTdFmA1dJD1ye/gI4yL3hU2g==",
+  "files": {
+    "dockview-core.min.js": {
+      "source": "dist/dockview-core.min.js",
+      "bytes": 561173,
+      "sha256": "e4b6a433d5af93cef6bfcb456906844d1fc048679979dd2f540bce68b8488f55"
+    },
+    "LICENSE": {
+      "source": "LICENCE.md",
+      "bytes": 1063,
+      "sha256": "1d56757fdc06c9b33c0f80821efe4f4b11960dd7fb6544232cff61752101f513"
+    }
+  }
+}
