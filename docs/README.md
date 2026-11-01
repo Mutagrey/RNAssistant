@@ -107,7 +107,7 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
 | Действующий production UI и прежний перенос | [UI design](ui-design.md) — product presentation, not runtime contract |
 | Новый визуальный Demo: scope, этапы и ревью | [Задание P0–P4](ui-prototype/00_START_HERE.md); [UX](ui-prototype/01_PROTOTYPE_UX_SPEC.md), [дизайн-правила](ui-prototype/02_DESIGN_RULES.md), [документация](ui-prototype/03_DOCUMENTATION_WORKFLOW.md) |
-| Компоновка, навигация и решения нового Demo | [UI Layout / UX](ui/UI_LAYOUT_UX.md), [UI Decisions](ui/UI_DECISIONS.md) — оболочка P1 и ревью оформления P2, согласования отмечены отдельно |
+| Компоновка, навигация и решения нового Demo | [UI Layout / UX](ui/UI_LAYOUT_UX.md), [UI Decisions](ui/UI_DECISIONS.md) — Dockview P1/P2; P3 на основе production UI, минимальные примеры поведения и критерии проверки; согласования отдельно |
 | Tokens и компоненты визуального Demo | [UI Design System](ui/UI_DESIGN_SYSTEM.md) — сохранён вид P1, в P2 возвращён выбор акцента; CSS владеет значениями |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |

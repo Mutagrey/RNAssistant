@@ -48,6 +48,8 @@
     });
   }
   document.documentElement.dataset.accent = preferences.accent || 'default';
+  D.openView = open;
+  D.closeMenus = closeMenus;
   setTheme(preferences.theme);
   function navigationVisibility(focus) {
     shell.classList.toggle('nav-closed', !navOpen);
@@ -299,7 +301,7 @@
     const opener = event.target.closest('[data-open]'), sectionButton = event.target.closest('[data-section]'), layout = event.target.closest('[data-layout]'), command = event.target.closest('[data-command]');
     if (opener) { open(opener.dataset.open); closeMenus(); }
     if (sectionButton) { const repeated = section === sectionButton.dataset.section; section = sectionButton.dataset.section; navOpen = repeated ? !navOpen : true; renderNavigation(); navigationVisibility(); changed(); }
-    if (layout) { preset(layout.dataset.layout); closeMenus(); toast('Компоновка изменена. Черновики сохранены в памяти вкладки.'); }
+    if (layout) { preset(layout.dataset.layout); closeMenus(); toast('Компоновка изменена. Примеры чатов могут загрузиться заново.'); }
     if (command) {
       switch (command.dataset.command) {
         case 'toggle-navigation': navOpen = !navOpen; navigationVisibility(true); changed(); break;
@@ -318,6 +320,10 @@
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
   document.addEventListener('change', event => { if (event.target.matches('[data-theme-choice]')) { setTheme(event.target.value); savePreferences(); } });
   document.getElementById('preview-width').addEventListener('change', event => { shell.style.setProperty('--preview-width', event.target.value === 'auto' ? '100%' : event.target.value + 'px'); closeMenus(); });
+  document.getElementById('preview-chat-state').addEventListener('change', event => {
+    const id = event.target.value; event.target.value = '';
+    if (id) open(id); closeMenus();
+  });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') { closeMenus(); if (compact && navOpen) { navOpen = false; navigationVisibility(true); } else if (api.hasMaximizedGroup()) api.exitMaximizedGroup(); }
   });

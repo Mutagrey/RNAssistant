@@ -2,13 +2,21 @@
   "use strict";
 
   var scenario = new URLSearchParams(location.search).get("scenario") || "ready";
+  var dockChat = new URLSearchParams(location.search).get("dockChat");
+  if (dockChat !== "preview-chat" && dockChat !== "preview-summary") dockChat = "";
+  if (dockChat) {
+    document.documentElement.dataset.dockChat = dockChat;
+    var dockStyle = document.createElement("link");
+    dockStyle.rel = "stylesheet"; dockStyle.href = "/preview/docked-chat.css";
+    document.head.appendChild(dockStyle);
+  }
   var fixtures = window.PrototypeFixtures;
   if (!fixtures) throw new Error("Preview fixtures are required before the mock bridge.");
   var contract = window.__RNAMockBridgeContract;
   var token = "local-preview-session";
   var listeners = [];
   // Preview-only stand-in for the native protected draft store across page reloads.
-  var draftStorageKey = "rnassistant-preview-chat-drafts";
+  var draftStorageKey = "rnassistant-preview-chat-drafts" + (dockChat ? ":" + dockChat : "");
   var previewDrafts = JSON.parse(sessionStorage.getItem(draftStorageKey) || "[]");
   function previewDraftKey(item) { return item.Owner === "office" ? "office:" + item.ChatId :
     "workspace:" + JSON.stringify([item.WorkspaceId, item.SessionId]); }
@@ -51,6 +59,7 @@
   var skills = [], skillTexts = Object.create(null), skillReferences = Object.create(null);
   var messagesByChat = activeChatId ? { "preview-chat": messages, "preview-summary": [],
     "preview-budget": [], "preview-notes": [] } : {};
+  if (dockChat && activeChatId) { activeChatId = dockChat; messages = messagesByChat[activeChatId]; }
   var previewRuns = Object.create(null);
   var dataProject = scenario === "empty" ? null : { projectId: "preview-data-project", workspaceId: "preview-data-workspace", name: fixtures.project };
   var projectSelected = !!dataProject;
@@ -92,6 +101,7 @@
   var toolSourceText = "";
   var settings = scenario === "empty" ? {} : { Model: "demo-balanced", MaxTokens: 3072,
     RequestTimeoutSeconds: 1800, StreamResponses: true };
+  if (dockChat) settings.UiTheme = new URLSearchParams(location.search).get("theme") === "dark" ? "dark" : "light";
   var workspaceRevision = 2;
   var sourcePaths = fixtures.sources.slice(0, 2).map(function (source) { return source.name; });
   var workspaceFiles = fixtures.sources.map(function (source) {

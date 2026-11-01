@@ -17,21 +17,13 @@
   // It is intentionally not serialized into Dockview or localStorage.
   const states = new Map();
   function state(id) {
-    if (!states.has(id)) states.set(id, { draft: "", scroll: 0, source: false, messages: [] });
+    if (!states.has(id)) states.set(id, { scroll: 0, source: false });
     return states.get(id);
   }
   function context(label, action) { return '<div class="view-context"><span>' + E(label) + '</span>' + (action || '') + '</div>'; }
   function badge(label, kind) { return '<span class="badge ' + (kind || '') + '">' + E(label) + '</span>'; }
-  function empty(title, description, symbol, action) { return '<div class="empty-state">' + I(symbol) + '<h2>' + E(title) + '</h2><p>' + E(description) + '</p>' + (action || '') + '</div>'; }
   function resource(id, name, detail, icon) { return '<button class="resource-row" data-open="' + id + '">' + I(icon || 'file') + '<span><strong>' + E(name) + '</strong><small>' + E(detail) + '</small></span>' + I('right') + '</button>'; }
-  function message(role, text) { return '<article class="message ' + role + '"><div class="message-byline">' + (role === 'user' ? 'Вы' : '<span class="agent-mark">rn</span> RNAssistant') + '</div><div class="prose">' + D.markdown(text) + '</div></article>'; }
-  function chat(id, s) {
-    const conversation = id === 'sales' ? message('user', F.chat.user) + '<div class="run-note">' + I('check') + 'Пример завершён · 3 действия · 8 с</div>' + message('assistant', F.chat.assistant) + resource('report', 'Итоги сентября', 'Markdown · материал чата', 'file') : '';
-    return context(F.document) +
-      '<div class="view-scroll chat-scroll"><div class="conversation">' + (conversation || (s.messages.length ? '' : empty('Сводка по регионам', 'Новый разговор о том же документе. Напишите сообщение, чтобы увидеть локальный пример ответа.', 'chat'))) +
-      s.messages.map(m => message(m.role, m.text)).join('') + '</div></div>' +
-      '<form class="composer"><label class="sr-only" for="input-' + id + '">Сообщение · ' + E(D.views[id].title) + '</label><textarea id="input-' + id + '" rows="3" placeholder="Спросите о документе или поручите задачу…">' + E(s.draft) + '</textarea><div class="composer-bottom"><span>' + I('paperclip') + 'Документ в контексте</span><span class="composer-model">Демо-модель</span><button class="send-button" type="submit" aria-label="Отправить демо-сообщение" title="Отправить демо-сообщение">' + I('arrow') + '</button></div></form><div class="composer-hint">Демонстрация · текст остаётся в этой вкладке</div>';
-  }
+
   function inspector() {
     return context('Объект · Анализ сентября', badge('Демо')) + '<div class="view-scroll inspector-body"><div class="inspector-intro"><span class="eyebrow">Контекст разговора</span><h2>Всё необходимое<br>для этого запроса</h2><p>Документ, источники и результат в одном месте.</p></div><section class="info-section"><h3>Документ</h3><div class="document-item"><span class="excel-mark">X</span><div><strong>' + E(F.document) + '</strong><small>Демонстрационный документ</small></div></div><dl class="facts"><div><dt>Лист</dt><dd>Продажи</dd></div><div><dt>Диапазон</dt><dd>A1:F1249</dd></div><div><dt>Период</dt><dd>Сентябрь 2026</dd></div></dl></section><section class="info-section"><h3>Материалы</h3>' + resource('report', 'Итоги сентября.md', 'Результат анализа', 'file') + resource('chart', 'Динамика продаж', 'Сравнение периодов', 'chart') + '</section><section class="info-section"><h3>Источники</h3><div class="source-fact"><span class="status-dot"></span>Москва.xlsx<span>128 строк</span></div><div class="source-fact"><span class="status-dot"></span>Казань.xlsx<span>96 строк</span></div><div class="source-fact warning"><span class="status-dot"></span>Самара.xlsx<span>Проверить</span></div>' + B('Открыть файлы', 'data-open="files"', 'folder', 'quiet') + '</section><p class="subtle-note">Инспектор закреплён за этим примером. Его можно перенести в любую группу вкладок.</p></div>';
   }
@@ -57,27 +49,19 @@
   }
 
   D.createView = function (id) {
+    if (D.views[id].type === 'chat') return D.createChatView(id);
     const s = state(id), element = document.createElement('div');
     element.className = 'panel-content'; element.dataset.view = id;
     function capture() { const scroll = element.querySelector('.view-scroll'); if (scroll) s.scroll = scroll.scrollTop; }
     function render() {
-      const type = D.views[id].type;
-      element.innerHTML = type === 'chat' ? chat(id, s) : id === 'report' ? report(s) : id === 'chart' ? context('Материалы / Сравнение периодов', badge('Демо')) + '<div class="view-scroll padded"><h2>Динамика продаж</h2><p class="muted">Выручка · миллионы рублей</p>' + chart() + resource('report', 'Итоги сентября.md', 'Выводы по результатам сравнения') + '</div>' : ({ inspector, browser, files, library, diagnostics, settings }[id])();
+      element.innerHTML = id === 'report' ? report(s) : id === 'chart' ? context('Материалы / Сравнение периодов', badge('Демо')) + '<div class="view-scroll padded"><h2>Динамика продаж</h2><p class="muted">Выручка · миллионы рублей</p>' + chart() + resource('report', 'Итоги сентября.md', 'Выводы по результатам сравнения') + '</div>' : ({ inspector, browser, files, library, diagnostics, settings }[id])();
       const scroll = element.querySelector('.view-scroll');
       if (scroll) { scroll.scrollTop = s.scroll; scroll.addEventListener('scroll', () => { s.scroll = scroll.scrollTop; }, { passive: true }); }
     }
-    element.addEventListener('input', event => { if (event.target.matches('textarea')) s.draft = event.target.value; });
     element.addEventListener('click', event => {
       const mode = event.target.closest('[data-report-mode]');
       if (mode) { capture(); s.source = mode.dataset.reportMode === 'source'; render(); }
     });
-    element.addEventListener('submit', event => {
-      event.preventDefault(); if (!s.draft.trim()) return;
-      s.messages.push({ role: 'user', text: s.draft.trim() }, { role: 'assistant', text: '**Демо-ответ.** Сообщение сохранено в памяти вкладки. В рабочем приложении здесь появится ответ модели с результатами анализа.' });
-      s.draft = ''; render(); const scroll = element.querySelector('.view-scroll'); scroll.scrollTop = scroll.scrollHeight;
-      element.querySelector('textarea').focus();
-    });
-    element.addEventListener('keydown', event => { if (event.target.matches('textarea') && event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); element.querySelector('form').requestSubmit(); } });
-    return { element, init() { render(); }, onShow() { const scroll = element.querySelector('.view-scroll'); if (scroll) scroll.scrollTop = s.scroll; }, dispose: capture, focus() { const input = element.querySelector('textarea'); if (input) input.focus(); } };
+    return { element, init() { render(); }, onShow() { const scroll = element.querySelector('.view-scroll'); if (scroll) scroll.scrollTop = s.scroll; }, dispose: capture };
   };
 }());

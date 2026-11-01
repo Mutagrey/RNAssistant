@@ -1,0 +1,16 @@
+/* Demo-only composition adapter for /preview/web/?dockChat=….
+   The chat, messages, menus and composer keep their production CSS. */
+html[data-dock-chat] .app-shell { min-width: 0; }
+html[data-dock-chat] .app-shell > :not(.content),
+html[data-dock-chat] .chat-workspace > :not(.chat-main),
+html[data-dock-chat] .chat-main > .chatbar { display: none !important; }
+html[data-dock-chat] .app-shell > .content { width: 100%; min-width: 0; }
+html[data-dock-chat] .shell #tab-chat .chat-workspace { display: flex; }
+html[data-dock-chat] .shell #tab-chat .chat-main { flex: 1; min-width: 0; }
+/* Avoid an extra title row and keep controls reachable in narrow Dockview panels. */
+html[data-dock-chat] .shell .chat-main .composer { flex: 0 0 auto; }
+@media (max-width: 400px) {
+  html[data-dock-chat] .shell .chat-main .composer { width: calc(100% - 16px); margin-bottom: 8px; }
+  html[data-dock-chat] .shell .chat-main .messages { padding-inline: 12px; }
+  html[data-dock-chat] .composer-model-picker { min-width: 0; }
+}

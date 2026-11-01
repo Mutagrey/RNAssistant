@@ -1,5 +1,14 @@
 # Current-to-target migration map
 
+## Demo-only chat embedding — 2026-11-02
+
+Owner: Demo presentation (`prototypes/ui/`). Consumers: Dockview chat views.
+`chat-views.js` and `docked-chat.css` temporarily embed the existing product preview
+with its mock bridge; production sources stay unchanged. No second chat renderer
+or runtime is introduced. Removal gate: replace or retire this visual prototype
+after explicit approval of the production phase; do not carry the iframe adapter
+into production. Scope and limits: [UI Layout / UX](../ui/UI_LAYOUT_UX.md).
+
 ## Compact multi-target patch — 2026-10-29
 
 Owner: Core Tools / Application Workspace / Office Tools; UI: Web.

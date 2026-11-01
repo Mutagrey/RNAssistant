@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>RNAssistant — рабочее пространство · Demo P2</title>
+  <title>RNAssistant — рабочее пространство · Demo P3</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="ui.css">
@@ -26,7 +26,10 @@
           <hr><button data-command="save-layout">Сохранить раскладку</button><button data-command="restore-layout">Вернуть сохранённую</button>
         </div></details>
         <details class="menu"><summary aria-label="Демо"><span data-icon="play"></span><span class="action-label">Демо</span></summary><div class="menu-body">
-          <span class="menu-label">Визуальное ревью · P2</span>
+          <span class="menu-label">P3 · чат на основе production</span>
+          <label for="preview-chat-state">Открыть пример чата</label><select id="preview-chat-state"><option value="" selected disabled>Выбрать пример…</option><option value="sales">Заполненный чат</option><option value="summary">Пустой чат</option></select>
+          <p>Настоящие элементы интерфейса на существующих mock-данных. Инспектор и остальные экраны пока — макеты P1.</p>
+          <hr>
           <label for="preview-width">Ширина оболочки</label><select id="preview-width"><option value="auto">По ширине окна</option><option value="900">900 px · окно</option><option value="560">560 px · панель</option><option value="360">360 px · панель</option></select>
           <p>Тема и цвет акцента — в настройках справа сверху. Содержимое экранов пока примерное.</p>
           <p>Локальные примеры. Модель и Office не подключены.</p>
@@ -65,6 +68,7 @@
   <script src="../../web/js/vendor/purify.min.js"></script>
   <script src="fixtures.js"></script>
   <script src="ui.js"></script>
+  <script src="chat-views.js"></script>
   <script src="panels.js"></script>
   <script src="app.js"></script>
 </body>
