@@ -8,7 +8,9 @@ Dockview, gear — вниз слева. Сохранены настоящие ф
 и подписи; применены общие menu styles. Старый root Settings path удалён.
 Проверены dirty/close/save race/error, lifecycle/cancellation, narrow/theme/zoom;
 performance guard: нет bridge reads при повторном открытии чистой формы.
-S1c **In Review**; исходная очередь сохранена, следующий предлагаемый срез — S2a.
+S1c (`26f4d87f`) **Approved** по «Меня устраивает»; исходная очередь сохранена,
+следующий предлагаемый срез — S2a. Это принятие UI; push/Windows-сборка и реальная
+Office qualification остаются отдельными действиями.
 [Scope, evidence и rollback](../ui/UI_MIGRATION_PLAN.md#s1c--settings-view-и-rail-menus).
 
 ## Production Dockview по эталону Demo — 2026-11-02

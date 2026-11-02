@@ -19,7 +19,7 @@
 | «Закрыть группу» действует только на эту группу | Approved |
 | Вид Dockview до A/B, возможность выбрать тему/акцент | Approved — направление |
 | Крестики и split icons меньше, область нажатия остаётся удобной | Approved — направление; точные размеры In Review |
-| Настройки вкладкой Dockview, gear снизу слева, сохранение hover menus | Approved — направление S1c; конкретные вид и responsive In Review |
+| Настройки вкладкой Dockview, gear снизу слева, сохранение hover menus | Approved — текущий S1c (`26f4d87f`), пользователь «Меня устраивает» |
 | Имя документа в topbar, responsive thresholds | In Review |
 | P3 production-чат в Dockview без повторного заголовка | In Review; iframe только Demo evidence |
 | S1a: общие подписи ввода, edit/reply/stop, reasoning и окно истории Office/Workspace/plugin | Реализовано, детали presentation In Review; не полная унификация capabilities |
@@ -150,7 +150,7 @@ CSS owner; sidebar headers используют общую геометрию. C
 
 ## Settings и hover menus S1c
 
-Направление согласовано; конкретный результат **In Review**. Gear сохраняет общий
+Текущий результат **Approved**: пользователь «Меня устраивает»; commit `26f4d87f`. Gear сохраняет общий
 размер/состояния rail button. Hover cards используют поверхность/строки того же
 menu component, общие spacing, icon, radius, shadow и theme tokens. У tooltip
 только подпись; у интерактивного меню есть заголовок и действия. Версия остаётся
