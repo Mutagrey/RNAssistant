@@ -1,72 +1,57 @@
-"use strict";
-const assert = require("node:assert/strict");
-const path = require("node:path");
-const { chromium } = require("playwright");
-
-(async () => {
-  const browser = await chromium.launch({ headless: true,
-    ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
-  try {
-    const demo = await browser.newPage({ viewport: { width: 1100, height: 760 } });
-    const product = await browser.newPage({ viewport: { width: 1074, height: 760 } });
-    const errors = [];
-    demo.on("pageerror", error => errors.push("demo: " + error.message));
-    product.on("pageerror", error => errors.push("product: " + error.message));
-    await demo.goto("file://" + path.resolve(__dirname, "../../prototypes/ui/index.html") + "#/chat/main");
-    await product.goto("file://" + path.resolve(__dirname, "../../web/index.html"));
-    assert.equal(await demo.evaluate(() => typeof RNAssistantNavigationTree.render), "function");
-    assert.equal(await product.evaluate(() => typeof RNAssistantNavigationTree.render), "function");
-    assert.deepEqual(await product.evaluate(() => [
-      RNAssistantConversationState.status(true, true, false),
-      RNAssistantConversationState.status(false, true, false),
-      RNAssistantConversationState.status(false, false, true)
-    ]), [
-      { status: "running", label: "Запрос выполняется" },
-      { status: "unknown", label: "Состояние запуска не подтверждено" },
-      { status: "waiting", label: "Требуется ответ" }
-    ], "saved running status alone does not claim a live owner");
-
-    const demoRoutes = ["chat/main", "materials/all", "library/all", "vba/code", "projects/sources", "settings/connection"];
-    for (const route of demoRoutes) {
-      await demo.goto("file://" + path.resolve(__dirname, "../../prototypes/ui/index.html") + "#/" + route);
-      const tree = demo.locator("[data-product-tree][role=tree]");
-      assert.equal(await tree.count(), 1, "demo has one shared tree for " + route);
-      assert.ok(await tree.locator(".navigation-tree-row").count(), "demo tree has shared rows for " + route);
-    }
-
-    const sections = [
-      ["artifacts", "#htmlWorkspaceTree"], ["instructions", "#instructionsList"],
-      ["vba", "#vbaModuleList"], ["settings", "#settingsNavTree"]
-    ];
-    for (const [section, selector] of sections) {
-      if (section === "instructions") await product.locator("#libraryRootTab").click();
-      else await product.locator('.rail-button[data-tab="' + section + '"]').click();
-      const tree = product.locator(selector);
-      assert.equal(await tree.getAttribute("role"), "tree", section + " uses shared ARIA tree");
-      assert.ok(await tree.evaluate(node => node.classList.contains("navigation-tree")));
-      if (section !== "artifacts" && section !== "vba")
-        assert.ok(await tree.locator(".navigation-tree-row").count(), section + " has shared rows");
-    }
-    await product.locator('.rail-button[data-tab="chat"]').click();
-    await product.evaluate(() => {
-      state.chats = [{ id: "shared", title: "Проверка дерева", host: "Excel", documentKey: "doc",
-        documentTitle: "Отчёт.xlsx", isCurrentDocument: true }];
-      state.documents = []; state.activeChatId = "shared";
-      renderChatSessionList(state.chats);
-    });
-    const chat = product.locator(".chat-navigation-tree");
-    assert.equal(await chat.getAttribute("role"), "tree");
-    assert.equal(await chat.locator(".navigation-tree-item").count(), 2);
-
-    await demo.goto("file://" + path.resolve(__dirname, "../../prototypes/ui/index.html") + "#/settings/connection");
-    await product.locator('.rail-button[data-tab="settings"]').click();
-    const sharedStyle = async (page, selector) => page.locator(selector).first().evaluate(node => {
-      const style = getComputedStyle(node);
-      return [style.minHeight, style.borderRadius, style.paddingLeft, style.fontSize];
-    });
-    assert.deepEqual(await sharedStyle(product, "#settingsNavTree .navigation-tree-row"),
-      await sharedStyle(demo, "[data-product-tree] .navigation-tree-row"), "demo and product use the same tree row geometry");
-    assert.deepEqual(errors, []);
-    console.log("PASS shared tree: one renderer and common row geometry across demo and native product sections");
-  } finally { await browser.close(); }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+'use strict';
+// Shared components run without Shell/bridge; production sections consume the same tree.
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {spawn}=require('node:child_process'),{chromium}=require('playwright');
+const root=path.resolve(__dirname,'../..');
+(async()=>{
+ const server=spawn('python3',['-B','prototypes/serve_ui.py','--port','0'],{cwd:root});server.stderr.resume();let browser;
+ try {
+  const address=await new Promise((resolve,reject)=>{server.once('error',reject);server.stdout.on('data',b=>{const m=/RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(b));if(m)resolve(m[1]);});});
+  browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
+  const standalone=await browser.newPage({reducedMotion:"reduce",viewport:{width:700,height:600}}),product=await browser.newPage({reducedMotion:"reduce",viewport:{width:1280,height:900}}),errors=[];
+  for(const page of [standalone,product]){page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));}
+  await standalone.setContent('<main style="width:340px"><div class="tree-toolbar"><button class="icon-btn" id="actions" aria-label="Действия">⋯</button></div><div id="tree"></div><section id="operation"></section></main>');
+  for(const name of ['app-product-tokens.css','app-product-components.css'])await standalone.addStyleTag({path:path.join(root,'web/css',name)});
+  for(const name of ['app-icons.js','app-accent.js','app-navigation-tree.js','app-action-menu.js'])await standalone.addScriptTag({path:path.join(root,'web/js',name)});
+  await standalone.addScriptTag({path:path.join(root,'web/data-templates/ui/operation-view.js')});
+  await standalone.evaluate(()=>{
+   window.calls={select:0,menu:0,cancel:0};
+   RNAssistantNavigationTree.render(document.getElementById('tree'),[{key:'g',kind:'parent',title:'Проект',expanded:true,iconHtml:RNAssistantIcons.render('folder'),children:[{key:'c',kind:'leaf',title:'Чат',selected:true,iconHtml:RNAssistantIcons.render('chat')}]}],{onSelect:()=>{calls.select++;}});
+   document.getElementById('actions').addEventListener('click',function(){RNAssistantActionMenu.open(this,[{label:'Недоступно',disabled:true,onSelect:()=>{throw Error('disabled action');}},{label:'Открыть',icon:'open',onSelect:()=>calls.menu++},{label:'Закрыть',icon:'close',onSelect:()=>calls.menu++}]);});
+   const operation=document.getElementById('operation');
+   operation.innerHTML=['stage','title','current','elapsed','count','detail','note','meter','percent'].map(name=>'<span data-operation-part="'+name+'"></span>').join('')+'<progress data-operation-part="progress"></progress><button data-operation-part="cancel">Отменить</button><button data-operation-part="dismiss">Закрыть</button>';
+   window.operation=DataTemplatesOperationView.create(operation,{cancel:()=>calls.cancel++,dismiss:()=>{}});
+   window.operation.render({state:'running',stage:'read',title:'Чтение',currentItem:'',elapsedMs:0,measure:{completed:3,total:null,label:'Строки'},detail:'',note:''});
+  });
+  assert.deepEqual(await standalone.evaluate(()=>[typeof RNAssistantDockWorkspace,typeof send,typeof state]),['undefined','undefined','undefined']);
+  await standalone.locator('[data-tree-key=c]').focus();await standalone.keyboard.press('Enter');
+  assert.equal(await standalone.evaluate(()=>calls.select),1);
+  await standalone.locator('#actions').click();await standalone.keyboard.press('ArrowDown');
+  assert.equal(await standalone.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Закрыть');
+  await standalone.keyboard.press('Escape');assert.equal(await standalone.evaluate(()=>document.activeElement.id),'actions');
+  await standalone.locator('#actions').click();await standalone.getByRole('menuitem',{name:'Открыть',exact:true}).click();
+  assert.equal(await standalone.evaluate(()=>calls.menu),1);assert.equal(await standalone.getByRole('menu').count(),0);
+  assert.equal(await standalone.locator('progress').getAttribute('value'),null,'unknown total stays indeterminate');
+  await standalone.locator('[data-operation-part=cancel]').click();assert.equal(await standalone.evaluate(()=>calls.cancel),1);
+  await standalone.evaluate(()=>{operation.dispose();document.querySelector('[data-operation-part=cancel]').click();RNAssistantNavigationTree.unmount(document.getElementById('tree'));document.querySelector('[data-tree-select=c]').click();});
+  assert.deepEqual(await standalone.evaluate(()=>[calls.cancel,calls.select]),[1,1],'dispose releases component callbacks');
+  await product.goto(address+'preview/web/?scenario=ready');await product.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
+  for(const [section,selector] of [['instructions','#instructionsList'],['vba','#vbaModuleList'],['settings','#settingsNavTree']]){
+   await product.locator(section==='instructions'?'#libraryRootTab':'.rail-button[data-tab="'+section+'"]').click();
+   assert.equal(await product.locator(selector).getAttribute('role'),'tree');
+   const heading=product.locator('.panel.active .global-nav :is(.product-nav-heading,.settings-nav-heading)').first();
+   assert.equal((await heading.boundingBox()).height,41,'shared sidebar heading: '+section);
+   const geometry=await product.locator('.panel.active .global-nav').evaluate(n=>({edge:n.getBoundingClientRect().right,divider:n.nextElementSibling.getBoundingClientRect().left,width:n.nextElementSibling.getBoundingClientRect().width}));
+   assert.equal(geometry.divider,geometry.edge,'no legacy grid gap beside navigation: '+section);assert.equal(geometry.width,4);
+  }
+  const rowStyle=(page,selector)=>page.locator(selector).first().evaluate(n=>{const s=getComputedStyle(n);return[s.minHeight,s.borderRadius,s.padding,s.fontSize,s.lineHeight];});
+  assert.deepEqual(await rowStyle(product,'#settingsNavTree .navigation-tree-row'),await rowStyle(standalone,'#tree [data-tree-key=c] > .navigation-tree-row'));
+  for(const theme of ['light','dark']){
+   await standalone.evaluate(theme=>{document.documentElement.dataset.theme=theme;RNAssistantAccents.apply('blue',false);},theme);
+   await product.evaluate(theme=>{applyUiTheme({UiTheme:theme},false);RNAssistantAccents.apply('blue',false);},theme);
+   const selected=page=>page.locator('.navigation-tree-row.selected').first().evaluate(n=>{const s=getComputedStyle(n);return[s.backgroundColor,s.color];});
+   assert.deepEqual(await selected(product),await selected(standalone),'shared selected state in '+theme);
+  }
+  assert.deepEqual(errors,[]);console.log('PASS shared UI: standalone Tree/Toolbar/Menu/Progress, keyboard/disposal, production section headings, shared geometry/themes; no Shell/bridge dependency');
+ }finally{if(browser)await browser.close();server.kill();}
+})().catch(e=>{console.error(e);process.exitCode=1});

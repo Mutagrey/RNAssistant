@@ -14,6 +14,11 @@ exact session/receipt ownership; до этого simultaneous chat clones зап
 в S1b. Уточнение навигации удалило fullscreen/compact CSS и эвристики выбора
 из app.js: один ShellLayout получает событие общего NavigationTree, preview
 потребляет общие navigation columns. Отдельного временного nav adapter нет.
+Повторная сверка: Shell DOM/CSS владеют ShellLayout/app-product-navigation;
+DockWorkspace передаёт snapshots/callbacks, ActionMenu обслуживает все Dock menus.
+Прежний flex Shell, дубли rail/topbar/footer, `#tab-workspace` CSS и Dock menu
+renderer удалены. Root sections/native previews остаются временной границей выше;
+наращивать их второй registry или controller нельзя.
 [Scope/review/rollback](../ui/UI_MIGRATION_PLAN.md).
 
 ## Demo-only chat embedding — 2026-11-02

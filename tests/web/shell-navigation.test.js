@@ -10,12 +10,54 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
   const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(address+'preview/web/?scenario=ready');await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
+  assert.equal(await page.evaluate(()=>!!document.activeElement.closest('#chatSessionList')),false,'initial selection must not steal focus into the tree');
+  // Compare the actual frozen Demo geometry, independent of production tokens and content.
+  const demo=await browser.newPage({viewport:{width:1280,height:900}});
+  await demo.goto(address+'index.html');await demo.locator('.dv-tab').first().waitFor();
+  const sample=(p,selectors)=>p.evaluate(selectors=>Object.fromEntries(Object.entries(selectors).map(([key,selector])=>{
+   const n=document.querySelector(selector),s=getComputedStyle(n),r=n.getBoundingClientRect();
+   return [key,{width:r.width,height:r.height,padding:s.padding,marginLeft:s.marginLeft,lineHeight:s.lineHeight,gap:s.gap}];
+  })),selectors);
+  const expected=await sample(demo,{nav:'.navigation',split:'.navigation-resize',dock:'.workspace-region',group:'.dv-groupview',tab:'.dv-tab',actions:'.group-actions',parent:'.tree-group > summary',child:'.nav-row',guide:'.tree-children'});
+  const actual=await sample(page,{nav:'#chatLayout > .global-nav',split:'#chatLayout > .global-nav + .splitter',dock:'#chatDockHost',group:'.dv-groupview',tab:'.dv-tab',actions:'.dock-group-actions',parent:'#chatSessionList .navigation-tree-row',child:'#chatSessionList [aria-selected=true] > .navigation-tree-row',guide:'#chatSessionList .navigation-tree-list .navigation-tree-list'});
+  for(const key of ['nav','split','dock','group','actions']) for(const field of ['width','height','padding']) assert.equal(actual[key][field],expected[key][field],key+' '+field+' matches Demo');
+  for(const key of ['tab','parent','child']) for(const field of ['height','padding','lineHeight']) assert.equal(actual[key][field],expected[key][field],key+' '+field+' matches Demo');
+  assert.equal(actual.guide.marginLeft,expected.guide.marginLeft);assert.equal(actual.guide.padding,expected.guide.padding);
+  await page.evaluate(()=>{window.initialFontSize=document.documentElement.style.fontSize;document.documentElement.style.fontSize='18px';});
+  assert.equal(await page.locator('.dv-tab').first().evaluate(n=>getComputedStyle(n).padding),expected.tab.padding,'chat font scale does not change Dockview spacing');
+  await page.evaluate(()=>{document.documentElement.style.fontSize=window.initialFontSize;});
+  // Width limits and keyboard reset are shared by every section, like Demo.
+  const divider=page.locator('#chatLayout > .global-nav + .splitter');
+  await demo.locator('#navigation-resize').press('ArrowRight');await divider.press('ArrowRight');
+  assert.equal((await page.locator('#chatLayout > .global-nav').boundingBox()).width,(await demo.locator('.navigation').boundingBox()).width);
+  await divider.press('End');assert.equal((await page.locator('#chatLayout > .global-nav').boundingBox()).width,340);
+  assert.ok(await page.locator('[data-navigation]').evaluateAll(nodes=>nodes.every(n=>n.style.getPropertyValue('--split-left')==='340px')));
+  await divider.press('Home');assert.equal((await page.locator('#chatLayout > .global-nav').boundingBox()).width,expected.nav.width);
+  // The chooser and menus also belong to the approved Shell, not a new screen design.
+  await demo.locator('[data-group-add]').first().click();
+  await page.locator('.dock-group-actions').first().getByRole('button',{name:'Выбрать экран',exact:true}).click();
+  const chooserStyle=(p,selector)=>p.locator(selector).first().evaluate(n=>{const s=getComputedStyle(n);return[s.padding,s.fontSize,s.lineHeight,s.borderRadius,s.backgroundColor];});
+  for(const [reference,production] of [['.chooser-body','.dock-screen-chooser-body'],['.chooser-body h2','.dock-screen-chooser h2'],['.chooser-body input','.dock-screen-chooser input']])
+   assert.deepEqual(await chooserStyle(page,production),await chooserStyle(demo,reference),'chooser geometry: '+reference);
+  await page.locator('.dock-screen-chooser input').fill('неизвестный экран');
+  assert.equal(await page.locator('.dock-screen-chooser [role=status]').textContent(),'Ничего не найдено');
+  await page.locator('[data-tab-panel-id^="choose-"]').getByRole('button').click();
+  await page.locator('[data-tab-panel-id=conversation]').click();
+  await demo.locator('[data-group-menu]').first().click();
+  await page.locator('.dock-group-actions').first().getByRole('button',{name:'Действия с вкладкой',exact:true}).click();
+  const menuGeometry=(p,selector)=>p.locator(selector).evaluate(n=>({width:n.getBoundingClientRect().width,iconInset:n.querySelector('button svg').getBoundingClientRect().left-n.getBoundingClientRect().left}));
+  assert.deepEqual(await menuGeometry(page,'.rna-action-menu-popup'),await menuGeometry(demo,'#group-menu'),'group menu width and left-aligned icons match Demo');
+  await page.keyboard.press('Escape');
+  await page.locator('#workspacePanels').click();
+  assert.equal((await page.getByRole('menu').boundingBox()).width,248);
+  await page.keyboard.press('Escape');assert.equal(await page.evaluate(()=>document.activeElement.id),'workspacePanels');
+  await demo.close();
   const rail=page.locator('.section-rail [data-section=chat]'),toggle=page.locator('#productMobileMenuButton'),scrim=page.locator('#productNavigationScrim');
   const opened=()=>page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen());
   const settled=()=>page.waitForFunction(()=>!document.querySelector('.shell').classList.contains('navigation-transition'));
   await page.locator('#chatInput').fill('Черновик остаётся на месте');
   await page.evaluate(()=>window.shellNodes=['messages','chatForm','chatInspector'].map(id=>document.getElementById(id)));
-  assert.equal(await opened(),true);await rail.click();assert.equal(await opened(),false);await rail.click();assert.equal(await opened(),true);
+  assert.equal(await opened(),true);await rail.click();assert.equal(await opened(),false);await rail.click();assert.equal(await opened(),true);await settled();
   const actions=await page.locator('.dock-group-actions').first().evaluate(n=>[...n.children].map(n=>[n.offsetWidth,n.offsetHeight,n.firstElementChild.getBoundingClientRect().width]));
   assert.deepEqual(actions,Array(4).fill([25,25,14]),'shared control size must not stretch Demo buttons to 34px');
   // A topbar toggle hides the tool group, retaining its DOM and dimensions.
@@ -27,7 +69,7 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   assert.ok(Math.abs((await page.locator('#chatInspector').boundingBox()).width-inspectorWidth)<2);
   assert.deepEqual(await page.evaluate(()=>shellNodes.map(n=>n===document.getElementById(n.id))),[true,true,true]);
   for(const width of [900,420,360]) {
-   await page.setViewportSize({width,height:800});await page.waitForFunction(()=>RNAssistantShellLayout.mode()!=='wide');await settled();
+   await page.setViewportSize({width,height:800});await page.waitForFunction(()=>RNAssistantShellLayout.mode()!=='wide'&&document.querySelector('.shell').classList.contains('navigation-'+RNAssistantShellLayout.mode()));await settled();
    assert.equal(await opened(),false);assert.equal(await rail.isVisible(),true,'rail stays available in compact and narrow mode');
    const before=await page.locator('#chatDockHost').boundingBox();
    await rail.click();assert.equal(await opened(),true);await scrim.waitFor();
@@ -53,10 +95,10 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   await page.locator('#toggleChatInspectorButton').click();await page.locator('#toggleChatInspectorButton').click();
   assert.equal(await page.locator('[data-tab-panel-id=conversation]').count(),1);
   assert.equal(await page.locator('#chatInspector').isVisible(),true);
-  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>RNAssistantShellLayout.mode()==='wide');await settled();
+  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>document.querySelector('.shell').classList.contains('navigation-wide'));await settled();
   assert.equal(await opened(),true,'wide preference survives temporary overlay use');
   await toggle.click();await page.setViewportSize({width:900,height:800});await toggle.click();await page.keyboard.press('Escape');
-  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>RNAssistantShellLayout.mode()==='wide');assert.equal(await opened(),false,'explicit wide collapse is also retained');
+  await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>document.querySelector('.shell').classList.contains('navigation-wide'));assert.equal(await opened(),false,'explicit wide collapse is also retained');
   // The only remaining tool group cannot be hidden into an empty workspace.
   await page.locator('[data-tab-panel-id=conversation]').getByRole('button').click();
   await page.locator('#toggleChatInspectorButton').click();assert.equal(await page.locator('#chatInspector').isVisible(),true);

@@ -6,6 +6,30 @@
 Canonical план последовательности, проверки, baseline, rollback и удаления.
 Границы — [Architecture](UI_ARCHITECTURE.md); маршруты — [Screen Map](UI_SCREEN_MAP.md).
 
+## Сверка с исходным планом
+
+Повторный запрос пользователя 2026-11-02: сохранить первоначальную стратегию,
+перенести Shell целиком по Demo и проверить дубли/архитектуру. Исходная
+[спецификация v1.0](reference/RNAssistant_UI_Architecture_and_Agent_Rules.md)
+сохранена дословно как reference; текущие правила остаются в четырёх canonical docs.
+Не возвращаем самостоятельный Demo, не начинаем P4 и не переписываем все views сразу.
+
+| Исходный этап | Соответствие текущей работе | Gate и реальный статус |
+|---|---|---|
+| A — audit/baseline | Аудит 119aff97 и повторная сверка Shell | Карта исходников и browser baseline есть; полный Windows/process-memory baseline открыт |
+| B — UX/map | P0 + UI_SCREEN_MAP | Все основные области перечислены; будущие detail views и их UX остаются Proposed |
+| C — shell prototype | P1/P2, production Shell в S1b | Demo выбран эталоном; production adaptation всё ещё проходит визуальное ревью |
+| D — minimum contracts | Общие tokens/components, один Dock catalog и ActionMenu | Нужный минимум используется сейчас. Standalone component fixture проверен; публичный panel SDK/plugin export не объявлен готовым |
+| E — real Chat | S1a/S1b → S2 | Общий bounded window/DOM/drafts и docking есть. Полная parity, независимые chat instances и catalog paging ещё впереди |
+| F — Inspector/diagnostics | Inspector в S1b, остальные views в S3 | Настоящий Inspector сохранён; Dock diagnostics и общий background status ещё открыты |
+| G — остальные views | S3 → S4 → S5 | Переносить по одному функциональному срезу через существующий каталог; сохранять native host/session boundaries |
+| H — удаление legacy | Обязательная часть каждого среза, финальная сверка S5 | Заменённые paths удаляются сразу после проверки; временные границы имеют owner/removal gate в MIGRATION_MAP |
+
+Очередь: **завершение и визуальное ревью целой Shell S1b → S2a capabilities общего
+чата → остальные части S2 → S3/S4/S5**. Единство registry/commands не откладывается
+до S5: каждый новый view подключается к уже существующему механизму. Следующий
+функциональный срез автоматически не начинается до ревью предыдущего.
+
 ## Фактические результаты P0–P3
 
 | Этап | Результат | Evidence / ограничения |
@@ -175,7 +199,7 @@ draft не теряется при owner switch, move, hide/reopen; старый
 
 ### Уточнение S1b: боковые панели и иконки
 
-По запросу пользователя перенесено поведение Demo целиком для левого дерева:
+По запросу пользователя перенесены режимы и команды Demo для левого дерева:
 wide/overlay, постоянный rail, повторный клик раздела, выбор/раскрытие, scrim/Escape,
 широкое предпочтение. Отдельная группа Inspector сворачивается без закрытия;
 в смешанной/узкой группе активируется его вкладка. Исправлен реальный размер
@@ -195,6 +219,66 @@ settings, сохранение draft/DOM, hide/restore Inspector и защиту
 следуют отдельными ограниченными изменениями, когда для них готовы владельцы.
 Сначала визуальное ревью уточнённого S1b; параллельный большой UI Kit/refactor не нужен.
 
+### Уточнение S1b: общая геометрия после визуального ревью
+
+Пользователь отклонил вид полностью раскрытого дерева: прошлый перенос поведения
+не обеспечил геометрию эталона. Найдены прежние ширина/разделитель navigation,
+flat indentation Tree, резервирование места скрытыми actions, vendor rem padding
+и начальный resize Inspector после установки navigation defaults.
+
+Исправление выполнено в существующих общих tokens, NavigationTree, ShellLayout
+и Dockview adapter. Удалены численные defaults отдельных разделов, leaf spacer,
+flat depth padding и plugin tree overrides. Tree не захватывает focus на фоне;
+создание чата из Office menu по-прежнему переводит focus в выбранный узел.
+
+`shell-navigation.test.js` сравнивает реальные computed размеры Demo и production
+при одинаковом viewport: navigation/splitter, workspace/groups, tab/action spacing,
+строки/вложенность Tree. Проверяет независимость от root font scale и общий
+resize/reset. Из проверяемых browser checks также прошли dock-workspace,
+workspace-chat-layout, chat-tree-layout; splitter-preferences покрывает generic
+drag/cancel/keyboard. Светлый раскрытый и тёмный overlay осмотрены в Chrome.
+Runtime/Bridge не менялись; это не Windows/Office qualification.
+
+Снимки: [исходная ширина](review/s1b-shared-navigation.png),
+[максимальная ширина, все документы раскрыты](review/s1b-shared-navigation-expanded.png).
+Проверить: resize/Home, повторный клик rail, клавиатура/actions строк, узкий overlay.
+Визуальный результат **In Review**. Общая очистка всего feature CSS не заявлена;
+следующий срез остаётся после этого ревью. Откат — один diff, без изменения данных.
+
+### Завершение Shell по повторному аудиту
+
+Shell chrome теперь имеет единые владельцы CSS и DOM; контекстные данные и callbacks
+передаются из Dock adapter без второго store. Перенесён chooser P1/P2: верхнее
+размещение, адаптивная сетка, исходные отступы, поиск/Enter и видимое пустое состояние.
+«Панели» и меню групп используют существующий ActionMenu. Закрытие/resize/dispose
+освобождают popup; Escape возвращает focus. После responsive fold focus сохраняется
+на следующем paint без перехвата у другого элемента.
+
+Удалены заменённые Shell/rail rules из app.css/Dock CSS, старый responsive layout
+дерева, неиспользуемый `#tab-workspace` CSS и отдельный Dock menu renderer.
+Настройки/библиотека/VBA используют тот же sidebar header. Пользовательский accent
+сохраняется; selection/shadow следуют Demo. Демо-переключатель ширины, mock-сценарии
+и фиктивные экраны в production не копируются; тема/акцент доступны через настройки.
+
+Проверки: shell-navigation сравнивает computed geometry с настоящим Demo, включая
+chooser; dock-workspace — move/split/close/restore/focus; workspace-chat-layout —
+Office/Workspace/plugin и drafts; shared-navigation-tree — standalone
+Tree/Toolbar/Menu/Progress, cleanup, keyboard и light/dark без Shell/bridge.
+Это host-free component fixture, не полная plugin SDK/`file://` qualification.
+
+Повторный before/after — тот же performance fixture, по три страницы, Chrome/macOS.
+Before — рабочее состояние после предыдущего ревью геометрии, до повторного аудита
+(незакоммиченный diff поверх 93814b4b), не чистый commit baseline.
+Готовность: медиана 234,9 → 226,7 мс; диапазоны 234,5–235,8 / 223,8–245,0.
+20 циклов Inspector: 136,8 → 135,2 мс; heap ~14,27 → 14,30 MB без forced GC.
+DOM после смены owner — 2268 в обоих случаях; getProjectChats/getProjectChat — по одному.
+Ускорение не заявляется по трём пробам; увеличения reads/DOM не обнаружено.
+[Raw samples](review/s1b-shell-audit-measurements.json).
+
+Результат **In Review**, архитектурные gaps перечислены в повторном аудите;
+полный перенос всех domain views и Windows qualification не заявлены.
+[Shell со вкладкой выбора](review/s1b-shell-chooser.png).
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |
@@ -203,7 +287,7 @@ settings, сохранение draft/DOM, hide/restore Inspector и защиту
 | S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
 | S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
 | S4 | Library/VBA/settings/project navigation; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
-| S5 | Оставшиеся plugin views, portability fixture, общий registry/команды | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
+| S5 | Оставшиеся plugin views, portable export/public API и финальная сверка единства | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
 
 Каждый срез: problem/scope → baseline → маленький diff → behavior/perf checks →
 визуальное ревью → согласование → удаление заменённого пути. Нет автоматического

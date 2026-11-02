@@ -5,8 +5,8 @@ domain owners. Стратегия и продолжение общего chat-с
 детали визуальных решений остаются на ревью.
 Это canonical document владения, зависимостей и lifecycle UI.
 
-Основание: запрос «UI Strategy Transition» и предоставленный
-RNAssistant_UI_Architecture_and_Agent_Rules.md, v1.0 от 2026-11-01.
+Основание: запрос «UI Strategy Transition» и сохранённый без изменений
+[исходный документ](reference/RNAssistant_UI_Architecture_and_Agent_Rules.md), v1.0 от 2026-11-01.
 Документ-источник задаёт цель, а не доказательство наличия архитектуры.
 Исходный аудит ниже относится к baseline **4ea3d6e4**; изменения S1a отмечены явно.
 
@@ -42,6 +42,14 @@ Dockview — единственный владелец групп, вкладо�
 `switchTab` размещает остальные sections той же Shell, временная граница описана
 в [Migration Map](../stabilization/MIGRATION_MAP.md).
 
+Геометрия Shell имеет общий источник в production tokens; ShellLayout читает их
+при инициализации. Размер navigation устанавливается до создания Dockview, чтобы
+начальная ширина Inspector не менялась вслед за поздним применением defaults.
+NavigationTree остаётся одним renderer для Office/Workspace/plugin и других
+деревьев; feature owners передают данные/действия, не свои размеры и состояния строк.
+Владение CSS и границы version-pinned vendor adapter — в
+[Design System](UI_DESIGN_SYSTEM.md#применение-правил-сейчас).
+
 Два bounded views сохраняют свои DOM nodes: renderer `always` выбран только для
 них, не как глобальная политика. Закрытие паркует узел, а не уничтожает controller,
 черновик или run. Listener компонента Dockview удаляется на dispose. На скрытом
@@ -66,6 +74,33 @@ vendor manifests. Demo использует тот же файл; второго
 
 ## Фактический аудит
 
+### Повторная сверка с исходным планом — 2026-11-02
+
+Перечитаны исходная спецификация, четыре canonical UI-docs, решения P1/P2,
+реальные CSS/JS/HTML и замороженный Demo. В текущем `web/index.html` один Shell,
+семь root sections, 118 script и 44 stylesheet подключения. Dockview один;
+его каталог пока содержит conversation/inspector, а не все целевые виды.
+
+| Responsibility | Текущий единственный owner | Результат сверки / открытая граница |
+|---|---|---|
+| Shell chrome, navigation, topbar/footer DOM | `app-layout.js` / ShellLayout; `app-product-navigation.css` | Убраны дубли rail/topbar/footer в Dock CSS, прежний flex Shell и старые navigation media rules. Настройки находятся сверху уже в HTML |
+| Dock placement и presentation lifecycle | `app-dock-workspace.js` / Dockview | Передаёт Shell вычисленный context/layout snapshot и callbacks команд; не владеет DOM topbar/footer. Domain hooks conversation/Inspector пока адаптированы здесь для двух singleton views |
+| Menus | `app-action-menu.js` / ActionMenu | Один компонент для существующих меню и портального варианта в clipped Dock headers; прежний Dock menu renderer/keyboard path удалён |
+| Tokens и навигационные элементы | `app-product-tokens.css`, `app-product-components.css` | Общие размеры/типографика/темы. Заголовки sidebar, дерево и контроли проверены в нескольких sections. CSS содержимого settings возвращён его screen owner |
+| View catalog / command routes | `views` в DockWorkspace; ещё не мигрировавшие sections — `switchTab` | Единого расширенного публичного panel/command API для plugins пока нет. Расширять существующий каталог при переносе следующего view; не откладывать единство до финальной чистки |
+| Chat / runtime data | Прежние ConversationState, WorkspaceChat, Office domain owners | Общие bounds/composer сохранены. Multiple live views, model/context/attachment parity и paged catalogs ещё открыты |
+| StatusBar | Shell отображает переданные mode/connection/layout facts | Общая агрегация фоновых operations пока не подключена; новых guessed progress/events/stores не вводилось |
+| Portability | Общие Tree/Toolbar/ActionMenu/OperationView в browser fixture | Проверены без Shell/bridge, включая dispose и обе темы. Это ещё не экспортированный plugin, полная `file://` или WebView2 qualification |
+
+Архитектура соответствует направлению исходного плана, но **не объявляется полностью
+реализованной**. До повторной сверки оставались реальные расхождения Shell CSS,
+chooser и menu ownership; они исправлены в этом срезе. Временные root sections и
+native previews остаются зарегистрированными migration boundaries, не вторым
+продуктом. Сопоставление A–H / S1–S5 и gates — в
+[Migration Plan](UI_MIGRATION_PLAN.md#сверка-с-исходным-планом).
+
+### Исходный аудит 4ea3d6e4 и уже внесённые изменения
+
 | Область | Что существует | Следствие для переноса |
 |---|---|---|
 | Production entry | Один [web/index.html](../../web/index.html), 7 корневых tab-секций; 116 внешних script-тегов и 43 stylesheet-тега | Это подсчёт подключений, не замер загрузки и не причина переписывать приложение |
@@ -74,7 +109,7 @@ vendor manifests. Demo использует тот же файл; второго
 | Office/Workspace/plugin chat | Один messages, chatForm и chatInput; [WorkspaceChat.mount](../../web/js/app-workspace-chat.js) перемещает существующие узлы между owners office/project/plugin | Уже есть общий UI. Клонирование DOM создаст конфликт глобальных IDs и состояния |
 | Data owners | Office: [chat-session](../../web/js/app-chat-session.js), [chat-state](../../web/js/app-chat-state.js), [inbox](../../web/js/app-chat-inbox.js). Workspace: [project-chats](../../web/js/app-project-chats.js), Application [WorkspaceConversationService](../../src/RNAssistant.Application/Workspace/WorkspaceConversationService.cs) | Различия target/receipts допустимы; не заменять их универсальным UI-store |
 | Общие conversation rules | [ConversationState](../../web/js/app-conversation-state.js), [ConversationInput](../../web/js/app-conversation-input.js), [ConversationObserver](../../web/js/app-conversation-observer.js), [RunViewState](../../web/js/app-run-view-state.js) | Повторно использовать identity, revision, receipt и stale-response guards |
-| Inspector/browser | Один [ChatInspector](../../web/js/app-chat-inspector.js) с owner switching; отдельный [ChatBrowser](../../web/js/app-chat-browser.js) для HTML preview | Их open/width/view и активный owner пока связаны с конкретным chat layout |
+| Inspector/browser | Один [ChatInspector](../../web/js/app-chat-inspector.js) с owner switching; отдельный [ChatBrowser](../../web/js/app-chat-browser.js) для HTML preview | Inspector уже размещает Dockview; у browser остаётся прежний preview placement до S3 |
 | Viewers | [ViewerRegistry](../../web/js/app-viewer-registry.js), text/Markdown/JSON/image/PDF/task-list, [ViewerUI](../../web/js/app-viewer-ui.js) | Это registry форматов содержимого, не второй workspace/panel registry |
 | Plugins/vendor | [RNPlugin SDK](../../web/plugin-host/sdk.js), [plugins](../../web/js/app-plugins.js), [vendor packages](../../web/vendor-packages.json), существующие generators | Есть Ready handshake и resource/command APIs; общего публичного UI/panel SDK пока нет |
 | Data Templates | Отдельное переносимое приложение, [shell](../../web/data-templates/ui/shell.js), [browser](../../web/data-templates/ui/browser.js), [plugin adapter](../../web/data-templates/ui/plugin-adapter.js) | Его предметные вкладки и standalone entry не являются второй RNAssistant Shell |

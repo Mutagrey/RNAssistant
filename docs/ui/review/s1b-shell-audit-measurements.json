@@ -1,0 +1,113 @@
+{
+  "date": "2026-11-02",
+  "environment": "Chrome/macOS, same ready fixture, 1280x900, three fresh pages per side",
+  "beforeSource": "Working tree after geometry review, before shell re-audit; uncommitted changes on 93814b4b",
+  "afterSource": "Shell ownership/menu/chooser consolidation, same working tree; not Office qualification",
+  "limitations": "Approximate performance.memory without forced GC; not process RSS or a clean-commit baseline",
+  "before": [
+    {
+      "cold": 234.5,
+      "cycles": {
+        "ms": 137.59999990463257,
+        "before": 2240,
+        "after": 2262
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2268,
+      "identity": true,
+      "heap": 14250064,
+      "errors": []
+    },
+    {
+      "cold": 234.89999961853027,
+      "cycles": {
+        "ms": 136.80000019073486,
+        "before": 2240,
+        "after": 2262
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2268,
+      "identity": true,
+      "heap": 14268108,
+      "errors": []
+    },
+    {
+      "cold": 235.7999997138977,
+      "cycles": {
+        "ms": 134.09999990463257,
+        "before": 2240,
+        "after": 2262
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2268,
+      "identity": true,
+      "heap": 14268324,
+      "errors": []
+    }
+  ],
+  "after": [
+    {
+      "cold": 245,
+      "cycles": {
+        "ms": 136.59999990463257,
+        "before": 2240,
+        "after": 2262
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2268,
+      "identity": true,
+      "heap": 14313687,
+      "errors": []
+    },
+    {
+      "cold": 226.7000002861023,
+      "cycles": {
+        "ms": 134.7999997138977,
+        "before": 2240,
+        "after": 2262
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2268,
+      "identity": true,
+      "heap": 14303739,
+      "errors": []
+    },
+    {
+      "cold": 223.7999997138977,
+      "cycles": {
+        "ms": 135.19999980926514,
+        "before": 2240,
+        "after": 2262
+      },
+      "calls": {
+        "saveChatDraft": 1,
+        "getProjectChats": 1,
+        "getProjectChat": 1
+      },
+      "nodes": 2268,
+      "identity": true,
+      "heap": 14290059,
+      "errors": []
+    }
+  ]
+}

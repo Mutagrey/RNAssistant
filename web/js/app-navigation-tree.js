@@ -56,17 +56,16 @@
         if (node.selected) item.setAttribute("aria-current", "page");
 
         var row = element("div", "navigation-tree-row" + (node.kind === "group" ? " is-group" : "") + (node.selected ? " selected" : ""));
-        row.style.setProperty("--tree-depth", String(depth - 1));
-        var expander = element(parent ? "button" : "span", "navigation-tree-expander");
         if (parent) {
+          var expander = element("button", "navigation-tree-expander");
           expander.type = "button";
           if (node.toggleId) expander.id = node.toggleId;
           expander.tabIndex = -1;
           expander.dataset.treeToggle = node.key;
           expander.setAttribute("aria-label", (node.expanded ? "Свернуть " : "Развернуть ") + node.title);
           expander.innerHTML = window.RNAssistantIcons.render(node.expanded ? "down" : "right");
-        } else expander.setAttribute("aria-hidden", "true");
-        row.appendChild(expander);
+          row.appendChild(expander);
+        }
 
         if (node.iconHtml) {
           var icon = element("span", "navigation-tree-icon");
@@ -225,7 +224,7 @@
     while (initial && initial.closest("ul[hidden]")) initial = record.rows.get(initial.dataset.parentKey);
     setFocus(initial, false);
     root.scrollTop = scroll;
-    if (options.focusKey && initial) requestAnimationFrame(function () {
+    if ((options.focusKey || focused) && initial) requestAnimationFrame(function () {
       if (root.isConnected) setFocus(initial, true);
     });
     if (selected && !focusKey) requestAnimationFrame(function () {

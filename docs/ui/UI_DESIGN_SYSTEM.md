@@ -61,8 +61,9 @@ P1/P2 (`95afa3b8`, `3e2433c9`), после возврата оформления
 
 Срез использует общий набор нейтральных цветов, исходные accent/theme controls,
 и `--shell-*` для размеров оболочки. Публичные `--dv-*` только связывают Dockview
-с этими tokens. [app-dock-workspace.css](../../web/css/app-dock-workspace.css)
-владеет размещением и оформлением Shell/Dockview, не заменяет feature CSS экранов.
+с этими tokens. [app-product-navigation.css](../../web/css/app-product-navigation.css)
+владеет Shell chrome, [app-dock-workspace.css](../../web/css/app-dock-workspace.css) —
+Dockview adapter/chooser. Feature CSS экранов сохраняет отдельного владельца.
 Размеры hit targets и знаков разделены; точные production breakpoints и поведение
 на реальной Office-панели ещё проверяются.
 
@@ -95,7 +96,7 @@ portable token entry, после чего host и standalone использую�
 Исторические снимки P2: [светлая тема](review/p2-settings.jpg),
 [тёмная с акцентом](review/p2-accent-dark.jpg), [tab controls](review/p2-tab-actions.jpg).
 P1/P2 оболочка выбрана пользователем эталоном; её значения перенесены в общие
-production tokens. Адаптер размера close icon ограничен Dockview 8.8.3 и повторно
+production tokens. Адаптер tab spacing/close icon ограничен Dockview 8.8.3 и повторно
 проверяется при обновлении vendor; другие компоненты от него не зависят.
 
 ## Применение правил сейчас
@@ -119,6 +120,33 @@ Shell слушает его только внутри `.global-nav`; сам Tree
 передаёт общий `--control` из shell token; SVG/mask остаётся 14 px. Второй button
 component или копия SVG не создавались.
 
+После повторного визуального замечания исправлена оставшаяся геометрия S1b:
+
+- `app-product-tokens.css` владеет диапазоном/шагом ширины navigation, разделителем,
+  внутренними отступами, размерами строк/иконок Tree и геометрией Dockview.
+  CSS и JS читают эти значения; числа из `data-default-left`/`data-min-left`
+  шести Shell layouts удалены. `data-navigation` обозначает только роль.
+- `app-product-components.css` владеет строками, направляющими вложенности,
+  selected/hover/focus и действиями NavigationTree для всех consumers.
+  Скрытые действия не занимают место; клавиатура и touch сохраняют доступ к ним.
+  Office/Workspace используют одну chat icon. Plugin overrides высоты/шрифта удалены.
+- `app-product-navigation.css` оформляет общий navigation splitter;
+  `app-dock-workspace.css` связывает tokens с Dockview и нормализует vendor `rem`
+  padding вкладок, чтобы масштаб текста чата не менял их геометрию.
+
+Повторный аудит завершает перенос Shell целиком: topbar/rail/footer имеют один
+CSS owner; sidebar headers используют общую геометрию. Chooser повторяет P1/P2
+(вверху области, responsive grid, поиск/Enter, empty state). Menus не имеют
+отдельного Dock renderer: используется портальный вариант существующего ActionMenu.
+Нейтральные surfaces, selection blend и shadow взяты из reference; выбранный
+пользователем accent не сбрасывается в Demo default. UI «Демо» для выбора mock
+сценария/ширины не является production-командой; theme/accent — в настройках.
+
+Это исправление существующих общих владельцев, без второго UI Kit или renderer.
+Остальные feature-specific CSS ещё существуют: полное устранение всех дублей
+не объявляется завершённым. Сравнение с Demo и снимки — в
+[Migration Plan](UI_MIGRATION_PLAN.md#уточнение-s1b-общая-геометрия-после-визуального-ревью).
+
 ## Каталог существующих компонентов
 
 L1 = host-independent component; L2 = browser requirements; L3 = host integration.
@@ -127,7 +155,8 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 
 | Компонент / источник | Повторное использование и граница | Состояния / lifecycle |
 |---|---|---|
-| [Dock Workspace](../../web/js/app-dock-workspace.js) | Одна production Shell/Dockview; descriptors conversation/inspector и временный chooser; не chat store | move/resize/close/restore, narrow, pending layout save, DOM lifecycle |
+| [ShellLayout](../../web/js/app-layout.js) | Shell chrome/navigation; renderWorkspace получает context/layout snapshot, bindWorkspace — callbacks трёх workspace-команд; без mirror store | navigation state, responsive, topbar/footer, notice cleanup |
+| [Dock Workspace](../../web/js/app-dock-workspace.js) | Один Dockview; descriptors conversation/inspector и временный chooser; placement и domain-view adapters, не chat store | move/resize/close/restore, narrow, pending layout save, DOM lifecycle |
 | [Icons](../../web/js/app-icons.js), [accent](../../web/js/app-accent.js) | Общие уже сейчас; кандидаты L1 без Shell | Theme/size/accessible label у consumer; shared catalog |
 | Buttons/toolbar/forms/menu CSS: app-product-components, app-theme, app-composer | Сохранять привычные controls; извлечь затронутые rules, не копировать по views | default/hover/focus/pressed/disabled/invalid/loading |
 | [NavigationTree](../../web/js/app-navigation-tree.js) | Реальный общий renderer, options/callbacks + icons; L1 candidate | selected/expanded/filter/keyboard; unmount освобождает state |
@@ -163,3 +192,11 @@ renderers/Tabulator достаточно для конкретного сцен�
 late responses, утечек или Office qualification. После согласования обновлять
 компонент и tokens в том же срезе; эксперимент остаётся Proposed/In Review.
 Отдельный UI_COMPONENT_CATALOG.md сейчас не нужен: этот каталог имеет одного owner.
+
+ActionMenu portalled API: `open(trigger, items, {label, className})`, item —
+`label/icon/disabled/status/onSelect` или separator; `closeAll()` и `closeWithin(root)`
+для deactivation/dispose. `render()` существующих inline menus сохранён.
+Компонент зависит только от Icons/DOM, не от NavigationTree/Shell/bridge.
+Arrow Up/Down, Home/End, Tab и Escape доступны; открытие нового меню закрывает
+предыдущее, Escape/выбор возвращают focus, resize/pagehide удаляют popup.
+API проверен в standalone component fixture; public plugin export ещё не заявлен.

@@ -210,6 +210,7 @@
           runStatus === "running",
           runStatus === "awaitingconfirmation");
         return { key: "project-chat:" + entry.workspaceId + ":" + chat.Id, kind: "chat",
+          iconHtml: window.RNAssistantNavigationTree.icon("chat"),
           title: entry.workspaceId === projectId() && chat.Id === selected && runState()
             ? field(runState(), "title", "Title") || chat.Title : chat.Title,
           selected: entry.workspaceId === projectId() && chat.Id === selected,

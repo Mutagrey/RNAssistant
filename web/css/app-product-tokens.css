@@ -5,7 +5,7 @@
   --surface: #ffffff;
   --surface-subtle: #f7f8f9;
   --surface-hover: #e8edf0;
-  --surface-selected: color-mix(in srgb, var(--accent) 8%, #f4f8f7);
+  --surface-selected: color-mix(in srgb, var(--accent) 14%, var(--surface));
   --ink: #263238;
   --ink-muted: #69777e;
   --ink-faint: #7a837e;
@@ -36,7 +36,7 @@
   --syntax-number: var(--palette-blue);
   --syntax-literal: var(--palette-rose);
   --scrim: #1d242255;
-  --shadow: 0 12px 40px #2028251c;
+  --shadow: 0 8px 28px #20303b1a;
   --focus: var(--accent);
 }
 :root {
@@ -44,13 +44,14 @@
   --actionbar-bg: var(--surface);
   --scrollbar-thumb: color-mix(in srgb, var(--ink-muted) 42%, transparent);
   --scrollbar-thumb-hover: color-mix(in srgb, var(--ink-muted) 68%, transparent);
-  --font: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 14px;
   --text-lg: 16px;
   --text-title: 24px;
+  --line-height-heading: 1.35;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -61,16 +62,48 @@
   --radius: 10px;
   --radius-lg: 16px;
   --control: 34px;
-  --nav-width: 224px;
+  --navigation-width-default: 224px;
+  --navigation-width-min: 180px;
+  --navigation-width-max: 340px;
+  --navigation-resize-step: 16px;
+  --navigation-splitter-width: 4px;
+  --navigation-heading-height: 41px;
+  --navigation-overlay-inset: 20px;
+  --navigation-content-padding: var(--space-2) var(--space-2) var(--space-4);
+  --nav-width: var(--navigation-width-default);
+  --tree-row-height: 32px;
+  --tree-gap: 7px;
+  --tree-parent-inset: 5px;
+  --tree-icon: 15px;
+  --tree-parent-icon: 17px;
+  --tree-expander: 12px;
   /* Approved Demo shell proportions; one canonical production token source. */
   --shell-top-height: 40px;
   --shell-rail-width: 44px;
+  --shell-rail-control: 36px;
+  --shell-rail-inset: 3px;
+  --shell-icon: 17px;
   --shell-status-height: 24px;
   --shell-tab-height: 34px;
   --shell-radius: 6px;
   --shell-control: 28px;
   --shell-tab-close: 10px;
   --shell-group-action: 25px;
+  --shell-group-action-gap: 1px;
+  --shell-group-action-inset: 3px;
+  --shell-group-action-icon: 14px;
+  --shell-dock-gap: var(--space-1);
+  --shell-inspector-width: 300px;
+  --shell-workspace-min-width: 280px;
+  --shell-chooser-width: 520px;
+  --shell-chooser-title: 20px;
+  --shell-chooser-item-width: 170px;
+  --menu-width: 248px;
+  --shell-group-menu-width: 240px;
+  --menu-padding: var(--space-1);
+  --menu-offset: 6px;
+  --menu-row-padding: 7px var(--space-2);
+  --menu-radius: var(--shell-radius);
   --page-header-height: 52px;
   --page-inset: 18px;
   --list-width: 250px;
@@ -89,7 +122,7 @@ html[data-theme="dark"], .theme-preview-dark {
   --surface: #21262b;
   --surface-subtle: #1c2126;
   --surface-hover: #2b343c;
-  --surface-selected: color-mix(in srgb, var(--accent) 8%, #2b3035);
+  --surface-selected: color-mix(in srgb, var(--accent) 14%, var(--surface));
   --ink: #e0e6e9;
   --ink-muted: #9ba9b2;
   --ink-faint: #99a2a8;
@@ -115,7 +148,7 @@ html[data-theme="dark"], .theme-preview-dark {
   --syntax-number: #a4bffc;
   --syntax-literal: #f0aec3;
   --scrim: #080a0daa;
-  --shadow: 0 12px 40px #00000055;
+  --shadow: 0 8px 28px #0006;
   --shimmer: #d9eedb38;
   --shimmer-peak: #ffffff;
   --focus: var(--accent);
@@ -129,7 +162,7 @@ html[data-theme="dark"], .theme-preview-dark {
 html[data-theme="dark"][data-accent="white"] { --accent-hover: #d9e0da; }
 html { --chat-text: 14px; --composer-text: 13px; --tree-text: 12px; }
 html[data-text-size="large"] { --text-base: 16px; --text-sm: 13px; --text-xs: 12px; --chat-text: 16px; --composer-text: 15px; --tree-text: 14px; }
-html[data-density="relaxed"] { --control: 38px; }
+html[data-density="relaxed"] { --control: 38px; --tree-row-height: 40px; }
 
 /* Existing domain components read these aliases; the palette remains the sole owner. */
 html:not([data-ui-prototype]) {

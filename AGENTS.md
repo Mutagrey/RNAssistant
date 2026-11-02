@@ -123,6 +123,14 @@ evidence и ADR — только когда нужны причина, точн�
 - Сначала ищи существующего владельца и компонент. Office/Workspace/plugin уже
   используют общий composer и ленту; не создавай параллельные chat UI/stores.
   Dockview владеет placement, view — presentation, domain — данными, host — APIs.
+- Геометрия, spacing, типографика и состояния повторяемых UI-элементов принадлежат
+  общим tokens/components. Исправляй владельца и удаляй заменённые overrides;
+  не копируй значения по экранам, HTML и JS. Проверяй вычисленные размеры рядом
+  с эталоном Demo: одинаковый viewport и состояние, а не только похожие selectors.
+- Исходная стратегия сохранена как [reference](docs/ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md);
+  её сверка A–H / S1–S5 — в Migration Plan. Не объявляй перенос Shell завершением
+  миграции всех views. Registry/команды и удаление дублей уточняются в каждом срезе,
+  а не откладываются на финальную чистку; следующий gate сейчас — ревью целой Shell S1b.
 - Сохраняй pagination/bounds, incremental streaming, lazy payload/media, caches,
   receipts, async generations, exact session/run ownership и оптимизации.
   Для heavy views задай mount/activate/deactivate/dispose; close UI не отменяет run.

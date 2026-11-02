@@ -15,9 +15,7 @@
 .plugin-preview .preview-surface-location{display:flex;flex-direction:column;justify-content:center;gap:0}
 .plugin-preview .preview-surface-path{font-size:11px}
 .plugin-preview-frame-host[hidden]{display:none}
-.plugin-navigation-tree{min-height:0;padding:8px;overflow:auto}
-.plugin-navigation .navigation-tree-row{min-height:32px}
-.plugin-navigation .navigation-tree-label{font-size:12px}
+.plugin-navigation-tree{min-height:0;padding:var(--navigation-content-padding);overflow:auto}
 .plugin-shell .plugin-manager button:not(.button):not(.plugin-create-mark){padding:7px 11px;border:1px solid var(--line-strong);border-radius:6px;background:var(--surface);color:inherit;cursor:pointer}
 .plugin-shell button:disabled{opacity:.45;cursor:default}
 

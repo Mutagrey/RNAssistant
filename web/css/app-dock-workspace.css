@@ -1,34 +1,6 @@
-/* One production Shell; existing section content stays under its current owner. */
-.shell.app-shell { display: grid; grid-template-columns: var(--shell-rail-width) minmax(0, 1fr); grid-template-rows: var(--shell-top-height) minmax(0, 1fr) var(--shell-status-height); border-inline: 1px solid var(--line); background: var(--canvas); }
-.shell > .workspace-topbar { grid-column: 1 / -1; grid-row: 1; }
-.shell > .section-rail { grid-column: 1; grid-row: 2; height: 100%; padding: 8px 3px; gap: 8px; background: var(--surface-subtle); }
-.shell > .section-rail .rail-button { position: relative; width: 36px; min-height: 36px; padding: 8px; border-radius: var(--shell-radius); }
-.shell > .section-rail .rail-button[aria-current="page"] { background: var(--surface-selected); box-shadow: none; }
-.shell > .section-rail .rail-button[aria-current="page"]::before { content: ""; position: absolute; left: -3px; width: 2px; height: 20px; border-radius: 1px; background: var(--accent); }
-.shell > .section-rail > [data-section="diagnostics"] { margin-top: auto; }
-.shell > .content { grid-column: 2; grid-row: 2; min-height: 0; }
-.workspace-topbar { display: flex; align-items: center; gap: 24px; padding: 0 12px; border-bottom: 1px solid var(--line); background: var(--surface-subtle); color: var(--ink-muted); z-index: 30; }
-.workspace-context { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; color: var(--ink); font-size: 12px; font-weight: 500; }
-#workspaceContextIcon { display: flex; color: var(--accent); }
-#workspaceContextIcon svg { width: 17px; height: 17px; }
-#workspaceSectionTitle { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.workspace-topbar-actions, .workspace-view-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.workspace-panel-controls { display: flex; align-items: center; gap: 1px; padding-right: 8px; margin-right: 4px; border-right: 1px solid var(--line); }
-.workspace-topbar .icon-btn, .workspace-topbar .rail-settings { flex: 0 0 var(--shell-control); display: grid; place-items: center; width: var(--shell-control); height: var(--shell-control); min-height: var(--shell-control); padding: 5px; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); }
-.workspace-topbar .icon-btn:hover, .workspace-topbar .rail-settings:hover, .workspace-menu-button:hover { color: var(--ink); background: var(--surface-hover); }
-.workspace-topbar .icon-btn svg, .workspace-topbar .rail-settings svg { width: 17px; height: 17px; }
-.workspace-menu-button { display: flex; align-items: center; gap: 6px; height: var(--shell-control); padding: 0 8px; border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); font-size: 12px; }
-.workspace-menu-button svg { width: 17px; height: 17px; }
-.shell .workspace-topbar .product-mobile-menu-button { position: static; flex-shrink: 0; }
-.workspace-topbar [hidden] { display: none !important; }
-.workspace-statusbar { grid-column: 1 / -1; grid-row: 3; display: flex; align-items: center; gap: 6px; padding: 0 12px; border-top: 1px solid var(--line); background: var(--surface-subtle); color: var(--ink-muted); font-size: 11px; }
-#workspaceLayoutStatus { margin-left: auto; }
-#workspaceLayoutNotice { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--accent); }
-.workspace-statusbar button { display: flex; align-items: center; gap: 5px; height: 100%; padding: 0 0 0 6px; border: 0; background: transparent; color: inherit; font-size: inherit; }
-.workspace-statusbar svg { width: 13px; height: 13px; }
-.chat-dock-host { grid-column: 3; grid-row: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: 4px 4px 0 0; overflow: hidden; background: var(--canvas); }
+.chat-dock-host { grid-column: 3; grid-row: 1; width: 100%; height: 100%; min-width: 0; min-height: 0; padding: var(--shell-dock-gap) var(--shell-dock-gap) 0 0; overflow: hidden; background: var(--canvas); }
 .chat-dock { width: 100%; height: 100%; }
-.shell:is(.navigation-closed, .navigation-overlay) .chat-dock-host { padding-left: 4px; }
+.shell:is(.navigation-closed, .navigation-overlay) .chat-dock-host { padding-left: var(--shell-dock-gap); }
 .dock-view, .dock-conversation { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
 .shell #tab-chat .dock-conversation > .chat-main { width: 100%; height: 100%; min-height: 0; }
 .shell #tab-chat .dock-conversation > .chat-main[hidden] { display: none !important; }
@@ -40,8 +12,8 @@
   --dv-group-view-background-color: var(--surface);
   --dv-tabs-and-actions-container-background-color: var(--surface-subtle);
   --dv-tabs-and-actions-container-height: var(--shell-tab-height);
-  --dv-tabs-and-actions-container-font-size: 12px;
-  --dv-tab-font-size: 12px;
+  --dv-tabs-and-actions-container-font-size: var(--text-sm);
+  --dv-tab-font-size: var(--text-sm);
   --dv-activegroup-visiblepanel-tab-background-color: var(--surface);
   --dv-activegroup-visiblepanel-tab-color: var(--accent);
   --dv-activegroup-hiddenpanel-tab-background-color: var(--surface-subtle);
@@ -64,39 +36,31 @@
   --dv-tabs-container-scrollbar-color: var(--ink-muted);
   --dv-overlay-z-index: 20;
 }
-/* Version-pinned adapter for Dockview's bundled tab close control. */
+/* Version-pinned adapter: vendor rem spacing must not follow the page's chat font scale. */
+.rna-product-dock .dv-tab { padding: var(--space-1) var(--space-2); line-height: 1.5; }
 .rna-product-dock .dv-default-tab-action { width: 20px; height: 20px; }
 .rna-product-dock .dv-default-tab-action .dv-svg { width: var(--shell-tab-close); height: var(--shell-tab-close); color: var(--ink-muted); }
-.dock-group-actions { --control: var(--shell-group-action); display: flex; align-items: center; gap: 1px; padding: 0 3px; }
-.dock-group-actions .icon-btn { width: var(--shell-group-action); height: var(--shell-group-action); padding: 4px; border-radius: var(--shell-radius); }
-.dock-group-actions .icon-btn svg, .dock-split-icon { width: 14px; height: 14px; }
+.dock-group-actions { --control: var(--shell-group-action); display: flex; align-items: center; gap: var(--shell-group-action-gap); padding: 0 var(--shell-group-action-inset) 0 0; }
+.dock-group-actions .icon-btn { width: var(--shell-group-action); height: var(--shell-group-action); padding: var(--space-1); border-radius: var(--shell-radius); }
+.dock-group-actions .icon-btn svg, .dock-split-icon { width: var(--shell-group-action-icon); height: var(--shell-group-action-icon); }
+.dock-group-menu { --menu-width: var(--shell-group-menu-width); --menu-row-padding: var(--space-2); }
 .dock-split-icon { display: block; background: currentColor; mask: var(--split-icon) center / contain no-repeat; }
 .split-right { --split-icon: url('../icons/codicons-split/split-horizontal.svg'); }
 .split-below { --split-icon: url('../icons/codicons-split/split-vertical.svg'); }
-.dock-chooser { position: fixed; z-index: 100; display: grid; gap: 4px; width: 300px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow); color: var(--ink); }
-.dock-chooser > strong { font-size: 12px; font-weight: 500; padding: 4px; }
-.dock-chooser > button { display: flex; gap: 8px; width: 100%; height: auto; min-height: 34px; padding: 7px; font-size: 12px; text-align: left; }
-.dock-chooser > button svg { flex: none; width: 16px; height: 16px; }
-.dock-chooser small { margin-left: auto; font-size: 10px; color: var(--ink-muted); }
-.dock-chooser p { margin: 6px 4px 2px; font-size: 11px; color: var(--ink-muted); line-height: 1.5; }
 .dock-empty { display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 10px; width: 100%; height: 100%; color: var(--ink-muted); }
 .dock-empty > p { flex: 0 0 100%; text-align: center; font-size: 12px; }
 .dock-empty > button { display: flex; gap: 6px; width: auto; padding: 6px 12px; font-size: 12px; }
 
-.dock-screen-chooser { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 24px; overflow: auto; color: var(--ink); background: var(--surface); }
-.dock-screen-chooser-body { width: min(100%, 440px); }
-.dock-screen-chooser h2 { font-size: 20px; font-weight: 600; margin: 0 0 16px; }
-.dock-screen-chooser input { width: 100%; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: var(--shell-radius); background: var(--surface); color: var(--ink); font-size: 12px; }
-.dock-screen-list { display: grid; gap: 6px; margin-top: 12px; }
-.dock-screen-list button { display: flex; gap: 8px; width: 100%; height: auto; min-height: 36px; padding: 8px; border: 1px solid var(--line); border-radius: var(--shell-radius); font-size: 12px; text-align: left; }
+/* The chooser is Shell chrome; its grid/spacing follows the frozen P1/P2 reference. */
+.dock-screen-chooser { width: 100%; height: 100%; overflow: auto; color: var(--ink); background: var(--surface); font: var(--text-sm)/1.5 var(--font); }
+.dock-screen-chooser-body { width: 100%; max-width: var(--shell-chooser-width); margin-inline: auto; padding: var(--space-5); }
+.dock-screen-chooser h2 { font-size: var(--shell-chooser-title); font-weight: 600; line-height: var(--line-height-heading); margin: 0 0 var(--space-4); }
+.dock-screen-chooser input { width: 100%; height: var(--shell-tab-height); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--shell-radius); background: var(--surface-subtle); color: inherit; font: inherit; }
+.dock-screen-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(var(--shell-chooser-item-width), 100%), 1fr)); gap: var(--space-1); margin-top: var(--space-3); }
+.dock-screen-list button { display: flex; align-items: center; gap: var(--space-2); min-width: 0; width: 100%; min-height: var(--shell-rail-control); height: auto; padding: var(--space-2); border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink); font: inherit; text-align: left; }
+.dock-screen-list button:hover { background: var(--surface-hover); }
+.dock-screen-list button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-screen-list button[hidden] { display: none; }
-.dock-screen-list svg { width: 17px; height: 17px; }
-.dock-screen-chooser p { font-size: 11px; line-height: 1.6; color: var(--ink-muted); margin: 14px 0 0; }
-.dock-action-menu { width: 248px; padding: 4px; gap: 0; border-radius: var(--shell-radius); }
-.dock-action-menu > button { min-height: 32px; padding: 7px 8px; border-radius: var(--shell-radius); }
-@media (max-width: 760px) {
-  .workspace-topbar { gap: 8px; padding-inline: 8px; }
-  .workspace-menu-button > span, .workspace-statusbar button > span, #workspaceLayoutStatus { display: none; }
-  .workspace-menu-button { width: 28px; padding: 5px; }
-  .workspace-statusbar button { margin-left: auto; }
-}
+.dock-screen-list svg { flex: none; width: var(--shell-icon); height: var(--shell-icon); }
+.dock-screen-list small { margin-left: auto; color: var(--accent); font-size: var(--text-xs); }
+.dock-screen-chooser p { font-size: var(--text-xs); line-height: 1.5; color: var(--ink-muted); margin: var(--space-4) 0 0; }

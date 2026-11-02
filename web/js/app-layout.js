@@ -6,6 +6,45 @@
   var productLayoutMode = null;
   var navigationTransitionTimer = null;
   var navigationToggle = null;
+  var navigationSizes = null;
+  var workspaceNoticeTimer = null;
+
+  function renderWorkspaceChrome(model) {
+    function text(id, value) { var node = document.getElementById(id); if (node.textContent !== value) node.textContent = value; }
+    function icon(node, value) { if (node.dataset.icon !== value) { node.dataset.icon = value; node.innerHTML = RNAssistantIcons.render(value); } }
+    if (model.context) {
+      text("workspaceSectionTitle", model.context.title);
+      icon(document.getElementById("workspaceContextIcon"), model.context.icon);
+      text("workspaceHostStatus", model.context.hostStatus);
+    }
+    if (model.layout) {
+      var layout = model.layout, max = document.getElementById("workspaceMaximize");
+      max.disabled = !layout.canMaximize; max.setAttribute("aria-pressed", String(layout.maximized));
+      max.title = layout.maximized ? "Восстановить компоновку" : "Развернуть группу";
+      max.setAttribute("aria-label", max.title); icon(max, layout.maximized ? "compress" : "fit");
+      max.hidden = !layout.visible;
+      document.getElementById("workspaceViewActions").hidden = !layout.visible;
+      document.getElementById("toggleChatInspectorButton").hidden = !layout.visible;
+      text("workspaceLayoutStatus", layout.visible ? "Вкладки: " + layout.panels + " · группы: " + layout.groups : "");
+    }
+  }
+
+  function workspaceNotice(message) {
+    document.getElementById("workspaceLayoutNotice").textContent = message;
+    clearTimeout(workspaceNoticeTimer);
+    workspaceNoticeTimer = setTimeout(function () { document.getElementById("workspaceLayoutNotice").textContent = ""; }, 5000);
+  }
+
+  function navigationMetrics() {
+    if (!navigationSizes) {
+      var styles = getComputedStyle(document.documentElement);
+      function size(token) { return Number.parseFloat(styles.getPropertyValue(token)); }
+      navigationSizes = { defaultWidth: size("--navigation-width-default"), min: size("--navigation-width-min"),
+        max: size("--navigation-width-max"), step: size("--navigation-resize-step"),
+        rail: size("--shell-rail-width"), workspace: size("--shell-workspace-min-width"), overlay: size("--navigation-overlay-inset") };
+    }
+    return navigationSizes;
+  }
 
   try { productNavigationPreference = window.localStorage.getItem(productNavigationOpenKey) !== "0"; }
   catch (error) { /* Presentation preferences are optional. */ }
@@ -44,7 +83,7 @@
     shell.classList.toggle("navigation-closed", !open);
     var button = document.getElementById("productMobileMenuButton");
     if (navigationToggle) navigationToggle.sync();
-    shell.querySelectorAll(".split-layout[data-default-left] > .global-nav + .splitter").forEach(function (handle) {
+    shell.querySelectorAll(".split-layout[data-navigation] > .global-nav + .splitter").forEach(function (handle) {
       handle.hidden = mode !== "wide";
     });
     var active = shell.querySelector(".panel.active .global-nav");
@@ -85,6 +124,13 @@
   }
 
   window.RNAssistantShellLayout = {
+    renderWorkspace: renderWorkspaceChrome,
+    notice: workspaceNotice,
+    bindWorkspace: function (actions) {
+      [["workspacePanels", actions.panels], ["workspaceLayout", actions.layout], ["workspaceMaximize", actions.maximize]].forEach(function (entry) {
+        document.getElementById(entry[0]).onclick = function () { entry[1](this); };
+      });
+    },
     isNavigationOpen: function () { return navigationIsOpen(); },
     mode: navigationMode,
     occupiesSpace: function () { return navigationMode() === "wide" && navigationIsOpen(); },
@@ -180,9 +226,9 @@
     handle.addEventListener("dblclick", function () { if (enabled()) apply(options.defaultValue(), true); });
     handle.addEventListener("keydown", function (event) {
       if (!enabled()) return;
-      var value = options.getValue(), step = (event.shiftKey ? 40 : 12) * direction;
-      if (event.key === "Home" && options.collapse) { event.preventDefault(); options.collapse(); return; }
-      if (event.key === "Home") value = options.bounds().min;
+      var value = options.getValue(), step = (options.step || (event.shiftKey ? 40 : 12)) * direction;
+      if (event.key === "Home" && options.collapse && !options.homeResets) { event.preventDefault(); options.collapse(); return; }
+      if (event.key === "Home") value = options.homeResets ? options.defaultValue() : options.bounds().min;
       else if (event.key === "End") value = options.bounds().max;
       else if (event.key === "Enter") value = options.defaultValue();
       else if (event.key === "ArrowLeft") value -= step;
@@ -206,13 +252,13 @@
   }
 
   function isProductNavigation(layout) {
-    return !!(typeof layout.closest === "function" && layout.closest(".shell") && layout.hasAttribute("data-default-left"));
+    return !!(typeof layout.closest === "function" && layout.closest(".shell") && layout.hasAttribute("data-navigation"));
   }
 
   function navigationBounds(layout) {
-    var available = layout.getBoundingClientRect().width || Math.max(0, window.innerWidth - 52);
-    var minimum = Math.max(180, numberAttr(layout, "data-min-left", 180));
-    return { min: minimum, max: Math.max(minimum, Math.min(460, available - (navigationMode() === "wide" ? 280 : 20))) };
+    var sizes = navigationMetrics();
+    var available = layout.getBoundingClientRect().width || Math.max(0, window.innerWidth - sizes.rail);
+    return { min: sizes.min, max: Math.max(sizes.min, Math.min(sizes.max, available - (navigationMode() === "wide" ? sizes.workspace : sizes.overlay))) };
   }
 
   function splitBounds(layout) {
@@ -230,7 +276,7 @@
     var handle = layout.querySelector(":scope > .splitter");
     setSplitterAria(handle, next, bounds);
     if (persist) {
-      Array.prototype.slice.call(document.querySelectorAll(".shell .split-layout[data-default-left]")).forEach(function (other) {
+      Array.prototype.slice.call(document.querySelectorAll(".shell .split-layout[data-navigation]")).forEach(function (other) {
         other.style.setProperty("--split-left", next + "px");
         var otherHandle = other.querySelector(":scope > .splitter");
         if (otherHandle) {
@@ -269,9 +315,7 @@
 
   function restoreSplitRatio(layout) {
     if (isProductNavigation(layout)) {
-      var width = numberAttr(layout, "data-default-left", 310);
-      // Match the prototype's compact default while preserving a dragged width.
-      if (window.innerWidth - 24 <= 1170) width = Math.min(width, 290);
+      var width = navigationMetrics().defaultWidth;
       try { width = Number(window.localStorage.getItem(productNavigationKey)) || width; } catch (error) { /* Use default. */ }
       setProductNavigationWidth(layout, width, false);
       return;
@@ -297,11 +341,11 @@
         handle.setAttribute("aria-controls", pane.id);
       }
       bindSplitter(handle, {
-        getValue: function () { return Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) || numberAttr(layout, "data-default-left", 310); },
+        getValue: function () { return Number.parseFloat(getComputedStyle(layout).getPropertyValue("--split-left")) || navigationMetrics().defaultWidth; },
         setValue: function (value, persist) { setProductNavigationWidth(layout, value, persist); },
         bounds: function () { return navigationBounds(layout); },
-        defaultValue: function () { return numberAttr(layout, "data-default-left", 310); },
-        collapse: function () { setProductNavigationOpen(false); }
+        defaultValue: function () { return navigationMetrics().defaultWidth; },
+        step: navigationMetrics().step, homeResets: true
       });
     } else {
       bindSplitter(handle, {
@@ -329,6 +373,7 @@
       }
     });
     document.getElementById("productNavigationScrim").addEventListener("click", dismissNavigation);
+    document.getElementById("workspaceDiagnostics").addEventListener("click", function () { switchTab("diagnostics"); });
     document.addEventListener("rna-navigation-select", function (event) {
       if (event.target.closest(".global-nav")) dismissNavigation();
     });
@@ -360,6 +405,7 @@
       syncProductNavigation();
     }
   });
+  window.addEventListener("pagehide", function () { clearTimeout(workspaceNoticeTimer); });
   document.addEventListener("keydown", function (event) {
     if (event.key === "Escape" && !event.defaultPrevented && navigationMode() !== "wide" && navigationIsOpen()) {
       event.preventDefault();

@@ -153,12 +153,11 @@ document.addEventListener("DOMContentLoaded", function () {
   bindToolActions();
   bindSkillActions();
   bindProductNavSearches();
+  if (typeof initializeSplitPanes === "function") initializeSplitPanes();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
   window.RNAssistantDockWorkspace.bind();
   if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.bind();
-  if (typeof initializeSplitPanes === "function") {
-    initializeSplitPanes();
-  }
+  window.RNAssistantShellLayout.refresh();
   window.addEventListener("load", function () {
     if (window.hljs) {
       highlightAllCode();

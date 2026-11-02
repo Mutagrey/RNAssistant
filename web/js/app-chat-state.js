@@ -840,7 +840,7 @@ function renderChatSessionList(chats) {
   list.appendChild(tree);
   window.RNAssistantNavigationTree.render(tree, nodes, {
     label: "Документы и чаты", positionKey: "chat",
-    focusKey: selectionChanged && state.activeChatId ? "chat:" + state.activeChatId : focusKey,
+    focusKey: (focusKey || officeWasFocused) && selectionChanged && state.activeChatId ? "chat:" + state.activeChatId : focusKey,
     onToggle: function (node, expanded) { state.collapsedChatDocuments[node.documentKey] = !expanded; },
     onSelect: function (node) { if (node.chatId && !state.bridgeUnavailable) selectChat(node.chatId); }
   });
@@ -953,6 +953,7 @@ function chatTreeNode(chat) {
   var storageTooltip = badgeLevel !== "none" ? buildChatStorageTooltip(chat, badgeLevel) : "";
   return {
     key: "chat:" + id, kind: "leaf", title: chatTitle(chat), chatId: id,
+    iconHtml: window.RNAssistantNavigationTree.icon("chat"),
     selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable,
     tooltip: chatTitle(chat),
     badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,

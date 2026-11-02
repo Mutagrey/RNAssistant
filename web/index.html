@@ -23,15 +23,15 @@
   <link rel="stylesheet" href="css/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="css/vendor/codemirror/addon/hint/show-hint.min.css">
   <link rel="stylesheet" href="css/vendor/viewer.min.css">
-  <link rel="stylesheet" href="css/app.css?v=diagnostics-20261101">
-  <link rel="stylesheet" href="css/app-chat.css?v=diagnostics-20261101">
+  <link rel="stylesheet" href="css/app.css?v=shell-reference-20261102">
+  <link rel="stylesheet" href="css/app-chat.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-markdown.css?v=theme-tokens-20261019-1-visuals-20261025-4">
   <link rel="stylesheet" href="css/app-composer.css?v=shared-chat-20261102">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-models.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-20261101">
-  <link rel="stylesheet" href="css/app-plugins.css?v=shared-palette-20261025-2">
+  <link rel="stylesheet" href="css/app-plugins.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-preview-surface.css?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-text-viewer.css?v=artifact-text-20260831-1">
@@ -48,21 +48,21 @@
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-artifacts.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=shared-palette-20261025-2-annotation-surface-20261026-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=shared-action-menu-20261019-1">
+  <link rel="stylesheet" href="css/app-responsive.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-agent.css?v=aligned-feed-20261029-5">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20261030-1">
-  <link rel="stylesheet" href="css/app-product-tokens.css?v=dock-s1b-20261102">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=dock-sidebar-20261102">
-  <link rel="stylesheet" href="css/app-product-components.css?v=v8-lab-20261030-2">
+  <link rel="stylesheet" href="css/app-product-tokens.css?v=shell-reference-20261102">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=shell-reference-20261102">
+  <link rel="stylesheet" href="css/app-product-components.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=dock-sidebar-20261102">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=diagnostics-20261101">
-  <link rel="stylesheet" href="css/app-dock-workspace.css?v=dock-sidebar-20261102">
+  <link rel="stylesheet" href="css/app-dock-workspace.css?v=shell-reference-20261102">
 </head>
 <body>
   <div class="shell app-shell">
@@ -74,13 +74,14 @@
           <button type="button" class="icon-btn" id="workspaceMaximize" aria-label="Развернуть группу" title="Развернуть группу"><svg data-rna-icon="fit" aria-hidden="true"></svg></button>
         </div>
         <div class="workspace-view-actions" id="workspaceViewActions">
-          <button type="button" class="workspace-menu-button" id="workspacePanels" aria-label="Панели" title="Панели" aria-haspopup="dialog"><svg data-rna-icon="layers" aria-hidden="true"></svg><span>Панели</span></button>
+          <button type="button" class="workspace-menu-button" id="workspacePanels" aria-label="Панели" title="Панели" aria-haspopup="menu"><svg data-rna-icon="layers" aria-hidden="true"></svg><span>Панели</span></button>
           <button type="button" class="workspace-menu-button" id="workspaceLayout" aria-label="Компоновка" title="Компоновка" aria-haspopup="menu"><svg data-rna-icon="panel" aria-hidden="true"></svg><span>Компоновка</span></button>
         </div>
+      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       </div>
     </header>
     <nav class="section-rail" aria-label="Разделы ассистента">
-      <button class="rail-button active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg data-rna-icon="home" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+      <button class="rail-button active" data-section="chat" data-tab="chat" aria-label="Рабочая область" title="Рабочая область" aria-current="page"><svg data-rna-icon="chat" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" data-section="artifacts" data-tab="artifacts" aria-label="Материалы" title="Материалы"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" id="libraryRootTab" data-section="library" data-default-tab="instructions" aria-label="Библиотека" title="Библиотека"><svg data-rna-icon="book" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" data-section="vba" data-tab="vba" aria-label="VBA" title="VBA"><svg data-rna-icon="code" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -88,14 +89,13 @@
       <span id="pluginRail" class="plugin-rail"></span>
       <button class="rail-button" id="pluginAdd" data-rail-popover="plugin-add" data-rail-label="Добавить плагины" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" data-section="diagnostics" data-tab="diagnostics" aria-label="Диагностика" title="Диагностика"><svg data-rna-icon="chart" aria-hidden="true"></svg></button>
-      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
     <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
     <button type="button" class="navigation-scrim" id="productNavigationScrim" aria-label="Закрыть навигацию" tabindex="-1" hidden></button>
     <main class="content">
       <section class="panel active" id="tab-chat">
-        <div class="chat-workspace split-layout" id="chatLayout" data-default-left="224" data-min-left="180">
+        <div class="chat-workspace split-layout" id="chatLayout" data-navigation>
           <aside class="chat-sidebar global-nav" aria-label="Документы и чаты">
             <div class="chat-sidebar-head product-search-heading">
               <details class="panel-switcher chat-scope-switcher product-nav-heading" id="chatScopeSwitcher"><summary aria-label="Раздел рабочей области"><span id="chatScopeIcon" aria-hidden="true"></span><span>Документы Office</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
@@ -273,7 +273,7 @@
           <div class="splitter chat-browser-splitter" id="chatBrowserSplitter" role="separator" aria-orientation="vertical" aria-controls="chatBrowser" aria-label="Ширина браузера" tabindex="0"></div>
           <aside class="chat-browser" id="chatBrowser" aria-label="Предпросмотр HTML" aria-hidden="true"><div class="chat-browser-frame-mount" id="chatBrowserFrameMount"></div></aside>
         </div>
-        <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-default-left="224" data-min-left="180" hidden>
+        <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-navigation hidden>
           <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
             <div class="chat-sidebar-head product-search-heading">
               <details class="panel-switcher chat-scope-switcher product-nav-heading" id="projectScopeSwitcher"><summary aria-label="Раздел рабочей области"><span data-project-scope-icon aria-hidden="true"></span><span>Проекты</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary><div class="popover-menu"><button type="button" data-workspace-scope="office"><svg data-rna-icon="office" viewBox="0 0 24 24" aria-hidden="true"></svg>Документы Office</button><button type="button" data-workspace-scope="projects"><svg data-rna-icon="folder" viewBox="0 0 24 24" aria-hidden="true"></svg>Проекты</button></div></details>
@@ -363,7 +363,7 @@
         </div>
 
       <section class="panel" id="tab-instructions">
-        <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-default-left="310" data-min-left="240">
+        <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-navigation>
           <div class="tool-list-panel surface-panel global-nav">
             <div class="product-nav-heading product-search-heading"><strong>Библиотека</strong><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="skillSearchInput" aria-label="Поиск в библиотеке" aria-expanded="false" aria-controls="skillSearchInput"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tool-search product-nav-search-input" id="skillSearchInput" type="search" placeholder="Найти…" aria-label="Поиск в библиотеке" autocomplete="off" hidden><details class="product-create-menu"><summary class="icon-btn" title="Создать в библиотеке" aria-label="Создать в библиотеке"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
               <div class="tool-list-actions">
@@ -436,7 +436,7 @@
       </section>
 
       <section class="panel" id="tab-vba">
-        <div class="tool-layout vba-layout split-layout" id="vbaLayout" data-default-left="310" data-min-left="240">
+        <div class="tool-layout vba-layout split-layout" id="vbaLayout" data-navigation>
           <aside class="tool-list-panel vba-list-panel global-nav">
             <div class="product-nav-heading product-search-heading"><strong>VBA</strong><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="vbaModuleSearchInput" aria-label="Поиск модулей" aria-expanded="false" aria-controls="vbaModuleSearchInput"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tool-search product-nav-search-input" id="vbaModuleSearchInput" type="search" placeholder="Найти…" aria-label="Поиск модулей" autocomplete="off" hidden><button class="product-nav-action icon-btn" id="refreshVbaButton" type="button" title="Обновить модули" aria-label="Обновить модули"><svg data-rna-icon="refresh" viewBox="0 0 24 24" aria-hidden="true"></svg></button></div></div>
             <div class="tool-list-status" id="vbaStatus">VBA-проект не загружен.</div>
@@ -526,7 +526,7 @@
       </section>
 
       <section class="panel" id="tab-artifacts">
-        <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-default-left="310" data-min-left="240">
+        <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-navigation>
           <aside class="tool-list-panel html-workspace-sidebar global-nav" id="htmlWorkspaceSidebar">
             <div class="artifact-catalog-toolbar product-search-heading">
               <strong>Материалы</strong>
@@ -648,7 +648,7 @@
       </section>
 
       <section class="panel" id="tab-settings">
-        <div class="settings-shell split-layout" id="settingsLayout" data-default-left="310" data-min-left="240">
+        <div class="settings-shell split-layout" id="settingsLayout" data-navigation>
           <nav class="settings-nav global-nav" aria-label="Разделы настроек">
             <div class="settings-navigation-content">
               <div class="workspace-heading settings-nav-heading product-search-heading"><h2 class="nav-label">Настройки</h2><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" id="settingsNavSearchToggle" data-nav-search-toggle="settingsNavSearch" type="button" aria-label="Поиск в настройках" aria-expanded="false" aria-controls="settingsNavSearch" title="Поиск в настройках"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tree-search-input" id="settingsNavSearch" type="search" aria-label="Найти раздел настроек" placeholder="Найти…" autocomplete="off" hidden></div></div>
@@ -1126,15 +1126,15 @@
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-rail-popovers.js"></script>
-  <script src="js/app-navigation-tree.js?v=dock-sidebar-20261102"></script>
+  <script src="js/app-navigation-tree.js?v=shell-reference-20261102"></script>
   <script src="js/app-conversation-state.js?v=shared-chat-20261102"></script>
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
-  <script src="js/app-action-menu.js?v=shared-action-menu-20261019-1"></script>
+  <script src="js/app-action-menu.js?v=shell-reference-20261102"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=effect-facts-20261029-1"></script>
-  <script src="js/app-layout.js?v=dock-sidebar-20261102"></script>
+  <script src="js/app-layout.js?v=shell-reference-20261102"></script>
   <script src="js/app-chat-inspector.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
@@ -1163,7 +1163,7 @@
   <script src="js/app-model-render.js?v=shared-chat-20261102"></script>
   <script src="js/app-models.js?v=single-composer-20261023-1-unified-chat-1"></script>
   <script src="js/app-context-data.js"></script>
-  <script src="js/app-chat-state.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-chat-state.js?v=shell-reference-20261102"></script>
   <script src="js/app-tools-structured.js?v=library-ux-20260903-1"></script>
   <script src="js/app-tools-actions.js?v=manual-tool-chat-20260908-1"></script>
   <script src="js/app-tools-documentation.js?v=tool-docs-20260906-1"></script>
@@ -1215,9 +1215,9 @@
   <script src="js/app-chat-edit.js?v=single-composer-20261023-1"></script>
   <script src="js/app-workspace-chat.js?v=dock-s1b-20261102"></script>
   <script src="js/app-plugins.js?v=dock-sidebar-20261102"></script>
-  <script src="js/app-project-chats.js?v=dock-s1b-20261102"></script>
+  <script src="js/app-project-chats.js?v=shell-reference-20261102"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
-  <script src="js/app-dock-workspace.js?v=dock-sidebar-20261102"></script>
-  <script src="js/app.js?v=dock-sidebar-20261102"></script>
+  <script src="js/app-dock-workspace.js?v=shell-reference-20261102"></script>
+  <script src="js/app.js?v=shell-reference-20261102"></script>
 </body>
 </html>
