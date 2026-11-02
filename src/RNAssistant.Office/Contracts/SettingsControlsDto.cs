@@ -12,8 +12,7 @@ namespace RNAssistant.Office.Contracts
         public int AgentPromptSchemaVersion { get; set; }
         public string SystemPromptRole { get; set; }
         public string AgentResponseMode { get; set; }
-        public string ToolResultRole { get; set; }
-        public bool FallbackToJsonObject { get; set; }
+        public string ProtocolMigrationNotice { get; set; }
         public string ReasoningRequestMode { get; set; }
         public string ReasoningCustomJson { get; set; }
         public int MaxTokens { get; set; }
@@ -62,8 +61,7 @@ namespace RNAssistant.Office.Contracts
                 AgentPromptSchemaVersion = settings.AgentPromptSchemaVersion,
                 SystemPromptRole = settings.SystemPromptRole,
                 AgentResponseMode = settings.AgentResponseMode,
-                ToolResultRole = settings.ToolResultRole,
-                FallbackToJsonObject = settings.FallbackToJsonObject,
+                ProtocolMigrationNotice = settings.ProtocolMigrationNotice,
                 ReasoningRequestMode = settings.ReasoningRequestMode,
                 ReasoningCustomJson = settings.ReasoningCustomJson,
                 MaxTokens = settings.MaxTokens,
@@ -113,8 +111,7 @@ namespace RNAssistant.Office.Contracts
             result.AgentPromptSchemaVersion = AgentPromptSchemaVersion;
             result.SystemPromptRole = SystemPromptRole;
             result.AgentResponseMode = AgentResponseMode;
-            result.ToolResultRole = ToolResultRole;
-            result.FallbackToJsonObject = FallbackToJsonObject;
+            result.ProtocolMigrationNotice = null;
             result.ReasoningRequestMode = ReasoningRequestMode;
             result.ReasoningCustomJson = ReasoningCustomJson;
             result.MaxTokens = MaxTokens;

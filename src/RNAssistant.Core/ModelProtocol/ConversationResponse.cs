@@ -10,7 +10,7 @@ namespace RNAssistant.Core.ModelProtocol
     public sealed class ConversationResponse
     {
         public const int ProtocolVersion = 8;
-        public const int ReferenceContractVersion = 3;
+        public const int ReferenceContractVersion = 4;
         public const string ExecuteAction = "execute";
         public const string ReflectionAction = "reflection";
         public const string FinishAction = "finish";
@@ -33,7 +33,6 @@ namespace RNAssistant.Core.ModelProtocol
             var snapshot = (calls ?? new ConversationToolCall[0]).ToArray();
             if (!IsValidAction(action, snapshot.Length)) throw new ArgumentException("Action and tool calls disagree.", nameof(action));
             if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
-            if (message == null) throw new ArgumentNullException(nameof(message));
             if (action == ExecuteAction && (decision != null || results != null) ||
                 action == ReflectionAction && (calls != null || results != null || string.IsNullOrWhiteSpace(decision)) ||
                 action == FinishAction && (calls != null || decision != null || results == null))
@@ -81,7 +80,7 @@ namespace RNAssistant.Core.ModelProtocol
                     ["assessment"] = claim.AssessmentName
                 }));
             }
-            root["message"] = Message;
+            if (Message != null) root["message"] = Message;
             return root.ToString(Formatting.None);
         }
 

@@ -4,7 +4,11 @@ The current `main` uses the [v8 response contract](protocols/CONVERSATION_RESPON
 and format-8 execution streams with [typed short references](decisions/ADR-0018-typed-model-references.md).
 Formats 6/7 remain read-only. Intermediate 9/10 candidates have no compatibility path.
 Format-8 history must satisfy the current accepted-call and reference contract. Dated v7 audit and qualification records below
-are historical and do not define the current wire contract.
+are historical and do not define the current wire contract. The production JSON
+profile uses reference revision 4 / prompt schema 67: calls stay in content,
+results use typed user-role batches and no automatic schema fallback exists.
+Earlier transport matrices and qualification results below describe their dated
+implementations, not current endpoint qualification.
 
 RNAssistant uses one `Core/Agent/AgentKernel`, invoked by Office's
 `ConversationRunService` and CLI's `WorkspaceConversationService`. A request may
@@ -143,20 +147,20 @@ run's settings without altering an accepted run. Version-format validation passe
 Real-model task quality remains unqualified.
 
 All modes now return conversation-response v8: `action`, `reason`, action-specific
-fields and `message` last; calls contain `name` and `arguments`, never a
+fields and optional nonfinal `message` last; calls contain `name` and `arguments`, never a
 model-owned ID. The shared ModelProtocol boundary owns strict parsing/schema,
 bounded repair and provider compatibility; the kernel receives one validated
 draft, separate provider-native refusal, or typed failure. Model wording and
 `action` are never execution evidence.
 
 ChatStore assigns `T1`, `T2`, … at accepted-call commit and separate `E1`, `E2`, …
-only to eligible terminal results, using trusted tool policy. Native wire pairs use
-T without duplicate content IDs; fallback result JSON carries T plus optional E.
+only to eligible terminal results, using trusted tool policy. T stays internal;
+JSON result batches use `call_index` for pairing and optional E for evidence.
 Finish `results[].criterion` cites delivered E; T/R cannot grant evidence or authority.
-Lookup normalizes reference case only. Revision 3 is explicit in the format-8 stream;
+Lookup normalizes reference case only. Revision 4 is explicit in the format-8 stream;
 missing/older revisions remain read-only and require a new chat. No event rewrite or
 continuation upgrade occurs. P5 admits delivered historical E from retained same-chat
-terminal facts. See the [current reference contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+terminal facts. See the [current reference contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 
 The workspace prompt includes Core's `AgentPromptDefaults.StructuredResponseContract`,
 the same complete response contract used by Office defaults. Both response formats
@@ -253,7 +257,7 @@ observation; its outcome may be remembered as an interpretation. Prior claims re
 their source-kind restrictions. A kind mismatch names the offending source alias
 and its allowed kinds, without copying rejected claim text into the next request.
 Compaction uses the same normalized `MaxAgentFormatRetries` limit as the main
-response: 1–20 attempts including the first, default 10. Limit 1 disables repair.
+response: 1–20 attempts including the first, default 3. Limit 1 disables repair.
 The counter belongs to each compaction operation; it does not consume or reset the
 main response's counter. Each retry uses the same frozen instructions, source
 transcript and schema plus one correction containing the latest parser error.
@@ -474,7 +478,7 @@ file-write acceptance. Windows/Office and real-model behavior require separate e
 The shared question tool produces 1–3 questions, each with 2–4 choices, a single
 or multiple selection and an optional free-text answer. Runtime IDs are persisted
 in the accepted tool result for UI/CLI correlation. The shared model projector
-removes them; native `role: tool` still keeps the accepted call/result pairing.
+removes them; the typed result batch keeps pairing through `call_index`.
 Recommended choices are display metadata and never submitted automatically.
 Each answer may explicitly set `skipped: true` with empty `optionIds` and
 `freeText`. Skipping is a user fact, not a selected recommendation or approval.
@@ -604,7 +608,7 @@ accepted tool results and emits the updated callable state after a response. The
 supplies step IDs and complete accepted-call context; it does not own prompt, media or
 ToolPack state. Confirmation uses the same kernel accounting and preserves replay/result
 ordering. The whole accepted read batch is persisted before dispatch; bounded result
-projection then keeps each native call/result pair adjacent in live and replayed requests.
+projection then keeps each full JSON decision/result batch adjacent in live and replayed requests.
 
 Context retention is not the visible chat transcript. Before each model dispatch,
 the compiler selects the active history window, validates observations against one
@@ -719,7 +723,7 @@ schemas have their own JSON fences. Discovery metadata never grants authority.
 
 Strict transport removes those JSON definitions only after every supplied schema
 matches `response_format.json_schema`. The untouched snapshot retains full
-schemas for explicit `json_object` fallback and repair. Current skill instructions
+schemas for the explicitly selected `json_object` mode and repair. Current skill instructions
 remain in `SELECTED_SKILL`; full instruction bodies are absent from the catalog.
 A prior complete `core.read` of the **same exact published skill resource/version**
 may replace only its duplicate text with `bodyIncluded:false` and
@@ -737,7 +741,7 @@ Reflection allowance and completion feedback are compact runtime metadata at the
 front of the request. Runtime still enforces reflection, confirmation, unknown-effect
 and finish guards. No trailing runtime message is appended after every tool step.
 Resource-body chronology is specified below; historical finish admission is specified
-in the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+in the [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 
 ### P4 chronological bodies — 2026-10-30
 
@@ -1233,19 +1237,18 @@ With SSE enabled, transport chunks still contain that raw JSON envelope. The liv
 
 Strict response schemas require every object property to appear. Properties that are optional in the executable tool contract are therefore represented as nullable in the response schema. A model may return `null` for an irrelevant optional argument; ModelProtocol removes those optional nulls before schema validation; the executor later applies the declared defaults. Required arguments remain non-null unless their original tool schema explicitly allows null.
 
-When `FallbackToJsonObject` is enabled and the endpoint explicitly rejects support for `json_schema`, ModelProtocol retries once with `json_object`, including during format repair, and keeps that choice for the rest of the run. An invalid supplied schema remains a typed provider HTTP error and does not trigger fallback. The exact current prompt is reused and the saved selection is unchanged. This compatibility fallback has its own limit and is not model routing.
+The selected response mode stays fixed for the run. Unsupported or invalid
+`json_schema` returns a provider failure; there is no automatic fallback. The
+shared renderer removes `tools[].function.parameters` from typed runtime context
+only after matching all callable contracts against the strict response schema.
+Tool descriptions, safety, document policy and capability membership remain.
+Direct `json_object` sends full argument schemas in the runtime JSON. Both paths
+budget the actual request and repair reserve before dispatch.
 
-For `json_schema`, the shared renderer's wire-only projection replaces the generated
-`Callable tool definitions` section in Runtime Context with a schema reference,
-after checking that every callable name and its exact structured argument contract
-matches `response_format.json_schema`. Descriptions,
-safety metadata, capability membership, document policy and the v8 envelope stay
-in the request. The accepted prompt retains full parameters: a schema-rejection
-retry and direct `json_object` mode send those same contracts without recompiling
-or changing the accepted messages. If the generated context or schema cannot be
-matched, projection is skipped. Compilation and dispatch budget the actual strict
-wire prompt plus its schema and required reserves; the frozen full prompt is
-checked again before any `json_object` fallback dispatch.
+Nonfinal `message` is optional (string if present, never null); finish still
+requires a nonblank answer. Strict action variants represent absence explicitly,
+without nullable message or duplicated tool definitions. The exact decision and
+history shapes belong to [Conversation Response v8](protocols/CONVERSATION_RESPONSE_V8.md).
 
 Historical host-neutral fixture measured from the retained exact `llm.request` UTF-8 bytes:
 the former Excel Agent core (20 callable schemas) plus one admitted
@@ -1348,7 +1351,7 @@ truncated, relabeled or deleted automatically.
 
 A confirmation pause persists its pending id, cumulative iteration/tool-step counters and execution fingerprint. A native preparable handler may additionally persist one bounded opaque prepared-state payload and a separate bounded confirmation preview. The state belongs to the exact accepted call/policy: accepted argument JSON is not rewritten, confirmed execution does not re-prepare live state, and missing/oversized/mismatched state fails before dispatch. After the singleton call is confirmed, its result returns to the same logical user run. A new request stays blocked until confirmation or cancellation; replaced definitions cannot execute. There is no persistent batch state.
 
-`ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 10, normalized 1–20), **including the first response**. Limit 1 means no format repair; limit 20 accepts a valid twentieth response and stops after twenty invalid responses. Every repair starts from the same accepted conversation plus one current `FORMAT_REPAIR` instruction; rejected output and prior repair instructions are never copied forward or stored in accepted history. Internal repair attempts are not shown as user-facing activity, while the rejected payload and exact parser error remain available in trajectory diagnostics. Native provider refusal is a separate accepted metadata outcome, including when accompanied by JSON content; it cannot dispatch calls. A model-authored refusal sentence is ordinary `message` text and does not set runtime status. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
+`ModelProtocolClient` permits `MaxAgentFormatRetries` total protocol responses per logical step (default 3, normalized 1–20), **including the first response**. Limit 1 means no format repair. Two consecutive identical invalid responses stop early; otherwise the configured total bounds attempts. Every repair starts from the same accepted conversation plus one current typed `format_repair` diagnostic. It quotes only the latest rejected content, bounded to 4096 UTF-8 bytes after JSON escaping, and names that attempt as the error target. Its original response format, truncation and native-call presence are explicit. Earlier diagnostics and provider-private reasoning are not copied; no rejected draft enters accepted assistant history or grants execution authority. The frozen context and callable schemas remain unchanged. Internal repair attempts are not shown as user-facing activity, while the full rejected payload and exact parser error remain available in trajectory diagnostics. Native provider refusal is a separate accepted metadata outcome, including when accompanied by JSON content; it cannot dispatch calls. A model-authored refusal sentence is ordinary `message` text and does not set runtime status. Exhausting the limit ends the run with a visible diagnostic excluded from model replay. There is no separate repair state machine or legacy response-envelope normalization.
 
 ### Published prompt inspection
 
@@ -1457,10 +1460,10 @@ response options, host-provided strict catalog projection, message budget and
 admitted-token estimate, and constructs `ModelProtocolRequest` for Office and workspace.
 Request creation rejects a tool-ID set different from the compiled snapshot arsenal.
 The existing ToolRuntime still validates exact descriptor/policy/binding revisions.
-Full accepted messages remain intact for explicit json_object fallback and frozen
+Full accepted messages remain intact for the selected output format and frozen
 repair; strict wire guidance and schema savings use the same projection as dispatch.
 Host owners add reasoning/cache/trace fields and prepare authority/domain prompts;
-AgentJsonProtocol retains native-role mapping and local history metadata.
+AgentJsonProtocol writes canonical JSON per-call facts and local history metadata.
 Compatibility probes reuse that same contract and transcript writer, but retain
 one raw attempt per check: no format repair, provider retry or fallback may turn a
 failed qualification probe into a pass. Fixed sentinel values remain independent
@@ -1513,13 +1516,13 @@ See [ADR-0002](decisions/ADR-0002-model-protocol-boundary.md).
 | Provider ends with `finish_reason=length` | Ask for a shorter complete proposal; never dispatch a truncated proposal | At most one correction inside the format budget; repeated truncation is `OutputTruncated` |
 | Runtime ID allocation/restore failure | Fail before acceptance/dispatch; never regenerate model payload for an ID | No model repair |
 | Typed timeout, network failure or HTTP 5xx/server failure | Retry the exact current prompt after a cancellable delay | Two extra requests for the whole step, delays 1s then 2s |
-| Explicit `json_schema` rejection with fallback enabled | Switch to `json_object`, including during repair | One extra request, independent of other budgets |
+| Explicit `json_schema` rejection | Typed provider failure; select another format explicitly | No extra request |
 | Authorization/other HTTP errors, 429, size limits, invalid provider envelope | Typed provider failure | No automatic retry |
 | Cancellation | Typed cancelled failure | No further dispatch or acceptance |
 
 The provider budget does not reset between format attempts; the next logical
-step gets a new budget. With protocol limit N, no more than N+3 raw completion
-requests can be made (maximum 23). Provider failures do not create format-repair
+step gets a new budget. With protocol limit N, no more than N+2 raw completion
+requests can be made (maximum 22). Provider failures do not create format-repair
 messages or consume protocol response slots. This wrapper does not change the
 LLM adapter's HTTP classification, configure endpoint failover or retry tools.
 
@@ -1531,7 +1534,7 @@ Error-like text inside model content remains ordinary content.
 The `MaxAgentFormatRetries` settings/bridge key and its stored number are kept;
 the number means total responses, not additional corrections, for both main
 responses and compaction. The form label and tooltip state that distinction.
-Default 10 and normalization to 1–20 remain. `MaxConsecutiveReflections` is a separate
+Default 3 and normalization to 1–20 remain. `MaxConsecutiveReflections` is a separate
 accepted-decision limit (0–20, default 2), not an attempt budget; see the
 [v8 contract](protocols/CONVERSATION_RESPONSE_V8.md#admission-persistence-and-presentation).
 
@@ -1544,7 +1547,8 @@ See [Phase 2B evidence](stabilization/PHASE_2B_RETRY_POLICY.md).
 
 ## Tool result
 
-Tool Result v1 is the only active model-result envelope. Core owns the immutable
+Tool Result v2 is the canonical internal result envelope. The final model request
+uses grouped `tool_results` as defined in the v8 contract. Core owns the immutable
 terminal value and `ModelProtocol.ToolResultWire`; Office owns budgeting, media and
 resource materialization. The only statuses are `ok`, `error`, and `unknown`.
 There is no root `ok`/`Success`, duplicated `error`, `retryable`, journal state or
@@ -1562,28 +1566,17 @@ markers and exact read-back remain in their existing owners. This common value
 replaces nine result/status/effect definitions and nine handler conversions; it is
 not an executor or a second outcome authority. VBA retains its journal contract.
 
-`ToolResultRole` is independent from the instruction role and controls transport:
+Production has one history transport: accepted JSON decisions in assistant content
+and typed `tool_results` in user content. Each result's zero-based `call_index`
+refers to the immediately preceding full accepted batch. Internal IDs and T aliases
+remain in the journal/Inspector, never fabricated into the model response history.
+Native generation/history variants and developer result roles are laboratory only.
+CLI accepts only `--tool-result-role user`; run metadata remains frozen across
+approval. Saved obsolete role/fallback settings are read only to show a migration
+notice and are no longer serialized. Old chat contracts stay readable but cannot
+continue under reference revision 4; no automatic conversion or data deletion.
 
-- `user` (default) / `developer`: result JSON follows the `TOOL_RESULT:` prefix;
-- `tool`: the same raw JSON follows a matching `assistant.tool_calls` entry;
-  that accepted-history entry carries the exact public tool id and only the
-  schema-valid semantic arguments accepted from conversation-response v8. RNAssistant
-  does not advertise a second native function catalog. The result message contains
-  exactly `role`, `tool_call_id` and `content`, with no message-level `name`; the
-  same public id remains inside Tool Result v1 and local replay metadata. Stored
-  pre-cutover resource/capability calls that no longer satisfy the current schema
-  require an explicit new chat/reset before another model request.
-
-The workspace CLI honors the same setting through `--tool-result-role` or
-`RNA_TOOL_RESULT_ROLE` (`user` by default). It records the role in
-`ModelRunMetadata`, inherits it on cross-process approval and rejects drift before
-tool execution. A pending run without that recorded role requires denial and a
-new turn; there is no guessed legacy profile. `resume` only reports/reconciles the
-interrupted lifecycle; it does not issue another model request or replay a tool.
-For a new turn, the selected role shapes accepted history through the same compiler;
-durable v8 facts and runtime call IDs are unchanged.
-
-`ModelContextCompiler` preserves the latest completed call/result pair, including
+`ModelContextCompiler` preserves the latest completed call/result batch, including
 its result role, exact accepted arguments, status and short receipt. Older mutation
 pairs also remain intact while they fit. Under budget pressure they may become
 atomic completed-operation receipts, retaining error/recovery data and semantic
@@ -1593,7 +1586,7 @@ exact bounded payload; missing/oversized arguments stop preparation instead of
 producing a fabricated native call.
 
 Source-body reduction is independent from transport: a latest stale/omitted read
-still has a correlated Tool Result v1, with an explicit `data.observation` and no
+still has a correlated Tool Result v2, with an explicit `data.observation` and no
 delivered read authority. A stale failed evaluation keeps its original diagnostics
 in `data.tool_data`; its outcome is not upgraded. Older stale observations and
 identical reads may be folded atomically. Short mutation outcomes are not folded
@@ -1604,13 +1597,16 @@ Office and workspace request preparation each detach messages and the receipt
 once per request, then reuse them for evidence selection, tracing and delivery.
 The frozen source remains isolated; later requests and repairs obtain their own copies.
 
-```text
-TOOL_RESULT:
-{"tool_call_id":"call_1","name":"common.resources_read","status":"ok","message":"Complete resource representation read.","data":{"kind":"resource-read","target":"note: Example","type":"artifact","scope":"conversation","representation":"text","text":"Hello","coverage":{"kind":"whole","fields":[]},"returnedCharacters":5,"totalCharacters":5,"complete":true,"rawContentIncluded":true}}
+Model-facing example (the canonical internal record additionally retains its
+`type:tool_result` and exact `tool_call_id`):
+
+```json
+{"type":"tool_results","results":[{"call_index":0,"name":"core.read","status":"ok","message":"Excerpt read.","data":{"kind":"resource-read","target":"note: Example","representation":"text","text":"Hello","complete":true},"evidence":"E1"}]}
 ```
 
-All five root fields shown are required. `data` may be any JSON
-value, including null. The durable optional `resources` array contains exact
+The canonical record requires type, tool_call_id, name, status, message and data.
+This result message is independent from the optional model decision message. `data`
+may be any JSON value, including null. The durable optional `resources` array contains exact
 `rna://` URI/revision references; at most one has `relation:"result"` for full
 externalized data. Every model projection omits the complete array; produced
 resources and full externalized results are rediscovered by semantic target.

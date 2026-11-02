@@ -16,7 +16,7 @@ namespace RNAssistant.Harness
 
         private static void ToolResultWireRoundTripsTerminalStates()
         {
-            AssertEqual(1, ToolResultWire.CurrentVersion, "result wire has its own version");
+            AssertEqual(2, ToolResultWire.CurrentVersion, "result wire has its own version");
             foreach (var status in new[] { ToolResultStatus.Ok, ToolResultStatus.Error, ToolResultStatus.Unknown })
                 foreach (var data in new[]
                 {
@@ -26,8 +26,8 @@ namespace RNAssistant.Harness
                 {
                     var wire = ToolResultWire.Write("call_Runtime_7", "Removed.Exact.Tool", new TerminalResult(status, "done", data));
                     var root = (JObject)WireJson(wire);
-                    AssertEqual(5, root.Count, "only required root fields are emitted without resources");
-                    AssertTrue(root.Properties().All(property => new[] { "tool_call_id", "name", "status", "message", "data" }.Contains(property.Name)),
+                    AssertEqual(6, root.Count, "only required root fields are emitted without resources");
+                    AssertTrue(root.Properties().All(property => new[] { "type", "tool_call_id", "name", "status", "message", "data" }.Contains(property.Name)),
                         "no aliases, runtime metadata or root version enter wire");
                     AssertEqual(status.ToString().ToLowerInvariant(), (string)root["status"], "status has one terminal spelling");
                     var parsed = ToolResultWire.Read(" \r\n" + wire + "\t");
@@ -128,13 +128,13 @@ namespace RNAssistant.Harness
 
         private static void ToolResultWireRejectsInvalidEnvelopeShapes()
         {
-            foreach (var field in new[] { "tool_call_id", "name", "status", "message", "data" })
+            foreach (var field in new[] { "type", "tool_call_id", "name", "status", "message", "data" })
             {
                 var root = WireEnvelope();
                 root.Remove(field);
                 WireRejects(root.ToString(Formatting.None));
             }
-            foreach (var field in new[] { "tool_call_id", "name", "status", "message" })
+            foreach (var field in new[] { "type", "tool_call_id", "name", "status", "message" })
                 foreach (var value in new JToken[] { JValue.CreateNull(), new JValue(1), new JValue(true), new JObject(), new JArray() })
                 {
                     var root = WireEnvelope();
@@ -290,7 +290,7 @@ namespace RNAssistant.Harness
                     AssertEqual(status, parsed.Result.Status, "message and domain codes never reinterpret terminal status");
                     AssertEqual("call_control", parsed.ToolCallId, "nested domain identity is not a call identity");
                     AssertEqual(data.ToString(Formatting.None), parsed.Result.DataJson, "domain state stays inside data");
-                    AssertEqual(5, ((JObject)WireJson(wire)).Count, "runtime control has no extra root fields");
+                    AssertEqual(6, ((JObject)WireJson(wire)).Count, "runtime control has no extra root fields");
                 }
         }
 
@@ -298,7 +298,7 @@ namespace RNAssistant.Harness
         {
             return new JObject
             {
-                ["tool_call_id"] = "call_1", ["name"] = "test.read", ["status"] = "ok",
+                ["type"] = "tool_result", ["tool_call_id"] = "call_1", ["name"] = "test.read", ["status"] = "ok",
                 ["message"] = "done", ["data"] = JValue.CreateNull()
             };
         }

@@ -16,31 +16,47 @@ namespace RNAssistant.Harness
         private static void ModelDiagnosticsTransportMatrix()
         {
             var scenarios = ModelDiagnosticScenarios.All("transport-matrix");
-            AssertEqual(23, scenarios.Count, "bounded A/B/C matrix");
+            AssertEqual(26, scenarios.Count, "bounded A/B/C matrix");
             AssertEqual(scenarios.Count, scenarios.Select(item => item.Id).Distinct().Count(), "unique scenario IDs");
             var replies = scenarios.Select(scenario => DiagnosticTransportReply(scenario)).ToArray();
-            WithDiagnosticEndpoint(replies.Select(reply => new Func<JObject, DiagnosticReply>(request => reply)), (settings, requests) =>
+            var exchanges = new List<Func<JObject, DiagnosticReply>>();
+            for (var i = 0; i < scenarios.Count; i++)
+            {
+                var first = replies[i]; exchanges.Add(request => first);
+                if (scenarios[i].NativeRoundTrip) exchanges.Add(request => DiagnosticContent((string)request["messages"]
+                    .Last(m => (string)m["role"] == "tool")["content"]));
+            }
+            WithDiagnosticEndpoint(exchanges, (settings, requests) =>
             {
                 var runner = new ModelDiagnosticRunner(new LlmClient(() => "synthetic").CompleteAsync);
                 ModelDiagnosticResult control = null;
                 for (var i = 0; i < scenarios.Count; i++)
                 {
                     var scenario = scenarios[i];
+                    var requestIndex = requests.Count;
                     var result = runner.RunAsync(settings, scenario, ModelDiagnosticExecutionKind.Synthetic, CancellationToken.None).GetAwaiter().GetResult();
                     if (scenario.Id == "C4-control") control = result;
                     if (scenario.Id == "C4") ModelDiagnosticRunner.CompareStreamControl(result, control);
                     AssertEqual(ModelDiagnosticVerdict.Pass, result.Verdict, scenario.Id + ": " + result.Reason + " " + result.ParserErrorCode);
-                    AssertEqual(requests[i], Encoding.UTF8.GetString(result.RequestUtf8), "post-serialization request captured");
-                    var request = JObject.Parse(requests[i]);
+                    AssertEqual(requests[requestIndex], Encoding.UTF8.GetString(result.RequestUtf8), "post-serialization request captured");
+                    var request = JObject.Parse(requests[requestIndex]);
                     AssertEqual(scenario.Streaming, (bool)request["stream"], "scenario-specific streaming");
                     if (scenario.ResponseFormat == LlmResponseFormats.Text)
                         AssertTrue(request["response_format"] == null, "explicit text request, no fallback format");
                     else AssertEqual(scenario.ResponseFormat, (string)request["response_format"]["type"], "exact requested format");
-                    AssertEqual(scenario.Id == "B8", request["tools"] != null, "native tools only on generation probe");
-                    if (scenario.Id == "B8")
+                    AssertEqual(scenario.NativeFunction != null, request["tools"] != null, "native tools only on generation probe");
+                    if (scenario.NativeFunction != null)
                     {
                         AssertEqual("required", (string)request["tool_choice"], "request a native call");
                         AssertTrue(result.ActualNativeCallsJson.Contains("provider_call_1"), "provider generation IDs retained, not runtime authority");
+                    }
+                    if (scenario.NativeRoundTrip)
+                    {
+                        AssertEqual(2, requests.Count - requestIndex, "native cycle uses two exchanges");
+                        AssertEqual(ModelDiagnosticVerdict.Pass, result.Continuation.Verdict, "continuation consumes tool data");
+                        var follow = JObject.Parse(requests[requestIndex + 1]);
+                        AssertEqual("provider_call_1", (string)follow["messages"].Single(m => (string)m["role"] == "tool")["tool_call_id"], "actual provider identity reused");
+                        AssertTrue((string)follow["tool_choice"] != "required", "final continuation is not forced to call");
                     }
                     if (scenario.Id == "A2" || scenario.Id == "A2-system")
                     {

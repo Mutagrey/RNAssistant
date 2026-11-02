@@ -213,6 +213,7 @@
     <Compile Include="ModelProtocol\ToolResultWire.cs" />
     <Compile Include="ModelProtocol\ModelProtocolClient.cs" />
     <Compile Include="ModelProtocol\ModelReferenceProjection.cs" />
+    <Compile Include="ModelProtocol\ModelHistoryBatchProjection.cs" />
     <Compile Include="ModelProtocol\ModelReference.cs" />
     <Compile Include="ModelProtocol\ModelResourceReference.cs" />
     <Compile Include="Storage\ChatStore.ModelReferences.cs" />

@@ -1,5 +1,19 @@
 # RNAssistant Harness
 
+JSON-profile coverage (no inference/Office): `history protocol:` checks optional
+message against the schema, exact batch/result mapping, partial receipts, frozen
+repair and early identical-response stop; `model protocol:` checks transport and
+independent retry budgets without fallback; `model diagnostics:` checks the 26-case
+matrix, null-ID content visibility and the actual two-exchange native lab cycle.
+`conversation v8:`, `tool result wire:`, `protocol context:`, `model refs:`,
+`context continuity:` and `model context:` cover parser/history/evidence/compaction.
+Old native/history/prefix expectations were replaced with JSON-profile assertions.
+The tool-schema subset validator expands the generated response's single local
+`$defs.calls` reference only in schema fixtures; it is not a server qualifier.
+[Offline Qwen rendering](../protocol/qwen38/README.md) uses pinned upstream bytes
+with an explicitly declared local Jinja adapter, never model weights or inference.
+Web: `agent-history-settings` and `model-diagnostics-layout` reuse production DOM.
+
 Chat model parity S2a: `workspace: chat model preferences and wire` checks actual
 scripted HTTP bodies, persisted override/default, reopen, exact workspace and busy
 lease refusal. `chat: session model overrides global settings` checks the common

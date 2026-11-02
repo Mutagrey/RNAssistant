@@ -56,13 +56,11 @@ var modelSettingsDefaults = {
 var agentSettingsDefaults = {
   systemPromptRole: "developer",
   agentResponseMode: "json_object",
-  toolResultRole: "user",
-  fallbackToJsonObject: true,
   autoConfirmToolActions: false,
   enableAgentJavaScript: false,
   autoCompressContext: true,
   maxAgentIterations: 256,
-  maxAgentFormatRetries: 10,
+  maxAgentFormatRetries: 3,
   maxConsecutiveReflections: 2,
   maxAgentToolSteps: 4096
 };
@@ -149,59 +147,30 @@ function updateReasoningCustomJsonVisibility() {
 }
 
 function updateAgentProtocolControls() {
-  var field = $("agentJsonFallbackField");
-  if (!field) {
-    return;
-  }
-  var visible = $("agentResponseModeInput").value === "json_schema";
-  field.classList.toggle("hidden", !visible);
-  field.setAttribute("aria-hidden", visible ? "false" : "true");
-  var nativeHistory = $("agentHistoryFormatInput").value === "native_tools";
-  var roleInput = $("toolResultRoleInput");
-  if (nativeHistory && roleInput.value !== "tool") roleInput.dataset.jsonRole = roleInput.value;
-  var toolOption = roleInput.querySelector('option[value="tool"]');
-  toolOption.hidden = !nativeHistory;
-  toolOption.disabled = !nativeHistory;
-  if (nativeHistory) roleInput.value = "tool";
-  else if (roleInput.value === "tool") roleInput.value = roleInput.dataset.jsonRole === "developer" ? "developer" : "user";
-  roleInput.disabled = nativeHistory;
-  $("agentHistoryFormatNote").textContent = nativeHistory
-    ? "После принятия ответа action, reason и message остаются в content; вызовы переходят в native tool_calls."
-    : "Принятые решения и вызовы остаются JSON в assistant.content. Результаты — отдельные сообщения TOOL_RESULT.";
-  $("toolResultRoleNote").textContent = nativeHistory
-    ? "Роль фиксирована: результат связан с native-вызовом через tool_call_id."
-    : "Для роли tool выберите Native tools в истории.";
+  $("agentResponseModeNote").textContent = $("agentResponseModeInput").value === "json_schema"
+    ? "Требует поддержки схемы сервером. Автоматического перехода на другой формат нет."
+    : "Ответ и история сохраняют JSON. execute содержит непустой tool_calls; промежуточный message необязателен.";
   updateAgentProtocolExample();
 }
 
 function updateAgentProtocolExample() {
   var mode = $("agentResponseModeInput").value;
-  var native = $("agentHistoryFormatInput").value === "native_tools";
-  var role = native ? "tool" : $("toolResultRoleInput").value;
   var instructionRole = $("systemPromptRoleInput").value;
   var saved = state.settings || {};
   var changed = mode !== compatibilityValue(saved, "AgentResponseMode", "agentResponseMode", agentSettingsDefaults.agentResponseMode) ||
-    role !== compatibilityValue(saved, "ToolResultRole", "toolResultRole", agentSettingsDefaults.toolResultRole) ||
     instructionRole !== compatibilityValue(saved, "SystemPromptRole", "systemPromptRole", agentSettingsDefaults.systemPromptRole);
-  $("agentProtocolExampleSummary").textContent = mode + " → " + (native ? "native tools" : "JSON") + " / " + role;
+  $("agentProtocolExampleSummary").textContent = mode + " · JSON-история";
   $("agentProtocolApplyNote").textContent = changed
     ? "Показан черновик настроек. Нажмите «Применить», чтобы использовать его в следующем запуске."
     : "Сохранённый формат для следующего запуска. Уже отправленные запросы и их снимки не меняются.";
   if (!$("agentProtocolExample").open) return;
   var call = { name: "core.tools.search", arguments: { query: "VBA" } };
-  var decision = { action: "execute", reason: "Найти инструменты.", tool_calls: [call], message: "" };
+  var decision = { action: "execute", reason: "Найти инструменты.", tool_calls: [call] };
   var response = { role: "assistant", content: JSON.stringify(mode === "json_schema" ? { response: decision } : decision) };
-  var historical = { action: decision.action, reason: decision.reason };
-  if (!native) historical.tool_calls = [{ id: "T1", name: call.name, arguments: call.arguments }];
-  historical.message = decision.message;
-  var assistant = { role: "assistant", content: JSON.stringify(historical) };
-  var result = { role: role, content: "… результат инструмента …" };
-  if (native) {
-    assistant.tool_calls = [{ id: "T1", type: "function", function: { name: call.name, arguments: JSON.stringify(call.arguments) } }];
-    result.tool_call_id = "T1";
-  } else {
-    result.content = 'TOOL_RESULT:\n{"tool_call_id":"T1","name":"core.tools.search","status":"ok","message":"…","data":"…"}';
-  }
+  var assistant = { role: "assistant", content: JSON.stringify(decision) };
+  var result = { role: "user", content: JSON.stringify({ type: "tool_results", results: [
+    { call_index: 0, name: call.name, status: "ok", message: "Найдены инструменты.", data: { items: ["…"] } }
+  ] }) };
   var format = { type: mode };
   if (mode === "json_schema") format.json_schema = { name: "rnassistant_conversation_response_v8", strict: true, schema: "…" };
   var request = { response_format: format, messages: [{ role: instructionRole, content: "… инструкции выбранного формата …" }, assistant, result] };
@@ -363,10 +332,9 @@ function renderSettings(options) {
   $("systemPromptRoleInput").value = instructionRole === "system" || instructionRole === "user" ? instructionRole : agentSettingsDefaults.systemPromptRole;
   var responseMode = String(s.AgentResponseMode || s.agentResponseMode || agentSettingsDefaults.agentResponseMode).toLowerCase();
   $("agentResponseModeInput").value = responseMode === "json_schema" ? "json_schema" : "json_object";
-  var toolResultRole = String(s.ToolResultRole || s.toolResultRole || agentSettingsDefaults.toolResultRole).toLowerCase();
-  $("agentHistoryFormatInput").value = toolResultRole === "tool" ? "native_tools" : "json_content";
-  $("toolResultRoleInput").value = toolResultRole === "developer" ? toolResultRole : agentSettingsDefaults.toolResultRole;
-  $("fallbackJsonObjectInput").checked = compatibilityValue(s, "FallbackToJsonObject", "fallbackToJsonObject", agentSettingsDefaults.fallbackToJsonObject) !== false;
+  var migration = $("agentProtocolMigrationNote");
+  migration.textContent = s.ProtocolMigrationNotice || s.protocolMigrationNotice || "";
+  migration.hidden = !migration.textContent;
   updateAgentProtocolControls();
   var reasoningRequestMode = String(s.ReasoningRequestMode || s.reasoningRequestMode || modelSettingsDefaults.reasoningRequestMode).toLowerCase();
   var reasoningModes = ["auto", "reasoning_effort", "enable_thinking", "chat_template_kwargs", "reasoning_enabled", "custom_json"];
@@ -478,9 +446,6 @@ function readSettings() {
     MaxAgentFormatRetries: Math.max(1, Math.min(20, Number($("maxAgentFormatRetriesInput").value || agentSettingsDefaults.maxAgentFormatRetries))),
     MaxAgentToolSteps: Number($("maxAgentToolStepsInput").value || agentSettingsDefaults.maxAgentToolSteps),
     AgentResponseMode: $("agentResponseModeInput").value,
-    ToolResultRole: $("agentHistoryFormatInput").value === "native_tools" ? "tool" :
-      ($("toolResultRoleInput").value === "developer" ? "developer" : "user"),
-    FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     SystemPromptRole: $("systemPromptRoleInput").value,
     ModelImageSupportOverrides: Object.assign({}, modelImageSupportOverrides(modelContext)),
     ModelAudioSupportOverrides: Object.assign({}, modelAudioSupportOverrides(modelContext)),
@@ -581,9 +546,6 @@ function resetModelSettingsToDefaults() {
 function resetAgentSettingsToDefaults() {
   $("systemPromptRoleInput").value = agentSettingsDefaults.systemPromptRole;
   $("agentResponseModeInput").value = agentSettingsDefaults.agentResponseMode;
-  $("toolResultRoleInput").value = agentSettingsDefaults.toolResultRole;
-  $("agentHistoryFormatInput").value = "json_content";
-  $("fallbackJsonObjectInput").checked = agentSettingsDefaults.fallbackToJsonObject;
   $("autoConfirmToolActionsInput").checked = agentSettingsDefaults.autoConfirmToolActions;
   $("enableAgentJavaScriptInput").checked = agentSettingsDefaults.enableAgentJavaScript;
   $("autoCompressContextInput").checked = agentSettingsDefaults.autoCompressContext;
@@ -675,8 +637,6 @@ function bindSettingsActions() {
 
   $("reasoningRequestModeInput").addEventListener("change", updateReasoningCustomJsonVisibility);
   $("agentResponseModeInput").addEventListener("change", updateAgentProtocolControls);
-  $("agentHistoryFormatInput").addEventListener("change", updateAgentProtocolControls);
-  $("toolResultRoleInput").addEventListener("change", updateAgentProtocolExample);
   $("systemPromptRoleInput").addEventListener("change", updateAgentProtocolExample);
   $("agentProtocolExample").addEventListener("toggle", updateAgentProtocolExample);
   $("historyHmacInput").addEventListener("change", updateHistoryProtectionControls);

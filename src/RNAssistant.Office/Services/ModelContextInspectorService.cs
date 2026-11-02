@@ -190,7 +190,7 @@ namespace RNAssistant.Office.Services
             Func<ContextMessagePresentation, IEnumerable<string>> ids, Func<string, string> alias)
         {
             var values = new Dictionary<string, ModelContextIdentityDto>(StringComparer.Ordinal);
-            foreach (var entry in (trace.ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
+            foreach (var entry in ContextMessagePresentation.Sources(trace.ContextMessages))
             {
                 foreach (var id in ids(entry).Where(id => !string.IsNullOrWhiteSpace(id)))
                     if (!values.ContainsKey(id)) values.Add(id, new ModelContextIdentityDto { CanonicalId = id, Alias = alias(id) });
@@ -202,7 +202,7 @@ namespace RNAssistant.Office.Services
             AliasIndex aliases, string requestEventId)
         {
             var rows = new Dictionary<string, ModelContextResourceDto>(StringComparer.Ordinal);
-            foreach (var entry in (trace.ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
+            foreach (var entry in ContextMessagePresentation.Sources(trace.ContextMessages))
                 foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
                 {
                     if (link?.Resource?.IsExact != true) continue;
@@ -444,7 +444,7 @@ namespace RNAssistant.Office.Services
                     var q = Register(_requests, request.EventId, ModelReferenceKind.Request);
                     _lastRequest[q] = request.EventId;
                     if (!includeLinks) continue;
-                    foreach (var entry in (Trace(request).ContextMessages ?? new List<ContextMessagePresentation>()).Where(item => item != null))
+                    foreach (var entry in ContextMessagePresentation.Sources(Trace(request).ContextMessages))
                     {
                         var operation = Operation(entry.ToolCallId);
                         if (operation != null) _lastRequest[operation] = request.EventId;

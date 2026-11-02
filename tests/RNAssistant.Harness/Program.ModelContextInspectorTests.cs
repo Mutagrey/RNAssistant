@@ -285,9 +285,9 @@ namespace RNAssistant.Harness
                 ModelConfiguration = new ModelRunMetadata { ContextWindowTokens = 32000 } } };
             AssertTrue(RNAssistant.Runtime.WorkspaceConversationService.ReadContextUsage(session) == null, "no response is not zero usage");
             session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run",
-                PromptTokens = 1200, CompletionTokens = 100, TotalTokens = 1300, AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0) });
+                PromptTokens = 1200, CompletionTokens = 100, TotalTokens = 1300, AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 0, 2) });
             session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, RunId = "run",
-                AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 1) });
+                AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 1, 2) });
             var usage = RNAssistant.Runtime.WorkspaceConversationService.ReadContextUsage(session);
             AssertEqual(1200, usage.PromptTokens.Value, "parallel calls retain their one provider completion");
             AssertEqual("step", usage.StepId, "usage has its accepted source step");
@@ -413,14 +413,14 @@ namespace RNAssistant.Harness
                 settings, NewSession(adapter), null);
             accepted[1].Id = "schema-prompt";
             var fullPrompt = accepted[1].Content;
-            AssertContains(fullPrompt, "```json\n", "accepted prompt retains exact fallback contracts");
+            AssertTrue(JObject.Parse(fullPrompt)["tools"][0]["function"]["parameters"] != null, "runtime JSON carries exact argument schemas");
             var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, tools,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools)));
             options.TraceContextReceipt = new ContextReceipt { Messages = new System.Collections.Generic.List<ContextMessagePresentation> {
                 new ContextMessagePresentation { SourceMessageId = accepted[1].Id, MessageIndex = 1,
                     Role = accepted[1].Role, Presentation = ContextPresentationKind.Full } } };
             var driftedSchema = JObject.Parse(options.ResponseSchemaJson);
-            driftedSchema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.name.const")
+            driftedSchema.SelectToken("$defs.calls.items.anyOf[0].properties.name.const")
                 .Replace(new JValue("different.tool"));
             AssertTrue(ReferenceEquals(accepted, ConversationPromptComposer.ProjectJsonSchemaMessages(
                 accepted, tools, driftedSchema.ToString(Newtonsoft.Json.Formatting.None))),
@@ -428,14 +428,14 @@ namespace RNAssistant.Harness
             var copiedRuntime = accepted.Concat(new[] { new ChatMessage { Role = "user", Content = fullPrompt } }).ToArray();
             var protectedHistory = ConversationPromptComposer.ProjectJsonSchemaMessages(copiedRuntime, tools, options.ResponseSchemaJson);
             AssertEqual(fullPrompt, protectedHistory.Last().Content, "a user-pasted runtime header is never transformed");
-            AssertTrue(protectedHistory[1].Content.EndsWith(RuntimeContextPrompt.SchemaDefinitions, StringComparison.Ordinal), "owned runtime still compacts");
+            AssertTrue(RuntimeContextPrompt.UsesResponseSchema(protectedHistory[1]), "owned runtime still compacts");
             var userRoleSettings = new AppSettings { SystemPromptRole = "user" };
             var userRoleMessages = new ConversationPromptComposer().BuildRequiredMessages(ChatModes.Agent,
                 "Keep this user request.", adapter, tools, new SkillDefinition[0], new DocumentContext(),
                 userRoleSettings, NewSession(adapter), null);
             var projectedUserRole = ConversationPromptComposer.ProjectJsonSchemaMessages(
                 userRoleMessages, tools, options.ResponseSchemaJson);
-            AssertTrue(projectedUserRole[1].Content.EndsWith(RuntimeContextPrompt.SchemaDefinitions, StringComparison.Ordinal) &&
+            AssertTrue(RuntimeContextPrompt.UsesResponseSchema(projectedUserRole[1]) &&
                 projectedUserRole.Last().Content == "Keep this user request.",
                 "user instruction role preserves the request suffix while eliding strict duplicates");
             var request = new ModelProtocolRequest
@@ -475,24 +475,15 @@ namespace RNAssistant.Harness
                         "Answer directly.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
             });
             var result = protocol.GetResponseAsync(request, null, CancellationToken.None).GetAwaiter().GetResult();
-            AssertTrue(result.Failure == null, "strict repair falls back and accepts a valid object response");
-            AssertEqual("json_schema,json_schema,json_object", string.Join(",", formats),
-                "schema rejection retains the one-time fallback during repair");
-            AssertTrue(wirePrompts[0].IndexOf("```json\n", StringComparison.Ordinal) < 0 &&
-                wirePrompts[1].IndexOf("```json\n", StringComparison.Ordinal) < 0,
-                "strict attempts omit only the repeated parameter schemas");
-            AssertEqual(fullPrompt, wirePrompts[2], "fallback reuses the exact accepted prompt");
-            AssertEqual("Unknown,Unknown,Full", string.Join(",", presentations),
-                "provenance follows the serialized strict, repair and fallback attempts");
-            AssertEqual(ContextPresentationKind.Full, options.TraceContextReceipt.Messages[0].Presentation,
-                "wire attribution does not mutate the frozen compiler receipt");
-            AssertEqual(repairMessages[1], ModelProtocolWire.ProjectGuidance(new[] {
-                new ChatMessage { Role = "user", ProtocolMessage = true, Content = repairMessages[2] } })[0].Content,
-                "fallback restores full format guidance on the same repair instruction");
-            AssertContains(wirePrompts[0], "`" + tool.Id + "`", "strict prompt retains descriptions");
-            AssertContains(wirePrompts[0], "policy:", "strict prompt retains safety policy");
-            AssertContains(wirePrompts[0], "\"office_tool_policy\"", "strict prompt retains document policy");
-            AssertTrue(options.ResponseSchemaJson == null, "fallback clears strict response schema");
+            AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "schema rejection is reported without hidden fallback");
+            AssertEqual("json_schema,json_schema", string.Join(",", formats), "all attempts retain selected transport");
+            AssertTrue(wirePrompts.All(prompt => JObject.Parse(prompt)["tools"][0]["function"]["parameters"] == null), "strict attempts omit only duplicate parameter schemas");
+            AssertEqual("Unknown,Unknown", string.Join(",", presentations), "transformed text does not claim byte identity");
+            AssertEqual(ContextPresentationKind.Full, options.TraceContextReceipt.Messages[0].Presentation, "source receipt is immutable");
+            AssertEqual("format_repair", (string)JObject.Parse(repairMessages[1])["type"], "repair is typed data");
+            AssertContains(wirePrompts[0], tool.Id, "tool names remain visible");
+            AssertContains(wirePrompts[0], "safety", "strict prompt retains tool policy");
+            AssertTrue(options.ResponseSchemaJson != null, "schema remains selected after failure");
             AssertEqual(fullPrompt, accepted[1].Content, "wire projection does not mutate accepted history");
 
             var objectOptions = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonObject, tools,
@@ -541,7 +532,7 @@ namespace RNAssistant.Harness
                     CancellationToken.None).GetAwaiter().GetResult();
                 AssertEqual(ToolExecutionOutcome.Ok, read.Outcome, "native schema read succeeds");
                 // Admission consumes exact native evidence, before model-facing projection removes runtime revisions.
-                var evidence = new ChatMessage { Role = "tool", ToolResultRole = "tool", ToolName = call.Name, ToolCallId = call.Id,
+                var evidence = new ChatMessage { Role = "user", ToolResultRole = "user", ToolName = call.Name, ToolCallId = call.Id,
                     RunId = session.LastRun.RunId, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                     Content = ToolResultWire.Write(call.Id, call.Name, read.Result), ProtocolMessage = true };
                 ToolResultWireReadResult acceptedRead;
@@ -641,14 +632,11 @@ namespace RNAssistant.Harness
                             var schemaBytes = schemaToken == null ? 0 : Encoding.UTF8.GetByteCount(schemaToken.ToString(Newtonsoft.Json.Formatting.None));
                             var content = (string)exact["messages"][1]["content"];
                             AssertEqual(mode == AgentResponseModes.JsonSchema ? 0 : callable.Count,
-                                content.Split(new[] { "```json\n" }, StringSplitOptions.None).Length - 1,
+                                JObject.Parse(content)["tools"].Count(tool => tool["function"]["parameters"] != null),
                                 "strict wire omits duplicate schemas; fallback retains them");
-                            var marker = mode == AgentResponseModes.JsonSchema ? RuntimeContextPrompt.SchemaDefinitions :
-                                RuntimeContextPrompt.Definitions(RuntimeContextPrompt.Tools(callable).OfType<JObject>());
-                            AssertContains(content, marker, "exact prompt contains the callable section");
-                            var without = (JObject)exact.DeepClone();
-                            without["messages"][1]["content"] = content.Replace(marker, "");
-                            var toolsBytes = retained.Length - LlmHttpTransport.SerializeJson(without).Length;
+                            var contextJson = JObject.Parse(content);
+                            var toolsBytes = Encoding.UTF8.GetByteCount(contextJson["tools"].ToString(Newtonsoft.Json.Formatting.None));
+                            AssertEqual(mode != AgentResponseModes.JsonSchema, contextJson["tools"][0]["function"]["parameters"] != null, "schemas live in the selected transport");
                             var otherMessagesBytes = messagesBytes - toolsBytes;
                             var otherFieldsBytes = retained.Length - messagesBytes - schemaBytes;
                             Console.WriteLine("REQUEST_SIZE " + (selection.Length == 0 ? "core" : selection) + " " + mode +
@@ -1356,8 +1344,8 @@ namespace RNAssistant.Harness
                 var folded = compiler.Compile(authority, new ChatMessage[0], new[] { ContinuityCall(mutation), mutation }, null,
                     new RNAssistant.Core.Tools.ToolCatalogEntry[0], new AppSettings(), 10000);
                 AssertEqual(2, folded.Messages.Count, "latest operation is a pair");
-                AssertTrue(folded.Messages[1].Content != mutation.Content, "canonical mutation presentation changes the original text");
-                AssertEqual(ContextPresentationKind.Unknown, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).Presentation, "changed mutation text without body evidence must not claim full source delivery");
+                AssertEqual(mutation.Content, folded.Messages[1].Content, "already canonical safe mutation result remains unchanged");
+                AssertEqual(ContextPresentationKind.Full, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).Presentation, "unchanged canonical result is fully included, without claiming an exact resource read");
                 AssertEqual(mutation.ToolCallId, folded.Receipt.Messages.Single(e => e.SourceMessageId == mutation.Id).ToolCallId,
                     "exact tool operation ID reaches the result receipt");
             });

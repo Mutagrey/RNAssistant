@@ -26,7 +26,7 @@ namespace RNAssistant.Harness
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 "pack", new SkillCatalogSnapshot(null), null, 1);
             var compiler = new ModelContextCompiler();
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             foreach (var status in new[] { ToolResultStatus.Ok, ToolResultStatus.Error, ToolResultStatus.Unknown })
             {
                 var result = ContinuityResult("recent", "core.write", new ToolResult(status,
@@ -82,7 +82,7 @@ namespace RNAssistant.Harness
         {
             var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
                 "pack", new SkillCatalogSnapshot(null), null, 1);
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             {
                 var old = ContinuityResult("old", "core.write", ToolResult.Error("Already exists.", "{\"code\":\"target_exists\"}"), role);
                 old.ResourceEffect = new ResourceEffect("effect", "create", ResourceEffectOutcome.FailedNoEffect);
@@ -125,7 +125,7 @@ namespace RNAssistant.Harness
                 new ResourceAuthoritySnapshot(scope, 1, null, 0, new[] { ResourceHeadState.Known(source, 1) }) });
             var authority = new ModelAuthoritySnapshot(resources, "pack1", new SkillCatalogSnapshot(null), null, 1);
             var compiler = new ModelContextCompiler(projection: ModelToolResultProjection.Instance);
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             {
                 var failed = ContinuityResult("failed", "core.read", ToolResult.Error(
                     "This target exposes records at $. Omit path or pass that exact value.",
@@ -189,7 +189,7 @@ namespace RNAssistant.Harness
 
         private static void ContextContinuityNarrationSurvivesCompaction()
         {
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             WithTempPaths(paths => {
                 const string finding = "Totals differ; inspect formulas before choosing a correction.";
                 var chats = new ChatStore(paths);
@@ -323,7 +323,7 @@ namespace RNAssistant.Harness
                 var blobs = new RNAssistant.Core.Storage.ChatBlobStore(paths);
                 var full = failed.Content;
                 failed.ResultPayload = PayloadRef.FromBlob(blobs.StoreText(full, "application/json"));
-                failed.Content = "TOOL_RESULT:\n" + ToolResultWire.Write("browser", "web.verify", ToolResult.Error("Archived diagnostic."));
+                failed.Content = ToolResultWire.Write("browser", "web.verify", ToolResult.Error("Archived diagnostic."));
                 var compiler = new ModelContextCompiler(blobs);
                 Func<ResourceHeadState, ModelAuthoritySnapshot> authority = head => new ModelAuthoritySnapshot(
                     new ResourceAuthoritySnapshotSet(new[] { new ResourceAuthoritySnapshot(scope, 2, null, 0,
@@ -372,7 +372,7 @@ namespace RNAssistant.Harness
 
         private static void ContextContinuityHydratesArchivedDiagnostics()
         {
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             foreach (var status in new[] { ToolResultStatus.Error, ToolResultStatus.Unknown })
             WithTempPaths(paths =>
             {
@@ -392,7 +392,7 @@ namespace RNAssistant.Harness
                 var header = new JObject { ["payload_externalized"] = true, ["complete"] = true, ["characters"] = full.Length };
                 var json = ToolResultWire.WriteParsed(inline.ToolCallId, inline.ToolName,
                     new ToolResult(status, "Inspect the failed hunk.", header.ToString()), header);
-                archived.Content = role == "tool" ? json : "TOOL_RESULT:\n" + json;
+                archived.Content = json;
                 var checkpoint = new ContextCheckpoint { ThroughMessageId = archived.Id,
                     Claims = new List<StructuredContextClaim> { new StructuredContextClaim {
                         ClaimId = "c", Kind = "interpretation", Text = "Continue.", SourceRoles = new List<string> { "assistant" },
@@ -453,7 +453,7 @@ namespace RNAssistant.Harness
 
         private static void ContextContinuityKeepsArchivedTargets()
         {
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             foreach (var tool in new[] { "core.write", "resources.move" })
             foreach (var externalized in new[] { false, true })
             WithTempPaths(paths =>
@@ -533,14 +533,14 @@ namespace RNAssistant.Harness
                 var compiled = compiler.Compile(authority, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                     new AppSettings(), externalized ? 12000 : 100000, workingSet: set);
                 AssertEqual(0, compiled.Receipt.OperationReceipts, "oversized receipts do not fit the optional token budget");
-                var budgetOmission = compiled.Receipt.Messages.First(item => item.Role == "tool" &&
+                var budgetOmission = compiled.Receipt.Messages.First(item => item.Role == "user" &&
                     item.ExclusionKind == ContextExclusionKind.OperationBudget);
                 var skippedCall = session.Messages.First(item => item.Role == "assistant" &&
                     item.ToolCallId == budgetOmission.ToolCallId);
                 AssertEqual(ContextExclusionKind.OperationBudget,
                     compiled.Receipt.Messages.Single(item => item.SourceMessageId == skippedCall.Id).ExclusionKind.Value,
                     "a skipped archived call and result share their actual budget decision");
-                AssertTrue(compiled.Receipt.Messages.Any(item => item.Role == "tool" &&
+                AssertTrue(compiled.Receipt.Messages.Any(item => item.Role == "user" &&
                     item.ExclusionKind == ContextExclusionKind.OperationSelectionLimit),
                     "bounded candidate admission has a distinct trace reason");
                 AssertTrue(projected > 0 && projected <= 64, "rejected optional candidates count toward the work limit");
@@ -587,7 +587,7 @@ namespace RNAssistant.Harness
                 new { Tool = "core.patch", Targets = new[] { "app.js" } },
                 new { Tool = "core.patch",
                     Targets = new[] { "HTML file: index.html", "HTML file: app.js" } } })
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             foreach (var outcome in new[] { ResourceEffectOutcome.VerifiedChanged, ResourceEffectOutcome.VerifiedNoChange,
                 ResourceEffectOutcome.FailedNoEffect, ResourceEffectOutcome.UnknownAfterDispatch })
             {
@@ -869,10 +869,7 @@ namespace RNAssistant.Harness
                     "actionable recovery reaches the actual next request");
                 AssertContains(FlattenSimple(requests.Last()), "CURRENT_BODY",
                     "the alternative route delivers the source to the model");
-                var deliveredRead = requests.Last().Where(message => message.Content != null &&
-                        message.Content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal))
-                    .Select(message => JObject.Parse(message.Content.Substring("TOOL_RESULT:\n".Length)))
-                    .Last(root => (string)root["name"] == "core.read" && (string)root["status"] == "ok");
+                var deliveredRead = LastToolResult(requests.Last(), "core.read");
                 var canonicalRead = session.Messages.Last(message => message.ToolName == "core.read" &&
                     message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok);
                 AssertEqual(canonicalRead.ResourceModelReferences.Single().Alias, (string)deliveredRead["data"]?["ref"],
@@ -914,9 +911,9 @@ namespace RNAssistant.Harness
                 AssertContains(string.Join("\n", restored.Messages.Select(item => item.Content)), body, "the complete current source survives compaction");
                 AssertEqual("source", restored.DeliveredObservations.Single().EvidenceId, "synthetic archived body retains delivery authority");
                 var restoredView = ModelReferenceProjection.Project(restored.Messages.Where(message => message.SyntheticResourceObservation).ToArray()).Single();
-                var restoredHeader = JObject.Parse(restoredView.Content.Split('\n')[1]);
+                var restoredHeader = JObject.Parse(restoredView.Content);
                 AssertEqual("R1@v1", (string)restoredHeader["ref"], "compiler binds the hydrated CAS view to its retained reference");
-                AssertTrue(restoredView.Content.EndsWith(body, StringComparison.Ordinal), "reference projection preserves the hydrated CAS bytes");
+                AssertEqual(body, (string)JObject.Parse(restoredView.Content)["text"], "reference projection preserves the hydrated CAS text");
                 var write = ContinuityResult("large_write", "core.write", ToolResult.Ok("Written.", "{\"target\":\"other.txt\"}"));
                 write.ResourceEffect = new ResourceEffect("fx", "core.write", ResourceEffectOutcome.VerifiedChanged);
                 var writeCall = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "large_write", Name = "core.write",
@@ -927,8 +924,8 @@ namespace RNAssistant.Harness
                 var enoughRoom = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
                     new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 6000,
                     workingSet: ContextWorkingSet.Restore(session, withLargeFrame, 5000));
-                AssertTrue(enoughRoom.Messages.SelectMany(item => item.ToolCalls).Any(item =>
-                    item.Id == "large_write" && item.ArgumentsJson.Contains(new string('x', 12000))),
+                AssertTrue(enoughRoom.Messages.Any(item => item.AcceptedCallOrigin != null &&
+                    item.ToolCallId == "large_write" && JObject.Parse(item.Content)["tool_calls"][0]["arguments"]["content"].Value<string>() == new string('x', 12000)),
                     "actual fitting source does not fold history merely to fund an unused reservation");
                 var funded = compiler.Compile(authority, new ChatMessage[0], withLargeFrame, null,
                     new ToolCatalogEntry[0], new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 2500,
@@ -1026,7 +1023,7 @@ namespace RNAssistant.Harness
 
         private static void ContextContinuityKeepsChronologicalReadBodies()
         {
-            foreach (var role in new[] { "user", "developer", "tool" })
+            foreach (var role in new[] { "user" })
             foreach (var scenario in new[] { "identical", "partial", "table", "empty", "metadata", "different-body", "scope", "resource", "coverage", "view" })
             {
                 var scope = new ResourceAuthorityScopeId("document", "p4");
@@ -1089,14 +1086,14 @@ namespace RNAssistant.Harness
                 }
                 Func<int, JObject> dataAt = index => {
                     var content = (string)wire[index]["content"];
-                    return JObject.Parse(content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal) ? content.Substring(13) : content);
+                    return (JObject)JObject.Parse(content)["results"][0];
                 };
                 var deliveredFirst = dataAt(2);
                 AssertEqual("ok", (string)deliveredFirst["status"], "body omission never rewrites the actual read outcome");
                 AssertEqual("E1", (string)deliveredFirst["evidence"], "historical eligible evidence remains visible");
                 if (duplicate)
                 {
-                    AssertEqual("T2", (string)deliveredFirst["data"]["observation"]["retainedAt"], "wire pointer uses the issued call alias");
+                    AssertEqual("E2", (string)deliveredFirst["data"]["observation"]["retainedAt"], "wire pointer uses delivered result evidence");
                     AssertEqual("R1@v1", (string)deliveredFirst["data"]["observation"]["ref"], "omitted body keeps its observed version");
                     AssertEqual("duplicate", (string)deliveredFirst["data"]["observation"]["omittedReason"], "omission is explicit");
                     AssertEqual(ContextExclusionKind.DuplicateBody, earlier.ExclusionKind.Value, "Inspector identifies deduplication");
@@ -1145,7 +1142,7 @@ namespace RNAssistant.Harness
                 current, new ChatMessage[0], new ChatMessage[0], null, new ToolCatalogEntry[0],
                 new AppSettings { ToolResultRole = ToolResultRoles.Tool }, 6000, workingSet: set);
             AssertEqual(1, restored.Receipt.RetainedBodies, "current exact line window is retained after compaction");
-            var retained = restored.Messages.Single(item => item.Role == "tool" && item.ToolCallId == "lines" &&
+            var retained = restored.Messages.Single(item => item.Role == "user" && item.ToolCallId == "lines" &&
                 item.ToolResultProtocolVersion == ToolResultWire.CurrentVersion);
             ToolResultWireReadResult wire; string error;
             AssertTrue(ToolResultHistoryReader.TryRead(retained, out wire, out error),

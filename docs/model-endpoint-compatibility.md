@@ -2,78 +2,45 @@
 
 RNAssistant uses an OpenAI-compatible Chat Completions endpoint.
 
-## Response format and accepted history — 2026-10-30
+## Production JSON profile — 2026-11-02
 
-Agent settings expose two independent choices: **Формат нового ответа**
-(`json_object` or `json_schema`) and **Формат истории** (JSON in content or
-Native tools). The model still generates the V8 decision as JSON in `content`.
-After acceptance, native history serializes execute calls as `assistant.tool_calls`
-and matching `role: tool` results, for either response format. Assistant `content`
-retains the accepted decision as JSON: `action:execute`, `reason`, `message`.
-Only the calls move to the native field; they are not duplicated inside content.
-Finish keeps `action`, `reason`, `outcome`, `results`, `message`; reflection keeps
-`action`, `reason`, `decision`, `message`, including across user turns.
-The final wire projection builds this from canonical accepted facts; it does not
-rewrite stored events or parse the projected partial execute as a new response.
-Native function generation by the provider is a separate capability and is not required here.
+Agent settings choose `json_object` (default) or explicit `json_schema`. Both use
+one JSON history profile: complete accepted decisions in assistant content, typed
+`tool_results` in user content, batch-local `call_index`; no invented model IDs or
+native projection. Nonfinal message is optional. Strict-schema support is required
+only when selected; an unsupported API returns an error without automatic fallback.
+The exact contract and examples belong to [Conversation Response v8](protocols/CONVERSATION_RESPONSE_V8.md).
 
-JSON history uses accepted execute JSON in assistant content and `TOOL_RESULT`
-messages with a user/developer role. Native history shows the fixed `tool` role;
-JSON history lets the user choose user/developer. The form maps these combinations to the existing typed
-`ToolResultRole`: tool for native, user/developer for JSON. There is no duplicate
-persisted switch that can disagree with the transport, and existing settings keep
-their behavior on reopening. Response-format fallback does not change history.
+The form reuses existing controls and JSON viewers. Its example follows unsaved
+controls and is labelled a draft. The instruction role remains separate from result transport; Workspace retains its
+existing system/developer instruction-role restriction. Applied settings are acknowledged by the shared
+save flow and captured on the next run, without restart; an active run remains frozen.
+Older role/fallback settings produce a visible migration notice. Old chats remain
+readable but require a new chat for reference-contract revision 4.
 
-| New content response | Accepted call history | Result message |
-|---|---|---|
-| `json_object` or `json_schema` | JSON in `assistant.content` | `user` + `TOOL_RESULT` |
-| `json_object` or `json_schema` | JSON in `assistant.content` | `developer` + `TOOL_RESULT` |
-| `json_object` or `json_schema` | Decision in content + native `assistant.tool_calls` | `tool` paired by `tool_call_id` |
+Native history variants and a true provider-call/result/continuation cycle are
+laboratory probes only. `role:tool` without a preceding native assistant call and
+matching `tool_call_id` is not a portable Chat Completions profile. API acceptance,
+rendered model input and inference behavior are distinct evidence.
 
-An unpaired `role:tool` after a call existing only inside a content string is not
-an additional portable mode. OpenAI's [Chat Completions tool message contract](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
-requires the corresponding call ID; the [function-calling flow](https://developers.openai.com/api/docs/guides/function-calling)
-appends the assistant call before its tool result. [Ollama's tool-calling examples](https://docs.ollama.com/capabilities/tool-calling)
-also retain assistant `tool_calls` before tool messages. Endpoint-specific acceptance
-and model behavior require separate qualification; merely selecting a role cannot
-establish either. No extra persisted flag or duplicate native/content calls is added.
+Diagnostic revision 5 has 26 scenarios. B2 marker correctness qualifies content
+visibility even when the model returns `tool_call_id:null`. ID visibility is a
+separate verdict. B5 includes semantic targets; B5-opaque removes them and marks
+pairing inconclusive when invisible IDs make the reversed results ambiguous.
+B8-cycle uses an actual provider-returned ID, a new synthetic result marker and a
+second request; both exchanges are retained. C2-tools sends the v8 schema with
+real base Core tool definitions, not the complete live Office catalog. A3/A4 are
+sample-parser checks, not free generation qualification. C6 remains an explicitly
+experimental developer-role probe, not a production setting.
 
-Prompt schema 64 projects only the selected history guidance into the owned Agent
-Contract. Native history omits the fallback `TOOL_RESULT`, `tool_call_id` and
-runtime-added JSON `id` explanation; output V8 fields remain required. The frozen
-source, user content, accepted calls and loaded skills are unchanged. Strict
-output removes duplicate shape examples; object fallback restores the object
-contract while keeping the same history guidance. Harness covers 36 combinations
-of response format, history role, Office instruction role and reflection on/off,
-plus repair/explicit fallback across 18 settings combinations. This wire-level
-matrix does not remove the existing Workspace restriction to system/developer
-instructions. The shipped form checks selection, matching examples and save/reopen
-without calling an endpoint.
-New execute decisions must include nonempty `tool_calls` in their content JSON;
-the historical projection is explicitly not a template for a fresh response.
-The photo-shaped `action/reason/message` reply is checked with JSON/SSE, both
-response modes and with/without separate provider-native calls. Native presence
-is captured as `NativeToolCallsObserved`; it does not enable native dispatch.
-Reason/decision/criterion brevity rules are identical in object instructions and
-strict field descriptions; they do not introduce truncation or a character limit.
+The offline [Qwen fixture](../tests/protocol/qwen38/README.md) pins upstream bytes
+and tests content/ID rendering without inference. Its snapshot requires a declared
+local Jinja test alias; it does not establish the deployed endpoint template.
+Models and Office were not run. The user's real endpoint and Windows qualification
+remain open; old diagnostic results retain their original scenario revision.
 
-The expandable example shows a fresh model response and the next request's
-accepted history through the shared JSON viewer. It follows unsaved controls and
-labels them as a draft; it is not a captured request or endpoint probe.
-Successful saves apply to the next run, including reprojecting earlier accepted
-history. Sent requests and stored Inspector snapshots remain unchanged. The
-synthetic save → run check reuses one SettingsService, executor, conversation
-service and chat across four changes. In-flight control edits survive a save
-response and tab navigation; failed saves remain visible and do not update the
-acknowledged settings. The user's Windows restart symptom is not yet reproduced.
-
-A retained native call has `content` equivalent to
-`{"action":"execute","reason":"Inspect the requested module.","message":"Reading Module1."}`
-and a separate `tool_calls:[{"id":"T1","type":"function","function":{"name":"core.read","arguments":"..."}}]`.
-Finish and reflection stay complete JSON decisions without native calls.
-Budget folding may replace an older call/result with an explicitly labelled
-assistant update and operation receipt; it never presents that receipt as a full
-original decision. Selected full decisions use the shapes above.
+The following P2–P5 sections describe earlier slices; where history transport or
+reference revision differs, the current v8 contract above takes precedence.
 
 ## Current P2 contract — 2026-10-30
 
@@ -454,9 +421,9 @@ The chat model consumes every media modality it declares directly in the normal 
 
 ## Failure behavior
 
-- Invalid conversation JSON in either mode receives bounded clean format repair: `MaxAgentFormatRetries` allows 1–20 total protocol responses including the first (default 10). Rejected raw attempts do not become accepted history; exhausting the limit stops the run.
+- Invalid conversation JSON in either mode receives bounded clean format repair: `MaxAgentFormatRetries` allows 1–20 total protocol responses including the first (default 3; two consecutive identical invalid responses stop early). Rejected raw attempts do not become accepted history; exhausting the limit stops the run.
 - `finish_reason=length` permits one shorter complete proposal inside that budget; repeated truncation is a typed failure. A truncated proposal never dispatches tools.
 - Typed timeout, network and transient server failures may retry the exact request at most twice per logical step, after 1s and 2s. Authorization, other HTTP errors, 429, invalid provider envelopes and cancellation do not retry. Tools and uncertain effects never replay because a model request was retried.
-- An explicit format-support rejection of `json_schema` may switch once to `json_object` when fallback is enabled. Invalid schema and ordinary provider errors do not trigger this fallback.
+- Unsupported or invalid `json_schema` is a provider failure. No automatic response-format fallback is performed.
 - Unknown tools and invalid arguments are rejected locally before Office execution.
 - A tool failure is returned as typed Tool Result evidence. The model may propose a next action, but runtime guards prevent automatic repetition of an unknown effect.

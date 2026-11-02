@@ -12,6 +12,21 @@ Owner: Web HtmlWorkspace source reader. В
 срез source reader с существующими checks bounds/cache/cancel/lease cleanup; mutation,
 runtime и format contracts менять не требуется.
 
+## JSON-профиль: оставшееся evidence — 2026-11-02
+
+Фотографии с добавленным `id`, пустым execute и отсутствующим nonfinal message
+учтены в локальном контракте и repair fixtures. Причину поведения конкретного
+endpoint по фото полностью установить нельзя. B2 с правильным marker/null ID
+теперь отличает видимость content от внешнего ID; это не доказательство native
+поддержки. Production больше не меняет JSON-ответ на native history.
+
+Открыто: реальная траектория JSON-профиля на машине пользователя, применяемый
+сервером Qwen-шаблон, работа full-schema API и native-cycle. Offline fixture
+фиксирует bytes шаблона и явно объявленный local Jinja adapter; ни inference, ни
+серверный шаблон этим не квалифицированы. Windows/Office/WebView2 не запускались.
+Owner: Core ModelProtocol/diagnostics; native production отложен отдельно.
+
+
 ## Office host menu fixture — 2026-11-02
 
 Owner: Web test fixtures. `office-host-chat-layout` подключает ChatState без

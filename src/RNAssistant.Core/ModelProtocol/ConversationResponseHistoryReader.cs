@@ -30,36 +30,9 @@ namespace RNAssistant.Core.ModelProtocol
                 return ConversationHistoryReadResult.Fail("History record is not an identified v8 assistant response.");
             ConversationResponseParseResult parsed;
             var nativeCalls = message.ToolCalls;
-            // Native tool transport stores plain narration plus a runtime call;
-            // user/developer transport stores the identified v8 envelope.
             if (nativeCalls != null && nativeCalls.Count > 0)
-            {
-                if (message.ToolResultRole != ToolResultRoles.Tool ||
-                    message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
-                    nativeCalls.Count != 1 || nativeCalls[0] == null ||
-                    string.IsNullOrWhiteSpace(message.ResponseReason) ||
-                    string.IsNullOrWhiteSpace(message.ToolName) ||
-                    string.IsNullOrWhiteSpace(nativeCalls[0].ArgumentsJson) ||
-                    nativeCalls[0].Type != "function" ||
-                    nativeCalls[0].Id != message.ToolCallId || nativeCalls[0].Name != message.ToolName)
-                    return ConversationHistoryReadResult.Fail("Native v8 call lacks reason, runtime ID, exact name or arguments.");
-                var envelope = new JObject
-                {
-                    ["action"] = ConversationResponse.ExecuteAction,
-                    ["reason"] = message.ResponseReason,
-                    ["tool_calls"] = new JArray(new JObject
-                    {
-                        ["name"] = message.ToolName,
-                        ["arguments"] = new JRaw(nativeCalls[0].ArgumentsJson)
-                    }),
-                    ["message"] = message.Content ?? string.Empty
-                }.ToString(Formatting.None);
-                parsed = ConversationResponseJson.Read(envelope);
-            }
-            else
-            {
-                parsed = ConversationResponseJson.Read(message.Content);
-            }
+                return ConversationHistoryReadResult.Fail("Native history is not part of the JSON profile. Start a new chat.");
+            parsed = ConversationResponseJson.Read(message.Content);
             if (!parsed.Success) return ConversationHistoryReadResult.Fail(parsed.Error);
             var response = parsed.Response;
             if (response.Action == ConversationResponse.ExecuteAction)
@@ -68,9 +41,7 @@ namespace RNAssistant.Core.ModelProtocol
                     string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin == null ||
                     string.IsNullOrWhiteSpace(message.AcceptedCallOrigin.ModelAttemptId) ||
                     message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
-                    message.ToolResultRole != ToolResultRoles.User && message.ToolResultRole != ToolResultRoles.Developer &&
-                    message.ToolResultRole != ToolResultRoles.Tool ||
-                    (message.ToolResultRole == ToolResultRoles.Tool) != (nativeCalls != null && nativeCalls.Count == 1) ||
+                    message.ToolResultRole != ToolResultRoles.User ||
                     response.ToolCalls[0].Name != message.ToolName)
                     return ConversationHistoryReadResult.Fail("Accepted v8 call metadata disagrees with its envelope.");
                 return ConversationHistoryReadResult.Ok(new AgentResponse(

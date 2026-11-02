@@ -72,8 +72,11 @@ namespace RNAssistant.Core.ModelProtocol
                 return Fail(ConversationResponseError.WrongActionFields, "action=" + action + " forbids root field " + unsupported.Name + ".");
             if (!Nonblank(root["reason"]))
                 return Fail(ConversationResponseError.MissingReason, "A nonblank string reason is required.");
-            if (root["message"] == null || root["message"].Type != JTokenType.String)
-                return Fail(ConversationResponseError.MissingMessage, "A string message is required; finish requires a nonblank answer.");
+            if (root["message"] != null && root["message"].Type != JTokenType.String ||
+                action == ConversationResponse.FinishAction && root["message"] == null)
+                return Fail(ConversationResponseError.MissingMessage, action == ConversationResponse.FinishAction
+                    ? "finish requires a nonblank string message containing the answer."
+                    : "message is optional; omit it when no update is needed, or provide a string. null is invalid.");
             var reason = (string)root["reason"];
             var message = (string)root["message"];
             if (action == ConversationResponse.ExecuteAction) return ReadExecute(root, reason, message,

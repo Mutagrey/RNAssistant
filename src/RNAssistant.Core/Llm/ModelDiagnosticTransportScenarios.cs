@@ -19,7 +19,12 @@ namespace RNAssistant.Core.Llm
             };
             cases.AddRange(history.Where(item => item.Id.StartsWith("B")));
             cases.Add(NativeGeneration(seed)); cases.Add(MultiRun(seed));
+            var cycle = NativeGeneration(seed); cycle.Id = "B8-cycle"; cycle.NativeRoundTrip = true; cases.Add(cycle);
             cases.Add(V8("C1", seed)); cases.Add(V8("C2", seed, strict: true));
+            var fullSchema = V8("C2-tools", seed, strict: true);
+            fullSchema.CallableTools.AddRange(CapabilityToolCatalog.GetTools().Concat(ResourceMutationToolCatalog.GetTools())
+                .Concat(TaskListToolCatalog.GetTools()).Concat(UserQuestionToolCatalog.GetTools()));
+            cases.Add(fullSchema);
             cases.Add(Schema("C3-valid", seed)); cases.Add(Schema("C3", seed, invalid: true));
             cases.Add(Schema("C3-text", seed, text: true));
             var control = V8("C4", seed);
@@ -110,7 +115,7 @@ namespace RNAssistant.Core.Llm
             var marker = Marker(seed, "B9-current");
             result.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = "T4", Content = new JObject { ["marker"] = marker }.ToString(Formatting.None) });
             result.Messages.Add(new ChatMessage { Role = "user", Content =
-                "Return raw JSON with exactly target, marker and tool_call_id for the latest ModuleB result in this conversation. No Markdown." });
+                "Return raw JSON with exactly target, marker and tool_call_id for the latest ModuleB result in this conversation; tool_call_id may be null when invisible. No Markdown." });
             result.ExpectedJson = Answer(marker, "T4").ToString(Formatting.None);
             return result;
         }

@@ -80,9 +80,10 @@ namespace RNAssistant.Core.Models
         public string StepId { get; private set; }
         public string ModelAttemptId { get; private set; }
         public int CallIndex { get; private set; }
+        public int CallCount { get; private set; }
 
         [JsonConstructor]
-        public AcceptedToolCallOrigin(string stepId, string modelAttemptId, int? callIndex)
+        public AcceptedToolCallOrigin(string stepId, string modelAttemptId, int? callIndex, int? callCount = null)
         {
             if (string.IsNullOrWhiteSpace(stepId) || string.IsNullOrWhiteSpace(modelAttemptId) ||
                 !callIndex.HasValue || callIndex.Value < 0)
@@ -90,11 +91,18 @@ namespace RNAssistant.Core.Models
             StepId = stepId;
             ModelAttemptId = modelAttemptId;
             CallIndex = callIndex.Value;
+            CallCount = callCount ?? 1;
+            if (CallCount <= CallIndex || CallCount > RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.MaximumToolCalls) throw new ArgumentException("Call index exceeds its accepted batch.");
         }
     }
 
     public sealed class ChatMessage
     {
+        // Request-local provenance for grouped JSON exchanges; never durable state.
+        [JsonIgnore]
+        public List<string> ProjectedSourceMessageIds { get; set; }
+        [JsonIgnore]
+        public List<string> ProjectedEvidenceReferences { get; set; }
         public string Id { get; set; }
         public string Role { get; set; }
         public string Content { get; set; }

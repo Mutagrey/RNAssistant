@@ -10,7 +10,8 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Core.ModelProtocol
 {
     // One instance per conversation run. Only endpoint-format compatibility is
-    // retained between steps; rejected responses and repair prompts are never retained.
+    // retained between steps. The latest rejected content is a bounded diagnostic
+    // within this request's repair only; no rejected response becomes accepted history.
     public interface IMaterializedModelProtocol
     {
         Task<ModelProtocolResult> GetResponseAsync(
@@ -43,7 +44,6 @@ namespace RNAssistant.Core.ModelProtocol
         public Action<bool, bool> AttemptStarted { get; set; }
         public Action<LlmStreamUpdate> StreamUpdate { get; set; }
         public Action AttemptCompleted { get; set; }
-        public Action JsonObjectFallback { get; set; }
         public Action OptionalTraceFailed { get; set; }
     }
 

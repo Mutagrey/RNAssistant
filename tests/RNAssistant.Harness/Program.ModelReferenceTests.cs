@@ -91,7 +91,7 @@ namespace RNAssistant.Harness
                 var reopened = new ChatStore(paths).Load(session.Id);
                 AssertEqual(3L, reopened.ToolCallReferenceSequence, "call high water survives SQLite/replay");
                 AssertEqual(2L, reopened.EvidenceReferenceSequence, "evidence high water is independent");
-                AssertEqual(3, reopened.ReferenceContractVersion, "reference boundary is durable");
+                AssertEqual(ConversationResponse.ReferenceContractVersion, reopened.ReferenceContractVersion, "reference boundary is durable");
                 var last = reopened.Messages.Single(message => message.Activity?.ToolCallId == ids.Last());
                 var trace = store.AppendTrace(reopened, SessionEventTypes.LlmRequest, new LlmTraceRecord {
                     ContextMessages = new List<ContextMessagePresentation> { new ContextMessagePresentation {
@@ -127,7 +127,7 @@ namespace RNAssistant.Harness
                 catch (ArgumentException) { }
             }
             AssertEqual("R1", ModelReference.Create(ModelReferenceKind.Resource, 1).Alias, "resource is a separate type");
-            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+            foreach (var role in new[] { ToolResultRoles.User })
             {
                 var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "call_canonical", Name = "test.read",
                     Arguments = new Dictionary<string, object> { ["text"] = "call_canonical e1 r2 日本語\nРусский" } },
@@ -140,24 +140,10 @@ namespace RNAssistant.Harness
                 var before = JsonConvert.SerializeObject(new[] { call, result });
                 var wire = ModelReferenceProjection.Project(new[] { call, result });
                 AssertEqual(before, JsonConvert.SerializeObject(new[] { call, result }), "projection preserves canonical bodies and identities");
-                if (role == ToolResultRoles.Tool)
-                {
-                    AssertEqual("T7", wire[0].ToolCalls.Single().Id, "native transport uses the call alias");
-                    AssertEqual("T7", wire[1].ToolCallId, "native result pairs literally with the call alias");
-                    var decision = JObject.Parse(wire[0].Content);
-                    AssertEqual("execute", (string)decision["action"], "native call preserves its decision");
-                    AssertEqual(call.ResponseReason, (string)decision["reason"], "native call preserves its reason");
-                    AssertEqual(call.Content, (string)decision["message"], "native decision preserves narration");
-                    AssertTrue(decision["tool_calls"] == null && decision["tool_call_id"] == null, "native decision has no duplicate call fields");
-                    var http = JArray.FromObject(new LlmMessageBuilder().Build(wire, new AppSettings()).Messages);
-                    AssertEqual("T7", (string)http[0]["tool_calls"][0]["id"], "serialized native call uses T");
-                    AssertEqual("T7", (string)http[1]["tool_call_id"], "serialized native result pairs exactly");
-                    AssertTrue(JObject.Parse((string)http[1]["content"])["tool_call_id"] == null,
-                        "serialized native content contains no duplicate correlation ID");
-                }
-                else AssertEqual("T7", (string)JObject.Parse(wire[0].Content)["tool_calls"][0]["id"], "accepted model history adds runtime reference");
-                var resultJson = JObject.Parse(wire[1].Content.Replace("TOOL_RESULT:\n", ""));
-                AssertEqual(role == ToolResultRoles.Tool ? null : "T7", (string)resultJson["tool_call_id"], "native content omits duplicate correlation; fallback retains T");
+                AssertTrue(JObject.Parse(wire[0].Content)["tool_calls"][0]["id"] == null, "accepted call shape has no invented ID");
+                var resultJson = (JObject)JObject.Parse(wire[1].Content)["results"][0];
+                AssertEqual(0, (int)resultJson["call_index"], "batch-local mapping");
+                AssertTrue(resultJson["tool_call_id"] == null, "runtime correlation stays private");
                 AssertEqual("E3", (string)resultJson["evidence"], "terminal evidence has its own sequence");
                 AssertTrue(wire[1].Content.Contains("call_canonical e1 r2"), "literal business data is not rewritten");
                 AssertEqual("business value", (string)resultJson["data"]["observation"]["retainedAt"], "generic business fields are not compiler pointers");
@@ -166,7 +152,7 @@ namespace RNAssistant.Harness
                 AssertTrue(ToolResultHistoryReader.TryRead(result, out parsed, out error), "canonical result remains readable");
                 var folded = ModelContextCompiler.CompleteOperation(result, parsed, call: call);
                 var projectedFold = ModelReferenceProjection.Project(new[] { folded });
-                AssertTrue(projectedFold[0].Content.Contains("\"tool_call_id\":\"T7\""), "folded receipt retains the execution reference");
+                AssertTrue(!projectedFold[0].Content.Contains("\"tool_call_id\""), "folded receipt does not invent transport identity");
                 AssertTrue(ModelReferenceProjection.Delivered(projectedFold).SequenceEqual(new[] { "E3" }), "folded receipt remains deliverable without the full body");
                 call.ToolCallReference = null;
                 try { ModelReferenceProjection.Project(new[] { call }); throw new Exception("Canonical ID leaked without reference."); }
@@ -237,7 +223,7 @@ namespace RNAssistant.Harness
 
         private static async Task ModelReferencesFreezeRepairAndFallback()
         {
-            var request = NewProtocolRequest(2, true);
+            var request = NewProtocolRequest(2);
             var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "canonical-repair", Name = "test.read" },
                 "Read.", "Read source.", null, ToolResultRoles.User, FixtureCallOrigin());
             call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 9);
@@ -254,16 +240,15 @@ namespace RNAssistant.Harness
             {
                 attempts++;
                 var content = string.Join("\n", messages.Select(message => message.Content));
-                AssertTrue(content.Contains("\"id\":\"T9\"") && content.Contains("\"tool_call_id\":\"T9\"") && !content.Contains("canonical-repair"),
-                    "every strict/repair/fallback request keeps the same aliases");
-                if (attempts == 2) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported");
+                AssertTrue(content.Contains("\"evidence\":\"E5\"") && !content.Contains("canonical-repair") && !content.Contains("\"id\":\"T9\""),
+                    "strict and repair preserve evidence without invented call IDs");
                 return Task.FromResult(new LlmCompletionResult { Content = attempts == 1 ? "invalid" :
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Report read.", "Done.",
                         results: new[] { new ConversationResultClaim("Read.", new[] { "E5" }, ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed) });
             });
             var outcome = await protocol.GetResponseAsync(request, null, CancellationToken.None);
             AssertTrue(outcome.Failure == null, "reference projection allows bounded repair/fallback");
-            AssertEqual(3, attempts, "one invalid completion and one explicit format fallback");
+            AssertEqual(2, attempts, "one invalid completion and one corrected response");
             AssertTrue(outcome.DeliveredEvidenceReferences.SequenceEqual(new[] { "E5" }), "delivered set comes from successful final request");
             AssertTrue(ConversationResponseHistoryReader.Read(call).Success, "canonical history remains raw-decoder compatible");
         }
@@ -296,8 +281,8 @@ namespace RNAssistant.Harness
                 result.ResourceModelReferences = bindings.ToList();
                 return result;
             };
-            Func<ChatMessage, JObject> project = message => JObject.Parse(ModelReferenceProjection.Project(new[] {
-                new ModelResultProjection().Project(message) }).Single().Content.Substring("TOOL_RESULT:\n".Length));
+            Func<ChatMessage, JObject> project = message => (JObject)JObject.Parse(ModelReferenceProjection.Project(new[] {
+                ContinuityCall(message), new ModelResultProjection().Project(message) }).Last().Content)["results"][0];
             var reads = new[] { read(first), read(second), read(foreign) };
             var canonical = JsonConvert.SerializeObject(reads);
             var blocks = reads.Select(project).ToArray();
@@ -322,9 +307,9 @@ namespace RNAssistant.Harness
             foreach (var field in new[] { "text", "coverage", "representation" })
             {
                 var incomplete = read(first);
-                var root = JObject.Parse(incomplete.Content.Substring("TOOL_RESULT:\n".Length));
+                var root = JObject.Parse(incomplete.Content);
                 ((JObject)root["data"]).Remove(field);
-                incomplete.Content = "TOOL_RESULT:\n" + root.ToString(Formatting.None);
+                incomplete.Content = root.ToString(Formatting.None);
                 AssertTrue(project(incomplete)["data"]["ref"] == null, "missing " + field + " cannot assert source delivery");
             }
             var mismatched = read(first);
@@ -348,22 +333,22 @@ namespace RNAssistant.Harness
             var receipt = ModelContextCompiler.CompleteOperation(projectedRead, parsed,
                 new ResourceObservationNotice { BodyIncluded = false, State = EvidenceState.Unknown, Reason = "Body omitted." });
             var receiptWire = ModelReferenceProjection.Project(new[] { receipt }).Single().Content;
-            AssertContains(receiptWire, "\"tool_call_id\":\"T1\"", "omitted body keeps execution evidence");
+            AssertTrue(!receiptWire.Contains("\"tool_call_id\""), "receipt keeps runtime identity out of model data");
             AssertTrue(!receiptWire.Contains("R1@v1") && !receiptWire.Contains("resource_refs"), "receipt never claims source body delivery");
 
             foreach (var evidence in new[] { first, second, foreign })
             {
-                var header = new JObject { ["target"] = "example.txt", ["view"] = evidence.View,
+                var header = new JObject { ["type"] = "resource_observation", ["text"] = "source\n{\"ref\":\"literal\"}", ["target"] = "example.txt", ["view"] = evidence.View,
                     ["bodyIncluded"] = true, ["coverage"] = JObject.FromObject(evidence.Coverage) };
                 var view = new ChatMessage { Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
                     ResourceEvidence = new List<ResourceEvidence> { evidence }, ResourceModelReferences = bindings,
-                    Content = "CURRENT_RESOURCE_VIEW (data):\n" + header.ToString(Formatting.None) + "\nsource\n{\"ref\":\"literal\"}" };
+                    Content = header.ToString(Formatting.None) };
                 var visible = ModelReferenceProjection.Project(new[] { view }).Single().Content;
-                AssertEqual(evidence == foreign ? "R2@v1" : "R1@v1", (string)JObject.Parse(visible.Split('\n')[1])["ref"],
+                AssertEqual(evidence == foreign ? "R2@v1" : "R1@v1", (string)JObject.Parse(visible)["ref"],
                     "each retained view binds its own source without modifying the trailing bytes");
-                AssertTrue(visible.EndsWith("\nsource\n{\"ref\":\"literal\"}", StringComparison.Ordinal), "view body remains exact");
+                AssertEqual("source\n{\"ref\":\"literal\"}", (string)JObject.Parse(visible)["text"], "view body remains exact");
                 header["bodyIncluded"] = false;
-                view.Content = "CURRENT_RESOURCE_VIEW (data):\n" + header.ToString(Formatting.None) + "\n";
+                view.Content = header.ToString(Formatting.None);
                 AssertEqual(view.Content, ModelReferenceProjection.Project(new[] { view }).Single().Content,
                     "a header with an omitted body receives no source label");
             }
@@ -405,16 +390,16 @@ namespace RNAssistant.Harness
                 result.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
                 result.ResourceModelReferences = changed.ResourceModelReferences;
                 result.ResourceEvidence = changed.ResourceEvidence;
-                var wire = ModelReferenceProjection.Project(new[] { result }).Single().Content;
+                var wire = ModelReferenceProjection.Project(new[] { ContinuityCall(result), result }).Last().Content;
                 AssertTrue(wire.Contains("\"ref\":\"R1@v2\"") && !wire.Contains("resource_refs") && !wire.Contains("canonical-revision"),
                     "result exposes resource/version labels without exact runtime revisions");
                 AssertTrue(wire.Contains("r1@v2 literal"), "resource labels never rewrite business text");
                 var view = new ChatMessage { Role = "assistant", ProtocolMessage = true, SyntheticResourceObservation = true,
                     ResourceModelReferences = changed.ResourceModelReferences,
                     ResourceEvidence = changed.ResourceEvidence,
-                    Content = "CURRENT_RESOURCE_VIEW (data):\n{\"target\":\"example.txt\",\"view\":\"source\",\"bodyIncluded\":true,\"coverage\":{\"kind\":\"whole\",\"fields\":[]}}\nr1@v2 literal\n日本語" };
+                    Content = "{\"type\":\"resource_observation\",\"target\":\"example.txt\",\"view\":\"source\",\"bodyIncluded\":true,\"text\":\"r1@v2 literal\\n日本語\",\"coverage\":{\"kind\":\"whole\",\"fields\":[]}}" };
                 var projectedView = ModelReferenceProjection.Project(new[] { view }).Single().Content;
-                AssertTrue(projectedView.Contains("\"ref\":\"R1@v2\"") && projectedView.EndsWith("r1@v2 literal\n日本語"),
+                AssertTrue(projectedView.Contains("\"ref\":\"R1@v2\"") && (string)JObject.Parse(projectedView)["text"] == "r1@v2 literal\n日本語",
                     "current view changes only its owned header");
                 var staleTraceSession = new ChatStore(paths).Load(session.Id);
                 var trace = store.AppendTrace(session, SessionEventTypes.LlmRequest,

@@ -19,13 +19,10 @@ namespace RNAssistant.Core.Storage
                 message.ArgumentPayload != null && message.AcceptedCallPayload != null &&
                 message.AcceptedCallPayload.ContentType == ContentType &&
                 message.AcceptedCallOrigin != null &&
-                message.AcceptedCallNarration != null &&
                 !string.IsNullOrWhiteSpace(message.ToolCallId) &&
                 !string.IsNullOrWhiteSpace(message.ToolName) &&
                 message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
-                (message.ToolResultRole == ToolResultRoles.User ||
-                 message.ToolResultRole == ToolResultRoles.Developer ||
-                 message.ToolResultRole == ToolResultRoles.Tool) &&
+                message.ToolResultRole == ToolResultRoles.User &&
                 message.ToolCalls != null && message.ToolCalls.Count == 0;
         }
 

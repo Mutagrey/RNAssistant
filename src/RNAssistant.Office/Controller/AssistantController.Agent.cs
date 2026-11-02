@@ -591,7 +591,7 @@ namespace RNAssistant.Office
         {
             return message != null &&
                 (string.Equals(message.Role, ToolResultRoles.Tool, StringComparison.OrdinalIgnoreCase) ||
-                 (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
+                 message.ToolResultProtocolVersion == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion);
         }
 
         private static ChatMessage UpdatePendingActivity(ChatSession session,

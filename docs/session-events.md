@@ -1049,8 +1049,9 @@ and `EvidenceReferenceSequence` are independent replay-derived high waters. JSON
 SQLite share reducers; removal, compaction and forks preserve counters and bindings.
 SQLite projection version 5 rebuilds only derived state. Resource allocation is unchanged.
 
-New format-8 chats persist `ReferenceContractVersion=3`. Earlier/missing revisions
+New format-8 chats persist `ReferenceContractVersion=4`. Earlier/missing revisions
 remain read-only; incompatible continuations are not hydrated/recovered and no write
 or implicit upgrade is permitted. Canonical IDs, events/CAS and old raw bodies remain
-untouched. See [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+untouched. Revision 4 keeps T internal and pairs model-facing JSON batches by
+`call_index`; see [reference revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 Windows/Office/WebView2 qualification remains open.

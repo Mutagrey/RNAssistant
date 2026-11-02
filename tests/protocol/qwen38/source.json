@@ -1,0 +1,6 @@
+{
+  "source": "https://huggingface.co/Qwen/Qwen3.8-27B/resolve/366a23fd246985933964e9d21ac63eb3a93190ab/chat_template.jinja",
+  "revision": "366a23fd246985933964e9d21ac63eb3a93190ab",
+  "sha256": "0311cb7a5270baf5ca59c1fba08a60ea08a91b100c4c3cdf3937edb3a7edb285",
+  "scope": "Text-only offline rendering; no inference or Office access. The deployed endpoint template is not assumed."
+}

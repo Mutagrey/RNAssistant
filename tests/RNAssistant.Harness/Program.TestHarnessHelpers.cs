@@ -60,9 +60,9 @@ namespace RNAssistant.Harness
         }
 
         private static AcceptedToolCallOrigin FixtureCallOrigin(string stepId = "fixture-step",
-            string modelAttemptId = null, int callIndex = 0)
+            string modelAttemptId = null, int callIndex = 0, int callCount = 1)
         {
-            return new AcceptedToolCallOrigin(stepId, modelAttemptId ?? Guid.NewGuid().ToString("N"), callIndex);
+            return new AcceptedToolCallOrigin(stepId, modelAttemptId ?? Guid.NewGuid().ToString("N"), callIndex, callCount);
         }
 
         private static readonly AsyncLocal<AppDataPaths> FixturePaths = new AsyncLocal<AppDataPaths>();

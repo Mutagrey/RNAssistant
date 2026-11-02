@@ -86,9 +86,11 @@ namespace RNAssistant.Harness
             Func<ChatMessage> jsonMessage = () => AgentJsonProtocol.CreateToolCallMessage(
                 new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.",
                 "Read the requested item.", null, ToolResultRoles.User, FixtureCallOrigin());
-            Func<ChatMessage> nativeMessage = () => AgentJsonProtocol.CreateToolCallMessage(
-                new AgentToolCall { Id = "call_1", Name = "test.read" }, "Read.",
-                "Read the requested item.", null, ToolResultRoles.Tool, FixtureCallOrigin());
+            Func<ChatMessage> nativeMessage = () => {
+                var message = jsonMessage();
+                message.ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "call_1", Name = "test.read", ArgumentsJson = "{}" } };
+                return message;
+            };
             var missingId = jsonMessage();
             missingId.ToolCallId = null;
             AssertTrue(!ConversationResponseHistoryReader.Read(missingId).Success, "missing runtime identity fails closed");
@@ -96,7 +98,7 @@ namespace RNAssistant.Harness
             missingOrigin.AcceptedCallOrigin = null;
             AssertTrue(!ConversationResponseHistoryReader.Read(missingOrigin).Success, "missing raw-attempt mapping fails closed");
             var mismatched = nativeMessage();
-            mismatched.ToolCallId = "other";
+            mismatched.ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "other", Name = "test.read", ArgumentsJson = "{}" } };
             AssertTrue(!ConversationResponseHistoryReader.Read(mismatched).Success, "native/runtime metadata id mismatch fails closed");
             mismatched = jsonMessage();
             mismatched.ToolName = "another.tool";
@@ -350,9 +352,9 @@ namespace RNAssistant.Harness
                 var repaired = (JArray)requests[1]["messages"];
                 AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
                 AssertContains((string)repaired.Last()["content"], "FORMAT_REPAIR:", "unsupported continue receives protocol repair");
-                AssertContains((string)repaired.Last()["content"], responseMode == AgentResponseModes.JsonSchema ? ModelProtocolWire.SchemaGuidance : ModelProtocolWire.ActionGuidance, "repair carries the shared control contract");
                 var repairBody = JObject.Parse(((string)repaired.Last()["content"]).Substring("FORMAT_REPAIR:\n".Length));
-                AssertContains((string)repairBody["instruction"], ModelProtocolWire.MessageGuidance, "repair does not reintroduce per-call narration");
+                AssertContains((string)repairBody["instruction"], ModelProtocolWire.RepairResponseGuidance(responseMode == AgentResponseModes.JsonSchema, true), "repair follows the selected control contract without duplicating its full prompt");
+                AssertContains((string)repairBody["instruction"], ModelProtocolWire.MessageFieldGuidance, "repair does not require per-call narration");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("I will continue.")),
                     "rejected narrative never enters durable chat history");
                 if (responseMode == AgentResponseModes.JsonSchema)
@@ -1683,8 +1685,10 @@ namespace RNAssistant.Harness
                 AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
                 AssertContains(repair.Content, "Keep the envelope even when the task cannot be fulfilled",
                     "v8 format repair permits a truthful refusal in finish");
-                AssertTrue(FlattenSimple(requests[1]).IndexOf(invalid, StringComparison.Ordinal) < 0,
-                    "invalid raw response is not copied into repair prompt");
+                var diagnostic = JObject.Parse(repair.Content);
+                AssertEqual(invalid, (string)diagnostic["rejected_response"]["content"], "invalid raw response is quoted as diagnostic data");
+                AssertTrue(FlattenSimple(requests[1].Take(requests[1].Count - 1)).IndexOf(invalid, StringComparison.Ordinal) < 0,
+                    "invalid raw response never enters the accepted prompt prefix");
                 AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).IndexOf(invalid, StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
@@ -1896,10 +1900,17 @@ namespace RNAssistant.Harness
                     (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
                     (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_DIAGNOSTIC_REASONING", StringComparison.Ordinal) >= 0),
                     "failed completions do not enter stored context");
+                for (var index = 1; index < requests.Count; index++)
+                {
+                    var repair = JObject.Parse(requests[index].Last().Content);
+                    AssertEqual("PROTECTION_RESPONSE_" + index, (string)repair["rejected_response"]["content"],
+                        "only the latest rejected content enters the current diagnostic");
+                    AssertTrue(!requests[index].Take(requests[index].Count - 1).Any(message =>
+                        (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_")), "accepted request prefix stays clean");
+                }
                 AssertTrue(!requests.SelectMany(request => request).Any(message =>
-                    (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
-                    (message.ReasoningContent ?? string.Empty).Contains("INVALID_DIAGNOSTIC_REASONING")),
-                    "rejected responses do not enter later repair requests");
+                    (message.ReasoningContent ?? string.Empty).Contains("INVALID_DIAGNOSTIC_REASONING") ||
+                    (message.Content ?? string.Empty).Contains("INVALID_DIAGNOSTIC_REASONING")), "provider reasoning stays out of repairs");
             });
         }
 
@@ -1940,18 +1951,22 @@ namespace RNAssistant.Harness
                 AssertEqual("Ответ принят.", (string)JObject.Parse(accepted[0].Content)["message"],
                     "accepted v8 message is preserved");
                 AssertEqual("ACCEPTED_REASONING", accepted[0].ReasoningContent, "only accepted provider reasoning is retained");
-                AssertTrue(!session.Messages.Concat(requests.SelectMany(request => request)).Any(message =>
+                AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
                     (message.ReasoningContent ?? string.Empty).Contains("REJECTED_REASONING")),
-                    "all nineteen rejected attempts stay out of accepted history and requests");
+                    "all nineteen rejected attempts stay out of accepted history");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("FORMAT_REPAIR")),
                     "repair instructions are ephemeral");
                 var initialPrompt = FlattenSimple(requests[0]);
-                foreach (var request in requests.Skip(1))
+                for (var index = 1; index < requests.Count; index++)
                 {
+                    var request = requests[index];
                     AssertEqual(1, request.Count(message => (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
                         "each retry carries one current repair instruction");
                     AssertEqual(initialPrompt, FlattenSimple(request.Take(request.Count - 1)), "repair starts from the same clean accepted prompt");
+                    var repair = JObject.Parse(request.Last().Content);
+                    AssertEqual("PROTECTION_RESPONSE_" + index, (string)repair["rejected_response"]["content"], "older rejected drafts never accumulate");
+                    AssertTrue(!FlattenSimple(request).Contains("REJECTED_REASONING"), "provider reasoning is not copied into diagnostic content");
                 }
             });
         }
@@ -3031,8 +3046,7 @@ namespace RNAssistant.Harness
                     message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
                     "confirmed result is retained as a typed tool result");
                 AssertContains(replay, "skills.upsert", "folded confirmation keeps its tool identity");
-                var runtimeMessage = calls[2].First(message => (message.Content ?? string.Empty)
-                    .StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal));
+                var runtimeMessage = calls[2].First(RuntimeContextPrompt.IsRuntimeContext);
                 AssertContains(runtimeMessage.Content, "### skills.upsert", "selected skill keeps its callable authoring schema");
                 AssertContains(runtimeMessage.Content, "`common.test` (skill)", "created skill appears in the next catalog");
                 AssertTrue(replay.IndexOf("waiting_confirmation", StringComparison.OrdinalIgnoreCase) < 0, "no stale waiting result");
@@ -4260,14 +4274,19 @@ namespace RNAssistant.Harness
 
         private static JObject LastToolResult(IEnumerable<ChatMessage> messages, string toolId)
         {
-            var message = (messages ?? new ChatMessage[0]).Last(item => item != null && item.ProtocolMessage &&
-                string.Equals(item.ToolName, toolId, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(item.Role, "assistant", StringComparison.OrdinalIgnoreCase));
-            var content = message.Content ?? string.Empty;
-            const string prefix = "TOOL_RESULT:\n";
-            return JObject.Parse(content.StartsWith(prefix, StringComparison.Ordinal)
-                ? content.Substring(prefix.Length)
-                : content);
+            foreach (var message in (messages ?? new ChatMessage[0]).Reverse())
+            {
+                if (!message.ProtocolMessage || message.Role == "assistant") continue;
+                JObject body;
+                try { body = JObject.Parse(message.Content ?? ""); } catch (JsonException) { continue; }
+                if ((string)body["type"] == "tool_results")
+                {
+                    var match = body["results"].OfType<JObject>().LastOrDefault(item => (string)item["name"] == toolId);
+                    if (match != null) return match;
+                }
+                if (message.ToolName == toolId && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion) return body;
+            }
+            throw new InvalidOperationException("No visible result for " + toolId);
         }
     }
 }

@@ -1,5 +1,16 @@
 # Current-to-target migration map
 
+## JSON-профиль: старые настройки — 2026-11-02
+
+Owner: Core AppSettings / ModelProtocol. `ToolResultRole` и `FallbackToJsonObject`
+остаются только read adapters старого settings JSON: effective user/false, видимое
+`ProtocolMigrationNotice`; прежние поля не сериализуются. UI save очищает notice.
+Удаление adapters — после прекращения импорта настроек до prompt schema 67 либо
+явного сброса таких настроек. Production native projection/fallback уже удалены;
+лабораторный native transport не является adapter или вторым runtime.
+Старые reference-contract <4 чаты остаются read-only, без конвертации/удаления.
+
+
 ## Navigation target routes S3b.1 — 2026-11-02
 
 Owner: Web Library / ArtifactCatalog / DockWorkspace. В S3b.1 `library-object` и

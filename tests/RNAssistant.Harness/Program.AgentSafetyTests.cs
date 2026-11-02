@@ -306,7 +306,7 @@ namespace RNAssistant.Harness
             foreach (var context in new[] { null, new ModelProtocolCallContext(null),
                 new ModelProtocolCallContext(new string[0], "incomplete local safety projection") })
             {
-                var request = NewProtocolRequest(20, true);
+                var request = NewProtocolRequest(20);
                 request.CallContext = context;
                 var before = JsonConvert.SerializeObject(request.AcceptedMessages);
                 var rawCalls = 0;
@@ -378,7 +378,7 @@ namespace RNAssistant.Harness
             var batchAttempt = Guid.NewGuid().ToString("N");
             var batchIds = new[] { "batch_1", "batch_2" };
             for (var index = 0; index < batchIds.Length; index++)
-                session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index)));
+                session.Messages.Add(ContextAcceptedCall(batchIds[index], origin: FixtureCallOrigin("batch-step", batchAttempt, index, batchIds.Length)));
             foreach (var id in batchIds)
                 session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation { ToolCallId = id, ToolId = "excel.inspect" }, TerminalToolResult.Ok("read")));
             foreach (var result in session.Messages.Where(m => m.ToolResultProtocolVersion == ToolResultWire.CurrentVersion))
@@ -421,7 +421,7 @@ namespace RNAssistant.Harness
             duplicateOrigin.Messages[5].AcceptedCallOrigin = duplicateOrigin.Messages[3].AcceptedCallOrigin;
             invalid.Add(duplicateOrigin);
             var nativeMismatch = ContextContinuationSession();
-            nativeMismatch.Messages[5].ToolCalls[0].Id = "wrong_native_id";
+            nativeMismatch.Messages[5].ToolCalls = new List<LlmToolCall> { new LlmToolCall { Id = "wrong_native_id", Name = "excel.inspect", ArgumentsJson = "{}" } };
             invalid.Add(nativeMismatch);
             var missing = ContextContinuationSession();
             missing.Messages.RemoveAt(missing.Messages.Count - 1);
@@ -545,7 +545,7 @@ namespace RNAssistant.Harness
                 var tools = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
                 var result = service.ExecuteAsync(ChatModes.Agent, "Inspect sheets", session, NewContext(adapter), settingsForRun, tools, null)
                     .GetAwaiter().GetResult();
-                AssertEqual(5, rawCalls, "unknown tool and forbidden model id are repaired inside their logical steps");
+                AssertEqual(5, rawCalls, "unknown tool and forbidden model id are repaired inside their logical steps: " + result.AssistantText);
                 AssertEqual(3, requests.Count, "boundary captures logical steps, not raw attempts");
                 AssertTrue(requests.All(request => request.CallContext != null && request.CallContext.IsComplete), "real loop supplies complete call context");
                 var acceptedCalls = session.Messages.Where(message => message.Activity == null && message.Role == "assistant" &&
@@ -585,7 +585,7 @@ namespace RNAssistant.Harness
                     LoadSkillResponse("skills.skill.authoring"),
                     ModelProtocolWire.WriteAcceptedCall("Create the requested skill.", "Create skill",
                         new ConversationToolCall { Name = "skills.upsert", Arguments = new JObject {
-                            ["id"] = "common.context_probe", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } })
+                            ["id"] = "skills.user.contextprobe", ["description"] = "Test", ["bodyMarkdown"] = "# Test" } })
                 });
                 var session = NewSession(adapter);
                 LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
@@ -601,7 +601,7 @@ namespace RNAssistant.Harness
                 ToolInvocation confirmed = null;
                 var first = service.ExecuteAsync(ChatModes.Agent, "Create test skill", session, NewContext(adapter), settingsForRun, tools, null,
                     (pendingSession, command, result) => { confirmed = command; return "pending_context"; }).GetAwaiter().GetResult();
-                AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call");
+                AssertTrue(first.WaitingForConfirmation && confirmed != null, "real runtime pauses after the accepted confirmation-required call: " + first.AssistantText);
                 var selectionCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
                     message.ToolName == SkillLoadToolHandler.ToolId);
                 var skillCall = session.Messages.Single(message => message.Activity == null && message.Role == "assistant" &&
@@ -748,7 +748,8 @@ namespace RNAssistant.Harness
                 "{\"status\": }",
                     "{\"message\":\"REJECTED_SCHEMA\",\"action\":\"done\",\"tool_calls\":{}}",
                 "",
-                "{\"message\":\"REJECTED_TRUNCATED"
+                "{\"message\":\"REJECTED_TRUNCATED",
+                new string('\u0001', ModelProtocolWire.MaximumFormatRepairResponseBytes + 200)
             };
             var request = NewProtocolRequest(invalid.Length + 1);
             var originalPrompt = JsonConvert.SerializeObject(request.AcceptedMessages);
@@ -771,12 +772,19 @@ namespace RNAssistant.Harness
                 AssertEqual(originalPrompt, JsonConvert.SerializeObject(prompt.Take(request.AcceptedMessages.Count)),
                     "every raw attempt starts from the same accepted messages");
                 AssertEqual(request.AcceptedMessages.Count + (calls == 1 ? 0 : 1), prompt.Count,
-                    "repairs neither accumulate nor append rejected responses");
+                    "repairs add one diagnostic, never rejected assistant messages");
                 if (calls > 1)
                 {
-                    const string prefix = "FORMAT_REPAIR:\n";
-                    AssertTrue(prompt.Last().Content.StartsWith(prefix, StringComparison.Ordinal), "one transient repair instruction");
-                    var repair = JObject.Parse(prompt.Last().Content.Substring(prefix.Length));
+                    var repair = JObject.Parse(prompt.Last().Content);
+                    AssertEqual("format_repair", (string)repair["type"], "one typed transient repair");
+                    var rejected = (string)repair["rejected_response"]["content"];
+                    AssertTrue(invalid[calls - 2].StartsWith(rejected, StringComparison.Ordinal), "repair quotes only the last rejected response, without rewriting it");
+                    AssertTrue(System.Text.Encoding.UTF8.GetByteCount(JsonConvert.ToString(rejected)) <= ModelProtocolWire.MaximumFormatRepairResponseBytes,
+                        "quoted diagnostic is bounded even with escaped control characters");
+                    AssertEqual(invalid[calls - 2] != rejected,
+                        (bool)repair["rejected_response"]["content_truncated"], "truncated diagnostic is explicitly marked");
+                    AssertTrue(ModelContextBudget.EstimateMessageTokens(prompt.Last(), settings) <=
+                        ModelProtocolClient.EstimateFormatRepairOverheadTokens(settings), "escaped rejected content fits the reserved budget");
                     AssertEqual(calls, (int)repair["attempt"], "repair names the total protocol attempt, including the initial response");
                     AssertEqual(invalid.Length + 1, (int)repair["max_attempts"], "repair reports the configured total limit");
                     AssertContains((string)repair["instruction"], "conversation-response-v8", "repair uses the active ID-free contract");
@@ -870,7 +878,7 @@ namespace RNAssistant.Harness
                 var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
                 {
                     calls++;
-                    if (afterInvalid && calls == 1) return Task.FromResult(new LlmCompletionResult { Content = "invalid response" });
+                    if (afterInvalid && calls == 1) return Task.FromResult(new LlmCompletionResult { Content = "invalid response " + calls });
                     var currentPrompt = JsonConvert.SerializeObject(messages);
                     if (retryPrompt == null) retryPrompt = currentPrompt;
                     AssertEqual(retryPrompt, currentPrompt, "provider retries do not create or change a repair prompt");
@@ -909,7 +917,7 @@ namespace RNAssistant.Harness
                         cancellation.Cancel();
                         return Task.FromResult(new LlmCompletionResult { Content = "{\"message\":\"Late response.\",\"action\":\"done\",\"tool_calls\":[]}" });
                     }
-                    return Task.FromResult(new LlmCompletionResult { Content = "invalid response" });
+                    return Task.FromResult(new LlmCompletionResult { Content = "invalid response " + calls });
                 });
                 if (point == 0) cancellation.Cancel();
                 var result = await protocol.GetResponseAsync(request, null, cancellation.Token);
@@ -921,36 +929,20 @@ namespace RNAssistant.Harness
 
         private static async Task ModelProtocolFallbackStaysWithinRun()
         {
-            var request = NewProtocolRequest(strict: true);
-            var stepId = request.Options.TraceStepId;
-            var formats = new List<string>();
-            var attempts = new HashSet<string>();
-            var fallbacks = 0;
-            LlmCompletionDelegate completion = (settings, messages, options, stream, token) =>
+            var calls = 0;
+            var client = new ModelProtocolClient((settings, messages, options, stream, token) => {
+                calls++;
+                AssertEqual("json_schema", options.ResponseFormat, "unsupported format is never silently changed");
+                throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported");
+            });
+            foreach (var legacyPreference in new[] { false, true })
             {
-                formats.Add(options.ResponseFormat);
-                AssertTrue(attempts.Add(options.TraceModelAttemptId), "fallback also gets a distinct attempt identity");
-                if (formats.Count <= 2)
-                {
-                    AssertTrue(ReferenceEquals(request.Options, options), "configured trace sink stays attached to its options instance");
-                    AssertEqual(stepId, options.TraceStepId, "fallback retains the logical step");
-                }
-                if (formats.Count == 1) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "unsupported schema");
-                if (options.ResponseFormat == LlmResponseFormats.JsonObject)
-                    AssertTrue(options.ResponseSchemaName == null && options.ResponseSchemaJson == null, "fallback clears strict schema fields");
-                var content = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Answer directly.", "Done.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
-                return Task.FromResult(new LlmCompletionResult { Content = options.ResponseFormat == LlmResponseFormats.JsonSchema
-                    ? SchemaTransport(JObject.Parse(content)).ToString(Formatting.None) : content });
-            };
-            var protocol = new ModelProtocolClient(completion);
-            var first = await protocol.GetResponseAsync(request,
-                new ModelProtocolProgress { JsonObjectFallback = () => fallbacks++ }, CancellationToken.None);
-            var next = await protocol.GetResponseAsync(NewProtocolRequest(strict: true), null, CancellationToken.None);
-            var anotherRun = await new ModelProtocolClient(completion).GetResponseAsync(NewProtocolRequest(strict: true), null, CancellationToken.None);
-            AssertTrue(first.Failure == null && next.Failure == null && anotherRun.Failure == null, "fallback and later steps accept valid responses");
-            AssertEqual("json_schema,json_object,json_object,json_schema", string.Join(",", formats), "compatibility state persists only within one run");
-            AssertEqual(1, fallbacks, "one local fallback notification");
-            AssertEqual(AgentResponseModes.JsonSchema, request.Settings.AgentResponseMode, "saved response mode never changes");
+                var request = NewProtocolRequest(3, true); request.Settings.FallbackToJsonObject = legacyPreference;
+                var result = await client.GetResponseAsync(request, null, CancellationToken.None);
+                AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "unsupported schema is an endpoint failure");
+                AssertEqual("json_schema", request.Settings.AgentResponseMode, "saved choice is preserved");
+            }
+            AssertEqual(2, calls, "one request per step, without fallback or format repair");
         }
 
         private static async Task ModelProtocolFallbackIsBounded()
@@ -966,7 +958,7 @@ namespace RNAssistant.Harness
                     throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "unsupported format");
                 });
                 var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
-                AssertEqual(enabled ? 2 : 1, calls, "fallback requires opt-in and never repeats");
+                AssertEqual(1, calls, "retired fallback preference cannot cause a second request");
                 AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "fallback failure remains a provider failure");
                 AssertTrue(result.Completion == null, "failed fallback cannot produce an accepted completion");
             }
@@ -1023,11 +1015,8 @@ namespace RNAssistant.Harness
                 });
             });
             var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
-            AssertTrue(result.Failure == null, "explicit schema rejection during repair permits the one local fallback");
-            AssertEqual("json_schema,json_schema,json_object", string.Join(",", formats), "fallback does not consume a protocol response attempt");
-            AssertEqual(prompts[1], JsonConvert.SerializeObject(ModelProtocolWire.ProjectGuidance(JsonConvert.DeserializeObject<ChatMessage[]>(prompts[2]))),
-                "fallback restores full format guidance on the same frozen repair prompt");
-            AssertEqual("Accepted after fallback.", result.Response.Message, "the second protocol response can accept");
+            AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "schema rejection during repair remains a provider failure");
+            AssertEqual("json_schema,json_schema", string.Join(",", formats), "repair does not switch transport");
         }
 
         private static async Task ModelProtocolProviderRecoveryKeepsProtocolSlots()
@@ -1070,7 +1059,7 @@ namespace RNAssistant.Harness
                 calls++;
                 if (calls == 1 || calls == 3 || calls == 5 || calls == 6)
                     throw new LlmRequestException(LlmFailureKind.TransientServer, "gateway unavailable", statusCode: 502);
-                return Task.FromResult(new LlmCompletionResult { Content = calls < 5 ? "invalid response" :
+                return Task.FromResult(new LlmCompletionResult { Content = calls < 5 ? "invalid response " + calls :
                     ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                         "Answer on the new step.", "Next step.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
             }, (delay, token) => { delays.Add(delay); return Task.CompletedTask; });
@@ -1086,26 +1075,23 @@ namespace RNAssistant.Harness
 
         private static async Task ModelProtocolCombinedBudgetsAreBounded()
         {
-            var request = NewProtocolRequest(20, true);
+            var request = NewProtocolRequest(20);
             var trace = new List<LlmTraceRecord>();
             request.Options.TraceSink = trace.Add;
             var calls = 0;
             var delays = 0;
-            var fallbacks = 0;
             var protocol = new ModelProtocolClient((settings, messages, options, stream, token) =>
             {
                 calls++;
-                if (calls == 1) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported");
                 if (calls == 2 || calls == 4) throw new LlmRequestException(LlmFailureKind.Network, "connection lost");
-                return Task.FromResult(new LlmCompletionResult { Content = "invalid response" });
+                return Task.FromResult(new LlmCompletionResult { Content = "invalid response " + calls });
             }, (delay, token) => { delays++; return Task.CompletedTask; });
             var result = await protocol.GetResponseAsync(request,
-                new ModelProtocolProgress { JsonObjectFallback = () => fallbacks++ }, CancellationToken.None);
+                null, CancellationToken.None);
             AssertEqual(ModelProtocolFailureKind.ProtocolExhausted, result.Failure.Kind, "received-response budget still exhausts at twenty");
             AssertEqual(20, trace.Count(record => record.Type == "rejected"), "twenty invalid responses, not twenty-one");
-            AssertEqual(23, calls, "total raw ceiling is protocol limit plus two provider retries plus one fallback");
+            AssertEqual(22, calls, "raw ceiling is protocol limit plus two provider retries");
             AssertEqual(2, delays, "provider retry budget remains independent");
-            AssertEqual(1, fallbacks, "fallback budget remains independent");
             AssertTrue(trace.All(record => record.Type != "accepted"), "no acceptance after exhaustion");
         }
 
@@ -1188,6 +1174,22 @@ namespace RNAssistant.Harness
             AssertTrue(ModelProtocolClient.EstimateFormatRepairOverheadTokens(
                     new AppSettings { MaxAgentFormatRetries = 2 }) > 0,
                 "a configured repair response reserves its bounded worst-case message");
+            var repairSettings = new AppSettings { MaxAgentFormatRetries = 20 };
+            foreach (var strict in new[] { false, true })
+            foreach (var reflection in new[] { false, true })
+            foreach (var raw in new[] { new string('\u0001', 5000), new string('x', 4093) + "😀" })
+            {
+                var notice = new ChatMessage { Role = "user", ProtocolMessage = true,
+                    Content = ModelProtocolWire.FormatRepairContent(ConversationResponseError.InvalidFinishResults,
+                        new string('\u0001', 5000), 20, 20, raw, LlmResponseFormats.JsonSchema, false) };
+                var wire = ModelProtocolWire.ProjectGuidance(new[] { notice }, strict, reflection).Single();
+                AssertTrue(ModelContextBudget.EstimateMessageTokens(wire, repairSettings) <=
+                    ModelProtocolClient.EstimateFormatRepairOverheadTokens(repairSettings), "strict/disabled repair and escaped diagnostics fit the reserved cost");
+                var body = JObject.Parse(wire.Content);
+                var quoted = (string)body["rejected_response"]["content"];
+                AssertTrue(raw.StartsWith(quoted, StringComparison.Ordinal) && !char.IsHighSurrogate(quoted.Last()), "bounded diagnostics preserve a Unicode prefix");
+                AssertEqual(true, (bool)body["error_truncated"], "error truncation is explicit too");
+            }
             var request = NewProtocolRequest();
             request.Settings.ContextWindowOverrideTokens = 4096;
             request.AcceptedMessages = new[] { new ChatMessage { Role = "user", Content = new string('x', 100000) } };
@@ -1255,8 +1257,8 @@ namespace RNAssistant.Harness
                 throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "json_schema unsupported");
             });
             var blocked = await protocol.GetResponseAsync(fallback, null, CancellationToken.None);
-            AssertEqual(ModelProtocolFailureKind.PromptBudgetExceeded, blocked.Failure.Kind,
-                "an oversized full prompt is refused before json_object fallback dispatch");
+            AssertEqual(ModelProtocolFailureKind.Provider, blocked.Failure.Kind,
+                "unsupported schema never dispatches a JSON fallback");
             AssertEqual(1, calls, "only the fitting strict request reached transport");
         }
 
@@ -1389,11 +1391,25 @@ namespace RNAssistant.Harness
             AssertEqual("http://127.0.0.1:8000/v1/models", LlmClient.BuildModelsConfigUrl(settings), "relative models endpoint");
         }
 
+        // Resolve the single shared definition used by the response schema before
+        // applying the tool-schema subset validator. Missing/unknown refs fail.
+        private static JObject ExpandResponseSchema(JObject schema)
+        {
+            var expanded = (JObject)schema.DeepClone();
+            foreach (var reference in expanded.Descendants().OfType<JProperty>().Where(p => p.Name == "$ref").ToArray())
+            {
+                AssertEqual("#/$defs/calls", (string)reference.Value, "known local schema reference");
+                AssertTrue(schema["$defs"]?["calls"] != null, "reference resolves");
+                reference.Parent.Replace(schema["$defs"]["calls"].DeepClone());
+            }
+            return expanded;
+        }
+
         private static IEnumerable<string> ResponseSchemaCallNames(string schemaJson)
         {
             var schema = JObject.Parse(schemaJson);
-            return schema.SelectTokens("properties.response.anyOf[*].properties.tool_calls.items.anyOf[*].properties.name.const")
-                .Concat(schema.SelectTokens("properties.response.anyOf[*].properties.tool_calls.anyOf[*].items.anyOf[*].properties.name.const"))
+            return schema.SelectTokens("$defs.calls.items.anyOf[*].properties.name.const")
+                .Concat(schema.SelectTokens("$defs.calls.anyOf[*].items.anyOf[*].properties.name.const"))
                 .Select(token => (string)token);
         }
 
@@ -1412,7 +1428,7 @@ namespace RNAssistant.Harness
                 call["arguments"]["at"] = JValue.CreateNull();
             }
             string error;
-            AssertEqual(accepted, ToolSchemaSupport.ValidateArguments(SchemaTransport(response), schema, false, out error),
+            AssertEqual(accepted, ToolSchemaSupport.ValidateArguments(SchemaTransport(response), ExpandResponseSchema(schema), false, out error),
                 "actual wire schema enforces local batch policy: " + error);
             AssertEqual(accepted, new ConversationResponseParser().Parse(response.ToString(Formatting.None), tools, tools, context).Success,
                 "parser agrees with the actual wire batch policy");
@@ -1432,7 +1448,7 @@ namespace RNAssistant.Harness
                 ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
             })));
             string error;
-            AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(valid), schema, false, out error),
+            AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(valid), ExpandResponseSchema(schema), false, out error),
                 "strict v8 envelope matches generated schema: " + error);
             AssertTrue(ParseV8(valid.ToString(Formatting.None), tool).Success, "local parser accepts strict optional null representation");
             AssertEqual(originalSchema, tool.ArgumentSchemaJson, "response schema construction never rewrites native tool schemas");
@@ -1441,20 +1457,20 @@ namespace RNAssistant.Harness
             {
                 var invalid = (JObject)valid.DeepClone();
                 invalid[field] = "completed";
-                AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(invalid), schema, false, out error) &&
+                AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(invalid), ExpandResponseSchema(schema), false, out error) &&
                     !ParseV8(invalid.ToString(Formatting.None), tool).Success, "schema/parser agree on unknown root field: " + field);
             }
             var modelId = (JObject)valid.DeepClone();
             modelId["tool_calls"][0]["id"] = "model_owned";
-            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(modelId), schema, false, out error) &&
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(modelId), ExpandResponseSchema(schema), false, out error) &&
                 !ParseV8(modelId.ToString(Formatting.None), tool).Success, "schema/parser reject model IDs without stripping them");
             var unknown = (JObject)valid.DeepClone();
             unknown["tool_calls"][0]["name"] = "test.unloaded";
-            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(unknown), schema, false, out error) &&
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(unknown), ExpandResponseSchema(schema), false, out error) &&
                 !ParseV8(unknown.ToString(Formatting.None), tool).Success, "schema/parser reject names outside callable set");
             var missing = (JObject)valid.DeepClone();
             ((JObject)missing["tool_calls"][0]["arguments"]).Remove("query");
-            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(missing), schema, false, out error) &&
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(missing), ExpandResponseSchema(schema), false, out error) &&
                 !ParseV8(missing.ToString(Formatting.None), tool).Success, "schema/parser reject missing required arguments");
 
             var body = LlmClient.BuildRequestBody(new AppSettings { StreamResponses = false },
@@ -1483,15 +1499,15 @@ namespace RNAssistant.Harness
             }
             var tool = V8ReadTool();
             var bounded = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool, tool, invalid }, new ModelProtocolCallContext(new[] { tool.Id })));
-            AssertEqual(1, ((JArray)bounded.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf")).Count,
+            AssertEqual(1, ((JArray)bounded.SelectToken("$defs.calls.items.anyOf")).Count,
                 "schema uses only unique valid callable contracts");
             var calls = Enumerable.Range(0, 32).Select(i => V8Call(arguments: new JObject
             {
                 ["query"] = "A" + i, ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull()
             })).ToArray();
             string limitError;
-            AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(JObject.Parse(V8Envelope(calls))), bounded, false, out limitError), "schema accepts 32 calls");
-            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(JObject.Parse(V8Envelope(calls.Concat(new[] { calls[0] }).ToArray()))), bounded, false, out limitError),
+            AssertTrue(ToolSchemaSupport.ValidateArguments(SchemaTransport(JObject.Parse(V8Envelope(calls))), ExpandResponseSchema(bounded), false, out limitError), "schema accepts 32 calls");
+            AssertTrue(!ToolSchemaSupport.ValidateArguments(SchemaTransport(JObject.Parse(V8Envelope(calls.Concat(new[] { calls[0] }).ToArray()))), ExpandResponseSchema(bounded), false, out limitError),
                 "schema bounds calls at 32 independently of runtime identity allocation");
         }
 
@@ -1560,7 +1576,7 @@ namespace RNAssistant.Harness
                     branch["additionalProperties"].Value<bool>() == false,
                     "each action branch has exactly its own required fields");
             }
-            var call = schema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0]");
+            var call = schema.SelectToken("$defs.calls.items.anyOf[0]");
             AssertTrue(((JObject)call["properties"]).Properties().Select(property => property.Name).SequenceEqual(new[] { "name", "arguments" }) &&
                 ((JArray)call["required"]).Values<string>().SequenceEqual(new[] { "name", "arguments" }),
                 "call schema exposes only name and arguments; IDs are runtime metadata");
@@ -1597,7 +1613,7 @@ namespace RNAssistant.Harness
             var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, new[] { questions }, new ModelProtocolCallContext(new string[0]));
             var request = LlmClient.BuildRequestBody(new AppSettings(), new ChatMessage[0], 4096, options);
             var argumentsSchema = (JObject)request.SelectToken(
-                "response_format.json_schema.schema.properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments");
+                "response_format.json_schema.schema.$defs.calls.items.anyOf[0].properties.arguments");
             var valid = JObject.Parse("{\"questions\":[{\"header\":\"Layout\",\"prompt\":\"Choose the interface\",\"selection\":\"single\",\"allowFreeText\":null,\"options\":[" +
                 "{\"label\":\"List\",\"description\":\"Compact rows\",\"recommended\":null}," +
                 "{\"label\":\"Table\",\"description\":\"Comparable columns\",\"recommended\":true}]}]}");
@@ -1664,13 +1680,13 @@ namespace RNAssistant.Harness
                 };
                 var schema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }, new ModelProtocolCallContext(new string[0])));
                 AssertEqual("string",
-                    (string)schema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.type.type"),
+                    (string)schema.SelectToken("$defs.calls.items.anyOf[0].properties.arguments.properties.type.type"),
                     "schema property named type");
 
                 var patchTool = executor.GetControllerTools().Single(candidate => candidate.Id == "core.patch");
                 var patchSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { patchTool }, new ModelProtocolCallContext(new string[0])));
                 var exactReplace = patchSchema.SelectToken(
-                    "properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments.properties.targets.items.properties.edits.items") as JObject;
+                    "$defs.calls.items.anyOf[0].properties.arguments.properties.targets.items.properties.edits.items") as JObject;
                 AssertTrue(exactReplace != null, "model schema exposes the same single edit contract");
                 AssertEqual("old,new,anchors_before,anchors_after", string.Join(",", ((JObject)exactReplace["properties"]).Properties().Select(p => p.Name)),
                     "strict projection adds no operation, context or coordinates");
@@ -1680,7 +1696,7 @@ namespace RNAssistant.Harness
                 edit["anchors_before"] = JValue.CreateNull(); edit["anchors_after"] = JValue.CreateNull();
                 string parseError;
                 AssertTrue(ToolSchemaSupport.ValidateArguments(strictPatchArguments,
-                    (JObject)patchSchema.SelectToken("properties.response.anyOf[0].properties.tool_calls.items.anyOf[0].properties.arguments"), false, out parseError), parseError);
+                    (JObject)patchSchema.SelectToken("$defs.calls.items.anyOf[0].properties.arguments"), false, out parseError), parseError);
                 ToolSchemaSupport.RemoveOptionalNulls(strictPatchArguments, runtimePatchSchema);
                 AssertEqual(2, edit.Properties().Count(), "strict optional nulls are omitted before runtime validation");
                 ResourcePatch.ValidateCall(strictPatchArguments.ToString());

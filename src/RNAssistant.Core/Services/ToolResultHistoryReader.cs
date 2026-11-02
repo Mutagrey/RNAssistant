@@ -6,7 +6,6 @@ namespace RNAssistant.Core.Services
 {
     public static class ToolResultHistoryReader
     {
-        private const string Prefix = "TOOL_RESULT:";
 
         public static bool TryRead(ChatMessage message, out ToolResultWireReadResult result, out string error)
         {
@@ -21,23 +20,12 @@ namespace RNAssistant.Core.Services
                 error = "Result history lacks an identified current tool-result record.";
                 return false;
             }
-            var native = message.Role == ToolResultRoles.Tool;
-            if ((!native && message.Role != ToolResultRoles.User && message.Role != ToolResultRoles.Developer) ||
-                message.ToolResultRole != message.Role)
+            if (message.Role != ToolResultRoles.User || message.ToolResultRole != message.Role)
             {
-                error = "Result history role disagrees with its recorded tool-result role.";
+                error = "JSON result history requires the user transport role.";
                 return false;
             }
             var json = message.Content ?? string.Empty;
-            if (!native)
-            {
-                if (!json.StartsWith(Prefix, StringComparison.Ordinal))
-                {
-                    error = "User/developer tool-result history requires its exact prefix.";
-                    return false;
-                }
-                json = json.Substring(Prefix.Length);
-            }
             var parsed = ToolResultWire.Read(json);
             if (!parsed.Success)
             {

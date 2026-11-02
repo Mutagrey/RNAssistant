@@ -44,7 +44,6 @@ namespace RNAssistant.Core.Agent
                 snapshot.Any(call => call == null))
                 throw new ArgumentException("Invalid v8 model proposal.");
             if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
-            if (message == null) throw new ArgumentNullException(nameof(message));
             var claims = results == null ? null : results.ToArray();
             if (claims != null && claims.Any(claim => claim == null)) throw new ArgumentException("Null result claim.", nameof(results));
             ConversationFinishContract.Validate(action, message, outcome, claims);
@@ -98,7 +97,6 @@ namespace RNAssistant.Core.Agent
                 snapshot.Any(call => call == null))
                 throw new ArgumentException("Invalid accepted v8 response.");
             if (string.IsNullOrWhiteSpace(reason)) throw new ArgumentException("A reason is required.", nameof(reason));
-            if (message == null) throw new ArgumentNullException(nameof(message));
             var claims = results == null ? null : results.ToArray();
             if (claims != null && claims.Any(claim => claim == null)) throw new ArgumentException("Null result claim.", nameof(results));
             ConversationFinishContract.Validate(action, message, outcome, claims);

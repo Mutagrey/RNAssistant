@@ -1,20 +1,29 @@
 # Conversation Response v8
 
-Status: **active on `main`**. Host-neutral integration is merged; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
-Response protocol is 8, reference contract revision is 3, new chat stream format
-is 8, and built-in prompt schema is 64. Formats 6 and 7 remain read-only history;
+Status: **current production contract**. Host-neutral integration is implemented; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
+Response protocol is 8, reference contract revision is 4, new chat stream format
+is 8, and built-in prompt schema is 67. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
 Earlier format-8 histories with missing/older ReferenceContractVersion are read-only;
-new chats persist revision 3. Incompatible continuations are not hydrated or resumed;
+new chats persist revision 4. Incompatible continuations are not hydrated or resumed;
 no automatic rewrite/deletion or execution upgrade. See [ADR-0018](../decisions/ADR-0018-typed-model-references.md).
 
 ## Model envelope
 
 In `json_object` mode the model returns one raw JSON object with fields in this order: `action`,
-`reason`, action-specific fields, `message` last. `reason` is a short decision
-basis, not private reasoning. `message` is user-facing text; only `execute` and
-`reflection` may leave it empty. `finish.message` must contain a nonblank answer.
+`reason`, action-specific fields, `message` last if present. `reason` is a short decision
+basis, not private reasoning. `message` is optional for `execute` and `reflection`; omission is preferred for
+routine steps. If supplied it is a string (including `""`), never null.
+`finish.message` must contain a nonblank answer.
 No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
+
+Prompt schema 67 shares the fresh-call rule between object output, strict-schema
+instructions/field descriptions and format repair: only `name` and object
+`arguments` belong to a new call. Historical `id`, `tool_call_id`, `type` and
+`function` are runtime/transport fields, not response examples to copy. This
+restriction is at the call level: tool arguments such as `core.tools.read`'s
+`arguments.id` remain required by their own schema. The JSON profile retains
+the original call shape in accepted history; runtime IDs remain internal.
 
 Prose guidance is shared by object-mode instructions and strict-schema field
 descriptions (`ModelProtocolWire` owns it):
@@ -24,7 +33,7 @@ descriptions (`ModelProtocolWire` owns it):
 | `reason` | One short sentence explaining this action; no extended analysis, plan, logs or copied arguments. | Nonblank string. |
 | `decision` | One or two short sentences stating the interpretation and next step. | Nonblank string, reflection only. |
 | `results[].criterion` | Short statement of one original user requirement. | Nonblank string, finish only. |
-| `execute/reflection.message` | Empty for routine continuation; otherwise one or two short progress sentences. | String; may be empty. |
+| `execute/reflection.message` | Omit for routine continuation; otherwise one or two short progress sentences. | Optional string; may be empty, never null. |
 | `finish.message` | Useful final answer, explanation and limitations, proportional to the user's request. | Nonblank string. |
 
 These are writing instructions, not hard character limits: schema and parser do
@@ -41,15 +50,30 @@ still validates action-specific fields, evidence, batching and outcomes independ
 
 The API message's `content` is a JSON string containing this envelope. After one
 decode, `tool_calls` must be an array of objects and each `arguments` an object;
-JSON-encoded calls or arguments are not accepted. Native history instead uses a
-string in `tool_calls[].function.arguments`; this transport representation does
-not change the fresh response contract. The parser validates new content before
+JSON-encoded calls or arguments are not accepted. Production history keeps this
+same call shape; native generation/history variants exist only in the laboratory. The parser validates new content before
 any accepted-history projection. Rejection traces preserve that content exactly.
 `invalid_tool_call` diagnostics identify the call index (including `response.` in
 schema mode), unexpected field names or the actual JSON type. Names are bounded
 and escaped; argument values are omitted. Repair receives the same diagnosis.
 The shared run-journal viewer initially expands the first rejected call, leaving
 argument bodies collapsed so the shape is visible in a screen photo.
+
+The JSON service message `type:format_repair` carries the exact error and only the latest rejected response's
+content as quoted diagnostic data, its original response format and the native-call
+presence flag. The quoted content is bounded to 4096 UTF-8 bytes including JSON
+escaping; `content_truncated` explicitly marks a prefix. A cut-off field is not
+proof of its absence. Error text is bounded to 2048 quoted bytes with an explicit
+`error_truncated` flag. The repair identifies this unaccepted attempt, not the
+preceding accepted assistant/tool exchange, and asks for a full corrected response.
+Missing nonfinal `message` is valid and does not trigger repair. Decision fields
+such as `reason`/`decision` remain in the bounded quoted rejected content. Provider-private reasoning is not copied.
+Rejected drafts never become accepted assistant history or executable native calls;
+older repair diagnostics are replaced, not accumulated. Schema guidance
+projects only the owned instruction, leaving quoted rejected content unchanged.
+The initial request reserves the bounded diagnostic cost before dispatch for both
+response transports. A short shared repair contract refers to the complete frozen
+instructions and schemas; it does not duplicate the entire main protocol prompt.
 
 `results[]` entries contain exactly `criterion`, `evidence` (issued eligible
 terminal references such as `E1`) and `assessment`: `satisfied`,
@@ -106,8 +130,8 @@ wrapper: `{"response": <v8 decision>}`. Its root is a closed object with the one
 required `response` property; the union of currently available actions lives inside it.
 Strict parsing requires the wrapper and unwraps it exactly once. Accepted history
 keeps the inner v8 decision; raw traffic diagnostics keep the actual transport.
-`json_object` uses the unwrapped decision. A configured, explicit provider fallback
-switches both parsing and prompt guidance to that unwrapped transport. Neither mode
+`json_object` uses the unwrapped decision and is the default. Unsupported
+`json_schema` stops with a provider error; the user selects another format explicitly. Neither mode
 bypasses local parser/evidence/kernel validation; duplicate evidence IDs are checked
 locally rather than through an unsupported `uniqueItems` keyword.
 
@@ -115,16 +139,15 @@ JSON-object prompts include short shape examples for available actions and exact
 Strict prompts retain action/evidence/permission semantics without repeating the
 format examples or tool argument schemas. Argument descriptions stay in the supplied
 schema; schema types alone do not explain their meaning. Both full and projected
-prompts belong to the same frozen request, including repair and fallback.
+prompts belong to the same frozen request, including repair.
 Strict admission counts the projected wire prompt and schema at compilation and
-dispatch. A fallback separately checks the retained full prompt before sending
-`json_object`; an invalid strict schema is reported as a provider error rather
-than treated as lack of format support. No-call accepted history rejects stray
+dispatch. An invalid or unsupported strict schema is a provider error; no fallback
+changes the format during a run. No-call accepted history rejects stray
 tool transport metadata and a second reason outside its v8 envelope.
 
-## Typed references (revision 3)
+## Typed references (revision 4)
 
-`T1`, `T2`, … identify accepted calls. ChatStore allocates `ToolCallReference`
+`T1`, `T2`, … identify accepted calls internally (journal/Inspector only). ChatStore allocates `ToolCallReference`
 atomically before dispatch, alongside canonical IDs/origins. `E1`, `E2`, … identify
 eligible terminal results: ChatStore allocates `EvidenceReference` only on
 `ToolExecutionFinished`, from the captured trusted `ToolPolicy.EvidenceEligibility`.
@@ -138,30 +161,41 @@ message removal and compaction never reuse them. Fork copies both high waters an
 bindings; canonical IDs/events/CAS are unchanged. Runtime emits uppercase prefixes
 and `@v`; only reference lookups normalize case, never target/path/source strings.
 
-Raw execute remains `{name, arguments}`. Fallback history adds `id:"T1"` to calls
-and `tool_call_id:"T1"` to result/receipt JSON. Native history rewrites only the wire
-pair to `assistant.tool_calls[].id == tool.tool_call_id == "T1"`. It has no
-`EXECUTION_REFERENCE` narration or duplicate `content.tool_call_id`. Eligible
-result content includes `evidence:"E1"`; service-only results omit it. Original
-accepted response bodies and runtime call IDs remain unchanged.
+Production uses one JSON history profile. Both response formats produce the same
+accepted inner decision. The final projection restores the original ordered batch
+from `AcceptedToolCallOrigin` (step, attempt, call index, exact call count), then
+emits one `assistant.content` decision and one `user.content` object:
 
-Output response format and accepted history are independent. Both `json_object`
-and `json_schema` generate the V8 decision in response `content`; either can use
-native history after runtime acceptance. Agent settings expose the history format
-separately, with user/developer result roles available for JSON history only.
-Native execute content is JSON containing `action`, `reason`, `message`; only
-`tool_calls` moves to the outer API field. Finish and reflection retain their full
-inner V8 decisions, including outcome/results or decision. Full retained history
-must never downgrade these decisions to plain narration. This wire-only conversion
-does not change canonical accepted records or make the partial execute content an
-admissible new model response.
-The native-history instruction describes `assistant.tool_calls` and matching tool
-messages; fallback-only JSON ID/envelope explanations are omitted. Repair and
-schema fallback retain this history choice and the frozen accepted messages.
+```json
+{"type":"tool_results","results":[{"call_index":0,"name":"core.read","status":"ok","message":"Excerpt read.","data":{"text":"observed source"},"evidence":"E1"}]}
+```
+
+`call_index` is zero-based within the preceding accepted batch. Runtime joins by
+canonical IDs before assigning the index; arrival order cannot change pairing.
+Model calls have only `name` and object `arguments`, exactly as in the fresh
+response. No synthetic native fields, call IDs or `TOOL_RESULT` prefixes are added.
+`reason`, `decision`, optional `message`, finish claims and literal arguments retain
+their semantics. E references remain citable; internal T/UUID values stay out of
+owned model-facing correlation fields. Business strings are never globally rewritten.
+
+Durable events remain per-call and append-only. The final wire projection is not a
+second store. Missing/duplicate results fail closed. If older batch siblings were
+compacted, retained operations become explicit `type:completed_operation` receipts
+with `batch_compacted:true`, original index, call and result; runtime does not invent
+a smaller assistant decision. Full latest batches are retained together. Inspector
+keeps source-message links for grouped exchanges and the exact serialized request.
+
+Service data is typed JSON (`tool_results`, `format_repair`, `runtime_context`,
+`decision_rejected`, `resource_observation`, `completed_operation`). Tool data and
+quoted rejected content are not instructions. `format_repair` and `decision_rejected` request a specific correction;
+quoted rejected content and tool data remain data. `format_repair.dispatched:false`
+identifies an unaccepted attempt and never refers to the previous valid result.
+The default is three response attempts including the first; two consecutive exact
+repetitions of the same invalid response stop early. Network recovery is separate.
 
 Every **new** execute proposal must still include nonempty `tool_calls` inside
-its decision JSON in content (inside `response` in schema mode). The reduced
-historical `action/reason/message` object is explicitly not a response template.
+its decision JSON in content (inside `response` in schema mode). An `action/reason/message` object without calls is invalid; runtime never removes
+calls from accepted decision content.
 Object/schema instructions, schema description and format repair share this rule.
 `empty_execute_calls` never borrows a call from history, accepts a narration as
 execution or silently converts provider-native calls into a V8 proposal.
@@ -175,7 +209,7 @@ undelivered references fail closed. A `satisfied` claim cannot cite a failed,
 unknown or undispatched result, even alongside a successful one. Uncited earlier
 errors do not block finish. Unknown-effect inspection/no-replay guards are unchanged.
 Earlier runs may be cited, including a bounded compact receipt after a checkpoint.
-Summaries and assistant prose never issue evidence. Reference revision remains 3;
+Summaries and assistant prose never issue evidence. Reference revision is 4;
 older histories are not reinterpreted or rewritten.
 
 `R1` identifies a scoped logical resource; `R1@v2` identifies a registered exact
@@ -198,7 +232,7 @@ groups by exact canonical identity; it never allocates replacement `T`/`E`/`R` n
 An omitted body does not erase the operation's reference. Compaction retains the
 latest current-run terminal receipt; older receipts are bounded by relevance/budget.
 A reference absent from the successful request cannot be guessed from the journal.
-Repair/fallback retain the same aliases and report the actual delivered set.
+Repair retains the same aliases and reports the actual delivered set.
 
 Discovery/search/outline remain navigation results with semantic targets and bounded
 snippets/coordinates. Their current durable contracts do not map each visible item
@@ -211,10 +245,10 @@ retain their existing contracts. The saved final model request contains the proj
 Example model-facing result (line-range end is exclusive):
 
 ```json
-{"tool_call_id":"T7","evidence":"E3","name":"core.read","status":"ok","message":"Excerpt read.","data":{"ref":"R1@v2","kind":"resource-read","target":"src/example.txt","representation":"text","coverage":{"kind":"line-range","start":10,"end":12,"fields":[]},"text":"first line\nsecond line","complete":false,"selectionComplete":true}}
+{"call_index":0,"evidence":"E3","name":"core.read","status":"ok","message":"Excerpt read.","data":{"ref":"R1@v2","kind":"resource-read","target":"src/example.txt","representation":"text","coverage":{"kind":"line-range","start":10,"end":12,"fields":[]},"text":"first line\nsecond line","complete":false,"selectionComplete":true}}
 ```
 
-Here `T7` identifies the call, `E3` the eligible result, `R1@v2` the source revision, and `coverage` the
+Here `call_index:0` identifies the call within its batch, `E3` the eligible result, `R1@v2` the source revision, and `coverage` the
 delivered excerpt. The label itself includes neither the range nor the text.
 
 ## Admission, persistence and presentation
@@ -226,7 +260,7 @@ CLI `--max-reflections`) accepts 0–20, default 2. With 0, `json_schema` exclud
 `reflection` branch and `decision` field: only `execute` and `finish` remain (only
 `finish` if no tools are callable). Both transports remove reflection instructions
 and examples and explicitly state that it is disabled. This projection also applies
-to format repair, explicit `json_object` fallback and context budget/Inspector.
+to format repair and context budget/Inspector.
 `json_object` constrains JSON syntax, not action selection. If a provider nevertheless
 returns a reflection, the runtime fails with `ReflectionDisabled` immediately,
 without a correction request. Existing accepted reflection history is unchanged.
@@ -238,7 +272,7 @@ terminal tool results and fresh user input reset that counter. `REFLECTION_BUDGE
 tells the model the remaining allowance before every step; at zero remaining it
 requests `execute` or an honest `finish`. An additional valid reflection
 is rejected with one semantic correction opportunity; another reflection then ends
-with `reflection_limit`. Format repair, provider retries and schema fallback do not
+with `reflection_limit`. Format repair and provider retries do not
 spend this allowance or that semantic opportunity. The separate overall iteration
 limit still bounds model steps; no extra step is granted beyond it. Confirmation, restart and continuation keep
 the same run ID, limits and accepted-call identities; a confirmation cannot
@@ -302,11 +336,12 @@ evidence-free claims when this run accepted no calls; any cited foreign ID is
 still rejected. Target WebView2 and full integration qualification remain open.
 
 History readers require `ResponseProtocolVersion=8` and exact accepted
-metadata. User/developer history cannot contain native call metadata; native
-history has exactly one paired call. Workspace replay checks adjacent batch
+metadata. Production JSON history rejects native call metadata. Internal results use typed
+Tool Result v2 records with user transport; the final request batches them as above. Workspace replay checks adjacent batch
 siblings against the same run, step and model attempt with consecutive indexes;
 an index reset cannot start a second batch before the preceding results.
-Format-6/7 chats and incompatible format-8 histories cannot continue; no legacy inference,
+Reference-contract revisions before 4 and incompatible format-8 histories cannot continue;
+old chats remain readable, without automatic conversion or deletion. no legacy inference,
 dual-write or automatic migration is allowed. Windows x64 + Office x64 +
 WebView2 and real-model qualification remain open.
 

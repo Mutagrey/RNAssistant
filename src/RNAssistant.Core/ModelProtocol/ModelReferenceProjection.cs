@@ -8,8 +8,8 @@ using RNAssistant.Core.Models;
 namespace RNAssistant.Core.ModelProtocol
 {
     // Wire-only history DTO. Canonical envelopes continue through the strict raw
-    // history reader unchanged. Native calls expose their accepted decision in
-    // content, and owned correlation fields use request-local aliases.
+    // history reader unchanged. JSON calls retain their original shape; final
+    // batches expose only call_index and delivered evidence references.
     public static class ModelReferenceProjection
     {
         public static IReadOnlyList<ChatMessage> Project(IReadOnlyList<ChatMessage> messages)
@@ -28,7 +28,11 @@ namespace RNAssistant.Core.ModelProtocol
                 bindings[message.ToolCallId] = reference.Alias;
                 aliases[reference.Alias] = message.ToolCallId;
             }
-            return messages.Select(source => ProjectResources(ProjectMessage(source, bindings))).ToArray();
+            var evidence = messages.Where(m => m.ProtocolMessage && !m.ExcludeFromModelContext && m.Activity == null &&
+                    m.AcceptedCallOrigin == null && !string.IsNullOrEmpty(m.ToolCallId) && m.EvidenceReference != null)
+                .GroupBy(m => m.ToolCallId, StringComparer.Ordinal).ToDictionary(group => group.Key,
+                    group => group.Select(m => m.EvidenceReference.Alias).Distinct(StringComparer.Ordinal).Single(), StringComparer.Ordinal);
+            return ModelHistoryBatchProjection.Project(messages.Select(source => ProjectResources(ProjectMessage(source, bindings, evidence))).ToArray());
         }
 
         private static ChatMessage ProjectResources(ChatMessage source)
@@ -36,18 +40,15 @@ namespace RNAssistant.Core.ModelProtocol
             if (!source.ProtocolMessage || source.ExcludeFromModelContext || source.ResourceModelReferences.Count == 0 ||
                 source.Activity != null || source.AcceptedCallOrigin != null) return source;
             var content = source.Content ?? string.Empty;
-            var view = source.SyntheticResourceObservation && content.StartsWith("CURRENT_RESOURCE_VIEW (", StringComparison.Ordinal);
+            var view = source.SyntheticResourceObservation;
             // Receipts describe an outcome, not delivery of the observed source.
             // Discovery/search have no durable per-item source binding. Never zip
             // their items with references or infer identity from semantic targets.
             var read = source.CompletedOperation == null && source.ToolName == "core.read" &&
                 source.ToolResultProtocolVersion == ToolResultWire.CurrentVersion;
             if (!view && !read) return source;
-            var start = view ? content.IndexOf('\n') + 1 :
-                content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal) ? "TOOL_RESULT:\n".Length : 0;
-            var end = view ? content.IndexOf('\n', start) : content.Length;
-            if (end < start) throw new InvalidOperationException("Current resource view lacks its structured header.");
-            var root = JObject.Parse(content.Substring(start, end - start));
+            var root = JObject.Parse(content);
+            if (view && (string)root["type"] != "resource_observation") return source;
             var block = view ? root : root["data"] as JObject;
             if (block == null || block["target"]?.Type != JTokenType.String) return source;
             if (view ? (bool?)block["bodyIncluded"] != true :
@@ -58,7 +59,7 @@ namespace RNAssistant.Core.ModelProtocol
             if (alias == null) return source;
             block.AddFirst(new JProperty("ref", alias));
             var projected = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(source));
-            projected.Content = content.Substring(0, start) + root.ToString(Formatting.None) + content.Substring(end);
+            projected.Content = root.ToString(Formatting.None);
             return projected;
         }
 
@@ -85,13 +86,15 @@ namespace RNAssistant.Core.ModelProtocol
 
         public static IReadOnlyList<string> Delivered(IReadOnlyList<ChatMessage> messages)
         {
-            return Array.AsReadOnly(messages.Where(message => message.ProtocolMessage && !message.ExcludeFromModelContext &&
-                message.EvidenceReference?.Kind == ModelReferenceKind.Evidence && message.Activity == null &&
-                message.AcceptedCallOrigin == null && (message.CompletedOperation != null || message.ToolResultProtocolVersion != 0))
-                .Select(message => message.EvidenceReference.Alias).Distinct(StringComparer.Ordinal).ToArray());
+            return Array.AsReadOnly(messages.Where(message => message.ProtocolMessage && !message.ExcludeFromModelContext && message.Activity == null)
+                .SelectMany(message => message.ProjectedEvidenceReferences ??
+                    (message.EvidenceReference?.Kind == ModelReferenceKind.Evidence && message.AcceptedCallOrigin == null &&
+                     (message.CompletedOperation != null || message.ToolResultProtocolVersion != 0)
+                        ? new List<string> { message.EvidenceReference.Alias } : new List<string>()))
+                .Distinct(StringComparer.Ordinal).ToArray());
         }
 
-        private static ChatMessage ProjectMessage(ChatMessage source, IDictionary<string, string> bindings)
+        private static ChatMessage ProjectMessage(ChatMessage source, IDictionary<string, string> bindings, IReadOnlyDictionary<string, string> evidence)
         {
             if (!source.ProtocolMessage || source.ExcludeFromModelContext || source.Activity != null ||
                 source.CompletedOperation == null && source.AcceptedCallOrigin == null && source.ToolResultProtocolVersion == 0)
@@ -104,34 +107,13 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 var accepted = ConversationResponseHistoryReader.Read(source);
                 if (!accepted.Success) throw new InvalidOperationException(accepted.Error);
-                if (source.ToolCalls?.Count > 0)
-                {
-                    // Runtime aliases own the wire pair only; canonical IDs/events stay unchanged.
-                    projected.Content = ModelProtocolWire.WriteNativeHistoryDecision(
-                        accepted.Response.Reason, accepted.Response.Message);
-                    projected.ToolCalls.Single().Id = alias;
-                    projected.ToolCallId = alias;
-                }
-                else
-                {
-                    var body = JObject.Parse(source.Content);
-                    ((JObject)body["tool_calls"][0]).AddFirst(new JProperty("id", alias));
-                    projected.Content = body.ToString(Formatting.None);
-                }
                 return projected;
             }
             var content = source.Content ?? string.Empty;
-            var start = source.CompletedOperation != null ? content.IndexOf('\n') + 1 :
-                content.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal) ? "TOOL_RESULT:\n".Length : 0;
-            var root = JObject.Parse(content.Substring(start));
+            var root = JObject.Parse(content);
             if ((string)root["tool_call_id"] != source.ToolCallId)
                 throw new InvalidOperationException("Model result correlation disagrees with canonical metadata.");
-            if (source.Role == ToolResultRoles.Tool && source.CompletedOperation == null)
-            {
-                projected.ToolCallId = alias;
-                root.Remove("tool_call_id");
-            }
-            else root["tool_call_id"] = alias;
+            root.Remove("tool_call_id");
             root.Remove("evidence");
             if (source.EvidenceReference != null)
             {
@@ -146,12 +128,11 @@ namespace RNAssistant.Core.ModelProtocol
                     ? root["data"]?["observation"] as JObject : null;
             if (observation?["retainedAt"] != null)
             {
-                string retainedAlias;
-                if (!bindings.TryGetValue((string)observation["retainedAt"], out retainedAlias))
-                    throw new InvalidOperationException("Retained body reference is absent from this request.");
-                observation["retainedAt"] = retainedAlias;
+                string retained;
+                if (observation["retainedAt"].Type == JTokenType.String && evidence.TryGetValue((string)observation["retainedAt"], out retained)) observation["retainedAt"] = retained;
+                else observation.Remove("retainedAt");
             }
-            projected.Content = content.Substring(0, start) + root.ToString(Formatting.None);
+            projected.Content = root.ToString(Formatting.None);
             return projected;
         }
     }

@@ -12,7 +12,6 @@ namespace RNAssistant.Core.ModelProtocol
     {
         private readonly LlmCompletionDelegate _completeAsync;
         private readonly Func<TimeSpan, CancellationToken, Task> _delayAsync;
-        private bool _useJsonObject;
 
         public ModelProtocolClient(LlmCompletionDelegate completeAsync)
             : this(completeAsync, (delay, token) => Task.Delay(delay, token))
@@ -34,7 +33,6 @@ namespace RNAssistant.Core.ModelProtocol
             var settings = request.Settings ?? new AppSettings();
             var accepted = (request.AcceptedMessages ?? new ChatMessage[0]).ToArray();
             var options = request.Options ?? new LlmRequestOptions { ResponseFormat = LlmResponseFormats.JsonObject };
-            if (_useJsonObject) UseJsonObject(options);
             object contextUsage = null;
             try
             {
@@ -43,10 +41,13 @@ namespace RNAssistant.Core.ModelProtocol
                     throw new InvalidOperationException("Model protocol requires a complete local sequential-batch context: " +
                         (request.CallContext == null ? "missing context" : request.CallContext.Error));
                 var budget = new ModelProtocolRetryBudget(settings);
-                var fallbackUsed = false;
                 var truncatedResponses = 0;
                 var lastTruncated = false;
                 string lastError = null;
+                string lastRejectedContent = null;
+                string lastRejectedFormat = null;
+                var lastNativeToolCallsObserved = false;
+                string previousRejectedContent = null;
                 var lastErrorKind = ConversationResponseError.None;
                 for (var attempt = 1; attempt <= budget.ProtocolAttemptLimit; attempt++)
                 {
@@ -56,7 +57,8 @@ namespace RNAssistant.Core.ModelProtocol
                     {
                         if (request.CompileRepair == null)
                             throw new InvalidOperationException("Protocol repair requires the owning frozen context compiler.");
-                        attemptMessages = request.CompileRepair(CreateFormatRepairMessage(lastErrorKind, lastError, attempt, budget.ProtocolAttemptLimit));
+                        attemptMessages = request.CompileRepair(CreateFormatRepairMessage(lastErrorKind, lastError, attempt, budget.ProtocolAttemptLimit,
+                            lastRejectedContent, lastRejectedFormat, lastNativeToolCallsObserved));
                     }
                     LlmCompletionResult completion;
                     IReadOnlyList<ChatMessage> wireMessages;
@@ -66,7 +68,7 @@ namespace RNAssistant.Core.ModelProtocol
                         var strict = string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal);
                         wireMessages = strict && request.ProjectJsonSchemaMessages != null
                             ? request.ProjectJsonSchemaMessages(attemptMessages) : attemptMessages;
-                        wireMessages = ModelProtocolWire.ProjectGuidance(wireMessages, strict, request.CallContext.ReflectionEnabled, settings.ToolResultRole);
+                        wireMessages = ModelProtocolWire.ProjectGuidance(wireMessages, strict, request.CallContext.ReflectionEnabled, ToolResultRoles.User);
                         if (request.ProjectReferences != null) wireMessages = request.ProjectReferences(wireMessages);
                         options.TraceMessageContentChanged = ChangedWireMessages(attemptMessages, wireMessages);
                         string budgetError;
@@ -86,19 +88,6 @@ namespace RNAssistant.Core.ModelProtocol
                             completion = await CompleteAsync(settings, wireMessages, options, progress, cancellationToken).ConfigureAwait(false);
                             break;
                         }
-                        catch (LlmRequestException ex) when (
-                            ex.Kind == LlmFailureKind.ResponseFormatUnsupported && !fallbackUsed &&
-                            string.Equals(options.ResponseFormat, LlmResponseFormats.JsonSchema, StringComparison.Ordinal) &&
-                            settings.FallbackToJsonObject)
-                        {
-                            // Compatibility fallback is separate from both retry budgets.
-                            // Reuse this exact prompt/options instance, including during repair.
-                            cancellationToken.ThrowIfCancellationRequested();
-                            fallbackUsed = true;
-                            _useJsonObject = true;
-                            UseJsonObject(options);
-                            if (progress != null && progress.JsonObjectFallback != null) progress.JsonObjectFallback();
-                        }
                         catch (LlmRequestException ex)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
@@ -116,6 +105,11 @@ namespace RNAssistant.Core.ModelProtocol
                         TraceAccepted(options, true, progress);
                         return ModelProtocolResult.Refused(completion, contextUsage);
                     }
+                    // Only the latest content is diagnostic input for a possible retry.
+                    // Provider reasoning and native call objects never become history or proposals.
+                    lastRejectedContent = completion.Content;
+                    lastRejectedFormat = options.ResponseFormat;
+                    lastNativeToolCallsObserved = completion.NativeToolCallsObserved;
                     lastTruncated = completion.Termination == LlmCompletionTermination.OutputLimit;
                     if (lastTruncated)
                     {
@@ -144,6 +138,8 @@ namespace RNAssistant.Core.ModelProtocol
                             request.ProjectReferences == null ? new string[0] : ModelReferenceProjection.Delivered(wireMessages));
                     }
                     lastError = parsed.Error;
+                    var identicalRejection = lastErrorKind == parsed.ErrorKind && previousRejectedContent == completion.Content;
+                    previousRejectedContent = completion.Content;
                     lastErrorKind = parsed.ErrorKind;
                     if (parsed.ErrorKind == ConversationResponseError.EmptyExecuteCalls && completion.NativeToolCallsObserved)
                         lastError += " Provider-native tool_calls were observed separately; return them as name/arguments entries inside the decision JSON, without provider IDs or function wrappers.";
@@ -151,6 +147,9 @@ namespace RNAssistant.Core.ModelProtocol
                     // repair instruction count total protocol responses, starting at one.
                     TraceRejected(options, completion, parsed.ErrorCode + ": " + lastError, attempt - 1, progress);
                     cancellationToken.ThrowIfCancellationRequested();
+                    if (identicalRejection)
+                        return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ProtocolExhausted,
+                            "Модель повторила тот же некорректный ответ. Действия не выполнялись: " + lastError), contextUsage);
                     if (parsed.ErrorKind == ConversationResponseError.ReflectionDisabled)
                         return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.ReflectionDisabled,
                             "Рефлексия отключена для этого запуска, но модель вернула reflection. Ответ отклонён без запроса на корректировку."), contextUsage);
@@ -215,13 +214,6 @@ namespace RNAssistant.Core.ModelProtocol
             return completion;
         }
 
-        private static void UseJsonObject(LlmRequestOptions options)
-        {
-            options.ResponseFormat = LlmResponseFormats.JsonObject;
-            options.ResponseSchemaName = null;
-            options.ResponseSchemaJson = null;
-        }
-
         private static ModelProtocolResult BudgetFailure(string message, object contextUsage)
         {
             return ModelProtocolResult.Failed(new ModelProtocolFailure(ModelProtocolFailureKind.PromptBudgetExceeded, message), contextUsage);
@@ -252,12 +244,14 @@ namespace RNAssistant.Core.ModelProtocol
             return false;
         }
 
-        private static ChatMessage CreateFormatRepairMessage(ConversationResponseError kind, string error, int attempt, int maxAttempts)
+        private static ChatMessage CreateFormatRepairMessage(ConversationResponseError kind, string error, int attempt, int maxAttempts,
+            string rejectedContent, string rejectedResponseFormat, bool nativeToolCallsObserved)
         {
             return new ChatMessage
             {
                 Role = "user", ProtocolMessage = true,
-                Content = ModelProtocolWire.FormatRepairContent(kind, error, attempt, maxAttempts)
+                Content = ModelProtocolWire.FormatRepairContent(kind, error, attempt, maxAttempts,
+                    rejectedContent, rejectedResponseFormat, nativeToolCallsObserved)
             };
         }
 
@@ -265,11 +259,14 @@ namespace RNAssistant.Core.ModelProtocol
         {
             var attempts = ModelProtocolRetryBudget.GetProtocolAttemptLimit(settings);
             if (attempts <= 1) return 0;
-            // Three-byte BMP characters are the maximum UTF-8 cost per valid
-            // UTF-16 code unit; include the truncation suffix used at the bound.
-            var maximumError = new string('\u4e00', ModelProtocolWire.MaximumFormatRepairErrorCharacters) + "...[truncated]";
-            return ModelContextBudget.EstimateMessageTokens(
-                CreateFormatRepairMessage(ConversationResponseError.MissingFinishResults, maximumError, attempts, attempts), settings);
+            // Both strings are bounded by their quoted UTF-8 size, including escapes.
+            var maximumError = new string('x', ModelProtocolWire.MaximumFormatRepairErrorBytes - 2);
+            var maximumResponse = new string('x', ModelProtocolWire.MaximumFormatRepairResponseBytes - 2);
+            var repair = CreateFormatRepairMessage(ConversationResponseError.MissingFinishResults, maximumError, attempts, attempts,
+                maximumResponse, LlmResponseFormats.JsonObject, false);
+            var strict = ModelProtocolWire.ProjectGuidance(new[] { repair }, schemaTransport: true).Single();
+            return Math.Max(ModelContextBudget.EstimateMessageTokens(repair, settings),
+                ModelContextBudget.EstimateMessageTokens(strict, settings));
         }
 
         private static void TraceRejected(LlmRequestOptions options, LlmCompletionResult completion, string error, int attempt, ModelProtocolProgress progress)

@@ -59,8 +59,7 @@ namespace RNAssistant.Office.Services
                     }
                     var isResult = message.Role == ToolResultRoles.Tool || message.ToolResultProtocolVersion != 0 ||
                         !string.IsNullOrWhiteSpace(message.ToolCallId) || !string.IsNullOrWhiteSpace(message.ToolName) ||
-                        !string.IsNullOrWhiteSpace(message.ToolResultRole) ||
-                        message.ProtocolMessage && (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal);
+                        !string.IsNullOrWhiteSpace(message.ToolResultRole);
                     if (!isResult) continue;
                     ToolResultWireReadResult result;
                     string error;
@@ -97,14 +96,8 @@ namespace RNAssistant.Office.Services
                 if (parsed.Response.ToolCalls.Count > 0)
                 {
                     if (!message.ProtocolMessage || message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
-                        message.ToolResultRole != ToolResultRoles.User && message.ToolResultRole != ToolResultRoles.Developer &&
-                        message.ToolResultRole != ToolResultRoles.Tool || calls.ContainsKey(message.ToolCallId))
+                        message.ToolResultRole != ToolResultRoles.User || calls.ContainsKey(message.ToolCallId))
                         throw HistoryFailure("Принятый вызов относится к другой версии результатов или имеет повторный id.");
-                    var native = message.ToolResultRole == ToolResultRoles.Tool;
-                    if (native != (message.ToolCalls != null && message.ToolCalls.Count == 1) ||
-                        native && (message.ToolCalls[0].Name != message.ToolName ||
-                            message.ToolCalls[0].Type != "function"))
-                        throw HistoryFailure("Форма принятого вызова не соответствует сохранённой роли результатов.");
                     calls.Add(message.ToolCallId, message);
                 }
                 else if (message.ToolResultProtocolVersion != 0 || !string.IsNullOrWhiteSpace(message.ToolResultRole))

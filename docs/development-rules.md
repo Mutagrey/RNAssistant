@@ -77,11 +77,12 @@ ModelProtocol.
   предметный результат, а не opaque handle; замена `ResourceRef` на новый
   `candidateId` запрещена.
 - Исключения ограничены exact public tool/skill id, когда это реальная выбираемая
-  semantic identity, и runtime-generated `tool_call_id` транспортного Tool Result.
-  `tool_call_id` нужен только для сопоставления принятого вызова с результатом,
-  никогда не является argument и не создаётся моделью. В model projection он имеет
-  короткое типизированное имя `T1`; finish цитирует отдельно выданное eligible `E1`
-  по reference revision 3 в [текущем контракте](protocols/CONVERSATION_RESPONSE_V8.md). `R1@v2`
+  semantic identity, и runtime-generated `tool_call_id` внутреннего Tool Result (не model wire).
+  В JSON-профиле модель связывает результаты через batch-local `call_index`;
+  внутренний `tool_call_id` нужен только для сопоставления принятого вызова с результатом,
+  никогда не является argument и не создаётся моделью. Короткое имя `T1` остаётся
+  в журнале и Inspector; finish цитирует отдельно выданное eligible `E1`
+  по reference revision 4 в [текущем контракте](protocols/CONVERSATION_RESPONSE_V8.md). `R1@v2`
   допускается только как метка наблюдения в owned context header: это не runtime
   revision, не target инструмента и не authority. Канонические значения остаются закрытыми.
 - Resource — данные, Tool — действие. Resource read не выдаёт execution authority.

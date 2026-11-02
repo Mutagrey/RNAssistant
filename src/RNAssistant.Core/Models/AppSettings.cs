@@ -146,6 +146,8 @@ namespace RNAssistant.Core.Models
         public bool? SupportsReasoning { get; set; }
         public bool? SupportsAudio { get; set; }
         public int? MaxImagesPerPrompt { get; set; }
+        public bool ShouldSerializeToolResultRole() { return false; }
+        public bool ShouldSerializeFallbackToJsonObject() { return false; }
         public string ReasoningRequestMode { get; set; }
 
         public ModelCapabilitySettings Clone()
@@ -240,7 +242,7 @@ namespace RNAssistant.Core.Models
             ToolResultContract +
             "## Completion\n\n" +
             "Use a resource tool only when the answer needs content that is not already present in active context. Reuse a known semantic target; find it only if unknown or unresolved. Never pass a resource URI, revision or continuation cursor; bounded table selectors are permitted by the read schema. " +
-            "Finish when the question is answered or state the concrete missing information. Never claim a resource was read unless its matching `TOOL_RESULT` has `status=ok` and the returned data supports the claim.";
+            "Finish when the question is answered or state the concrete missing information. Never claim a resource was read unless its matching `tool_results` entry has `status=ok` and the returned data supports the claim.";
 
         public const string PlanInstructions =
             "# RNAssistant Plan Mode\n\n" +
@@ -259,7 +261,7 @@ namespace RNAssistant.Core.Models
 
         public const string ToolInstructions =
             "# Agent tool policy\n\n" +
-            "- Runtime Context lists Available now tools and their exact schemas, plus a separate Load on demand catalog. Use exact listed ids; never derive, translate or invent them. `core.tools.search` optionally filters that same list.\n" +
+            "- Runtime Context lists Available now tools and their exact schemas, plus a separate Load on demand catalog. Call Available now tools directly; core.tools.read is not a prerequisite for each use. Use exact listed ids; never derive, translate or invent them. `core.tools.search` optionally filters that same list.\n" +
             "- For an unloaded direct tool, call `core.tools.read` with its exact id, then wait for `TOOL_PACK_STATE` with `admitted=true` before calling it. A rejected extension is not callable. If the entry has `loadSkill`, select one listed skill instead; an empty list means unavailable. Direct discovery cannot admit skill-only tools. Reuse admitted schemas across confirmation, compaction and restart while offered in the current request.\n" +
             "- Skills own domain workflow; the loaded tool description/schema owns exact operations, root arguments and result semantics. Follow the higher-priority prompt/schema and report a conflict instead of inventing compatibility arguments.\n" +
             "- Read current Office state when an edit depends on missing or invalidated source; reuse included current after-state. Resource reads use semantic selectors; table reads may use bounded offset, limit and exact column keys. Omit path for Office targets. `data.truncated=true` is incomplete; follow the returned reading guidance.\n" +
@@ -279,12 +281,12 @@ namespace RNAssistant.Core.Models
         public const int DefaultDesktopWindowWidth = 1600;
         public const int MinimumDesktopWindowWidth = 900;
         public const int MaximumDesktopWindowWidth = 3840;
-        public const int CurrentAgentPromptSchemaVersion = 64;
+        public const int CurrentAgentPromptSchemaVersion = 67;
         public const int DefaultMaxTokens = 3072;
         public const int DefaultMaxImagesPerPrompt = 5;
         public const int DefaultRequestTimeoutSeconds = 1800;
         public const int DefaultMaxAgentIterations = 256;
-        public const int DefaultMaxAgentFormatRetries = 10;
+        public const int DefaultMaxAgentFormatRetries = 3;
         public const int DefaultMaxConsecutiveReflections = 2;
         public const int MaximumConsecutiveReflections = 20;
         public const int MaximumAgentFormatRetries = 20;
@@ -310,8 +312,23 @@ namespace RNAssistant.Core.Models
         public string AttachmentAnalysisPrompt { get; set; }
         public string SystemPromptRole { get; set; }
         public string AgentResponseMode { get; set; }
-        public string ToolResultRole { get; set; }
-        public bool FallbackToJsonObject { get; set; }
+        // Deserialization-only migration adapters. Saved production settings have
+        // one JSON history profile; no legacy control is written back.
+        private const string JsonProfileMigrationNotice =
+            "История переведена на JSON-профиль; для старого контракта нужен новый чат. Автоматический переход json_schema → json_object отключён: выберите поддерживаемый формат явно.";
+        public string ProtocolMigrationNotice { get; set; }
+        public string ToolResultRole
+        {
+            get { return ToolResultRoles.User; }
+            set { if (!string.IsNullOrEmpty(value) && value != ToolResultRoles.User) ProtocolMigrationNotice = JsonProfileMigrationNotice; }
+        }
+        public bool FallbackToJsonObject
+        {
+            get { return false; }
+            set { if (value) ProtocolMigrationNotice = JsonProfileMigrationNotice; }
+        }
+        public bool ShouldSerializeToolResultRole() { return false; }
+        public bool ShouldSerializeFallbackToJsonObject() { return false; }
         public string ReasoningRequestMode { get; set; }
         public string ReasoningCustomJson { get; set; }
         public int MaxTokens { get; set; }
@@ -391,7 +408,7 @@ namespace RNAssistant.Core.Models
             SystemPromptRole = "developer";
             AgentResponseMode = AgentResponseModes.JsonObject;
             ToolResultRole = ToolResultRoles.User;
-            FallbackToJsonObject = true;
+            FallbackToJsonObject = false;
             ReasoningRequestMode = ReasoningRequestModes.ChatTemplateKwargs;
             ReasoningCustomJson = "{}";
             MaxTokens = DefaultMaxTokens;
@@ -440,6 +457,7 @@ namespace RNAssistant.Core.Models
         {
             if (AgentPromptSchemaVersion != CurrentAgentPromptSchemaVersion)
             {
+                if (AgentPromptSchemaVersion < 67) ProtocolMigrationNotice = JsonProfileMigrationNotice;
                 var defaults = new AppSettings();
                 SystemPrompt = defaults.SystemPrompt;
                 AgentToolsPrompt = defaults.AgentToolsPrompt;

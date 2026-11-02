@@ -17,6 +17,26 @@ AssistantController.Agent.cs (ToolResultWire); их исправление вн�
 Ожидание уже начатой навигации/каталога, реальный Save As и Windows timing остаются
 открытыми. Глобальное холодное восстановление существующих чатов не отменено.
 
+## JSON-профиль и harness — 2026-11-02
+
+По принятому плану production сохраняет JSON-решения и передаёт индексированные
+`tool_results` в user content. Убраны synthetic native history и автоматический
+schema fallback; nonfinal message необязателен. Repair содержит ограниченный
+отклонённый ответ и явный факт отсутствия dispatch; повторы ограничены. Внутренние
+IDs/guards/evidence остаются у runtime. Reference contract 4 / Tool Result 2;
+старые чаты читаются, продолжение требует нового чата.
+
+Owner: Core ModelProtocol/context/settings; Application/Office и Web — consumers.
+Lab revision 5 разделяет видимость данных/ID, неоднозначное связывание, полную базовую
+схему и native-цикл. Форма использует общий viewer и подтверждённое сохранение.
+Ошибки компиляции protocol/controller, отмеченные в соседних отчётах, исправлены.
+104 адресные host-neutral проверки, две Chromium fixtures и offline rendering
+прошли без моделей и Office;
+реальный endpoint, его шаблон и Windows/Office остаются открытым evidence.
+Контракт: [v8](../protocols/CONVERSATION_RESPONSE_V8.md),
+диагностика: [endpoint compatibility](../model-endpoint-compatibility.md#production-json-profile--2026-11-02).
+
+
 ## Общий Browser S3b.3a — 2026-11-02
 
 HTML и plugin получили общий стабильный renderer в ViewerRegistry и отдельные Dock
@@ -465,7 +485,7 @@ checks и unknown-call no-replay прошли. Synthetic CLI: historical finish 
 transport без новых tools во втором run и guarded write после compaction.
 Реальные модели и Windows/Office/VSTO не запускались. Далее P6/full Inspector;
 реальная qualification остаётся открытой по указанию пользователя.
-[Контракт](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3),
+[Контракт](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4),
 [проверки](../model-endpoint-compatibility.md#current-p5-admission--2026-10-30).
 
 ## V8 P4: хронология и материализация source bodies — 2026-10-30
@@ -593,7 +613,7 @@ Kernel suite: 58/59; external-unknown assertion так же падает на ч
 и schemas. P4 chronological bodies и P5 cross-run historical citations/оптимизация
 admission остаются открыты: P2 пока допускает E только текущего run. P6/full Inspector,
 реальная модель и Windows/Office/WebView2 qualification также открыты.
-[Текущий контракт](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+[Текущий контракт](../protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 
 ## V8 Diagnostics: минимальный UI — 2026-10-30
 

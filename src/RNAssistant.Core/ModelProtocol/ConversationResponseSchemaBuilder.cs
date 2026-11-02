@@ -32,6 +32,7 @@ namespace RNAssistant.Core.ModelProtocol
                 }));
             }
             var branches = new JArray();
+            var definitions = new JObject();
             // Disjoint catalogs keep each argument contract once, and exclude mixed batches.
             if (reads.Count > 0 || singleCalls.Count > 0)
             {
@@ -39,11 +40,13 @@ namespace RNAssistant.Core.ModelProtocol
                     ? new JObject { ["anyOf"] = new JArray(CallArray(singleCalls, 1), CallArray(reads, MaximumToolCalls)) }
                     : reads.Count > 0 ? CallArray(reads, MaximumToolCalls) : CallArray(singleCalls, 1);
                 calls["description"] = ModelProtocolWire.ExecuteGuidance;
-                branches.Add(Branch(ConversationResponse.ExecuteAction, "tool_calls", calls, context.ReflectionEnabled));
+                definitions["calls"] = calls;
+                AddOptionalMessageBranches(branches, ConversationResponse.ExecuteAction, "tool_calls",
+                    new JObject { ["$ref"] = "#/$defs/calls" }, context.ReflectionEnabled);
             }
             if (context.ReflectionEnabled)
-                branches.Add(Branch(ConversationResponse.ReflectionAction, "decision",
-                    new JObject(NonblankString()) { ["description"] = ModelProtocolWire.DecisionGuidance }, true));
+                AddOptionalMessageBranches(branches, ConversationResponse.ReflectionAction, "decision",
+                    new JObject(NonblankString()) { ["description"] = ModelProtocolWire.DecisionGuidance }, true);
             branches.Add(Branch(ConversationResponse.FinishAction, "results", new JObject
             {
                 ["type"] = "array",
@@ -64,10 +67,22 @@ namespace RNAssistant.Core.ModelProtocol
             }, context.ReflectionEnabled));
             // Structured Outputs requires an object root; the closed action union
             // lives inside an explicit transport envelope, never a permissive root.
-            return ClosedObject(new JObject
+            var root = ClosedObject(new JObject
             {
                 ["response"] = new JObject { ["anyOf"] = branches }
-            }).ToString(Formatting.None);
+            });
+            if (definitions.Count > 0) root["$defs"] = definitions;
+            return root.ToString(Formatting.None);
+        }
+
+        private static void AddOptionalMessageBranches(JArray branches, string action, string field, JObject schema, bool reflectionEnabled)
+        {
+            var withMessage = Branch(action, field, schema, reflectionEnabled);
+            var withoutMessage = (JObject)withMessage.DeepClone();
+            ((JObject)withoutMessage["properties"]).Remove("message");
+            withoutMessage["required"] = new JArray(((JObject)withoutMessage["properties"]).Properties().Select(item => item.Name));
+            branches.Add(withoutMessage);
+            branches.Add(withMessage);
         }
 
         private static JObject Branch(string action, string field, JObject schema, bool reflectionEnabled)

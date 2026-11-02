@@ -298,7 +298,7 @@ namespace RNAssistant.Office.Services
             var currentTokens = EstimateMessageTokens(current);
             var hasStandaloneInstruction = messages != null && messages.Count > 1 &&
                 (messages[0].Content ?? "").StartsWith(RuntimeContextPrompt.AgentHeader, StringComparison.Ordinal);
-            var runtimeMessage = messages?.FirstOrDefault(message => (message.Content ?? "").StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal));
+            var runtimeMessage = messages?.FirstOrDefault(message => RuntimeContextPrompt.IsRuntimeContext(message));
             var instructionMessageTokens = hasStandaloneInstruction ? EstimateMessageTokens(messages[0]) + EstimateMessageTokens(runtimeMessage) : 0;
             string agentGeneralInstruction;
             string agentToolInstruction;
@@ -319,7 +319,7 @@ namespace RNAssistant.Office.Services
                 capabilityCatalog);
             runtime["loaded_skills"] = new JArray((_receipt?.Arsenal?.Selected ?? new List<ArsenalSkill>())
                 .Where(skill => skill.Status == "selected").Select(skill => skill.Id));
-            if ((runtimeMessage?.Content ?? "").EndsWith(RuntimeContextPrompt.SchemaDefinitions, StringComparison.Ordinal))
+            if (RuntimeContextPrompt.UsesResponseSchema(runtimeMessage))
                 foreach (var tool in ((JArray)runtime["tools"]).OfType<JObject>())
                     ((JObject)tool["function"]).Remove("parameters");
             var embeddedInstructionTokens = 0;

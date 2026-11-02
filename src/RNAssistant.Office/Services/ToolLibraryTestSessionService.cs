@@ -139,7 +139,7 @@ namespace RNAssistant.Office.Services
                 ToolName = toolId,
                 ToolResultRole = ToolResultRoles.User,
                 ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                Content = "TOOL_RESULT:" + ToolResultWire.Write(
+                Content = ToolResultWire.Write(
                     callId, toolId, terminal),
                 ProtocolMessage = true
             });

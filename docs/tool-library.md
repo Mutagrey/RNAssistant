@@ -4,7 +4,7 @@ Trusted `ToolPolicy.EvidenceEligibility` is `None` or `Eligible`; it participate
 snapshot hashes, copies and policy drift checks. Capability search/schema reads,
 skill loading and resource find/search/outline publish no E reference. Other reads
 and mutations default to Eligible. Only a terminal runtime commit may issue E;
-a tool/model never supplies it. See [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 
 Текущий контракт Core, patch и имён: [Text mutations](text-mutations.md).
 Текущий [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
@@ -131,11 +131,17 @@ result is projected as a compact receipt with `schemaInRequest=true`. The compil
 passes that surface separately from the discoverable catalog; the projection must
 match both the complete descriptor and its revision before omitting the duplicate
 descriptor. The exact schema remains in the request instructions or strict response
-schema, including fallback to `json_object`. Full read evidence stays in the durable
+schema, according to the explicitly selected response format. Full read evidence stays in the durable
 transcript/CAS. Admission still consumes that complete result; replay still requires
 durable tool-pack extension decisions. The compact receipt cannot grant authority.
 Missing admission/surface, incomplete reads, mismatches and
 stale/error diagnostics do not become successful compact receipts.
+
+The runtime-context guidance identifies `Available now` as directly callable and
+explains `schemaInRequest=true`: the omitted duplicate descriptor is supplied in
+`Callable tool definitions` or `response_format.json_schema`. Another schema read
+is not a prerequisite for using the tool. The existing no-progress guard can
+reject a fourth identical schema read; this does not revoke callable membership.
 
 The `skills.excel.analysis.reporting` package supplies inspection, sheet creation, range
 writes, tables, formatting and both workbook/chat charts. Standalone operations do
@@ -674,7 +680,7 @@ are not. Its field names, defaults, effects and accepted arguments are unchanged
 `ForPrompt` retains the compact form. `ForStructuredOutput` expands these
 fragments before nullable/strict conversion so the provider receives the same
 complete variants as before. The measured saving therefore applies to the
-`json_object` prompt/descriptor, including strict-response fallback; the strict
+`json_object` prompt/descriptor; the strict
 `json_schema` response contract itself is unchanged. Descriptor revisions still
 change with their exact serialized contents; old admission evidence cannot stand
 in for a current descriptor.
@@ -1018,7 +1024,7 @@ HTML vendor globals исполняются только в sandbox HTML workspac
 
 Повторные операции контролируются typed `ToolExecutionProgress`/recovery в kernel,
 исторический результат — `CompletedToolOperation`, отсутствие/устаревание тела —
-`ResourceObservationNotice`. Внешний Tool Result v1 не меняется. Complete core skill
+`ResourceObservationNotice`. Терминальные статусы не меняются; текущий transport определён в v8 protocol. Complete core skill
 и resource read используют один Gateway whole-reader; partial references сохраняют
 свою точную coverage. Prompt schema 33 согласована с этим контрактом; custom prompts
 требуют review, без автоматической перезаписи. R61 inventory отражает новые schemas.
@@ -1105,8 +1111,9 @@ semantic target должен выдерживать round-trip: target из find
 
 ### Что именно унифицировать в ответах
 
-Единый внешний Tool Result v1 уже существует: `tool_call_id`, `name`, `status`,
-`message`, `data`; статусы `ok/error/unknown`. Это сохраняется. Добавлять ещё один
+Внутренний Tool Result v2 содержит `type:tool_result`, `tool_call_id`, `name`, `status`,
+`message`, `data`; статусы `ok/error/unknown`. Модель получает пакет `tool_results`
+с `call_index`, без внутренних IDs; точный контракт — в [v8](protocols/CONVERSATION_RESPONSE_V8.md). Добавлять ещё один
 `success/ok` рядом или заставлять таблицу и VBA source иметь одинаковое содержимое
 не нужно.
 
@@ -1115,7 +1122,7 @@ semantic target должен выдерживать round-trip: target из find
 Preflight дополняет тот же outcome, сохраняя effect, recovery и read-back;
 `HtmlWorkspaceToolHandler` сериализует данные один раз при создании Tool Result.
 Handler не восстанавливает resource-ссылки из JSON. Durable `artifactRef`/`members`
-и внешний Tool Result v1 сохраняются; preview получает typed DTO напрямую из дерева.
+и семантика терминального результата сохраняются; preview получает typed DTO напрямую из дерева.
 
 Слабая граница — `data` как произвольный JSON плюс независимые metadata paths.
 `ModelToolResultProjection` знает семейства по именам и рекурсивно удаляет ключи,

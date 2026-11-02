@@ -44,11 +44,12 @@ namespace RNAssistant.Harness
                     if (scenario.Id == "C5" || scenario.Id == "C6")
                     {
                         var call = JObject.Parse((string)messages.Single(item => (string)item["role"] == "assistant")["content"]);
-                        AssertEqual("T2", (string)call["tool_calls"][0]["id"], "fallback call carries its runtime alias");
-                        var resultMessage = messages.Single(item => ((string)item["content"] ?? "").StartsWith("TOOL_RESULT:\n"));
-                        var body = JObject.Parse(((string)resultMessage["content"]).Substring("TOOL_RESULT:\n".Length));
-                        AssertEqual("ok", (string)body["status"], "fallback uses the production result envelope");
-                        AssertTrue(body["arguments"] == null, "fallback result cannot leak target from repeated arguments");
+                        AssertTrue(call["tool_calls"][0]["id"] == null, "JSON call has no invented identity");
+                        var resultMessage = messages.Single(item => ((string)item["content"] ?? "").StartsWith("{\"type\":\"tool_results\""));
+                        var body = JObject.Parse((string)resultMessage["content"]);
+                        AssertEqual("ok", (string)body["results"][0]["status"], "typed result envelope");
+                        AssertEqual(0, (int)body["results"][0]["call_index"], "result maps to original call");
+                        AssertTrue(body["results"][0]["tool_call_id"] == null, "JSON result has no transport ID");
                     }
                     if (scenario.Id == "B3") AssertTrue(native.Property("content") == null, "content omitted");
                     if (scenario.Id == "B5")
@@ -102,9 +103,10 @@ namespace RNAssistant.Harness
                 {
                     var result = runner.RunAsync(settings, i == 1 || i == 6 ? negative : pairing,
                         ModelDiagnosticExecutionKind.Synthetic, CancellationToken.None).GetAwaiter().GetResult();
-                    AssertEqual(i >= 4 && i <= 6 ? ModelDiagnosticVerdict.Inconclusive : ModelDiagnosticVerdict.Fail,
+                    AssertEqual(i == 0 ? ModelDiagnosticVerdict.Pass : i >= 4 && i <= 6 ? ModelDiagnosticVerdict.Inconclusive : ModelDiagnosticVerdict.Fail,
                         result.Verdict, "bad answer or transport is not success: " + i);
                     AssertTrue(result.RequestUtf8 != null && result.ResponsePayload != null, "failures retain exact exchange");
+                    if (i == 0) AssertEqual(ModelDiagnosticVerdict.Fail, result.CallIdVisibilityVerdict, "wrong ID does not invalidate visible content");
                     if (i == 4) AssertEqual(500, result.HttpStatusCode.Value, "500 is recorded, never inferred unsupported");
                     if (i == 5)
                     {
@@ -114,6 +116,23 @@ namespace RNAssistant.Harness
                 }
                 AssertEqual(replies.Count, requests.Count, "no hidden retries or fallback");
             });
+        }
+
+        private static void ModelDiagnosticsInvisibleId()
+        {
+            foreach (var id in new[] { "B2", "B5-opaque" })
+            {
+                var scenario = ModelDiagnosticScenarios.NativeHistory("hidden-id").Single(s => s.Id == id);
+                var answer = JObject.Parse(scenario.ExpectedJson); answer["tool_call_id"] = JValue.CreateNull();
+                WithDiagnosticEndpoint(new Func<JObject, DiagnosticReply>[] { request => DiagnosticContent(answer.ToString(Formatting.None)) }, (settings, requests) => {
+                    var result = new ModelDiagnosticRunner(new LlmClient(() => "synthetic").CompleteAsync)
+                        .RunAsync(settings, scenario, ModelDiagnosticExecutionKind.Synthetic, CancellationToken.None).GetAwaiter().GetResult();
+                    AssertEqual(ModelDiagnosticVerdict.Pass, result.VisibilityVerdict, "visible marker passes");
+                    AssertEqual(ModelDiagnosticVerdict.Inconclusive, result.CallIdVisibilityVerdict, "null ID does not claim visibility");
+                    AssertEqual(id == "B2" ? ModelDiagnosticVerdict.Pass : ModelDiagnosticVerdict.Inconclusive, result.Verdict,
+                        "ambiguous mapping is distinct from content visibility");
+                });
+            }
         }
 
         private static async Task ModelDiagnosticsCancellation()
@@ -145,22 +164,22 @@ namespace RNAssistant.Harness
         { return new DiagnosticReply { Body = new JObject { ["choices"] = new JArray(new JObject {
             ["finish_reason"] = "stop", ["message"] = new JObject { ["role"] = "assistant", ["content"] = content } }) }.ToString(Formatting.None) }; }
 
+        // Serializer fixture: it sees HTTP fields, unlike a rendered model prompt.
+        // Actual template visibility is covered by tests/protocol/qwen38.
         private static DiagnosticReply DiagnosticAnswer(JObject request)
         {
             string marker = null;
+            string callId = null;
             foreach (var message in request["messages"])
             {
                 var text = (string)message["content"] ?? "";
                 if ((string)message["role"] == "tool" && (string)message["tool_call_id"] == "T2")
-                    marker = (string)JObject.Parse(text)["marker"];
-                else if (text.StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal))
-                {
-                    var result = JObject.Parse(text.Substring(text.IndexOf('\n') + 1));
-                    if ((string)result["tool_call_id"] == "T2") marker = (string)result["data"]["marker"];
-                }
+                { marker = (string)JObject.Parse(text)["marker"]; callId = "T2"; }
+                else if (text.StartsWith("{\"type\":\"tool_results\"", StringComparison.Ordinal))
+                    marker = (string)JObject.Parse(text)["results"][0]["data"]["marker"];
             }
             return DiagnosticContent(new JObject { ["target"] = "ModuleB", ["marker"] = marker == null ? JValue.CreateNull() : new JValue(marker),
-                ["tool_call_id"] = "T2" }.ToString(Formatting.None));
+                ["tool_call_id"] = callId == null ? JValue.CreateNull() : new JValue(callId) }.ToString(Formatting.None));
         }
 
         private static void WithDiagnosticEndpoint(IEnumerable<Func<JObject, DiagnosticReply>> replies,

@@ -62,7 +62,7 @@ namespace RNAssistant.Core.Tools
                         return _admit(candidate, new ChatMessage { Role = role, ToolResultRole = role,
                             ProtocolMessage = true, ToolCallId = context.Execution.Call.Id, ToolName = ToolId,
                             RunId = _session.LastRun.RunId, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                            Content = role == ToolResultRoles.Tool ? wire : "TOOL_RESULT:\n" + wire });
+                            Content = wire });
                     });
                 return Task.FromResult(new ToolHandlerResult(SelectionResult(selected)));
             }

@@ -15,15 +15,17 @@ const { chromium } = require("playwright");
     await page.evaluate(() => {
       window.labCalls = []; window.labHold = false;
       const controls = { A2: ["A2-system"], C3: ["C3-valid"], C4: ["C4-control"] };
-      const catalog = window.labCatalog = { scenarioRevision: 4, endpoint: "http://synthetic.invalid/v1", model: "scripted",
+      const catalog = window.labCatalog = { scenarioRevision: 5, endpoint: "http://synthetic.invalid/v1", model: "scripted",
         scenarios: Object.keys(modelDiagnosticTitles).map(id => ({ id, capability: id, assertion: "HistoryJson",
           controls: controls[id] || [], isControl: ["A2-system", "C3-valid", "C4-control"].includes(id),
           responseFormat: "json_object", streaming: id === "C4" })) };
       function exchange(id) {
         return { result: { ScenarioId: id, Model: "scripted", Endpoint: catalog.endpoint, ExecutionKind: "Synthetic",
-          Verdict: id === "B5" || id === "C4" ? "Fail" : "Pass", Reason: id === "B5" ? "call_id_mismatch" :
+          Verdict: id === "C4" ? "Fail" : "Pass", Reason: id === "B5" ? "exact_json_answer" :
             id === "C4" ? "v8_parser_rejected" : id === "C3" ? "invalid_schema_rejected" : "exact_json_answer",
           HttpStatusCode: id === "C3" ? 400 : 200, HttpAccepted: id !== "C3", MarkerMatches: id === "B5" ? true : null,
+          VisibilityVerdict: id === "B5" || id === "B2" ? "Pass" : "NotRun",
+          CallIdVisibilityVerdict: id === "B5" ? "Fail" : id === "B2" ? "Inconclusive" : "NotRun",
           CallIdMatches: id === "B5" ? false : null, TargetMatches: id === "B5" ? true : null,
           ParserVerdict: id === "C4" ? "Fail" : id === "C4-control" ? "Pass" : "NotRun", ParityVerdict: id === "C4" ? "Inconclusive" : "NotRun",
           StreamingRequested: id === "C4", StreamingObserved: id === "C4", ResponseBodyComplete: false,
@@ -44,7 +46,7 @@ const { chromium } = require("playwright");
           const waiting = new Promise((resolve, reject) => { window.labReject = reject; });
           waiting.requestId = "held-probe"; return waiting;
         }
-        return Promise.resolve({ scenarioRevision: 4, seed: payload.seed,
+        return Promise.resolve({ scenarioRevision: 5, seed: payload.seed,
           exchanges: [...(controls[payload.scenarioId] || []), payload.scenarioId].map(exchange) });
       };
       window.cancelBridgeRequest = function (id) {
@@ -76,8 +78,8 @@ const { chromium } = require("playwright");
     await page.locator('#modelLabSeed').fill("ui-seed");
     await page.locator('#modelLabOptions > summary').click();
     await page.locator('#modelLabRun').click();
-    await page.waitForFunction(() => !modelDiagnosticsLab.running && modelDiagnosticsLab.rows.length === 23);
-    assert.equal(await page.evaluate(() => labCalls.filter(c => c.type === "runModelDiagnostic").length), 20, "controls are host-owned");
+    await page.waitForFunction(() => !modelDiagnosticsLab.running && modelDiagnosticsLab.rows.length === 26);
+    assert.equal(await page.evaluate(() => labCalls.filter(c => c.type === "runModelDiagnostic").length), 23, "controls are host-owned");
     assert.equal(await page.locator('#modelLabResults table.rna-table').count(), 1, "shared result table");
     assert.match(await page.locator('#modelLabResults').innerText(), /Не пройдено/);
     assert.match(await page.locator('#modelLabResults').innerText(), /C4-control/);
@@ -97,7 +99,7 @@ const { chromium } = require("playwright");
     await page.locator('#modelLabResults [data-row-key="B5/1"] button').focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('#modelLabResults [data-row-key="B5/1"]').getAttribute('aria-selected'), 'true', "keyboard selects");
-    assert.match(await page.locator('#modelLabInspector').innerText(), /Ответ связан с другим вызовом/);
+    assert.match(await page.locator('#modelLabInspector').innerText(), /ID[\s\S]*Не пройдено/);
     await page.locator('#modelLabResults [data-row-key="C3/1"] td').last().click();
     assert.match(await page.locator('#modelLabInspector').innerText(), /отказ HTTP 400\/422/);
     await page.locator('#modelLabResults [data-row-key="B8/1"] td').last().click();
@@ -107,7 +109,7 @@ const { chromium } = require("playwright");
     const download = await downloadWait;
     const fs = require("node:fs");
     const report = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
-    assert.equal(report.rows.length, 23);
+    assert.equal(report.rows.length, 26);
     assert.equal(report.rows[0].seed, "ui-seed/1");
     assert.equal(report.rows.find(row => row.id === "C4-control").seed, "ui-seed/1", "controls retain reproducibility metadata");
     assert.ok(report.rows.find(row => row.id === "C4").exchange.response.truncated, "export preserves preview limitations");
@@ -162,7 +164,7 @@ const { chromium } = require("playwright");
     await page.locator('#modelLabStop').click();
     await page.waitForFunction(() => !modelDiagnosticsLab.running);
     assert.deepEqual(await page.evaluate(() => modelDiagnosticsLab.rows.map(r => r.phase)), ["Cancelled"]);
-    assert.equal(await page.evaluate(() => labCalls.filter(c => c.type === "runModelDiagnostic").length), 21, "stop prevents next request");
+    assert.equal(await page.evaluate(() => labCalls.filter(c => c.type === "runModelDiagnostic").length), 24, "stop prevents next request");
     assert.match(await page.locator('#modelLabStatus').innerText(), /отменена/);
     assert.doesNotMatch(await page.locator('#modelLabInspector').innerText(), /Ошибка запуска не является результатом/);
     await page.evaluate(() => { window.labHold = false; window.labFailure = 'Synthetic transport failure'; });

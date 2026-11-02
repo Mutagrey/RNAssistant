@@ -170,6 +170,10 @@ select потребляет те же nav items и общий `.rna-form-control
 принадлежит `app-product-screens.css`; Shell не управляет внутренней навигацией.
 [Снимок с меню](review/s1c-settings-hover.png), [узкая группа](review/s1c-settings-narrow.png).
 
+JSON-профиль агента использует существующие `setting-field`, `setting-note`,
+`details` и JSON viewer. Один select формата без дублирующих колонок истории/роли;
+миграция — текстовый status, пример — раскрываемый блок. Новые tokens/CSS не нужны.
+
 ## Общие controls модели S2a
 
 Owner: существующие composer/model-picker/model-capabilities. Один menu renderer,

@@ -748,41 +748,18 @@
                     <h3 id="agentProtocolTitle">Протокол</h3>
                   </div>
                 </div>
-                <div class="form-grid two-columns agent-protocol-controls">
-                  <div class="form-grid">
-                    <label>
-                      <span>Формат нового ответа</span>
-                      <select id="agentResponseModeInput" aria-describedby="agentResponseModeNote">
-                        <option value="json_object">json_object · JSON в content</option>
-                        <option value="json_schema">json_schema · строгая схема</option>
-                      </select>
-                      <small id="agentResponseModeNote">Новый execute всегда содержит непустой tool_calls внутри JSON.</small>
-                    </label>
-                    <label class="checkline agent-protocol-fallback" id="agentJsonFallbackField">
-                      <input id="fallbackJsonObjectInput" type="checkbox">
-                      <span>Если сервер не поддерживает схему, повторить через json_object</span>
-                    </label>
-                  </div>
-                  <div class="form-grid">
-                    <label>
-                      <span>Формат истории</span>
-                      <select id="agentHistoryFormatInput" aria-describedby="agentHistoryFormatNote">
-                        <option value="json_content">JSON в content</option>
-                        <option value="native_tools">Native tools + JSON решения</option>
-                      </select>
-                      <small id="agentHistoryFormatNote">Представление принятых вызовов в следующих запросах.</small>
-                    </label>
-                    <label id="toolResultRoleField">
-                      <span>Роль результата инструмента</span>
-                      <select id="toolResultRoleInput" aria-describedby="toolResultRoleNote">
-                        <option value="user">user · TOOL_RESULT</option>
-                        <option value="developer">developer · TOOL_RESULT</option>
-                        <option value="tool" hidden disabled>tool · native-история</option>
-                      </select>
-                      <small id="toolResultRoleNote">Для роли tool выберите Native tools в истории.</small>
-                    </label>
-                  </div>
+                <div class="form-grid agent-protocol-controls">
+                  <label>
+                    <span>Формат нового ответа</span>
+                    <select id="agentResponseModeInput" aria-describedby="agentResponseModeNote">
+                      <option value="json_object">json_object · JSON в content</option>
+                      <option value="json_schema">json_schema · строгая схема</option>
+                    </select>
+                    <small id="agentResponseModeNote">Ответ и история сохраняют JSON.</small>
+                  </label>
+                  <p class="setting-note">JSON-профиль: результаты инструментов — типизированные данные в user.content. Native tools доступны для исследования в лаборатории.</p>
                 </div>
+                <p class="setting-note" id="agentProtocolMigrationNote" role="status" hidden></p>
                 <p class="setting-note" id="agentProtocolApplyNote" role="status"></p>
                 <details class="product-settings-advanced agent-protocol-example" id="agentProtocolExample">
                   <summary>Пример обмена · <span id="agentProtocolExampleSummary"></span></summary>
@@ -791,7 +768,7 @@
                       <div><p class="setting-note">1. Новый ответ модели</p><div id="agentResponseExample"></div></div>
                       <div><p class="setting-note">2. История в следующем запросе</p><div id="agentHistoryExample"></div></div>
                     </div>
-                    <p class="setting-note">Пример execute. Инструкции, схема и результат сокращены. Finish и reflection в истории сохраняют полный JSON; вызовов в native-части у них нет.</p>
+                    <p class="setting-note">Пример execute. Инструкции, схема и данные сокращены. call_index связывает результат с позицией вызова; внутренние ID в ответ модели не добавляются.</p>
                   </div>
                 </details>
               </section>

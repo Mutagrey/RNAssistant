@@ -2258,8 +2258,8 @@ See the [continuity contract](conversation-protocol.md#agent-continuity-audit--2
 
 ## Model resource labels — 2026-10-26
 
-[Reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3)
-separates T calls from eligible E results. R identity/provenance is unchanged;
+[Reference revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4)
+keeps T calls internal and exposes eligible E results. R identity/provenance is unchanged;
 lookup accepts `r1@V2` but does not normalize semantic targets or source text.
 R never becomes a tool argument or finish evidence.
 

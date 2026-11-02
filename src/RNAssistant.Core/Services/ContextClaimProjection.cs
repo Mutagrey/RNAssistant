@@ -35,7 +35,7 @@ namespace RNAssistant.Core.Services
             data["bodyIncluded"] = false;
             data["retainedAt"] = new JObject { ["kind"] = "selected_skill", ["id"] = skill.Id };
             var json = ToolResultWire.WriteParsed(wire.ToolCallId, wire.Name, wire.Result, data, wire.ResultResource);
-            message.Content = message.Role == ToolResultRoles.Tool ? json : "TOOL_RESULT:\n" + json;
+            message.Content = json;
             return new ContextMessagePresentation { Kind = "data.text", Presentation = ContextPresentationKind.Summary,
                 RetainedAtMessageId = instruction.Id,
                 Reason = "Точное полное тело уже включено в выбранный skill; исходное чтение сохранено в истории." };

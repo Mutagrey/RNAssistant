@@ -129,8 +129,8 @@ namespace RNAssistant.Harness
                             var nextContents = string.Join("\n", nextWire["messages"].Select(item => (string)item["content"]));
                             AssertTrue(calls.All(call => !nextContents.Contains(call.ToolCallId)),
                                 "model message bodies expose aliases, never canonical GUIDs");
-                            AssertTrue(nextContents.Contains("\"id\":\"T1\"") && nextContents.Contains("\"tool_call_id\":\"T1\""),
-                                "model receives both accepted call and result with the same short reference");
+                            AssertTrue(nextContents.Contains("\"call_index\":0") && nextContents.Contains("\"call_index\":1") && !nextContents.Contains("\"id\":\"T1\""),
+                                "model receives the original batch and indexed results");
                             AssertTrue(calls.All(call => !string.IsNullOrWhiteSpace(call.ToolCallId) &&
                                 (string)JObject.Parse(call.Content)["tool_calls"]?[0]?["name"] == call.ToolName &&
                                 JObject.Parse(call.Content)["tool_calls"]?.Count() == 1),
@@ -167,8 +167,9 @@ namespace RNAssistant.Harness
                             AssertEqual("История читается.", next.Summary.AssistantMessage, "next turn receives model answer");
                             var modelMessages = (JArray)JObject.Parse(requests[expectedRequests - 1])["messages"];
                             AssertTrue(modelMessages.Any(item => (string)item["role"] == "assistant" &&
-                                (string)item["content"] == "Первый ответ."),
-                                "next request contains accepted final narration without a protocol envelope");
+                                (string)JObject.Parse((string)item["content"])["message"] == "Первый ответ." &&
+                                (string)JObject.Parse((string)item["content"])["action"] == "finish"),
+                                "next request retains the full accepted finish decision");
                             var corrupted = reopened.GetSession(workspace, sessionId);
                             AssertTrue(corrupted.Messages.Any(item => item.Role == "assistant" && item.ProtocolMessage &&
                                 item.Content.Contains("\"message\":\"Первый ответ.\"")),
@@ -223,7 +224,7 @@ namespace RNAssistant.Harness
                             forged = new ChatStore(paths).Load(sessionId);
                             sibling = forged.Messages.Single(message => message.Id == sibling.Id);
                             sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
-                                siblingOrigin.ModelAttemptId, invalidIndex);
+                                siblingOrigin.ModelAttemptId, invalidIndex, Math.Max(siblingOrigin.CallCount, invalidIndex + 1));
                             new ChatStore(paths).Commit(forged,
                                 new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
                             using (var batchService = new WorkspaceConversationService(paths))
@@ -253,7 +254,7 @@ namespace RNAssistant.Harness
                         new ChatStore(paths).Commit(forged,
                             new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
                         forged = new ChatStore(paths).Load(sessionId);
-                        var forgedResult = forged.Messages.First(message => message.Role == "tool" &&
+                        var forgedResult = forged.Messages.First(message => message.Role == "user" &&
                             message.ToolName == "core.find");
                         forgedResult.ToolName = "different.tool";
                         new ChatStore(paths).Commit(forged,

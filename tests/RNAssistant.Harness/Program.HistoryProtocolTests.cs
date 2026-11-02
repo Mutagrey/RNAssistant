@@ -12,6 +12,7 @@ using RNAssistant.Core.ModelProtocol;
 using RNAssistant.Core.Models;
 using RNAssistant.Core.Services;
 using RNAssistant.Core.Storage;
+using RNAssistant.Core.Tools;
 using RNAssistant.Office.Contracts;
 using RNAssistant.Office.Services;
 using RNAssistant.Office.Tools;
@@ -20,106 +21,116 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void HistoryProtocolOptionalMessage()
+        {
+            var migrated = JsonConvert.DeserializeObject<AppSettings>("{\"ToolResultRole\":\"tool\",\"FallbackToJsonObject\":true}");
+            AssertEqual("user", migrated.ToolResultRole, "old native preference migrates explicitly");
+            AssertTrue(!migrated.FallbackToJsonObject && !string.IsNullOrEmpty(migrated.ProtocolMigrationNotice), "migration notice is retained");
+            var saved = JObject.FromObject(migrated);
+            AssertTrue(saved["ToolResultRole"] == null && saved["FallbackToJsonObject"] == null, "retired controls are not serialized");
+            var oldJson = new AppSettings { AgentPromptSchemaVersion = 66 };
+            oldJson.NormalizeAgentPrompts();
+            AssertTrue(!string.IsNullOrEmpty(oldJson.ProtocolMigrationNotice), "old JSON history also announces the new contract");
+            var tool = V8ReadTool();
+            var context = new ModelProtocolCallContext(new[] { tool.Id });
+            var schema = ExpandResponseSchema(JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }, context)));
+            foreach (var action in new[] { "execute", "reflection", "finish" })
+            foreach (var variant in new[] { "omitted", "empty", "null", "text" })
+            {
+                var value = action == "execute" ? JObject.Parse(V8Envelope(V8Call(arguments: new JObject {
+                    ["query"] = "A", ["limit"] = JValue.CreateNull(), ["at"] = JValue.CreateNull() }))) :
+                    action == "reflection" ? new JObject { ["action"] = action, ["reason"] = "Choose a check.", ["decision"] = "Inspect the observed source." } :
+                    JObject.Parse(V8Envelope());
+                value.Remove("message");
+                if (variant != "omitted") value["message"] = variant == "null" ? JValue.CreateNull() : new JValue(variant == "empty" ? "" : "Ready.");
+                var expected = action == "finish" ? variant == "text" : variant != "null";
+                string error;
+                var parsed = new ConversationResponseParser().Parse(value.ToString(Formatting.None), new[] { tool }, new[] { tool }, context);
+                AssertEqual(expected, parsed.Success, action + "/" + variant + " parser");
+                AssertEqual(expected, ToolSchemaSupport.ValidateArguments(SchemaTransport(value), schema, false, out error), action + "/" + variant + " schema: " + error);
+                if (expected) AssertEqual(variant != "omitted", JObject.Parse(parsed.Response.ToJson()).Property("message") != null, "presence survives accepted serialization");
+            }
+        }
+
+        private static async Task HistoryProtocolStopsIdenticalRepair()
+        {
+            AssertEqual(3, new AppSettings().MaxAgentFormatRetries, "three received responses by default");
+            var calls = 0;
+            var client = new ModelProtocolClient((settings, messages, options, progress, token) => {
+                calls++;
+                if (calls == 2)
+                {
+                    var repair = JObject.Parse(messages.Last().Content);
+                    AssertEqual("format_repair", (string)repair["type"], "typed retry context");
+                    AssertEqual(false, (bool)repair["dispatched"], "rejection did not execute");
+                }
+                return Task.FromResult(new LlmCompletionResult { Content = "{\"action\":\"execute\",\"reason\":\"Read.\"}" });
+            });
+            var result = await client.GetResponseAsync(NewProtocolRequest(10), null, CancellationToken.None);
+            AssertEqual(2, calls, "two identical invalid answers stop without spending ten attempts");
+            AssertEqual(ModelProtocolFailureKind.ProtocolExhausted, result.Failure.Kind, "typed no-progress failure");
+        }
+
         private static async Task HistoryProtocolSeparatesResponseAndHistory()
         {
-            foreach (var mode in new[] { AgentResponseModes.JsonObject, AgentResponseModes.JsonSchema })
-            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
-            foreach (var instructionRole in new[] { "developer", "system", "user" })
-            foreach (var reflectionEnabled in new[] { false, true })
+            foreach (var strict in new[] { false, true })
+            foreach (var role in new[] { "system", "developer", "user" })
             {
-                var request = NewProtocolRequest(1, mode == AgentResponseModes.JsonSchema);
-                request.Settings.ToolResultRole = role;
-                request.Settings.SystemPromptRole = instructionRole;
-                request.Settings.MaxConsecutiveReflections = reflectionEnabled ? 2 : 0;
-                request.CallContext = new ModelProtocolCallContext(new string[0], reflectionEnabled: reflectionEnabled);
-                request.Options = ModelProtocolWire.CreateRequestOptions(mode, request.CallableTools, request.CallContext);
-                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "runtime-call", Name = "test.read" },
-                    "Read.", "Inspect.", null, role, FixtureCallOrigin());
-                call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
-                var result = ContinuityResult(call.ToolCallId, call.ToolName, RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read."), role);
-                result.ToolCallReference = call.ToolCallReference;
-                result.EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, 1);
-                var reflection = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.ReflectionAction,
-                    "The read returned the requested source.", "Reviewing the result.", decision: "Report the observed source.");
-                var finish = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
-                    "The read is confirmed by E1.", "Source inspected.",
-                    results: new[] { new ConversationResultClaim("Inspect source.", new[] { "E1" }, ConversationAssessment.Satisfied) },
-                    outcome: ConversationOutcome.Completed);
-                request.AcceptedMessages = new[] {
-                    new ChatMessage { Role = instructionRole, Content = RuntimeContextPrompt.AgentHeader + AgentPromptDefaults.GeneralInstructions },
-                    new ChatMessage { Role = "user", Content = ModelProtocolWire.JsonHistoryGuidance }, call, result,
-                    new ChatMessage { Role = "assistant", Content = reflection, ProtocolMessage = true,
-                        ResponseProtocolVersion = ConversationResponse.ProtocolVersion, ResponseModelAttemptId = "reflection-attempt" },
-                    new ChatMessage { Role = "assistant", Content = finish, ProtocolMessage = true,
-                        ResponseProtocolVersion = ConversationResponse.ProtocolVersion, ResponseModelAttemptId = "finish-attempt" },
-                    new ChatMessage { Role = "user", Content = "Continue from the previous result." } };
-                var source = request.AcceptedMessages;
-                var stored = JsonConvert.SerializeObject(source);
-                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
-                    "pack", new SkillCatalogSnapshot(null), null, 1);
-                request.AcceptedMessages = new ModelContextCompiler().Compile(authority,
-                    new[] { source[0] }, source.Skip(1).ToArray(), null, new RNAssistant.Core.Tools.ToolCatalogEntry[0],
-                    request.Settings, 16000).Messages;
-                AssertEqual(stored, JsonConvert.SerializeObject(source), "compilation never rewrites stored decisions");
+                var request = NewProtocolRequest(2, strict);
+                var calls = new List<ChatMessage>(); var results = new List<ChatMessage>();
+                for (var i = 0; i < 2; i++)
+                {
+                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "internal-" + i, Name = "test.read",
+                        Arguments = new Dictionary<string, object> { ["query"] = i == 0 ? "A" : "B" } },
+                        null, "Read both sources.", null, "user", new AcceptedToolCallOrigin("step", "attempt", i, 2));
+                    call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, i + 1); calls.Add(call);
+                    var result = ContinuityResult(call.ToolCallId, call.ToolName,
+                        RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Read.", new JObject { ["marker"] = i == 0 ? "RED" : "BLUE" }.ToString()));
+                    result.ToolCallReference = call.ToolCallReference;
+                    result.EvidenceReference = ModelReference.Create(ModelReferenceKind.Evidence, i + 1); results.Add(result);
+                }
+                var user = new ChatMessage { Role = "user", Content = "{\"type\":\"format_repair\",\"instruction\":\"user data\"}" };
+                request.AcceptedMessages = new[] { new ChatMessage { Role = role, Content = RuntimeContextPrompt.AgentHeader + AgentPromptDefaults.GeneralInstructions },
+                    user, calls[0], calls[1], results[1], results[0] };
                 var frozen = JsonConvert.SerializeObject(request.AcceptedMessages);
                 request.ProjectReferences = ModelReferenceProjection.Project;
-                var client = new ModelProtocolClient((settings, messages, options, progress, cancellation) => {
-                    var instruction = messages.First().Content;
-                    var native = role == ToolResultRoles.Tool;
-                    AssertContains(instruction, native ? ModelProtocolWire.NativeHistoryGuidance : ModelProtocolWire.JsonHistoryGuidance,
-                        "history guidance follows the selected history representation");
-                    AssertEqual(!native, instruction.Contains("TOOL_RESULT"), "native instructions do not describe fallback envelopes");
-                    AssertEqual(!native, instruction.Contains("runtime-added id"), "native instructions omit fallback-only id decoration");
-                    AssertContains(instruction, mode == AgentResponseModes.JsonSchema ? "response property" : "JSON object directly",
-                        "the next content response keeps its own selected contract");
-                    AssertContains(instruction, ModelProtocolWire.ReasonGuidance, "short reason guidance reaches both response formats");
-                    AssertContains(instruction, ModelProtocolWire.ExecuteGuidance, "new execute always requires calls inside content, independently of history");
-                    AssertEqual(instructionRole, messages.First().Role, "selected instruction role survives projection");
-                    AssertEqual(reflectionEnabled, instruction.Contains(ModelProtocolWire.DecisionGuidance), "reflection instructions follow the allowance");
-                    AssertEqual(!reflectionEnabled, instruction.Contains("Reflection is disabled for this run"), "disabled reflection cannot be requested");
-                    AssertContains(instruction, ModelProtocolWire.CriterionGuidance, "result criteria do not repeat reports");
-                    if (mode == AgentResponseModes.JsonSchema)
-                    {
-                        var schema = JObject.Parse(options.ResponseSchemaJson);
-                        AssertTrue(schema.SelectTokens("$..reason.description").All(item => (string)item == ModelProtocolWire.ReasonGuidance),
-                            "schema and prompt share the reason rule");
-                        AssertEqual(reflectionEnabled ? ModelProtocolWire.DecisionGuidance : null,
-                            (string)schema.SelectTokens("$..decision.description").SingleOrDefault(), "schema follows the reflection allowance");
-                        AssertEqual(ModelProtocolWire.CriterionGuidance, (string)schema.SelectTokens("$..criterion.description").Single(),
-                            "schema describes concise result criteria");
-                    }
-                    AssertEqual(ModelProtocolWire.JsonHistoryGuidance, messages.ElementAt(1).Content, "user content is never instruction-projected");
-                    AssertEqual(mode, options.ResponseFormat, "native history cannot change output response_format");
+                var client = new ModelProtocolClient((settings, messages, options, progress, token) => {
+                    var projectedMessages = messages.ToArray();
+                    AssertEqual(role, projectedMessages[0].Role, "instruction role remains selected");
+                    AssertEqual(user.Content, projectedMessages[1].Content, "user service-shaped JSON stays untouched");
+                    AssertContains(projectedMessages[0].Content, ModelProtocolWire.JsonHistoryGuidance, "single history contract");
                     var wire = JArray.FromObject(new LlmMessageBuilder().Build(messages, settings, options).Messages);
-                    AssertTrue(JToken.DeepEquals(JObject.Parse(reflection), JObject.Parse((string)wire[4]["content"])),
-                        "compiled reflection preserves action, reason, decision and message");
-                    AssertTrue(JToken.DeepEquals(JObject.Parse(finish), JObject.Parse((string)wire[5]["content"])),
-                        "compiled prior-run finish preserves outcome and evidence assessments");
-                    AssertEqual(role, (string)wire[3]["role"], "selected result role survives actual message serialization");
-                    if (native)
-                    {
-                        AssertEqual("T1", (string)wire[2]["tool_calls"][0]["id"], "native accepted call uses runtime alias");
-                        AssertEqual("T1", (string)wire[3]["tool_call_id"], "native result is paired");
-                        var decision = JObject.Parse((string)wire[2]["content"]);
-                        AssertEqual("execute", (string)decision["action"], "native history retains the chosen action");
-                        AssertEqual("Inspect.", (string)decision["reason"], "native history retains the decision reason");
-                        AssertEqual("Read.", (string)decision["message"], "native history retains narration");
-                        AssertTrue(decision["tool_calls"] == null && decision.Count == 3, "calls occur only in the native field");
-                    }
-                    else
-                    {
-                        AssertTrue(wire[2]["tool_calls"] == null, "JSON history uses assistant content");
-                        AssertContains((string)wire[3]["content"], "TOOL_RESULT:", "fallback result remains identified");
-                    }
-                    var response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Report read.", "Read verified.",
-                        results: new[] { new ConversationResultClaim("Read the source.", new[] { "E1" }, ConversationAssessment.Satisfied) },
-                        outcome: ConversationOutcome.Completed);
-                    return Task.FromResult(new LlmCompletionResult { Content = mode == AgentResponseModes.JsonSchema
-                        ? "{\"response\":" + response + "}" : response });
+                    AssertEqual(4, wire.Count, "two calls and two results become one exchange");
+                    var decision = JObject.Parse((string)wire[2]["content"]);
+                    var output = JObject.Parse((string)wire[3]["content"]);
+                    AssertEqual(2, ((JArray)decision["tool_calls"]).Count, "original batch is restored");
+                    AssertTrue(decision["message"] == null && decision["tool_calls"][0]["id"] == null, "no invented fields");
+                    AssertTrue(wire[2]["tool_calls"] == null && wire[3]["tool_call_id"] == null, "no synthetic native transport");
+                    AssertEqual("user", (string)wire[3]["role"], "JSON result role");
+                    AssertEqual("tool_results", (string)output["type"], "typed result group");
+                    AssertEqual("RED", (string)output["results"][0]["data"]["marker"], "out of order results are paired by runtime identity");
+                    AssertEqual(1, (int)output["results"][1]["call_index"], "indices refer to original calls");
+                    AssertEqual("E1,E2", string.Join(",", ModelReferenceProjection.Delivered(projectedMessages)), "all grouped evidence remains delivered");
+                    AssertTrue(!wire.ToString().Contains("internal-"), "runtime IDs stay private");
+                    var receipt = new ContextReceipt { Messages = request.AcceptedMessages.Select((m, i) => new ContextMessagePresentation {
+                        SourceMessageId = m.Id, MessageIndex = i, Role = m.Role, ToolCallId = m.ToolCallId, EvidenceReference = m.EvidenceReference, Presentation = ContextPresentationKind.Full }).ToList() };
+                    var attributed = LlmClient.DescribeWireMessages(projectedMessages, receipt, null, null, wire, settings);
+                    AssertEqual(2, attributed[2].Parts.Count, "grouped decision keeps both journal links");
+                    AssertEqual(2, attributed[3].Parts.Count, "grouped results keep both journal links");
+                    var savedTrace = JsonConvert.DeserializeObject<List<ContextMessagePresentation>>(JsonConvert.SerializeObject(attributed));
+                    var terminalSources = ContextMessagePresentation.Sources(savedTrace).Where(m => m.EvidenceReference != null).ToArray();
+                    AssertEqual("internal-0,internal-1", string.Join(",", terminalSources.Select(m => m.ToolCallId)), "Inspector preserves each operation after trace round-trip");
+                    AssertTrue(terminalSources.All(m => m.Presentation == ContextPresentationKind.Summary), "delivered E references remain citable without claiming exact source bytes");
+                    AssertTrue(ModelReferenceProjection.Delivered(ModelReferenceProjection.Project(projectedMessages)).SequenceEqual(new[] { "E1", "E2" }), "projection is idempotent");
+                    var finish = ModelProtocolWire.WriteAcceptedDecision("finish", "Answer ready.", "Done.",
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                    return Task.FromResult(new LlmCompletionResult { Content = strict ? "{\"response\":" + finish + "}" : finish });
                 });
-                var completion = await client.GetResponseAsync(request, null, CancellationToken.None);
-                AssertTrue(completion.Response != null && completion.Failure == null, "content JSON is accepted with every history transport");
-                AssertEqual(frozen, JsonConvert.SerializeObject(request.AcceptedMessages), "projection preserves the frozen source for fallback");
+                var response = await client.GetResponseAsync(request, null, CancellationToken.None);
+                AssertTrue(response.Failure == null, "JSON batch request: " + response.Failure?.Message);
+                AssertEqual(frozen, JsonConvert.SerializeObject(request.AcceptedMessages), "canonical history is immutable");
+                var partial = ModelReferenceProjection.Project(new[] { calls[1], results[1] });
+                AssertEqual("completed_operation", (string)JObject.Parse(partial.Single().Content)["type"], "compacted sibling is an explicit receipt");
             }
         }
 
@@ -151,13 +162,14 @@ namespace RNAssistant.Harness
                 var client = new ModelProtocolClient(async (settings, messages, options, progress, cancellation) => {
                     attempts++;
                     AssertContains(messages.First().Content, ModelProtocolWire.ExecuteGuidance, "both formats state the fresh-response rule");
-                    AssertContains(messages.First().Content, "not a valid template for a new execute response", "native history is explicitly historical");
-                    var historical = messages.Single(candidate => candidate.ToolCalls?.Count > 0);
-                    AssertTrue(JObject.Parse(historical.Content)["tool_calls"] == null && historical.ToolCalls[0].Id == "T1",
-                        "history still separates decision content and native calls on every attempt");
+                    var historical = messages.Single(candidate => candidate.Role == "assistant");
+                    AssertTrue(JObject.Parse(historical.Content)["tool_calls"] != null && historical.ToolCalls.Count == 0,
+                        "history uses the same execute shape on every attempt");
                     if (attempts == 2)
                     {
-                        var repair = JObject.Parse(messages.Last().Content.Substring("FORMAT_REPAIR:\n".Length));
+                        var repair = JObject.Parse(messages.Last().Content);
+                        AssertEqual(rejectedContent, (string)repair["rejected_response"]["content"], "repair quotes the rejected content before any native history projection");
+                        AssertEqual(nativeReply, (bool)repair["rejected_response"]["native_tool_calls_observed"], "repair identifies separate native generation without executing it");
                         AssertEqual(invalidShape == "missing" ? "empty_execute_calls" : "invalid_tool_call", (string)repair["code"], "malformed execute is rejected before acceptance");
                         AssertContains((string)repair["instruction"], "supply the intended next calls inside the new decision JSON", "repair retains the fresh-call rule");
                         AssertEqual(nativeReply && invalidShape == "missing", ((string)repair["error"]).Contains("Provider-native tool_calls were observed"),
@@ -211,46 +223,76 @@ namespace RNAssistant.Harness
             }
         }
 
-        private static async Task HistoryProtocolSurvivesRepairAndFallback()
+        private static async Task HistoryProtocolRepairPreservesReflectionDecision()
         {
+            foreach (var strict in new[] { false, true })
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
-            foreach (var instructionRole in new[] { "developer", "system", "user" })
-            foreach (var reflectionEnabled in new[] { false, true })
             {
-                var request = NewProtocolRequest(2, true);
+                var request = NewProtocolRequest(2, strict);
                 request.Settings.ToolResultRole = role;
-                request.Settings.SystemPromptRole = instructionRole;
-                request.CallContext = new ModelProtocolCallContext(new string[0], reflectionEnabled: reflectionEnabled);
-                request.Options = ModelProtocolWire.CreateRequestOptions(request.Settings.AgentResponseMode, request.CallableTools, request.CallContext);
-                request.AcceptedMessages = new[] { new ChatMessage { Role = instructionRole,
-                    Content = RuntimeContextPrompt.AgentHeader + AgentPromptDefaults.GeneralInstructions } };
-                var frozen = request.AcceptedMessages;
-                request.CompileRepair = notice => frozen.Concat(new[] { notice }).ToArray();
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "accepted-read", Name = "test.read" },
+                    "", "Read Module1 source.", null, role, FixtureCallOrigin());
+                var result = ContinuityResult(call.ToolCallId, call.ToolName,
+                    RNAssistant.Core.Tools.Contracts.ToolResult.Ok("Source read.", "{\"text\":\"Sub TestScene3DRun1()\\nEnd Sub\"}"), role);
+                request.AcceptedMessages = new[] { new ChatMessage { Role = "system", Content = AgentPromptDefaults.GeneralInstructions },
+                    new ChatMessage { Role = "user", Content = "Run the checks in Module1." }, call, result };
+                var frozen = JsonConvert.SerializeObject(request.AcceptedMessages);
+                request.CompileRepair = notice => request.AcceptedMessages.Concat(new[] { notice }).ToArray();
+                var decision = new JObject { ["action"] = "reflection", ["reason"] = "Identify which checks to run on Module1.",
+                    ["decision"] = "Load the macro tool, then run TestScene3DRun1." };
+                var corrected = (JObject)decision.DeepClone();
+                decision["tool_calls"] = new JArray();
+                var rejected = (strict ? new JObject { ["response"] = decision.DeepClone() } : decision).ToString(Formatting.None);
                 var attempts = 0;
                 var client = new ModelProtocolClient((settings, messages, options, progress, cancellation) => {
                     attempts++;
-                    var strict = options.ResponseFormat == LlmResponseFormats.JsonSchema;
-                    AssertEqual(attempts < 3, strict, "only explicit schema refusal changes the response transport");
-                    AssertEqual(instructionRole, messages.First().Role, "repair and fallback retain the instruction role");
-                    AssertContains(messages.First().Content, role == ToolResultRoles.Tool
-                        ? ModelProtocolWire.NativeHistoryGuidance : ModelProtocolWire.JsonHistoryGuidance, "repair/fallback preserve history instructions");
-                    AssertEqual(role != ToolResultRoles.Tool, messages.First().Content.Contains("TOOL_RESULT"), "fallback changes output schema, not history transport");
-                    AssertContains(messages.First().Content, ModelProtocolWire.ResponseGuidance(strict, reflectionEnabled), "owned contract follows the active response format");
-                    if (attempts > 1)
+                    if (attempts == 2)
                     {
-                        var repair = JObject.Parse(messages.Last().Content.Substring("FORMAT_REPAIR:\n".Length));
-                        AssertContains((string)repair["instruction"], ModelProtocolWire.ResponseGuidance(strict, reflectionEnabled),
-                            "repair follows response format and reflection allowance too");
+                        var repair = JObject.Parse(messages.Last().Content);
+                        AssertEqual("wrong_action_fields", (string)repair["code"], "reflection rejects execute-only fields");
+                        AssertEqual(rejected, (string)repair["rejected_response"]["content"], "reason and decision survive only in the rejected diagnostic");
+                        AssertContains((string)repair["error"], "forbids root field tool_calls", "precise action-specific error");
+                        AssertContains((string)repair["instruction"], "not to the preceding accepted assistant/tool exchange", "repair cannot refer to the successful read");
+                        AssertContains((string)repair["instruction"], "Do not change action", "repair preserves reflection instead of inviting empty execute");
+                        AssertEqual(result.Content, messages.ElementAt(messages.Count() - 2).Content, "preceding read data remains intact");
                     }
-                    if (attempts == 2) throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "synthetic schema refusal");
-                    return Task.FromResult(new LlmCompletionResult { Content = attempts == 1 ? "invalid" :
-                        ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction, "Answer.", "Done.",
-                            results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed) });
+                    AssertTrue(messages.All(message => string.IsNullOrEmpty(message.ReasoningContent)), "provider reasoning is not model history");
+                    return Task.FromResult(new LlmCompletionResult { Content = attempts == 1 ? rejected :
+                        (strict ? new JObject { ["response"] = corrected } : corrected).ToString(Formatting.None),
+                        ReasoningContent = "PRIVATE_PROVIDER_REASONING" });
                 });
-                var completion = await client.GetResponseAsync(request, null, CancellationToken.None);
-                AssertTrue(completion.Response != null && attempts == 3, "invalid content and explicit format refusal stay bounded");
-                AssertEqual(RuntimeContextPrompt.AgentHeader + AgentPromptDefaults.GeneralInstructions, frozen[0].Content,
-                    "wire projection does not overwrite accepted instructions");
+                var accepted = await client.GetResponseAsync(request, null, CancellationToken.None);
+                AssertTrue(accepted.Failure == null && attempts == 2, "missing message repairs without executing another read: " + accepted.Failure?.Message);
+                AssertEqual("reflection", accepted.Response.Action, "reflection remains reflection");
+                AssertEqual((string)decision["decision"], accepted.Response.Decision, "chosen next step is retained");
+                AssertEqual<string>(null, accepted.Response.Message, "absent nonfinal message stays absent");
+                AssertEqual(frozen, JsonConvert.SerializeObject(request.AcceptedMessages), "repair never adds the rejected draft to accepted history");
+            }
+        }
+
+        private static async Task HistoryProtocolSurvivesRepairAndFallback()
+        {
+            foreach (var strict in new[] { false, true })
+            {
+                var request = NewProtocolRequest(2, strict); var attempts = 0;
+                var rejected = "{\"unrecognized\":\"quoted diagnostic\"}";
+                var client = new ModelProtocolClient((settings, messages, options, progress, token) => {
+                    attempts++;
+                    AssertEqual(strict ? "json_schema" : "json_object", options.ResponseFormat, "repair keeps the selected transport");
+                    if (attempts == 2)
+                    {
+                        var repair = JObject.Parse(messages.Last().Content);
+                        AssertEqual("format_repair", (string)repair["type"], "typed repair");
+                        AssertEqual(rejected, (string)repair["rejected_response"]["content"], "exact rejected response");
+                        AssertEqual(false, (bool)repair["dispatched"], "no actions from rejection");
+                    }
+                    var finish = ModelProtocolWire.WriteAcceptedDecision("finish", "Answer ready.", "Done.",
+                        results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                    return Task.FromResult(new LlmCompletionResult { Content = attempts == 1 ? rejected :
+                        strict ? "{\"response\":" + finish + "}" : finish });
+                });
+                var result = await client.GetResponseAsync(request, null, CancellationToken.None);
+                AssertTrue(result.Failure == null && attempts == 2, "same-profile repair succeeds: " + result.Failure?.Message);
             }
         }
 
@@ -273,7 +315,7 @@ namespace RNAssistant.Harness
                     AssertEqual(expected.ToolResultRole, settings.ToolResultRole, "next run uses the saved history setting");
                     AssertEqual(expected.SystemPromptRole, messages.First().Role, "published instruction role changes immediately");
                     var native = expected.ToolResultRole == ToolResultRoles.Tool;
-                    AssertContains(messages.First().Content, native ? ModelProtocolWire.NativeHistoryGuidance : ModelProtocolWire.JsonHistoryGuidance,
+                    AssertContains(messages.First().Content, native ? ModelProtocolWire.JsonHistoryGuidance : ModelProtocolWire.JsonHistoryGuidance,
                         "next run has matching instructions");
                     var wire = JArray.FromObject(new LlmMessageBuilder().Build(messages, settings, options).Messages);
                     if (wire.Any(message => message["tool_calls"] != null) || requests > 1)
@@ -302,7 +344,7 @@ namespace RNAssistant.Harness
                     var result = run.ExecuteAsync(ChatModes.Agent, "Найди инструменты CSS и предложи скругление button.",
                         session, NewContext(adapter), storage.Load(), OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                         .GetAwaiter().GetResult();
-                    AssertEqual(2, requests, "each run has one call and its answer, without stale-format repair");
+                    AssertEqual(2, requests, "each run has one call and its answer, without stale-format repair (" + role + "): " + result.AssistantText);
                     AssertEqual("Use border-radius: 8px;", result.AssistantText, "the same live chat completes with each saved configuration");
                 }
             });

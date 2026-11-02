@@ -69,15 +69,16 @@ Owner — Core/Application; после принятия diff это истори
 и [план Diagnostics / Qualification Lab](proposals/RNAssistant_V8_Diagnostics_Qualification_Plan.md)
 от 2026-10-30. Owner — Core ModelProtocol/LLM/context; существующие Office/Workspace
 adapters и Web Inspector остаются consumers. P0/D0 начат; headless P1/D1 расширен
-до 23 synthetic-проверенных A/B/C сценариев текущего контракта; пять CLI context
-fixtures снимают exact wire чтений, patch, compaction и skills. Live-model прогоны
-по указанию пользователя отложены; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
+до 26 scripted A/B/C сценариев (diagnostic revision 5); пять CLI context
+fixtures снимают exact wire чтений, patch, compaction и skills. Текущий production [JSON-профиль](protocols/CONVERSATION_RESPONSE_V8.md)
+не использует native history. Live-model прогоны по указанию пользователя отложены; [baseline и действующие пробы](model-endpoint-compatibility.md#v8-diagnostics-first-slice--2026-10-30).
 [Диагностика](diagnostics.md) — canonical структура экранов, владельцы,
 аудит, ограничения и проверка. Единый вход: Запуски / Лаборатория / Приложение;
 настройки управляют будущими запросами. [Лаборатория](model-endpoint-compatibility.md#diagnostics-ui--2026-10-30)
 использует общие встроенные сценарии и HTTP transport.
-P2 ввёл [reference revision 3](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3):
-T/E separation, eligibility, `criterion` и новый чат для старой истории.
+P2 ввёл T/E separation, eligibility и `criterion`. Текущий
+[reference revision 4](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4)
+оставляет T внутренними, связывает JSON-результаты по `call_index` и требует нового чата для старой истории.
 P3 ввёл [компактную сборку запроса](conversation-protocol.md#p3-request-composition--2026-10-30)
 и единственную materialization выбранных skills/схем. P4 сохраняет
 [хронологические пары и единственную копию source body](conversation-protocol.md#p4-chronological-bodies--2026-10-30)

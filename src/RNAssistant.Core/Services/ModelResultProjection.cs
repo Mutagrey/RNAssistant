@@ -16,7 +16,6 @@ namespace RNAssistant.Core.Services
     // additional sanitization; no callback may read live state or execute a tool.
     public sealed class ModelResultProjection
     {
-        private const string Prefix = "TOOL_RESULT:\n";
         // Match core.read; binary data-plane views stay runtime-only.
         private static readonly HashSet<string> ModelReadRepresentations = new HashSet<string>(StringComparer.Ordinal) {
             ResourceRepresentations.Metadata, ResourceRepresentations.Text, ResourceRepresentations.Structure,
@@ -32,43 +31,6 @@ namespace RNAssistant.Core.Services
 
         // Request transport is chosen after bounded payload materialization.
         // This mutates only the compiler's detached message, never durable facts.
-        internal static void NormalizeTransport(ChatMessage message, string role)
-        {
-            if (!message.ProtocolMessage || message.CompletedOperation != null) return;
-            if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
-            {
-                var parsed = ConversationResponseHistoryReader.Read(message);
-                if (!parsed.Success) throw new InvalidOperationException("Stored response is invalid: " + parsed.Error);
-                if (parsed.Response.ToolCalls.Count > 0)
-                {
-                    var call = parsed.Response.ToolCalls.Single();
-                    var native = role == ToolResultRoles.Tool;
-                    message.ToolResultRole = role;
-                    message.ResponseReason = native ? parsed.Response.Reason : null;
-                    message.Content = native ? parsed.Response.Message : ModelProtocolWire.WriteAcceptedCall(
-                        parsed.Response.Reason, parsed.Response.Message,
-                        new ConversationToolCall { Name = call.Name, Arguments = JObject.Parse(call.ArgumentsJson) });
-                    message.ToolCalls = native ? new List<LlmToolCall> { new LlmToolCall {
-                        Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } }
-                        : new List<LlmToolCall>();
-                    message.AcceptedCallPayload = null;
-                    message.ArgumentPayload = null;
-                    message.AcceptedCallNarration = null;
-                }
-                // No-call decisions retain action/reason/decision or outcome/results.
-                // A finish is model assessment, not disposable display-only prose.
-            }
-            else if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant")
-            {
-                ToolResultWireReadResult wire; string error;
-                if (!ToolResultHistoryReader.TryRead(message, out wire, out error) || wire.ToolCallId != message.ToolCallId)
-                    throw new InvalidOperationException("Stored tool result is invalid: " + error);
-                var body = message.Role == ToolResultRoles.Tool ? message.Content : message.Content.Substring(Prefix.Length);
-                message.Role = role; message.ToolResultRole = role;
-                message.Content = role == ToolResultRoles.Tool ? body : Prefix + body;
-            }
-        }
-
         public ChatMessage Project(
             ChatMessage source,
             IEnumerable<ToolCatalogEntry> tools = null,
@@ -93,8 +55,6 @@ namespace RNAssistant.Core.Services
                 StringComparison.OrdinalIgnoreCase))
             {
                 projected.Content = SanitizeAcceptedAssistantContent(source);
-                if (source.ToolResultRole == ToolResultRoles.Tool)
-                    projected.ResponseReason = SanitizeOperationalText(source.ResponseReason);
                 return projected;
             }
 
@@ -129,9 +89,7 @@ namespace RNAssistant.Core.Services
                 model.Result,
                 model.Data,
                 model.ResultResource);
-            projected.Content = string.Equals(projected.Role, ToolResultRoles.Tool, StringComparison.Ordinal)
-                ? json
-                : Prefix + json;
+            projected.Content = json;
             return projected;
         }
 
@@ -457,59 +415,10 @@ namespace RNAssistant.Core.Services
 
         private static string SanitizeAcceptedAssistantContent(ChatMessage source)
         {
-            if (string.Equals(source.ToolResultRole, ToolResultRoles.Tool, StringComparison.Ordinal))
-                return SanitizeOperationalText(source.Content);
-
-            // The v8 writer places reason before calls and message last. Change only
-            // those operational strings; call arguments may contain exact user text.
-            const string prefix = "{\"action\":\"execute\",\"reason\":";
-            const string calls = ",\"tool_calls\":";
-            const string messageField = ",\"message\":";
-            var content = source.Content ?? string.Empty;
-            if (source.ResponseProtocolVersion != ConversationResponse.ProtocolVersion ||
-                !content.StartsWith(prefix, StringComparison.Ordinal))
-                return SanitizeOperationalText(content);
-            int reasonEnd;
-            string reason;
-            if (!TryReadJsonString(content, prefix.Length, out reasonEnd, out reason) ||
-                content.IndexOf(calls, reasonEnd + 1, StringComparison.Ordinal) != reasonEnd + 1)
-                return SanitizeOperationalText(content);
-            var messageKey = content.LastIndexOf(messageField, StringComparison.Ordinal);
-            if (messageKey <= reasonEnd)
-                return SanitizeOperationalText(content);
-            var messageStart = messageKey + messageField.Length;
-            int messageEnd;
-            string message;
-            if (!TryReadJsonString(content, messageStart, out messageEnd, out message) ||
-                messageEnd != content.Length - 2 || content[content.Length - 1] != '}')
-                return SanitizeOperationalText(content);
-            var cleanReason = SanitizeOperationalText(reason);
-            var cleanMessage = SanitizeOperationalText(message);
-            if (string.Equals(reason, cleanReason, StringComparison.Ordinal) &&
-                string.Equals(message, cleanMessage, StringComparison.Ordinal))
-                return content;
-            return content.Substring(0, prefix.Length) + JsonConvert.SerializeObject(cleanReason) +
-                content.Substring(reasonEnd + 1, messageStart - reasonEnd - 1) +
-                JsonConvert.SerializeObject(cleanMessage) + '}';
-        }
-
-        private static bool TryReadJsonString(string content, int start, out int end, out string value)
-        {
-            end = -1;
-            value = null;
-            if (start >= content.Length || content[start] != '"') return false;
-            var escaped = false;
-            for (var index = start + 1; index < content.Length; index++)
-            {
-                if (escaped) { escaped = false; continue; }
-                if (content[index] == '\\') { escaped = true; continue; }
-                if (content[index] != '"') continue;
-                try { value = JsonConvert.DeserializeObject<string>(content.Substring(start, index - start + 1)); }
-                catch (JsonException) { return false; }
-                end = index;
-                return true;
-            }
-            return false;
+            var body = JObject.Parse(source.Content);
+            body["reason"] = SanitizeOperationalText((string)body["reason"]);
+            if (body["message"] != null) body["message"] = SanitizeOperationalText((string)body["message"]);
+            return body.ToString(Formatting.None);
         }
 
         private static ChatMessage InvalidCurrentResult(
@@ -531,9 +440,7 @@ namespace RNAssistant.Core.Services
                     ["code"] = "tool_result_projection_invalid"
                 }.ToString(Formatting.None));
             var json = ToolResultWire.Write(callId, name, result);
-            projected.Content = string.Equals(projected.Role, ToolResultRoles.Tool, StringComparison.Ordinal)
-                ? json
-                : Prefix + json;
+            projected.Content = json;
             return projected;
         }
 

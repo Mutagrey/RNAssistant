@@ -517,10 +517,7 @@ namespace RNAssistant.Core.Services
             string error;
             if (!ToolResultHistoryReader.TryRead(message, out wire, out error))
                 return message == null ? string.Empty : message.Content;
-            var value = JObject.Parse(string.Equals(message.Role, ToolResultRoles.Tool,
-                    StringComparison.Ordinal)
-                ? message.Content
-                : message.Content.Substring("TOOL_RESULT:\n".Length));
+            var value = JObject.Parse(message.Content);
             value.Property("tool_call_id")?.Remove();
             // The retained body can lie outside this selected prefix. Its
             // request-local canonical pointer is neither a compaction source ID
@@ -532,7 +529,8 @@ namespace RNAssistant.Core.Services
                 observation.Remove("retainedAt");
                 observation["reason"] = "The source body is omitted from this historical result.";
             }
-            return "TOOL_RESULT_SUMMARY:\n" + value.ToString(Formatting.None);
+            value["type"] = "tool_result_summary";
+            return value.ToString(Formatting.None);
         }
 
         private static object[] CompactionToolCalls(

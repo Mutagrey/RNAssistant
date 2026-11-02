@@ -98,6 +98,21 @@ namespace RNAssistant.Core.Models
     // Diagnostic provenance only; never serialized into provider messages.
     public sealed class ContextMessagePresentation
     {
+        // A wire batch has one position but several canonical operations. Consumers
+        // of source identities use its parts; attachment parts keep their old owner.
+        public static IEnumerable<ContextMessagePresentation> Sources(IEnumerable<ContextMessagePresentation> entries)
+        {
+            foreach (var entry in entries ?? Enumerable.Empty<ContextMessagePresentation>())
+            {
+                if (entry == null) continue;
+                if (entry.Kind == "json-history-batch" && entry.Parts?.Count > 0)
+                {
+                    foreach (var part in entry.Parts.Where(part => part != null)) yield return part;
+                }
+                else yield return entry;
+            }
+        }
+
         // The compiler carries the issued terminal alias; roles alone cannot distinguish a call from a folded receipt.
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public RNAssistant.Core.ModelProtocol.ModelReference EvidenceReference { get; set; }

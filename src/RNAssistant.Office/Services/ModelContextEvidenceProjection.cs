@@ -39,7 +39,8 @@ namespace RNAssistant.Office.Services
                 .ToDictionary(group => group.Key, group => group.Single());
             var finishes = Finishes(all, request, trace, token);
             var cited = new HashSet<string>(finishes.SelectMany(finish => finish.Claims).SelectMany(claim => claim.Evidence), StringComparer.Ordinal);
-            var selected = new HashSet<string>(entries.Select(item => item.ToolCallId).Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.Ordinal);
+            var sourceEntries = ContextMessagePresentation.Sources(entries).ToArray();
+            var selected = new HashSet<string>(sourceEntries.Select(item => item.ToolCallId).Where(id => !string.IsNullOrWhiteSpace(id)), StringComparer.Ordinal);
             foreach (var call in calls.Values.Where(call => !string.IsNullOrEmpty(request.RunId) && call.RunId == request.RunId)) selected.Add(call.CallId);
             foreach (var terminal in terminals.Values.Where(fact => fact.Reference != null && cited.Contains(fact.Reference))) selected.Add(terminal.CallId);
             var rows = new List<ModelContextToolEvidenceDto>();
@@ -55,7 +56,7 @@ namespace RNAssistant.Office.Services
                     terminal.RunId != call.RunId || terminal.Sequence < call.Sequence) terminal = null;
                 var progress = terminal?.Message.ExecutionProgress;
                 var evidence = progress?.EvidenceEligibility == EvidenceEligibility.Eligible ? terminal.Reference : null;
-                var matching = entries.Where(item => item.ToolCallId == id).ToArray();
+                var matching = sourceEntries.Where(item => item.ToolCallId == id).ToArray();
                 var delivered = matching.Where(item => item.EvidenceReference?.Alias == evidence && evidence != null).ToArray();
                 var delivery = ModelContextEvidenceDelivery.Unknown;
                 if (delivered.Any(item => item.MessageIndex.HasValue && indices.ContainsKey(item.MessageIndex.Value) &&

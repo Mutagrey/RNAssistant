@@ -1,5 +1,7 @@
 using System;
 using System.Diagnostics;
+using System.Linq;
+using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -36,6 +38,10 @@ namespace RNAssistant.Core.Llm
         public bool? JsonObjectAccepted { get; set; }
         public bool? MarkerMatches { get; set; }
         public bool? CallIdMatches { get; set; }
+        public ModelDiagnosticVerdict VisibilityVerdict { get; set; }
+        public ModelDiagnosticVerdict PairingVerdict { get; set; }
+        public ModelDiagnosticVerdict CallIdVisibilityVerdict { get; set; }
+        public ModelDiagnosticResult Continuation { get; set; }
         public bool? TargetMatches { get; set; }
         public string FailureKind { get; set; }
         public long DurationMs { get; set; }
@@ -67,12 +73,12 @@ namespace RNAssistant.Core.Llm
                 ExpectedText = scenario.ExpectedText, Endpoint = settings.BaseUrl, Model = settings.Model,
                 ResponseFormat = scenario.ResponseFormat, StreamingRequested = scenario.Streaming };
             var options = scenario.Assertion == ModelDiagnosticAssertion.V8
-                ? ModelProtocolWire.CreateRequestOptions(scenario.ResponseFormat, scenario.CallableTools, new ModelProtocolCallContext(new string[0]))
+                ? ModelProtocolWire.CreateRequestOptions(scenario.ResponseFormat, scenario.CallableTools, new ModelProtocolCallContext(scenario.CallableTools.Where(t => t.Policy?.IndependentLocalRead == true).Select(t => t.Id)))
                 : new LlmRequestOptions { ResponseFormat = scenario.ResponseFormat,
                     ResponseSchemaName = "diagnostic_marker", ResponseSchemaJson = scenario.ResponseSchemaJson };
             options.NativeToolCallContent = scenario.NativeCallContent;
             options.NativeTools = scenario.NativeFunction == null ? null : new[] { scenario.NativeFunction };
-            options.RequireNativeToolCall = scenario.NativeFunction != null;
+            options.RequireNativeToolCall = scenario.NativeFunction != null && scenario.ForceNativeCall;
             options.InspectNativeToolCalls = true;
             options.CaptureStreamBody = scenario.Streaming;
             options.ReasoningEnabled = false;
@@ -124,6 +130,36 @@ namespace RNAssistant.Core.Llm
                     if (scenario.Streaming && matches && !completion.IsEventStream)
                     { matches = false; result.Reason = "json_response_instead_of_sse"; }
                     result.Verdict = matches ? ModelDiagnosticVerdict.Pass : ModelDiagnosticVerdict.Fail;
+                    if (scenario.AmbiguousWithoutIds && result.CallIdMatches != true)
+                    { result.Verdict = ModelDiagnosticVerdict.Inconclusive; result.Reason = "pairing_requires_visible_ids"; }
+                    if (scenario.Assertion == ModelDiagnosticAssertion.HistoryJson && !scenario.NegativeControl)
+                    {
+                        result.VisibilityVerdict = result.MarkerMatches == true ? ModelDiagnosticVerdict.Pass : ModelDiagnosticVerdict.Fail;
+                        if (scenario.Capability == ModelDiagnosticCapability.NativeHistoryPairing)
+                            result.PairingVerdict = result.Verdict;
+                    }
+                    if (matches && scenario.NativeRoundTrip)
+                    {
+                        var call = completion.NativeToolCalls.Single();
+                        if (string.IsNullOrWhiteSpace(call.Id))
+                        { result.Verdict = ModelDiagnosticVerdict.Fail; result.Reason = "native_call_id_missing"; }
+                        else
+                        {
+                            // The result marker must not already be present in the call arguments.
+                            var marker = Guid.NewGuid().ToString("N");
+                            var follow = new ModelDiagnosticScenario { Id = scenario.Id + "/result", Capability = ModelDiagnosticCapability.NativeGeneration,
+                                Assertion = ModelDiagnosticAssertion.ExactJson, ResponseFormat = LlmResponseFormats.Text,
+                                NativeFunction = scenario.NativeFunction, ForceNativeCall = false,
+                                ExpectedJson = new JObject { ["marker"] = marker }.ToString(Formatting.None),
+                                Messages = new List<ChatMessage>(scenario.Messages) };
+                            follow.Messages.Add(new ChatMessage { Role = "assistant", Content = completion.Content, ToolCalls = completion.NativeToolCalls.ToList() });
+                            follow.Messages.Add(new ChatMessage { Role = "tool", ToolCallId = call.Id, Content = follow.ExpectedJson });
+                            follow.Messages.Add(new ChatMessage { Role = "user", Content = "Return only JSON with marker from the tool result. Do not call another tool." });
+                            result.Continuation = await RunAsync(settings, follow, kind, deadline.Token).ConfigureAwait(false);
+                            result.Verdict = result.Continuation.Verdict;
+                            result.Reason = result.Verdict == ModelDiagnosticVerdict.Pass ? "native_cycle_completed" : "native_continuation_failed";
+                        }
+                    }
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 {
@@ -185,7 +221,7 @@ namespace RNAssistant.Core.Llm
             if (scenario.Assertion == ModelDiagnosticAssertion.V8)
             {
                 var parsed = ModelProtocolWire.Parse(result.ActualContent, scenario.CallableTools, scenario.CallableTools,
-                    new ModelProtocolCallContext(new string[0]), scenario.ResponseFormat == LlmResponseFormats.JsonSchema);
+                    new ModelProtocolCallContext(scenario.CallableTools.Where(t => t.Policy?.IndependentLocalRead == true).Select(t => t.Id)), scenario.ResponseFormat == LlmResponseFormats.JsonSchema);
                 result.ParserVerdict = parsed.Success ? ModelDiagnosticVerdict.Pass : ModelDiagnosticVerdict.Fail;
                 result.ParserErrorCode = parsed.ErrorCode;
                 if (!parsed.Success) { result.Reason = "v8_parser_rejected"; return false; }
@@ -206,12 +242,17 @@ namespace RNAssistant.Core.Llm
                 result.MarkerMatches = JToken.DeepEquals(actual["marker"], expected["marker"]);
                 if (history)
                 {
-                    result.CallIdMatches = JToken.DeepEquals(actual["tool_call_id"], expected["tool_call_id"]);
+                    result.CallIdMatches = actual["tool_call_id"]?.Type == JTokenType.String
+                        ? (bool?)JToken.DeepEquals(actual["tool_call_id"], expected["tool_call_id"]) : null;
+                    result.CallIdVisibilityVerdict = !result.CallIdMatches.HasValue ? ModelDiagnosticVerdict.Inconclusive :
+                        result.CallIdMatches.Value ? ModelDiagnosticVerdict.Pass : ModelDiagnosticVerdict.Fail;
                     result.TargetMatches = JToken.DeepEquals(actual["target"], expected["target"]);
                 }
-                var matches = JToken.DeepEquals(actual, expected);
-                result.Reason = result.MarkerMatches != true ? "marker_mismatch" : history && result.CallIdMatches != true ? "call_id_mismatch" :
-                    history && result.TargetMatches != true ? "target_mismatch" : matches ? "exact_json_answer" : "unexpected_answer_fields";
+                var compared = (JObject)actual.DeepClone();
+                var target = (JObject)expected.DeepClone();
+                if (history) { compared.Remove("tool_call_id"); target.Remove("tool_call_id"); }
+                var matches = JToken.DeepEquals(compared, target);
+                result.Reason = result.MarkerMatches != true ? "marker_mismatch" : history && result.TargetMatches != true ? "target_mismatch" : matches ? (history && !result.CallIdMatches.HasValue ? "content_visible_id_unobserved" : "exact_json_answer") : "unexpected_answer_fields";
                 return matches;
             }
             catch (JsonException) { result.JsonObjectAccepted = false; result.Reason = "invalid_answer_json"; return false; }

@@ -90,7 +90,7 @@ namespace RNAssistant.Office.Services
                             index == 0 ? fact.Response.Message : string.Empty,
                             fact.Response.Reason,
                             index == 0 ? _lastModel.Completion : null,
-                            new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index));
+                            new AcceptedToolCallOrigin(fact.StepId, _lastModel.SourceModelAttemptId, index, fact.Response.ToolCalls.Count));
                     break;
                 case AgentRunEventKind.ToolStarted:
                     run.Phase = "executing";

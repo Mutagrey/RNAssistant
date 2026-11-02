@@ -26,7 +26,7 @@ namespace RNAssistant.Harness
                 var before = JsonConvert.SerializeObject(settings);
                 var service = new ModelDiagnosticsService(new LlmClient(() => "fixture").CompleteAsync);
                 var catalog = ModelDiagnosticsService.Catalog(settings);
-                AssertEqual(23, catalog.Scenarios.Count, "shared catalog");
+                AssertEqual(26, catalog.Scenarios.Count, "shared catalog");
                 AssertEqual(3, catalog.Scenarios.Count(item => item.IsControl), "controls cannot be accidentally omitted");
                 AssertEqual(0, requests.Count, "listing sends no request");
                 var request = new RunModelDiagnosticRequest { Endpoint = settings.BaseUrl, Model = settings.Model, ScenarioId = "C4", Seed = seed };
@@ -83,7 +83,7 @@ namespace RNAssistant.Harness
                     .GetAwaiter().GetResult());
                 var catalog = send("getModelDiagnosticScenarios", "{}");
                 AssertTrue((bool)catalog["ok"], "catalog is registered");
-                AssertEqual(23, ((JArray)catalog["payload"]["scenarios"]).Count, "catalog DTO crosses bridge");
+                AssertEqual(26, ((JArray)catalog["payload"]["scenarios"]).Count, "catalog DTO crosses bridge");
                 var result = send("runModelDiagnostic", "{\"scenarioId\":\"B5\",\"model\":\"scripted\",\"seed\":\"one\"}");
                 AssertTrue((bool)result["ok"], "runner is registered");
                 AssertEqual("B5", (string)result.SelectToken("payload.exchanges[0].result.ScenarioId"), "typed request and response");

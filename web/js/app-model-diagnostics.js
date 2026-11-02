@@ -3,25 +3,25 @@ var modelDiagnosticsLab = { catalog: null, catalogRevision: 0, loading: false, r
   request: null, rows: [], selected: null, followResults: true, run: null, scope: "response", expanded: { all: true } };
 var modelDiagnosticTitles = {
   A1: "Обычный текст", A2: "Роль инструкции", "A2-system": "Контроль system",
-  A3: "Вызов в V8", A4: "Завершение в V8", B1: "content: null",
+  A3: "Разбор execute (образец)", A4: "Разбор finish (образец)", B1: "content: null",
   B2: "content: пустая строка", B3: "Без поля content", B4: "Решение execute и результат",
-  B5: "Связь вызова с результатом", B6: "Нет результата",
-  B7: "Источник данных", B8: "Генерация native-вызова", B9: "Несколько запросов пользователя",
-  C1: "Ответ JSON", C2: "Строгая схема V8", C3: "Ошибочная схема",
+  B5: "Связь по предметным данным", "B5-opaque": "Связь только по внешним ID", B6: "Нет результата",
+  B7: "Источник данных", B8: "Генерация native-вызова", "B8-cycle": "Native: вызов и результат", B9: "Несколько запросов пользователя",
+  C1: "Ответ JSON", C2: "Схема без инструментов", "C2-tools": "Схема базовых инструментов", C3: "Ошибочная схема",
   "C3-valid": "Контроль валидной schema", "C3-text": "JSON без response_format",
   C4: "SSE и обычный JSON", "C4-control": "Контроль JSON для SSE",
   C5: "Результат в role: user", C6: "Результат в role: developer"
 };
 var modelDiagnosticGroups = [
-  { id: "response", title: "Ответ в content", icon: "braces", ids: ["A1", "A3", "A4", "C1", "C2", "C3", "C3-text"],
+  { id: "response", title: "Ответ в content", icon: "braces", ids: ["A1", "A3", "A4", "C1", "C2", "C2-tools", "C3", "C3-text"],
     description: "Обычный ответ, JSON и строгая схема V8. Проверяется новый ответ модели." },
   { id: "instruction", title: "Роль инструкции", icon: "chat", ids: ["A2"],
     description: "Сравнение developer и контрольной system-инструкции." },
-  { id: "native-history", title: "История Native tools", icon: "tool", ids: ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B9"],
+  { id: "native-history", title: "История Native tools", icon: "tool", ids: ["B1", "B2", "B3", "B4", "B5", "B5-opaque", "B6", "B7", "B9"],
     description: "Чтение assistant.tool_calls → role: tool. Новый ответ приходит JSON в content; генерация native-вызовов не требуется." },
   { id: "json-history", title: "История JSON в content", icon: "chat", ids: ["C5", "C6"],
-    description: "Чтение V8 JSON в assistant.content и TOOL_RESULT в роли user или developer." },
-  { id: "native-generation", title: "Генерация Native tools", icon: "tool", ids: ["B8"],
+    description: "Чтение JSON-решения и типизированных результатов. developer — лабораторный эксперимент, не production-профиль." },
+  { id: "native-generation", title: "Генерация Native tools", icon: "tool", ids: ["B8", "B8-cycle"],
     description: "Отдельная возможность: модель сама возвращает tool_calls. Её результат не определяет поддержку native-истории." },
   { id: "stream", title: "Потоковый ответ", icon: "layers", ids: ["C4"],
     description: "SSE сравнивается с обычным JSON-ответом на одинаковый запрос." }
@@ -29,6 +29,11 @@ var modelDiagnosticGroups = [
 var modelDiagnosticVerdicts = { NotRun: "Не запускался", Pass: "Пройдено", Fail: "Не пройдено",
   Inconclusive: "Недостаточно данных", Unsupported: "Не поддерживается", Running: "Выполняется", Cancelled: "Отменено", Error: "Ошибка запуска" };
 var modelDiagnosticReasons = {
+  content_visible_id_unobserved: "Содержимое результата прочитано. Внешний ID не воспроизведён; шаблон сервера может его скрывать.",
+  pairing_requires_visible_ids: "Для этой пробы нужны внешние ID. Их видимость не установлена; вывод о поддержке инструментов делать нельзя.",
+  native_cycle_completed: "Native-вызов и продолжение после синтетического результата прошли проверку.",
+  native_continuation_failed: "Вызов сформирован, но продолжение после результата не прошло проверку.",
+  native_call_id_missing: "В ответе API отсутствует ID native-вызова.",
   exact_text_marker: "Текст совпал с ожидаемым маркером.", text_marker_mismatch: "Модель изменила ожидаемый текст.",
   exact_json_answer: "Все поля ответа совпали с ожидаемыми.", invalid_answer_json: "Ответ не является допустимым JSON-объектом.",
   marker_mismatch: "Маркер из результата инструмента не совпал.", call_id_mismatch: "Ответ связан с другим вызовом инструмента.",
@@ -264,7 +269,8 @@ function renderModelLabInspector() {
   var assertions = modelLabNode("section"), checks = modelLabNode("table", undefined, "rna-table");
   assertions.appendChild(modelLabNode("h5", "Что проверено"));
   [["HTTP принят", result.HttpAccepted], ["JSON разобран", result.JsonObjectAccepted], ["Маркер совпал", result.MarkerMatches],
-    ["ID вызова совпал", result.CallIdMatches], ["Объект совпал", result.TargetMatches], ["Контракт V8", result.ParserVerdict],
+    ["Видимость содержимого", result.VisibilityVerdict], ["Сопоставление результатов", result.PairingVerdict],
+    ["Видимость внешнего ID", result.CallIdVisibilityVerdict], ["Продолжение native-цикла", result.Continuation && result.Continuation.Verdict], ["Объект совпал", result.TargetMatches], ["Контракт V8", result.ParserVerdict],
     ["SSE совпал с JSON", result.ParityVerdict], ["Получен SSE", result.StreamingRequested ? result.StreamingObserved : null]]
     .forEach(function (item) { modelLabAssertion(checks, item[0], item[1]); });
   if (checks.children.length) { assertions.appendChild(checks); root.appendChild(assertions); }
@@ -276,6 +282,11 @@ function renderModelLabInspector() {
       modelLabRaw(panel, item[0] + " · текст", { text: item[1] || "Не получено.", truncated: exchange.resultTruncated, redacted: exchange.resultRedacted }, false, "text"); comparison.appendChild(panel);
     });
   root.appendChild(comparison);
+  if (result.Continuation) {
+    var follow = modelLabNode("section"); follow.appendChild(modelLabNode("h5", "Продолжение после результата"));
+    modelLabRaw(follow, "Ответ", { text: result.Continuation.ActualContent || result.Continuation.Reason || "Не получен." }, false, "text");
+    root.appendChild(follow);
+  }
   if (exchange.resultTruncated || exchange.resultRedacted) root.appendChild(modelLabNode("p",
     (exchange.resultTruncated ? "Просмотр результата сокращён. " : "") + (exchange.resultRedacted ? "Секреты скрыты." : ""), "muted"));
   if (result.StreamingRequested) root.appendChild(modelLabNode("p", result.ResponseCaptureTruncated ? "Лимит захвата: сохранена часть ответа." :

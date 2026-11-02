@@ -48,7 +48,7 @@ namespace RNAssistant.Core.Tools
                         "Anchors can be distant or repeated, but the final edit location must be unique; a procedure header alone does not scope a repeated End Sub/End Function. " +
                         "All edits for each target resolve against one original observed snapshot, not intermediate edits. No line numbers, regex or operation types. " +
                         "Read current source or reuse delivered verified after-source. Use core.write for creation/full overwrite and core.replace for bulk replacement. " +
-                        "At most 262144 JSON characters. All targets prepare before sequential writes. Wait for TOOL_RESULT and inspect each target: " +
+                        "At most 262144 JSON characters. All targets prepare before sequential writes. Wait for tool_results and inspect each target: " +
                         "Changed/Unchanged are verified; Rejected/NotStarted were not applied; Unknown needs inspection. Never replay a partial or unknown package automatically.";
 
                 }

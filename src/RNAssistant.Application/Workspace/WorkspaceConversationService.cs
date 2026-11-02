@@ -1996,26 +1996,21 @@ namespace RNAssistant.Runtime
                     for (var index = 0; index < fact.Response.ToolCalls.Count; index++)
                     {
                         var call = fact.Response.ToolCalls[index];
-                        var native = _settings.ToolResultRole == ToolResultRoles.Tool;
                         var arguments = JObject.Parse(call.ArgumentsJson);
                         _session.Messages.Add(new ChatMessage
                         {
                             Role = "assistant", ProtocolMessage = true,
                             ResponseProtocolVersion = ConversationResponse.ProtocolVersion,
-                            ResponseReason = native ? fact.Response.Reason : null,
                             ResponseStatus = AgentResponseStatuses.InProgress,
                             ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
-                            ToolResultRole = _settings.ToolResultRole,
-                            Content = native ? (index == 0 ? fact.Response.Message : string.Empty) :
-                                ModelProtocolWire.WriteAcceptedCall(fact.Response.Reason,
+                            ToolResultRole = ToolResultRoles.User,
+                            Content = ModelProtocolWire.WriteAcceptedCall(fact.Response.Reason,
                                     index == 0 ? fact.Response.Message : string.Empty,
                                     new ConversationToolCall { Name = call.Name, Arguments = arguments }),
-                            ToolCalls = native ? new List<LlmToolCall> { new LlmToolCall
-                                { Id = call.Id, Type = "function", Name = call.Name, ArgumentsJson = call.ArgumentsJson } }
-                                : new List<LlmToolCall>(),
+                            ToolCalls = new List<LlmToolCall>(),
                             ToolCallId = call.Id,
                             ToolName = call.Name,
-                            AcceptedCallOrigin = new AcceptedToolCallOrigin(fact.StepId, fact.SourceModelAttemptId, index),
+                            AcceptedCallOrigin = new AcceptedToolCallOrigin(fact.StepId, fact.SourceModelAttemptId, index, fact.Response.ToolCalls.Count),
                             RunId = fact.Summary.RunId
                         });
                     }
@@ -2041,7 +2036,7 @@ namespace RNAssistant.Runtime
                     var record = fact.Execution;
                     _session.Messages.Add(new ChatMessage
                     {
-                        Role = ToolResultRoles.Tool, ToolResultRole = ToolResultRoles.Tool,
+                        Role = ToolResultRoles.User, ToolResultRole = ToolResultRoles.User,
                         ProtocolMessage = true, ToolCallId = record.Context.Call.Id,
                         ResultStepId = record.Context.StepId,
                         ToolName = record.Context.Call.Name, ToolResultProtocolVersion = ToolResultWire.CurrentVersion,

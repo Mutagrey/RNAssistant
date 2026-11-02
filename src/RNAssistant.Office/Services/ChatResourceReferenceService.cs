@@ -394,9 +394,8 @@ namespace RNAssistant.Office.Services
                     attachment.VisualSelectionSource = current;
             }
 
-            var resultPrefix = string.Equals(message.Role, ToolResultRoles.Tool, StringComparison.OrdinalIgnoreCase) &&
-                message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion ? null : "TOOL_RESULT:";
-            message.Content = RebaseJsonText(session, message.Content, resultPrefix);
+            if (message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion && message.Role != "assistant")
+                message.Content = RebaseJsonText(session, message.Content, null);
             foreach (var call in message.ToolCalls ?? new List<RNAssistant.Core.Llm.LlmToolCall>())
             {
                 if (call != null) call.ArgumentsJson = RebaseJsonText(session, call.ArgumentsJson, null);

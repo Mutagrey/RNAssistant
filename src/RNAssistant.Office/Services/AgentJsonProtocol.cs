@@ -92,8 +92,7 @@ namespace RNAssistant.Office.Services
         internal static ChatMessage CreateToolResultMessage(ToolInvocation command, ToolResultMaterialization result,
             int maxDataTokens, string role, AppSettings settings = null)
         {
-            var normalizedRole = ToolResultRoles.Normalize(role);
-            var native = string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal);
+            var normalizedRole = ToolResultRoles.User;
             var resultJson = BuildToolResult(command, result, maxDataTokens, settings);
             return new ChatMessage
             {
@@ -107,7 +106,7 @@ namespace RNAssistant.Office.Services
                 ResourceEffect = result.ResourceEffect,
                 ExecutionProgress = result.ExecutionProgress,
                 AuthorityCommitId = result.AuthorityCommitId,
-                Content = native ? resultJson : "TOOL_RESULT:\n" + resultJson,
+                Content = resultJson,
                 ProtocolMessage = true
             };
         }
@@ -123,37 +122,7 @@ namespace RNAssistant.Office.Services
             if (call == null || string.IsNullOrWhiteSpace(call.Id) || string.IsNullOrWhiteSpace(call.Name) ||
                 string.IsNullOrWhiteSpace(reason) || origin == null)
                 throw new ArgumentException("Accepted runtime call identity and origin are required.");
-            var normalizedRole = ToolResultRoles.Normalize(toolResultRole);
-            if (string.Equals(normalizedRole, ToolResultRoles.Tool, StringComparison.Ordinal))
-            {
-                var nativeMessage = AgentTranscript.CreateAssistantMessage(message ?? string.Empty, completion);
-                nativeMessage.ResponseProtocolVersion = AgentResponseProtocol.CurrentVersion;
-                nativeMessage.ResponseReason = reason;
-                nativeMessage.ToolResultProtocolVersion = ToolResultWire.CurrentVersion;
-                nativeMessage.ResponseStatus = AgentResponseStatuses.InProgress;
-                nativeMessage.ToolResultRole = normalizedRole;
-                nativeMessage.ToolCallId = call.Id;
-                nativeMessage.AcceptedCallOrigin = origin;
-                // Native history is only the matching call/result transport shape;
-                // RNAssistant does not advertise a second provider function catalog.
-                // Keep the exact public id visible on both the API message and local metadata.
-                nativeMessage.ToolName = call.Name;
-                nativeMessage.ToolCalls = new List<LlmToolCall>
-                {
-                    new LlmToolCall
-                    {
-                        Id = call.Id,
-                        Type = "function",
-                        Name = call.Name,
-                        ArgumentsJson = JsonConvert.SerializeObject(
-                            call.Arguments == null
-                                ? new Dictionary<string, object>()
-                                : call.Arguments)
-                    }
-                };
-                nativeMessage.ProtocolMessage = true;
-                return nativeMessage;
-            }
+            var normalizedRole = ToolResultRoles.User;
             var content = ModelProtocolWire.WriteAcceptedCall(reason, message, new ConversationToolCall
                 {
                     Name = call.Name,

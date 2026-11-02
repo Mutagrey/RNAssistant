@@ -215,7 +215,8 @@ namespace RNAssistant.Core.Services
             CopyStructured(data, activity, "ArgumentsJson", "arguments", null);
             CopyStructured(data, activity, "DataJson", "resultData", null);
             CopyStructured(data, activity, "ExecutionEvidence", "executionEvidence", null);
-            CopyStructured(data, value, "Content", "toolResult", "TOOL_RESULT:\n");
+            if (origin == null && Property(value, "ToolResultProtocolVersion")?.Value<int>() == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion)
+                CopyStructured(data, value, "Content", "toolResult", null);
             if (origin != null) data["acceptedCallOrigin"] = origin.DeepClone();
             if (incompatible)
             {

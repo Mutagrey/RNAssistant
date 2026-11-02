@@ -548,8 +548,8 @@ namespace RNAssistant.Cli
                 throw new ArgumentException("--instruction-role/RNA_INSTRUCTION_ROLE must be system or developer.");
             var toolResultRole = Value(options, "tool-result-role",
                 Environment.GetEnvironmentVariable("RNA_TOOL_RESULT_ROLE") ?? defaultToolResultRole ?? ToolResultRoles.User).ToLowerInvariant();
-            if (toolResultRole != ToolResultRoles.User && toolResultRole != ToolResultRoles.Developer && toolResultRole != ToolResultRoles.Tool)
-                throw new ArgumentException("--tool-result-role/RNA_TOOL_RESULT_ROLE must be user, developer or tool.");
+            if (toolResultRole != ToolResultRoles.User)
+                throw new ArgumentException("--tool-result-role/RNA_TOOL_RESULT_ROLE supports only user in the JSON profile.");
             var responseMode = Value(options, "response-mode",
                 Environment.GetEnvironmentVariable("RNA_RESPONSE_MODE") ??
                 defaultResponseMode ?? AgentResponseModes.JsonSchema);

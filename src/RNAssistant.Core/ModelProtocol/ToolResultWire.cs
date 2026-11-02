@@ -44,7 +44,7 @@ namespace RNAssistant.Core.ModelProtocol
     // and bounded result materialization belong to the callers of this boundary.
     public static class ToolResultWire
     {
-        public const int CurrentVersion = 1;
+        public const int CurrentVersion = 2;
 
         private static readonly Regex JsonLiteral = new Regex(
             @"\A(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)\z",
@@ -93,6 +93,7 @@ namespace RNAssistant.Core.ModelProtocol
             using (var writer = new JsonTextWriter(output) { Formatting = Formatting.None })
             {
                 writer.WriteStartObject();
+                writer.WritePropertyName("type"); writer.WriteValue("tool_result");
                 writer.WritePropertyName("tool_call_id"); writer.WriteValue(toolCallId);
                 writer.WritePropertyName("name"); writer.WriteValue(toolName);
                 writer.WritePropertyName("status"); writer.WriteValue(StatusName(result.Status));
@@ -130,8 +131,8 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 return Fail("Tool result is invalid JSON: " + ex.Message);
             }
-            if (root == null) return Fail("Tool result must be one JSON object.");
-            if (root.Properties().Any(property => property.Name != "tool_call_id" && property.Name != "name" &&
+            if (root == null || root["type"]?.Type != JTokenType.String || (string)root["type"] != "tool_result") return Fail("Tool result requires type=tool_result.");
+            if (root.Properties().Any(property => property.Name != "type" && property.Name != "tool_call_id" && property.Name != "name" &&
                 property.Name != "status" && property.Name != "message" && property.Name != "data" && property.Name != "resources"))
                 return Fail("Tool result contains an unsupported root field.");
             if (!IsNonemptyString(root["tool_call_id"]) || !IsNonemptyString(root["name"]))

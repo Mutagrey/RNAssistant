@@ -23,9 +23,7 @@ namespace RNAssistant.Core.Services
         {
             return message != null && message.ProtocolMessage &&
                 (message.ToolResultProtocolVersion == RNAssistant.Core.ModelProtocol.ToolResultWire.CurrentVersion &&
-                 !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(message.ToolCallId) ||
-                 string.Equals(message.Role, "tool", StringComparison.OrdinalIgnoreCase) ||
-                 (message.Content ?? string.Empty).StartsWith("TOOL_RESULT:", StringComparison.Ordinal));
+                 !string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(message.ToolCallId));
         }
 
         public static HashSet<string> Ids(ChatMessage message)

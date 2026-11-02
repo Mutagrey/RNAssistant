@@ -202,7 +202,7 @@ namespace RNAssistant.Harness
             AssertEqual(321, reloaded["lastPromptTokens"].Value<int>(), "reloaded API input stays exact");
             AssertEqual(12, reloaded["lastCompletionTokens"].Value<int>(), "reloaded API output stays exact");
             session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true,
-                AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 1), Content = "second call of one response" });
+                AcceptedCallOrigin = new AcceptedToolCallOrigin("step", "attempt", 1, 2), Content = "second call of one response" });
             var batch = JObject.FromObject(ContextUsageEstimator.FromSession(session, settings));
             AssertEqual(321, batch["lastPromptTokens"].Value<int>(), "later calls in one response do not erase its usage");
             session.Messages.Add(new ChatMessage { Role = "assistant", ProtocolMessage = true, Content = "new response without usage" });

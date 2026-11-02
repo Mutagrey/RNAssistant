@@ -339,7 +339,7 @@ references in existing commits. Core ToolPolicy owns eligibility; ModelProtocol 
 `criterion`, reference lookup and wire-only T/E/R projection. Office/Workspace are
 consumers. Native IDs pair literally without duplicate content fields. Canonical
 IDs/events/CAS stay unchanged. Old format-8 chats are read-only under the explicit
-reference revision boundary; see [the current contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-3).
+reference revision boundary; see [the current contract](protocols/CONVERSATION_RESPONSE_V8.md#typed-references-revision-4).
 
 ## Important boundaries
 

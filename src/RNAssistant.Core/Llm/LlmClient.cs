@@ -730,6 +730,38 @@ namespace RNAssistant.Core.Llm
                     foreach (var link in entry.EvidenceLinks ?? new List<ContextEvidenceLink>())
                         link.BodyIncludedInMessage = null;
                 }
+                if (message.ProjectedSourceMessageIds?.Count > 0 && wire != null &&
+                    wire["content"]?.Type == JTokenType.String &&
+                    string.Equals((string)wire["content"], message.Content, StringComparison.Ordinal) &&
+                    string.Equals((string)wire["role"], message.Role, StringComparison.Ordinal))
+                {
+                    entry.Kind = "json-history-batch";
+                    // No single canonical payload/operation represents the whole batch.
+                    entry.SourceMessageId = null;
+                    entry.ToolCallId = null;
+                    entry.OriginalPayload = null;
+                    entry.EvidenceReference = null;
+                    entry.Reason = "Пакет JSON из принятых записей; исходные сообщения перечислены в частях. Точный переданный текст — в JSON запроса.";
+                    entry.Parts.Clear();
+                    entry.EvidenceLinks.Clear();
+                    foreach (var id in message.ProjectedSourceMessageIds.Distinct(StringComparer.Ordinal))
+                    {
+                        var candidates = (receipt?.Messages ?? new List<ContextMessagePresentation>())
+                            .Where(item => item.SourceMessageId == id && item.MessageIndex.HasValue &&
+                                item.Presentation != ContextPresentationKind.Excluded).ToArray();
+                        if (candidates.Length != 1) continue;
+                        var part = JsonConvert.DeserializeObject<ContextMessagePresentation>(JsonConvert.SerializeObject(candidates[0]));
+                        part.MessageIndex = entries.Count;
+                        part.Presentation = part.EvidenceReference != null &&
+                            message.ProjectedEvidenceReferences?.Contains(part.EvidenceReference.Alias) == true
+                            ? ContextPresentationKind.Summary : ContextPresentationKind.Unknown;
+                        part.Reason = "Исходная запись преобразована в пакет JSON; связь с журналом сохранена.";
+                        part.EstimatedWireMessageTokens = null;
+                        foreach (var link in part.EvidenceLinks) link.BodyIncludedInMessage = null;
+                        entry.Parts.Add(part);
+                        entry.EvidenceLinks.AddRange(part.EvidenceLinks);
+                    }
+                }
                 if ((message.Attachments?.Count ?? 0) > 0 || message.AttachmentAnalysis != null)
                 {
                     entry.Parts.Add(new ContextMessagePresentation { Kind = "message", Presentation = entry.Presentation, Reason = entry.Reason });

@@ -546,7 +546,7 @@ namespace RNAssistant.Office.Services
                 var envelope = new RNAssistant.Core.Tools.Contracts.ToolResult(result.Result.Status,
                     result.Result.Message, compact.ToString(Formatting.None), result.Result.Resources);
                 var json = ToolResultWire.WriteParsed(command.ToolCallId, command.ToolId, envelope, compact, result.ResultResource);
-                message.Content = message.Role == "tool" ? json : "TOOL_RESULT:\n" + json;
+                message.Content = json;
             }
             if (artifact != null && !string.Equals(artifact.Kind, ChatArtifactKinds.Chart, StringComparison.OrdinalIgnoreCase))
                 artifact.SourceMessageId = message.Id;

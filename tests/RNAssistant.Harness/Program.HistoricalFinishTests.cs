@@ -155,8 +155,8 @@ namespace RNAssistant.Harness
 
         private static void ContextTransportMaterializesOnlySelectedCalls()
         {
-            foreach (var storedRole in new[] { "user", "developer", "tool" })
-            foreach (var requestRole in new[] { "user", "developer", "tool" })
+            foreach (var storedRole in new[] { "user" })
+            foreach (var requestRole in new[] { "user" })
                 WithTempPaths(paths =>
                 {
                     var blobs = new ChatBlobStore(paths);
