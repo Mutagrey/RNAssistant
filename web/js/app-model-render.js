@@ -19,6 +19,7 @@ function applyModelDefaultsToForm(model) {
 }
 
 function renderModelStatus() {
+  var catalog = modelSettingsFormContext().modelCatalog;
   var status = $("modelStatus");
   if (!status) {
     return;
@@ -26,21 +27,21 @@ function renderModelStatus() {
 
   status.hidden = false;
 
-  if (state.modelCatalog.loading) {
+  if (catalog.loading) {
     status.textContent = "Загрузка каталога...";
     status.title = "";
     return;
   }
-  if (state.modelCatalog.error) {
-    status.textContent = "Ошибка каталога: " + state.modelCatalog.error;
+  if (catalog.error) {
+    status.textContent = "Ошибка каталога: " + catalog.error;
     status.title = "";
     return;
   }
-  if (state.modelCatalog.loaded) {
-    status.textContent = "Моделей: " + (state.modelCatalog.models || []).length;
-    status.title = "Моделей загружено: " + (state.modelCatalog.models || []).length +
-      (state.modelCatalog.defaultModel ? ". По умолчанию: " + state.modelCatalog.defaultModel : "") +
-      (state.modelCatalog.configUrl ? ". Источник: " + state.modelCatalog.configUrl : "");
+  if (catalog.loaded) {
+    status.textContent = "Моделей: " + (catalog.models || []).length;
+    status.title = "Моделей загружено: " + (catalog.models || []).length +
+      (catalog.defaultModel ? ". По умолчанию: " + catalog.defaultModel : "") +
+      (catalog.configUrl ? ". Источник: " + catalog.configUrl : "");
     return;
   }
   status.textContent = "";
@@ -56,9 +57,9 @@ function renderModelCapabilityBadges() {
   root.hidden = !value;
   if (!value) return;
 
-  [["Текст", true], ["Изображения", effectiveModelSupportsImages(value)],
-    ["Рассуждения", effectiveModelSupportsReasoning(value)],
-    ["Аудио", effectiveModelSupportsAudio(value)]].forEach(function (entry, index) {
+  [["Текст", true], ["Изображения", effectiveModelSupportsImages(value, modelSettingsFormContext())],
+    ["Рассуждения", effectiveModelSupportsReasoning(value, modelSettingsFormContext())],
+    ["Аудио", effectiveModelSupportsAudio(value, modelSettingsFormContext())]].forEach(function (entry, index) {
     var badge = document.createElement("span");
     var support = entry[1];
     badge.textContent = support === true ? entry[0] : entry[0] + (support === null ? " ?" : " нет");
@@ -69,23 +70,27 @@ function renderModelCapabilityBadges() {
 }
 
 function renderModelControls() {
-  if (typeof isPanelActive === "function" && !isPanelActive("chat") && !isPanelActive("settings")) return;
-  if (typeof isPanelActive !== "function" || isPanelActive("settings")) {
-    populateModelOptions($("modelOptions"));
+  var settingsVisible = typeof RNAssistantSettingsView !== "undefined" ? RNAssistantSettingsView.active :
+    typeof isPanelActive !== "function" || isPanelActive("settings");
+  var chatVisible = typeof isPanelActive !== "function" || isPanelActive("chat");
+  if (!settingsVisible && !chatVisible) return;
+  if (settingsVisible) {
+    var context = modelSettingsFormContext();
+    populateModelOptions($("modelOptions"), context);
     renderModelStatus();
     renderModelCapabilityList();
     renderModelCapabilityBadges();
     renderAttachmentModelPriority();
-    renderActiveModelCapability();
-    if ($("loadModelsButton")) $("loadModelsButton").disabled = state.modelCatalog.loading;
+    if ($("loadModelsButton")) $("loadModelsButton").disabled = context.modelCatalog.loading;
     if (typeof renderTokenEstimateCalibrationStatus === "function") {
-      renderTokenEstimateCalibrationStatus(state.settings);
+      renderTokenEstimateCalibrationStatus(context.settings);
     }
     if (typeof renderContextWindowSummary === "function") renderContextWindowSummary();
   }
-  if (typeof isPanelActive !== "function" || isPanelActive("chat")) {
+  if (chatVisible) {
+    renderActiveModelCapability();
     renderReasoningToggle();
-    renderChatModelPicker(true);
+    renderChatModelPicker();
   }
 }
 
@@ -98,9 +103,7 @@ function renderReasoningToggle() {
   var model = activeChatModel() || settingsModel();
   var support = effectiveModelSupportsReasoning(model);
   var active = !!state.activeChatReasoning && support !== false;
-  var disabled = !!currentActiveSend() || state.modelSaving || state.reasoningSaving ||
-    !!state.chatNavigationPending || !!state.initializePromise ||
-    hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId || support === false;
+  var disabled = chatModelSelection().disabled || support === false;
 
   renderReasoningControl(button, active, disabled, support);
 }

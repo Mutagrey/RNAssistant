@@ -15,8 +15,8 @@ Owner: Web presentation; catalog protocol — соответствующий dom
   локализованного источника; повтор не воспроизвёл. Не объявлено production-багом
   или исправлением; исследовать при воспроизведении, не расширять Demo ради этого.
 - UI-10: S1a объединил composer labels/edit/reply/stop/reasoning. Остались различия
-  model selection (Office per-chat override, Workspace shared settings), attachments,
-  context meter и confirmation presentation. Объединять через существующие domain
+  attachments, context meter и confirmation presentation. Model selection
+  объединён в S2a: один picker и persisted override/default для всех типов. Объединять через существующие domain
   capabilities/typed contracts, не клонировать controls и не скрывать отсутствие API.
 - UI-11: старый VM test workspace-chat-v8.test.js падает на baseline 119aff97
   (`$ is not defined`) до проверки renderer. Восстановить fixture отдельно при
@@ -62,14 +62,13 @@ assertion с действующим guard-контрактом отдельно;
 
 ## Settings: model capability draft boundary — 2026-11-02
 
-Owner: Web models/Settings; следующий предметный срез — S2a capabilities.
-Source audit S1c: `setStoredModelCapabilityField`, `setModelCapabilityOverride` и
-attachment priority в `app-model-capabilities.js` уже редактируют in-memory
-`state.settings` до «Применить». Это старый path, не новый store S1c; источник
-риска при внешнем refresh/позднем save и разделении applied/draft capabilities.
-Нужно локально отделить этот editor draft у текущего owner, проверить save race,
-ошибку и cancel; не создавать вторую копию Settings UI. S1c сохраняет текущую
-форму и проверяет form revision, но не объявляет этот старый boundary исправленным.
+Owner: Web models/Settings. Исправлено в S2a: non-DOM поля capabilities,
+приоритетов и калибровки принадлежат черновику существующей формы, не `state.settings`.
+Каждое изменение увеличивает revision; ACK не стирает новые поля, ошибка сохраняет
+draft, reset не применяется заранее. Form catalog preview не меняет applied catalog.
+`model-settings`, `model-navigation`, `prompt-review` и Settings browser fixtures
+проверяют границу и late/cancel behavior. Второй Settings UI/store не создан;
+Windows/WebView2 evidence остаётся открытым.
 
 ## Settings navigation fixture: версия в hover — 2026-10-30
 

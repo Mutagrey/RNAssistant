@@ -327,8 +327,46 @@ Rollback: отменить только diff S1c поверх `2a4831c5`; дан
 Активный заголовок вкладки прокручивается в видимую часть узкой полосы.
 Открытая source-audit граница model capability drafts —
 [BACKLOG](../stabilization/BACKLOG.md#settings-model-capability-draft-boundary--2026-11-02);
-общая изоляция applied/draft capabilities остаётся S2a.
+общая изоляция applied/draft capabilities реализована в S2a ниже.
 После ревью — предложенный S2a; полного переноса остальных views этот срез не означает.
+
+## S2a: модель чата и настройки возможностей
+
+**Реализовано, In Review (2026-11-02).** Пользователь явно расширил scope:
+выбор модели должен работать и для Workspace; общие возможности чата не должны
+дублироваться по типам Office/project/plugin.
+
+Перенесён общий picker, сохранение override/default через existing chat store,
+единый `ChatSettingsResolver`, защита модели принятого run. Удалён Workspace-only
+переход в настройки вместо выбора. Исправлены applied/draft capabilities,
+attachment priority/reset/calibration и поздний ACK; catalog preview отделён от
+applied catalog. Скрытая Settings view и закрытое меню сохраняют lazy rendering.
+Меню укладывается в узкую группу без обрезания.
+
+Проверки: `model-settings`, `model-navigation` (500 моделей, 100 закрытых render —
+0 созданных catalog nodes), `prompt-review`, `settings-navigation-layout`,
+`settings-dock`, `workspace-shared-draft`. Harness: `workspace: chat model
+preferences and wire`, `chat: session model overrides global settings`,
+`plugins: approval continuation belongs to application` (complete/stop/close/deny/terminal).
+Проверены реальные HTTP bodies локального scripted provider: override/reopen,
+изменение default/reset, принятая модель после approval; busy lease отказывает сразу.
+Устаревший `files.create` в approval fixture заменён действующим `core.write`.
+Это host-neutral evidence; реальный Office/WebView2 и provider не квалифицированы.
+
+Ревью: открыть production preview `/preview/web/?scenario=ready`, выбрать модель
+в проекте и чате плагина, вернуться в Office; переключить default; проверить меню
+при 420 px. В Settings изменить возможности без Apply, затем применить: composer
+меняется только после подтверждения сохранения. Mock не запускает реальную модель.
+Снимки — в Design System. Визуальные детали ждут согласия пользователя.
+
+Откат — revert атомарного commit S2a; новые store/формат сессий/vendor не добавлены.
+Сохранённое предпочтение модели остаётся обычным `ChatSession.Model`.
+
+Следующий атомарный срез S2a — общие attachment/context actions и состояния
+Office/project/plugin: инвентаризировать оставшиеся owner checks, затем переключать
+общие consumers с узкими domain adapters. Не копировать chat UI и не объявлять
+паритет там, где ещё отсутствует backend contract. Несколько живых chat views и
+paging остаются последующими ограниченными срезами; S3b preview сохраняет свой scope.
 
 ## Последующие срезы — только после ревью предыдущего
 

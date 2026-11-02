@@ -1,15 +1,29 @@
 var settingsDirty = false;
 var settingsFormRevision = 0;
 var settingsSaveInProgress = false;
+// Only non-DOM form fields. Copy-on-write keeps applied settings and submitted saves immutable.
+var settingsModelDraft = {};
+function modelSettingsFormContext() {
+  return { settings: Object.assign({}, state.settings, settingsModelDraft),
+    modelCatalog: modelCatalogPreview.modelCatalog || state.modelCatalog };
+}
+function setModelSettingsDraft(field, value) {
+  settingsModelDraft[field] = value;
+  markSettingsDirty();
+}
+
 var agentProtocolExampleViewers = {};
 
 // Placement retains this form; its draft/save owner stays here, never in Dockview.
 var RNAssistantSettingsView = {
+  active: false,
   activate: function () {
+    this.active = true;
     if (!settingsDirty && !settingsSaveInProgress) renderSettings();
     loadSettingsModelCatalogIfNeeded();
   },
   deactivate: function () {
+    this.active = false;
     // Keep edited controls, but cancel form-derived catalog requests on leaving the view.
     // A later activation can reload that preview from the same unapplied inputs.
     discardModelCatalogPreview();
@@ -256,8 +270,8 @@ function renderContextWindowSummary() {
   var summary = $("contextWindowSummary");
   if (!summary) return;
   var model = formModel();
-  var catalog = findModel(model) || {};
-  var declared = Number(effectiveModelCapabilityValue(model, "MaxContextTokens", "maxContextTokens", catalog.maxContextTokens) || 0);
+  var catalog = findModel(model, modelSettingsFormContext()) || {};
+  var declared = Number(effectiveModelCapabilityValue(model, "MaxContextTokens", "maxContextTokens", catalog.maxContextTokens, modelSettingsFormContext()) || 0);
   var limit = Number($("contextLimitInput").value || 0);
   var effective = limit > 0 ? (declared > 0 ? Math.min(limit, declared) : limit) :
     (declared > 0 ? declared : 32768);
@@ -270,7 +284,8 @@ function renderContextWindowSummary() {
 
 function loadSettingsModelCatalogIfNeeded() {
   var page = document.querySelector('.settings-page[data-settings-page="model"].active');
-  if (page && !state.modelCatalog.loaded && !state.modelCatalog.loading && !state.modelCatalog.error &&
+  var catalog = modelSettingsFormContext().modelCatalog;
+  if (page && !catalog.loaded && !catalog.loading && !catalog.error &&
       !state.bridgeUnavailable && typeof loadModelCatalog === "function") {
     loadModelCatalog(true);
   }
@@ -334,6 +349,7 @@ function formatAppVersionLabel(value) {
 function renderSettings(options) {
   // Host/chat refreshes may arrive while this global view has an edited form.
   if ((settingsDirty || settingsSaveInProgress) && !(options && options.committed)) return;
+  settingsModelDraft = {};
   var s = state.settings || {};
   applyUiFontScale(s);
   var uiTheme = applyUiTheme(s);
@@ -419,6 +435,7 @@ function renderSettings(options) {
 }
 
 function readSettings() {
+  var modelContext = modelSettingsFormContext();
   if (typeof syncSelectedPromptFromEditor === "function") {
     syncSelectedPromptFromEditor();
   }
@@ -445,7 +462,7 @@ function readSettings() {
     AttachmentEvidenceMaxTokens: Math.max(0, Math.floor(Number($("attachmentEvidenceMaxTokensInput").value || 0))),
     TokenEstimateMultiplier: Number($("tokenEstimateMultiplierInput").value || modelSettingsDefaults.tokenEstimateMultiplier),
     AutoCalibrateTokenEstimate: $("autoCalibrateTokenEstimateInput").checked,
-    TokenEstimateCalibrations: compatibilityValue(state.settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {},
+    TokenEstimateCalibrations: compatibilityValue(modelContext.settings, "TokenEstimateCalibrations", "tokenEstimateCalibrations", {}) || {},
     StreamResponses: $("streamInput").checked,
     AutoConfirmToolActions: $("autoConfirmToolActionsInput").checked,
     EnableAgentJavaScript: $("enableAgentJavaScriptInput").checked,
@@ -465,10 +482,10 @@ function readSettings() {
       ($("toolResultRoleInput").value === "developer" ? "developer" : "user"),
     FallbackToJsonObject: $("fallbackJsonObjectInput").checked,
     SystemPromptRole: $("systemPromptRoleInput").value,
-    ModelImageSupportOverrides: modelImageSupportOverrides(),
-    ModelAudioSupportOverrides: modelAudioSupportOverrides(),
-    ModelCapabilities: modelCapabilitiesForSettings(),
-    AttachmentModelPriority: attachmentModelPriorityForSettings(),
+    ModelImageSupportOverrides: Object.assign({}, modelImageSupportOverrides(modelContext)),
+    ModelAudioSupportOverrides: Object.assign({}, modelAudioSupportOverrides(modelContext)),
+    ModelCapabilities: modelCapabilitiesForSettings(modelContext),
+    AttachmentModelPriority: attachmentModelPriorityForSettings(modelContext),
     HtmlNetworkAllowedOrigins: $("htmlNetworkOriginsInput").value.split(/\r?\n/).map(function (value) { return value.trim(); }).filter(Boolean),
     CustomHeaders: textToHeaders($("headersInput").value)
   };
@@ -480,6 +497,7 @@ async function persistSettingsFromForm() {
   var historySecret = $("historySecretInput").value;
   var nextSettings = readSettings();
   var submittedRevision = settingsFormRevision;
+  var submittedModelDraft = Object.assign({}, settingsModelDraft);
   var javascriptWasEnabled = compatibilityValue(state.settings, "EnableAgentJavaScript", "enableAgentJavaScript", false) === true;
   settingsSaveInProgress = true;
   updateSettingsSaveButton();
@@ -487,6 +505,9 @@ async function persistSettingsFromForm() {
     var response = await saveSettingsWithPromptChanges(nextSettings, apiKey, historySecret);
     state.appVersion = response.appVersion || response.AppVersion || state.appVersion;
     state.settings = response.settings;
+    Object.keys(submittedModelDraft).forEach(function (field) {
+      if (settingsModelDraft[field] === submittedModelDraft[field]) delete settingsModelDraft[field];
+    });
     if (typeof resetModelCatalog === "function") resetModelCatalog();
     state.prompts = response.prompts;
     state.hasApiKey = !!(response.hasApiKey || response.HasApiKey);
@@ -502,6 +523,7 @@ async function persistSettingsFromForm() {
     }
     if (typeof refreshModelDiagnosticsSettings === "function") refreshModelDiagnosticsSettings();
     if (typeof renderChatModePicker === "function") renderChatModePicker();
+    renderModelControls();
     if (javascriptWasEnabled !== nextSettings.EnableAgentJavaScript &&
         typeof applyLibraryCatalogState === "function") {
       try {
@@ -530,7 +552,7 @@ function markSettingsDirty() {
 }
 
 function resetModelSettingsToDefaults() {
-  var settings = state.settings || (state.settings = {});
+  var settings = settingsModelDraft;
   settings.ModelCapabilities = {};
   settings.ModelImageSupportOverrides = {};
   settings.ModelAudioSupportOverrides = {};
@@ -661,13 +683,13 @@ function bindSettingsActions() {
   $("historyEncryptionInput").addEventListener("change", updateHistoryProtectionControls);
   $("historyKeySourceInput").addEventListener("change", updateHistoryProtectionControls);
   $("tokenEstimateMultiplierInput").addEventListener("input", function () {
-    renderTokenEstimateCalibrationStatus(state.settings);
+    renderTokenEstimateCalibrationStatus(modelSettingsFormContext().settings);
   });
   $("autoCalibrateTokenEstimateInput").addEventListener("change", function () {
-    renderTokenEstimateCalibrationStatus(state.settings);
+    renderTokenEstimateCalibrationStatus(modelSettingsFormContext().settings);
   });
   $("modelInput").addEventListener("input", function () {
-    renderTokenEstimateCalibrationStatus(state.settings);
+    renderTokenEstimateCalibrationStatus(modelSettingsFormContext().settings);
   });
   $("resetModelSettingsButton").addEventListener("click", resetModelSettingsToDefaults);
   $("resetAgentSettingsButton").addEventListener("click", resetAgentSettingsToDefaults);

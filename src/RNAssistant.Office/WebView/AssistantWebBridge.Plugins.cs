@@ -84,6 +84,7 @@ namespace RNAssistant.Office.WebView
                             .Read(presentationSession, presentationRequest.RunId, presentationRequest.ToolCallId);
                         presentation.WorkspaceId = presentationRequest.WorkspaceId;
                         return presentation;
+                    case BridgeOperationId.SetProjectChatModel: return Plugins.SetProjectChatModel(Payload<ProjectChatModelRequest>(payload));
                     case BridgeOperationId.RenameProjectChat: return Plugins.RenameProjectChat(Payload<ProjectChatRequest>(payload));
                     case BridgeOperationId.DeleteProjectChat:
                         var deletedChat = Payload<ProjectChatRequest>(payload);

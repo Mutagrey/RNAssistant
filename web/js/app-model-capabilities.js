@@ -1,7 +1,8 @@
 function renderActiveModelCapability() {
   var indicator = $("modelCapabilityIndicator");
   if (!indicator) return;
-  var value = activeChatModel() || settingsModel();
+  var selection = chatModelSelection();
+  var value = selection.runningModel || selection.selected || settingsModel();
   var vision = effectiveModelSupportsImages(value);
   var reasoning = effectiveModelSupportsReasoning(value);
   var audio = effectiveModelSupportsAudio(value);
@@ -101,7 +102,7 @@ function appendModelReasoningModeSelect(row, value, catalogMode, onChange) {
 function modelCapabilityEditorValue(value, field, catalogValue) {
   var camel = field.charAt(0).toLowerCase() + field.slice(1);
   var snake = field.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
-  var stored = storedModelCapabilityValue(value, field, camel, snake);
+  var stored = storedModelCapabilityValue(value, field, camel, snake, modelSettingsFormContext());
   return stored === null || stored === undefined || stored === "" || String(stored) === String(catalogValue)
     ? null : stored;
 }
@@ -121,15 +122,15 @@ function updateModelCapabilitySummary(value, targetItem) {
   var items = targetItem ? [targetItem] : Array.prototype.slice.call(list.querySelectorAll(".model-capability-item"));
   items.forEach(function (item) {
     if (item.dataset.modelValue.toLowerCase() !== value.toLowerCase()) return;
-    var model = findModel(value) || {};
-    var context = effectiveModelCapabilityValue(value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens);
-    var output = effectiveModelCapabilityValue(value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens);
+    var model = findModel(value, modelSettingsFormContext()) || {};
+    var context = effectiveModelCapabilityValue(value, "MaxContextTokens", "maxContextTokens", model.maxContextTokens, modelSettingsFormContext());
+    var output = effectiveModelCapabilityValue(value, "MaxOutputTokens", "maxOutputTokens", model.maxOutputTokens, modelSettingsFormContext());
     var meta = item.querySelector(".model-capability-meta");
     meta.textContent = "Контекст " + modelCapabilityNumberText(context) + " · Ответ " + modelCapabilityNumberText(output);
     var badges = item.querySelector(".model-capability-tags");
     badges.replaceChildren();
-    var support = [["Vision", effectiveModelSupportsImages(value)], ["Audio", effectiveModelSupportsAudio(value)],
-      ["Reasoning", effectiveModelSupportsReasoning(value)]];
+    var support = [["Vision", effectiveModelSupportsImages(value, modelSettingsFormContext())], ["Audio", effectiveModelSupportsAudio(value, modelSettingsFormContext())],
+      ["Reasoning", effectiveModelSupportsReasoning(value, modelSettingsFormContext())]];
     support.forEach(function (entry) {
       if (entry[1] !== true) return;
       var badge = document.createElement("span");
@@ -164,10 +165,10 @@ function renderModelCapabilityEditor(item, value, model) {
     modelCapabilityPlaceholder(model.maxOutputTokens), function (next) {
       setStoredModelCapabilityField(value, "MaxOutputTokens", next);
     });
-  appendModelCapabilitySelect(fields, "Изображения", modelOverrideState(modelImageSupportOverrides(), value), function (mode) {
+  appendModelCapabilitySelect(fields, "Изображения", modelOverrideState(modelImageSupportOverrides(modelSettingsFormContext()), value), function (mode) {
     setModelCapabilityOverride("image", value, mode);
   });
-  appendModelCapabilitySelect(fields, "Аудио", modelOverrideState(modelAudioSupportOverrides(), value), function (mode) {
+  appendModelCapabilitySelect(fields, "Аудио", modelOverrideState(modelAudioSupportOverrides(modelSettingsFormContext()), value), function (mode) {
     setModelCapabilityOverride("audio", value, mode);
   });
   var reasoning = modelCapabilityEditorValue(value, "SupportsReasoning", model.supportsReasoning);
@@ -192,43 +193,38 @@ function refreshModelCapabilityDependents(value) {
   updateModelCapabilitySummary(value);
   renderModelCapabilityBadges();
   renderAttachmentModelPriority();
-  renderActiveModelCapability();
   if (typeof renderContextWindowSummary === "function") renderContextWindowSummary();
 }
 
 function setStoredModelCapabilityField(value, field, nextValue) {
   value = String(value || "").trim();
   if (!value) return;
-  var settings = state.settings || (state.settings = {});
-  var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
-  settings.ModelCapabilities = capabilities;
-  var entry = storedModelCapabilityEntry(value);
-  var capability = entry ? entry.value : {};
-  if (!entry) capabilities[value] = capability;
+  var settings = modelSettingsFormContext().settings;
+  var capabilities = Object.assign({}, settings.ModelCapabilities || settings.modelCapabilities);
+  var entry = storedModelCapabilityEntry(value, modelSettingsFormContext());
+  var capability = Object.assign({}, entry && entry.value);
+  capabilities[entry ? entry.key : value] = capability;
+  delete capability[field.charAt(0).toLowerCase() + field.slice(1)];
+  delete capability[field.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase()];
   if (nextValue === null || nextValue === undefined || nextValue === "") delete capability[field];
   else capability[field] = nextValue;
   if (!Object.keys(capability).length) delete capabilities[entry ? entry.key : value];
-  settingsDirty = true;
-  updateSettingsSaveButton();
+  setModelSettingsDraft("ModelCapabilities", capabilities);
   refreshModelCapabilityDependents(value);
 }
 
 function setModelCapabilityOverride(kind, value, mode) {
   value = String(value || "").trim();
   if (!value) return;
-  var settings = state.settings || (state.settings = {});
-  var overrides = kind === "audio" ? modelAudioSupportOverrides() : modelImageSupportOverrides();
-  if (kind === "audio") settings.ModelAudioSupportOverrides = overrides;
-  else settings.ModelImageSupportOverrides = overrides;
+  var overrides = Object.assign({}, kind === "audio" ? modelAudioSupportOverrides(modelSettingsFormContext()) : modelImageSupportOverrides(modelSettingsFormContext()));
   Object.keys(overrides).forEach(function (key) {
     if (key.toLowerCase() === value.toLowerCase()) delete overrides[key];
   });
   if (mode !== "auto") {
     overrides[value] = mode === "true";
   }
-  settings.AttachmentModelPriority = attachmentModelPriorityForSettings();
-  settingsDirty = true;
-  updateSettingsSaveButton();
+  setModelSettingsDraft(kind === "audio" ? "ModelAudioSupportOverrides" : "ModelImageSupportOverrides", overrides);
+  settingsModelDraft.AttachmentModelPriority = attachmentModelPriorityForSettings(modelSettingsFormContext());
   refreshModelCapabilityDependents(value);
 }
 
@@ -242,20 +238,20 @@ function renderModelCapabilityList() {
     open[item.dataset.modelValue.toLowerCase()] = true;
   });
   list.replaceChildren();
-  var values = allKnownModelValues().filter(function (value) {
-    var model = findModel(value);
+  var values = allKnownModelValues(modelSettingsFormContext()).filter(function (value) {
+    var model = findModel(value, modelSettingsFormContext());
     return !query || (value + " " + (model ? model.title : "")).toLocaleLowerCase("ru").includes(query);
   });
   if (!values.length) {
     var empty = document.createElement("div");
     empty.className = "model-capability-empty";
     empty.textContent = query ? "Модели не найдены." :
-      (state.modelCatalog.loading ? "Загрузка моделей…" : "Обновите каталог или введите ID модели.");
+      (modelSettingsFormContext().modelCatalog.loading ? "Загрузка моделей…" : "Обновите каталог или введите ID модели.");
     list.appendChild(empty);
     return;
   }
   values.forEach(function (value) {
-    var model = findModel(value) || { value: value, title: value };
+    var model = findModel(value, modelSettingsFormContext()) || { value: value, title: value };
     var item = document.createElement("details");
     item.className = "model-capability-item";
     item.dataset.modelValue = value;
@@ -296,17 +292,14 @@ function renderModelCapabilityList() {
 }
 
 function setAttachmentModelPriority(values) {
-  var settings = state.settings || (state.settings = {});
-  settings.AttachmentModelPriority = values.slice();
-  settingsDirty = true;
-  updateSettingsSaveButton();
+  setModelSettingsDraft("AttachmentModelPriority", values.slice());
   renderAttachmentModelPriority();
 }
 
 function renderAttachmentModelPriority() {
   var list = $("attachmentModelPriorityList");
   if (!list) return;
-  var values = attachmentModelPriorityForSettings();
+  var values = attachmentModelPriorityForSettings(modelSettingsFormContext());
   list.innerHTML = "";
   if (!values.length) {
     var empty = document.createElement("div");
@@ -325,7 +318,7 @@ function renderAttachmentModelPriority() {
 
     var copy = document.createElement("div");
     copy.className = "model-capability-text";
-    var model = findModel(value);
+    var model = findModel(value, modelSettingsFormContext());
     var title = document.createElement("div");
     title.className = "model-capability-title";
     title.textContent = model ? model.title : value;
@@ -340,12 +333,12 @@ function renderAttachmentModelPriority() {
 
     var badges = document.createElement("div");
     badges.className = "attachment-model-priority-badges";
-    if (effectiveModelSupportsImages(value) === true) {
+    if (effectiveModelSupportsImages(value, modelSettingsFormContext()) === true) {
       var vision = document.createElement("span");
       vision.textContent = "Vision";
       badges.appendChild(vision);
     }
-    if (effectiveModelSupportsAudio(value) === true) {
+    if (effectiveModelSupportsAudio(value, modelSettingsFormContext()) === true) {
       var audio = document.createElement("span");
       audio.textContent = "Audio";
       badges.appendChild(audio);

@@ -35,6 +35,18 @@ namespace RNAssistant.Harness
             session.Model = " ";
             effective = ChatSettingsResolver.Resolve(settings, session);
             AssertEqual("global-model", effective.Model, "blank chat model fallback");
+            session.FormatVersion = ChatSession.CurrentFormatVersion;
+            session.Mode = ChatModes.Agent;
+            session.LastRun = new ChatRunRecord { Status = "running", ModelConfiguration = new ModelRunMetadata { Model = "accepted-model" } };
+            var refused = false;
+            try { ChatSettingsResolver.RequireEditablePreferences(session); } catch (InvalidOperationException) { refused = true; }
+            AssertTrue(refused, "the common preference policy refuses an active run");
+            session.LastRun.Status = "completed";
+            ChatSettingsResolver.RequireEditablePreferences(session);
+            session.Model = "next-model";
+            AssertEqual("accepted-model", ChatSettingsResolver.ResolveAcceptedRun(settings, session).Model,
+                "same-run continuation uses its recorded model independently of future preferences");
+            AssertEqual("global-model", settings.Model, "accepted-run resolution also leaves applied settings intact");
         }
 
         private static void PromptResourcesReadPublishedTemplates()

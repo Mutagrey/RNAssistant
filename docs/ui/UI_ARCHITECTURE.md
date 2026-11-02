@@ -98,6 +98,39 @@ Hover/focus остаётся у `RailPopovers`, click menus — у `ActionMenu`;
 строки и иконки принадлежат общему `app-product-components.css`. Старые отдельные
 rail menu CSS удалены. Нового popup engine, registry, библиотеки или vendor нет.
 
+## S2a: общая модель чата и черновик возможностей
+
+Scope разрешён пользователем 2026-11-02: выбор модели должен работать одинаково в
+Office, project и plugin chat. Реализация — In Review; это первый ограниченный
+срез S2a, а не объявление полной parity всех функций чата.
+
+- Один `app-model-picker.js` и `chatModelSelection` показывают выбор, default,
+  metadata/capabilities и недоступность. WorkspaceChat предоставляет данные и
+  dispatch; его прежнее отдельное меню «Настройки модели» удалено.
+- `ChatSettingsResolver` — существующий Core owner разрешения chat override и
+  общей политики редактирования model/reasoning. Office и Workspace используют
+  его. `ChatSession.Model` — предпочтение; null означает текущий default.
+  Фактически использованная модель остаётся в `LastRun.ModelConfiguration`.
+  Новый run не записывает default поверх предпочтения. Approval/continuation
+  использует принятую модель; проверки endpoint/digest/context/roles сохранены.
+- Project и plugin идут через один typed `setProjectChatModel` adapter и
+  `WorkspaceConversationService.SetModel`. Ответ содержит только адрес, model и
+  revision. Существующая exact-session lease берётся без ожидания; input barrier
+  и navigation generation защищают отправку и поздние ответы. При потерянном ACK
+  под тем же barrier читается сохранённое состояние без повтора записи; если read-back
+  также недоступен, отправка отключена до восстановления bridge. Нового store нет.
+- `app-settings.js` владеет неприменёнными non-DOM полями возможностей, приоритетов
+  и калибровки. Copy-on-write сохраняет applied settings и submitted snapshot.
+  Все изменения повышают revision формы; ACK освобождает только подтверждённые
+  версии полей. Reset также является черновиком. Ошибка сохраняет правки.
+- `app-models.js` владеет одним cancellable catalog request. Form preview отделён
+  от applied catalog и исчезает при deactivation; общий resolver получает draft
+  context явно. Предпросмотр другого endpoint не меняет возможности текущего чата.
+  Скрытая Settings view не строит списки моделей; закрытый picker не строит меню.
+
+Оставшиеся расхождения attachments/context и view-scoping — в
+[плане](UI_MIGRATION_PLAN.md#s2a-модель-чата-и-настройки-возможностей).
+
 ## Фактический аудит
 
 ### Повторная сверка с исходным планом — 2026-11-02

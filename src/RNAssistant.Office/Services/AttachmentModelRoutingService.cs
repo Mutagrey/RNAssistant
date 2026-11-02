@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RNAssistant.Core.Llm;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Services;
 
 namespace RNAssistant.Office.Services
 {
@@ -69,11 +70,8 @@ namespace RNAssistant.Office.Services
             ChatSession session,
             IReadOnlyList<ChatAttachment> attachments)
         {
-            var settings = (source ?? new AppSettings()).Clone();
-            var baseModel = session == null || string.IsNullOrWhiteSpace(session.Model)
-                ? settings.Model
-                : session.Model.Trim();
-            settings.Model = baseModel;
+            var settings = ChatSettingsResolver.Resolve(source, session);
+            var baseModel = settings.Model;
 
             var allAttachments = (attachments ?? new ChatAttachment[0])
                 .Where(attachment => attachment != null)

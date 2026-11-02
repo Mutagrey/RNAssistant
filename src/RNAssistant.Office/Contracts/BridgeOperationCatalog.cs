@@ -19,7 +19,7 @@ namespace RNAssistant.Office.Contracts
         GetPluginVendors, ImportPluginVendor, ResolveHtmlVendor,
         GetProjectChats, ConnectProjectWorkspace, CreateProjectWorkspace, CreateProjectChat, ForkProjectChat, GetProjectChat,
         GetPreviousProjectChatMessages, GetProjectToolResultPresentation, DeleteProjectChatMessage,
-        RenameProjectChat, DeleteProjectChat, DeleteProjectHistory,
+        RenameProjectChat, SetProjectChatModel, DeleteProjectChat, DeleteProjectHistory,
         [BridgeOperationPolicy(true, 300)] SubmitProjectChat, [BridgeOperationPolicy(true, 300)] ResolveProjectChat, CancelProjectChat,
         BeginProjectChatFileUpload, WriteProjectChatFileChunk, [BridgeOperationPolicy(true, 300)] CompleteProjectChatFileUpload, CancelProjectChatFileUpload,
         GetWorkspaceState,

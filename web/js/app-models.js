@@ -1,3 +1,5 @@
+var modelCatalogPreview = { modelCatalog: null };
+
 function loadModelCatalog(useFormSettings) {
   if (state.chatNavigationPending || state.initializePromise || state.bridgeUnavailable) return Promise.resolve(false);
   var previous = state.modelCatalogRequest;
@@ -8,9 +10,11 @@ function loadModelCatalog(useFormSettings) {
     return previous.completion;
   }
   var operation = { cancelled: false, settings: state.settings, bridgeToken: state.bridgeToken, useFormSettings: !!useFormSettings };
+  operation.target = useFormSettings ? modelCatalogPreview : state;
+  operation.formRevision = typeof settingsFormRevision === "number" ? settingsFormRevision : 0;
+  operation.target.modelCatalog = Object.assign({}, operation.target.modelCatalog || state.modelCatalog,
+    { loading: true, error: "" });
   state.modelCatalogRequest = operation;
-  state.modelCatalog.loading = true;
-  state.modelCatalog.error = "";
   renderModelControls();
   operation.completion = (async function () {
     try {
@@ -19,13 +23,13 @@ function loadModelCatalog(useFormSettings) {
       operation.request = send("getModelCatalog", { settings: settings, apiKey: apiKey || null });
       var response = await operation.request;
       if (operation.cancelled || operation.bridgeToken !== state.bridgeToken || operation.settings !== state.settings) return false;
-      normalizeModelCatalog(response);
-      state.modelCatalog.fromSettingsForm = operation.useFormSettings;
-      log("Models loaded: " + state.modelCatalog.models.length);
+      if (useFormSettings && typeof settingsFormRevision === "number" && operation.formRevision !== settingsFormRevision) return false;
+      normalizeModelCatalog(response, operation.target);
+      log("Models loaded: " + operation.target.modelCatalog.models.length);
       return true;
     } catch (error) {
       if (!operation.cancelled && !error.cancelled && operation.bridgeToken === state.bridgeToken && operation.settings === state.settings) {
-        state.modelCatalog.error = error.message || "Unknown error";
+        if (operation.target.modelCatalog) operation.target.modelCatalog.error = error.message || "Unknown error";
         var message = error.message || "Неизвестная ошибка";
         log(/^Каталог моделей не загружен:/i.test(message) ? message : ("Каталог моделей не загружен: " + message), "warning");
       }
@@ -40,7 +44,7 @@ function loadModelCatalog(useFormSettings) {
 function finishModelCatalogLoad(operation) {
   if (state.modelCatalogRequest !== operation) return;
   state.modelCatalogRequest = null;
-  state.modelCatalog.loading = false;
+  if (operation.target.modelCatalog) operation.target.modelCatalog.loading = false;
   renderModelControls();
 }
 
@@ -61,18 +65,39 @@ function cancelModelCatalogLoad() {
 function resetModelCatalog() {
   cancelModelCatalogLoad();
   state.modelCatalog = { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" };
+  modelCatalogPreview.modelCatalog = null;
 }
 
 function discardModelCatalogPreview() {
-  if (state.modelCatalog.fromSettingsForm || state.modelCatalogRequest && state.modelCatalogRequest.useFormSettings) {
-    resetModelCatalog();
+  if (state.modelCatalogRequest && state.modelCatalogRequest.useFormSettings) cancelModelCatalogLoad();
+  modelCatalogPreview.modelCatalog = null;
+}
+
+// An uncertain preference write is never retried. Re-read the selected chat before allowing another send.
+async function refreshUncertainChatPreference(error, isCurrent, refresh) {
+  if (!error.resultUncertain || !isCurrent()) return false;
+  try { await refresh(); return isCurrent(); }
+  catch (refreshError) {
+    if (isCurrent()) failBridgeTransport(null, refreshError);
+    return false;
   }
 }
 
+function refreshOfficeChatPreference(error, chatId) {
+  function selected() {
+    return state.activeChatId === chatId && (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office");
+  }
+  return refreshUncertainChatPreference(error, selected, async function () {
+    var response = await send("getChatState", { chatId: chatId });
+    if (selected()) applyChatStateForChat(response, chatId);
+  });
+}
+
 async function saveChatModelSelection(value) {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
+    return window.RNAssistantWorkspaceChat.selectModel(value);
   value = String(value || "").trim();
-  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise ||
-      state.chatDetailPending || state.chatDetailError || hasActiveMessageEdit() || !!currentActiveSend()) {
+  if (chatModelSelection().disabled) {
     return false;
   }
   if (value === activeChatModel()) {
@@ -91,6 +116,7 @@ async function saveChatModelSelection(value) {
     log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
     return activeChatModel() === value;
   } catch (error) {
+    await refreshOfficeChatPreference(error, targetChatId);
     renderModelControls();
     log(error.detail || error.message, "error");
     return false;
@@ -104,8 +130,7 @@ async function saveChatModelSelection(value) {
 }
 
 async function saveChatReasoningSelection(enabled) {
-  if (!state.activeChatId || state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise ||
-      state.chatDetailPending || state.chatDetailError || hasActiveMessageEdit() || !!currentActiveSend()) {
+  if (chatModelSelection().disabled) {
     return false;
   }
   state.reasoningSaving = true;
@@ -118,6 +143,7 @@ async function saveChatReasoningSelection(enabled) {
     log(enabled ? "Reasoning enabled." : "Reasoning disabled.");
     return state.activeChatReasoning === !!enabled;
   } catch (error) {
+    await refreshOfficeChatPreference(error, targetChatId);
     log(error.detail || error.message, "error");
     return false;
   } finally {
@@ -133,7 +159,7 @@ function bindModelActions() {
     renderContextWindowSummary();
   });
   $("modelInput").addEventListener("change", function () {
-    applyModelDefaultsToForm(findModel($("modelInput").value));
+    applyModelDefaultsToForm(findModel($("modelInput").value, modelSettingsFormContext()));
     renderModelControls();
   });
   $("chatReasoningToggle").addEventListener("click", function () {
@@ -148,9 +174,6 @@ function bindModelActions() {
   });
   $("chatModelPicker").addEventListener("toggle", function () {
     if (!$("chatModelPicker").open) return;
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
-      window.RNAssistantWorkspaceChat.refreshComposer(); return;
-    }
     renderChatModelPicker(true);
     if (!state.modelCatalog.loaded && !state.modelCatalog.loading) {
       loadModelCatalog(false);

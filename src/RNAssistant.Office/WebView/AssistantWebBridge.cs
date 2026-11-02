@@ -236,6 +236,7 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.CreateProjectChat: case BridgeOperationId.ForkProjectChat: case BridgeOperationId.GetProjectChat:
                     case BridgeOperationId.GetPreviousProjectChatMessages: case BridgeOperationId.GetProjectToolResultPresentation:
                     case BridgeOperationId.DeleteProjectChatMessage:
+                    case BridgeOperationId.SetProjectChatModel:
                     case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.DeleteProjectHistory:
                     case BridgeOperationId.SubmitProjectChat:
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:

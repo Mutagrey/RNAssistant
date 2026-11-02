@@ -240,7 +240,7 @@
   function projectChatState(payload) {
     var entry = requireWorkspace(payload), chat = requireProjectChat(payload), run = projectRuns[chat.Id];
     return { project: clone(entry), sessionId: chat.Id,
-      state: { id: chat.Id, workspaceId: entry.workspaceId, title: chat.Title,
+      state: { id: chat.Id, workspaceId: entry.workspaceId, title: chat.Title, model: chat.Model || null,
         revision: projectRevisions[chat.Id] || 0,
         status: run ? "running" : chat.RunStatus, runId: run && run.runId || null,
         cursor: run && run.cursor || "preview-project-cursor", userInput: null,
@@ -720,6 +720,13 @@
       history.splice(removedIndex, 1);
       projectRevisions[payload.sessionId] = (projectRevisions[payload.sessionId] || 0) + 1;
       return projectChatState(payload);
+    }
+    if (type === "setProjectChatModel") {
+      var modelChat = requireProjectChat(payload);
+      if (projectRuns[payload.sessionId]) fail("Сначала остановите чат.", "preview_run_busy");
+      modelChat.Model = payload.model || null;
+      var modelRevision = projectRevisions[payload.sessionId] = (projectRevisions[payload.sessionId] || 0) + 1;
+      return { workspaceId: payload.workspaceId, sessionId: payload.sessionId, model: modelChat.Model, revision: modelRevision };
     }
     if (type === "renameProjectChat") {
       var renamed = requireProjectChat(payload);

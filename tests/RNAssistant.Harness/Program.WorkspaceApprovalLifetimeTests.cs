@@ -40,13 +40,18 @@ namespace RNAssistant.Harness
                 {
                     var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "test-model",
                         AgentResponseMode = "json_object", StreamResponses = false, SmartChatTitles = false,
-                        AutoCompressContext = false, AutoConfirmToolActions = false };
+                        AutoCompressContext = false, AutoConfirmToolActions = false, RequestTimeoutSeconds = 15, MaxAgentFormatRetries = 0 };
                     new SettingsService(paths).Save(settings);
                     var root = Path.Combine(paths.Root, "approval-project");
                     var workspaceId = service.CreateProjectWorkspace(new ProjectConnectionRequest { RootPath = root }).SelectedWorkspaceId;
                     var chat = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
                     var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
+                    var modelReply = JObject.Parse(bridge.HandleMessageAsync(WorkspaceBridgeRequest(BridgeToken(bridge),
+                        "setProjectChatModel", new ProjectChatModelRequest { WorkspaceId = workspaceId,
+                            SessionId = chat.SessionId, Model = "chosen-model" })).GetAwaiter().GetResult());
+                    AssertEqual("chosen-model", (string)modelReply["payload"]?["model"], "typed bridge persists the chat model");
                     var requests = 0;
+                    var requestModels = new System.Collections.Generic.List<string>();
                     listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
                     var server = Task.Run(async () =>
                     {
@@ -54,7 +59,7 @@ namespace RNAssistant.Harness
                         {
                             var context = await listener.GetContextAsync().ConfigureAwait(false);
                             using (var reader = new StreamReader(context.Request.InputStream))
-                                await reader.ReadToEndAsync().ConfigureAwait(false);
+                                requestModels.Add((string)JObject.Parse(await reader.ReadToEndAsync().ConfigureAwait(false))["model"]);
                             Interlocked.Increment(ref requests);
                             if (index == 1)
                             {
@@ -64,10 +69,10 @@ namespace RNAssistant.Harness
                             }
                             var content = index == 0
                                 ? new ConversationResponse(ConversationResponse.ExecuteAction, "Create the requested file.",
-                                    "Создаю файл.", calls: new[] { new ConversationToolCall { Name = "files.create",
-                                        Arguments = new JObject { ["relativePath"] = "once.txt", ["text"] = "ONCE" } } }).ToJson()
+                                    "Создаю файл.", calls: new[] { new ConversationToolCall { Name = "core.write",
+                                        Arguments = new JObject { ["target"] = "once.txt", ["content"] = "ONCE" } } }).ToJson()
                                 : ScriptedVerifiedFinish(new ChatStore(paths).Load(chat.SessionId),
-                                    "Report the verified write.", "Файл создан.", "File created.", "files.create");
+                                    "Report the verified write.", "Файл создан.", "File created.", "core.write");
                             var bytes = Encoding.UTF8.GetBytes(new JObject { ["choices"] = new JArray(new JObject {
                                 ["message"] = new JObject { ["content"] = content } }) }.ToString(Formatting.None));
                             context.Response.ContentLength64 = bytes.Length;
@@ -83,6 +88,13 @@ namespace RNAssistant.Harness
                         service.Conversations.RunsDrained.GetAwaiter().GetResult();
                         AssertEqual(RunLifecycle.AwaitingConfirmation, initial.Summary.Lifecycle, "real write pauses for approval");
                         AssertTrue(!File.Exists(Path.Combine(root, "once.txt")), "pending call has no file effect");
+                        var modelChangeRefused = false;
+                        try { service.SetProjectChatModel(new ProjectChatModelRequest { WorkspaceId = workspaceId,
+                            SessionId = chat.SessionId, Model = "other-model" }); }
+                        catch (InvalidOperationException) { modelChangeRefused = true; }
+                        AssertTrue(modelChangeRefused, "a pending approval pins the selected model");
+                        settings.Model = "changed-default";
+                        new SettingsService(paths).Save(settings);
                         var request = new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId,
                             PendingId = initial.Summary.PendingConfirmation.PendingId, Approve = ending != "deny" };
                         var waiting = service.ProjectChat(request);
@@ -170,9 +182,10 @@ namespace RNAssistant.Harness
                         AssertEqual(ending == "deny" ? "confirmation_denied" : ending == "complete" ? "model_finish" : "cancelled",
                             durable.LastRun.KernelState.Summary.Reason, "terminal reason: " + ending);
                         AssertEqual(ending == "deny" ? 0 : 1, durable.LastRun.KernelState.Summary.ToolCounts.WriteOk, "one verified write, no replay");
+                        AssertTrue(requestModels.All(model => model == "chosen-model"), "approval keeps the accepted chat model after the shared default changes");
                         AssertEqual(ending == "deny" ? 1 : 2, requests, "denial does not call the model; approval calls it once");
                         if (ending == "deny") AssertTrue(!File.Exists(Path.Combine(root, "once.txt")), "denial never writes");
-                        AssertEqual(1, durable.Messages.Count(item => item.ToolName == "files.create" && item.ExecutionProgress != null),
+                        AssertEqual(1, durable.Messages.Count(item => item.ToolName == "core.write" && item.ExecutionProgress != null),
                             "one terminal result for the accepted call");
                         using (PluginStore.AcquireRuntimeUse(paths, exclusive: true)) { }
                         using (new FileStream(leasePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }

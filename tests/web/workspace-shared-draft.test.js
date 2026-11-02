@@ -170,9 +170,12 @@ const root = path.resolve(__dirname, '../..');
       assert.equal(count, 1, 'lost acknowledgement must not execute the input twice');
       await page.waitForFunction(() => !document.querySelector('#chatInput').value);
     }
+    await page.waitForFunction(() => !document.querySelector('#chatModelPicker').classList.contains('is-disabled'));
     await page.locator('#chatModelPicker summary').click();
-    assert.equal(await page.locator('#chatModelMenu').getByText('Настройки модели').count(), 1,
-      'workspace model control uses the shared picker and global model setting');
+    await page.waitForFunction(() => document.querySelectorAll('#chatModelMenu .composer-model-item').length > 1);
+    assert.equal(await page.locator('#chatModelMenu [data-value=""]').count(), 1,
+      'workspace uses the same explicit default-model option');
+    assert.ok(await page.locator('#chatModelMenu .composer-model-item').count() > 1, 'workspace can select catalog models');
     await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
     await page.locator('#chatModelPicker summary').click();
     await page.waitForFunction(() => !document.querySelector('#chatModelMenu').textContent.includes('Настройки модели'));

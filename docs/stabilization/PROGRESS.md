@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Модель общего чата S2a — 2026-11-02
+
+По прямому уточнению пользователя Office/project/plugin получили один picker и
+выбор модели конкретного чата, включая «По умолчанию». Existing ChatSettingsResolver,
+chat store и exact lease общие; принятая модель сохраняется при approval/continuation.
+Неприменённые capabilities/reset/priority и catalog preview отделены от applied
+settings; сохранённый ACK не стирает новые правки. Реализация In Review.
+[Границы, проверки и следующий срез](../ui/UI_MIGRATION_PLAN.md#s2a-модель-чата-и-настройки-возможностей).
+Полная parity attachments/context ещё открыта; Windows/Office evidence не закрыт.
+
 ## Request view и controls диагностики S3a — 2026-11-02
 
 По прямому указанию пользователя включён production-срез: сохранённый запрос

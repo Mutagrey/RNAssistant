@@ -165,6 +165,24 @@ select потребляет те же nav items и общий `.rna-form-control
 принадлежит `app-product-screens.css`; Shell не управляет внутренней навигацией.
 [Снимок с меню](review/s1c-settings-hover.png), [узкая группа](review/s1c-settings-narrow.png).
 
+## Общие controls модели S2a
+
+Owner: существующие composer/model-picker/model-capabilities. Один menu renderer,
+строки, badges и подписи используются Office/Workspace/plugin без отдельных CSS.
+«По умолчанию» наследует общие настройки; явный выбор принадлежит чату. Running,
+awaiting approval, preference save и read-only делают control недоступным.
+Подтверждённый отказ не меняет выбранную строку; потерянный ACK требует чтения
+сохранённого выбора перед отправкой. Неизвестная каталогу модель остаётся
+видна с объяснением. Reasoning учитывает возможности выбранной модели.
+
+Menu позиционируется относительно общей toolbar composer, ограничено её шириной
+и использует существующий spacing token. Это устраняет обрезание у левой границы
+узкой Dockview-группы. Новой библиотеки controls или локальных owner styles нет.
+
+Статус реализации — **In Review**. Production UI на mock bridge:
+[1360 px](review/s2a-model-menu.png), [420 px / dark](review/s2a-model-menu-narrow.png).
+Screenshots подтверждают отображение, не работу Office или реального provider.
+
 ## Каталог существующих компонентов
 
 L1 = host-independent component; L2 = browser requirements; L3 = host integration.

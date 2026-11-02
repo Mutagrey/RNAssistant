@@ -35,7 +35,7 @@ function fixture() {
   context.effectiveModelCapabilityValue = () => null;
   context.log = () => {};
   context.readSettings = () => ({ Model: "form-model" });
-  context.renderSendControls = () => {};
+  context.renderSendControls = context.renderActiveModelCapability = () => {};
   context.applyChatState = value => { context.state.activeChatId = value.activeChatId; return true; };
   ["app-model-data.js", "app-model-picker.js", "app-model-render.js", "app-models.js", "app-chat-session.js"].forEach(file => vm.runInContext(read(file), context, { filename: file }));
   return { context, nodes, creations: () => creations };
@@ -132,6 +132,28 @@ function fixture() {
     console.log("PASS models: accepted model preference drains before rebinding; new preferences wait for navigation");
   }
   {
+    const { context, nodes } = fixture(), calls = [];
+    context.state.activeChatModel = "before";
+    context.applyChatStateForChat = (response, id) => {
+      assert.equal(id, context.state.activeChatId); context.state.activeChatModel = response.activeChatModel;
+    };
+    context.send = async type => {
+      calls.push(type);
+      if (type === "setChatModel") { const error = Error("reply lost"); error.resultUncertain = true; throw error; }
+      return { activeChatModel: "saved-model" };
+    };
+    assert.equal(await context.saveChatModelSelection("saved-model"), false);
+    assert.deepEqual(calls, ["setChatModel", "getChatState"], "uncertain preference is read back, never retried");
+    assert.equal(context.state.activeChatModel, "saved-model");
+    assert.equal(context.state.modelSaving, false);
+    context.send = async type => { const error = Error("unreachable"); error.resultUncertain = true; throw error; };
+    context.failBridgeTransport = () => { context.state.bridgeUnavailable = true; };
+    await context.saveChatModelSelection("unconfirmed-model");
+    assert.equal(context.state.activeChatModel, "saved-model");
+    assert.equal(nodes.chatModelPicker.summary.attributes["aria-disabled"], "true", "failed read-back cannot reenable an unknown model selection");
+    console.log("PASS models: uncertain Office preference reads back once; failed reconciliation requires bridge recovery");
+  }
+  {
     const { context } = fixture(), preview = deferred(), cancelled = deferred(), calls = [];
     preview.promise.requestId = "preview";
     context.send = (type, payload) => {
@@ -140,13 +162,7 @@ function fixture() {
     };
     context.cancelBridgeRequest = () => cancelled.promise;
     const loading = context.loadModelCatalog(true);
-    context.document.querySelector = () => ({ id: "tab-settings" });
-    context.document.querySelectorAll = () => [];
-    context.document.getElementById = () => null;
-    context.document.addEventListener = () => {};
-    context.renderChatSessions = context.renderMessages = context.renderContext = context.renderContextMeter = () => {};
-    vm.runInContext(read("app.js"), context);
-    context.switchTab("chat");
+    context.discardModelCatalogPreview();
     const reload = context.loadModelCatalog(false);
     assert.equal(calls.length, 1, "new picker request drains the cancelled settings preview first");
     preview.resolve({ models: ["unsaved-server-model"] });
@@ -158,8 +174,9 @@ function fixture() {
     assert.equal(context.state.modelCatalog.models[0].value, "saved-server-model");
     context.send = () => Promise.resolve({ models: ["another-preview"] });
     await context.loadModelCatalog(true);
-    context.switchTab("chat");
-    assert.equal(context.state.modelCatalog.loaded, false, "a completed settings preview is also discarded on leaving settings");
+    context.discardModelCatalogPreview();
+    assert.equal(context.modelCatalogPreview.modelCatalog, null, "a completed settings preview is discarded on leaving settings");
+    assert.equal(context.state.modelCatalog.models[0].value, "saved-server-model", "the applied catalog survives a discarded form preview");
     console.log("PASS models: leaving settings discards previews; the chat picker reloads saved settings after cancellation");
   }
   {

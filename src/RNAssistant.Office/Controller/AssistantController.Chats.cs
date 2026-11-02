@@ -554,6 +554,7 @@ namespace RNAssistant.Office
         {
             return WithReservedChatPreference(LoadAddressedSession(chatId), session =>
             {
+                ChatSettingsResolver.RequireEditablePreferences(session);
                 session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
                 if (_conversationStore.IsPersisted(session))
                 {
@@ -593,6 +594,7 @@ namespace RNAssistant.Office
         {
             return WithReservedChatPreference(LoadAddressedSession(chatId), session =>
             {
+                ChatSettingsResolver.RequireEditablePreferences(session);
                 session.ReasoningEnabled = enabled;
                 if (_conversationStore.IsPersisted(session))
                 {

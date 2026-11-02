@@ -114,8 +114,13 @@ CSS, transforms, локальные defs/references и текст. Коорди�
 в SVG при чтении. Новые записи и bridge DTO не содержат массивов путей.
 В mock preview создание рисунка и запись исходников имитируются в памяти вкладки.
 Scaffold содержит `plugin.json`, UI, CSS, пример Worker-команды и README для агента.
-Описание передаётся в чат исходников. Чат использует действующие model settings,
-вопросы, confirmation и cancel; API key остаётся у settings owner.
+Описание передаётся в чат исходников. Чат использует общие вопросы, confirmation
+и cancel; endpoint/API key остаются у settings owner. Как Office и другие project
+чаты, он сохраняет model override в `ChatSession.Model`; null означает default.
+Один typed `setProjectChatModel` command обслуживает project/plugin, проверяет exact
+workspace/session и lease без ожидания, возвращает model/revision. Уже принятый run
+использует записанную `ModelConfiguration`; смена общих настроек не подменяет его
+модель при approval/continuation. UI/владельцы — [S2a](ui/UI_ARCHITECTURE.md#s2a-общая-модель-чата-и-черновик-возможностей).
 Иконка плагина открывает его исходный проект в общем экране чатов: слева остаётся
 дерево проектов и бесед, в центре — тот же ChatView, справа — живой предпросмотр
 плагина с изменяемой шириной. Data Templates открывает свои разделы внутри правого

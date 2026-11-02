@@ -1,3 +1,13 @@
+// One presentation contract; domain adapters provide only their current selection and availability.
+function chatModelSelection() {
+  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
+    return window.RNAssistantWorkspaceChat.modelSelection();
+  return { selected: activeChatModel(),
+    disabled: !!(state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise ||
+      state.chatDetailPending || state.chatDetailError || state.chatReadOnly || currentActiveSend() || hasActiveMessageEdit() ||
+      state.bridgeUnavailable || !state.activeChatId || state.activeRunViewState && state.activeRunViewState.lifecycle === "awaiting_confirmation") };
+}
+
 function settingsModel() {
   var s = state.settings || {};
   return s.Model || s.model || "";
@@ -42,7 +52,7 @@ function modelFieldWithDefaults(model, pascal, snake, camel) {
   return modelField(defaults, pascal, snake, camel, null);
 }
 
-function normalizeModelCatalog(payload) {
+function normalizeModelCatalog(payload, target) {
   payload = payload || {};
   var catalog = payload.catalog || payload.Catalog || payload;
   var rawModels = Array.isArray(catalog)
@@ -107,7 +117,7 @@ function normalizeModelCatalog(payload) {
     }
   }
 
-  state.modelCatalog = {
+  (target || state).modelCatalog = {
     configUrl: payload.configUrl || payload.ConfigUrl || "",
     defaultModel: configuredDefault,
     models: models,
@@ -117,16 +127,16 @@ function normalizeModelCatalog(payload) {
   };
 }
 
-function modelCapabilitiesForSettings() {
-  var settings = state.settings || {};
+function modelCapabilitiesForSettings(context) {
+  var settings = (context || state).settings || {};
   var existing = settings.ModelCapabilities || settings.modelCapabilities || {};
   var result = {};
   var storedKeys = {};
   Object.keys(existing).forEach(function (key) {
-    result[key] = existing[key];
+    result[key] = Object.assign({}, existing[key]);
     storedKeys[key.toLowerCase()] = key;
   });
-  (state.modelCatalog.models || []).forEach(function (model) {
+  ((context || state).modelCatalog.models || []).forEach(function (model) {
     var storedKey = storedKeys[String(model.value).toLowerCase()];
     var stored = storedKey ? existing[storedKey] || {} : {};
     result[storedKey || model.value] = {
@@ -148,9 +158,9 @@ function preferredCapabilityValue(stored, pascal, camel, fallback) {
   return value !== null && value !== undefined && value !== "" ? value : (fallback === undefined ? null : fallback);
 }
 
-function findModel(value) {
+function findModel(value, context) {
   value = String(value || "").toLowerCase();
-  var models = state.modelCatalog.models || [];
+  var models = (context || state).modelCatalog.models || [];
   for (var i = 0; i < models.length; i += 1) {
     if (String(models[i].value || "").toLowerCase() === value) {
       return models[i];
@@ -159,18 +169,18 @@ function findModel(value) {
   return null;
 }
 
-function modelImageSupportOverrides() {
-  var settings = state.settings || {};
+function modelImageSupportOverrides(context) {
+  var settings = (context || state).settings || {};
   return settings.ModelImageSupportOverrides || settings.modelImageSupportOverrides || {};
 }
 
-function modelAudioSupportOverrides() {
-  var settings = state.settings || {};
+function modelAudioSupportOverrides(context) {
+  var settings = (context || state).settings || {};
   return settings.ModelAudioSupportOverrides || settings.modelAudioSupportOverrides || {};
 }
 
-function storedAttachmentModelPriority() {
-  var settings = state.settings || {};
+function storedAttachmentModelPriority(context) {
+  var settings = (context || state).settings || {};
   return settings.AttachmentModelPriority || settings.attachmentModelPriority || [];
 }
 
@@ -197,9 +207,9 @@ function catalogModelSupportsAudio(model) {
     : null;
 }
 
-function storedModelCapabilityEntry(value) {
+function storedModelCapabilityEntry(value, context) {
   value = String(value || "").trim().toLowerCase();
-  var settings = state.settings || {};
+  var settings = (context || state).settings || {};
   var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
   var keys = Object.keys(capabilities);
   for (var index = 0; index < keys.length; index += 1) {
@@ -209,17 +219,17 @@ function storedModelCapabilityEntry(value) {
   return null;
 }
 
-function storedModelCapabilityValue(value, pascal, camel, snake) {
-  var entry = storedModelCapabilityEntry(value);
+function storedModelCapabilityValue(value, pascal, camel, snake, context) {
+  var entry = storedModelCapabilityEntry(value, context);
   return entry ? modelField(entry.value, pascal, snake, camel, null) : null;
 }
 
-function storedModelCapability(value, pascal, camel, snake) {
-  return nullableModelBoolean(storedModelCapabilityValue(value, pascal, camel, snake));
+function storedModelCapability(value, pascal, camel, snake, context) {
+  return nullableModelBoolean(storedModelCapabilityValue(value, pascal, camel, snake, context));
 }
 
-function effectiveModelCapabilityValue(value, pascal, camel, catalogValue) {
-  var stored = storedModelCapabilityValue(value, pascal, camel, camel);
+function effectiveModelCapabilityValue(value, pascal, camel, catalogValue, context) {
+  var stored = storedModelCapabilityValue(value, pascal, camel, camel, context);
   return stored !== null && stored !== undefined && stored !== "" ? stored : catalogValue;
 }
 
@@ -234,37 +244,37 @@ function modelSupportOverride(overrides, value) {
   return null;
 }
 
-function effectiveModelSupportsReasoning(value) {
-  var stored = storedModelCapability(value, "SupportsReasoning", "supportsReasoning", "supports_reasoning");
+function effectiveModelSupportsReasoning(value, context) {
+  var stored = storedModelCapability(value, "SupportsReasoning", "supportsReasoning", "supports_reasoning", context);
   if (stored !== null) return stored;
-  var model = findModel(value);
+  var model = findModel(value, context);
   return model && model.supportsReasoning !== null && model.supportsReasoning !== undefined
     ? nullableModelBoolean(model.supportsReasoning)
     : null;
 }
 
-function effectiveModelSupportsAudio(value) {
+function effectiveModelSupportsAudio(value, context) {
   value = String(value || "").trim();
-  var override = modelSupportOverride(modelAudioSupportOverrides(), value);
+  var override = modelSupportOverride(modelAudioSupportOverrides(context), value);
   if (override !== null) return override;
-  var model = findModel(value);
+  var model = findModel(value, context);
   var catalogSupport = catalogModelSupportsAudio(model);
   return catalogSupport !== null
     ? catalogSupport
-    : storedModelCapability(value, "SupportsAudio", "supportsAudio", "supports_audio");
+    : storedModelCapability(value, "SupportsAudio", "supportsAudio", "supports_audio", context);
 }
 
-function effectiveModelSupportsImages(value) {
+function effectiveModelSupportsImages(value, context) {
   value = String(value || "").trim();
-  var override = modelSupportOverride(modelImageSupportOverrides(), value);
+  var override = modelSupportOverride(modelImageSupportOverrides(context), value);
   if (override !== null) return override;
-  var catalogSupport = catalogModelSupportsImages(findModel(value));
+  var catalogSupport = catalogModelSupportsImages(findModel(value, context));
   if (catalogSupport !== null) return catalogSupport;
 
-  return storedModelCapability(value, "SupportsImages", "supportsImages", "supports_images");
+  return storedModelCapability(value, "SupportsImages", "supportsImages", "supports_images", context);
 }
 
-function allKnownModelValues() {
+function allKnownModelValues(context) {
   var values = [];
   var seen = {};
   function add(value) {
@@ -274,29 +284,29 @@ function allKnownModelValues() {
     seen[key] = true;
     values.push(value);
   }
-  (state.modelCatalog.models || []).forEach(function (model) { add(model.value); });
+  ((context || state).modelCatalog.models || []).forEach(function (model) { add(model.value); });
   add(formModel());
-  storedAttachmentModelPriority().forEach(add);
-  Object.keys(modelImageSupportOverrides()).forEach(add);
-  Object.keys(modelAudioSupportOverrides()).forEach(add);
-  var settings = state.settings || {};
+  storedAttachmentModelPriority(context).forEach(add);
+  Object.keys(modelImageSupportOverrides(context)).forEach(add);
+  Object.keys(modelAudioSupportOverrides(context)).forEach(add);
+  var settings = (context || state).settings || {};
   var capabilities = settings.ModelCapabilities || settings.modelCapabilities || {};
   Object.keys(capabilities).forEach(add);
   return values;
 }
 
-function attachmentModelPriorityForSettings() {
+function attachmentModelPriorityForSettings(context) {
   var result = [];
   var seen = {};
   function append(value) {
     value = String(value || "").trim();
     var key = value.toLowerCase();
     if (!value || seen[key]) return;
-    if (effectiveModelSupportsImages(value) !== true && effectiveModelSupportsAudio(value) !== true) return;
+    if (effectiveModelSupportsImages(value, context) !== true && effectiveModelSupportsAudio(value, context) !== true) return;
     seen[key] = true;
     result.push(value);
   }
-  storedAttachmentModelPriority().forEach(append);
-  allKnownModelValues().forEach(append);
+  storedAttachmentModelPriority(context).forEach(append);
+  allKnownModelValues(context).forEach(append);
   return result;
 }

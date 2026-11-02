@@ -359,6 +359,18 @@ namespace RNAssistant.Runtime
             }
         }
 
+        public ChatSession SetModel(WorkspaceDescriptor workspace, string sessionId, string model)
+        {
+            using (AcquireSessionLease(sessionId, wait: false))
+            {
+                var session = GetSession(workspace, sessionId);
+                ChatSettingsResolver.RequireEditablePreferences(session);
+                session.Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+                _chats.SetModel(session, session.Model);
+                return session;
+            }
+        }
+
         public bool DeleteSession(WorkspaceDescriptor workspace, string sessionId)
         {
             using (AcquireSessionLease(sessionId))
@@ -471,7 +483,7 @@ namespace RNAssistant.Runtime
             var mode = request.Mode == null ? null : ChatModes.Require(request.Mode);
             var answers = request.Answers;
             var reasoningEnabled = request.ReasoningEnabled;
-            if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) || string.IsNullOrWhiteSpace(settings.Model))
+            if (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl))
                 throw new ArgumentException("An LLM endpoint and model are required.", nameof(settings));
             ValidateMessageRoles(settings);
             var acceptedContract = PrepareAcceptance(request.Acceptance);
@@ -492,6 +504,9 @@ namespace RNAssistant.Runtime
                     if (duplicate != null) return WorkspaceRunResult.AlreadyAccepted(duplicate);
                 }
                 ConversationRunPolicy.RequireCurrentSession(session);
+                settings = ChatSettingsResolver.Resolve(settings, session);
+                if (string.IsNullOrWhiteSpace(settings.Model))
+                    throw new ArgumentException("An LLM model is required.", nameof(settings));
                 var acceptedMode = mode ?? ChatModes.Require(session.Mode);
                 var policy = ConversationRunPolicy.For(acceptedMode,
                     workspace.ReadOnly ? MutationPolicy.Deny : request.MutationPolicy ?? session.MutationPolicy,
@@ -601,7 +616,6 @@ namespace RNAssistant.Runtime
                         ReasoningEnabled = session.ReasoningEnabled
                     },
                     WorkspaceAcceptance = acceptedContract };
-                session.Model = settings.Model;
                 session.Messages.Add(userMessage);
                 if (userMessage.Attachments.Count > 0)
                 {
@@ -652,8 +666,7 @@ namespace RNAssistant.Runtime
         {
             if (workspace == null || string.IsNullOrWhiteSpace(sessionId) || string.IsNullOrWhiteSpace(pendingId))
                 throw new ArgumentException("Workspace, session and pending confirmation are required.");
-            if (approve && (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl) ||
-                string.IsNullOrWhiteSpace(settings.Model)))
+            if (approve && (settings == null || string.IsNullOrWhiteSpace(settings.BaseUrl)))
                 throw new ArgumentException("The LLM endpoint and model are required after approval.", nameof(settings));
             if (approve) ValidateMessageRoles(settings);
             using (var runReservation = ReserveRun(sessionId, wait: waitForLease, cancellationToken: cancellationToken))
@@ -664,8 +677,7 @@ namespace RNAssistant.Runtime
                 if (run?.Summary.Lifecycle != RunLifecycle.AwaitingConfirmation ||
                     run.Summary.PendingConfirmation?.PendingId != pendingId)
                     throw new InvalidOperationException("Pending confirmation was not found or was already resolved.");
-                if (approve && !string.Equals(settings.Model, session.Model, StringComparison.Ordinal))
-                    throw new InvalidOperationException("Approval must continue with the accepted run's model.");
+                if (approve) settings = ChatSettingsResolver.ResolveAcceptedRun(settings, session);
                 if (approve && ChatModes.Require(session.Mode) != ChatModes.Agent)
                     throw new InvalidOperationException("This mode cannot approve a file mutation.");
                 var modelConfiguration = session.LastRun.ModelConfiguration;

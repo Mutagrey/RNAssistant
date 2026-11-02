@@ -499,7 +499,7 @@
       await refresh(selected ? null : { workspaceId: projectId(), sessionId: currentId() });
       if (selected) notice(error.detail || error.message, true); }
   }
-  async function runChat(action, reportFailure) {
+  async function runChat(action, reportFailure, applyPreference) {
     if (!active || !project() || !project().available) return false;
     var pid = projectId(), sid = currentId();
     if (!pid || !sid) return false;
@@ -510,14 +510,21 @@
     function selected() { return version === serial && projectId() === pid && currentId() === sid; }
     render();
     try { var result = await action(pid, sid); if (selected()) {
+      if (applyPreference) { applyPreference(result, pid, sid); notice(statusText()); render(); return true; }
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
       // Catalog refresh is presentation work; an accepted input must release
       // the composer even if this separate read is slow or never returns.
       refreshCatalog(selected).then(function (refreshed) { if (refreshed && selected()) render(); })
         .catch(function () { /* The accepted chat result remains available. */ });
     } return true; }
-    catch (error) { if (selected()) notice(error.detail || error.message, true);
-      if (reportFailure) throw error; return false; }
+    catch (error) {
+      if (applyPreference) await refreshUncertainChatPreference(error, selected, async function () {
+        var snapshot = await readProjectChat({ workspaceId: pid, sessionId: sid });
+        if (selected()) active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot);
+      });
+      if (selected()) notice(error.detail || error.message, true);
+      if (reportFailure) throw error; return false;
+    }
     finally { releasePending(); render(); }
   }
   function submitProjectInput(target, input, flush, accepted, reportFailure) {
@@ -654,6 +661,18 @@
     });
     var chatActions = {
       snapshot: function () { return active; },
+      selectModel: function (model) {
+        return runChat(function (pid, sid) {
+          return send("setProjectChatModel", { workspaceId: pid, sessionId: sid, model: model });
+        }, false, function (result, pid, sid) {
+          if (!result || result.workspaceId !== pid || result.sessionId !== sid ||
+              !Number.isSafeInteger(result.revision) || result.model !== null && typeof result.model !== "string" ||
+              (result.model || "") !== model) throw new Error("Выбор модели не подтверждён.");
+          if (result.revision < field(runState(), "revision", "Revision")) return;
+          active.state.Model = active.state.model = result.model;
+          active.state.Revision = active.state.revision = result.revision;
+        });
+      },
       refresh: render,
       suspend: function () { runObserver.select(null, false); },
       loadPrevious: async function () {

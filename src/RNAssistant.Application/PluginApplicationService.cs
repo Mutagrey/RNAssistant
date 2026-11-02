@@ -925,6 +925,22 @@ namespace RNAssistant.Application
             }
         }
 
+        public ProjectChatModelDto SetProjectChatModel(ProjectChatModelRequest request)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+                if (string.IsNullOrWhiteSpace(request.SessionId))
+                    throw new PluginException("project_chat_invalid", "A project chat is required.");
+                ChatSession session;
+                try { session = Conversations.SetModel(workspace, request.SessionId, request.Model); }
+                catch (WorkspaceSessionLeaseUnavailableException)
+                { throw new PluginException("project_chat_busy", "This chat is running or its storage lease is unavailable. Retry after it stops."); }
+                return new ProjectChatModelDto { WorkspaceId = workspace.WorkspaceId,
+                    SessionId = session.Id, Model = session.Model, Revision = session.Revision };
+            }
+        }
+
         public ProjectChatCatalogDto RenameProjectChat(ProjectChatRequest request)
         {
             using (PluginStore.AcquireRuntimeUse(_paths))

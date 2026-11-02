@@ -161,6 +161,7 @@ namespace RNAssistant.Harness
                 Test("workspace: Office target stays pinned across document and host switches", WorkspaceOfficeTargetStaysPinned),
                 Test("workspace: saved Office results use host projection", WorkspaceOfficeHistoryUsesHostProjection),
                 Test("workspace: first message names the chat and smart title updates it", WorkspaceChatAutoTitle),
+                Test("workspace: chat model preferences and wire", WorkspaceChatModelPreferences),
                 Test("workspace: accepted call history survives a new turn", () => WorkspaceAcceptedCallHistory()),
                 Test("workspace: failed read activity preserves outcome and target", () => WorkspaceAcceptedCallHistory(failedRead: true)),
                 Test("workspace: discovery admission restart and binding drift", WorkspaceDiscoveryAdmitsAndRestoresExactTools),

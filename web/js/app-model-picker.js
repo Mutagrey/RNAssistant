@@ -118,33 +118,29 @@ function createChatModelPickerItem(value, model, isDefault, selected) {
 }
 
 function renderChatModelPicker(force) {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
-    window.RNAssistantWorkspaceChat.refreshComposer(); return;
-  }
+  var selection = chatModelSelection();
   var picker = $("chatModelPicker");
   var menu = $("chatModelMenu");
   var label = $("chatModelButtonLabel");
   if (!picker || !menu || !label) return;
-  var previousOwner = menu.dataset && menu.dataset.owner;
-  if (menu.dataset) menu.dataset.owner = "office";
+  var owner = window.RNAssistantWorkspaceChat ? window.RNAssistantWorkspaceChat.owner() : "office";
+  if (menu.dataset) menu.dataset.owner = owner;
 
-  var selected = activeChatModel();
+  var selected = selection.selected;
   var defaultValue = settingsModel();
-  var effectiveValue = selected || defaultValue;
+  var effectiveValue = selection.runningModel || selected || defaultValue;
   var effectiveModel = findModel(effectiveValue);
   label.textContent = (effectiveModel && effectiveModel.title) || effectiveValue || "Модель";
   picker.title = effectiveValue ? "Модель чата: " + effectiveValue : "Модель чата не выбрана";
-  var disabled = state.modelSaving || state.reasoningSaving || !!state.chatNavigationPending || !!state.initializePromise ||
-    !!currentActiveSend() || hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId;
-  setComposerPickerDisabled(picker, disabled);
-  if (!picker.open && previousOwner !== "workspace") return;
+  setComposerPickerDisabled(picker, selection.disabled);
+  if (!picker.open) return;
 
   var catalog = state.modelCatalog;
   var previous = menu.modelRenderState;
-  if (!force && previous && previous.catalog === catalog && previous.settings === state.settings &&
+  if (!force && previous && previous.owner === owner && previous.catalog === catalog && previous.settings === state.settings &&
       previous.selected === selected && previous.defaultValue === defaultValue &&
       previous.loading === catalog.loading && previous.error === catalog.error) return;
-  menu.modelRenderState = { catalog: catalog, settings: state.settings, selected: selected,
+  menu.modelRenderState = { owner: owner, catalog: catalog, settings: state.settings, selected: selected,
     defaultValue: defaultValue, loading: catalog.loading, error: catalog.error };
 
   menu.replaceChildren();
@@ -177,9 +173,9 @@ function renderChatModelPicker(force) {
   });
 }
 
-function populateModelOptions(options) {
+function populateModelOptions(options, context) {
   if (!options) return;
-  var models = state.modelCatalog.models || [];
+  var models = (context || state).modelCatalog.models || [];
   if (options._catalogModels === models) return;
   options._catalogModels = models;
   options.replaceChildren();

@@ -31,7 +31,7 @@ function fixture(loadPrompts = true) {
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
     RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
-    renderModelCapabilityList() {},
+    modelCatalogPreview: { modelCatalog: null }, renderModelControls() {}, renderModelCapabilityList() {},
     renderContextMeter() {}, clearRuntimeData() {}, setControlBusy: (id, busy) => { get(id).disabled = busy; },
     log: (message, level) => { if (level === "error") errors.push(message); }, confirm: () => true, cancelBridgeRequest: async () => {},
     fetch: async (url, options) => {

@@ -177,6 +177,19 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("pendingId")] public string PendingId { get; set; }
         [JsonProperty("approve")] public bool Approve { get; set; }
     }
+    public sealed class ProjectChatModelRequest
+    {
+        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("model", Required = Required.AllowNull)] public string Model { get; set; }
+    }
+    public sealed class ProjectChatModelDto
+    {
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("model")] public string Model { get; set; }
+        [JsonProperty("revision")] public long Revision { get; set; }
+    }
     public sealed class ProjectChatHistoryRequest
     {
         [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }

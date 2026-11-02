@@ -390,8 +390,7 @@
     }
     var picker = document.getElementById("composerAddPicker"), plan = document.getElementById("chatPlanButton");
     var fileAction = document.getElementById("attachFileButton"), fileInput = document.createElement("input");
-    var modelPicker = document.getElementById("chatModelPicker"), modelLabel = document.getElementById("chatModelButtonLabel");
-    var modelMenu = document.getElementById("chatModelMenu"), think = document.getElementById("chatReasoningToggle");
+    var think = document.getElementById("chatReasoningToggle");
     var fileTarget = null, fileOptions = null;
     fileInput.id = "workspaceFileInput"; fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
     picker.appendChild(fileInput);
@@ -411,15 +410,16 @@
       fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
       picker.open = false; fileInput.click();
     }
-    function renderWorkspaceModelMenu() {
-      if (modelMenu.dataset.owner === "workspace") return;
-      modelMenu.replaceChildren();
-      var settingsAction = document.createElement("button"); settingsAction.type = "button";
-      settingsAction.className = "composer-picker-item composer-model-item";
-      settingsAction.textContent = "Настройки модели";
-      settingsAction.onclick = function () { modelPicker.open = false; switchTab("settings"); };
-      modelMenu.appendChild(settingsAction);
-      modelMenu.dataset.owner = "workspace";
+    function modelSelection() {
+      var snapshot = field(dispatch("snapshot"), "state"), status = runStatus(snapshot);
+      return { selected: field(snapshot, "model") || "",
+        runningModel: status === "running" || status === "awaiting_confirmation"
+          ? field(field(snapshot, "modelConfiguration"), "model") : null,
+        disabled: locked || !current || state.bridgeUnavailable };
+    }
+    function effectiveModel() {
+      var selection = modelSelection();
+      return selection.runningModel || selection.selected || settingsModel();
     }
     function update() {
       if (activeOwner === "office") return;
@@ -428,21 +428,20 @@
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
       fileAction.disabled = locked || !current || !fileOptions ||
         activeOwner !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
-      renderReasoningControl(think, reasoning, locked || !current, effectiveModelSupportsReasoning(settingsModel()));
-      var model = findModel(settingsModel());
-      modelLabel.textContent = model && model.title || settingsModel() || "Модель";
-      modelPicker.title = "Модель из общих настроек";
-      setComposerPickerDisabled(modelPicker, locked || !current);
-      modelMenu.modelRenderState = null;
-      renderWorkspaceModelMenu();
+      renderReasoningControl(think, reasoning, locked || !current, effectiveModelSupportsReasoning(effectiveModel()));
+      renderChatModelPicker();
     }
     input.addEventListener("input", function () { if (activeOwner !== "office") { save(); update(); } });
     window.addEventListener("resize", update);
     attachFiles(options);
-    update();
     sharedComposer = {
       attachFiles: attachFiles,
       refresh: update,
+      modelSelection: modelSelection,
+      selectModel: function (value) {
+        if (!modelSelection().disabled) return dispatch("selectModel", String(value || "").trim());
+        return Promise.resolve(false);
+      },
       pickFiles: pickFiles,
       togglePlan: function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); } },
       toggleReasoning: function () { if (!think.disabled) { reasoning = !reasoning; save(); update(); } },
@@ -461,7 +460,7 @@
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
       options: function () { return { Mode: mode,
-        ReasoningEnabled: reasoning && effectiveModelSupportsReasoning(settingsModel()) !== false }; },
+        ReasoningEnabled: reasoning && effectiveModelSupportsReasoning(effectiveModel()) !== false }; },
       prepareInput: function (target, text, edit, activeRun) {
         var options = activeRun ? { SteerRunId: field(activeRun, "runId"), Mode: field(activeRun, "mode"),
           ReasoningEnabled: !!field(field(activeRun, "modelConfiguration"), "reasoningEnabled") } : this.options();
@@ -501,6 +500,7 @@
         if (activeOwner !== "office" && currentMessageEdit() && sameTarget(current, target)) cancelWorkspaceMessageEdit(true);
       }
     };
+    update();
     return sharedComposer;
   }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
@@ -511,6 +511,8 @@
     currentMessageEdit: currentMessageEdit,
     composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
+    modelSelection: function () { return sharedComposer ? sharedComposer.modelSelection() : { selected: "", disabled: true }; },
+    selectModel: function (value) { return sharedComposer && sharedComposer.selectModel(value); },
     snapshot: function () { return dispatch("snapshot"); }, runStatus: runStatus,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     latestSnapshot: latestSnapshot, prependMessages: prependMessages,

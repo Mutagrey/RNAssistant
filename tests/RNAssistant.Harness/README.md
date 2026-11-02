@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+Chat model parity S2a: `workspace: chat model preferences and wire` checks actual
+scripted HTTP bodies, persisted override/default, reopen, exact workspace and busy
+lease refusal. `chat: session model overrides global settings` checks the common
+resolver; `plugins: approval continuation belongs to application` checks the typed
+preference bridge and pinned model through approval, stop/close/deny/terminal.
+Web: `model-settings` checks Office/project/plugin picker, late replies and Settings
+capability draft/save/reset/catalog preview; `model-navigation` retains the 500-model
+lazy-render/cancellation checks. Browser fixtures use the existing mock bridge;
+none of these checks qualifies real Office/WebView2 or a live provider.
+
 Chat navigation storage: `storage: indexed input journal` compares exact canonical
 input/commit events with indexed replay, counts skipped trace reads, checks reuse
 of a header-only index for full-session materialization, foreign appends, damaged
