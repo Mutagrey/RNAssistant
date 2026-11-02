@@ -565,11 +565,21 @@ namespace RNAssistant.Office.Services
 
         public ChatSession CreateChatForDocument(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
+            return CreateChatForDocument(title, host, documentKey, documentTitle, documentPath, false);
+        }
+
+        public ChatSession CreatePersistentChatForDocument(string title, string host, string documentKey, string documentTitle, string documentPath)
+        {
+            return CreateChatForDocument(title, host, documentKey, documentTitle, documentPath, true);
+        }
+
+        private ChatSession CreateChatForDocument(string title, string host, string documentKey, string documentTitle, string documentPath, bool persist)
+        {
             if (string.IsNullOrWhiteSpace(host) || string.IsNullOrWhiteSpace(documentKey) ||
                 string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(documentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase))
             {
-                return CreateChat(title);
+                return persist ? CreatePersistentChat(title) : CreateChat(title);
             }
 
             var session = _conversations.CreateTransient(
@@ -579,6 +589,7 @@ namespace RNAssistant.Office.Services
                 string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
             session.DocumentPath = string.IsNullOrWhiteSpace(documentPath) ? null : documentPath.Trim();
             BindDocumentAuthority(session, host, null, session.DocumentPath);
+            if (persist) _conversations.Commit(session, new ConversationCommit());
             SetActiveSession(session);
             return session;
         }

@@ -326,6 +326,7 @@ function renderComposerPresentation(view) {
   var form = $("chatForm"), input = $("chatInput"), send = $("sendButton"), stop = $("stopButton");
   form.classList.toggle("is-message-editing", !!view.editing);
   form.classList.toggle("is-preparing-attachments", !!view.preparing);
+  form.classList.toggle("is-running", !!view.running);
   $("messageEditBar").classList.toggle("hidden", !view.editing);
   $("messageEditBar").setAttribute("aria-hidden", String(!view.editing));
   $("cancelMessageEditButton").disabled = !view.editing || !!view.editBusy || !!view.running;
@@ -464,8 +465,11 @@ function resizeComposerInput(input) {
     (parseFloat(styles.borderTopWidth) || 0) +
     (parseFloat(styles.borderBottomWidth) || 0);
   var minHeight = Math.ceil((lineHeight * 2) + verticalChrome);
-  var maxHeight = Math.ceil((lineHeight * 6) + verticalChrome);
-  var contentHeight = Math.max(input.scrollHeight, minHeight);
+  var pane = input.closest(".chat-main");
+  var availableHeight = pane && pane.clientHeight || window.innerHeight;
+  var maxHeight = Math.max(minHeight, Math.min(
+    Math.ceil((lineHeight * 6) + verticalChrome), Math.floor(availableHeight * 0.2)));
+  var contentHeight = input.value ? Math.max(input.scrollHeight, minHeight) : minHeight;
 
   input.style.height = Math.min(contentHeight, maxHeight) + "px";
   input.style.overflowY = contentHeight > maxHeight ? "auto" : "hidden";

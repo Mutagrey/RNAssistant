@@ -218,12 +218,17 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 | [Questions](../../web/js/app-questions.js), [RunChanges](../../web/js/app-run-changes.js) | Общие conversation composites, пока domain-aware | awaiting/submitting/rejected/failed, owner/receipt сохраняются |
 | [ConversationView](../../web/js/app-conversation-view.js), Messages/WorkspaceChat adapters, composer | Общие transcript lifecycle и SnapshotOwner; Workspace у view, Office transcript/preferences/context и material metadata через временный selected accessor. Общие builders/footer заимствуют данные | target-scoped cache/frames/scroll/actions; hide сохраняет projection, replace/dispose освобождает; Office source/view factory и singleton adapter ещё мигрируют |
 | [Composer presentation](../../web/js/app-chat-composer.js), [reasoning control](../../web/js/app-model-render.js) | Один renderer состояний ввода и controls; owners передают факты и capabilities | idle/edit/awaiting reply/read-only/running/cancelling; не хранит второй draft |
-| ChatComposer в том же `app-chat-composer.js` | Один controller bindings/edit state, draft presentation и команд model/mode/reasoning на form; exact target и сервисные adapters | S2b.2/S2b.5/S2b.6: edit/draft retention, scoped ACK/read-back, стабильный cursor, Enter/IME/disabled Send; единые controls, без нового store и геометрии |
+| ChatComposer в том же `app-chat-composer.js` | Один controller bindings/edit state, draft presentation и команд model/mode/reasoning на form; exact target и сервисные adapters | S2b.2/S2b.5/S2b.6: edit/draft retention, scoped ACK/read-back, стабильный cursor, Enter/IME/disabled Send; единые controls, без нового store и экранных overrides |
 | [ConversationObserver](../../web/js/app-conversation-observer.js), `ConversationView.observe` | S2b.4: общий lifecycle UI-чтений; source adapters задают transport и callbacks | exact binding, stale reply/error, pause/catch-up/dispose; не отменяет domain run |
 | [ConversationState](../../web/js/app-conversation-state.js), history buttons в Messages | Один cap 240 и prepend/refresh для обоих доменов; explicit latest bypass; S2b.7 — адресный приём snapshot | wrong-target/stale page rejection, bounded data, reading anchor; source не хранит второй snapshot, durable history не обрезается |
 | [ChatInspector](../../web/js/app-chat-inspector.js) | Один domain view, настоящие context/capabilities/usage/run | Scope/generation, lazy detail, disclosure/focus, suspend |
 | [ModelContext](../../web/js/app-model-context.js) | Domain reader, сохранять существующие cache/abort/bounds | metadata → lazy body, retained views, stale guards |
 | [RNPlugin SDK](../../web/plugin-host/sdk.js) | Существующий Ready/command/files/results protocol; не новый SDK | L3 host, L2 browser adapter отдельно; permissions у host |
+
+Пустое поле ввода занимает две строки после очистки длинного черновика; длинный
+текст прокручивается внутри поля с пределом по высоте chat view. В узкой группе
+кнопки модели, отправки и остановки остаются внутри composer. Содержимое вкладки
+Материалов занимает всю высоту Dockview, включая пустое состояние HTML-редактора.
 
 Нельзя обобщать Chat/Inspector в UI Core только из-за общих кнопок. Сначала
 выделяются независимые controls с реальными consumers и инъекцией зависимостей.

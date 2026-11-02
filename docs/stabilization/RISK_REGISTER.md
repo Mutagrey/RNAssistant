@@ -3563,3 +3563,14 @@ outside this change: `common.file_create/copy/patch`, `common.resources_search`,
 The updated Excel rows match the captured catalog. Owner: Common catalog/property
 inventory maintenance; review those contracts before refreshing their baseline.
 This task does not alter those Common contracts.
+
+## Устаревшая product-shell-parity fixture — 2026-11-02
+
+`tests/web/product-shell-parity.test.js` останавливается до проверок production:
+ищет `#main .page-header` в замороженном Demo, где сейчас `#workspace-region`
+и Dockview. Owner: Web test fixture. Сверить селекторы с действующим Demo отдельно;
+этот сбой не является evidence о геометрии Office/WebView2.
+`tests/web/chat-composer-layout.test.js` в изолированном DOM вручную ставит
+`navigation-closed` без реального Shell layout: при 740 px composer сжимается до
+26 px, rail перекрывает context meter. Реальный `web/index.html` в Chromium
+раскладывается корректно; fixture требует отдельного обновления.

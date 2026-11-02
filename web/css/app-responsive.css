@@ -174,12 +174,18 @@
   }
 
   .composer-quick-actions {
-    flex: 1 0 auto;
+    flex: 0 0 auto;
     gap: 2px;
   }
 
   .composer-actions {
+    flex: 1 1 0;
+    flex-wrap: nowrap;
     margin-left: auto;
+  }
+
+  .composer.is-running .composer-actions {
+    flex-wrap: wrap;
   }
 
   .composer-picker-trigger-label {
@@ -187,6 +193,8 @@
   }
 
   .composer-model-picker {
+    flex: 0 1 auto;
+    min-width: 40px;
     max-width: min(142px, 34vw);
   }
 

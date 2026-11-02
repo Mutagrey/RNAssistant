@@ -1907,6 +1907,13 @@ namespace RNAssistant.Harness
                 AssertEqual(created.Id, new ChatStore(paths).LoadOrCreateActive(
                     adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Id,
                     "new host chat remains active after reload");
+                service.RunOwnershipProvider = id => string.Equals(id, created.Id, StringComparison.OrdinalIgnoreCase);
+                var empty = service.CreatePersistentChat("Новый чат");
+                service.SetActiveSession(created);
+                service.SetActiveSession(service.TryLoadCurrentDocumentChat(empty.Id));
+                AssertEqual(empty.Id, service.GetActiveSession().Id,
+                    "saved empty chat remains selectable while another exact chat owns a run");
+                service.SetActiveSession(created);
                 var otherAdapter = FakeOfficeAdapter.ForHost(host == "Excel" ? "PowerPoint" : "Excel");
                 var other = new ChatSessionService(otherAdapter, ConversationStore(store));
                 var otherChat = other.CreatePersistentChat("Other host");

@@ -39,16 +39,30 @@ namespace RNAssistant.MockDemo
                         response.CatalogChanges?.UpsertedChats.Count != 1 || response.CatalogChanges.UpsertedChats[0].Id != response.ActiveChatId)
                         throw new Exception("Creation must return its empty detail and one exact catalog change.");
                 }
-                if (draft.CatalogChanges.RemovedTransientChatIds.Count != 0 ||
-                    second.CatalogChanges.RemovedTransientChatIds.Single() != draft.ActiveChatId ||
-                    persistent.CatalogChanges.RemovedTransientChatIds.Single() != second.ActiveChatId ||
-                    archived.CatalogChanges.RemovedTransientChatIds.Count != 0)
-                    throw new Exception("Only the replaced transient draft may leave the catalog.");
+                if (new[] { draft, second, persistent, archived }.Any(response =>
+                    response.CatalogChanges.RemovedTransientChatIds.Count != 0))
+                    throw new Exception("Switching between saved empty chats must not remove them from the catalog.");
                 if (File.Exists(oldFile + ".projection.sqlite") || !bytes.SequenceEqual(File.ReadAllBytes(oldFile)))
                     throw new Exception("Creating a fresh chat must not index or change cold history.");
-                if (store.Load(adapter.HostName, adapter.DocumentKey, persistent.ActiveChatId) == null)
-                    throw new Exception("Host-row creation must remain durable.");
-                Console.WriteLine("PASS chat-creation-controller: four creation paths, exact deltas, zero indexing of cold history");
+                if (new[] { draft, second, persistent }.Any(response =>
+                    store.Load(adapter.HostName, adapter.DocumentKey, response.ActiveChatId) == null) ||
+                    store.Load("Word", "archive", archived.ActiveChatId) == null ||
+                    controller.TrySelectCurrentDocumentChat(draft.ActiveChatId)?.ActiveChatId != draft.ActiveChatId)
+                    throw new Exception("An explicitly created empty chat must remain selectable.");
+                var selectionPaths = AppDataPaths.CreateForRoot(Path.Combine(root, "selection"));
+                var selectionAdapter = FakeOfficeAdapter.ForHost("Excel");
+                using (var selection = new AssistantController(selectionAdapter, selectionPaths,
+                    (settings, messages, token) => Task.FromException<LlmCompletionResult>(new Exception("Selection must not call a model."))))
+                {
+                    var transient = selection.GetChatState();
+                    var target = new ChatStore(selectionPaths).Create(selectionAdapter.HostName,
+                        selectionAdapter.DocumentKey, selectionAdapter.DocumentTitle, "Saved chat");
+                    var selected = selection.TrySelectCurrentDocumentChat(target.Id);
+                    if (selected?.ActiveChatId != target.Id ||
+                        selected.CatalogChanges?.RemovedTransientChatIds.Single() != transient.ActiveChatId)
+                        throw new Exception("Selecting a saved chat must remove the discarded transient row.");
+                }
+                Console.WriteLine("PASS chat-creation-controller: four durable creation paths, exact deltas, zero indexing of cold history");
                 return 0;
             }
             catch (Exception ex) { Console.WriteLine("FAIL chat-creation-controller: " + ex); return 1; }

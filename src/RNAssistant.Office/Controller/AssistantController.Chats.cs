@@ -413,12 +413,7 @@ namespace RNAssistant.Office
 
         public ChatStateResponse CreateChat(string title)
         {
-            using (_conversationLeases.AcquireMaintenance())
-            {
-                var replacedDraftId = _chatSessions.ActiveTransientSessionId;
-                var session = _chatSessions.CreateChat(title);
-                return NewChatState(session, replacedDraftId);
-            }
+            return CreatePersistentChat(title);
         }
 
         public ChatStateResponse CreatePersistentChat(string title)
@@ -447,7 +442,7 @@ namespace RNAssistant.Office
             using (_conversationLeases.AcquireMaintenance())
             {
                 var replacedDraftId = _chatSessions.ActiveTransientSessionId;
-                var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
+                var session = _chatSessions.CreatePersistentChatForDocument(title, host, documentKey, documentTitle, documentPath);
                 return NewChatState(session, replacedDraftId);
             }
         }
@@ -474,19 +469,27 @@ namespace RNAssistant.Office
         {
             var timer = Stopwatch.StartNew();
             EnsureStartupRecovery();
+            var replacedDraftId = _chatSessions.ActiveTransientSessionId;
             var session = _chatSessions.SelectSession(chatId);
+            var catalogChanges = RemovedTransientAfterSelection(replacedDraftId, session.Id);
             var loadMs = timer.ElapsedMilliseconds;
             ReportChatReadStage(reportStage, "load", loadMs);
             // SelectSession already commits the selection through ChatSessionService.
             // Do not fsync the same active pointer again for the selection preview.
             if (selected != null)
             {
-                try { selected(ChatSelectionState(session)); }
+                try
+                {
+                    var preview = ChatSelectionState(session);
+                    preview.CatalogChanges = catalogChanges;
+                    selected(preview);
+                }
                 catch (Exception ex) { RNAssistant.Office.Diagnostics.RuntimeLog.Error("Chat selection preview failed.", ex); }
             }
             var previewMs = timer.ElapsedMilliseconds - loadMs;
             if (selected != null) ReportChatReadStage(reportStage, "preview", previewMs);
             var response = ChatState(session, false);
+            response.CatalogChanges = catalogChanges;
             var stateMs = timer.ElapsedMilliseconds - loadMs - previewMs;
             ReportChatReadStage(reportStage, "state", stateMs);
             if (timer.ElapsedMilliseconds >= 250)
@@ -506,10 +509,20 @@ namespace RNAssistant.Office
         public ChatStateResponse TrySelectCurrentDocumentChat(string chatId)
         {
             EnsureStartupRecovery();
+            var replacedDraftId = _chatSessions.ActiveTransientSessionId;
             var session = _chatSessions.TryLoadCurrentDocumentChat(chatId);
             if (session == null) return null;
             _chatSessions.SetActiveSession(session);
-            return ChatState(session, false);
+            var response = ChatState(session, false);
+            response.CatalogChanges = RemovedTransientAfterSelection(replacedDraftId, session.Id);
+            return response;
+        }
+
+        private static ChatCatalogChangesDto RemovedTransientAfterSelection(string replacedDraftId, string selectedId)
+        {
+            if (string.IsNullOrWhiteSpace(replacedDraftId) ||
+                string.Equals(replacedDraftId, selectedId, StringComparison.OrdinalIgnoreCase)) return null;
+            return new ChatCatalogChangesDto { RemovedTransientChatIds = new[] { replacedDraftId } };
         }
 
         public OpenDocumentResponse OpenDocument(string chatId)
