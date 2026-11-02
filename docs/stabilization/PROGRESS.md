@@ -92,6 +92,7 @@ CAS refusal/success, restore, bounds, 420/1280/light/dark/125% и клавиат
 live providers/annotations после общего Shell ревью; Library/VBA — S4.
 Windows/Office и полный старый diagnostics qualification plan остаются открытыми.
 
+
 ## Создание чата без чтения предыдущей истории — 2026-11-02
 
 Owner: Office ChatSessionService/controller; Web — существующий catalog merger.
@@ -266,6 +267,27 @@ Office/Workspace/plugin, Inspector и changes summary через локальн�
 In Review; delivery/subscriptions и вспомогательные adapters ещё используют
 selected owner, несколько chat views и Windows/Office qualification не закрыты.
 
+## Format repair и чтение после неизвестного эффекта — 2026-11-02
+
+Owner: Core ModelProtocol / AgentProgressTracker. По четырём новым фото проверены
+missing_message, пустой execute, состав retry и повторные чтения. Repair раньше
+отправлял ошибку без отклонённого ответа; теперь один временный diagnostic содержит
+последний bounded raw content, его формат и native-call presence. Он явно отделён
+от предыдущего принятого tool exchange; reason/decision не теряются при обычном
+размере ответа. Provider-private reasoning не переносится в model history.
+Prompt 66 явно требует строку message, допускает пустую для nonfinal действий,
+показывает полный новый execute и сокращает повторяемый контракт в repair.
+JSON-escaped byte bounds и резерв обоих transports проверяются до отправки.
+
+Воспроизведён runtime-блок fresh read после unknown-effect при уже исчерпанном
+счётчике одинаковых чтений. Сброс затрагивает только ранее наблюдённые изменяемые
+ресурсы соответствующей области; schema/immutable reads, failures и unknown replay
+guard остаются защищены. Решение одинаково после восстановления из terminal facts.
+Протокольные матрицы, recovery/reasoning и narrow loop checks прошли host-neutral.
+Два несвязанных characterization failures воспроизведены отдельно на исходных
+C# sources `19a271ed`; детали в RISK_REGISTER. Реальные модели, Office и причинность
+конкретного Windows-run по фото не квалифицированы.
+
 ## Общий composer и состояние правки S2b.2 — 2026-11-02
 
 S2b.1 закоммичен в `bb53539b`. Продолжение объединяет bindings/commands и edit state
@@ -276,6 +298,24 @@ Office/project/plugin в существующем ChatComposer. Убран сб�
 Bridge/runtime не переписывались. [Scope и ревью](../ui/UI_MIGRATION_PLAN.md#s2b2-ввод-и-незавершённые-правки--2026-11-02).
 In Review; instance scoping остальных adapters/subscriptions, полная parity,
 несколько chat tabs и Windows/Office evidence ещё открыты.
+
+## Исторические ID и повторное чтение схем — 2026-11-02
+
+Owner: Core ModelProtocol / runtime-context instructions. Новое фото подтвердило
+лишний `tool_calls[0].id`. Запрет в object-инструкции не исчезал, но после
+`af66575e` был отделён от пояснения исторических ID; strict prose полагалось на schema.
+Prompt 65 даёт общее правило обоим output modes/repair: новый вызов — name/arguments,
+исторические IDs/native wrappers принадлежат runtime. Законное `arguments.id`
+явно отделено от запрещённого ID вызова. История и parser admission не менялись.
+
+Возвращено явное использование Available now без повторного schema read; объяснено
+schemaInRequest=true. Шесть synthetic Office-service сочетаний response/history
+подтвердили: схема office.macro.run доступна после первого чтения, три одинаковых
+чтения успешны, четвёртое блокируется без удаления схемы. Сам макрос не запускался.
+Прошли 36 history-комбинаций, 18 repair/fallback и migration archive/dispatch.
+Старый тест общей миграции имеет несвязанное устаревшее текстовое ожидание —
+зафиксировано в RISK_REGISTER. Поведение реальной модели, Windows/Office и
+точный запрос пользователя не квалифицированы; разрешённое evidence — фото.
 
 ## Общий transcript lifecycle S2b.1 — 2026-11-02
 

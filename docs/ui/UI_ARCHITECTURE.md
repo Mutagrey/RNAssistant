@@ -51,7 +51,6 @@ domain owners; вкладка не создаёт второй durable store и�
 состояние Office и отдельную Workspace orchestration. Полное объединение и
 несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
 singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
-
 В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.12 используют тот же
 SnapshotOwner для Office transcript/preferences/context, метаданных материалов и
 run projection через временный selected adapter; полный Office view и навигация

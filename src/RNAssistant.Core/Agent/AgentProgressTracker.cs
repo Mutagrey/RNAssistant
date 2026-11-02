@@ -29,6 +29,7 @@ namespace RNAssistant.Core.Agent
         private readonly Dictionary<string, Failure> _failures = new Dictionary<string, Failure>(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _seenResults = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly Dictionary<string, int> _unchanged = new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ResourceIdentity[]> _mutableReadTargets = new Dictionary<string, ResourceIdentity[]>(StringComparer.Ordinal);
         private int _rejectedSteps;
         private bool _stepRejected;
         private bool _stepDispatched;
@@ -102,6 +103,15 @@ namespace RNAssistant.Core.Agent
                 var targets = (effect?.Impacts ?? new ResourceImpact[0]).Select(impact => impact.Identity)
                     .Concat(progress.Recovery?.ResourceIdentity == null ? new ResourceIdentity[0] :
                         new[] { progress.Recovery.ResourceIdentity }).Distinct().ToArray();
+                // Earlier identical reads describe the state BEFORE this possible
+                // effect. Permit fresh inspection, without releasing failed calls,
+                // immutable/schema reads or the uncertain operation's replay guard.
+                foreach (var read in _mutableReadTargets)
+                    if (targets.Length == 0 || read.Value.Any(target => targets.Contains(target)))
+                    {
+                        _unchanged.Remove(read.Key);
+                        _seenResults.Remove(read.Key);
+                    }
                 // An opaque action has no inspectable target. Requiring a read
                 // here would make finish impossible and cause a model loop.
                 if (targets.Length == 0 && !progress.OpaqueAction)
@@ -119,6 +129,13 @@ namespace RNAssistant.Core.Agent
                 return;
             }
             var observations = (evidence ?? new ResourceEvidence[0]).Where(e => e != null).ToArray();
+            if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
+            {
+                var mutable = observations.Where(observation => !observation.Immutable)
+                    .Select(observation => observation.Resource.Identity).Distinct().ToArray();
+                if (mutable.Length > 0) _mutableReadTargets[key] = mutable;
+                else _mutableReadTargets.Remove(key);
+            }
             if (progress.Outcome == ToolExecutionOutcome.Ok && progress.IndependentLocalRead)
                 _inspections.RemoveAll(pending => pending.Target != null && pending.AfterUtc.HasValue &&
                     observations.Any(observation => pending.Target.Equals(observation.Resource.Identity) &&

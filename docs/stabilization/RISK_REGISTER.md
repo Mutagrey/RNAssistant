@@ -98,6 +98,7 @@ heap не измерен, plugin selection стал медленнее. Гран
 32 МиБ encoded parts, 6 material/4 release views ограничивают retained data, но
 не heap/CPU произвольного JS внутри sandbox. Нет заявления общего ускорения.
 
+
 ## HTML source validation читает постороннюю переменную — 2026-11-02
 
 Owner: Web HtmlWorkspace source reader. В
@@ -170,6 +171,31 @@ scope команды и проверяет его до применения acti
 текущей команды остаётся видимой. Это локальное synthetic evidence, не Windows
 qualification и не закрытие остальных one-off UI delivery paths.
 
+## Repair без отклонённого ответа и повторные чтения — 2026-11-02
+
+Owner: Core ModelProtocol / AgentKernel. Четыре фото показывают reflection без
+message, следующий execute без calls, FORMAT_REPAIR после успешного tool-result
+и остановку на одинаковых чтениях SceneBuilder. Подтверждён пропуск rejected content
+из retry: исправлен одним bounded diagnostic без добавления rejected assistant
+history. Обязательность message сохранена; пустая строка для execute/reflection
+разрешена и явно объяснена. Native history сохраняет reason; reflection сохраняет
+decision. Provider-private reasoning остаётся transport metadata, а не model history.
+Полная инструкция не дублируется в repair; его краткая форма адаптируется к
+schema/object и доступности reflection, не меняя quoted rejected content.
+
+Отдельное локальное воспроизведение подтвердило блок fresh inspection после
+unknown-effect старым read counter; исправлен scoped reset успешных live reads,
+включая replay и opaque effect без известной области. Не установлено, что именно
+эта последовательность произошла в photographed run; без свежей модели/Windows
+оценку качества и закрытие Office qualification не заявляем.
+
+Соседние test gaps: `agent: characterization write ok preserves final status`
+ожидает canonical call ID вместо E1; `agent: characterization completed after
+write error` падает на индексе списка запросов. Обе ошибки воспроизведены на
+исходных C# sources `19a271ed` в отдельном временном build output с теми же
+зависимостями. Рабочие файлы при проверке не заменялись. Эти сценарии не менялись
+как часть исправления repair; итоговая host-neutral матрица не считается полным Harness.
+
 ## Request view S3a: пределы измерений — 2026-11-02
 
 Owner: Web diagnostics presentation / shared viewers. Ограничены строки оглавления
@@ -206,16 +232,30 @@ Office / WebView2 qualification; допустимое Windows evidence — то�
 
 ## Отклонённый tool_calls: форма на Windows — 2026-10-30
 
-Owner: Core ModelProtocol; Web run journal — отображение. На фото ошибка
-`invalid_tool_call: Each call contains only name and arguments; runtime assigns call IDs.`
-при свёрнутом `tool_calls[0]`. Эта ветка означает не объект или лишнее прямое поле
-вызова; строковый `arguments` имеет другую ветку. Точная форма и источник отклонения
-на Windows остаются открыты: нужен только экран с раскрытым элементом, не выгрузка.
-Адресная диагностика и раскрытие первого вызова добавлены; контракт приёма сохранён.
+Owner: Core ModelProtocol; Web run journal — отображение. Уточнение по фото
+2026-11-02: адресная диагностика показала лишний `tool_calls[0].id`, а не строковый
+вызов/arguments. Runtime отклонил нарушенную форму нового ответа. Копирование
+runtime-декорации из истории — вероятная причина, но выбор модели фото не доказывает.
+В `af66575e` единая фраза «historical id / never new id» разнесена по разделам;
+запрет в object mode сохранился, а strict prose полагалось на закрытую schema.
+Prompt 65 объединяет правило нового вызова для обоих форматов/repair, объясняет
+исторические поля и отличает их от законного `arguments.id`.
+
+Второе фото — четвёртый одинаковый `core.tools.read` описания `office.macro.run`,
+отклонённый `repeated_tool_no_progress`; это не ошибка чтения VBA. Шесть synthetic
+сочетаний response/history подтвердили сохранение macro schema после receipt/отказа. Runtime context
+теперь прямо объясняет reuse и `schemaInRequest=true`. Влияние формулировок на
+реальную модель и точный состав Windows-запроса остаются открытым evidence;
+модели/Office не запускались, разрешены только фото.
 
 Старое source-ожидание трёх аргументов `appendAgentRunViewState` обновлено
-при переносе диагностики. `run-journal.test.js` проходит целиком; Windows-форма
-отклонённого вызова при этом остаётся открытым evidence.
+при переносе диагностики. `run-journal.test.js` проходит целиком по evidence того среза.
+
+Соседний test gap: `settings: prompt schema migrates automatically` требует старую
+фразу ``select `skills.task.tracking` `` с обратными кавычками; GeneralInstructions
+ещё в HEAD до prompt 65 содержит ту же фразу без кавычек. Ожидание не связано с ID
+или миграцией значений. Проверки архива исходных текстов и миграции до реального
+service/model boundary проходят; старое текстовое ожидание не исправлялось здесь.
 
 ## Применение настроек агента на Windows — 2026-10-30
 

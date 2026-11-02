@@ -880,6 +880,63 @@ namespace RNAssistant.Harness
             });
         }
 
+        private static void MacroSchemaRemainsCallableAfterRepeatedRead()
+        {
+            foreach (var strict in new[] { false, true })
+            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
+                WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), (executor, adapter) =>
+                {
+                    var session = NewSession(adapter);
+                    var requests = 0;
+                    var catalog = OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList();
+                    LlmCompletionDelegate complete = (settings, messages, options, stream, token) =>
+                    {
+                        requests++;
+                        AssertTrue(requests <= 5, "repeated schema read does not cause protocol repairs");
+                        var text = FlattenSimple(messages);
+                        AssertContains(text, RuntimeContextPrompt.SchemaReuseGuidance, "actual context explains where compacted schemas live");
+                        AssertContains(text, ModelProtocolWire.NewCallFieldsGuidance, "new call IDs and arguments.id are explicitly distinguished");
+                        var offered = session.LastContextReceipt.Arsenal.Tools.Select(tool => tool.Id).ToArray();
+                        AssertEqual(requests > 1, offered.Contains(VbaToolCatalog.RunMacro), "one schema read admits the macro tool");
+                        if (requests > 1)
+                        {
+                            var last = LastToolResult(messages.ToList(), CapabilityToolCatalog.ReadToolId);
+                            if (requests <= 4)
+                            {
+                                AssertEqual("ok", (string)last["status"], "first three identical reads succeeded");
+                                AssertTrue((bool?)last["data"]["schemaInRequest"] == true && last["data"]["descriptor"] == null,
+                                    "schema is compacted only because the request already supplies it");
+                            }
+                            else AssertEqual("repeated_tool_no_progress", (string)last["data"]["code"], "only the fourth redundant read is blocked");
+                            if (strict)
+                                AssertTrue(JObject.Parse(options.ResponseSchemaJson).SelectTokens("$..name.const")
+                                    .Any(value => (string)value == VbaToolCatalog.RunMacro), "strict request still offers the exact macro call");
+                            else AssertContains(text, "### " + VbaToolCatalog.RunMacro + "\n", "object request still contains the exact argument schema");
+                            var proposal = V8Envelope(V8Call(VbaToolCatalog.RunMacro, new JObject { ["macroName"] = "Module1.Main" }));
+                            AssertTrue(ModelProtocolWire.Parse(proposal, catalog.Where(tool => offered.Contains(tool.Id)), catalog,
+                                new ModelProtocolCallContext(new[] { CapabilityToolCatalog.ReadToolId })).Success,
+                                "the proposed macro is still admitted after redundant schema reading; this test does not execute it");
+                        }
+                        var content = requests < 5 ? V8Envelope(V8Call(CapabilityToolCatalog.ReadToolId,
+                            new JObject { ["id"] = VbaToolCatalog.RunMacro })) :
+                            ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "The requested schema is available.", "Описание макроса доступно; макрос не выполнялся.",
+                                results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed);
+                        // Conversation fixtures wrap logical decisions for json_schema.
+                        return Task.FromResult(new LlmCompletionResult { Content = content });
+                    };
+                    var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(ChatModes.Agent,
+                        "Проверь описание office.macro.run без выполнения макроса.", session, NewContext(adapter),
+                        new AppSettings { AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject,
+                            ToolResultRole = role, MaxAgentFormatRetries = 1, ContextWindowOverrideTokens = 65536 }, catalog, null)
+                        .GetAwaiter().GetResult();
+                    AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "schema-read run finishes: " + result.AssistantText);
+                    AssertEqual(5, requests, "three reads, one no-progress rejection and finish");
+                    AssertEqual(3, session.LastRun.KernelState.Summary.ToolCounts.ReadOk, "first reads really executed successfully");
+                    AssertTrue(!session.Messages.Any(message => message.ToolName == VbaToolCatalog.RunMacro), "no macro execution or confirmation was requested");
+                });
+        }
+
         private static void AgentRejectsOversizedCapabilityEvidenceExplicitly()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)

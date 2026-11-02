@@ -35,6 +35,20 @@ explicitly exclude manual evidence from model history. The focused follow-up pas
 92 distinct cases on the isolated protocol copy; this does not close the earlier
 17 baseline gaps. No live models or Office.
 
+`kernel: inspection can refresh repeated read after unknown` reproduces an exhausted
+read counter before a possible effect, including replay: fresh affected live reads
+are allowed, while immutable/schema reads, unrelated known targets and unknown-call
+replay remain guarded. `context continuity: bounds loops and restores progress`
+checks the existing no-progress limits. No real models or Office hosts are involved.
+
+`tool pack: macro schema remains callable after repeated read` reproduces the
+photographed `core.tools.read` loop in six response/history combinations: one read
+admits `office.macro.run`, the compact receipt points to the actual request schema,
+and the fourth identical read is rejected without revoking the callable tool.
+The macro is parsed for admission only, never executed. Existing `history protocol:`
+matrix checks fresh-call field guidance in both JSON outputs and typed repair,
+including the distinction between call `id` and `arguments.id`.
+
 Chat model parity S2a: `workspace: chat model preferences and wire` checks actual
 scripted HTTP bodies, persisted override/default, reopen, exact workspace and busy
 lease refusal. `chat: session model overrides global settings` checks the common

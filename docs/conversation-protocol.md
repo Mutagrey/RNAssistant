@@ -2250,6 +2250,13 @@ Owner: Conversation/model context; совместные границы — Core 
   точное complete observation для RefreshRequired и verified state change того же
   ресурса позволяют продолжение. Отказы Replan и отказы без resource identity
   не сбрасываются посторонними изменениями. Unknown не очищается посторонним успешным чтением или записью.
+  После unknown-effect прежние счётчики одинаковых успешных чтений затронутого
+  изменяемого ресурса сбрасываются, чтобы разрешить свежую inspection. Если эффект
+  не имеет точной области, сбрасываются счётчики чтений всех ранее наблюдавшихся
+  изменяемых ресурсов. Immutable reads и schema reads без live resource evidence,
+  отказы и запрет повтора самой uncertain operation остаются защищены.
+  Это разрешение на новое чтение, не подтверждение изменения или результата;
+  проекция восстанавливает то же решение из terminal facts после перезапуска.
   Старый pending continuation без typed progress явно отвергается; история не удаляется.
 - Workspace `files.copy/move/patch/replace/delete` возвращают отсутствие полного
   чтения как `source_observation_required` с typed `RefreshRequired`:

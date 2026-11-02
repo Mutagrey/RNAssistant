@@ -395,6 +395,52 @@ namespace RNAssistant.Harness
             AssertTrue(!tracker.CanDispatch(write, out reason, out message, out delay), "inspection never authorizes replay");
         }
 
+        private static void KernelInspectionCanRefreshRepeatedRead()
+        {
+            foreach (var opaque in new[] { false, true })
+            {
+                var tracker = new AgentProgressTracker();
+                var read = new ToolCall("read", "read", "{}");
+                var immutableRead = new ToolCall("archive", "read", "{\"archive\":true}");
+                var schema = new ToolCall("schema", "core.tools.read", "{\"id\":\"macro\"}");
+                var otherRead = new ToolCall("other", "read", "{\"other\":true}");
+                var other = new ResourceIdentity(ResourceUri.Create("state", "conversation", "fixture", "other"));
+                var when = DateTime.UtcNow;
+                var history = new List<AgentMessage>();
+                Action<ToolCall, ToolExecutionProgress, ResourceEvidence[], ResourceEffect> observe = (call, progress, evidence, effect) => {
+                    var recorded = new ToolCall(call.Id + "-" + history.Count, call.Name, call.ArgumentsJson);
+                    tracker.Observe(recorded, progress, "result", evidence, effect);
+                    history.Add(AgentMessage.Assistant(new AgentResponse(ConversationResponse.ExecuteAction, "Inspect.", "", new[] { recorded })));
+                    history.Add(AgentMessage.AcceptedToolResult(recorded.Id, "result", "{}", progress, evidence: evidence, effect: effect));
+                };
+                for (var round = 0; round < 3; round++)
+                foreach (var call in new[] { read, immutableRead, schema, otherRead })
+                {
+                    var evidence = call == schema ? new ResourceEvidence[0] : new[] { new ResourceEvidence(call.Id,
+                        new ResourceAuthorityScopeId("conversation", "fixture"),
+                        new ResourceRef((call == otherRead ? other : InspectionTarget).Uri, "r1"), "text",
+                        ResourceCoverage.Whole(), true, 1, observedAt: when.AddSeconds(-1), immutable: call == immutableRead) };
+                    observe(call, new ToolExecutionProgress(ToolExecutionOutcome.Ok, independentLocalRead: true,
+                        resultFingerprint: "same"), evidence, null);
+                }
+                string reason, message; int delay;
+                AssertTrue(!tracker.CanDispatch(read, out reason, out message, out delay), "three unchanged reads reach the repeat guard");
+                var write = new ToolCall("write", "write", "{}");
+                observe(write, new ToolExecutionProgress(ToolExecutionOutcome.Unknown, completedUtc: when, opaqueAction: opaque), null,
+                    opaque ? null : new ResourceEffect("unknown", "write", ResourceEffectOutcome.UnknownAfterDispatch,
+                        new[] { new ResourceImpact(InspectionTarget, ResourceImpactRelation.Exact) }));
+                var replay = new AgentProgressTracker(); replay.Restore(history);
+                foreach (var state in new[] { tracker, replay })
+                {
+                    AssertTrue(state.CanDispatch(read, out reason, out message, out delay), "a possible change allows fresh inspection despite earlier identical reads");
+                    AssertEqual(opaque, state.CanDispatch(otherRead, out reason, out message, out delay), "a known target invalidates only its reads; an opaque effect has no narrower target");
+                    AssertTrue(!state.CanDispatch(immutableRead, out reason, out message, out delay), "immutable historical reads remain repeat-blocked");
+                    AssertTrue(!state.CanDispatch(schema, out reason, out message, out delay), "effects do not justify reloading tool schemas");
+                    AssertTrue(!state.CanDispatch(write, out reason, out message, out delay), "inspection never permits replaying the uncertain action");
+                }
+            }
+        }
+
         private static async Task KernelNeverRepeatsUnknownCallAfterInterveningSuccess()
         {
             const string uncertain = "{\"target\":\"same possible effect\"}";
