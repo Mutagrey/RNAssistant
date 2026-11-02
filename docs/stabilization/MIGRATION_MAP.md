@@ -1,5 +1,16 @@
 # Current-to-target migration map
 
+## Conversation composer S2b.2 — 2026-11-02
+
+Owner: Web conversation presentation, `app-chat-composer.js`. Общий controller
+получает DOM nodes и адресные adapters; `chatComposer()` временно возвращает
+единственную production form и связывает dispose с ConversationView. Удалены
+Workspace action registry/listeners и Office global editing fields, их fallback
+не оставлен. ChatDrafts/ConversationInput остаются прежними владельцами данных.
+Removal gate adapter: DOM/renderers, preferences/drafts и snapshots/subscriptions
+адресованы конкретному view; проверены независимые чаты и не осталось consumers
+глобального active selection. Не клонировать adapter для нескольких вкладок.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

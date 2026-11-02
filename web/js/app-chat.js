@@ -1,5 +1,7 @@
 async function runQuickAction(action) {
+  var scope = chatComposer().capture();
   var response = await send("quickAction", { action: action });
+  if (!scope.isCurrent()) return;
   if (response.prompt === "/open-settings") {
     switchTab("settings");
     return;
@@ -103,7 +105,8 @@ function bindChatActions() {
   $("compactContextButton").addEventListener("click", compactChatContext);
   $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
   window.addEventListener("resize", resizeChatInput);
-  window.RNAssistantWorkspaceChat.registerActions("office", {
+  chatComposer().register("office", {
+    target: function () { return officeComposerTarget(); },
     refresh: function () { renderMessages(); renderSendControls(); },
     submit: submitChatInput,
     stop: stopActiveSend,
@@ -119,7 +122,7 @@ function bindChatActions() {
       }
     }
   });
-  window.RNAssistantWorkspaceChat.bindActions();
+  chatComposer().bind();
   if (typeof initChatInbox === "function") initChatInbox();
   updateComposerInputState();
 }

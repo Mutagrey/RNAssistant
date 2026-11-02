@@ -12,11 +12,13 @@ async function refreshChatAfterSendFailure(chatId) {
   }
 }
 
-async function submitChatInput() {
+async function submitChatInput(value, scope) {
+  scope = scope || chatComposer().capture();
+  if (!scope.isCurrent() || !scope.target || scope.target.source !== "office" || !scope.target.sessionId) return;
   if (state.chatNavigationPending || state.initializePromise || state.chatDetailPending || state.chatDetailError) return;
   if (hasActiveMessageEdit()) {
     if (!currentActiveSend() && !state.modelSaving && !state.modeSaving && !state.reasoningSaving) {
-      state.editingText = $("chatInput").value;
+      officeMessageEdit().text = $("chatInput").value;
       saveMessageEdit();
     } else {
       focusMessageEditComposer();
@@ -30,7 +32,7 @@ async function submitChatInput() {
     return;
   }
 
-  var targetChatId = state.activeChatId;
+  var targetChatId = scope.target.sessionId;
   var text = $("chatInput").value.trim();
   var ingestion = typeof pendingChatResourceIngestion === "function"
     ? pendingChatResourceIngestion(targetChatId)

@@ -400,10 +400,8 @@ function captureChatDraft(chatIdValue, changed) {
   if (!chatIdValue) return null;
   if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return readOfficeDraft(chatIdValue);
   var input = $("chatInput");
-  var editing = typeof hasActiveMessageEdit === "function" && hasActiveMessageEdit();
-  var text = editing && state.editingDraftCaptured
-    ? (state.editingDraftText || "")
-    : (input ? input.value : "");
+  var edit = typeof chatComposer === "function" ? chatComposer().edit(officeComposerTarget(chatIdValue)) : null;
+  var text = edit ? edit.draft : (input ? input.value : "");
   var attachments = (state.draftAttachments || []).slice();
   return saveOfficeDraft(chatIdValue, text, attachments, changed);
 }
@@ -415,8 +413,10 @@ function restoreChatDraft(chatIdValue) {
     renderAttachmentDrafts();
   }
   if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
+  var edit = typeof chatComposer === "function" ? chatComposer().edit(officeComposerTarget(chatIdValue)) : null;
+  if (typeof chatComposer === "function") chatComposer().sync();
   if (typeof setChatInputText === "function") {
-    setChatInputText(draft ? draft.text : "", false, false);
+    setChatInputText(edit ? edit.text : draft ? draft.text : "", false, false);
   } else if ($("chatInput")) {
     $("chatInput").value = draft ? draft.text : "";
   }
@@ -580,9 +580,6 @@ function applyChatState(response, skipDraftCapture, options) {
     state.artifactViewerPages = {};
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
     state.artifactImageGalleryContext = null;
-  }
-  if (typeof resetMessageEditState === "function") {
-    resetMessageEditState();
   }
   state.activeChatId = nextChatId;
   state.chatDetailPending = detailDeferred;

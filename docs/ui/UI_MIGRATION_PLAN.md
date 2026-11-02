@@ -421,6 +421,35 @@ explicit view scope вместо global active owner. Только затем в
 chat targets одновременно. Ни общий чат целиком, ни multiple chat UI этим срезом
 не объявлены реализованными.
 
+### S2b.2: ввод и незавершённые правки — 2026-11-02
+
+По «Коммит и далее» S2b.1 сохранён в `bb53539b`; продолжен пункт 1 S2.
+Общий ChatComposer заменяет Workspace registry/bindings и Office `state.editing*`.
+Одинаковое хранение edit records на exact target, восстановление исходного ввода,
+единые keyboard/Send rules. Snapshot больше не сбрасывает Office edit; renderer не
+перезаписывает его текст. Отложенный focus/quick-action и accepted edit защищены
+target/generation либо identity отправленного record. Draft persistence, input
+receipts и runtime не изменены. Нового CSS/экрана/библиотеки нет.
+Исправлена потеря Office-правки при отказе bridge: record удаляется после успеха,
+при ошибке остаётся доступным. Pending edit блокирует изменение отправляемого
+текста; обычный черновик следующего сообщения не блокируется.
+
+Ревью — **In Review**: начать правку в Office и в проекте, переключиться между ними;
+обновить чат; отменить одну правку и проверить другой чат/исходный ввод. При смене
+чата отложенное восстановление cursor не должно захватывать фокус. Mock запускается
+по прежнему `/preview/web/?scenario=ready`; это не Office qualification.
+
+Проверки: `conversation-composer` (два экземпляра, targets, A→B→A, IME/disabled Send,
+focus/dispose); `message-actions`, `multi-chat-requests`, `attachment-ingestion-order`;
+browser `workspace-chat-layout` с refresh/switch/failed-edit checks, `chat-input-delivery`,
+`workspace-shared-draft`, `chat-draft-reload`. Последний fixture ждёт существующий
+Dock tab вместо скрытого прежнего header. Откат — diff этого presentation-среза,
+без изменения формата пользовательских данных.
+
+Остаток пункта 1: builders/snapshot/subscriptions и preference/draft adapters должны
+получать конкретный view вместо global selection. Затем — оставшиеся общие функции
+вложений/контекста и несколько разных chat targets в Dockview. S2 целиком не закрыт.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

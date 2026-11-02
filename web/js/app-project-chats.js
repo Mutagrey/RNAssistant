@@ -660,6 +660,9 @@
         catalogBusy = false; render(); }
     });
     var chatActions = {
+      target: function () { return workspaceComposerTarget({ workspaceId: projectId(), sessionId: currentId() }); },
+      clear: function () { el("Input").value = ""; el("Input").dispatchEvent(new Event("input", { bubbles: true })); el("Input").focus(); },
+      cancelEdit: function () { window.RNAssistantWorkspaceChat.cancelMessageEdit(true); render(); },
       snapshot: function () { return active; },
       selectModel: function (model) {
         return runChat(function (pid, sid) {
@@ -700,7 +703,8 @@
           if (ownsView()) scrollMessagesToBottom(false);
         } catch (error) { if (version === serial && projectId() === pid && currentId() === sid) notice(error.detail || error.message, true); }
       },
-      canMessageAction: function (name, message) {
+      canMessageAction: function (action) {
+        var name = action.name, message = action.message;
         return (name === "fork" || name === "delete" || name === "edit") && !!active && !!message && !!message.Id &&
           (active.messages || []).some(function (item) { return item.Id === message.Id; }) &&
           !window.RNAssistantWorkspaceChat.readOnly(active) && !chatBusy() &&
@@ -709,7 +713,7 @@
           (name !== "edit" || String(field(message, "role", "Role") || "").toLowerCase() === "user");
       },
       messageAction: async function (action) {
-        if (!chatActions.canMessageAction(action.name, action.message)) return;
+        if (!chatActions.canMessageAction(action)) return;
         if (action.name === "edit") { window.RNAssistantWorkspaceChat.startMessageEdit(action.message); render(); return; }
         var pid = projectId(), sid = currentId(), version = serial;
         try {
@@ -731,18 +735,20 @@
           notice(error.detail || error.message, true); }
       },
       input: function () {
+        if (composer) composer.input();
         updateControls();
       },
-      submit: function () {
+      submit: function (value, scope) {
         var text = el("Input").value.trim(); if (el("Send").disabled || !active || selectedUploadBusy()) return;
-        var pid = projectId(), sid = currentId();
+        if (!scope.isCurrent() || !scope.target || scope.target.source !== "workspace") return;
+        var pid = scope.target.workspaceId, sid = scope.target.sessionId;
         var target = { workspaceId: pid, sessionId: sid }, edit = window.RNAssistantWorkspaceChat.currentMessageEdit();
         var draftVersion = edit ? null : composer.draftVersion();
         var request = composer.prepareInput(target, text, edit,
           runStatus() === "running" ? runState() : null);
         submitProjectInput(target, request,
           function () { return window.RNAssistantChatDrafts.flushWorkspace(target); }, function () {
-            if (edit) composer.acceptedEdit(target, request);
+            if (edit) composer.acceptedEdit(target, request, edit);
             else composer.accepted(target, text, draftVersion, request);
           });
       },
@@ -774,8 +780,8 @@
       },
       progress: runObserver.acceptProgress
     };
-    window.RNAssistantWorkspaceChat.registerActions("project", chatActions);
-    window.RNAssistantWorkspaceChat.registerActions("plugin", chatActions);
+    chatComposer().register("project", chatActions);
+    chatComposer().register("plugin", chatActions);
     render();
   }
   document.addEventListener("DOMContentLoaded", bind);

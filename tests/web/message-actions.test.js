@@ -23,7 +23,7 @@ class Element {
 let sending = true, approval = false, renders = 0;
 const box = new Element();
 const ctx = vm.createContext({
-  state: { messages: [{ Id: "user", Role: "user", Content: "Question" }], editingMessageIndex: -1 },
+  state: { activeChatId: "chat", messages: [{ Id: "user", Role: "user", Content: "Question" }], editingMessageIndex: -1 },
   $: () => box,
   document: { createElement: () => new Element() },
   currentActiveSend: () => sending,
@@ -41,9 +41,10 @@ const ctx = vm.createContext({
   copyText: () => {}, log: () => {}
 });
 ctx.window = ctx;
-for (const name of ["app-chat-edit.js", "app-conversation-view.js", "app-messages.js", "app-agent.js"]) {
+for (const name of ["app-chat-composer.js", "app-chat-edit.js", "app-conversation-view.js", "app-messages.js", "app-agent.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), ctx);
 }
+ctx.chatComposer().register("office", { target: () => ctx.officeComposerTarget() });
 ctx.messageUsageText = () => "";
 ctx.messageUnitSignature = m => JSON.stringify(m);
 ctx.renderMessageArticle = (message, index) => {
@@ -72,9 +73,9 @@ assert.ok(titles(article).includes("Изменить сообщение"));
 assert.ok(titles(article).includes("Ответвить чат отсюда"));
 article.children.at(-1).children.at(-1).children.find(b => b.title === "Ответвить чат отсюда").click();
 assert.deepEqual(ctx.forked, ["user", 0]);
-ctx.state.editingMessageId = "user"; refresh();
+ctx.chatComposer().startEdit(ctx.officeComposerTarget(), { messageId: "user", index: 0, text: "edit" }); refresh();
 assert.deepEqual(titles(article), ["Копировать сообщение"]);
-ctx.state.editingMessageId = ""; refresh();
+ctx.chatComposer().cancelEdit(ctx.officeComposerTarget(), { restore: false }); refresh();
 assert.ok(titles(article).includes("Изменить сообщение"));
 approval = true; refresh();
 assert.ok(!titles(article).includes("Ответвить чат отсюда"));

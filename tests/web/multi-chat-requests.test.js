@@ -10,6 +10,7 @@ const requests = [];
 const refreshedChats = [];
 const context = vm.createContext({ Promise, console });
 context.window = context;
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-composer.js"), "utf8"), context);
 context.state = {
   activeChatId: "chat-b",
   activeSends: {},
@@ -42,6 +43,7 @@ context.renderMessages = () => {};
 context.renderModelControls = () => {};
 context.resetLiveReasoning = () => {};
 context.log = () => {};
+context.chatComposer().register("office", { target: () => context.officeComposerTarget() });
 
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-run.js"), "utf8"), context,
   { filename: "app-chat-run.js" });
@@ -91,6 +93,7 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
   context.$ = id => id === "sendButton" ? sendButton : null;
   context.hasActiveMessageEdit = () => false;
   vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-composer.js"), "utf8"), context);
+  context.chatComposer().register("office", { target: () => context.officeComposerTarget() });
   context.state.chatNavigationPending = 1;
   context.updateSendButtonAvailability(true);
   assert.equal(sendButton.disabled, true, "composer cannot submit against an uncommitted binding");

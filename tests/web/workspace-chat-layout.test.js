@@ -201,9 +201,36 @@ fs.mkdirSync(captures, {recursive:true});
       'return to Office restores the anchored reading position');
     await page.evaluate(() => startMessageEdit(state.messages[0], 0));
     await page.locator('#chatInput').fill('Правка сообщения Office');
+    await page.evaluate(async () => {
+      const edit = officeMessageEdit(), response = await loadChatState(state.activeChatId);
+      response.messages = state.messages; response.messageStartIndex = state.messageStartIndex;
+      response.messageTotalCount = state.messageTotalCount;
+      applyChatState(response);
+      if (officeMessageEdit() !== edit) throw Error('snapshot replaced the active edit');
+    });
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Правка сообщения Office', 'snapshot refresh preserves an unfinished edit');
+    await page.evaluate(() => {
+      window.originalEditSend = send;
+      send = function(type, ...args) {
+        if (type !== 'editMessage') return originalEditSend(type, ...args);
+        const pending = new Promise((resolve, reject) => { window.rejectEdit = reject; });
+        pending.requestId = 'synthetic-edit-failure'; return pending;
+      };
+    });
+    await page.locator('#sendButton').click();
+    await page.waitForFunction(() => !!window.rejectEdit && officeMessageEdit().busy);
+    assert.equal(await page.locator('#chatInput').getAttribute('readonly'), '', 'pending edit uses the common input lock');
+    await page.evaluate(() => rejectEdit(new Error('Synthetic edit failure')));
+    await page.waitForFunction(() => officeMessageEdit() && !officeMessageEdit().busy);
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Правка сообщения Office', 'failed edit retains the submitted text');
+    await page.evaluate(() => { send = originalEditSend; });
     await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
     await page.evaluate(() => RNAssistantWorkspaceChat.startMessageEdit(RNAssistantProjectChats.snapshot().messages[0]));
     await page.locator('#chatInput').fill('Правка сообщения Workspace');
+    await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Правка сообщения Office');
+    await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
+    assert.equal(await page.locator('#chatInput').inputValue(), 'Правка сообщения Workspace', 'Workspace edit survives the same owner switch as Office');
     await page.locator('#cancelMessageEditButton').click();
     assert.equal(await page.evaluate(() => !!RNAssistantWorkspaceChat.currentMessageEdit()),false);
     await page.evaluate(() => RNAssistantProjectChats.setScope('office'));

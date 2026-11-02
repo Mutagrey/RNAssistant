@@ -71,6 +71,36 @@ production-вкладку к новому owner. Builders Office/Workspace, вв
 Transient UI cache не заменяет draft store, events или runtime authority.
 Условие удаления adapter — в [Migration Map](../stabilization/MIGRATION_MAP.md#conversation-view-s2b1--2026-11-02).
 
+### S2b.2: общий ввод, команды и состояние правки
+
+Owner — `RNAssistantChatComposer` в существующем `app-chat-composer.js`.
+Один controller на form принимает явные DOM nodes и adapters источников. Он
+владеет input/keyboard/submit/stop/clear/confirmation bindings, точным target,
+generation и незавершёнными edit records. Office/project/plugin передают сервисные
+операции и адрес; отдельные `WorkspaceChat.actions`/`activeOwner` и глобальные
+`state.editing*` удалены. Workspace input больше не имеет второго listener сохранения.
+
+Edit record содержит исходный ввод/selection/scroll и текущий текст правки; ключ
+включает источник, workspace и session. Он сохраняется при переключении и refresh,
+удаляется при cancel/accepted edit/dispose. Нормальный draft и подтверждение доставки
+по-прежнему принадлежат ChatDrafts/ConversationInput; нового durable store нет.
+Отрисовка controls больше не записывает текст в edit state. Это устраняет сброс
+Office-правки на snapshot и разное поведение правок Office/Workspace при переключении.
+
+Команды получают captured scope; submit использует его session/workspace address.
+Отложенный focus/selection и quick-action reply проверяют generation, включая
+A→B→A. Enter и form submit используют доступность той же Send button; IME,
+Shift+Enter и modified Escape имеют одно правило для всех источников. Поздний
+ACK Workspace edit очищает только тот record, который был отправлен.
+Office также сохраняет record до успешного ответа; ошибка отправки и refresh не
+стирают текст правки. Пока edit request выполняется, ввод правки read-only;
+обычный следующий draft во время отправки сообщения остаётся редактируемым.
+
+Временный `chatComposer()` ещё выбирает singleton form, как `messageView()` —
+transcript. Workspace preference/draft adapter, общие builders и доставка snapshots
+ещё требуют explicit instance scope. Несколько независимых UI-вкладок пока не
+включены. Сохранение scratch edit между перезапусками приложения не добавлено.
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

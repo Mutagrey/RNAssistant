@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Общий composer и состояние правки S2b.2 — 2026-11-02
+
+S2b.1 закоммичен в `bb53539b`. Продолжение объединяет bindings/commands и edit state
+Office/project/plugin в существующем ChatComposer. Убран сброс правки на snapshot,
+восстановление ввода/focus привязано к target; Enter не обходит disabled Send.
+Ошибка сохранения Office-правки теперь сохраняет её текст до успешного ответа.
+Прежние Workspace registry и Office editing globals удалены. Draft store, receipts,
+Bridge/runtime не переписывались. [Scope и ревью](../ui/UI_MIGRATION_PLAN.md#s2b2-ввод-и-незавершённые-правки--2026-11-02).
+In Review; instance scoping остальных adapters/subscriptions, полная parity,
+несколько chat tabs и Windows/Office evidence ещё открыты.
+
 ## Общий transcript lifecycle S2b.1 — 2026-11-02
 
 Первый шаг после требования единого чата: один ConversationView теперь владеет

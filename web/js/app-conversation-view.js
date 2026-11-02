@@ -185,6 +185,7 @@
       dispose: function () {
         if (disposed) return;
         invalidate(); disconnect(); listeners.forEach(function (remove) { remove(); }); listeners = [];
+        if (view.composer) view.composer.dispose();
         reset(); positions.clear(); disposed = true; views.delete(box);
       }
     });

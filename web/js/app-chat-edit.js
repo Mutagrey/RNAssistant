@@ -1,66 +1,27 @@
-function resetMessageEditState(options) {
-  options = options || {};
-  var restoreDraft = !!state.editingDraftCaptured;
-  var draftText = state.editingDraftText || "";
-  var selectionStart = Number(state.editingDraftSelectionStart) || 0;
-  var selectionEnd = Number(state.editingDraftSelectionEnd) || selectionStart;
-  var scrollTop = Number(state.editingDraftScrollTop) || 0;
-
-  state.editingMessageId = "";
-  state.editingMessageIndex = -1;
-  state.editingText = "";
-  state.editingBusy = false;
-  state.editingDraftCaptured = false;
-  state.editingDraftText = "";
-  state.editingDraftSelectionStart = 0;
-  state.editingDraftSelectionEnd = 0;
-  state.editingDraftScrollTop = 0;
-
-  var input = $("chatInput");
-  if (!restoreDraft || !input || window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
-    return;
-  }
-
-  input.value = draftText;
-  if (typeof updateComposerInputState === "function") {
-    updateComposerInputState();
-  }
-  window.requestAnimationFrame(function () {
-    if (typeof resizeChatInput === "function") {
-      resizeChatInput();
-    }
-    var textLength = input.value.length;
-    input.selectionStart = Math.min(selectionStart, textLength);
-    input.selectionEnd = Math.min(Math.max(selectionEnd, input.selectionStart), textLength);
-    input.scrollTop = scrollTop;
-    if (options.focus) {
-      input.focus();
-    }
-  });
-}
-
-function hasActiveMessageEdit() {
-  return !!state.editingMessageId || state.editingMessageIndex >= 0;
-}
+function officeMessageEdit() { return chatComposer().edit(officeComposerTarget()); }
+function resetMessageEditState(options) { return chatComposer().cancelEdit(officeComposerTarget(), options); }
+function hasActiveMessageEdit() { return !!officeMessageEdit(); }
 
 function normalizeEditedMessageText(text) {
   return String(text || "").replace(/\r\n/g, "\n").trim();
 }
 
 function findEditingMessage() {
+  var edit = officeMessageEdit();
+  if (!edit) return null;
   var messages = state.messages || [];
   var messageIndex;
 
-  if (state.editingMessageId) {
+  if (edit.messageId) {
     for (messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
-      if (messageId(messages[messageIndex]) === state.editingMessageId) {
+      if (messageId(messages[messageIndex]) === edit.messageId) {
         return { message: messages[messageIndex], index: messageIndex };
       }
     }
     return null;
   }
 
-  messageIndex = state.editingMessageIndex;
+  messageIndex = edit.index;
   return messageIndex >= 0 && messageIndex < messages.length
     ? { message: messages[messageIndex], index: messageIndex }
     : null;
@@ -72,9 +33,9 @@ function isEditingMessage(message, index) {
   }
 
   var id = messageId(message);
-  return state.editingMessageId && id
-    ? state.editingMessageId === id
-    : state.editingMessageIndex === index;
+  return officeMessageEdit().messageId && id
+    ? officeMessageEdit().messageId === id
+    : officeMessageEdit().index === index;
 }
 
 function canEditMessage(message) {
@@ -91,28 +52,24 @@ function canEditMessage(message) {
 
 function canSaveMessageEdit(message, index) {
   if (!isEditingMessage(message, index) ||
-      state.editingBusy ||
+      officeMessageEdit().busy ||
       currentActiveSend() ||
       !state.activeChatId) {
     return false;
   }
 
-  var text = normalizeEditedMessageText(state.editingText);
+  var text = normalizeEditedMessageText(officeMessageEdit().text);
   return !!text;
 }
 
 function focusMessageEditComposer() {
-  window.setTimeout(function () {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
+  var edit = officeMessageEdit();
+  if (!edit || !chatComposer().current(officeComposerTarget())) return;
+  chatComposer().defer(function () {
+    if (officeMessageEdit() !== edit) return;
     var input = $("chatInput");
-    if (!input) {
-      return;
-    }
-    resizeChatInput();
-    input.focus();
-    input.selectionStart = input.value.length;
-    input.selectionEnd = input.value.length;
-  }, 0);
+    resizeChatInput(); input.focus(); input.selectionStart = input.selectionEnd = input.value.length;
+  });
 }
 
 function startMessageEdit(message, index) {
@@ -120,24 +77,17 @@ function startMessageEdit(message, index) {
     return;
   }
 
-  var input = $("chatInput");
-  state.editingDraftCaptured = true;
-  state.editingDraftText = input ? input.value : "";
-  state.editingDraftSelectionStart = input && typeof input.selectionStart === "number" ? input.selectionStart : 0;
-  state.editingDraftSelectionEnd = input && typeof input.selectionEnd === "number" ? input.selectionEnd : state.editingDraftSelectionStart;
-  state.editingDraftScrollTop = input ? input.scrollTop : 0;
-  state.editingMessageId = messageId(message);
-  state.editingMessageIndex = index;
-  state.editingText = messageContent(message);
-  state.editingBusy = false;
+  var edit = chatComposer().startEdit(officeComposerTarget(), {
+    messageId: messageId(message), index: index, text: messageContent(message) });
+  if (!edit) return;
   clearSendError();
   renderMessages();
-  setChatInputText(state.editingText, true);
+  setChatInputText(officeMessageEdit().text, true);
   renderSendControls();
 }
 
 function cancelMessageEdit() {
-  if (!hasActiveMessageEdit() || state.editingBusy) {
+  if (!hasActiveMessageEdit() || officeMessageEdit().busy) {
     return;
   }
 
@@ -191,31 +141,32 @@ async function saveMessageEdit() {
   }
 
   var sentChatId = state.activeChatId;
+  var edit = officeMessageEdit(), address = officeComposerTarget(sentChatId);
   var sentMessageId = messageId(target.message);
-  var text = normalizeEditedMessageText(state.editingText);
+  var text = normalizeEditedMessageText(edit.text);
   var textChanged = text !== normalizeEditedMessageText(messageContent(target.message));
-  state.editingBusy = true;
+  edit.busy = true;
   clearSendError();
   applyEditedMessagePreview(target, text);
-  var request = send("editMessage", {
-    chatId: sentChatId,
-    id: sentMessageId,
-    index: target.index,
-    text: text
-  });
-  state.activeSends[sentChatId] = {
-    requestId: request.requestId,
-    text: text,
-    attachments: messageAttachments(target.message).slice(),
-    canceling: false,
-    editing: true
-  };
-  resetMessageEditState();
-  beginChatRunTracking(sentChatId);
-  renderChatRunControls();
-
   try {
+    var request = send("editMessage", {
+      chatId: sentChatId,
+      id: sentMessageId,
+      index: target.index,
+      text: text
+    });
+    state.activeSends[sentChatId] = {
+      requestId: request.requestId,
+      text: text,
+      attachments: messageAttachments(target.message).slice(),
+      canceling: false,
+      editing: true
+    };
+    beginChatRunTracking(sentChatId);
+    renderChatRunControls();
+
     var response = await request;
+    if (chatComposer().edit(address) === edit) chatComposer().cancelEdit(address);
     if (state.activeChatId === sentChatId) {
       applyChatState(response);
       clearSendError();
@@ -229,6 +180,7 @@ async function saveMessageEdit() {
     log(error.cancelled ? "Редактирование сообщения отменено." : error.detail || error.message, error.cancelled ? "warning" : "error");
     await refreshChatAfterEditFailure(sentChatId);
   } finally {
+    edit.busy = false;
     delete state.activeSends[sentChatId];
     endChatRunTracking(sentChatId);
     renderChatRunControls();

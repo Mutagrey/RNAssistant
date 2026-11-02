@@ -64,7 +64,8 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(restoredRequestId, firstRequestId, 'uncertain send must reuse its persisted request ID');
 
     await page.evaluate(target => RNAssistantProjectChats.open(target.workspaceId, target.sessionId), {workspaceId, sessionId});
-    await page.locator('#projectChatTitle').waitFor({state:'visible'});
+    await page.waitForFunction(() => RNAssistantWorkspaceChat.owner() === 'project');
+    await page.locator('[data-tab-panel-id=conversation]').waitFor({state:'visible'});
     assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик workspace после reload',
       'project and plugin use the same restored draft');
     await page.evaluate(async target => {

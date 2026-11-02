@@ -15,6 +15,7 @@ function createContext(stageFails) {
   const input = { value: "", focus() {} };
   const context = vm.createContext({ Promise, console, setImmediate, AbortController, setTimeout, clearTimeout });
   context.window = context;
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-composer.js"), "utf8"), context);
   context.addEventListener = context.removeEventListener = () => {};
   context.state = {
     activeChatId: "chat-a", draftAttachments: [], activeSends: {}, messages: [],
@@ -56,6 +57,7 @@ function createContext(stageFails) {
   for (const file of ["app-chat-state.js", "app-conversation-input.js", "app-resource-upload.js", "app-attachments.js", "app-chat-run.js"]) {
     vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
   }
+  context.chatComposer().register("office", { target: () => context.officeComposerTarget() });
   context.submitInboxMessage = (text, attachments, chatId) => sent.push({ text, attachments, chatId });
 
   return {
@@ -129,8 +131,10 @@ async function settle() {
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.ok(index.includes("app-chat-state.js?v="), "draft owner has a cache key");
-  for (const file of ["app-conversation-input", "app-attachments", "app-chat-composer", "app-chat-run"])
-    assert.ok(index.includes(file + ".js?v=addressed-pending-20261027-1"), file + " has the updated cache key");
+  for (const file of ["app-conversation-input", "app-attachments", "app-chat-composer", "app-chat-run"]) {
+    const version = ["app-chat-composer", "app-chat-run"].includes(file) ? "chat-composer-s2b2-20261102" : "addressed-pending-20261027-1";
+    assert.ok(index.includes(file + ".js?v=" + version), file + " has the updated cache key");
+  }
   console.log("PASS attachment staging: changed UI modules have current cache keys");
   console.log("OK 4/4");
 }()).catch(error => {

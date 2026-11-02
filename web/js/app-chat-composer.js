@@ -1,3 +1,131 @@
+(function () {
+  "use strict";
+  function key(target) {
+    return target && target.sessionId ? JSON.stringify([target.source, target.workspaceId || "", target.sessionId]) : "";
+  }
+  function create(nodes) {
+    var sources = Object.create(null), owner = "office", selected = "", generation = 0, bound = false, disposed = false;
+    var edits = new Map(), listeners = [], frames = new Set();
+    function invalidate() {
+      ++generation;
+      frames.forEach(function (frame) { window.cancelAnimationFrame(frame); }); frames.clear();
+    }
+    function context() {
+      var adapter = sources[owner], target = adapter && adapter.target ? adapter.target() : null;
+      var next = owner + ":" + key(target);
+      if (next !== selected) { selected = next; invalidate(); }
+      return { owner: owner, target: target && Object.freeze(Object.assign({}, target)), adapter: adapter };
+    }
+    function capture() {
+      var scope = context(), stamp = generation;
+      scope.isCurrent = function () { context(); return !disposed && stamp === generation; };
+      scope.invoke = function (name, value) {
+        if (!scope.isCurrent()) return;
+        var handler = scope.adapter && scope.adapter[name];
+        if (handler) return handler(value, scope);
+      };
+      return scope;
+    }
+    function dispatch(name, value) { return capture().invoke(name, value); }
+    function current(target) { return key(target) !== "" && key(context().target) === key(target); }
+    function edit(target) { return edits.get(key(target)) || null; }
+    function defer(action) {
+      var scope = capture(), frame = window.requestAnimationFrame(function () {
+        frames.delete(frame);
+        if (scope.isCurrent() && nodes.form.isConnected !== false &&
+            (!nodes.form.closest || !nodes.form.closest("[inert]"))) action();
+      });
+      frames.add(frame);
+    }
+    function startEdit(target, details) {
+      if (!current(target)) return null;
+      var input = nodes.input, previous = edit(target);
+      if (previous) return null;
+      invalidate();
+      var value = Object.assign({}, details, { draft: input.value, selectionStart: input.selectionStart || 0,
+        selectionEnd: input.selectionEnd || 0, scrollTop: input.scrollTop || 0, busy: false });
+      edits.set(key(target), value); return value;
+    }
+    function cancelEdit(target, options) {
+      options = options || {};
+      var value = edit(target);
+      if (!value) return null;
+      edits.delete(key(target));
+      if (!current(target)) return value;
+      invalidate();
+      if (options.restore === false) return value;
+      nodes.input.value = value.draft;
+      dispatch("input");
+      defer(function () {
+        var length = nodes.input.value.length;
+        nodes.input.selectionStart = Math.min(value.selectionStart, length);
+        nodes.input.selectionEnd = Math.min(Math.max(value.selectionEnd, nodes.input.selectionStart), length);
+        nodes.input.scrollTop = value.scrollTop;
+        if (options.focus) nodes.input.focus();
+      });
+      return value;
+    }
+    function listen(node, event, action) {
+      if (!node) return;
+      node.addEventListener(event, action);
+      listeners.push(function () { node.removeEventListener(event, action); });
+    }
+    function bind() {
+      if (bound) return;
+      bound = true;
+      function submit() { if (!nodes.send.disabled) dispatch("submit"); }
+      listen(nodes.form, "submit", function (event) { event.preventDefault(); submit(); });
+      listen(nodes.input, "input", function () {
+        var value = edit(context().target);
+        if (value) value.text = nodes.input.value;
+        dispatch("input");
+      });
+      listen(nodes.input, "keydown", function (event) {
+        if (event.key === "Escape" && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+          if (edit(context().target) && nodes.cancelEdit && nodes.cancelEdit.disabled) event.preventDefault();
+          else dispatch("escape", event);
+        }
+        if (!event.defaultPrevented && event.key === "Enter" && !event.isComposing &&
+            !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
+          event.preventDefault(); submit();
+        }
+      });
+      listen(nodes.stop, "click", function () { dispatch("stop"); });
+      listen(nodes.clear, "click", function () { dispatch("clear"); });
+      listen(nodes.cancelEdit, "click", function () { dispatch("cancelEdit"); });
+      listen(nodes.approve, "click", function () { dispatch("resolve", true); });
+      listen(nodes.reject, "click", function () { dispatch("resolve", false); });
+    }
+    return { register: function (name, adapter) { sources[name] = adapter; },
+      activate: function (name) { owner = name; context(); }, owner: function () { return owner; },
+      capture: capture, dispatch: dispatch, sync: context, current: current, defer: defer,
+      edit: edit, startEdit: startEdit, cancelEdit: cancelEdit, bind: bind,
+      dispose: function () {
+        if (disposed) return;
+        disposed = true; invalidate(); listeners.forEach(function (remove) { remove(); });
+        listeners = []; edits.clear(); sources = Object.create(null);
+      }
+    };
+  }
+  window.RNAssistantChatComposer = { create: create };
+})();
+
+// Temporary adapter to the single mounted composer; the controller itself accepts explicit nodes/targets.
+var currentChatComposer = null;
+function chatComposer() {
+  if (!currentChatComposer) {
+    currentChatComposer = window.RNAssistantChatComposer.create({ form: $("chatForm"), input: $("chatInput"),
+      send: $("sendButton"), stop: $("stopButton"), clear: $("clearInputButton"), cancelEdit: $("cancelMessageEditButton"),
+      approve: $("workspaceChatApprove"), reject: $("workspaceChatReject") });
+    if (typeof messageView === "function") messageView().composer = currentChatComposer;
+  }
+  return currentChatComposer;
+}
+function officeComposerTarget(id) { return { source: "office", sessionId: id === undefined ? state.activeChatId : id }; }
+function workspaceComposerTarget(target) {
+  return { source: "workspace", workspaceId: target && target.workspaceId, sessionId: target && target.sessionId };
+}
+
 function positionComposerTooltip(tooltip, trigger) {
   tooltip.style.setProperty("--composer-tooltip-shift", "0px");
   var container = trigger.closest(".chat-main");
@@ -142,7 +270,7 @@ function renderComposerPresentation(view) {
   stop.disabled = !!view.canceling;
   stop.title = view.canceling ? "Останавливаю запрос" : "Остановить запрос";
   stop.setAttribute("aria-label", stop.title);
-  input.readOnly = !!view.inputReadOnly;
+  input.readOnly = !!view.inputReadOnly || !!(view.editing && view.editBusy);
   input.setAttribute("aria-label", "Сообщение в чат");
   input.placeholder = view.readOnly ? "История чата · создайте новый чат…" :
     view.loading ? "Обновляю чат…" : view.loadError ? "Повторите загрузку чата…" :
@@ -178,7 +306,7 @@ function renderSendControls() {
 
   if ($("newChatButton")) $("newChatButton").disabled = navigating || !!state.bridgeUnavailable;
 
-  renderComposerPresentation({ editing: isEditing, editBusy: state.editingBusy,
+  renderComposerPresentation({ editing: isEditing, editBusy: isEditing && officeMessageEdit().busy,
     preparing: isPreparingAttachments, running: isSending, canceling: isCanceling,
     awaitingReply: awaitingReply, awaitingApproval: approvalPending,
     readOnly: state.chatReadOnly, loading: navigating || state.chatDetailPending,
@@ -221,10 +349,6 @@ function updateComposerInputState() {
   var hasAttachments = !!(state.draftAttachments && state.draftAttachments.length);
   var hasPendingAttachments = !!(state.chatResourceIngestions && state.activeChatId &&
     state.chatResourceIngestions[state.activeChatId]);
-
-  if (hasActiveMessageEdit() && input) {
-    state.editingText = input.value;
-  }
 
   renderComposerInputState(hasText || hasAttachments || hasPendingAttachments);
   updateSendButtonAvailability(hasText || hasAttachments || hasPendingAttachments);
@@ -291,6 +415,8 @@ function setChatInputText(text, shouldFocus, saveDraft) {
   }
 
   input.value = text || "";
+  var edit = chatComposer().edit(officeComposerTarget());
+  if (edit) edit.text = input.value;
   if (saveDraft !== false && !hasActiveMessageEdit()) captureChatDraft(state.activeChatId, true);
   updateComposerInputState();
   window.requestAnimationFrame(resizeChatInput);

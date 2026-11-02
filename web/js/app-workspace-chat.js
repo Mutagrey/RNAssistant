@@ -1,93 +1,44 @@
 (function () {
   "use strict";
   var selectedSessions = new Map();
-  var activeOwner = "office", sharedComposer = null, actions = Object.create(null), actionsBound = false;
-  var workspaceMessageEdit = null;
+  var sharedComposer = null;
   var officeComposerAnchor = null;
   var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
     Notice: "workspaceChatNotice", Control: "workspaceChatControl", Pending: "workspaceChatPending",
     Approve: "workspaceChatApprove", Reject: "workspaceChatReject", Questions: "workspaceChatQuestions" };
   function node(name) { return viewNodes[name] ? document.getElementById(viewNodes[name]) : null; }
-  function registerActions(owner, handlers) {
-    if (owner !== "office" && owner !== "project" && owner !== "plugin") throw new Error("Unknown chat owner: " + owner);
-    actions[owner] = handlers;
-  }
-  function dispatch(name, value) {
-    var handler = actions[activeOwner] && actions[activeOwner][name];
-    if (handler) return handler(value);
+  function dispatch(name, value) { return chatComposer().dispatch(name, value); }
+  function currentTarget() {
+    var snapshot = dispatch("snapshot");
+    return workspaceComposerTarget({ workspaceId: field(field(snapshot, "project"), "workspaceId"), sessionId: field(snapshot, "sessionId") });
   }
   function canMessageAction(name, message, index) {
-    if (activeOwner === "office") return false;
-    var handler = actions[activeOwner] && actions[activeOwner].canMessageAction;
-    return !!handler && !!handler(name, message, index);
+    return chatComposer().owner() !== "office" && !!dispatch("canMessageAction", { name: name, message: message, index: index });
   }
   function messageAction(name, message, index) {
-    if (!canMessageAction(name, message, index)) return;
-    return dispatch("messageAction", { name: name, message: message, index: index });
+    if (canMessageAction(name, message, index)) return dispatch("messageAction", { name: name, message: message, index: index });
   }
-  function cancelWorkspaceMessageEdit(restore) {
-    if (!workspaceMessageEdit) return;
-    var prior = workspaceMessageEdit;
-    workspaceMessageEdit = null;
-    if (restore !== false && activeOwner === prior.owner) {
-      node("Input").value = prior.draft;
-      node("Input").dispatchEvent(new Event("input", { bubbles: true }));
-    } else dispatch("input");
-  }
+  function cancelWorkspaceMessageEdit(restore) { return chatComposer().cancelEdit(currentTarget(), { restore: restore !== false, focus: restore !== false }); }
   function startWorkspaceMessageEdit(message) {
-    if (activeOwner === "office" || !message || !message.Id) return;
-    var snapshot = dispatch("snapshot"), workspaceId = field(field(snapshot, "project"), "workspaceId");
-    var sessionId = field(snapshot, "sessionId"), revision = field(field(snapshot, "state"), "revision");
-    if (!workspaceId || !sessionId || !Number.isSafeInteger(revision)) return;
+    if (chatComposer().owner() === "office" || !message || !message.Id) return;
+    var snapshot = dispatch("snapshot"), target = currentTarget(), revision = field(field(snapshot, "state"), "revision");
+    if (!target.workspaceId || !target.sessionId || !Number.isSafeInteger(revision)) return;
     if (sharedComposer) sharedComposer.draftVersion();
-    workspaceMessageEdit = { owner: activeOwner, workspaceId: workspaceId, sessionId: sessionId,
-      messageId: message.Id, revision: revision, draft: node("Input").value };
+    if (!chatComposer().startEdit(target, { messageId: message.Id, revision: revision, text: messageContent(message) })) return;
     node("Input").value = messageContent(message);
-    node("Input").dispatchEvent(new Event("input", { bubbles: true }));
-    node("Input").focus();
+    node("Input").dispatchEvent(new Event("input", { bubbles: true })); node("Input").focus();
   }
-  function currentMessageEdit() {
-    if (!workspaceMessageEdit || activeOwner !== workspaceMessageEdit.owner) return null;
-    var snapshot = dispatch("snapshot");
-    return field(field(snapshot, "project"), "workspaceId") === workspaceMessageEdit.workspaceId &&
-      field(snapshot, "sessionId") === workspaceMessageEdit.sessionId ? workspaceMessageEdit : null;
-  }
-  function bindActions() {
-    if (actionsBound) return;
-    actionsBound = true;
-    var form = node("Form"), input = node("Input");
-    form.addEventListener("submit", function (event) { event.preventDefault(); dispatch("submit"); });
-    input.addEventListener("input", function () { dispatch("input"); });
-    input.addEventListener("keydown", function (event) {
-      if (event.key === "Escape") dispatch("escape", event);
-      if (!event.defaultPrevented && event.key === "Enter" && !event.isComposing &&
-          !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        event.preventDefault(); dispatch("submit");
-      }
-    });
-    node("Stop").addEventListener("click", function () { dispatch("stop"); });
-    document.getElementById("clearInputButton").addEventListener("click", function () {
-      if (activeOwner === "office") dispatch("clear");
-      else { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); input.focus(); }
-    });
-    node("Approve").addEventListener("click", function () { dispatch("resolve", true); });
-    node("Reject").addEventListener("click", function () { dispatch("resolve", false); });
-    document.getElementById("cancelMessageEditButton").addEventListener("click", function () {
-      if (activeOwner === "office") dispatch("cancelEdit");
-      else { cancelWorkspaceMessageEdit(true); dispatch("refresh"); }
-    });
-  }
+  function currentMessageEdit() { return chatComposer().owner() === "office" ? null : chatComposer().edit(currentTarget()); }
   function mount(owner, container) {
     var view = document.getElementById("workspaceChatView");
     var list = document.getElementById("messages");
     var form = document.getElementById("chatForm"), input = document.getElementById("chatInput");
     if (!view || !list || !form || !input || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
     if (owner !== "office" && !container) return false;
-    var changed = activeOwner !== owner;
+    var changed = chatComposer().owner() !== owner;
     if (changed) messageView(list).suspend();
-    if (changed && workspaceMessageEdit) cancelWorkspaceMessageEdit(false);
-    if (changed && activeOwner !== "office") dispatch("suspend");
-    if (activeOwner === "office" && owner !== "office") {
+    if (changed && chatComposer().owner() !== "office") dispatch("suspend");
+    if (chatComposer().owner() === "office" && owner !== "office") {
       if (!officeComposerAnchor) {
         officeComposerAnchor = document.createComment("Office composer");
         form.parentNode.insertBefore(officeComposerAnchor, form);
@@ -98,13 +49,13 @@
       var picker = document.getElementById(id);
       if (picker) picker.open = false;
     });
-    if (changed && activeOwner !== "office" && sharedComposer) sharedComposer.select(null);
+    if (changed && chatComposer().owner() !== "office" && sharedComposer) sharedComposer.select(null);
     var transcriptMount = document.getElementById(owner === "office" ? "officeChatTranscriptMount" : "workspaceChatTranscriptMount");
     if (list.parentNode !== transcriptMount) {
       transcriptMount.append(list, document.getElementById("chatScrollBottomButton"));
       changed = true;
     }
-    activeOwner = owner;
+    chatComposer().activate(owner);
     form.dataset.owner = owner;
     document.getElementById("attachmentDrafts").hidden = owner !== "office";
     var pluginDrafts = document.getElementById("pluginAnnotationDrafts");
@@ -113,11 +64,7 @@
       form.title = "";
       if (form.parentNode !== document.getElementById("chatDropZone"))
         document.getElementById("chatDropZone").insertBefore(form, officeComposerAnchor);
-      if (changed) {
-        var editText = hasActiveMessageEdit() ? state.editingText : null;
-        restoreChatDraft(state.activeChatId);
-        if (editText !== null) setChatInputText(editText || "", false, false);
-      }
+      if (changed) restoreChatDraft(state.activeChatId);
       renderSendControls();
       list.setAttribute("aria-label", "Сообщения чата");
       if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.mount(owner);
@@ -261,7 +208,7 @@
     var signature = JSON.stringify([chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
     if (!changed && view.cache.signature === signature) return;
     var viewport = !following ? frame.viewport : null;
-    list.dataset.session = JSON.stringify([activeOwner, target.workspaceId, target.sessionId]);
+    list.dataset.session = JSON.stringify([chatComposer().owner(), target.workspaceId, target.sessionId]);
     list.dataset.startIndex = String(start); view.cache.signature = signature;
     var units = [];
     if (start > 0) {
@@ -355,7 +302,7 @@
     return true;
   }
   function renderWorkspaceControls(chat, submitQuestions) {
-    if (activeOwner === "office") return;
+    if (chatComposer().owner() === "office") return;
     var snapshot = field(chat, "state") || {}, pending = field(chat, "pendingId");
     node("Control").hidden = !pending;
     node("Pending").textContent = pending ? (field(chat, "pendingTool") || "Действие") + "\n" +
@@ -381,11 +328,11 @@
       return !!left && !!right && left.workspaceId === right.workspaceId && left.sessionId === right.sessionId;
     }
     function save() {
-      if (workspaceMessageEdit) return;
+      if (currentMessageEdit()) return;
       if (current) loaded = draftStore.saveWorkspace(current, { text: input.value, mode: mode, reasoning: reasoning });
     }
     function showOfficeContext(snapshot) {
-      if (activeOwner !== "project") { form.title = ""; return; }
+      if (chatComposer().owner() !== "project") { form.title = ""; return; }
       var office = field(snapshot, "office"), status = runStatus(snapshot);
       var activeRun = status === "running" || status === "awaiting_confirmation", pinned = office && activeRun;
       form.title = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
@@ -408,7 +355,7 @@
       if (sharedComposer) update();
     }
     function pickFiles() {
-      if (activeOwner !== "project" || locked || !current || !fileOptions ||
+      if (chatComposer().owner() !== "project" || locked || !current || !fileOptions ||
           fileOptions.canAttachFiles && !fileOptions.canAttachFiles()) return;
       fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
       picker.open = false; fileInput.click();
@@ -425,21 +372,20 @@
       return selection.runningModel || selection.selected || settingsModel();
     }
     function update() {
-      if (activeOwner === "office") return;
+      if (chatComposer().owner() === "office") return;
       renderComposerInputState(input.value.trim() || loaded && loaded.attachments && loaded.attachments.length);
       setComposerPickerDisabled(picker, locked || !current);
       plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
       fileAction.disabled = locked || !current || !fileOptions ||
-        activeOwner !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
+        chatComposer().owner() !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
       renderReasoningControl(think, reasoning, locked || !current, effectiveModelSupportsReasoning(effectiveModel()));
       renderChatModelPicker();
     }
-    input.addEventListener("input", function () { if (activeOwner !== "office") { save(); update(); } });
-    window.addEventListener("resize", update);
     attachFiles(options);
     sharedComposer = {
       attachFiles: attachFiles,
       refresh: update,
+      input: function () { save(); update(); },
       modelSelection: modelSelection,
       selectModel: function (value) {
         if (!modelSelection().disabled) return dispatch("selectModel", String(value || "").trim());
@@ -453,13 +399,13 @@
         var next = target && target.workspaceId && target.sessionId
           ? { workspaceId: target.workspaceId, sessionId: target.sessionId } : null;
         var same = sameTarget(current, next);
-        if (workspaceMessageEdit && (!same || draftStore.readWorkspace(next) !== loaded))
-          cancelWorkspaceMessageEdit(false);
         current = next;
+        chatComposer().sync();
         var saved = draftStore.readWorkspace(next);
         if (same && saved === loaded) { update(); return; }
         loaded = saved;
-        input.value = saved ? saved.text : ""; mode = saved ? saved.mode : field(snapshot, "mode") || "agent";
+        var edit = currentMessageEdit();
+        input.value = edit ? edit.text : saved ? saved.text : ""; mode = saved ? saved.mode : field(snapshot, "mode") || "agent";
         reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
       },
       options: function () { return { Mode: mode,
@@ -492,27 +438,28 @@
       accepted: function (target, text, version, request) {
         var previous = draftStore.readWorkspace(target);
         var cleared = draftStore.acceptWorkspaceInput(target, request, text, version);
-        if (cleared && activeOwner !== "office" && sameTarget(current, target) && loaded === previous) {
-          if (currentMessageEdit()) workspaceMessageEdit.draft = "";
+        if (cleared && chatComposer().owner() !== "office" && sameTarget(current, target) && loaded === previous) {
+          if (currentMessageEdit()) currentMessageEdit().draft = "";
           else input.value = "";
           loaded = cleared; update();
         }
       },
-      acceptedEdit: function (target, request) {
+      acceptedEdit: function (target, request, edit) {
         draftStore.acknowledgeWorkspaceInput(target, request);
-        if (activeOwner !== "office" && currentMessageEdit() && sameTarget(current, target)) cancelWorkspaceMessageEdit(true);
+        if (chatComposer().edit(workspaceComposerTarget(target)) === edit)
+          chatComposer().cancelEdit(workspaceComposerTarget(target));
       }
     };
     update();
     return sharedComposer;
   }
   window.RNAssistantWorkspaceChat = { renderMessages: renderMessages, renderWorkspaceControls: renderWorkspaceControls, bindComposer: bindComposer,
-    mount: mount, owner: function () { return activeOwner; }, node: node, messages: function () { return node("Messages"); },
-    registerActions: registerActions, bindActions: bindActions, refreshPresentation: function () { dispatch("refresh"); },
+    mount: mount, owner: function () { return chatComposer().owner(); }, node: node, messages: function () { return node("Messages"); },
+    refreshPresentation: function () { dispatch("refresh"); },
     canMessageAction: canMessageAction, messageAction: messageAction,
     startMessageEdit: startWorkspaceMessageEdit, cancelMessageEdit: cancelWorkspaceMessageEdit,
     currentMessageEdit: currentMessageEdit,
-    composerAction: function (name) { if (sharedComposer && activeOwner !== "office" && sharedComposer[name]) sharedComposer[name](); },
+    composerAction: function (name) { if (sharedComposer && chatComposer().owner() !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
     modelSelection: function () { return sharedComposer ? sharedComposer.modelSelection() : { selected: "", disabled: true }; },
     selectModel: function (value) { return sharedComposer && sharedComposer.selectModel(value); },
