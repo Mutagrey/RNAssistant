@@ -47,10 +47,11 @@ domain owners; вкладка не создаёт второй durable store и�
 несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
 singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
 
-В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.11 используют тот же
+В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.12 используют тот же
 SnapshotOwner для Office transcript/preferences/context, метаданных материалов и
 run projection через временный selected adapter; полный Office view и навигация
-ещё не принадлежат независимым вкладкам.
+ещё не принадлежат независимым вкладкам. S2b.12 выделяет создание и нормализацию
+Office source и передаёт его snapshot сборщику ленты явно; выбранный DOM ещё один.
 
 Создание Office-чата возвращает пустую detail projection и typed `catalogChanges`:
 новая строка и ID заменённого transient. Существующий revision-aware catalog merger
@@ -301,6 +302,28 @@ Bridge маршрутизирует Office progress в существующий 
 Selected adapter пока остаётся для одного физического transcript. Это ещё не
 независимые chat tabs: следующий срез — explicit source/view factories, адресные
 consumers и удаление selected facade. Нельзя размножать эти accessors по вкладкам.
+
+### S2b.12: создание Office source и явный вход ленты
+
+`createOfficeChatProjection(chatId)` создаёт адресный owner с единственным
+`mergeOfficeChatSnapshot`. Full-state decoding, detail reset и bounded message
+window больше не пишут по отдельности в глобальный selected state. Reducer
+получает только current snapshot, response и options; не читает глобальный UI.
+Он сохраняет лишь presentation fields, заимствует массивы/metadata/live run и
+не удерживает response DTO с каталогами или HTML working copy.
+
+Ревизия последнего snapshot хранится у owner. Selected adapter явно передаёт
+knownRevision из существующей per-chat delivery map: ACK настройки/контекста или
+каталог не должны сбрасывать reading window при последующем full refresh.
+Сама map, navigation, catalogs, draft/receipt side effects и editor остаются
+у прежних владельцев. Частичный selected response без ID получает адрес только
+на этой существующей границе; factory принимает исключительно exact source.
+
+`officeMessagePresentation(view, commands, snapshot)` получает данные явно и
+отвергает snapshot другого target. Два source и два render inputs работают без
+доступа к `state`; это проверка границы данных, не включение нескольких Dock tabs.
+Следом — явный экземпляр Chat View с nodes/commands и lifecycle, переключение
+остальных selected consumers, затем независимое размещение. Фасад пока не удалён.
 
 ## S1b: фактическая граница переноса
 

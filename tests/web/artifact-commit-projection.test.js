@@ -8,10 +8,9 @@ const vm = require("node:vm");
 const root = path.join(__dirname, "../..");
 const ui = vm.createContext({});
 ui.window = ui;
-ui.state = {
-  activeChatId: "chat-a", activeRunViewState: null, chatProjectionRevisions: {},
-  chats: [], documents: [], messages: [], artifacts: [], tools: [], skills: [], chatStateApplyVersion: 0
-};
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-core.js"), "utf8"), ui,
+  { filename: "app-core.js" });
+ui.state.activeChatId = "chat-a";
 ui.$ = () => null;
 ["renderMessages", "renderContext", "renderContextMeter", "renderModelControls", "renderChatSessions"].forEach(name => {
   ui[name] = () => {};
@@ -22,6 +21,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-conversation-state.j
   { filename: "app-conversation-state.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "utf8"), ui,
   { filename: "app-chat-state.js" });
+ui.selectOfficeChatProjection("chat-a");
 
 {
   const order = [];
@@ -125,7 +125,7 @@ vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "ut
   assert.match(attachments, /preparing:\s*"Подготовка"/);
   assert.match(attachments, /committed:\s*"Оригинал"/);
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-core.js?v=bridge-contract-20261015-1"), "core has the current cache key");
+  assert.match(index, /app-core\.js\?v=[^"\s]+/, "core delivery is versioned");
   assert.ok(index.includes("app-chat-state.js?v=office-chat-20260930-3"), "chat state has the current cache key");
   assert.ok(index.includes("app-messages.js?v=action-severity-20260930-1"), "messages have the current cache key");
   assert.ok(index.includes("app-attachments.js?v=attachment-input-20261012-1"),

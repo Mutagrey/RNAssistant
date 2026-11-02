@@ -65,7 +65,7 @@ const saved = [action("s1", "a", "completed", null), action("s2", "b", "complete
 saved[0].ArgumentsPayload = { Hash: "blob", ContentType: "application/json" };
 ctx.state.messages = saved.map(message);
 liveRun.activities = live;
-const presentation = () => ctx.officeMessagePresentation(ctx.messageView());
+const presentation = () => ctx.officeMessagePresentation(ctx.messageView(), null, ctx.officeChatSnapshot());
 function render() { ctx.reconcileMessageUnits(box, ctx.buildMessageUnits(presentation())); }
 function assertFeed(steps, calls) {
   const nodes = walk(box);

@@ -2,7 +2,7 @@
 const assert = require("node:assert/strict"), fs = require("node:fs"), vm = require("node:vm");
 const ui = vm.createContext({ state: { activeChatId: "a", messages: [{ Id: "saved" }] } });
 ui.window = ui;
-for (const file of ["app-conversation-state", "app-chat-composer", "app-workspace-chat", "app-chat-state", "app-chat-session"])
+for (const file of ["app-conversation-state", "app-run-view-state", "app-chat-composer", "app-workspace-chat", "app-chat-state", "app-chat-session"])
   vm.runInContext(fs.readFileSync("web/js/" + file + ".js", "utf8"), ui);
 const office = ui.officeChatSource("a"), target = { workspaceId: "w", sessionId: "a" };
 const workspace = ui.RNAssistantWorkspaceChat.snapshotSource(target);

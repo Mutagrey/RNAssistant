@@ -47,7 +47,7 @@ for (const name of ["app-chat-composer.js", "app-chat-edit.js", "app-conversatio
 }
 ctx.chatComposer().register("office", { target: () => ctx.officeComposerTarget(), canMessageAction: ctx.officeCanMessageAction, messageAction: ctx.officeMessageAction });
 ctx.messageView().begin(ctx.officeConversationTarget());
-const presentation = () => ctx.officeMessagePresentation(ctx.messageView(), ctx.chatComposer().capture());
+const presentation = () => ctx.officeMessagePresentation(ctx.messageView(), ctx.chatComposer().capture(), ctx.state);
 ctx.messageUsageText = () => "";
 ctx.messageUnitSignature = m => JSON.stringify(m);
 ctx.renderMessageArticle = (message, index, options) => {
@@ -122,7 +122,7 @@ const activity = (id, status) => ({ RunId: "r", StepId: "s", StepMessage: "One s
 const persisted = { message: { RunId: "r", Id: "p" }, index: 0, activity: activity("a", "completed") };
 let snapshot = { items: [persisted], finalMessage: null, nextIndex: 1 };
 ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => snapshot;
-ctx.state.liveAgentRun = [activity("a", "running"), activity("b", "running")];
+ctx.state.liveRun = { activities: [activity("a", "running"), activity("b", "running")] };
 ctx.renderAgentRunArticle = value => { ctx.projected = value; return new Element(); };
 let units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 1); assert.equal(units[0].key, "live:agent-run");
@@ -136,7 +136,7 @@ ctx.agentRunUnitSignature = () => "snapshot";
 snapshot = { items: [persisted], finalMessage: { message: { RunId: "r", Id: "final" }, index: 1 }, nextIndex: 1 };
 units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 1); assert.notEqual(units[0].key, "live:agent-run", "terminal snapshot removes live replay");
-ctx.state.liveAgentRun = [Object.assign(activity("a", "running"), { RunId: "other" })];
+ctx.state.liveRun = { activities: [Object.assign(activity("a", "running"), { RunId: "other" })] };
 units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 2, "distinct runtime runs are not merged by matching prose or call names");
 console.log("PASS run overlap: persisted/live replay merges once by runtime identity and yields to the final snapshot");

@@ -142,6 +142,17 @@ and Chromium `workspace-chat-progress` / `chat-input-delivery`. The progress fix
 explicitly opens the plugin source chat. Independent chat tabs and Windows evidence
 are still open; source/view factories must replace the selected facade first.
 
+S2b.12: `office-conversation-projection` also runs two independent Office factories
+and render inputs with all global state access forbidden, checks exact delivery,
+bounded/borrowed data, disposal and reading-window preservation after a preference
+ACK. Run-view/source fixtures use real core accessors. Pair with context, completion,
+message-actions, live projection and stream-cost checks; Chromium shared-draft,
+workspace progress and chat-inspector exercise production delivery. The Inspector
+fixture publishes its real transient run instead of writing read-only live fields.
+`artifact-commit-projection` passes
+its four Web cases, but its static C# ordering assertion also fails on `d61a9aff`;
+see RISK_REGISTER. It is not a passing full file or Office qualification.
+
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,
 shared concise-field guidance, unchanged user data and frozen

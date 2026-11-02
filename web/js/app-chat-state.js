@@ -2,13 +2,72 @@
 // not replace each other's data; per-view factories will remove this selection.
 var selectedOfficeProjection = null;
 function createOfficeChatSnapshot(chatId) {
-  return { activeChatId: chatId, messages: [], messageStartIndex: 0, messageTotalCount: 0,
+  return { activeChatId: chatId, sessionRevision: null, messages: [], messageStartIndex: 0, messageTotalCount: 0,
     activeChatModel: "", activeChatMode: "agent", activeChatReasoning: false,
     activeRunViewState: null, liveRun: null,
     context: {}, contextUsage: {}, artifacts: [], artifactLibrary: { sessionRevision: 0, heads: [] },
     activeContextCheckpointId: "", activeHtmlArtifactId: "", activeTaskListArtifactId: "", activePlanDocumentArtifactId: "" };
 }
 var emptyOfficeChatSnapshot = Object.freeze(createOfficeChatSnapshot(""));
+// Decode only this source's presentation fields; catalogs, navigation and editors have other owners.
+function mergeOfficeChatSnapshot(current, response, options) {
+  var incomingRevision = window.RNAssistantRunViewState.sessionRevision(response);
+  var previousRevision = current ? current.sessionRevision : null;
+  if (options && Number.isSafeInteger(options.knownRevision) &&
+      (previousRevision === null || options.knownRevision > previousRevision)) previousRevision = options.knownRevision;
+  if (previousRevision !== null && (incomingRevision === null || incomingRevision < previousRevision)) return current;
+  var next = Object.assign({}, current || createOfficeChatSnapshot(response.activeChatId || response.ActiveChatId));
+  var detailDeferred = !!(response.detailDeferred || response.DetailDeferred);
+  next.sessionRevision = incomingRevision;
+  if (detailDeferred) {
+    next.messages = [];
+    next.messageStartIndex = 0;
+    next.messageTotalCount = response.messageTotalCount || response.MessageTotalCount || 0;
+    next.context = {}; next.contextUsage = {}; next.artifacts = [];
+    next.artifactLibrary = { sessionRevision: incomingRevision || 0, heads: [] };
+  }
+  next.activeRunViewState = window.RNAssistantRunViewState.normalize(
+    response.runViewState !== undefined ? response.runViewState : response.RunViewState);
+  if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined)
+    next.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
+  if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined)
+    next.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
+  if (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined)
+    next.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);
+  if (response.context || response.Context) next.context = response.context || response.Context;
+  if (response.contextUsage || response.ContextUsage) next.contextUsage = response.contextUsage || response.ContextUsage;
+  if (response.messages || response.Messages) {
+    var incomingMessages = response.messages || response.Messages;
+    var windowed = window.RNAssistantConversationState.messageWindow(next, {
+      messages: incomingMessages,
+      messageStartIndex: response.messageStartIndex !== undefined ? response.messageStartIndex : (response.MessageStartIndex || 0),
+      messageTotalCount: response.messageTotalCount !== undefined ? response.messageTotalCount :
+        response.MessageTotalCount !== undefined ? response.MessageTotalCount : incomingMessages.length
+    }, !(options && options.latestMessages) && !detailDeferred &&
+      Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision);
+    next.messages = windowed.messages;
+    next.messageStartIndex = windowed.messageStartIndex;
+    next.messageTotalCount = windowed.messageTotalCount;
+  }
+  if (response.artifacts !== undefined || response.Artifacts !== undefined)
+    next.artifacts = response.artifacts || response.Artifacts || [];
+  if (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined)
+    next.artifactLibrary = response.artifactLibrary || response.ArtifactLibrary || { sessionRevision: incomingRevision || 0, heads: [] };
+  if (response.activeContextCheckpointId !== undefined || response.ActiveContextCheckpointId !== undefined)
+    next.activeContextCheckpointId = response.activeContextCheckpointId || response.ActiveContextCheckpointId || "";
+  if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined)
+    next.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
+  if (response.activeTaskListArtifactId !== undefined || response.ActiveTaskListArtifactId !== undefined)
+    next.activeTaskListArtifactId = response.activeTaskListArtifactId || response.ActiveTaskListArtifactId || "";
+  if (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined)
+    next.activePlanDocumentArtifactId = response.activePlanDocumentArtifactId || response.ActivePlanDocumentArtifactId || "";
+  return next;
+}
+function createOfficeChatProjection(chatId) {
+  var owner = window.RNAssistantConversationState.createSnapshotOwner(officeChatSource(chatId), mergeOfficeChatSnapshot);
+  owner.accept(createOfficeChatSnapshot(chatId));
+  return owner;
+}
 function officeChatProjection() { return selectedOfficeProjection; }
 function officeChatSnapshot() {
   return selectedOfficeProjection && selectedOfficeProjection.snapshot() || emptyOfficeChatSnapshot;
@@ -34,9 +93,7 @@ function selectOfficeChatProjection(chatId) {
       selectedOfficeProjection.target.sessionId === chatId) return selectedOfficeProjection;
   clearOfficeChatProjection();
   if (!chatId) return null;
-  selectedOfficeProjection = window.RNAssistantConversationState.createSnapshotOwner(officeChatSource(chatId),
-    function (current, incoming) { return incoming; });
-  selectedOfficeProjection.accept(createOfficeChatSnapshot(chatId));
+  selectedOfficeProjection = createOfficeChatProjection(chatId);
   return selectedOfficeProjection;
 }
 
@@ -626,35 +683,19 @@ function applyChatState(response, skipDraftCapture, options) {
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
     state.artifactImageGalleryContext = null;
   }
-  selectOfficeChatProjection(nextChatId);
+  var projection = selectOfficeChatProjection(nextChatId);
+  if (projection) projection.accept(hasResponseChatId ? response :
+    Object.assign({ activeChatId: nextChatId }, response), Object.assign({}, options, { knownRevision: previousRevision }));
   state.activeChatId = nextChatId;
   state.chatDetailPending = detailDeferred;
   state.chatDetailError = "";
   if (detailDeferred) {
-    if (nextChatId) {
-      state.messages = [];
-      state.messageStartIndex = 0;
-      state.messageTotalCount = response.messageTotalCount || response.MessageTotalCount || 0;
-      state.context = {};
-      state.contextUsage = {};
-      state.artifacts = [];
-      state.artifactLibrary = { sessionRevision: incomingRevision || 0, heads: [] };
-    }
     state.htmlWorkspace = { files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [],
       recovery: { status: "empty", canMutate: false } };
   }
-  if (nextChatId) state.activeRunViewState = window.RNAssistantRunViewState.normalize(
-    response.runViewState !== undefined ? response.runViewState : response.RunViewState);
-  if (nextChatId && (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined)) {
-    state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
-  }
   if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined) {
-    if (nextChatId) state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
     state.mutationPolicy = response.mutationPolicy || "Ask";
     state.chatReadOnly = response.chatReadOnly === true;
-  }
-  if (nextChatId && (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined)) {
-    state.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);
   }
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = window.RNAssistantRunViewState.mergeCatalog(
@@ -669,51 +710,9 @@ function applyChatState(response, skipDraftCapture, options) {
     state.documents = response.documents || response.Documents || [];
   }
   var libraryChanged = applyLibraryCatalogState(response);
-  if (nextChatId && (response.context || response.Context)) {
-    state.context = response.context || response.Context || {};
-  }
-  if (response.messages || response.Messages) {
-    var incomingMessages = response.messages || response.Messages || [];
-    var incomingStart = response.messageStartIndex !== undefined
-      ? response.messageStartIndex : (response.MessageStartIndex || 0);
-    var incomingTotal = response.messageTotalCount !== undefined
-      ? response.messageTotalCount : response.MessageTotalCount !== undefined
-        ? response.MessageTotalCount : incomingMessages.length;
-    var windowed = window.RNAssistantConversationState.messageWindow({
-      messages: state.messages, messageStartIndex: state.messageStartIndex,
-      messageTotalCount: state.messageTotalCount
-    }, { messages: incomingMessages, messageStartIndex: incomingStart,
-      messageTotalCount: incomingTotal }, !(options && options.latestMessages) && !chatChanged && !detailDeferred &&
-      Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision);
-    if (nextChatId) {
-      state.messages = windowed.messages;
-      state.messageStartIndex = windowed.messageStartIndex;
-      state.messageTotalCount = windowed.messageTotalCount;
-    }
-    if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages);
-  }
-  if (nextChatId && (response.artifacts !== undefined || response.Artifacts !== undefined)) {
-    state.artifacts = response.artifacts || response.Artifacts || [];
-  }
-  if (nextChatId && (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined)) {
-    state.artifactLibrary = response.artifactLibrary || response.ArtifactLibrary || { sessionRevision: incomingRevision || 0, heads: [] };
-  }
-  if (nextChatId && (response.activeContextCheckpointId !== undefined || response.ActiveContextCheckpointId !== undefined)) {
-    state.activeContextCheckpointId = response.activeContextCheckpointId || response.ActiveContextCheckpointId || "";
-  }
-  if (nextChatId && (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined)) {
-    state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
-  }
-  if (nextChatId && (response.activeTaskListArtifactId !== undefined || response.ActiveTaskListArtifactId !== undefined)) {
-    state.activeTaskListArtifactId = response.activeTaskListArtifactId || response.ActiveTaskListArtifactId || "";
-  }
-  if (nextChatId && (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined)) {
-    state.activePlanDocumentArtifactId = response.activePlanDocumentArtifactId || response.ActivePlanDocumentArtifactId || "";
-  }
-  if (nextChatId && (response.contextUsage || response.ContextUsage)) {
-    state.contextUsage = response.contextUsage || response.ContextUsage || {};
-    syncTokenEstimateCalibrationFromUsage();
-  }
+  if ((response.messages || response.Messages) && typeof reconcileChatInputEchoes === "function")
+    reconcileChatInputEchoes(nextChatId, officeChatSnapshot().messages);
+  if (nextChatId && (response.contextUsage || response.ContextUsage)) syncTokenEstimateCalibrationFromUsage();
   if ((response.htmlWorkspace || response.HtmlWorkspace) && (chatChanged || !state.htmlWorkspaceDirty)) {
     var nextWorkspace = response.htmlWorkspace || response.HtmlWorkspace;
     state.htmlWorkspace = chatChanged ? nextWorkspace : retainHtmlWorkspaceSources(state.htmlWorkspace, nextWorkspace);

@@ -28,17 +28,20 @@ function createMessagePresentation(view, data, commands) {
     invoke: function (name, value) { if (this.isCurrent()) return commands.invoke(name, value); }
   };
 }
-function officeMessagePresentation(view, commands) {
-  var activities = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun : state.liveActivity ? [state.liveActivity] : [];
-  var run = state.chatRuns && state.chatRuns[state.activeChatId], runId = run && run.runId || "";
+function officeMessagePresentation(view, commands, snapshot) {
+  var target = view.scope().target;
+  if (!snapshot || !target || target.source !== "office" || target.sessionId !== snapshot.activeChatId)
+    throw new Error("Источник ленты не соответствует представлению чата.");
+  var run = snapshot.liveRun, runId = run && run.runId || "";
+  var activities = run && run.activities && run.activities.length ? run.activities : run && run.activity ? [run.activity] : [];
   if (!runId) for (var i = activities.length - 1; i >= 0; i--) {
     runId = activities[i].RunId || activities[i].runId;
     if (runId) break;
   }
   return createMessagePresentation(view, {
-    messages: state.messages || [], start: state.messageStartIndex || 0, total: state.messageTotalCount || 0,
-    live: { activities: activities, runId: runId || "", content: state.liveStreamContent || "",
-      reasoning: state.liveReasoning || "", reasoningComplete: !!state.liveReasoningComplete,
+    messages: snapshot.messages, start: snapshot.messageStartIndex, total: snapshot.messageTotalCount,
+    live: { activities: activities, runId: runId || "", content: run && run.stream || "",
+      reasoning: run && run.reasoning || "", reasoningComplete: !!(run && run.reasoningComplete),
       retrying: !!(run && run.streamRetrying), statusText: typeof chatModelStageText === "function" ? chatModelStageText(run) : "" }
   }, commands);
 }
@@ -1053,7 +1056,7 @@ function renderStreamingMessages(outputOnly) {
     return;
   }
   if (outputOnly && messageView().cache.liveSuppressed) return;
-  var box = $("messages"), presentation = officeMessagePresentation(view, chatComposer().capture());
+  var box = $("messages"), presentation = officeMessagePresentation(view, chatComposer().capture(), officeChatSnapshot());
   var shouldScroll = shouldFollowChatScroll(box);
   var viewport = !shouldScroll ? captureMessageViewport(box) : null;
   if (outputOnly && live && live.node.liveOutputVisible && hasLiveAgentOutput(presentation) &&
@@ -1075,7 +1078,7 @@ function renderMessages(options) {
   if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
   var box = $("messages");
   var view = messageView(box), frame = view.begin(officeConversationTarget(), options);
-  var presentation = officeMessagePresentation(view, chatComposer().capture());
+  var presentation = officeMessagePresentation(view, chatComposer().capture(), officeChatSnapshot());
   view.cache.fullRenderPending = false;
   var viewport = frame.viewport, shouldScroll = frame.follow;
   if (options.fullReset && !frame.changed) resetRenderedMessageUnits(box);

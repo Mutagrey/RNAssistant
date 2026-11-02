@@ -1,5 +1,17 @@
 # Stabilization risk register
 
+## Artifact commit fixture: старое C# ordering expectation — 2026-11-02
+
+Owner: Office conversation delivery / Harness fixture. При S2b.12 Web-часть
+`tests/web/artifact-commit-projection.test.js` подключена к реальному source owner;
+четыре сценария metadata/transcript/dirty HTML проходят. Затем static assertion
+`production order is durable save -> UI queue -> helper transport -> primary transport`
+падает и на изолированном `d61a9aff` с тем же обновлённым fixture, без S2b.12 Web diff.
+У исходного fixture раньше не создавался selected source и ожидался старый cache key.
+Нужно отдельно сверить нынешний controller/service delivery и заменить устаревшую
+проверку только после подтверждения инварианта. Это не установленная потеря данных
+и не qualification порядка эффектов; C#/runtime в S2b.12 не изменялись.
+
 ## Saved Browser S3b.3b: границы проверки — 2026-11-02
 
 Owner: Web Browser / HtmlWorkspace / Plugins. Независимые saved HTML/release views

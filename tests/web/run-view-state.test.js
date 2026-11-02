@@ -149,11 +149,10 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
     { filename: "app-utils.js" });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-conversation-state.js"), "utf8"), ui,
     { filename: "app-conversation-state.js" });
-  ui.state = {
-    activeChatId: "chat-a", activeRunViewState: null, chatProjectionRevisions: {},
-    chats: [], messages: [], artifacts: [], tools: [{ Id: "tool-new" }], skills: [], chatStateApplyVersion: 0,
-    activeSends: {}, chatRuns: {}, chatInboxes: {}
-  };
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-core.js"), "utf8"), ui,
+    { filename: "app-core.js" });
+  ui.state.activeChatId = "chat-a";
+  ui.state.tools = [{ Id: "tool-new" }];
   ui.RNAssistantNavigationTree = { icon: () => "" };
   ui.$ = () => null;
   ["renderMessages", "renderContext", "renderContextMeter", "renderModelControls"].forEach(name => {

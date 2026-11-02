@@ -104,6 +104,10 @@ production tokens. Адаптер tab spacing/close icon ограничен Dock
 
 ## Применение правил сейчас
 
+S2b.12 меняет вход данных общего transcript, без новых UI-компонентов, controls или
+CSS. История/stream/reasoning используют прежние renderer и tokens. Два адресных
+source не означают две реализации чата; фабрика DOM-представления — следующий шаг.
+
 S2b.11 сохраняет общий transcript, composer и существующий вид stream/reasoning.
 Убрана выбранная копия live-данных, без новых controls/CSS. Token paints сохраняют
 узлы истории, фокус и раскрытые блоки; отмена/повтор удаляют непринятый draft.

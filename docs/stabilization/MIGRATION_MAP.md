@@ -101,6 +101,13 @@ resetLiveReasoning удалены. Office progress reducer принадлежи�
 Owner прежний. Остаток: explicit source/view factory, адресные consumers и удаление
 всех selected accessors перед независимыми chat tabs; per-tab копия запрещена.
 
+S2b.12: Office source создаётся explicit factory; full-state reducer и render-input
+builder работают без global state. Selected adapter вызывает эту factory, а не
+имеет свой decode path. Known revision передаётся явно из прежней delivery map;
+catalog/editor/runtime не перенесены. Owner прежний. Removal gate остаётся:
+explicit Chat View nodes/commands/lifecycle, переключение остальных consumers,
+затем удалить selected facade перед независимыми Dock chat tabs.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

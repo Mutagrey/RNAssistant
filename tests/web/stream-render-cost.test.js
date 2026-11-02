@@ -20,6 +20,9 @@ const context = vm.createContext({ console, document: { activeElement: null }, s
   $: () => box, clearMarkdownEnhancements: node => cleaned.push(node.id), isPanelActive: () => true });
 context.window = context;
 context.requestAnimationFrame = callback => frames.push(callback);
+for (const file of ["app-run-view-state.js", "app-conversation-state.js", "app-chat-state.js"])
+  vm.runInContext(read(file), context);
+context.selectOfficeChatProjection("a");
 vm.runInContext(read("app-conversation-view.js"), context);
 vm.runInContext(read("app-messages.js"), context);
 vm.runInContext(read("app-chat-composer.js"), context);
@@ -69,6 +72,7 @@ bridge.document = { getElementById: () => null };
 bridge.setTimeout = callback => timers.push(callback);
 bridge.chrome = { webview: { addEventListener: (_, callback) => { listener = callback; } } };
 vm.runInContext(read("app-core.js"), bridge);
+vm.runInContext(read("app-run-view-state.js"), bridge);
 vm.runInContext(read("app-conversation-state.js"), bridge);
 vm.runInContext(read("app-chat-state.js"), bridge);
 vm.runInContext(read("app-chat-run.js"), bridge);

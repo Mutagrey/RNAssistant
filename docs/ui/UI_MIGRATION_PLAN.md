@@ -801,6 +801,84 @@ chat tabs. Attachments/approval/context auxiliary consumers сверяются �
 с тем же owner. HTML working copy остаётся у HtmlWorkspace; новые вкладки не
 должны клонировать selected adapter. Принятие среза не закрывает Windows evidence.
 
+### S2b.12: Office source factory и явный snapshot ленты — принято
+
+Срез принят пользователем по «Коммит». При этом пользователь указал на затянувшуюся
+подготовку независимых вкладок; оценка остатка и предложение ниже не означают их готовность.
+Baseline `d61a9aff`; S2b.11 принят пользователем. Owner: Web ChatState / transcript.
+Фабрика создаёт адресный SnapshotOwner; существующий selected adapter теперь её
+consumer. Полный ответ разбирается единственным reducer без global state вместо
+набора global setters. Лента принимает snapshot явно и отвергает чужой target.
+Каталоги/navigation, draft/inbox, HTML editor и runtime не переписывались.
+
+Проверки `office-conversation-projection`: два source и два render inputs при
+запрещённом доступе к global state; exact address/revisions, отсутствие копии
+bounded history/metadata, cap 240, dispose/late delivery и сохранение reading
+window после preference ACK. `run-view-state`, `conversation-snapshot-source`,
+`office-context-projection`, `chat-run-completion`, `live-run-projection`,
+`message-actions`, `stream-render-cost` прошли. Старые fixture dependencies
+обновлены на реальные source accessors, вместо второго тестового selected state.
+Source и render script cache queries обновлены.
+
+Chromium `workspace-shared-draft`, `workspace-chat-progress` и `chat-inspector` прошли на изолированном
+`d61a9aff` + Web diff: shared draft/preferences/receipts и stable live DOM сохранены.
+В первом параллельном запуске draft fixture ожидал кнопку plugin chat до timeout;
+повтор на том же production diff прошёл. Inspector fixture подключён к live run
+вместо записи в read-only accessor. После отдельного падения focus/Escape проверка
+прошла последовательно и на baseline, и на Web diff. Timing gaps не объявляются закрытыми.
+Четыре Web-сценария `artifact-commit-projection` проходят; его отдельное static C#
+ordering expectation падает и на `d61a9aff` с актуализированным fixture. Owner/gap
+зафиксирован в RISK_REGISTER, весь этот test file не объявляется зелёным.
+
+Ревью: `python3 prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+1. Office A → B → A: проверить историю, модель и контекст каждого чата.
+2. Загрузить прежние сообщения, изменить модель и дождаться refresh: окно истории
+   не должно перескакивать к последним сообщениям.
+3. Проект/plugin source chat: проверить черновик и раскрытый reasoning при потоке.
+Mock не квалифицирует Office/WebView2. Откат — Web diff, без миграции данных.
+
+Далее — общий Chat View с explicit nodes/commands/lifecycle и переключение
+оставшихся selected consumers. После этого — независимые chat targets в Dockview,
+с проверками одновременного ввода/настроек/потока, close/move/restore и поздних ответов.
+Selected facade и singleton DOM пока остаются; S2 и несколько chat tabs не завершены.
+
+### Следующая контрольная точка S2: два работающих Chat View — Proposed
+
+Owner: Web conversation presentation / DockWorkspace. Уточнение способа выполнения
+после замечания пользователя о темпе; исходная архитектура и остальные срезы плана
+сохраняются. S2b.1–S2b.12 дали используемые owners/guards/components, но слишком
+долгая последовательность подготовительных срезов не доставила независимые вкладки.
+Единство реализации компонента не означает единственный экземпляр его DOM/controller.
+
+Фактический остаток на момент S2b.12:
+
+| Граница | Состояние и обязательное переключение |
+|---|---|
+| Данные и render input | Адресные sources, bounded snapshots и явная сборка ленты уже есть; использовать их в экземплярах Chat View |
+| DOM и composer | `messageView()` / `chatComposer()` удерживают текущий singleton; Workspace mount переносит одни messages/form. Общая factory должна создавать nodes/controller для каждого view |
+| Команды и подписки | Часть adapters по-прежнему читает active chat и глобальные DOM IDs. Передать exact view/source в действия, ошибки, confirmations/questions, Inspector и callback delivery |
+| Dock placement | Один `conversation` root/id. Переключить существующий DockWorkspace на адресные chat views; повтор exact target активирует существующий view |
+
+Предлагаемый следующий результат — сквозной production-сценарий с одной реализацией
+Chat View и несколькими экземплярами, а не очередное самостоятельное выделение helper.
+Начать интеграцию с двух Office-чатов; до закрытия контрольной точки проверить также
+Office + Workspace и project/plugin source через тот же компонент.
+
+Критерии результата:
+1. Два чата видны рядом; у каждого свои input/edit/model, history/scroll, progress,
+   ошибки и адресные команды. Изменение одного не меняет другой.
+2. Move/split/close/reopen/restore сохраняют exact target; close не отменяет run;
+   поздний ответ закрытого или прежнего view не обновляет новый.
+3. Сохранены cap 240 на view, coalesced/leaf streaming, lazy hidden rendering,
+   очистка listeners/reads/leases. Runtime, stores и UI реализации не дублируются.
+4. После переключения consumers заменённый singleton path удалён; остаток полной
+   parity S2 перечислен явно. Ни пара Office views, ни эта точка сами по себе не
+   закрывают весь S2 или Windows/Office qualification.
+
+Возможны несколько атомарных implementation commits. Подготовительный commit не
+объявляется завершением этого результата; визуальное ревью показывает работающую
+пару чатов. Оценка «ещё один срез — и готово» без такой интеграции больше не используется.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

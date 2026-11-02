@@ -107,9 +107,10 @@ const { chromium } = require("playwright");
       send = savedInspectorSend; cancelBridgeRequest = savedInspectorCancel; state.activeChatId = "preview-chat";
       state.activeRunViewState = { lifecycle: "completed", executionHealth: "unknown", runId: "inspector-run", currentAction: "Проверка модулей завершена" };
       state.messages = [];
-      state.liveAgentRun = [1, 2].map(i => ({ Id: "activity-" + i, Kind: "tool", RunId: "inspector-run", StepId: "step-" + i,
+      state.chatRuns["preview-chat"] = { runId: "inspector-run", activities: [1, 2].map(i => ({ Id: "activity-" + i, Kind: "tool", RunId: "inspector-run", StepId: "step-" + i,
         StepMessage: "Проверю содержимое модуля", ToolId: "core.read", ToolCallId: "call-" + i,
-        Status: i === 1 ? "completed" : "unknown", ResultMessage: "Прочитан фрагмент " + i }));
+        Status: i === 1 ? "completed" : "unknown", ResultMessage: "Прочитан фрагмент " + i })) };
+      publishOfficeChatRun("preview-chat", state.chatRuns["preview-chat"]);
       window.inspectorRoutes = [];
       openRunJournal = options => inspectorRoutes.push(options);
       RNAssistantModelContext.open = options => inspectorRoutes.push(options);
@@ -173,10 +174,10 @@ const { chromium } = require("playwright");
       const oldMessage = { Id: "old-message", RunId: "older-run", Role: "assistant", Content: "", Activity: oldActivity };
       const oldFinal = { Id: "old-final", RunId: "older-run", Role: "assistant", Content: "Предыдущий ответ" };
       state.messages = [oldMessage, oldFinal];
-      const article = renderMessageArticle(oldMessage, 0, { presentation: officeMessagePresentation(messageView(), chatComposer().capture()) }); article.id = "inspector-source";
+      const article = renderMessageArticle(oldMessage, 0, { presentation: officeMessagePresentation(messageView(), chatComposer().capture(), officeChatSnapshot()) }); article.id = "inspector-source";
       document.getElementById("messages").appendChild(article);
       const grouped = document.createElement("article"); grouped.id = "inspector-run-source";
-      appendAgentRunFooter(grouped, [{ message: oldMessage, index: 0 }], { message: oldFinal, index: 1 }, officeMessagePresentation(messageView(), chatComposer().capture()));
+      appendAgentRunFooter(grouped, [{ message: oldMessage, index: 0 }], { message: oldFinal, index: 1 }, officeMessagePresentation(messageView(), chatComposer().capture(), officeChatSnapshot()));
       document.getElementById("messages").appendChild(grouped);
     });
     assert.equal(await page.locator("#inspector-source .message-inspect-action").count(), 0,
@@ -243,7 +244,7 @@ const { chromium } = require("playwright");
         return { message: { Id: "grouped-message-" + index, Role: "assistant",
           RunId: "grouped-run", Activity: activity }, activity, index };
       });
-      const article = renderAgentRunArticle({ items, live: false }, officeMessagePresentation(messageView(), chatComposer().capture()));
+      const article = renderAgentRunArticle({ items, live: false }, officeMessagePresentation(messageView(), chatComposer().capture(), officeChatSnapshot()));
       article.id = "grouped-step-probe";
       document.getElementById("messages").appendChild(article);
     });

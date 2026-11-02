@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Адресный source Office S2b.12 — 2026-11-02
+
+Owner: Web ChatState / transcript. Создание и нормализация source выделены из
+selected path, сборщик ленты получает snapshot явно. Два источника и их render
+inputs проверены без global state; history cap 240, borrowed metadata/live run,
+revision/late-response guards и reading window после preference ACK сохранены.
+Focused Web checks и Chromium shared-draft/progress/Inspector прошли; старое static C#
+ordering expectation artifact fixture остаётся открытым в RISK_REGISTER.
+Срез принят пользователем по «Коммит». Предложена следующая контрольная точка —
+два действующих Chat View, объединяющая nodes/commands/lifecycle и Dock placement;
+границы и критерии — в UI_MIGRATION_PLAN. Selected facade и один transcript остаются.
+Независимые Dock chat tabs, полная
+parity S2 и Windows/Office qualification ещё не завершены.
+
 ## Адресный поток чата S2b.11 — 2026-11-02
 
 Owner: Web conversation presentation. Office source заимствует существующий run;
