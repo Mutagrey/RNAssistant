@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Инструкции, роли и source tools — 2026-11-02
+
+Owner: Core ModelProtocol/context compiler, Office built-in skills и resource mutation.
+По запросу пользователя runtime presentation возвращён к Markdown/YAML; JSON-решения,
+индексированные результаты и typed repair сохранены. Prompt schema 69: общий подход
+к Task List, важным сообщениям и свободной рефлексии; усилены конкретные правила VBA.
+Verified after-source и summary/claims теперь supplied user data, а не assistant;
+admission/restore используют единый `tool_pack_state`.
+
+Поиск явно объясняет неподдерживаемые CR/LF patterns, replace называет несовпавший
+search guard. Старое VBA evidence больше не отвергает свежее доставленное чтение
+для patch; stale-only и непокрытые участки остаются запрещены. 92 адресных сценария
+прошли host-neutral на изолированной копии `601283cf` с protocol diff, без параллельных
+UI правок; VBA skill admission проверен при 32768 tokens. Реальные модели, Office/VBE
+и прежние baseline gaps не квалифицированы.
+Карта ролей и форматов — [v8 contract](../protocols/CONVERSATION_RESPONSE_V8.md#runtime-presentation-and-message-roles--2026-11-02).
+
 ## Адресный source Office S2b.12 — 2026-11-02
 
 Owner: Web ChatState / transcript. Создание и нормализация source выделены из
@@ -84,6 +101,17 @@ AssistantController.Agent.cs (ToolResultWire); их исправление вн�
 открытыми. Глобальное холодное восстановление существующих чатов не отменено.
 
 ## JSON-профиль и harness — 2026-11-02
+
+Повторное ревью коммита `601283cf` выполнено на отдельной копии, без параллельных
+Browser/loop-guard изменений. Исправлены чтение старого batch без CallCount,
+двойная сериализация completionFeedback в Office/Workspace, ошибочный учёт
+одинаковых отказов через промежуточный truncated response и расхождение инструкции
+с runtime rendering. На том этапе prompt schema 68; дальнейший запрос пользователя
+вернул Markdown/YAML presentation с согласованной инструкцией в schema 69.
+Reference revision остаётся 4.
+В расширенной матрице 149/166 успешны; все 17 оставшихся падений воспроизведены
+на родительском `a0eea223` и перечислены в RISK_REGISTER. Полный Harness не закрыт.
+Сверка последнего плана — в [v8 checklist](../protocols/CONVERSATION_RESPONSE_V8.md#json-profile-implementation-checklist--2026-11-02).
 
 По принятому плану production сохраняет JSON-решения и передаёт индексированные
 `tool_results` в user content. Убраны synthetic native history и автоматический

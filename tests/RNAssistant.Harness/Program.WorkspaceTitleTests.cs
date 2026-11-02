@@ -224,7 +224,7 @@ namespace RNAssistant.Harness
                             forged = new ChatStore(paths).Load(sessionId);
                             sibling = forged.Messages.Single(message => message.Id == sibling.Id);
                             sibling.AcceptedCallOrigin = new AcceptedToolCallOrigin(siblingOrigin.StepId,
-                                siblingOrigin.ModelAttemptId, invalidIndex, Math.Max(siblingOrigin.CallCount, invalidIndex + 1));
+                                siblingOrigin.ModelAttemptId, invalidIndex, Math.Max(siblingOrigin.CallCount.GetValueOrDefault(), invalidIndex + 1));
                             new ChatStore(paths).Commit(forged,
                                 new RNAssistant.Core.Persistence.ConversationCommit(new[] { sibling }));
                             using (var batchService = new WorkspaceConversationService(paths))

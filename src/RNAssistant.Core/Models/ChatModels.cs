@@ -80,10 +80,14 @@ namespace RNAssistant.Core.Models
         public string StepId { get; private set; }
         public string ModelAttemptId { get; private set; }
         public int CallIndex { get; private set; }
-        public int CallCount { get; private set; }
+        [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
+        public int? CallCount { get; private set; }
+
+        public AcceptedToolCallOrigin(string stepId, string modelAttemptId, int? callIndex)
+            : this(stepId, modelAttemptId, callIndex, 1) { }
 
         [JsonConstructor]
-        public AcceptedToolCallOrigin(string stepId, string modelAttemptId, int? callIndex, int? callCount = null)
+        public AcceptedToolCallOrigin(string stepId, string modelAttemptId, int? callIndex, int? callCount)
         {
             if (string.IsNullOrWhiteSpace(stepId) || string.IsNullOrWhiteSpace(modelAttemptId) ||
                 !callIndex.HasValue || callIndex.Value < 0)
@@ -91,8 +95,11 @@ namespace RNAssistant.Core.Models
             StepId = stepId;
             ModelAttemptId = modelAttemptId;
             CallIndex = callIndex.Value;
-            CallCount = callCount ?? 1;
-            if (CallCount <= CallIndex || CallCount > RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.MaximumToolCalls) throw new ArgumentException("Call index exceeds its accepted batch.");
+            // Old streams did not record batch size. Keep that absence readable;
+            // current history admission rejects it instead of guessing a size.
+            CallCount = callCount;
+            if (CallCount.HasValue && (CallCount <= CallIndex || CallCount > RNAssistant.Core.ModelProtocol.ConversationResponseSchemaBuilder.MaximumToolCalls))
+                throw new ArgumentException("Call index exceeds its accepted batch.");
         }
     }
 

@@ -40,6 +40,7 @@ namespace RNAssistant.Core.ModelProtocol
                 if (response.ToolCalls.Count != 1 || string.IsNullOrWhiteSpace(message.ToolCallId) ||
                     string.IsNullOrWhiteSpace(message.ToolName) || message.AcceptedCallOrigin == null ||
                     string.IsNullOrWhiteSpace(message.AcceptedCallOrigin.ModelAttemptId) ||
+                    !message.AcceptedCallOrigin.CallCount.HasValue ||
                     message.ToolResultProtocolVersion != ToolResultWire.CurrentVersion ||
                     message.ToolResultRole != ToolResultRoles.User ||
                     response.ToolCalls[0].Name != message.ToolName)

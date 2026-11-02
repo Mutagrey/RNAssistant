@@ -63,7 +63,7 @@ namespace RNAssistant.Core.ModelProtocol
             catch (JsonException) { return null; }
         }
 
-        public static string RuntimeFeedback(AgentModelRequest request)
+        public static JObject RuntimeFeedback(AgentModelRequest request)
         {
             var feedback = new JObject { ["type"] = "decision_rejected" };
             if (!string.IsNullOrWhiteSpace(request.CompletionFeedback)) feedback["reason"] = request.CompletionFeedback;
@@ -73,7 +73,7 @@ namespace RNAssistant.Core.ModelProtocol
                 feedback["reflections_remaining"] = Math.Max(0, request.ReflectionLimit.Value - request.ReflectionsUsed);
                 feedback["instruction"] = "Use reflection only when useful and within the remaining allowance; otherwise execute or finish.";
             }
-            return feedback.Count == 1 ? null : feedback.ToString(Formatting.None);
+            return feedback.Count == 1 ? null : feedback;
         }
 
         public static LlmRequestOptions CreateRequestOptions(string responseMode, IEnumerable<ToolCatalogEntry> tools,

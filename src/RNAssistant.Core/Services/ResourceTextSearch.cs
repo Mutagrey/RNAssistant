@@ -35,12 +35,13 @@ namespace RNAssistant.Core.Services
             token.ThrowIfCancellationRequested();
             if (request == null || string.IsNullOrEmpty(request.Query) || request.Query.Length > 500 ||
                 request.Limit < 1 || request.Limit > 50 || (request.Mode != "literal" && request.Mode != "regex") ||
-                string.IsNullOrEmpty(request.Target) == string.IsNullOrEmpty(request.Scope) ||
-                request.Query.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                string.IsNullOrEmpty(request.Target) == string.IsNullOrEmpty(request.Scope))
                 throw Invalid("Select one target or scope and a nonempty single-line query, mode literal/regex, limit 1–50.");
             RNAssistant.Core.Tools.ResourceTextMatcher matcher;
             try { matcher = new RNAssistant.Core.Tools.ResourceTextMatcher(request.Query, request.Mode, request.MatchCase); }
-            catch (RNAssistant.Core.Tools.TextPatternException ex) { throw Invalid(ex.Message); }
+            catch (RNAssistant.Core.Tools.TextPatternException ex)
+            { throw new ResourceRequestException(ex.Message, ex.ErrorCode == "multiline_pattern_unsupported"
+                ? "resource_search_multiline_unsupported" : "resource_search_invalid", false); }
             var items = sources.Items.OrderBy(x => x.Target, StringComparer.Ordinal).ToList();
             if (items.Select(x => x.Target).Distinct(StringComparer.Ordinal).Count() != items.Count)
                 throw Invalid("Search targets are ambiguous.");

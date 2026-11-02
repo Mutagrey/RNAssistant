@@ -102,7 +102,8 @@ ModelProtocol.
 - Protocol version меняется атомарно: parser, schema, prompts, history preflight и
   consumers переключаются вместе, без dual-write и скрытой нормализации.
 - Текущий model response — [conversation-response v8](protocols/CONVERSATION_RESPONSE_V8.md):
-  `action`, `reason`, поля действия и `message` последним; вызов содержит только
+  `action`, `reason`, поля действия и `message` последним, если он присутствует;
+  для execute/reflection `message` необязателен. Вызов содержит только
   `name` и `arguments`. Runtime назначает IDs.
 - `execute` требует непустой `tool_calls`; `reflection` сохраняет решение и
   продолжает ограниченный цикл; `finish` завершает run с честными `results`.

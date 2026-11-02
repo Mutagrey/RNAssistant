@@ -253,9 +253,6 @@ namespace RNAssistant.Office.Tools
             var accepted = _session.Messages.FirstOrDefault(m => m.AcceptedCallOrigin != null && m.ToolCallId == context.Execution.Call.Id);
             if (accepted == null) return; // Manual editor has its explicit owner guard.
             var delivered = accepted.ResourceEvidence ?? new List<ResourceEvidence>();
-            if (_id == ResourceMutationToolCatalog.Patch && delivered.Any(e => e.Resource.Uri == source.Resource.Reference.Uri) &&
-                !delivered.Any(e => e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision))
-                throw new ResourceRequestException("Source changed after the delivered read.", "source_changed", false);
             var evidence = delivered.Where(e => e.Resource.Uri == source.Resource.Reference.Uri && e.Resource.Revision == source.Resource.Reference.Revision).ToArray();
             if (complete)
             {
@@ -265,21 +262,22 @@ namespace RNAssistant.Office.Tools
                     if (e.Coverage.Start <= covered && e.Coverage.End.HasValue) covered = Math.Max(covered, e.Coverage.End.Value);
                 if (covered == source.Text.Length && evidence.Any(e => e.Complete && e.Coverage.End == covered)) return;
             }
-            else if (evidence.Length > 0)
+            else if (_id == ResourceMutationToolCatalog.Patch)
             {
-                if (_id != ResourceMutationToolCatalog.Patch) return;
-                var plan = SourcePatch(source.Text, source.Resource.Reference, context);
-                if (plan.Edits.All(edit => evidence.Any(e => e.Complete && e.Coverage.Kind == ResourceCoverageKinds.Whole ||
-                    e.Coverage.Kind == ResourceCoverageKinds.CharacterRange && e.Coverage.Start <= edit.Offset &&
-                    e.Coverage.End >= edit.Offset + edit.Before.Length))) return;
+                bool staleExcerpt;
+                var excerpts = CurrentVbaExcerptRanges(accepted, source.Text, source.Resource.Reference, out staleExcerpt);
+                if (evidence.Length > 0 || excerpts.Count > 0)
+                { SourcePatch(source.Text, source.Resource.Reference, context); return; }
+                if (staleExcerpt || delivered.Any(e => e.Resource.Uri == source.Resource.Reference.Uri))
+                    throw new ResourceRequestException("Source changed after the delivered read; read the relevant current lines before patching.", "source_changed", false);
             }
-            if (!complete && _id == ResourceMutationToolCatalog.Patch && CurrentVbaExcerptRanges(accepted, source.Text, source.Resource.Reference).Count > 0)
-            { SourcePatch(source.Text, source.Resource.Reference, context); return; }
+            else if (evidence.Length > 0) return;
             throw new ResourceRequestException(complete ? "core.write requires complete current source in model context; read it first." : "Read the current source before changing it.", "source_observation_required", false);
         }
 
-        private List<Tuple<long, long>> CurrentVbaExcerptRanges(ChatMessage accepted, string text, ResourceRef reference)
+        private List<Tuple<long, long>> CurrentVbaExcerptRanges(ChatMessage accepted, string text, ResourceRef reference, out bool stale)
         {
+            stale = false;
             var observed = new List<Tuple<long, long>>();
             ResourceAddress current;
             if (!ResourceUri.TryParse(reference.Uri, out current) || current.Provider != "vba" || current.Segments.Count < 3) return observed;
@@ -292,7 +290,7 @@ namespace RNAssistant.Office.Tools
                     !int.TryParse(address.Segments[3], out first) || !int.TryParse(address.Segments[4], out end)) continue;
                 if (_gateway.Authority == null || new EvidenceStateReducer().Reduce(evidence,
                     _gateway.Authority.CaptureMany(new[] { evidence.ScopeId })).State != EvidenceState.Current)
-                    throw new ResourceRequestException("The delivered VBA excerpt is no longer current.", "source_changed", false);
+                { stale = true; continue; }
                 var excerpt = _gateway.ReadObservedText(evidence);
                 if (excerpt == null) continue;
                 var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
@@ -460,7 +458,8 @@ namespace RNAssistant.Office.Tools
             {
                 var ranges = TextPatch.Coverage((accepted.ResourceEvidence ?? new List<ResourceEvidence>()).Where(e =>
                     e.Resource.Uri == reference.Uri && e.Resource.Revision == reference.Revision));
-                if (ranges != null && vba) ranges = ranges.Concat(CurrentVbaExcerptRanges(accepted, source, reference)).ToArray();
+                bool staleExcerpt;
+                if (ranges != null && vba) ranges = ranges.Concat(CurrentVbaExcerptRanges(accepted, source, reference, out staleExcerpt)).ToArray();
                 patch = patch.WithCoverage(ranges);
             }
             return TextEditPlan.Patch(source, patch, token,

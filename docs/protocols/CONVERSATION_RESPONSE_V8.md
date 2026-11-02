@@ -2,7 +2,7 @@
 
 Status: **current production contract**. Host-neutral integration is implemented; full Harness, real-model and Windows/Office/WebView2 qualification remain open.
 Response protocol is 8, reference contract revision is 4, new chat stream format
-is 8, and built-in prompt schema is 67. Formats 6 and 7 remain read-only history;
+is 8, and built-in prompt schema is 69. Formats 6 and 7 remain read-only history;
 intermediate 9/10 candidates were never deployed and have no compatibility path.
 Earlier format-8 histories with missing/older ReferenceContractVersion are read-only;
 new chats persist revision 4. Incompatible continuations are not hydrated or resumed;
@@ -17,7 +17,7 @@ routine steps. If supplied it is a string (including `""`), never null.
 `finish.message` must contain a nonblank answer.
 No Markdown, duplicate keys, model-owned IDs or extra fields are accepted.
 
-Prompt schema 67 shares the fresh-call rule between object output, strict-schema
+Prompt schema 69 shares the fresh-call rule between object output, strict-schema
 instructions/field descriptions and format repair: only `name` and object
 `arguments` belong to a new call. Historical `id`, `tool_call_id`, `type` and
 `function` are runtime/transport fields, not response examples to copy. This
@@ -31,9 +31,9 @@ descriptions (`ModelProtocolWire` owns it):
 | Field | Writing rule | Runtime constraint |
 | --- | --- | --- |
 | `reason` | One short sentence explaining this action; no extended analysis, plan, logs or copied arguments. | Nonblank string. |
-| `decision` | One or two short sentences stating the interpretation and next step. | Nonblank string, reflection only. |
+| `decision` | Free-form reasoning summary, usually a few short sentences or bullets: relevant facts/uncertainty, alternatives when useful, chosen direction and check. No mandatory outline or hard length limit; may revise overall strategy. | Nonblank string, reflection only. |
 | `results[].criterion` | Short statement of one original user requirement. | Nonblank string, finish only. |
-| `execute/reflection.message` | Omit for routine continuation; otherwise one or two short progress sentences. | Optional string; may be empty, never null. |
+| `execute/reflection.message` | Omit by default, including the first action. Use one or two short sentences for important findings, changed approach, blockers or a meaningful result; routine actions already appear in UI. | Optional string; may be empty, never null. |
 | `finish.message` | Useful final answer, explanation and limitations, proportional to the user's request. | Nonblank string. |
 
 These are writing instructions, not hard character limits: schema and parser do
@@ -185,13 +185,46 @@ with `batch_compacted:true`, original index, call and result; runtime does not i
 a smaller assistant decision. Full latest batches are retained together. Inspector
 keeps source-message links for grouped exchanges and the exact serialized request.
 
-Service data is typed JSON (`tool_results`, `format_repair`, `runtime_context`,
-`decision_rejected`, `resource_observation`, `completed_operation`). Tool data and
+Service data is typed JSON (`tool_results`, `format_repair`, `tool_pack_state`,
+`decision_rejected`, `resource_observation`, `completed_operation`, `context_summary`, `context_claims`). Tool data and
 quoted rejected content are not instructions. `format_repair` and `decision_rejected` request a specific correction;
 quoted rejected content and tool data remain data. `format_repair.dispatched:false`
 identifies an unaccepted attempt and never refers to the previous valid result.
 The default is three response attempts including the first; two consecutive exact
 repetitions of the same invalid response stop early. Network recovery is separate.
+An intervening truncated response breaks that sequence and retains its own bounded
+output-limit correction. `completionFeedback` inside runtime context is a JSON
+object in both Office and Workspace, never a JSON-encoded string. The request cache
+compares its value and freezes a detached copy.
+
+### Runtime presentation and message roles — 2026-11-02
+
+At the user's request, the runtime context uses the earlier Markdown/YAML presentation:
+`# RUNTIME_CONTEXT`, Environment metadata, Available now tools, a filtered Load on
+demand catalog and Callable tool definitions. JSON-object mode supplies exact JSON
+argument schemas there; strict mode replaces only that section with the location of
+the supplied response schema. Accepted JSON history and typed repair/results do not change.
+Nested feedback stays a JSON object value on its YAML line, without double encoding.
+
+| Message | API role / ownership |
+| --- | --- |
+| Base instructions, runtime context, selected skill | Configured instruction role; developer by default |
+| Actual user input | user; preserved as supplied |
+| Accepted execute/reflection/finish | assistant; model-authored JSON decision |
+| tool_results, completed_operation, resource_observation | user; runtime-supplied data, not new human requests |
+| format_repair, tool_pack_state | user; explicit runtime correction/admission |
+| context_summary, context_claims | user; historical reference data; individual claims retain their original sourceRoles |
+
+Verified after-source must never be presented as a model-authored assistant message.
+Compaction preserves its required summary and original claim provenance. UI-only
+activities remain excluded from the request. Native tools remain a separate diagnostic
+profile, not a reinterpretation of these production roles.
+
+Agent/Workspace share task-planning and task-approach guidance: bounded discovery,
+an outcome-based Task List for dependent stages, updates from actual results, and
+proportionate verification. Simple tasks skip tracking. Reflection is optional and
+can synthesize observations, compare approaches or revise the overall plan; it has
+no mandatory internal template and does not replace execution or evidence.
 
 Every **new** execute proposal must still include nonempty `tool_calls` inside
 its decision JSON in content (inside `response` in schema mode). An `action/reason/message` object without calls is invalid; runtime never removes
@@ -341,7 +374,10 @@ Tool Result v2 records with user transport; the final request batches them as ab
 siblings against the same run, step and model attempt with consecutive indexes;
 an index reset cannot start a second batch before the preceding results.
 Reference-contract revisions before 4 and incompatible format-8 histories cannot continue;
-old chats remain readable, without automatic conversion or deletion. no legacy inference,
+old chats remain readable, without automatic conversion or deletion. An absent
+legacy `AcceptedToolCallOrigin.CallCount` remains unknown during deserialization;
+it is never guessed as one. Current execution and batch projection require the
+recorded count, including externally stored calls. No legacy inference,
 dual-write or automatic migration is allowed. Windows x64 + Office x64 +
 WebView2 and real-model qualification remain open.
 
@@ -363,3 +399,23 @@ retire that preview; it is never a durable store or execution authority. CLI rec
 these progress events through its callback. A desktop attached to a run in another
 process still sees persisted progress; cross-process token streaming and history
 paging beyond the existing 100-message window remain separate open delivery work.
+
+## JSON-profile implementation checklist — 2026-11-02
+
+This checks the latest approved JSON-profile plan; it does not close the older
+diagnostics proposal's full roadmap or real-endpoint qualification.
+
+| Plan item | Implementation / verification boundary |
+| --- | --- |
+| One production history profile | Accepted JSON decisions and user-role result batches; synthetic native history removed. |
+| Explicit output transport | `json_object` default; `json_schema` selected explicitly; unsupported schema stops without fallback. |
+| Optional nonfinal message | Parser, schema, accepted history and preview agree; finish still requires an answer. |
+| Runtime identities | Canonical IDs/T stay internal; fresh and historical calls contain only name/arguments. |
+| Batch pairing and compaction | Original order/count restored; results use call_index; partial old batches become explicit receipts. |
+| Structured correction | Typed format repair quotes bounded rejected content; private provider reasoning stays out; runtime feedback is an object. |
+| Bounded retries | Default three responses, consecutive identical rejection stop, separate provider and truncation budgets. |
+| Diagnostic verdicts | Content, ID visibility, pairing, schema and two-exchange native cycle are separate; scripted transport only. |
+| Qwen rendering | Pinned offline template and declared local adapter; no inference or deployed-template claim. |
+| Settings and preview | Shared form/viewer and acknowledged next-run save; obsolete controls removed. |
+| Migration | Reference revision 4/result v2; old history remains readable, cannot execute, and is never rewritten. |
+| Qualification | Targeted host-neutral regression checks; live models, Windows/Office/WebView2 and the full Harness remain open. |

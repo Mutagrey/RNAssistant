@@ -5,8 +5,11 @@ and format-8 execution streams with [typed short references](decisions/ADR-0018-
 Formats 6/7 remain read-only. Intermediate 9/10 candidates have no compatibility path.
 Format-8 history must satisfy the current accepted-call and reference contract. Dated v7 audit and qualification records below
 are historical and do not define the current wire contract. The production JSON
-profile uses reference revision 4 / prompt schema 67: calls stay in content,
+profile uses reference revision 4 / prompt schema 69: calls stay in content,
 results use typed user-role batches and no automatic schema fallback exists.
+The runtime context retains Markdown/YAML with separate callable/loadable catalogs;
+the [role map](protocols/CONVERSATION_RESPONSE_V8.md#runtime-presentation-and-message-roles--2026-11-02)
+distinguishes assistant decisions from supplied source, summaries and tool results.
 Earlier transport matrices and qualification results below describe their dated
 implementations, not current endpoint qualification.
 

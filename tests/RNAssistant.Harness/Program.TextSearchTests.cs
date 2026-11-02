@@ -115,6 +115,30 @@ namespace RNAssistant.Harness
             var result = new ResourceTextSearch().Search(request, sources(), CancellationToken.None);
             AssertEqual(2, result.Matches.Count, "language-independent regex");
             AssertEqual(2, result.Matches[0].StartLine.Value, "regex line coordinate");
+            body = "Case xlXYScatterSmooth, _\r\n    xlXYScatterSmoothNoMarkers\r\n";
+            request.Query = @"xlXYScatterSmooth, _";
+            AssertEqual(1, new ResourceTextSearch().Search(request, sources(), CancellationToken.None).Matches.Count,
+                "the photographed single-line VBA fragment is searchable");
+            foreach (var query in new[] { @"xlXYScatterSmooth, _\r?\n\s+xlXYScatterSmoothNoMarkers",
+                @"_\n", @"_\x0a", @"_\u000A", @"_\cJ", "_\r\n", @"_[\r\n]+" })
+            {
+                request.Query = query;
+                var failure = RuntimeThrows<ResourceRequestException>(() =>
+                    new ResourceTextSearch().Search(request, sources(), CancellationToken.None));
+                AssertEqual("resource_search_multiline_unsupported", failure.ErrorCode,
+                    "unsupported newline patterns cannot report a complete zero-match search");
+                AssertContains(failure.Message, "core.patch", "the error gives a supported multiline editing route");
+            }
+            foreach (var query in new[] { @"[^\r\n]+", @"[^\n]+", @"xlXYScatterSmooth,\s+_" })
+            {
+                request.Query = query;
+                AssertTrue(new ResourceTextSearch().Search(request, sources(), CancellationToken.None).Matches.Count > 0,
+                    "ordinary line-local character classes and whitespace remain supported");
+            }
+            body = @"literal \n and \r";
+            request.Query = @"\\n";
+            AssertEqual(1, new ResourceTextSearch().Search(request, sources(), CancellationToken.None).Matches.Count,
+                "an escaped backslash searches literal backslash-n, not a newline");
             request.Query = "a+"; request.Limit = 1; body = "aaa";
             var nonoverlapping = new ResourceTextSearch();
             result = nonoverlapping.Search(request, sources(), CancellationToken.None);

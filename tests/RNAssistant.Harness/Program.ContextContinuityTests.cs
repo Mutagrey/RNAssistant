@@ -149,8 +149,16 @@ namespace RNAssistant.Harness
             var session = new ChatSession { ActiveContextCheckpointId = checkpoint.Id,
                 ContextCheckpoints = new List<ContextCheckpoint> { checkpoint } };
             var otherPack = new ModelAuthoritySnapshot(resources, "pack2", new SkillCatalogSnapshot(null), null, 2);
-            var projected = compiler.Compile(otherPack, new ChatMessage[0], ContextCompactionService.BuildActiveWindow(session),
+            var activeSummary = ContextCompactionService.BuildActiveWindow(session);
+            AssertEqual("user", activeSummary[0].Role, "summary is supplied historical context, not a new assistant answer");
+            AssertEqual("context_summary", (string)JObject.Parse(activeSummary[0].Content)["type"], "summary has an explicit service type");
+            var projected = compiler.Compile(otherPack, new ChatMessage[0], activeSummary,
                 null, new ToolCatalogEntry[0], new AppSettings(), 10000);
+            var claimMessage = projected.Messages.Single(message => message.ContextClaims.Count > 0);
+            var claimWire = JObject.Parse(claimMessage.Content);
+            AssertEqual("user", claimMessage.Role, "runtime supplies claims as data");
+            AssertEqual("context_claims", (string)claimWire["type"], "claims cannot resemble an assistant action envelope");
+            AssertEqual("tool", (string)claimWire["claims"][0]["sourceRoles"][0], "claim provenance still identifies the original tool source");
             var text = string.Join("\n", projected.Messages.Select(m => m.Content));
             AssertContains(text, "STABLE_OBSERVATION", "unrelated tool admission cannot erase a resource fact");
             AssertContains(text, "SKILL_CONTEXT_NOTICE", "capability notice survives claim rendering");

@@ -60,7 +60,7 @@ namespace RNAssistant.Core.Tools
                     properties["matchCase"] = new JObject { ["description"] = "Identical case sensitivity used for core.search; default false.", ["type"] = "boolean" };
                     properties["expectedMatches"] = new JObject { ["description"] = "Exact completed search count, checked again before dispatch.", ["type"] = "integer", ["minimum"] = 1, ["maximum"] = 10000 };
                     required.Add("query"); required.Add("replacement"); required.Add("expectedMatches");
-                    description = "Replace all literal or line-oriented .NET regex matches in one resource, using the exact completed core.search snapshot and parameters. A changed source/count fails before writing. Zero-length replacement matches are rejected; use core.patch for insertion. This is text replacement, including matching comments/strings, not semantic rename.";
+                    description = "Replace all literal or line-oriented .NET regex matches in one resource, using the exact completed core.search snapshot and parameters. Wait for that search result before returning core.replace in the next response. " + ResourceTextMatcher.LineSearchGuidance + " A changed source/count fails before writing. Zero-length replacement matches are rejected; use core.patch for insertion. This is text replacement, including matching comments/strings, not semantic rename.";
                 }
                 else if (id == Move || id == Copy)
                 {

@@ -45,7 +45,7 @@ namespace RNAssistant.Office.Services
         private List<ResourceEvidence> _responseEvidence = new List<ResourceEvidence>();
         private CallableToolSet _toolPack;
         private string _requestStepId;
-        private string _completionFeedback;
+        private JObject _completionFeedback;
         private LlmRunCache _runCache;
 
         private ConversationModelSession(IOfficeApplicationAdapter adapter,
@@ -120,12 +120,12 @@ namespace RNAssistant.Office.Services
 
         internal async Task<ModelProtocolRequest> PrepareRequestAsync(
             string stepId, ModelProtocolCallContext callContext, CancellationToken cancellationToken,
-            string completionFeedback = null)
+            JObject completionFeedback = null)
         {
-            if (_requestStepId != stepId || _completionFeedback != completionFeedback)
+            if (_requestStepId != stepId || !JToken.DeepEquals(_completionFeedback, completionFeedback))
             {
                 _requestStepId = stepId;
-                _completionFeedback = completionFeedback;
+                _completionFeedback = completionFeedback == null ? null : (JObject)completionFeedback.DeepClone();
                 _lastSnapshot = null;
             }
             // Compile at the request boundary, after every accepted terminal

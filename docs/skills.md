@@ -2,6 +2,15 @@
 
 Текущий контракт Core, patch и имён: [Text mutations](text-mutations.md).
 
+VBA guidance (`skills.vba.code.editing`, owner: `BuiltInSkillProvider`) requires
+scope/declaration checks for introduced names, actual host members/constants,
+complete helper definitions, explicit variable types and VBA rather than VB.NET
+syntax. New modules retain `Option Explicit`; see Microsoft's
+[Option Explicit](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/option-explicit-statement)
+and [variable declarations](https://learn.microsoft.com/en-us/office/vba/language/reference/user-interface-help/dim-statement).
+The skill separates source read-back from compilation/runtime validation; prompting
+is not a VBA compiler and does not qualify generated code on Windows.
+
 ## Status and boundary
 
 Task-scoped skill loading and dependency-bound tools are implemented without a new Code Mode.

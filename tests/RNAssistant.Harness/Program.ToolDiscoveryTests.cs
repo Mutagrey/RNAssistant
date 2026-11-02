@@ -782,8 +782,9 @@ namespace RNAssistant.Harness
                     .ToList();
                 AssertTrue(loadedCallableNames.Contains(optionalId, StringComparer.OrdinalIgnoreCase),
                     "strict response schema includes exact loaded tool as a callable name");
-                AssertTrue(requests[2][0].Content.IndexOf("\"parameters\"", StringComparison.Ordinal) < 0 &&
-                    requests[2][0].Content.Contains("\"safety\""),
+                var loadedRuntime = FlattenSimple(requests[2]);
+                AssertTrue(loadedRuntime.Contains(RuntimeContextPrompt.SchemaDefinitions) &&
+                    loadedRuntime.Contains("policy:"),
                     "strict wire prompt keeps callable metadata while response schema carries arguments");
                 AssertContains(FlattenSimple(requests[1]), "Tool schema is not loaded: " + optionalId,
                     "local parser distinguishes an unloaded known tool during repair");
@@ -791,10 +792,12 @@ namespace RNAssistant.Harness
                     "repair directs specialized tools through the skill loader");
                 AssertContains(FlattenSimple(requests[1]), "If that load was refused, resolve its reported blocker",
                     "unloaded-tool repair does not override an admission refusal");
-                var repair = requests[1].Single(message =>
-                    (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal));
-                AssertTrue(!repair.Content.Contains("core.tools.read"),
-                    "generic repair must not contradict the skill-only recovery route");
+                var repair = requests[1].Select(message => ModelProtocolWire.ReadServiceMessage(message, "format_repair"))
+                    .Single(value => value != null);
+                AssertContains((string)repair["error"], "core.skills.load", "repair preserves the skill-only recovery route");
+                AssertTrue(JToken.DeepEquals(JObject.Parse(earlyWrite),
+                    JObject.Parse((string)repair["rejected_response"]["content"])["response"]),
+                    "repair retains the actual rejected strict-schema envelope separately from accepted history");
                 AssertContains(FlattenSimple(requests[2]), "SELECTED_SKILL skills.html.workspace.authoring",
                     "complete instructions reach the same request as specialized tools");
                 AssertTrue(session.LastRun.SelectedSkills.Any(skill => skill.Id == "skills.html.workspace.authoring"),
@@ -846,10 +849,9 @@ namespace RNAssistant.Harness
                     {
                         AssertContains(FlattenSimple(messages), "\"admitted\":true", "batched discovery admits both exact schemas together");
                         var receipts = 0;
-                        foreach (var message in messages)
+                        foreach (var wire in messages.SelectMany(message =>
+                            (ModelProtocolWire.ReadServiceMessage(message, "tool_results")?["results"] as JArray ?? new JArray()).OfType<JObject>()))
                         {
-                            if (!(message.Content ?? "").StartsWith("TOOL_RESULT:\n", StringComparison.Ordinal)) continue;
-                            var wire = JObject.Parse(message.Content.Substring("TOOL_RESULT:\n".Length));
                             if ((string)wire["name"] != CapabilityToolCatalog.ReadToolId) continue;
                             receipts++;
                             AssertTrue(wire["data"]["descriptor"] == null && (bool?)wire["data"]["schemaInRequest"] == true,
@@ -1374,15 +1376,18 @@ namespace RNAssistant.Harness
                     null,
                     CancellationToken.None).GetAwaiter().GetResult())
                 {
-                    foreach (var tool in optionalTools)
+                    for (var index = 0; index < optionalTools.Length; index++)
                     {
+                        var tool = optionalTools[index];
                         var callId = "read_" + tool.Id;
                         modelSession.AppendToolCall(new AgentToolCall
                         {
                             Id = callId,
                             Name = CapabilityToolCatalog.ReadToolId,
                             Arguments = new Dictionary<string, object> { { "id", tool.Id } }
-                        }, string.Empty, "Read the requested capability.", null, FixtureCallOrigin("overflow-step"));
+                        }, string.Empty, "Read the requested capability.", null,
+                            FixtureCallOrigin("overflow-step", "overflow-attempt", index, optionalTools.Length));
+                        session.Messages.Last().RunId = session.LastRun.RunId;
                         var command = Command(CapabilityToolCatalog.ReadToolId, "id", tool.Id);
                         command.ToolCallId = callId;
                         var result = executor.ExecuteManual(command, catalog, settings, false, false);
@@ -1402,15 +1407,7 @@ namespace RNAssistant.Harness
                                 accepted.Select(message => new ToolCall(message.ToolCallId, message.ToolName, "{}")))),
                         accepted, updated: session.Messages.Where(message => message.AcceptedCallOrigin == null)));
                     modelSession.EndResponse("after-overflow");
-                    if (oversized)
-                    {
-                        // A rejected pack does not erase the complete read evidence.
-                        // If that evidence also exceeds the small context, refuse
-                        // request construction instead of silently truncating it.
-                        RuntimeThrows<PromptBudgetExceededException>(() => modelSession.CreateRequest("blocked-overflow",
-                            new ModelProtocolCallContext(new string[0])));
-                        settings.ContextWindowOverrideTokens = 131072;
-                    }
+                    if (oversized) settings.ContextWindowOverrideTokens = 131072;
                     var request = modelSession.CreateRequest("after-overflow",
                         new ModelProtocolCallContext(new string[0]));
                     AssertToolPackWireFits(request, oversized ? "rejected extension" : "accepted extension");
@@ -1428,8 +1425,8 @@ namespace RNAssistant.Harness
                     AssertTrue(optionalTools.All(candidate => !request.CallableTools.Any(tool => tool.Id == candidate.Id)),
                         "overflow publishes none of the requested schemas; callable=" +
                         string.Join(",", request.CallableTools.Select(tool => tool.Id).ToArray()));
-                    var state = request.AcceptedMessages.Last(message =>
-                        (message.Content ?? string.Empty).StartsWith("TOOL_PACK_STATE:", StringComparison.Ordinal));
+                    var state = request.AcceptedMessages.Last(message => ModelProtocolWire.ReadServiceMessage(message, "tool_pack_state") != null);
+                    AssertEqual("user", state.Role, "admission is runtime data, not an assistant decision");
                     AssertContains(state.Content, "\"admitted\":false", "runtime rejects the candidate before publication");
                     AssertContains(state.Content, "tool_pack_budget_exceeded", "overflow is visible to the model");
                     AssertContains(state.Content, "\"requestedSchemas\":null",
@@ -1655,6 +1652,8 @@ namespace RNAssistant.Harness
                 var evidence = ReadSchemaEvidence(executor, catalog, optional.Id, "durable-read");
                 evidence.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
                 evidence.RunId = session.LastRun.RunId;
+                // Manual fixture evidence seeds admission, not an accepted model exchange.
+                evidence.ExcludeFromModelContext = true;
                 session.Messages.Add(evidence);
                 var store = new ChatStore(FixturePaths.Value);
                 store.Save(session);
@@ -1731,8 +1730,11 @@ namespace RNAssistant.Harness
                     var request = nextTurn.CreateRequest("next-step", new ModelProtocolCallContext(new string[0]));
                     AssertEqual(2, request.CallableTools.Count(tool => tool.Id == optional.Id || tool.Id == secondOptional.Id),
                         "unchanged exact admissions remain callable in the next chat turn");
-                    AssertContains(FlattenSimple(request.AcceptedMessages), "\"schemaLoaded\":true",
-                        "current capability metadata reflects carried callable schemas");
+                    var runtime = request.AcceptedMessages.Single(RuntimeContextPrompt.IsRuntimeContext).Content;
+                    var available = runtime.Substring(runtime.IndexOf("## Capabilities — available now", StringComparison.Ordinal));
+                    available = available.Substring(0, available.IndexOf("## Capabilities — load on demand", StringComparison.Ordinal));
+                    AssertContains(available, "`" + optional.Id + "`", "first carried schema is available now");
+                    AssertContains(available, "`" + secondOptional.Id + "`", "second carried schema is available now");
                 }
                 var inspected = new PromptContextInspectorService(adapter, FixturePaths.Value,
                     executor.ResourceAuthority, executor.Payloads, EventStore(store)).Inspect(reloaded,
@@ -1769,8 +1771,9 @@ namespace RNAssistant.Harness
                     var request = changed.CreateRequest("changed-step", new ModelProtocolCallContext(new string[0]));
                     AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id),
                         "changed pinned schema fails closed to the deterministic core");
-                    AssertContains(FlattenSimple(request.AcceptedMessages), "TOOL_PACK_RESTORE_STATE",
-                        "schema drift is visible without blocking a confirmed terminal result");
+                    var restore = request.AcceptedMessages.Single(message =>
+                        (string)ModelProtocolWire.ReadServiceMessage(message, "tool_pack_state")?["stage"] == "restore");
+                    AssertEqual("user", restore.Role, "schema drift is supplied runtime data");
                 }
 
                 store.Save(reloaded);
@@ -1795,8 +1798,8 @@ namespace RNAssistant.Harness
                     AssertTrue(!request.CallableTools.Any(tool => tool.Id == optional.Id) &&
                         request.CallableTools.Any(tool => tool.Id == secondOptional.Id),
                         "a later accepted core rebase replaces the broken chain without resurrecting drifted schemas");
-                    AssertTrue(FlattenSimple(request.AcceptedMessages).IndexOf(
-                        "TOOL_PACK_RESTORE_STATE", StringComparison.Ordinal) < 0,
+                    AssertTrue(!request.AcceptedMessages.Any(message =>
+                        (string)ModelProtocolWire.ReadServiceMessage(message, "tool_pack_state")?["stage"] == "restore"),
                         "a valid accepted rebase clears the prior reconstruction warning");
                 }
             });
@@ -1843,7 +1846,7 @@ namespace RNAssistant.Harness
 
                 session.LastRun = new ChatRunRecord { RunId = "small-run", TurnId = "small-turn" };
                 var settings = new AppSettings { AgentResponseMode = AgentResponseModes.JsonSchema,
-                    ContextWindowOverrideTokens = 12000, MaxTokens = 512, AutoCompressContext = false };
+                    ContextWindowOverrideTokens = 16384, MaxTokens = 512, AutoCompressContext = false };
                 AssertToolPackBudgetFixture(catalog, settings, oversized);
                 if (oversized)
                 {

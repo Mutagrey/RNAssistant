@@ -21,6 +21,37 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void HistoryProtocolLegacyBatchRemainsReadable()
+        {
+            WithTempPaths(paths =>
+            {
+                var legacy = new ChatSession { ReferenceContractVersion = 3, Host = "Workspace", DocumentKey = "legacy-batch" };
+                for (var index = 0; index < 2; index++)
+                {
+                    var origin = JsonConvert.DeserializeObject<AcceptedToolCallOrigin>(new JObject {
+                        ["StepId"] = "step", ["ModelAttemptId"] = "attempt", ["CallIndex"] = index
+                    }.ToString(Formatting.None));
+                    var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall { Id = "old-" + index, Name = "test.read" },
+                        null, "Read.", null, "user", new AcceptedToolCallOrigin("step", "attempt", index, 2));
+                    call.AcceptedCallOrigin = origin;
+                    legacy.Messages.Add(call);
+                }
+                foreach (var call in legacy.Messages)
+                {
+                    AssertTrue(JObject.FromObject(call.AcceptedCallOrigin)["CallCount"] == null, "missing legacy batch size is not invented");
+                    AssertTrue(!ConversationResponseHistoryReader.Read(call).Success, "unknown batch size cannot enter current execution");
+                }
+                var store = new ChatStore(paths);
+                store.Save(legacy);
+                var reopened = new ChatStore(paths).Load(legacy.Id);
+                AssertEqual(2, reopened.Messages.Count, "both old batch members remain readable after cold load");
+                AssertEqual(1, reopened.Messages[1].AcceptedCallOrigin.CallIndex, "legacy call order is preserved");
+                AssertTrue(!reopened.UsesCurrentProtocol, "reading old history never upgrades its contract");
+                try { ConversationRunPolicy.RequireCurrentSession(reopened); throw new Exception("Legacy batch executed."); }
+                catch (InvalidOperationException) { }
+            });
+        }
+
         private static void HistoryProtocolOptionalMessage()
         {
             var migrated = JsonConvert.DeserializeObject<AppSettings>("{\"ToolResultRole\":\"tool\",\"FallbackToJsonObject\":true}");
@@ -31,6 +62,8 @@ namespace RNAssistant.Harness
             var oldJson = new AppSettings { AgentPromptSchemaVersion = 66 };
             oldJson.NormalizeAgentPrompts();
             AssertTrue(!string.IsNullOrEmpty(oldJson.ProtocolMigrationNotice), "old JSON history also announces the new contract");
+            AssertContains(oldJson.SystemPrompt, "Markdown sections, YAML metadata", "migrated prompt describes the requested runtime presentation");
+            AssertTrue(!oldJson.SystemPrompt.Contains("type=runtime_context"), "JSON service envelopes do not redefine runtime presentation");
             var tool = V8ReadTool();
             var context = new ModelProtocolCallContext(new[] { tool.Id });
             var schema = ExpandResponseSchema(JObject.Parse(ConversationResponseSchemaBuilder.Build(new[] { tool }, context)));
@@ -69,6 +102,21 @@ namespace RNAssistant.Harness
             var result = await client.GetResponseAsync(NewProtocolRequest(10), null, CancellationToken.None);
             AssertEqual(2, calls, "two identical invalid answers stop without spending ten attempts");
             AssertEqual(ModelProtocolFailureKind.ProtocolExhausted, result.Failure.Kind, "typed no-progress failure");
+
+            foreach (var repeated in new string[] { null, "invalid JSON" })
+            {
+                calls = 0;
+                client = new ModelProtocolClient((settings, messages, options, progress, token) => {
+                    calls++;
+                    return Task.FromResult(new LlmCompletionResult {
+                        Content = calls == 4 ? V8Envelope() : calls == 2 ? "truncated output" : repeated,
+                        Termination = calls == 2 ? LlmCompletionTermination.OutputLimit : LlmCompletionTermination.Completed
+                    });
+                });
+                result = await client.GetResponseAsync(NewProtocolRequest(5), null, CancellationToken.None);
+                AssertEqual(4, calls, "a different truncated response breaks the identical-rejection sequence");
+                AssertTrue(result.Response != null, "nonconsecutive invalid answers do not stop a later valid response");
+            }
         }
 
         private static async Task HistoryProtocolSeparatesResponseAndHistory()
@@ -101,6 +149,7 @@ namespace RNAssistant.Harness
                     AssertContains(projectedMessages[0].Content, ModelProtocolWire.JsonHistoryGuidance, "single history contract");
                     var wire = JArray.FromObject(new LlmMessageBuilder().Build(messages, settings, options).Messages);
                     AssertEqual(4, wire.Count, "two calls and two results become one exchange");
+                    AssertEqual("assistant", (string)wire[2]["role"], "tool calls belong to the model, not to user-supplied data");
                     var decision = JObject.Parse((string)wire[2]["content"]);
                     var output = JObject.Parse((string)wire[3]["content"]);
                     AssertEqual(2, ((JArray)decision["tool_calls"]).Count, "original batch is restored");
@@ -130,6 +179,7 @@ namespace RNAssistant.Harness
                 AssertTrue(response.Failure == null, "JSON batch request: " + response.Failure?.Message);
                 AssertEqual(frozen, JsonConvert.SerializeObject(request.AcceptedMessages), "canonical history is immutable");
                 var partial = ModelReferenceProjection.Project(new[] { calls[1], results[1] });
+                AssertEqual("user", partial.Single().Role, "a compacted operation is runtime-supplied reference data");
                 AssertEqual("completed_operation", (string)JObject.Parse(partial.Single().Content)["type"], "compacted sibling is an explicit receipt");
             }
         }

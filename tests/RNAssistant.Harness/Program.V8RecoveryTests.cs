@@ -33,6 +33,13 @@ namespace RNAssistant.Harness
         private static string RecoveryFinish()
         { return ModelProtocolWire.WriteAcceptedDecision("finish", "Answer the question.", "Ready.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed); }
 
+        private static JToken RuntimeMetadataValue(string content, string name)
+        {
+            var prefix = name + ": ";
+            var line = content.Split('\n').Single(value => value.StartsWith(prefix, StringComparison.Ordinal));
+            return JToken.Parse(line.Substring(prefix.Length));
+        }
+
         private static void V8RecoveryFinishOutcome()
         {
             foreach (var strict in new[] { false, true })
@@ -45,6 +52,8 @@ namespace RNAssistant.Harness
                 var accepted = JObject.Parse(ModelProtocolWire.WriteAcceptedDecision("finish", "Explain the final answer and limits.",
                     "Final answer with its limitations.", results: new[] { claim }, outcome: outcome));
                 var service = CreateConversationRunService(adapter, executor, (config, messages, options, stream, token) => {
+                    var runtime = messages.First(RuntimeContextPrompt.IsRuntimeContext).Content;
+                    AssertTrue(RuntimeMetadataValue(runtime, "completionFeedback") is JObject, "YAML metadata retains structured feedback, not JSON encoded inside a string");
                     requests.Add(string.Join("\n", messages.Select(message => message.Content)));
                     var response = (JObject)accepted.DeepClone();
                     if (requests.Count == 1) response["message"] = " \t\n";
@@ -116,7 +125,7 @@ namespace RNAssistant.Harness
                 AssertEqual(depth == 0 ? 1 : depth + 2, session.LastRun.IterationsUsed, "inner format retries do not consume kernel iterations or reflection depth");
                 AssertEqual(depth, session.LastRun.KernelState.ConsecutiveReflections, "only accepted reflections count");
                 AssertEqual(depth, session.LastRun.KernelState.Limits.MaxConsecutiveReflections, "run freezes selected depth");
-                AssertContains(requests[depth], "0 remaining", "the request at the cap already asks execute/finish");
+                AssertContains(requests[depth], "\"reflections_remaining\":0", "the request at the cap already asks execute/finish");
                 if (depth == 0) AssertContains(requests[0], "Reflection is disabled for this run", "disabled reflection is explicit before the first attempt");
                 if (depth > 0) AssertContains(requests[depth + 3], "reflection_limit_feedback", "format repair preserves semantic correction");
                 else AssertEqual(1, requests.Count, "disabled reflection needs no correction round trip");
@@ -143,7 +152,7 @@ namespace RNAssistant.Harness
                     OfficeToolCatalog.ForHost("Excel").Concat(executor.GetControllerTools()).ToArray(), null).GetAwaiter().GetResult();
                 AssertEqual("ReflectionDisabled", result.RunViewState.Reason, "disabled reflection fails explicitly");
                 AssertEqual(1, requests.Count, "disabled reflection never requests a correction");
-                AssertContains(requests[0], "Choose execute or finish now", "initial request states available actions");
+                AssertContains(requests[0], "Only execute and finish are available", "initial request states available actions");
                 AssertEqual(0, session.LastRun.KernelState.ConsecutiveReflections, "over-limit proposals were never accepted");
             });
         }
@@ -193,11 +202,11 @@ namespace RNAssistant.Harness
                         "user data is never rewritten by instruction projection");
                     AssertTrue(messages.Any(message => message.Role == "assistant" && message.Content == RecoveryReflection()),
                         "previously accepted reflection history is retained");
-                    var repair = messages.LastOrDefault(message => (message.Content ?? "").StartsWith("FORMAT_REPAIR:\n", StringComparison.Ordinal));
+                    var repair = messages.LastOrDefault(message => ModelProtocolWire.ReadServiceMessage(message, "format_repair") != null);
                     if (repair != null)
                     {
                         repairs++;
-                        AssertDisabledReflectionGuidance((string)JObject.Parse(repair.Content.Substring("FORMAT_REPAIR:\n".Length))["instruction"]);
+                        AssertDisabledReflectionGuidance((string)JObject.Parse(repair.Content)["instruction"]);
                     }
                     if (mode == "fallback" && calls == 2)
                         throw new LlmRequestException(LlmFailureKind.ResponseFormatUnsupported, "schema unsupported during repair");
@@ -207,9 +216,10 @@ namespace RNAssistant.Harness
                         ? SchemaTransport(JObject.Parse(content)).ToString(Formatting.None) : content });
                 });
                 var result = await protocol.GetResponseAsync(request, null, CancellationToken.None);
-                AssertTrue(result.Response != null, "ordinary format repair still works with reflection disabled: " + mode);
-                AssertEqual(mode == "fallback" ? 3 : 2, calls, "bounded repair and explicit fallback");
-                AssertEqual(mode == "fallback" ? 2 : 1, repairs, "repair instructions retain disabled reflection across fallback");
+                if (mode == "fallback") AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "unsupported schema stops without fallback");
+                else AssertTrue(result.Response != null, "ordinary format repair still works with reflection disabled: " + mode);
+                AssertEqual(2, calls, "one format correction and no transport fallback");
+                AssertEqual(1, repairs, "repair instructions retain disabled reflection");
                 foreach (var proposal in new[] { RecoveryReflection(), "{\"action\":\"reflection\"}" })
                 {
                     rejectedProposal = proposal;
@@ -323,6 +333,10 @@ namespace RNAssistant.Harness
                             var request = JObject.Parse(raw);
                             wireRequests.Add(request);
                             var prompt = (string)request["messages"][0]["content"];
+                            var runtimeMessage = request["messages"].First(message =>
+                                ((string)message["content"] ?? "").StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal));
+                            AssertTrue(RuntimeMetadataValue((string)runtimeMessage["content"], "completionFeedback") is JObject,
+                                "workspace sends structured runtime feedback without double encoding");
                             AssertEqual(strict, (string)request.SelectToken("response_format.type") == "json_schema", "selected wire transport");
                             if (strict) {
                                 AssertContains(prompt, ModelProtocolWire.SchemaGuidance, "workspace uses concise schema guidance");
@@ -344,7 +358,7 @@ namespace RNAssistant.Harness
                         var session = service.CreateSession(workspace, "Stream"); var previewSeen = false;
                         var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "fixture",
                             StreamResponses = true, SmartChatTitles = false, AutoCompressContext = false,
-                            ContextWindowOverrideTokens = strict ? 22000 : 131072, MaxConsecutiveReflections = 1,
+                            ContextWindowOverrideTokens = strict ? 24000 : 131072, MaxConsecutiveReflections = 1,
                             AgentResponseMode = strict ? AgentResponseModes.JsonSchema : AgentResponseModes.JsonObject };
                         var result = service.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest {
                             SessionId = session.Id, Message = "Answer directly.", ReasoningEnabled = true }, settings, () => "fixture-key",

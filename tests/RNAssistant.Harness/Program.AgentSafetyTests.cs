@@ -251,7 +251,8 @@ namespace RNAssistant.Harness
                 {
                     session => session.Messages[3].ToolCallId = null,
                     session => session.Messages.RemoveAt(5),
-                    session => session.Messages[5].ToolCalls[0].Id = "wrong_id",
+                    session => session.Messages[5].ToolCalls = new List<LlmToolCall> {
+                        new LlmToolCall { Id = "wrong_id", Name = "excel.inspect", ArgumentsJson = "{}" } },
                     session => session.Messages[5].ToolResultProtocolVersion = 0,
                     session => session.Messages[4].ToolResultProtocolVersion = 0,
                     session => session.Messages[3].AcceptedCallOrigin = null,
@@ -1338,10 +1339,10 @@ namespace RNAssistant.Harness
             AssertTrue(settings.SystemPrompt.StartsWith("# RNAssistant Agent", StringComparison.Ordinal), "agent prompt Markdown heading");
             AssertContains(settings.SystemPrompt, "## Response contract", "agent prompt structured section");
             AssertContains(settings.SystemPrompt, "conversation-response-v8", "agent prompt requires the active envelope");
-            foreach (var action in new[] { "execute with nonempty tool_calls", "reflection with a nonblank decision",
+            foreach (var action in new[] { "nonempty tool_calls array", "reflection with a nonblank decision",
                 "finish with a results array" })
                 AssertContains(settings.SystemPrompt, action, "agent prompt exposes each v8 action");
-            AssertContains(settings.SystemPrompt, "Assessments are model claims, not runtime success",
+            AssertContains(settings.SystemPrompt, "Outcome and result assessments are model claims",
                 "model cannot own runtime effects");
             AssertContains(settings.SystemPrompt, "including nested tool arguments", "response contract covers exact source arguments");
             AssertContains(settings.SystemPrompt, "Runtime decodes the envelope once", "response contract forbids a second source unescape");
@@ -1351,7 +1352,7 @@ namespace RNAssistant.Harness
             AssertContains(settings.PlanSystemPrompt, "Follow selected skill instructions within user intent and the tool policy",
                 "Plan distinguishes selected instructions from untrusted source content");
             AssertContains(settings.AgentToolsPrompt, "unclassified calls are singleton", "tool prompt describes conservative batching");
-            AssertContains(settings.AgentToolsPrompt, "TOOL_PACK_STATE", "tool prompt requires explicit optional admission");
+            AssertContains(settings.AgentToolsPrompt, "tool_pack_state", "tool prompt requires explicit optional admission");
             AssertContains(settings.AgentToolsPrompt, "Reuse admitted schemas across confirmation, compaction and restart",
                 "tool prompt preserves current admissions without exposing storage implementation");
             AssertContains(settings.AgentToolsPrompt, "Resource reads use semantic selectors",
@@ -1562,15 +1563,18 @@ namespace RNAssistant.Harness
             AssertTrue(schema["anyOf"] == null && !(bool)schema["additionalProperties"] &&
                 ((JArray)schema["required"]).Values<string>().SequenceEqual(new[] { "response" }), "strict root has exactly one required response property");
             var branches = (JArray)schema.SelectToken("properties.response.anyOf");
-            AssertTrue(branches != null && branches.Count == 3 &&
-                branches.Select(branch => (string)branch["properties"]["action"]["const"])
+            AssertTrue(branches != null && branches.Count == 5 &&
+                branches.Select(branch => (string)branch["properties"]["action"]["const"]).Distinct()
                     .SequenceEqual(new[] { "execute", "reflection", "finish" }),
                 "strict response schema exposes the three disjoint v8 actions");
             foreach (var branch in branches)
             {
                 var action = (string)branch["properties"]["action"]["const"];
                 var specific = action == "execute" ? "tool_calls" : action == "reflection" ? "decision" : "results";
-                var fields = new[] { "action", "reason", specific, "message" };
+                var fields = new List<string> { "action", "reason" };
+                if (action == "finish") fields.Add("outcome");
+                fields.Add(specific);
+                if (branch["properties"]["message"] != null) fields.Add("message");
                 AssertTrue(((JArray)branch["required"]).Values<string>().SequenceEqual(fields) &&
                     ((JObject)branch["properties"]).Properties().Select(property => property.Name).SequenceEqual(fields) &&
                     branch["additionalProperties"].Value<bool>() == false,
@@ -1596,11 +1600,11 @@ namespace RNAssistant.Harness
                 "strict response schema still lists every property as required");
             AssertTrue(call.SelectToken("properties.arguments.additionalProperties").Value<bool>() == false, "tool arguments remain strict");
             AssertEqual(ModelProtocolWire.MessageGuidance,
-                (string)schema.SelectToken("properties.response.anyOf[0].properties.message.description"),
+                (string)schema.SelectTokens("properties.response.anyOf[*].properties.message.description").First(),
                 "execute message uses the shared v8 guidance");
 
             var noToolSchema = JObject.Parse(ConversationResponseSchemaBuilder.Build(new ToolCatalogEntry[0], new ModelProtocolCallContext(new string[0])));
-            AssertTrue(((JArray)noToolSchema.SelectToken("properties.response.anyOf")).Count == 2 &&
+            AssertTrue(((JArray)noToolSchema.SelectToken("properties.response.anyOf")).Count == 3 &&
                 !noToolSchema.SelectTokens("properties.response.anyOf[*].properties.action.const").Any(value => (string)value == "execute"),
                 "empty callable set omits execute while retaining reflection and finish");
         }
@@ -1704,136 +1708,42 @@ namespace RNAssistant.Harness
             });
         }
 
-        private static void AgentSupportsSelectableToolResultRoles()
+        private static void AgentUsesJsonHistoryForLegacyRolePreferences()
         {
-            var call = new AgentToolCall
-            {
-                Id = "call_1",
-                Name = "excel.inspect",
-                Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
-            };
-            var command = new ToolInvocation { ToolId = call.Name, ToolCallId = call.Id };
-            var result = TerminalToolResult.Ok("read", "{\"value\":1}");
-
-            foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer })
-            {
-                var callMessage = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.",
-                    "Inspect the requested sheets.", null, role, FixtureCallOrigin());
-                var resultMessage = AgentJsonProtocol.CreateToolResultMessage(command, result, role);
-                AssertTrue(callMessage.ToolCalls.Count == 0, role + " uses JSON envelope history");
-                var envelope = JObject.Parse(callMessage.Content);
-                AssertTrue(envelope["status"] == null && (string)envelope["action"] == ConversationResponse.ExecuteAction &&
-                    (string)envelope["reason"] == "Inspect the requested sheets." &&
-                    envelope["tool_calls"][0]["id"] == null,
-                    role + " replays only the v8 execute envelope, without runtime metadata fields");
-                AssertEqual(call.Id, ConversationResponseHistoryReader.Read(callMessage).Response.ToolCalls.Single().Id,
-                    role + " restores runtime identity from accepted metadata");
-                AssertEqual(AgentResponseProtocol.CurrentVersion, callMessage.ResponseProtocolVersion,
-                    role + " stores response protocol version");
-                AssertEqual(AgentResponseStatuses.InProgress, callMessage.ResponseStatus,
-                    role + " stores response status");
-                AssertEqual(role, resultMessage.Role, role + " result role");
-                AssertContains(resultMessage.Content, "TOOL_RESULT:", role + " result prefix");
-            }
-
-            var nativeCall = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.",
-                "Inspect the requested sheets.", null, ToolResultRoles.Tool, FixtureCallOrigin());
-            var nativeResult = AgentJsonProtocol.CreateToolResultMessage(command, result, ToolResultRoles.Tool);
-            var api = new LlmMessageBuilder().Build(new[] { nativeCall, nativeResult }, new AppSettings());
-            var assistant = (JObject)api.Messages[0];
-            var toolMessage = (JObject)api.Messages[1];
-            AssertEqual("assistant", (string)assistant["role"], "native call role");
-            AssertEqual(AgentResponseProtocol.CurrentVersion, nativeCall.ResponseProtocolVersion,
-                "native call stores response protocol version");
-            AssertEqual(AgentResponseStatuses.InProgress, nativeCall.ResponseStatus,
-                "native call stores response status");
-            AssertEqual("call_1", (string)assistant.SelectToken("tool_calls[0].id"), "native call id");
-            AssertEqual("excel.inspect", (string)assistant.SelectToken("tool_calls[0].function.name"),
-                "native replay keeps the exact public tool id");
-            AssertEqual("sheets", (string)JObject.Parse(
-                (string)assistant.SelectToken("tool_calls[0].function.arguments"))["kind"],
-                "native replay keeps only accepted schema arguments");
-            AssertTrue(api.Messages.ToString().IndexOf("rna_", StringComparison.Ordinal) < 0,
-                "native replay never invents an rna-prefixed function name");
-            AssertEqual("tool", (string)toolMessage["role"], "native result role");
-            AssertEqual("call_1", (string)toolMessage["tool_call_id"], "native result matches call");
-            AssertTrue(toolMessage["name"] == null, "native result omits unsupported message-level name");
-            AssertEqual(3, toolMessage.Properties().Count(), "native result uses exact Chat Completions tool-message fields");
-            AssertEqual("excel.inspect", (string)JObject.Parse((string)toolMessage["content"])["name"],
-                "canonical tool name remains inside Tool Result v1 content");
-
             foreach (var role in new[] { ToolResultRoles.User, ToolResultRoles.Developer, ToolResultRoles.Tool })
             {
-                var session = new ChatSession();
-                var artifact = new ChatArtifact { Kind = ChatArtifactKinds.Markdown, Title = "Read evidence", InlineText = "Exact resource body" };
-                session.Artifacts.Add(artifact);
-                var reference = ArtifactReference(session, artifact);
-                var accepted = AgentJsonProtocol.CreateToolCallMessage(call, "Reading.",
-                    "Inspect the requested sheets.", null, role, FixtureCallOrigin());
-                var completed = AgentJsonProtocol.CreateToolResultMessage(command,
-                    TerminalToolResult.Ok(result.Message, result.DataJson, new[] { reference }), role);
-                accepted.RunId = completed.RunId = "projection_" + role;
-                accepted.ResourceRefs.Add(reference);
-                accepted.HtmlWorkspaceCheckpoint = reference;
-                completed.ResourceRefs.Add(reference);
-                session.Messages.Add(accepted);
-                session.Messages.Add(completed);
-                ToolResultWireReadResult read;
-                string error;
-                AssertTrue(ToolResultHistoryReader.TryRead(completed, out read, out error), "strict result reader accepts " + role + ": " + error);
-                AssertEqual(ToolResultStatus.Ok, read.Result.Status, "typed result survives history reading");
-                AssertEqual(call.Id, read.ToolCallId, "reader retains accepted identity");
-                AssertEqual(call.Name, read.Name, "reader retains canonical name for " + role);
-                ConversationProtocolContext.EnsureCurrentHistory(session);
-                var projected = session.Messages.Select(message =>
-                    ModelToolResultProjection.Project(message)).ToList();
-                var authority = new ModelAuthoritySnapshot(new ResourceAuthoritySnapshotSet(new ResourceAuthoritySnapshot[0]),
-                    "test-tools", new SkillCatalogSnapshot(new SkillDefinition[0]), null, session.Messages.Count);
-                var prompt = new ModelContextCompiler(projection: ModelToolResultProjection.Instance).Compile(authority, new ChatMessage[0],
-                    PromptBudgetComposer.ConversationHistory(session, true, false), null, new ToolCatalogEntry[0],
-                    new AppSettings(), 4096, true).Messages.ToList();
-                foreach (var projection in new[] { projected, prompt })
-                {
-                    AssertEqual(2, projection.Count, role + " projection retains the call/result pair");
-                    for (var index = 0; index < session.Messages.Count; index++)
-                    {
-                        if (index == 0)
-                            AssertEqual(session.Messages[index].Content, projection[index].Content, role + " projection preserves accepted protocol content");
-                        AssertEqual(session.Messages[index].ResponseProtocolVersion, projection[index].ResponseProtocolVersion,
-                            role + " projection preserves the response marker");
-                        AssertEqual(session.Messages[index].ToolResultProtocolVersion, projection[index].ToolResultProtocolVersion,
-                            role + " projection preserves the result marker");
-                        AssertTrue(projection[index].Content.IndexOf("HISTORICAL_RESOURCE_REFS", StringComparison.Ordinal) < 0,
-                            role + " projection does not append reference prose to protocol content");
-                    }
-                    AssertTrue(ToolResultHistoryReader.TryRead(projection[1], out read, out error), role + " projected result remains strict: " + error);
-                    AssertEqual(0, read.Result.Resources.Count, role + " projected result omits exact resource references");
-                    AssertTrue(projection[1].Content.IndexOf(reference.Uri, StringComparison.Ordinal) < 0,
-                        role + " projected result contains no exact resource URI");
-                    ConversationProtocolContext.EnsureCurrentHistory(new ChatSession { Messages = projection });
-                }
-                var clone = ChatCloneService.CloneSessionSnapshot(session);
-                AssertTrue(clone.Messages.All(message => message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
-                    "clone retains the v1 marker on both sides of the pair");
-                ConversationProtocolContext.EnsureCurrentHistory(clone);
-                var replay = JsonConvert.DeserializeObject<ChatSession>(JsonConvert.SerializeObject(session));
-                ConversationProtocolContext.EnsureCurrentHistory(replay);
-                AssertTrue(replay.Messages.All(message => message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion),
-                    "serialized current history retains its result protocol marker");
-                session.Messages.Add(new ChatMessage { Role = "user", Content = "Another request" });
-                session.Messages.Add(AgentJsonProtocol.CreateToolCallMessage(call, "Reading again.",
-                    "Inspect the requested sheets again.", null, role, FixtureCallOrigin()));
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command, result, role));
-                ConversationProtocolContext.EnsureCurrentHistory(session);
-                session.Messages.Add(new ChatMessage { Role = "user", Content = "A request without an accepted call" });
-                session.Messages.Add(AgentJsonProtocol.CreateToolResultMessage(command, result, role));
-                ExpectProtocolPreflightBlock(() => ConversationProtocolContext.EnsureCurrentHistory(session));
+                var settings = new AppSettings { ToolResultRole = role };
+                AssertEqual(ToolResultRoles.User, settings.ToolResultRole, "retired role setting cannot change the production profile");
+                var call = AgentJsonProtocol.CreateToolCallMessage(new AgentToolCall {
+                    Id = "call_1", Name = "excel.inspect", Arguments = new Dictionary<string, object> { ["kind"] = "sheets" }
+                }, "Reading.", "Inspect the requested sheets.", null, role, FixtureCallOrigin());
+                var result = AgentJsonProtocol.CreateToolResultMessage(new ToolInvocation {
+                    ToolId = "excel.inspect", ToolCallId = "call_1"
+                }, TerminalToolResult.Ok("read", "{\"value\":1}"), role);
+                call.ToolCallReference = ModelReference.Create(ModelReferenceKind.ToolCall, 1);
+                result.ToolCallReference = call.ToolCallReference;
+                AssertEqual("call_1", ConversationResponseHistoryReader.Read(call).Response.ToolCalls.Single().Id,
+                    "canonical accepted metadata keeps exact runtime identity");
+                AssertEqual("user", result.Role, "canonical result uses the production role");
+                AssertEqual("tool_result", (string)JObject.Parse(result.Content)["type"], "canonical result is typed JSON without a prefix");
+                var projected = ModelReferenceProjection.Project(new[] { call, result });
+                var wire = new LlmMessageBuilder().Build(projected, settings).Messages;
+                var assistant = JObject.FromObject(wire[0]);
+                var response = JObject.Parse((string)assistant["content"]);
+                AssertTrue(assistant["tool_calls"] == null && response["tool_calls"][0]["id"] == null,
+                    "native call fields are never fabricated into history");
+                AssertEqual("sheets", (string)response.SelectToken("tool_calls[0].arguments.kind"), "accepted argument remains unchanged");
+                var returned = JObject.FromObject(wire[1]);
+                var body = JObject.Parse((string)returned["content"]);
+                AssertEqual("user", (string)returned["role"], "model receives user-role data");
+                AssertEqual("tool_results", (string)body["type"], "model receives one typed batch");
+                AssertEqual(0, (int)body["results"][0]["call_index"], "result maps to the accepted batch position");
+                AssertTrue(returned["tool_call_id"] == null && body["results"][0]["tool_call_id"] == null,
+                    "internal IDs are not model-facing pairing fields");
             }
-            AssertTrue(JObject.FromObject(new ChatMessage())["ToolResultProtocolVersion"] == null,
-                "unmarked history remains absent on storage serialization");
         }
 
-        private static void AgentJsonSchemaFallbackIsRequestLocal()
+        private static void AgentUnsupportedSchemaDoesNotFallback()
         {
             WithTempExecutor(FakeOfficeAdapter.ForHost("Excel"), delegate(OfficeToolExecutor executor, FakeOfficeAdapter adapter)
             {
@@ -1861,10 +1771,9 @@ namespace RNAssistant.Harness
                     "Test.", NewSession(adapter), NewContext(adapter), settings, new ToolCatalogEntry[0],
                     null, null, null, CancellationToken.None).GetAwaiter().GetResult();
 
-                AssertEqual("Done.", result.AssistantText, "fallback completes request");
-                AssertEqual(2, formats.Count, "fallback makes one retry");
+                AssertContains(result.AssistantText, "json_schema unsupported", "unsupported schema is surfaced as a provider error");
+                AssertEqual(1, formats.Count, "retired fallback cannot make another request");
                 AssertEqual(LlmResponseFormats.JsonSchema, formats[0], "selected format is tried first");
-                AssertEqual(LlmResponseFormats.JsonObject, formats[1], "fallback uses json_object");
                 AssertEqual(AgentResponseModes.JsonSchema, settings.AgentResponseMode, "saved selection is unchanged");
             });
         }

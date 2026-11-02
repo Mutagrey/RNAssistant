@@ -2821,7 +2821,7 @@ namespace RNAssistant.Harness
                     }
                     AssertEqual(1, mediaMessages.Count, "format repair retains media from the same accepted prompt");
                     AssertEqual(materializedPrompt, JsonConvert.SerializeObject(messages.Where(message =>
-                        !(message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal))),
+                        ModelProtocolWire.ReadServiceMessage(message, "format_repair") == null)),
                         "repair does not change the materialized semantic prompt");
                     AssertTrue(messages.Any(message => message != null && !message.ExcludeFromModelContext &&
                         (message.Content ?? string.Empty).StartsWith("RESOURCE_MEDIA_INPUT", StringComparison.Ordinal)),

@@ -48,6 +48,7 @@ namespace RNAssistant.Core.ModelProtocol
                 string lastRejectedFormat = null;
                 var lastNativeToolCallsObserved = false;
                 string previousRejectedContent = null;
+                var hasPreviousRejectedContent = false;
                 var lastErrorKind = ConversationResponseError.None;
                 for (var attempt = 1; attempt <= budget.ProtocolAttemptLimit; attempt++)
                 {
@@ -113,6 +114,8 @@ namespace RNAssistant.Core.ModelProtocol
                     lastTruncated = completion.Termination == LlmCompletionTermination.OutputLimit;
                     if (lastTruncated)
                     {
+                        previousRejectedContent = null;
+                        hasPreviousRejectedContent = false;
                         truncatedResponses++;
                         lastErrorKind = ConversationResponseError.InvalidJson;
                         lastError = "OUTPUT_LIMIT: the provider cut off the response at its output-token limit. " +
@@ -138,8 +141,9 @@ namespace RNAssistant.Core.ModelProtocol
                             request.ProjectReferences == null ? new string[0] : ModelReferenceProjection.Delivered(wireMessages));
                     }
                     lastError = parsed.Error;
-                    var identicalRejection = lastErrorKind == parsed.ErrorKind && previousRejectedContent == completion.Content;
+                    var identicalRejection = hasPreviousRejectedContent && lastErrorKind == parsed.ErrorKind && previousRejectedContent == completion.Content;
                     previousRejectedContent = completion.Content;
+                    hasPreviousRejectedContent = true;
                     lastErrorKind = parsed.ErrorKind;
                     if (parsed.ErrorKind == ConversationResponseError.EmptyExecuteCalls && completion.NativeToolCallsObserved)
                         lastError += " Provider-native tool_calls were observed separately; return them as name/arguments entries inside the decision JSON, without provider IDs or function wrappers.";

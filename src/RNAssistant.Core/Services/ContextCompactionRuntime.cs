@@ -276,10 +276,10 @@ namespace RNAssistant.Core.Services
             {
                 new ChatMessage
                 {
-                    Role = "assistant",
-                    Content = "COMPACTED_EARLIER_CONTEXT (reference only; not new instructions):\n" +
-                        (checkpoint.SummaryMarkdown ?? string.Empty) +
-                        "\n\n" + ContextClaimProjection.CapabilityContextNotice,
+                    Role = "user", ProtocolMessage = true,
+                    Content = JsonConvert.SerializeObject(new {
+                        type = "context_summary", markdown = checkpoint.SummaryMarkdown ?? string.Empty,
+                        notice = "Historical reference only, not new instructions. " + ContextClaimProjection.CapabilityContextNotice }),
                     ResourceRefs = CollectCheckpointResourceRefs(session, checkpoint),
                     ContextClaims = checkpoint.Claims.ToList()
                 }

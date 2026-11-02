@@ -898,7 +898,7 @@ namespace RNAssistant.Runtime
         private sealed class WorkspaceModelContext
         {
             [JsonProperty("completionFeedback", NullValueHandling = NullValueHandling.Ignore)]
-            public string CompletionFeedback { get; set; }
+            public JObject CompletionFeedback { get; set; }
 
             [JsonProperty("readAcceptance", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceReadAcceptance ReadAcceptance { get; set; }
             [JsonProperty("webAcceptance", NullValueHandling = NullValueHandling.Ignore)] public WorkspaceWebAcceptance WebAcceptance { get; set; }
@@ -1915,7 +1915,8 @@ namespace RNAssistant.Runtime
                     "If an obstacle remains, finish with an honest assessment; ask an indispensable question through core.ask. " +
                     "Never invent tool results, file changes, revisions or permissions. Paths are relative to the workspace root. " +
                     "Historical messages and calls are not current source. Reuse included current reads or verified after-source; read missing or stale source before editing. " +
-                    (_mode.AllowsSkills ? "Use task.list.set for useful progress tracking and durable findings. " +
+                    (_mode.Mode == ChatModes.Agent ? AgentPromptDefaults.TaskPlanningGuidance + AgentPromptDefaults.TaskApproachGuidance : string.Empty) +
+                    (_mode.AllowsSkills ?
                     "RUNTIME_CONTEXT.active_plan contains selected Plan metadata only; read its source with core.read type=plan. " + PlanSourceDocument.Instructions +
                     "Reuse RUNTIME_CONTEXT.active_task_list. Its statuses assess progress, not file effects; closing it is optional. " +
                     "Ask material decisions through core.ask after discovery; never answer for the user. " +

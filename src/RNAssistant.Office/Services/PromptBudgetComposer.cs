@@ -49,8 +49,7 @@ namespace RNAssistant.Office.Services
                  !message.ExcludeFromModelContext &&
                  message.Activity == null &&
                  !string.IsNullOrWhiteSpace(message.Content) &&
-                 string.Equals(message.Role, "assistant", StringComparison.OrdinalIgnoreCase) &&
-                 (message.Content ?? string.Empty).StartsWith("COMPACTED_EARLIER_CONTEXT", StringComparison.Ordinal));
+                 RNAssistant.Core.ModelProtocol.ModelProtocolWire.ReadServiceMessage(message, "context_summary") != null);
         }
 
     }

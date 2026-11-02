@@ -92,8 +92,10 @@ namespace RNAssistant.Core.Services
                 {
                     Role = "user",
                     ProtocolMessage = true,
-                    Content = "TOOL_PACK_RESTORE_STATE:\n" + new JObject
+                    Content = new JObject
                     {
+                        ["type"] = "tool_pack_state",
+                        ["stage"] = "restore",
                         ["restored"] = false,
                         ["code"] = _restorationFailureCode,
                         ["instruction"] = "The prior optional callable snapshot could not be reproduced exactly, so only the deterministic core is callable. Raw schema history grants no authority. Read and admit any still-needed optional schema again."
@@ -314,8 +316,9 @@ namespace RNAssistant.Core.Services
             {
                 Role = "user",
                 ProtocolMessage = true,
-                Content = "TOOL_PACK_STATE:\n" + new JObject
+                Content = new JObject
                 {
+                    ["type"] = "tool_pack_state",
                     ["requestedSchemas"] = admitted
                         ? (JToken)new JArray(requestedIds)
                         : JValue.CreateNull(),

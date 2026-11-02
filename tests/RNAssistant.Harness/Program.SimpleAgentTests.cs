@@ -351,8 +351,8 @@ namespace RNAssistant.Harness
                 var original = (JArray)requests[0]["messages"];
                 var repaired = (JArray)requests[1]["messages"];
                 AssertTrue(JToken.DeepEquals(original, new JArray(repaired.Take(original.Count))), "repair keeps the frozen request intact");
-                AssertContains((string)repaired.Last()["content"], "FORMAT_REPAIR:", "unsupported continue receives protocol repair");
-                var repairBody = JObject.Parse(((string)repaired.Last()["content"]).Substring("FORMAT_REPAIR:\n".Length));
+                var repairBody = JObject.Parse((string)repaired.Last()["content"]);
+                AssertEqual("format_repair", (string)repairBody["type"], "unsupported continue receives typed repair");
                 AssertContains((string)repairBody["instruction"], ModelProtocolWire.RepairResponseGuidance(responseMode == AgentResponseModes.JsonSchema, true), "repair follows the selected control contract without duplicating its full prompt");
                 AssertContains((string)repairBody["instruction"], ModelProtocolWire.MessageFieldGuidance, "repair does not require per-call narration");
                 AssertTrue(!session.Messages.Any(message => (message.Content ?? "").Contains("I will continue.")),
@@ -360,10 +360,10 @@ namespace RNAssistant.Harness
                 if (responseMode == AgentResponseModes.JsonSchema)
                 {
                     AssertTrue(JToken.DeepEquals(new JArray("execute", "reflection", "finish"),
-                        new JArray(requests[0].SelectTokens("response_format.json_schema.schema.properties.response.anyOf[*].properties.action.const"))),
+                        new JArray(requests[0].SelectTokens("response_format.json_schema.schema.properties.response.anyOf[*].properties.action.const").Values<string>().Distinct())),
                         "schema exposes exactly the three v8 actions");
                     AssertEqual(ModelProtocolWire.MessageGuidance,
-                        (string)requests[0].SelectToken("response_format.json_schema.schema.properties.response.anyOf[0].properties.message.description"),
+                        (string)requests[0].SelectTokens("response_format.json_schema.schema.properties.response.anyOf[*].properties.message.description").First(),
                         "actual strict wire shares optional progress guidance with repair and defaults");
                     AssertContains(original.ToString(), "response property contains", "strict wire explains its transport envelope");
                 }
@@ -1628,14 +1628,13 @@ namespace RNAssistant.Harness
                     AssertEqual(1, request.Count(message =>
                         (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0),
                         "system prompt appears once per request");
-                    AssertEqual(1, request.Count(message =>
-                        (message.Content ?? string.Empty).IndexOf("# RUNTIME_CONTEXT", StringComparison.Ordinal) >= 0),
+                    AssertEqual(1, request.Count(RuntimeContextPrompt.IsRuntimeContext),
                         "runtime context appears once per request");
                     var materialized = FlattenSimple(request);
                     var generalIndex = materialized.IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal);
                     var toolsIndex = materialized.IndexOf("TOOLS_PROMPT_SENTINEL", StringComparison.Ordinal);
                     var skillsIndex = materialized.IndexOf("SKILLS_PROMPT_SENTINEL", StringComparison.Ordinal);
-                    var runtimeIndex = materialized.IndexOf("# RUNTIME_CONTEXT", StringComparison.Ordinal);
+                    var runtimeIndex = materialized.IndexOf(request.Single(RuntimeContextPrompt.IsRuntimeContext).Content, StringComparison.Ordinal);
                     AssertTrue(generalIndex >= 0 && generalIndex < toolsIndex && toolsIndex < skillsIndex && skillsIndex < runtimeIndex,
                         "general, tool, skill, and runtime prompt sections keep stable order");
                     AssertTrue(request.Any(message =>
@@ -1649,7 +1648,7 @@ namespace RNAssistant.Harness
                     (message.Content ?? string.Empty).IndexOf("SYSTEM_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("TOOLS_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
                     (message.Content ?? string.Empty).IndexOf("SKILLS_PROMPT_SENTINEL", StringComparison.Ordinal) >= 0 ||
-                    (message.Content ?? string.Empty).IndexOf("# RUNTIME_CONTEXT", StringComparison.Ordinal) >= 0),
+                    RuntimeContextPrompt.IsRuntimeContext(message)),
                     "prompt is not persisted in chat history");
             });
         }
@@ -1682,7 +1681,7 @@ namespace RNAssistant.Harness
                 AssertEqual("Не могу выполнить этот запрос.", result.AssistantText, "formatted refusal accepted");
                 AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "model-authored refusal text only ends its loop; it is not provider refusal");
                 var repair = requests[1].Last();
-                AssertContains(repair.Content, "FORMAT_REPAIR", "repair instruction added");
+                AssertEqual("format_repair", (string)JObject.Parse(repair.Content)["type"], "typed repair instruction added");
                 AssertContains(repair.Content, "Keep the envelope even when the task cannot be fulfilled",
                     "v8 format repair permits a truthful refusal in finish");
                 var diagnostic = JObject.Parse(repair.Content);
@@ -1691,7 +1690,7 @@ namespace RNAssistant.Harness
                     "invalid raw response never enters the accepted prompt prefix");
                 AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).IndexOf(invalid, StringComparison.Ordinal) >= 0 ||
-                    (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
+                    ModelProtocolWire.ReadServiceMessage(message, "format_repair") != null ||
                     (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_REASONING_SENTINEL", StringComparison.Ordinal) >= 0),
                     "invalid completion and repair instruction are not persisted");
             });
@@ -1844,7 +1843,7 @@ namespace RNAssistant.Harness
                     null).GetAwaiter().GetResult();
 
                 AssertEqual(needsTool ? 3 : 2, requests.Count, "repair either delivers the answer or continues through a real tool result");
-                AssertContains(FlattenSimple(requests[1]), "FORMAT_REPAIR:",
+                AssertContains(FlattenSimple(requests[1]), "\"type\":\"format_repair\"",
                     "repair reaches the model before accepting an answer");
                 AssertContains(FlattenSimple(requests[1]), "empty_execute_calls",
                     "repair explains the exact invalid combination");
@@ -1897,7 +1896,7 @@ namespace RNAssistant.Harness
                 AssertTrue(session.Messages.Last().ExcludeFromModelContext, "diagnostic excluded from replay");
                 AssertTrue(!session.Messages.Any(message =>
                     (message.Content ?? string.Empty).IndexOf("PROTECTION_RESPONSE_", StringComparison.Ordinal) >= 0 ||
-                    (message.Content ?? string.Empty).IndexOf("FORMAT_REPAIR", StringComparison.Ordinal) >= 0 ||
+                    ModelProtocolWire.ReadServiceMessage(message, "format_repair") != null ||
                     (message.ReasoningContent ?? string.Empty).IndexOf("INVALID_DIAGNOSTIC_REASONING", StringComparison.Ordinal) >= 0),
                     "failed completions do not enter stored context");
                 for (var index = 1; index < requests.Count; index++)
@@ -1955,13 +1954,13 @@ namespace RNAssistant.Harness
                     (message.Content ?? string.Empty).Contains("PROTECTION_RESPONSE_") ||
                     (message.ReasoningContent ?? string.Empty).Contains("REJECTED_REASONING")),
                     "all nineteen rejected attempts stay out of accepted history");
-                AssertTrue(!session.Messages.Any(message => (message.Content ?? string.Empty).Contains("FORMAT_REPAIR")),
+                AssertTrue(!session.Messages.Any(message => ModelProtocolWire.ReadServiceMessage(message, "format_repair") != null),
                     "repair instructions are ephemeral");
                 var initialPrompt = FlattenSimple(requests[0]);
                 for (var index = 1; index < requests.Count; index++)
                 {
                     var request = requests[index];
-                    AssertEqual(1, request.Count(message => (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
+                    AssertEqual(1, request.Count(message => ModelProtocolWire.ReadServiceMessage(message, "format_repair") != null),
                         "each retry carries one current repair instruction");
                     AssertEqual(initialPrompt, FlattenSimple(request.Take(request.Count - 1)), "repair starts from the same clean accepted prompt");
                     var repair = JObject.Parse(request.Last().Content);
@@ -1979,7 +1978,7 @@ namespace RNAssistant.Harness
                 LlmCompletionDelegate completion = (settings, messages, options, stream, cancellationToken) =>
                 {
                     calls += 1;
-                    return Task.FromResult(new LlmCompletionResult { Content = "INVALID" });
+                    return Task.FromResult(new LlmCompletionResult { Content = "INVALID " + calls });
                 };
                 var result = CreateConversationRunService(adapter, executor, completion).ExecuteAsync(
                     ChatModes.Agent,
@@ -2159,7 +2158,7 @@ namespace RNAssistant.Harness
                     !string.Equals(message.ToolName, CapabilityToolCatalog.ReadToolId, StringComparison.Ordinal)),
                     "routine Excel task adds no capability-schema call");
                 AssertTrue(requests.SelectMany(items => items).All(message =>
-                    !(message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
+                    ModelProtocolWire.ReadServiceMessage(message, "format_repair") == null),
                     "routine Excel task needs no format repair");
                 AssertTrue(ResponseSchemaCallNames(requestOptions[0].ResponseSchemaJson)
                     .Any(name => name == "excel.inspect"),
@@ -2687,7 +2686,7 @@ namespace RNAssistant.Harness
                 // Fill the compact request enough to exercise next-request admission refusal,
                 // while the pre-selection request and its explicit rejection still fit.
                 var userRequest = "Исправь незакрытый If в UniLoader." +
-                    (tightBudget ? "\nRequired fixture context: " + new string('x', 38500) : "");
+                    (tightBudget ? "\nRequired fixture context: " + new string('x', 32000) : "");
                 var result = CreateConversationRunService(adapter, executor, complete).ExecuteAsync(
                     ChatModes.Agent, userRequest, session, NewContext(adapter),
                     requestSettings,
@@ -3098,9 +3097,7 @@ namespace RNAssistant.Harness
                     var response = responses.Dequeue();
                     if (response == "__FINISH__")
                     {
-                        var callId = messages.Single(message => message.ToolName == "core.patch" &&
-                            message.EvidenceReference != null && message.Activity == null &&
-                            message.AcceptedCallOrigin == null && message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion).EvidenceReference.Alias;
+                        var callId = (string)LastToolResult(messages, "core.patch")["evidence"];
                         response = ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
                             "Report the confirmed patch outcome.",
                             externalDrift ? "Изменение отклонено как устаревшее." : "Изменение сохранено.",
@@ -3181,15 +3178,14 @@ namespace RNAssistant.Harness
                     AssertEqual(expectedSource, adapter.VbaModuleCode, "confirmed large patch saves the intended module");
                     var afterSource = calls.Last().SingleOrDefault(message => message.SyntheticResourceObservation);
                     AssertTrue(afterSource != null, "the first request after confirmation has an after-source observation");
-                    AssertContains(afterSource.Content, expectedSource,
+                    AssertEqual(expectedSource, (string)JObject.Parse(afterSource.Content)["text"],
                         "the first request after confirmation contains complete changed source");
                     AssertContains(afterSource.Content, "VBA module: Module1", "archival keeps the source associated with its target");
                     AssertTrue(loaded.Messages.Any(message => message.ToolName == "core.patch" &&
                         AcceptedCallPayloadService.IsExternalizedCall(message)), "large patch arguments exercise CAS archival");
                     var frame = calls.Last().SingleOrDefault(message =>
-                        message.ToolCallId == terminal.ToolCallId &&
-                        message.ToolResultProtocolVersion == ToolResultWire.CurrentVersion &&
-                        !string.Equals(message.Role, "assistant", StringComparison.Ordinal));
+                        ModelProtocolWire.ReadServiceMessage(message, "tool_results")?["results"]?
+                            .Any(item => (string)item["name"] == "core.patch") == true);
                     AssertTrue(frame != null && frame.Content.Contains("\"status\":\"ok\""),
                         "the first request after confirmation contains the verified terminal result");
                     AssertContains(frame.Content, "Module1", "terminal effect remains associated with its module");
@@ -3367,7 +3363,7 @@ namespace RNAssistant.Harness
                 var service = CreateConversationRunService(adapter, executor, (settings, messages, options, stream, token) =>
                 {
                     requestCount++;
-                    AssertTrue(!messages.Any(message => (message.Content ?? string.Empty).StartsWith("FORMAT_REPAIR:", StringComparison.Ordinal)),
+                    AssertTrue(!messages.Any(message => ModelProtocolWire.ReadServiceMessage(message, "format_repair") != null),
                         "execution identity never triggers regeneration of HTML");
                     if (requestCount == 3 || requestCount == 6)
                     {

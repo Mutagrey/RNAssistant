@@ -37,15 +37,16 @@ namespace RNAssistant.Harness
                             "The requested review is saved and closed.", "Review recorded.",
                             results: new[] { new ConversationResultClaim("Review recorded and closed.",
                                 new[] { session.Messages.Last(message => message.RunId == session.LastRun.RunId &&
-                                    message.ToolName == TaskListToolCatalog.SetToolId &&
-                                    message.AcceptedCallOrigin != null).ToolCallId },
+                                    message.ToolName == TaskListToolCatalog.SetToolId && message.Activity == null &&
+                                    message.ExecutionProgress?.Outcome == ToolExecutionOutcome.Ok &&
+                                    message.EvidenceReference != null).EvidenceReference.Alias },
                                 ConversationAssessment.Satisfied) }, outcome: ConversationOutcome.Completed);
                     return Task.FromResult(new LlmCompletionResult { Content = content });
                 })
-                    .ExecuteAsync(ChatModes.Agent, "Record the completed review.", session, NewContext(adapter), new AppSettings(),
+                    .ExecuteAsync(ChatModes.Agent, "Record the completed review.", session, NewContext(adapter), new AppSettings { MaxAgentIterations = 6 },
                         OfficeToolCatalog.ForHost(adapter.HostName).Concat(executor.GetControllerTools()).ToList(), null)
                     .GetAwaiter().GetResult();
-                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "corrected Task List turn completes");
+                AssertEqual(AgentResponseStatuses.Completed, result.ResponseStatus, "corrected Task List turn completes: " + result.AssistantText);
                 AssertEqual(2, result.RunViewState.VerifiedWrites, "save and retried close both execute with verified effects");
                 AssertEqual(1, result.RunViewState.FailedCalls, "the original missing-list refusal stays visible");
                 AssertTrue(string.IsNullOrEmpty(session.ActiveTaskListArtifactId), "identical close succeeds after creation");

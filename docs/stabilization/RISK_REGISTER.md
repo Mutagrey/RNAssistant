@@ -12,6 +12,52 @@ Owner: Office conversation delivery / Harness fixture. При S2b.12 Web-час�
 проверку только после подтверждения инварианта. Это не установленная потеря данных
 и не qualification порядка эффектов; C#/runtime в S2b.12 не изменялись.
 
+## JSON profile audit: baseline gaps — 2026-11-02
+
+Owner: Harness / Core-Agent and settings fixtures. Проверены отдельные копии
+`601283cf` и родителя `a0eea223`, без параллельных Browser/storage/loop-guard правок.
+Ревью исправило потерю читаемости legacy batch, двойной JSON в completionFeedback,
+ложную остановку на непоследовательных одинаковых отказах и расхождение prompt
+с runtime rendering. Позже пользователь выбрал Markdown/YAML presentation; schema 69
+согласует его с JSON-ответами/историей. Новые истории/repair/schema expectations обновлены без ослабления
+runtime guards. Итог расширенной матрицы — 149 passed / 17 failed / 166 total.
+
+Все оставшиеся падения ниже воспроизводятся на родителе. Это открытые baseline
+gaps, а не доказательство корректности этих сценариев; требуется отдельный разбор
+fixture и production поведения. Полный Harness и Windows qualification не закрыты.
+
+```text
+agent: Excel unknown continues through inspection
+agent: inspects full skill without selection
+agent: new skill and tool are readable in same run
+agent: model projection hides runtime evidence
+agent: characterization write ok preserves final status
+agent: characterization completed after write error
+agent: status-free response controls loop
+agent: R61 routine Excel avoids schema discovery
+agent: loads and runs arbitrary macro
+agent: confirmation replays one final result
+agent: confirmed tool failure continues
+agent: bounds oversized tool result data
+agent: keeps tool result within prompt budget
+agent: tool result uses calibrated prompt budget
+settings: prompt schema migrates automatically
+settings: built-in guidance uses runtime IDs and result v1
+protocol preflight: incompatible history stops preparation
+```
+
+Матрица: `history protocol:`, `agent:`, `protocol context:`, `model protocol:`,
+`model refs:`, `model context:`, `v8 recovery:`, `conversation v8:`,
+`tool result wire:`, `context continuity:`, `settings:`, `protocol preflight:`.
+Только host-neutral fixtures и loopback HTTP; реальные модели и Office не запускались.
+
+Следующее ревью source tools/prompts устранило veto старого VBA evidence при свежем
+чтении, смешение ролей after-source/summary и старые service prefixes. Поиск остаётся
+построчным: явные CR/LF patterns теперь получают объяснение и маршрут read/patch;
+поддержка многострочного regex не заявлена. Реальное поведение модели, Office search/
+patch/read-back и качество VBA требуют проверки пользователя на Windows. Новые
+адресные проверки не закрывают перечисленные выше 17 baseline gaps и полный Harness.
+
 ## Saved Browser S3b.3b: границы проверки — 2026-11-02
 
 Owner: Web Browser / HtmlWorkspace / Plugins. Независимые saved HTML/release views

@@ -413,7 +413,9 @@ namespace RNAssistant.Harness
                 settings, NewSession(adapter), null);
             accepted[1].Id = "schema-prompt";
             var fullPrompt = accepted[1].Content;
-            AssertTrue(JObject.Parse(fullPrompt)["tools"][0]["function"]["parameters"] != null, "runtime JSON carries exact argument schemas");
+            AssertTrue(fullPrompt.StartsWith(RuntimeContextPrompt.Header, StringComparison.Ordinal) &&
+                fullPrompt.EndsWith(RuntimeContextPrompt.Definitions(RuntimeContextPrompt.Tools(tools).OfType<JObject>()), StringComparison.Ordinal),
+                "Markdown runtime carries exact JSON argument schemas");
             var options = ModelProtocolWire.CreateRequestOptions(AgentResponseModes.JsonSchema, tools,
                 new ModelProtocolCallContext(ConversationProtocolContext.SequentialBatchIds(tools)));
             options.TraceContextReceipt = new ContextReceipt { Messages = new System.Collections.Generic.List<ContextMessagePresentation> {
@@ -477,12 +479,13 @@ namespace RNAssistant.Harness
             var result = protocol.GetResponseAsync(request, null, CancellationToken.None).GetAwaiter().GetResult();
             AssertEqual(ModelProtocolFailureKind.Provider, result.Failure.Kind, "schema rejection is reported without hidden fallback");
             AssertEqual("json_schema,json_schema", string.Join(",", formats), "all attempts retain selected transport");
-            AssertTrue(wirePrompts.All(prompt => JObject.Parse(prompt)["tools"][0]["function"]["parameters"] == null), "strict attempts omit only duplicate parameter schemas");
+            AssertTrue(wirePrompts.All(prompt => prompt.EndsWith(RuntimeContextPrompt.SchemaDefinitions, StringComparison.Ordinal)),
+                "strict attempts omit only duplicate parameter schemas");
             AssertEqual("Unknown,Unknown", string.Join(",", presentations), "transformed text does not claim byte identity");
             AssertEqual(ContextPresentationKind.Full, options.TraceContextReceipt.Messages[0].Presentation, "source receipt is immutable");
             AssertEqual("format_repair", (string)JObject.Parse(repairMessages[1])["type"], "repair is typed data");
             AssertContains(wirePrompts[0], tool.Id, "tool names remain visible");
-            AssertContains(wirePrompts[0], "safety", "strict prompt retains tool policy");
+            AssertContains(wirePrompts[0], "policy:", "strict prompt retains tool policy");
             AssertTrue(options.ResponseSchemaJson != null, "schema remains selected after failure");
             AssertEqual(fullPrompt, accepted[1].Content, "wire projection does not mutate accepted history");
 
@@ -631,12 +634,15 @@ namespace RNAssistant.Harness
                             var schemaToken = exact.SelectToken("response_format.json_schema");
                             var schemaBytes = schemaToken == null ? 0 : Encoding.UTF8.GetByteCount(schemaToken.ToString(Newtonsoft.Json.Formatting.None));
                             var content = (string)exact["messages"][1]["content"];
+                            var definitions = mode == AgentResponseModes.JsonSchema
+                                ? RuntimeContextPrompt.SchemaDefinitions
+                                : RuntimeContextPrompt.Definitions(RuntimeContextPrompt.Tools(callable).OfType<JObject>());
+                            AssertTrue(content.EndsWith(definitions, StringComparison.Ordinal),
+                                "runtime retains the exact selected definition section");
                             AssertEqual(mode == AgentResponseModes.JsonSchema ? 0 : callable.Count,
-                                JObject.Parse(content)["tools"].Count(tool => tool["function"]["parameters"] != null),
+                                content.Split(new[] { "\n```json\n" }, StringSplitOptions.None).Length - 1,
                                 "strict wire omits duplicate schemas; fallback retains them");
-                            var contextJson = JObject.Parse(content);
-                            var toolsBytes = Encoding.UTF8.GetByteCount(contextJson["tools"].ToString(Newtonsoft.Json.Formatting.None));
-                            AssertEqual(mode != AgentResponseModes.JsonSchema, contextJson["tools"][0]["function"]["parameters"] != null, "schemas live in the selected transport");
+                            var toolsBytes = Encoding.UTF8.GetByteCount(definitions);
                             var otherMessagesBytes = messagesBytes - toolsBytes;
                             var otherFieldsBytes = retained.Length - messagesBytes - schemaBytes;
                             Console.WriteLine("REQUEST_SIZE " + (selection.Length == 0 ? "core" : selection) + " " + mode +

@@ -62,7 +62,8 @@ evidence и ADR — только когда нужны причина, точн�
   `app.js` — boot/shared rendering.
 - Все modes идут через `ConversationRunService` → `AgentKernel`; только kernel
   считает lifecycle/outcomes. Model wire — conversation-response v8
-  `action + reason + (tool_calls | decision | outcome + results) + message`; для
+  `action + reason + (tool_calls | decision | outcome + results)`; `message`
+  необязателен для execute/reflection. Для
   `finish` обязателен непустой ответ, `outcome` — оценка модели, не runtime proof.
   IDs, guards, URI/revision/cursor и authority принадлежат
   runtime, а не модели/UI.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
@@ -12,35 +13,78 @@ namespace RNAssistant.Core.Services
     // model prose, authority lookup, selection or second context store lives here.
     public static class RuntimeContextPrompt
     {
-        public const string AgentHeader = "# RNAssistant Agent Contract\n\n";
         public const string SchemaReuseGuidance =
-            "Entries in tools are already callable; use them directly without reading their schemas again. " +
-            "Their exact arguments are in tools[].function.parameters or response_format.json_schema. " +
-            "schemaInRequest=true is a compact receipt: the schema is supplied there, not missing. ";
+            "Tools under Available now are already callable; use them directly without reading their schemas again. " +
+            "schemaInRequest=true is a compact receipt: use the argument definitions supplied in this request. ";
+        public const string Header = "# RUNTIME_CONTEXT\n";
+        public const string AgentHeader = "# RNAssistant Agent Contract\n\n";
+        public const string DefinitionsHeader = "## Callable tool definitions\n";
+        public const string SchemaDefinitions = DefinitionsHeader + "Exact argument contracts are in response_format.json_schema.\n";
 
         public static string Render(JObject context)
         {
-            var value = (JObject)context.DeepClone();
-            value.AddFirst(new JProperty("type", "runtime_context"));
-            value["tool_guidance"] = SchemaReuseGuidance +
-                "Use the tools listed in tools directly. Other capabilities must be loaded before use.";
-            return value.ToString(Formatting.None);
+            var text = new StringBuilder(Header);
+            var metadata = new JObject(context.Properties().Where(p => p.Name != "tools" && p.Name != "capabilities")
+                .Select(p => new JProperty(p.Name, p.Value.DeepClone())));
+            text.Append("## Environment\n").Append(Metadata(metadata));
+            var tools = (context["tools"] as JArray ?? new JArray()).OfType<JObject>().ToArray();
+            var callable = new HashSet<string>(tools.Select(t => (string)t.SelectToken("function.name")), StringComparer.Ordinal);
+            text.Append("\n## Capabilities — available now\n");
+            foreach (var tool in tools)
+            {
+                text.Append("- `").Append((string)tool.SelectToken("function.name")).Append("` — ")
+                    .Append(Line((string)tool.SelectToken("function.description"))).Append('\n');
+                if (tool["safety"] is JObject safety)
+                    text.Append("  policy: ").Append(safety.ToString(Formatting.None)).Append('\n');
+            }
+            if (tools.Length == 0) text.Append("- None.\n");
+            text.Append("\n## Capabilities — load on demand\n");
+            var loaded = new HashSet<string>((context["loaded_skills"] as JArray ?? new JArray()).Values<string>(), StringComparer.Ordinal);
+            var items = ((context["capabilities"] as JObject)?["items"] as JArray ?? new JArray()).OfType<JObject>()
+                .Where(item => (string)item["kind"] == "tool" ? !callable.Contains((string)item["id"]) : !loaded.Contains((string)item["id"])).ToArray();
+            foreach (var item in items)
+            {
+                text.Append("- `").Append((string)item["id"]).Append("` (").Append((string)item["kind"])
+                    .Append(") — ").Append(Line((string)item["summary"])).Append('\n');
+                if (item["loadSkill"] is JArray skills)
+                    text.Append("  loadSkill: ").Append(skills.ToString(Formatting.None)).Append('\n');
+            }
+            if (items.Length == 0) text.Append("- None.\n");
+            text.Append(SchemaReuseGuidance).Append("Only available tools are callable. Load a direct tool with core.tools.read; select a skill with core.skills.load. A listed loadSkill is required; an empty loadSkill list means unavailable.\n\n");
+            text.Append(Definitions(tools));
+            return text.ToString();
         }
 
         public static bool IsRuntimeContext(ChatMessage message)
         {
-            if (message == null || message.ToolCallId != null || message.AttachmentAnalysis != null) return false;
-            try { var value = JObject.Parse(message.Content ?? ""); return value["type"]?.Type == JTokenType.String && (string)value["type"] == "runtime_context"; }
-            catch (JsonException) { return false; }
+            return message != null && message.ToolCallId == null && message.AttachmentAnalysis == null &&
+                (message.Content ?? string.Empty).StartsWith(Header, StringComparison.Ordinal);
         }
 
         public static bool UsesResponseSchema(ChatMessage message)
+        { return IsRuntimeContext(message) && message.Content.EndsWith(SchemaDefinitions, StringComparison.Ordinal); }
+
+        // JSON values are a YAML subset. One key per line avoids wrapping/escaping
+        // a whole runtime object and preserves arbitrary strings exactly.
+        public static string Metadata(JObject fields)
         {
-            return IsRuntimeContext(message) && (bool?)JObject.Parse(message.Content)["schemaInRequest"] == true;
+            var text = new StringBuilder("```yaml\n");
+            foreach (var field in fields.Properties())
+                text.Append(field.Name).Append(": ").Append(field.Value.ToString(Formatting.None)).Append('\n');
+            return text.Append("```\n").ToString();
         }
 
         public static JArray Tools(IEnumerable<ToolCatalogEntry> tools)
         { return new JArray((tools ?? new ToolCatalogEntry[0]).Select(CapabilityCatalogService.BuildTool).Where(t => t != null)); }
+
+        public static string Definitions(IEnumerable<JObject> tools)
+        {
+            var text = new StringBuilder(DefinitionsHeader);
+            foreach (var tool in tools)
+                text.Append("### ").Append((string)tool.SelectToken("function.name")).Append("\n```json\n")
+                    .Append(tool.SelectToken("function.parameters").ToString(Formatting.None)).Append("\n```\n");
+            return text.ToString();
+        }
 
         public static IReadOnlyList<ChatMessage> ProjectJsonSchemaMessages(IReadOnlyList<ChatMessage> messages,
             IEnumerable<ToolCatalogEntry> tools, string responseSchemaJson)
@@ -67,20 +111,19 @@ namespace RNAssistant.Core.Services
                 if (matching.Length != 1 || !JToken.DeepEquals(ToolSchemaSupport.ForStructuredOutput(
                     (JObject)tool.SelectToken("function.parameters"), keepDescriptions: true), matching[0].SelectToken("properties.arguments"))) return messages;
             }
-            // Transform only the owned second context message beneath our instruction.
+            var full = Definitions(expected);
+            // Only the owned second message is runtime context. A pasted header in
+            // user/history content must never trigger this wire transformation.
             var source = messages[1];
-            if (source == null || source.ProtocolMessage || source.Attachments?.Count > 0 || !IsRuntimeContext(source)) return messages;
-            var body = JObject.Parse(source.Content);
-            if (!JToken.DeepEquals(body["tools"], new JArray(expected))) return messages;
-            foreach (var tool in ((JArray)body["tools"]).OfType<JObject>())
-                ((JObject)tool["function"]).Remove("parameters");
-            body["schemaInRequest"] = true;
+            if (source == null || source.ProtocolMessage || source.ToolCallId != null || source.Attachments?.Count > 0 ||
+                !(source.Content ?? "").StartsWith(Header, StringComparison.Ordinal) || !source.Content.EndsWith(full, StringComparison.Ordinal)) return messages;
             var copy = JsonConvert.DeserializeObject<ChatMessage>(JsonConvert.SerializeObject(source));
-            copy.Content = body.ToString(Formatting.None);
+            copy.Content = source.Content.Substring(0, source.Content.Length - full.Length) + SchemaDefinitions;
             var result = messages.ToArray();
             result[1] = copy;
             return result;
         }
 
+        private static string Line(string value) { return (value ?? "").Replace("\r", " ").Replace("\n", " "); }
     }
 }

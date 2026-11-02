@@ -7,12 +7,33 @@ independent retry budgets without fallback; `model diagnostics:` checks the 26-c
 matrix, null-ID content visibility and the actual two-exchange native lab cycle.
 `conversation v8:`, `tool result wire:`, `protocol context:`, `model refs:`,
 `context continuity:` and `model context:` cover parser/history/evidence/compaction.
-Old native/history/prefix expectations were replaced with JSON-profile assertions.
+In these focused groups, old native/history/prefix expectations were replaced with JSON-profile assertions.
 The tool-schema subset validator expands the generated response's single local
 `$defs.calls` reference only in schema fixtures; it is not a server qualifier.
 [Offline Qwen rendering](../protocol/qwen38/README.md) uses pinned upstream bytes
 with an explicitly declared local Jinja adapter, never model weights or inference.
 Web: `agent-history-settings` and `model-diagnostics-layout` reuse production DOM.
+
+Follow-up audit of `601283cf`: the focused history suite also cold-loads a revision-3
+batch without CallCount and rejects its execution; repeated-rejection coverage
+includes intervening truncation and null content. `v8 recovery:` checks that Office
+and Workspace deliver completionFeedback as an object, without double encoding.
+The enlarged 166-case matrix passed 149; all 17 remaining failures reproduce on
+parent `a0eea223`. They remain explicit [baseline gaps](../../docs/stabilization/RISK_REGISTER.md#json-profile-audit-baseline-gaps--2026-11-02),
+not a passing full Harness or real-model/Office qualification.
+
+Markdown/YAML follow-up: `model context:` checks exact runtime definition sections
+and schema deduplication; `context continuity:` checks supplied-data roles and retained
+summary provenance; `tool pack:` checks typed admission/restoration and exact loaded
+schemas. `text search:` / `universal mutations:` cover explicit newline-pattern
+refusal, differing search guards and fresh VBA excerpts alongside stale observations.
+`task lists:` uses issued result evidence in its repaired close sequence. Scripted
+VBA skill admission covers both JSON transports at 32768 tokens, refusal under a
+full context and the next user turn after refusal. Fixed-size padding leaves room
+for initial reads; optional-schema fixtures include accepted call origins/RunId or
+explicitly exclude manual evidence from model history. The focused follow-up passed
+92 distinct cases on the isolated protocol copy; this does not close the earlier
+17 baseline gaps. No live models or Office.
 
 Chat model parity S2a: `workspace: chat model preferences and wire` checks actual
 scripted HTTP bodies, persisted override/default, reopen, exact workspace and busy
@@ -153,10 +174,11 @@ fixture publishes its real transient run instead of writing read-only live field
 its four Web cases, but its static C# ordering assertion also fails on `d61a9aff`;
 see RISK_REGISTER. It is not a passing full file or Office qualification.
 
-`history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
-native pairing and decision content, retained finish/reflection through the compiler,
-shared concise-field guidance, unchanged user data and frozen
-repair/explicit fallback in 18 settings combinations. `saved settings apply without
+`history protocol:` checks JSON-object/schema responses, instruction roles,
+optional message, accepted assistant decisions and user-role indexed result batches,
+shared concise-field guidance, unchanged user data and frozen typed repair.
+Legacy history-role preferences normalize to the single production JSON profile;
+native pairing is tested separately in the diagnostics lab. `saved settings apply without
 restart` changes controls through the real SettingsService/publication path and
 runs the same chat four times through one executor/conversation service, inspecting
 the actual wire history and current instructions. `node tests/web/agent-history-settings.test.js`

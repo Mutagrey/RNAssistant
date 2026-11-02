@@ -76,6 +76,7 @@ namespace RNAssistant.Office.Services
                 if (message.AcceptedCallPayload != null)
                 {
                     if (!AcceptedCallPayloadService.IsExternalizedCall(message) ||
+                        message.AcceptedCallOrigin?.CallCount == null ||
                         calls.ContainsKey(message.ToolCallId))
                         throw HistoryFailure("Неполная reference-first запись принятого вызова.");
                     calls.Add(message.ToolCallId, message);

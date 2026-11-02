@@ -22,7 +22,7 @@ namespace RNAssistant.Core.ModelProtocol
             {
                 var ordered = batch.OrderBy(m => m.AcceptedCallOrigin.CallIndex).ToArray();
                 var count = ordered[0].AcceptedCallOrigin.CallCount;
-                if (ordered.Any(m => m.AcceptedCallOrigin.CallCount != count) ||
+                if (!count.HasValue || ordered.Any(m => m.AcceptedCallOrigin.CallCount != count) ||
                     ordered.Select(m => m.AcceptedCallOrigin.CallIndex).Distinct().Count() != ordered.Length)
                     throw new InvalidOperationException("Accepted batch origin is inconsistent.");
                 var template = JObject.Parse(ordered[0].Content);

@@ -28,6 +28,10 @@ match timeout. Literal and regex matching share the non-overlapping matcher with
 the public query is single-line. Internal indexed artifact navigation retains part coordinates. No parser/LSP/index
 is required, including for unknown extensions. String matches are candidates,
 not verified references or a complete call graph. The model chooses queries/depth.
+Explicit CR/LF patterns, including regex `\r?\n`, fail as
+`resource_search_multiline_unsupported` rather than reporting an ordinary complete
+zero-match scan. Negated newline classes and literal escaped backslashes remain
+supported. Read the surrounding source and use exact multiline `core.patch` edits.
 
 Results distinguish `scanComplete`, `sourceComplete`, `matchesComplete`, bounded
 matches and `unavailableScopes`/`incompleteReasons`. `totalMatches` is cumulative

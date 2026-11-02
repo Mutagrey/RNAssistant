@@ -225,6 +225,14 @@ namespace RNAssistant.Harness
                 var page = new ResourceTextSearch().Search(request, provider.SearchSources(request, CancellationToken.None), CancellationToken.None);
                 AssertEqual(2, page.TotalMatches, "literal search and replacement share non-overlapping matches");
                 var receipt = new ResourceSearchObservation(); receipt.Record(request, page);
+                AssertContains(RuntimeThrows<ResourceRequestException>(() => receipt.Require("matches.md", "a+", "literal", true, 2)).Message,
+                    "query differs", "replacement identifies the mismatched search parameter");
+                AssertContains(RuntimeThrows<ResourceRequestException>(() => receipt.Require("matches.md", "aa", "regex", true, 2)).Message,
+                    "mode differs", "changing literal to regex requires a new search");
+                AssertContains(RuntimeThrows<ResourceRequestException>(() => receipt.Require("matches.md", "aa", "literal", false, 2)).Message,
+                    "matchCase differs", "case sensitivity is part of the exact search contract");
+                AssertContains(RuntimeThrows<ResourceRequestException>(() => receipt.Require("matches.md", "aa", "literal", true, 3)).Message,
+                    "totalMatches=2", "replacement reports the observed count instead of a generic search failure");
                 files.ReplaceMatches(workspace, "matches.md", receipt.Require("matches.md", "aa", "literal", true, 2), "aa", "b", "literal", true, 2, null, CancellationToken.None);
                 AssertEqual("bb", File.ReadAllText(Path.Combine(workspace.RootPath, "matches.md")), "search receipt drives exact replacement");
             });
@@ -436,6 +444,7 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Error, blocked.Outcome, "accepted model call cannot use manual-editor authority");
                 AssertEqual(ToolRetryPolicy.RefreshRequired, blocked.Recovery.RetryPolicy, "fresh source allows recovery after refusal");
                 var module = VbaComponent(executor, session, "Module1");
+                var oldWhole = executor.ResourceGateway.Evidence(session, ReadVbaSource(executor, session, "Module1")).ToArray();
                 var excerpt = executor.ResourceGateway.ReadLines(session, new ResourceRef(module.Reference.Uri), "source", 2, 1).Result;
                 var evidence = executor.ResourceGateway.Evidence(session, excerpt).ToArray();
                 var unseen = prepare(Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit("Debug.Print 1", "Debug.Print 2", new[] { "Debug.Print 1" }, new[] { "End Sub" }))))), evidence).Record;
@@ -446,6 +455,12 @@ namespace RNAssistant.Harness
                 ReadVbaSource(executor, session, "Module1");
                 var deliveredExcerpt = executor.ResourceGateway.ReadLines(session, new ResourceRef(module.Reference.Uri), "source", 2, 1).Result;
                 var staleExcerpt = executor.ResourceGateway.Evidence(session, deliveredExcerpt).ToArray();
+                var refreshedPatch = Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1",
+                    EditSet(Edit("Debug.Print 2", "Debug.Print 3")))));
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, prepare(refreshedPatch, oldWhole.Concat(staleExcerpt)).Record.Outcome,
+                    "an older whole-source observation cannot veto a current delivered excerpt");
+                AssertEqual(ToolExecutionOutcome.AwaitingConfirmation, prepare(refreshedPatch, evidence.Concat(staleExcerpt)).Record.Outcome,
+                    "an older excerpt cannot veto a current delivered excerpt");
                 adapter.VbaModuleCode += "\n' outside the excerpt changed";
                 var staleExcerptPatch = prepare(Command("core.patch", "targets", PatchTargets(PatchSection("VBA module: Module1", EditSet(Edit("Debug.Print 2", "Debug.Print 3"))))), staleExcerpt).Record;
                 AssertTrue(staleExcerptPatch.Outcome == ToolExecutionOutcome.Error && !staleExcerptPatch.MayHaveDispatched, "equal excerpt bytes cannot bypass changed module authority");
@@ -531,7 +546,10 @@ namespace RNAssistant.Harness
                 AssertEqual(ToolExecutionOutcome.Ok, first.Outcome, "first patch is verified");
                 publish(first);
                 var afterFirst = currentSource();
-                AssertContains(afterFirst.Content, module(edited), "next model request receives the full first result");
+                var sourceWire = JArray.FromObject(new RNAssistant.Core.Llm.LlmMessageBuilder().Build(
+                    new[] { afterFirst }, new AppSettings()).Messages);
+                AssertEqual("user", (string)sourceWire[0]["role"], "verified source is supplied data, never a model-authored statement");
+                AssertEqual(module(edited), (string)JObject.Parse(afterFirst.Content)["text"], "next model request receives the full first result");
                 var bounded = request(1500);
                 AssertEqual(0, bounded.DeliveredObservations.Count, "omitted after-source is not delivered observation authority");
                 var notice = string.Join("\n", bounded.Messages.Select(m => m.Content));
@@ -568,7 +586,7 @@ namespace RNAssistant.Harness
                             workingSet: ContextWorkingSet.Restore(archive, active, 6000));
                     var retained = compiled.Messages.SingleOrDefault(m => m.SyntheticResourceObservation);
                     AssertTrue(retained != null, "compaction retains a verified source from a partial " + (unknown ? "unknown" : "error") + " result");
-                    AssertContains(retained.Content, module(edited),
+                    AssertEqual(module(edited), (string)JObject.Parse(retained.Content)["text"],
                         "compaction cannot hide a confirmed source behind another target's failure");
                 }
                 var second = ConfirmVbaNative(prepare(MergeEdits(LineHunk(edited[0], original[0]), LineHunk(edited[2], original[2])),
@@ -578,7 +596,7 @@ namespace RNAssistant.Harness
                 var expected = module(new[] { original[0], edited[1], original[2] });
                 AssertEqual(expected, adapter.GetVbaModuleCode("Scene3D"), "second patch preserves the unmentioned first edit");
                 var afterSecond = currentSource();
-                AssertContains(afterSecond.Content, expected, "current source supersedes the previous source in model context");
+                AssertEqual(expected, (string)JObject.Parse(afterSecond.Content)["text"], "current source supersedes the previous source in model context");
                 var beforeSecond = PatchChangesProjection.ReadSource(executor.ResourceAuthority, second.ResourceEffect.Targets[0].Source, 10000);
                 AssertEqual(module(edited), beforeSecond, "second diff before is the actual first read-back");
                 var stale = prepare(LineHunk(original[1], edited[1]), initialEvidence).Record;
