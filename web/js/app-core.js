@@ -115,6 +115,7 @@ function $(id) {
 }
 
 function isPanelActive(name) {
+  if (window.RNAssistantDockWorkspace && window.RNAssistantDockWorkspace.isSectionVisible(name)) return true;
   var panel = $("tab-" + name);
   return !panel || panel.classList.contains("active");
 }

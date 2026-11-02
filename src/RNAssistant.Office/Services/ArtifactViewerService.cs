@@ -280,8 +280,11 @@ namespace RNAssistant.Office.Services
             {
                 return ArtifactViewerKinds.Pdf;
             }
-            if (mimeType == "text/html" || mimeType == "application/xhtml+xml" ||
-                mimeType == "application/json" || mimeType.EndsWith("+json", StringComparison.Ordinal))
+            // Structured viewers consume the same exact, paged text representation.
+            // Parsing/presentation stays in the format viewer; the data plane owns bounds.
+            if (mimeType == "application/json" || mimeType.EndsWith("+json", StringComparison.Ordinal))
+                return ArtifactViewerKinds.Text;
+            if (mimeType == "text/html" || mimeType == "application/xhtml+xml")
             {
                 throw new InvalidOperationException("This artifact format has a separate viewer.");
             }

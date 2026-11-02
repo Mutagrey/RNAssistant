@@ -423,11 +423,10 @@ dispose очищает scoped reads/listeners/leases, presentation cache ост�
 
 ## Единая навигация и вкладки объектов — проектирование 2026-11-02
 
-**Proposed, после zoom out пользователя.** Прежняя карта была инвентаризацией,
-а S3b описывал слишком частный перенос plugin preview. Общие Tree и стили уже есть;
-единого поведения каталог → объект → независимый view ещё нет. Реализация S3b
-остановлена на проектировании по прямому уточнению пользователя, не на согласовании
-косметики. Следующая единица миграции — пользовательский маршрут через общие owners.
+**Исходный аудит после zoom out пользователя; текущая реализация — S3b.1/S3b.2 ниже.**
+Прежняя карта была инвентаризацией, а S3b описывал частный перенос plugin preview.
+После проектирования общих owners реализованы навигация и независимые материалы.
+Таблица ниже сохраняет исходные разрывы; Browser S3b.3 и editor scope S4 ещё открыты.
 
 | Проверенный разрыв | Действующий код / следствие |
 |---|---|
@@ -556,8 +555,42 @@ kind, Id/key и revision; materials — document/chat/navigation generation/URI.
 instances. Они не предлагаются как восстанавливаемые Dock panels. Условия удаления
 — [Migration Map](../stabilization/MIGRATION_MAP.md#navigation-target-routes-s3b1--2026-11-02).
 
-S3b.2 заменит доставку material route независимым view; S4 — Library/VBA editors.
-Ни общий Browser, ни независимость material от смены чата этим срезом не завершены.
+На S3b.1 независимые views ещё отсутствовали. Material route заменён в S3b.2 ниже;
+Library/VBA editors — S4. Общий Browser остаётся S3b.3.
+
+### S3b.2: владельцы независимых просмотров — In Review
+
+- `app-dock-workspace.js`: один catalog descriptors, placement и bounded instances.
+  `registerView` задаёт singleton element/section/layout или per-object
+  accepts/key/titleFor/create/maximumInstances. `objectViews` содержит лишь живые
+  controllers для move/fromJSON, не является registry данных. Per-object target
+  проверяется при открытии/restore; шесть material instances, без автоматического
+  вытеснения. Factory возвращает element/activate/deactivate/dispose.
+- `app-material-view.js`: immutable target (`chatId`, `documentId`, exact URI),
+  локальный presentation cache, reader lifetime и команды просмотра. Ни active chat,
+  ни source filter не меняют открытый target. В layout сохраняется metadata target;
+  готовый DOM переживает move/split/fromJSON в текущем окне. Cold restart mementos
+  формата/поиска/scroll пока не реализованы; тела/leases не сериализуются.
+- `app-artifact-viewer-actions.js`: прежний owner paging/data-plane/media URL,
+  расширен явными limits и pending identity guards. View injects captured send/fetch,
+  AbortSignal/generation; hidden отменяет незаконченный read, close закрывает leases
+  и URLs, late lease освобождается без отображения. Никакого нового transport/store.
+- `ArtifactViewerService`/`ArtifactCatalogService.Source`: чтение сохранённого
+  документа через существующий gateway/CAS. Typed ArtifactResourcePayload несёт
+  documentId; ChatArtifactDto и CatalogItem дают scope/MIME/size metadata. JSON
+  поступает как exact paged text; его структуру показывает общий JSON viewer.
+- `app-artifact-viewers.js`: форматная presentation вне HTML editor; используется
+  и новым view, и старым editor detail. `app-sequence-document-viewer.js` использует
+  existing lossless JSON parser/raw slices и SequenceViewer rail; не знает полей
+  предметной области. Остальные format viewers и ViewerRegistry сохранены.
+- Catalog остаётся owner metadata/attach/use/edit/copy/delete; object menu получает
+  его команды лишь при совпадении текущего actor/catalog scope. Историческая версия
+  не получает current-head mutation commands. Read-only open не отбрасывает dirty
+  editor и не присоединяет объект к контексту.
+
+Source layout подключён descriptor-ом к тому же Dockview; нет ветки Shell по имени
+формата. HTML singleton adapter и Library section adapter явно остаются до S3b.3/S4
+в [Migration Map](../stabilization/MIGRATION_MAP.md#navigation-target-routes-s3b1--2026-11-02).
 
 ## Производительность, portability и поддержка
 

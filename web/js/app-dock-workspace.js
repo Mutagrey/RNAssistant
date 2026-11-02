@@ -5,25 +5,81 @@
   var saveTimer, restoring = false;
   var compact = false, wideLayout = null, settingsVisible = false;
   var tabFrame;
+  var objectViews = Object.create(null);
   var inspectorWidth;
   var storageKey = "rnassistant.ui.dock.s1.v1", savedKey = storageKey + ".saved", nextChooser = 1;
   var views = {
-    conversation: { title: "Чат", icon: "chat" },
+    conversation: { title: "Чат", icon: "chat", section: "chat" },
     inspector: { title: "Инспектор", icon: "panel" },
     request: { title: "Запрос модели", icon: "code" },
     settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
-  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute; }); }
+  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute && !views[id].perObject; }); }
   // Temporary section adapters live in this catalog, not a second navigation registry.
   // S3b.2/S4 replace their delivery with independently mounted object views.
   function registerTargetRoute(id, route) {
     if (views[id]) throw new Error("Workspace route already registered: " + id);
     views[id] = { targetRoute: true, accepts: route.accepts, open: route.open };
   }
-  function openTarget(target) {
-    var view = target && views[target.view];
-    if (!view || !view.targetRoute || !view.accepts(target)) return false;
-    return view.open(Object.freeze(Object.assign({}, target)));
+  function registerView(id, descriptor) {
+    if (views[id]) throw new Error("Workspace view already registered: " + id);
+    views[id] = descriptor;
+  }
+  function openTarget(target, options) {
+    var descriptor = target && views[target.view];
+    if (!descriptor || !descriptor.accepts || !descriptor.accepts(target)) return false;
+    target = Object.freeze(Object.assign({}, target));
+    if (descriptor.targetRoute) return descriptor.open(target);
+    if (!api || !descriptor.perObject) return false;
+    var id = descriptor.key(target), item = panel(id);
+    if (!item) {
+      var count = api.panels.filter(function (p) { return p.params && p.params.target && p.params.target.view === target.view; }).length;
+      if (count >= descriptor.maximumInstances) { notice("Открыто " + count + " просмотров. Закройте один перед открытием нового."); return false; }
+      var reference = options && panel(options.referencePanel);
+      item = api.addPanel({ id: id, component: target.view, title: descriptor.titleFor(target),
+        params: { target: target }, renderer: "always", minimumWidth: 150, minimumHeight: 120,
+        position: (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: "within" } : undefined });
+    }
+    item.group.api.setVisible(true); item.api.setActive(); changed(); return true;
+  }
+  function sectionView(name) {
+    return Object.keys(views).find(function (id) { return views[id].section === name; }) || null;
+  }
+  function workspaceActive() { return section === "chat" || !!sectionView(section); }
+  function placeHost() {
+    if (!host) return;
+    var source = views[sectionView(section)], target = source && source.layout && source.layout();
+    target = target || document.getElementById(owner === "office" ? "chatLayout" : "projectChatLayout");
+    if (host.parentElement !== target) target.appendChild(host);
+  }
+  function syncObjectViews() {
+    Object.keys(objectViews).forEach(function (id) {
+      var record = objectViews[id], shown = visible(id);
+      record.view.element.inert = !shown;
+      if (record.active === shown) return;
+      record.active = shown;
+      if (shown) record.view.activate(); else record.view.deactivate();
+    });
+  }
+  function createObjectComponent(options, descriptor) {
+    var content = element("div", "dock-view"), visibility;
+    var id = options.id;
+    return { element: content, init: function (parameters) {
+      var target = parameters.params && parameters.params.target;
+      if (!descriptor.accepts(target) || descriptor.key(target) !== id) throw new Error("Invalid object view target");
+      var record = objectViews[id];
+      if (!record) record = objectViews[id] = { active: false, view: descriptor.create(Object.freeze(Object.assign({}, target)), parameters.params.presentation || {}) };
+      content.appendChild(record.view.element);
+      visibility = parameters.api.onDidVisibilityChange(sync);
+    }, dispose: function () {
+      if (visibility) visibility.dispose();
+      Promise.resolve().then(function () {
+        // Move/fromJSON replaces a Dock component synchronously, not the owned view.
+        if (panel(id)) return;
+        var record = objectViews[id]; if (!record) return;
+        record.view.dispose(); delete objectViews[id];
+      });
+    } };
   }
   function element(tag, className, label) {
     var node = document.createElement(tag); node.className = className || "";
@@ -38,7 +94,7 @@
     node.addEventListener("click", action); return node;
   }
   function panel(id) { return api && api.getPanel(id); }
-  function visible(id) { var item = panel(id); return section === "chat" && !!item && item.group.api.isVisible && item.api.isVisible; }
+  function visible(id) { var item = panel(id); return workspaceActive() && !!item && item.group.api.isVisible && item.api.isVisible; }
   function sync() {
     if (!api || restoring) return;
     var nextVisible = visible("conversation");
@@ -56,9 +112,14 @@
       if (!restoring && !panel("request")) RNAssistantModelContext.onDockState(false, false);
     });
     RNAssistantChatInspector.onDockState(!!panel("inspector"), visible("inspector"));
-    RNAssistantShellLayout.renderWorkspace({ layout: { visible: section === "chat", canMaximize: !!api.activePanel,
+    RNAssistantShellLayout.renderWorkspace({ layout: { visible: workspaceActive(), section: section, canMaximize: !!api.activePanel,
       maximized: api.hasMaximizedGroup(), panels: api.panels.length, activeView: api.activePanel && api.activePanel.id,
       groups: api.groups.filter(function (group) { return group.api.isVisible; }).length } });
+    Object.keys(views).forEach(function (id) {
+      var view = views[id], shown = visible(id);
+      if (view.onVisible && view.active !== shown) { view.active = shown; view.onVisible(shown); }
+    });
+    syncObjectViews();
     updateContext();
     messageView().setVisible(nextVisible, function () { RNAssistantWorkspaceChat.refreshPresentation(); });
   }
@@ -67,7 +128,7 @@
   function revealActiveTab() {
     cancelAnimationFrame(tabFrame);
     tabFrame = requestAnimationFrame(function () {
-      if (!api.activePanel || section !== "chat") return;
+      if (!api.activePanel || !workspaceActive()) return;
       var tab = host.querySelector('[data-tab-panel-id="' + api.activePanel.id + '"]');
       if (tab) tab.scrollIntoView({ block: "nearest", inline: "nearest" });
     });
@@ -84,6 +145,7 @@
   }
   function createComponent(options) {
     if (options.name === "chooser") return createChooser(options.id);
+    if (views[options.name] && views[options.name].perObject) return createObjectComponent(options, views[options.name]);
     var id = options.name, content = element("div", "dock-view");
     if (!views[id] || views[id].targetRoute) throw new Error("Unknown workspace view: " + id);
     var visibility;
@@ -106,6 +168,8 @@
   }
   function show(id, group, direction) {
     if (!api || !views[id] || views[id].targetRoute) return;
+    direction = direction || views[id].placement;
+    if (views[id].prepare) views[id].prepare();
     if (id === "inspector") RNAssistantChatInspector.prepareOpen();
     var item = panel(id);
     // The gear opens in the main group; repeat clicks activate without relocating it.
@@ -239,7 +303,15 @@
   }
   function validateLayout(layout) {
     if (!layout || !layout.grid || !layout.panels) return false;
-    return Object.keys(layout.panels).every(function (id) { return views[id] && !views[id].targetRoute && layout.panels[id].contentComponent === id || /^choose-\d+$/.test(id) && layout.panels[id].contentComponent === "chooser"; });
+    var counts = {};
+    return Object.keys(layout.panels).every(function (id) {
+      var spec = layout.panels[id], view = views[spec.contentComponent];
+      if (/^choose-\d+$/.test(id) && spec.contentComponent === "chooser") return true;
+      if (!view || view.targetRoute) return false;
+      if (!view.perObject) return spec.contentComponent === id;
+      counts[spec.contentComponent] = (counts[spec.contentComponent] || 0) + 1;
+      return counts[spec.contentComponent] <= view.maximumInstances && spec.params && view.accepts(spec.params.target) && view.key(spec.params.target) === id;
+    });
   }
   function reset() {
     if (!canClose(api.panels)) return;
@@ -257,8 +329,7 @@
     var changedOwner = owner !== nextOwner;
     owner = nextOwner;
     if (!api) return;
-    var target = document.getElementById(owner === "office" ? "chatLayout" : "projectChatLayout");
-    if (host.parentElement !== target) target.appendChild(host);
+    placeHost();
     document.getElementById("chatDropZone").hidden = owner !== "office";
     document.getElementById("workspaceChatView").hidden = owner === "office";
     // Background mount/preview refresh must not reopen a hidden conversation.
@@ -299,7 +370,10 @@
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
     roots.settings = document.getElementById("settingsView");
     roots.request = document.getElementById("modelContextDialog"); roots.request.classList.remove("hidden");
-    parking.append(roots.conversation, roots.inspector, roots.settings, roots.request);
+    Object.keys(views).forEach(function (id) {
+      if (views[id].element) roots[id] = views[id].element();
+    });
+    Object.keys(roots).forEach(function (id) { parking.appendChild(roots[id]); });
     roots.settings.hidden = false;
     host = element("div", "chat-dock-host"); host.id = "chatDockHost";
     host.setAttribute("role", "region"); host.setAttribute("aria-label", "Рабочее пространство");
@@ -365,14 +439,15 @@
     sync();
   }
   window.RNAssistantDockWorkspace = {
-    registerTargetRoute: registerTargetRoute, openTarget: openTarget,
+    registerTargetRoute: registerTargetRoute, registerView: registerView, openTarget: openTarget, sectionView: sectionView,
+    isSectionVisible: function (name) { var id = sectionView(name); return !!id && visible(id); },
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext,
     isVisible: visible,
     setTitle: function (id, title) { var item = panel(id); if (item && item.title !== title) item.api.setTitle(title); },
     toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel,
     onTabChange: function (name) {
       section = name; if (!api) return;
-      RNAssistantActionMenu.closeAll(); sync();
+      placeHost(); RNAssistantActionMenu.closeAll(); sync();
     }
   };
 }());

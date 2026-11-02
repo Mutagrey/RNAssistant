@@ -297,6 +297,22 @@ mount не создаёт обработчики; dispose снимает listene
 Проверены реальные consumers и независимый VBA-shaped fixture без Office/bridge;
 [ревью и ограничения](UI_MIGRATION_PLAN.md#s3b1-общая-навигация--in-review-2026-11-02).
 
+### Material object view S3b.2 — In Review
+
+Используются существующие Dock tabs, ResourceEditor header/title/meta/actions,
+ActionMenu, ViewerRegistry и форматные controls. Новые styles ограничены flex/scroll
+компоновкой `.material-object-view`; tokens задают inset/spacing/type/color.
+У переносимых Chat/Materials components удалена зависимость от `#tab-chat`/
+`#tab-artifacts`: внешний source не меняет оформление view. Sidebar Материалов
+использует flex tree body, поэтому «Все материалы» не растягивается при скрытом search.
+Whole-row selection остаётся у NavigationTree; Escape возвращает focus из action menu.
+
+[Wide/light](review/s3b2-light-1280.png), [narrow/dark](review/s3b2-dark-420.png):
+1280/420 px, light/dark, 125% zoom, source title overflow и keyboard menu проверены
+в Chromium. Несколько JSON toolbars используют локальный индекс действий; decorators
+не запускают взаимную перерисовку при вложенных viewers. Browser/Office evidence
+и cold restart presentation mementos остаются открытыми.
+
 ### Общая панель навигации и object views — Proposed, 2026-11-02
 
 Материалы/Библиотека/будущие Файлы переиспользуют один каркас панели: source/scope,

@@ -1684,12 +1684,13 @@ namespace RNAssistant.Harness
             const string uri = "rna://chat/chat-view/artifact/plan-r2/revision/2";
             var response = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"artifact-page\",\"type\":\"readArtifactViewerPage\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + uri +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"documentId\":\"source-document\",\"resourceUri\":\"" + uri +
                 "\",\"cursor\":\"32000\"}}")
                 .GetAwaiter().GetResult();
             var envelope = JObject.Parse(response);
             AssertTrue(envelope["ok"].Value<bool>(), "artifact viewer bridge response ok");
             AssertEqual("chat-view", controller.LastChatId, "artifact viewer targets the addressed chat");
+            AssertEqual("source-document", controller.LastArtifactViewerDocumentId, "reader keeps the captured source document");
             AssertEqual(uri, controller.LastArtifactViewerResourceUri, "artifact viewer forwards exact resource URI");
             AssertEqual("32000", controller.LastArtifactViewerCursor, "artifact viewer forwards opaque continuation");
             AssertEqual("markdown", (string)envelope["payload"]["viewerKind"],
@@ -1722,37 +1723,40 @@ namespace RNAssistant.Harness
             const string imageUri = "rna://chat/chat-view/artifact/image-r1/revision/1";
             response = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"artifact-image\",\"type\":\"readArtifactImage\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + imageUri + "\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"documentId\":\"source-document\",\"resourceUri\":\"" + imageUri + "\"}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
             AssertTrue(envelope["ok"].Value<bool>(), "artifact image bridge response ok");
+            AssertEqual("source-document", controller.LastArtifactViewerDocumentId, "media reader keeps the source document");
             AssertEqual(imageUri, controller.LastArtifactViewerResourceUri,
                 "artifact image forwards exact resource URI");
             AssertEqual("image", (string)envelope["payload"]["viewerKind"],
                 "artifact image returns typed viewer kind");
             response = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"artifact-image-thumbnail\",\"type\":\"readArtifactImageThumbnail\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + imageUri + "\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"documentId\":\"source-document\",\"resourceUri\":\"" + imageUri + "\"}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
             AssertTrue(envelope["ok"].Value<bool>(), "artifact image thumbnail bridge response ok");
+            AssertEqual("source-document", controller.LastArtifactViewerDocumentId, "media reader keeps the source document");
             AssertEqual(160, envelope["payload"]["width"].Value<int>(),
                 "artifact image thumbnail returns bounded preview width");
 
             const string pdfUri = "rna://chat/chat-view/artifact/pdf-r1/revision/1";
             response = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"artifact-pdf\",\"type\":\"readArtifactPdfInfo\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri + "\"}}")
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"documentId\":\"source-document\",\"resourceUri\":\"" + pdfUri + "\"}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
             AssertTrue(envelope["ok"].Value<bool>(), "artifact PDF info bridge response ok");
+            AssertEqual("source-document", controller.LastArtifactViewerDocumentId, "media reader keeps the source document");
             AssertEqual("pdf", (string)envelope["payload"]["viewerKind"],
                 "artifact PDF info returns typed viewer kind");
             AssertTrue(envelope["payload"]["extractedText"] == null,
                 "artifact PDF info does not bypass bounded extracted-text paging");
             response = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"artifact-pdf-page\",\"type\":\"readArtifactPdfPage\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"documentId\":\"source-document\",\"resourceUri\":\"" + pdfUri +
                 "\",\"pageIndex\":0}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);
@@ -1761,7 +1765,7 @@ namespace RNAssistant.Harness
                 "artifact PDF page forwards zero-based page index");
             response = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"artifact-pdf-thumbnail\",\"type\":\"readArtifactPdfThumbnail\",\"bridgeToken\":\"" + token +
-                "\",\"payload\":{\"chatId\":\"chat-view\",\"resourceUri\":\"" + pdfUri +
+                "\",\"payload\":{\"chatId\":\"chat-view\",\"documentId\":\"source-document\",\"resourceUri\":\"" + pdfUri +
                 "\",\"pageIndex\":0}}")
                 .GetAwaiter().GetResult();
             envelope = JObject.Parse(response);

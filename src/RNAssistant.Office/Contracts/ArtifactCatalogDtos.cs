@@ -21,6 +21,9 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }
+        [JsonProperty("mimeType")] public string MimeType { get; set; }
+        [JsonProperty("revision")] public int Revision { get; set; }
+        [JsonProperty("byteLength")] public long? ByteLength { get; set; }
         [JsonProperty("updatedUtc")] public DateTime UpdatedUtc { get; set; }
         [JsonProperty("linked")] public bool Linked { get; set; }
         [JsonProperty("selected")] public bool Selected { get; set; }

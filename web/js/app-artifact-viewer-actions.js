@@ -46,7 +46,7 @@
       binaryPending.add(data);
       try {
         var bytes = await window.RNAssistantResourceDownload.readBinary(data, {
-          maxBytes: Number.MAX_SAFE_INTEGER, fetch: options.fetch || window.fetch.bind(window), signal: data.abort.signal,
+          maxBytes: options.maximumBinaryBytes || Number.MAX_SAFE_INTEGER, fetch: options.fetch || window.fetch.bind(window), signal: data.abort.signal,
           isCurrent: function () { return !data.closed && state.activeChatId === data.chatId && current(); }
         });
         if (data.closed || state.activeChatId !== data.chatId || !current()) throw new Error("RESOURCE_READ_CANCELLED");
@@ -477,9 +477,10 @@
       var current = artifactViewerState(uri);
       if (current && (current.status === "loading" || current.status === "ready")) return current.status === "ready";
       var chatId = state.activeChatId;
-      cacheViewer(uri, { status: "loading", resourceUri: uri });
+      var pending = cacheViewer(uri, { status: "loading", resourceUri: uri });
       try {
         var page = await readPage(uri, null, 0, 1, chatId);
+        if (cache()[uri] !== pending) return false;
         var viewer = cacheViewer(uri, {
           status: "ready",
           resourceUri: uri,
@@ -501,6 +502,7 @@
         if (options.render) options.render();
         return true;
       } catch (error) {
+        if (cache()[uri] !== pending) return false;
         if (state.activeChatId !== chatId) {
           delete cache()[uri];
           return false;
@@ -779,6 +781,7 @@
           throw new Error("Artifact viewer continuation changed exact revision evidence.");
         }
         viewer.pages.push(page);
+        if (options.maximumTextPages && viewer.pages.length > options.maximumTextPages) viewer.pages.shift();
         viewer.pageIndex = viewer.pages.length - 1;
         viewer.viewerLimitReached = viewer.viewerLimitReached || page.viewerLimitReached;
         return true;
@@ -797,6 +800,9 @@
       var viewer = artifactViewerState(uri);
       if (!viewer || viewer.status !== "ready" || viewer.pending || !viewer.fullReadAllowed) return false;
       if (viewer.complete && typeof viewer.fullText === "string") return true;
+      if (options.maximumTextCharacters && viewer.pages[0].totalCharacters > options.maximumTextCharacters) {
+        options.log("Полный просмотр ограничен " + options.maximumTextCharacters.toLocaleString("ru-RU") + " символами. Используйте страницы исходника.", "error"); return false;
+      }
       var chatId = state.activeChatId;
       viewer.pending = true;
       try {
@@ -856,6 +862,9 @@
 
     return {
       closeAll: closeAll,
+      hasPending: function () { return binaryPending.size > 0 || Object.keys(cache()).some(function (uri) {
+        var value = cache()[uri]; return value.status === "loading" || value.pending || value.pdfThumbnailPendingCount > 0;
+      }); },
       artifactImageThumbnailState: artifactImageThumbnailState,
       artifactViewerState: artifactViewerState,
       changeArtifactPdfPage: changeArtifactPdfPage,

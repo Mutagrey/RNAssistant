@@ -604,21 +604,96 @@ route **13 → 4,2 ms** и перестал менять selected editor; кор
 production preview (можно отдельного baseline checkout). Крупная Библиотека пока
 рисуется целиком; virtualisation не объявлена выполненной.
 
-Остаток: S3b.2 — независимые exact-target viewers и bounded/cancellable body reads;
-S3b.3 — единый Browser HTML/plugin и iframe lifetime; S4 — предметные Library/VBA
-редакторы и остальные adapters. Сейчас preview/editor остаются singleton, выбор
-чата ещё сбрасывает material view; legacy chat artifact route и detail toolbar
-заменяются с соответствующим viewer, а не дублируются новой системой сейчас.
-Move/split/restore для новых object views ещё не существует и не квалифицирован.
+Остаток на момент S3b.1: независимые viewers и bounded/cancellable reads (реализованы
+в S3b.2 ниже); единый Browser HTML/plugin и iframe lifetime — S3b.3; предметные
+Library/VBA редакторы и остальные adapters — S4. Старый singleton HTML/editor
+сохраняется до своего среза. Move/split/restore новых object views проверен в S3b.2.
 Откат среза — его UI diff, без изменения durable данных или product version.
+
+### S3b.2: независимые просмотры материалов — In Review, 2026-11-02
+
+Разрешён пользователем после `20b11dc0`; реализован следующий законченный срез:
+
+- Один catalog DockWorkspace: descriptor содержит identity, factory, lifecycle,
+  maximum instances и restore validation. Временный material target route заменяется
+  per-object factory; Library route остаётся до S4. Source layouts подключаются
+  через descriptor; Shell не получает веток по форматам/названиям источников.
+- Каталог Материалов — singleton view в том же Dockview; его navigation остаётся
+  слева. Markdown/JSON/text/image/PDF/task/sequence — отдельные exact-target views.
+  Текущий HTML preview/editor остаётся явно ограниченным adapter до Browser S3b.3.
+- Source adapter передаёт actor chat, document, exact URI, title/kind/mime. Чтение
+  идёт через существующие ArtifactViewerActions / ResourceDataPlane; typed payload
+  получает documentId для другого сохранённого документа. UI не подменяет scope
+  активным чатом, не создаёт второй reader/store и не включает объект в контекст.
+- Budget: до 6 открытых material views; текст — существующие страницы 32 000 chars
+  и полный readable до 512 000 chars по запросу; image preview до 8 MiB, PDF page
+  до существующих 10 MiB, bounded thumbnails. Достижение лимита явно показано.
+  Hidden views отменяют незавершённые чтения; готовый DOM сохраняется. Close удаляет
+  instance и освобождает readers/leases/URLs. Layout хранит только target, без тел и
+  lease IDs. Move/split/restore в текущем окне сохраняет живой view и его состояние.
+  После полного перезапуска восстанавливается target, формат/поиск/scroll начинаются
+  заново: сериализуемые mementos специализированных viewers остаются отдельным gap.
+  Невалидный target не заменяется текущим.
+
+Макет использует существующие Dock tabs, viewer controls и source navigation:
+
+```text
+Материалы [поиск] [+] | [Каталог] [Отчёт.md] [Данные.json] | [Методика.pdf]
+scope / дерево      | документ · сохранённая версия     | документ · версия
+                    | формат / исходник / действия      | страницы / текст
+                    | viewer / loading / error+retry    | viewer
+```
+
+Маршруты gate: открыть MD и PDF → вернуться без сброса; из чата открыть материал →
+сменить чат → исходный target; повторно открыть URI → та же вкладка; другая версия
+→ другая вкладка. Проверить narrow/themes/keyboard, move/split/restore, late replies,
+close во время lease open, лимиты и повторные чтения на одинаковых fixture данных.
+
+Проверка: `material-object-views` проходит реальные Dockview/typed-reader маршруты
+на synthetic bridge, включая отдельные версии, chat card → уже открытый объект,
+смену чата, 780 000 chars/17 переходов страниц, 6 views, late lease close, JSON/task/
+collection, URL cleanup, restore, focus, light/dark 1280/420 и zoom 125%.
+`dock-workspace`, `artifact-catalog-layout`, `artifact-text-viewer`,
+`artifact-json-viewer`, `artifact-working-set` покрывают прежние consumers и guards.
+Harness: `bridge: typed artifact viewer`, `artifact viewer:`,
+`artifact transfer: original and authored files` — typed document scope и exact body
+из другого локального документа. Office/VSTO и реальные модели не запускались.
+
+Визуальное ревью: [wide/light](review/s3b2-light-1280.png),
+[narrow/dark](review/s3b2-dark-420.png). Компоновка использует existing Dock tabs,
+ActionMenu, ResourceEditor header и format controls; секционные CSS prefixes убраны
+у переносимых компонентов. Исправлен MutationObserver loop: несколько JSON toolbars
+получают иконки в пределах собственного toolbar, а не общий порядковый индекс.
+
+Измерение `material-views-performance.test.js`, baseline `20b11dc0`, одинаковые
+fixture и Chromium 1280×900: [числа и метод](review/s3b2-performance.json).
+На 20 переключениях MD/JSON: body reads **20 → 2**, p50 **49,1 → 32,7 ms**,
+p95 **50,2 → 46,4 ms** (select → mounted viewer → два animation frames).
+Это локальный synthetic sample, не гарантия ускорения Office. Цена сохранения двух
+view DOM: **42 → 391 nodes**. Для исходника 780 000 chars отображается одна страница
+32 000 chars, а не всё тело; DOM source text с номерами строк **948 899 → 37 047 chars**.
+Готовность этого просмотра в sample **75,2 → 27,7 ms**; DOM **18 → 35 nodes**.
+Лимиты и снижение повторных запросов подтверждены; уменьшения общего DOM не заявляем.
+
+Удалены non-HTML ветви singleton catalog preview/refresh, отдельный collection
+renderer и material section target adapter. Shared ArtifactViewers используется
+object view и оставшимся HTML-editor detail. Команды attach/use/edit/copy/delete
+имеют один owner Catalog, обе точки входа получают одну реализацию.
+
+Далее **S3b.3 Browser**: один HTML/plugin surface, отдельный общий чат, source
+providers, sandbox/authority, iframe identity при move/restore. Текущий HTML editor
+и preview сохраняются до этого gate; Library/VBA editors и остальные навигационные
+панели — **S4**, с теми же NavigationPane и view descriptors. Cold restart viewer
+mementos, реальный WebView2/Office и прежние diagnostics qualification gaps не закрыты.
 
 ### S3b: общая навигация и независимые просмотры — Proposed
 
 Пользователь сначала разрешил отдельный plugin preview, затем потребовал zoom out:
 Материалы/Библиотека/будущие Файлы используют общую навигацию; HTML/plugin — общий
 browser; остальные форматы — независимые экземпляры действующих viewers.
-Прежний plugin-only порядок заменён. Код размещения S3b ещё не менялся; выполнены
-source audit и локальный iframe probe на `c01daa34`. S3a завершён (`c01daa34`),
+Прежний plugin-only порядок заменён. S3b.1 и S3b.2 реализованы и проходят ревью;
+Browser S3b.3 остаётся следующим срезом. Исходный audit/iframe probe — `c01daa34`;
+S3a завершён (`c01daa34`),
 S2a model/capability work имеет свой scope и не смешивается с этой миграцией.
 
 [Границы и owners](UI_ARCHITECTURE.md#единая-навигация-и-вкладки-объектов--проектирование-2026-11-02),
@@ -629,7 +704,7 @@ S2a model/capability work имеет свой scope и не смешиваетс
 |---|---|---|
 | S3b.0 — общая модель, план `535da5b3` | Source/object/commands/view type/view instance/renderer, матрица возможностей и группировка всей карты по семействам UI; явная точка подключения в существующие каталоги | Не начинать с копирования конкретного экрана. На трёх маршрутах проверить ownership, identity, dirty/close/restore и отсутствие особых условий по имени source в Shell |
 | S3b.1 — навигация и команды | Общий каркас на существующем NavigationTree для Материалов и Библиотеки, adapters источников; один open route в нынешний DockWorkspace. Открытие отделено от attach/use/edit/delete | Заменённые headers/search/menu handlers и CSS удаляются. Два реальных consumers; одинаковые focus/selection/empty/error/paging; открытие не меняет контекст чата |
-| S3b.2 — самостоятельные object views | Exact target и local presentation state на вкладку; текущие Markdown/JSON/text/PDF/image/task/sequence renderers. Несколько разных материалов одновременно; source/revision видимы | Старый singleton catalog preview переключён и удалён. Bounded lazy reads, cancel/stale reply, leases; смена активного чата не подменяет открытые объекты. Нельзя клонировать global IDs/active-selection controllers |
+| S3b.2 — самостоятельные object views, In Review | Exact target и local presentation state на вкладку; текущие Markdown/JSON/text/PDF/image/task/sequence renderers. Несколько разных материалов одновременно; source/revision видимы | Non-HTML singleton catalog preview удалён; HTML adapter остаётся до S3b.3. Bounded lazy reads, cancel/stale reply, leases; смена активного чата не подменяет открытые объекты. Нельзя клонировать global IDs/active-selection controllers |
 | S3b.3 — общий Browser | HTML из материалов/чата и plugin используют общий Browser surface/lifecycle. Providers сохраняют существующий resource builder, sandbox и plugin instance authority | Удалены раздельные ChatBrowser/plugin placement и splitters; нет plugin-only renderer. Проверены iframe document identity при move/restore, независимый chat, source change, аннотации и dispose |
 
 S3b.1 не выдаёт legacy singleton редактор Библиотеки за несколько независимых:

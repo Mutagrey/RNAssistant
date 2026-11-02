@@ -171,25 +171,25 @@ namespace RNAssistant.Office
         public ArtifactViewerPageDto ReadArtifactViewerPage(
             string chatId,
             string resourceUri,
-            string cursor, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+            string cursor, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken), string documentId = null)
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for artifact text reads.");
-            return _artifactViewer.ReadPage(LoadAddressedSession(chatId), resourceUri, cursor, _resourceData, cancellationToken);
+            return _artifactViewer.ReadPage(LoadArtifactViewerSession(chatId, documentId), resourceUri, cursor, _resourceData, cancellationToken);
         }
 
-        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
-            var data = OpenArtifactView(chatId, resourceUri, "image", cancellationToken: cancellationToken);
+            var data = OpenArtifactView(chatId, resourceUri, "image", cancellationToken: cancellationToken, documentId: documentId);
             return new ArtifactImageViewerDto { ResourceUri = resourceUri, ViewerKind = "image",
                 Title = data.Descriptor.Title, MimeType = data.Binary.Payload.ContentType,
                 ContentSha256 = data.Descriptor.Metadata["sourceContentSha256"],
                 ByteLength = data.Binary.Payload.ByteLength, Data = data };
         }
 
-        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
-            var data = OpenArtifactView(chatId, resourceUri, "thumbnail", cancellationToken: cancellationToken);
+            var data = OpenArtifactView(chatId, resourceUri, "thumbnail", cancellationToken: cancellationToken, documentId: documentId);
             return new ArtifactImageThumbnailDto { ResourceUri = resourceUri, ViewerKind = "image",
                 ContentSha256 = data.Descriptor.Metadata["sourceContentSha256"],
                 Width = data.Binary.Width, Height = data.Binary.Height,
@@ -197,32 +197,32 @@ namespace RNAssistant.Office
                 ImageByteLength = data.Binary.Payload.ByteLength, Data = data };
         }
 
-        public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri)
+        public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri, string documentId = null)
         {
-            return _artifactViewer.ReadPdfInfo(LoadArtifactViewerSession(chatId), resourceUri);
+            return _artifactViewer.ReadPdfInfo(LoadArtifactViewerSession(chatId, documentId), resourceUri);
         }
 
-        public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
-            return OpenArtifactPage(chatId, resourceUri, pageIndex, "render-page", cancellationToken);
+            return OpenArtifactPage(chatId, resourceUri, pageIndex, "render-page", cancellationToken, documentId);
         }
 
-        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
-            return OpenArtifactPage(chatId, resourceUri, pageIndex, "page-thumbnail", cancellationToken);
+            return OpenArtifactPage(chatId, resourceUri, pageIndex, "page-thumbnail", cancellationToken, documentId);
         }
 
         private ResourceDataOpenResponse OpenArtifactView(string chatId, string resourceUri, string view, string path = null,
-            CancellationToken cancellationToken = default(CancellationToken))
+            CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
-            var session = LoadArtifactViewerSession(chatId);
+            var session = LoadArtifactViewerSession(chatId, documentId);
             var artifact = _toolExecutor.ResourceGateway.ResolveArtifact(session, resourceUri);
             return _resourceData.Open(session, "viewer", ChatResourceUri.CreateArtifactRevision(session, artifact), view, path, cancellationToken);
         }
 
-        private ArtifactPdfPageDto OpenArtifactPage(string chatId, string resourceUri, int pageIndex, string view, CancellationToken cancellationToken)
+        private ArtifactPdfPageDto OpenArtifactPage(string chatId, string resourceUri, int pageIndex, string view, CancellationToken cancellationToken, string documentId)
         {
-            var data = OpenArtifactView(chatId, resourceUri, view, pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken);
+            var data = OpenArtifactView(chatId, resourceUri, view, pageIndex.ToString(System.Globalization.CultureInfo.InvariantCulture), cancellationToken, documentId);
             return new ArtifactPdfPageDto { ResourceUri = resourceUri, ViewerKind = "pdf",
                 ContentSha256 = data.Descriptor.Metadata["sourceContentSha256"],
                 PageIndex = data.Binary.PageIndex.Value, PageCount = data.Binary.PageCount.Value,
@@ -231,11 +231,12 @@ namespace RNAssistant.Office
                 ImageByteLength = data.Binary.Payload.ByteLength, Data = data };
         }
 
-        private ChatSession LoadArtifactViewerSession(string chatId)
+        private ChatSession LoadArtifactViewerSession(string chatId, string documentId = null)
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required for artifact viewing.");
-            return LoadAddressedSession(chatId);
+            var actor = LoadAddressedSession(chatId);
+            return string.IsNullOrEmpty(documentId) ? actor : ArtifactCatalog().Source(actor, documentId);
         }
     }
 }

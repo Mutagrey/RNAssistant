@@ -78,7 +78,7 @@ context.echarts = {
     };
   }
 };
-for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js", "app-chart-artifacts.js"]) {
+for (const file of ["app-utils.js", "app-viewer-registry.js", "app-json-viewer.js", "app-text-viewer.js", "app-resource-viewer.js", "app-artifact-viewers.js", "app-html-workspace-artifacts.js", "app-chart-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", file), "utf8"), context, { filename: file });
 }
 

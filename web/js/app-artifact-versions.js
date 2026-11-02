@@ -1,11 +1,11 @@
 (function () {
   "use strict";
 
-  function append(root, head, selectedRevision, onSelect) {
+  function append(root, head, selectedRevision, onSelect, context) {
     if (!head || head.historyCount < 2 ||
         ["versioned_document", "versioned_aggregate"].indexOf(head.resourceClass) < 0) return;
-    var chatId = state.activeChatId, navigation = state.chatNavigationVersion;
-    var sessionRevision = state.artifactLibrary.sessionRevision;
+    var chatId = context ? context.chatId : state.activeChatId, navigation = state.chatNavigationVersion;
+    var sessionRevision = context ? context.sessionRevision : state.artifactLibrary.sessionRevision;
     var selected = selectedRevision || head;
     var menu = document.createElement("details");
     menu.className = "html-workspace-menu artifact-version-menu";
@@ -27,6 +27,7 @@
     menu.appendChild(panel); root.appendChild(menu);
     var loaded = false, pending = false, cursor = null, ids = new Set();
     function current() {
+      if (context) return menu.isConnected && context.isCurrent();
       return menu.isConnected && chatId === state.activeChatId && navigation === state.chatNavigationVersion &&
         sessionRevision === (state.artifactLibrary || {}).sessionRevision && !state.chatDetailPending && !state.chatDetailError;
     }
@@ -34,7 +35,7 @@
       if (pending || !current()) return;
       pending = true; more.disabled = true; message.textContent = "Загрузка версий…";
       try {
-        var result = await send("getArtifactLibraryHistory", { chatId: chatId, expectedSessionRevision: sessionRevision,
+        var result = await (context ? context.send : send)("getArtifactLibraryHistory", { chatId: chatId, expectedSessionRevision: sessionRevision,
           headArtifactId: head.artifactId, cursor: cursor });
         if (!current()) return;
         if (result.chatId !== chatId || result.sessionRevision !== sessionRevision || result.headArtifactId !== head.artifactId)

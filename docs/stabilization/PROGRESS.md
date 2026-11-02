@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Независимые материалы S3b.2 — 2026-11-02
+
+После `20b11dc0` Материалы подключены к существующему Dockview: отдельные exact-target
+views, один набор format viewers, scoped typed reads из исходного чата/документа.
+Non-HTML singleton catalog preview и material section adapter удалены. Ограничены
+instances/pages/media; hide/close отменяют незавершённые чтения, late lease закрывается.
+Готовый DOM сохраняется при переключении/restore текущего окна. Synthetic Chromium
+и focused Harness прошли; 20 MD/JSON switches дают 2 body reads вместо 20, с ростом
+retained DOM двух views. [Ревью, измерения и ограничения](../ui/UI_MIGRATION_PLAN.md#s3b2-независимые-просмотры-материалов--in-review-2026-11-02).
+In Review. Далее общий HTML/plugin Browser S3b.3; Library/VBA и остальные панели S4.
+Cold restart mode/search/scroll, Windows/Office и прежние qualification gaps открыты.
+
+
 ## Общие команды настроек чата S2b.5 — 2026-11-02
 
 S2b.4 сохранён в `e7e8c47f`. Модель/режим/reasoning используют ChatComposer и

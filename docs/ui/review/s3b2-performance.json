@@ -1,0 +1,46 @@
+{
+  "baselineCommit": "20b11dc0",
+  "environment": "macOS local Chromium (Google Chrome), headless, 1280x900; synthetic bridge only",
+  "script": "tests/web/material-views-performance.test.js",
+  "before": {
+    "independent": false,
+    "fixture": {
+      "mdParagraphs": 300,
+      "largeTextCharacters": 780000,
+      "alternatingSelections": 20
+    },
+    "route": "select → viewer mounted → two animation frames",
+    "repeated": {
+      "bodyReads": 20,
+      "retainedViewerNodes": 42,
+      "p50Ms": 49.1,
+      "p95Ms": 50.2
+    },
+    "large": {
+      "readyMs": 75.19999980926514,
+      "renderedTextCharacters": 948899,
+      "domNodes": 18
+    }
+  },
+  "after": {
+    "independent": true,
+    "fixture": {
+      "mdParagraphs": 300,
+      "largeTextCharacters": 780000,
+      "alternatingSelections": 20
+    },
+    "route": "select → viewer mounted → two animation frames",
+    "repeated": {
+      "bodyReads": 2,
+      "retainedViewerNodes": 391,
+      "p50Ms": 32.7,
+      "p95Ms": 46.4
+    },
+    "large": {
+      "readyMs": 27.699999809265137,
+      "renderedTextCharacters": 37047,
+      "domNodes": 35
+    }
+  },
+  "limits": "One paired synthetic sample; timing includes two animation frames. Retained viewers: before one singleton, after two independent views. renderedTextCharacters includes line numbers, not source body size. No Office or model performance claim."
+}

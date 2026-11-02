@@ -413,8 +413,11 @@
     });
   }
 
-  function openArtifactResource(artifact, galleryArtifacts, gallerySource) {
+  function openArtifactResource(artifact, galleryArtifacts, gallerySource, options) {
     if (!artifact || value(artifact, "AvailabilityIssue", "availabilityIssue", "") === "metadata_unavailable") return false;
+    if ((!options || options.purpose !== "edit") && window.RNAssistantMaterialView &&
+        artifactKind(artifact) !== "html_workspace" && value(artifact, "ResourceUri", "resourceUri", ""))
+      return window.RNAssistantMaterialView.openArtifact(artifact);
     if (state.htmlWorkspaceDirty) {
       window.alert("Сначала сохраните или отмените изменения текущего артефакта.");
       return false;

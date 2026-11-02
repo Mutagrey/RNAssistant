@@ -2,9 +2,9 @@
 .chat-dock { width: 100%; height: 100%; }
 .shell:is(.navigation-closed, .navigation-overlay) .chat-dock-host { padding-left: var(--shell-dock-gap); }
 .dock-view, .dock-conversation { width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; }
-.shell #tab-chat .dock-conversation > .chat-main { width: 100%; height: 100%; min-height: 0; }
-.shell #tab-chat .dock-conversation > .chat-main[hidden] { display: none !important; }
-.shell #tab-chat .dock-conversation .chatbar { flex-basis: 33px; min-height: 33px; padding: 0 12px !important; }
+.shell .dock-conversation > .chat-main { width: 100%; height: 100%; min-height: 0; }
+.shell .dock-conversation > .chat-main[hidden] { display: none !important; }
+.shell .dock-conversation .chatbar { flex-basis: 33px; min-height: 33px; padding: 0 12px !important; }
 .dock-conversation #activeChatTitle, .dock-conversation #projectChatTitle { display: none; }
 .shell .chat-inspector-head { flex-basis: 33px; min-height: 33px; padding: 0 12px; }
 .shell .chat-inspector { background: var(--surface); }

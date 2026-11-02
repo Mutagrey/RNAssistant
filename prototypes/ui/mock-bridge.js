@@ -215,7 +215,7 @@
         runId: "preview-run-initial", revision: 1, inlineText: fixtures.report,
         inlineTruncated: false, metadataJson: "{}", relatedArtifactIds: [],
         createdUtc: "2026-10-18T09:00:05Z", resourceUri: report.resourceUri,
-        documentScoped: false }] : [],
+        documentScoped: false, documentId: "preview-document" }] : [],
       artifactLibrary: { sessionRevision: revision, heads: [], removedResourceUris: clone(removedArtifactUris) }, inbox: chatInbox() };
   }
   function chatInbox(receipt) {
@@ -307,6 +307,10 @@
   }
   function requireChat(payload) {
     if (!payload || payload.chatId !== activeChatId || !activeChatId) fail("Чат примера изменился.", "preview_chat_changed");
+  }
+  function requireArtifactReader(payload) {
+    if (!payload || !chats.some(function (chat) { return chat.Id === payload.chatId; }))
+      fail("Исходный чат материала недоступен.", "preview_chat_changed");
   }
   function mutationResult(mutation, previousRevision, nextRevision) {
     return { type: "rnassistant.skillMutationResult", contractVersion: 1, status: "ok",
@@ -941,6 +945,7 @@
         return { documentId: otherDocument ? "preview-other-document" : "preview-document",
           documentTitle: otherDocument ? "Все документы" : fixtures.document,
           resourceUri: item.resourceUri, title: item.title, kind: item.kind,
+          mimeType: item.contentType, revision: 1, byteLength: item.body == null ? null : new TextEncoder().encode(item.body).length,
           updatedUtc: exampleDate(item), linked: linked, selected: linked,
           canTransfer: true, canDelete: !otherDocument };
       });
@@ -985,9 +990,9 @@
       return chatState();
     }
     if (type === "exportArtifact") {
-      requireChat(payload);
+      requireArtifactReader(payload);
       var example = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri; });
-      if (!example || payload.documentId !== (example.id === "sequence" ? "preview-other-document" : "preview-document"))
+      if (!example || payload.documentId && payload.documentId !== (example.id === "sequence" ? "preview-other-document" : "preview-document"))
         fail("Материал примера изменился.", "preview_revision_changed");
       var body = example.body;
       if (example.assetUrl) {
@@ -1001,7 +1006,7 @@
         fileName: example.title, data: artifactData };
     }
     if (type === "readArtifactImage") {
-      requireChat(payload);
+      requireArtifactReader(payload);
       var imageExample = artifactExamples.find(function (item) { return item.id === "image" && item.resourceUri === payload.resourceUri; });
       if (!imageExample) fail("Версия изображения примера недоступна.", "preview_revision_changed");
       var imageData = await viewerBinary(imageExample.resourceUri, imageExample.assetUrl, imageExample.contentType);
@@ -1010,7 +1015,7 @@
         byteLength: imageData.binary.payload.byteLength, data: imageData };
     }
     if (type === "readArtifactPdfInfo" || type === "readArtifactPdfPage" || type === "readArtifactPdfThumbnail") {
-      requireChat(payload);
+      requireArtifactReader(payload);
       var pdfExample = artifactExamples.find(function (item) { return item.id === "pdf" && item.resourceUri === payload.resourceUri; });
       if (!pdfExample || type !== "readArtifactPdfInfo" && payload.pageIndex !== 0)
         fail("Версия PDF примера недоступна.", "preview_revision_changed");
@@ -1031,24 +1036,29 @@
         imageByteLength: pdfImage.binary.payload.byteLength, data: pdfImage };
     }
     if (type === "readArtifactViewerPage") {
-      requireChat(payload);
+      requireArtifactReader(payload);
       var viewed = artifactExamples.find(function (item) { return item.resourceUri === payload.resourceUri; });
-      if (!viewed || viewed.id !== "report" && viewed.id !== "pdf" || payload.cursor)
+      if (!viewed || viewed.body == null && viewed.id !== "pdf")
         fail("Версия материала примера недоступна.", "preview_revision_changed");
       var viewerId = leaseId();
       var reference = { uri: viewed.resourceUri, revision: "1" };
-      var viewerText = viewed.id === "pdf" ? pdfText : viewed.body;
+      var fullViewerText = viewed.id === "pdf" ? pdfText : viewed.body;
+      var viewerOffset = payload.cursor ? Number(String(payload.cursor).slice(5)) : 0;
+      if (!Number.isSafeInteger(viewerOffset) || viewerOffset < 0 || viewerOffset >= fullViewerText.length && viewerOffset !== 0)
+        fail("Страница примера недоступна.");
+      var viewerText = fullViewerText.slice(viewerOffset, viewerOffset + 32000), viewerEnd = viewerOffset + viewerText.length;
+      var viewerComplete = viewerEnd === fullViewerText.length;
       viewerBatches[viewerId] = { resource: reference, view: "text", text: viewerText,
-        offset: 0, nextOffset: viewerText.length, done: true };
-      return { resourceUri: viewed.resourceUri, viewerKind: viewed.id === "pdf" ? "pdf" : "markdown", title: viewed.title,
-        mimeType: viewed.contentType, contentSha256: await hash(viewerText),
+        offset: viewerOffset, nextOffset: viewerEnd, done: viewerComplete };
+      return { resourceUri: viewed.resourceUri, viewerKind: viewed.id === "pdf" ? "pdf" : viewed.kind === "markdown" || viewed.kind === "plan_document" ? "markdown" : "text", title: viewed.title,
+        mimeType: viewed.contentType, contentSha256: await hash(fullViewerText),
         data: { leaseId: viewerId, url: "https://rnassistant.local-resource/v1/" + viewerId,
           descriptor: { reference: reference }, view: "text",
           expiresUtc: new Date(Date.now() + 600000).toISOString(),
           maxBatchItems: 32000, maxBatchBytes: 8 * 1024 * 1024 },
-        offset: 0, returnedCharacters: viewerText.length, totalCharacters: viewerText.length,
-        nextCursor: null, complete: true, truncated: false, sourceComplete: true,
-        fullReadAllowed: true, viewerLimitReached: false, maximumDocumentCharacters: 1000000 };
+        offset: viewerOffset, returnedCharacters: viewerText.length, totalCharacters: fullViewerText.length,
+        nextCursor: viewerComplete ? null : "page:" + viewerEnd, complete: viewerComplete, truncated: !viewerComplete, sourceComplete: true,
+        fullReadAllowed: fullViewerText.length <= 512000, viewerLimitReached: false, maximumDocumentCharacters: 512000 };
     }
     if (type === "getRunChanges") {
       requireChat(payload);
@@ -1215,7 +1225,7 @@
     if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(count) || count < 1)
       return Promise.resolve(new Response("", { status: 400 }));
     if (viewerBatches[id] && address.pathname === "/v1/" + id) {
-      if (offset !== 0 || count !== 32000) return Promise.resolve(new Response("", { status: 404 }));
+      if (offset !== viewerBatches[id].offset || count !== 32000) return Promise.resolve(new Response("", { status: 404 }));
       return Promise.resolve(new Response(JSON.stringify(viewerBatches[id]),
         { headers: { "Content-Type": "application/json" } }));
     }

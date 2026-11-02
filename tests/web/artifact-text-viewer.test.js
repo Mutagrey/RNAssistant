@@ -90,7 +90,7 @@ context.Viewer = class ViewerStub {
   reset() { this.calls.push(["reset"]); }
   destroy() { this.destroyed = true; }
 };
-for (const file of ["app-viewer-registry.js", "app-text-viewer.js", "app-sequence-viewer.js", "app-resource-viewer.js", "app-html-workspace-artifacts.js"]) {
+for (const file of ["app-viewer-registry.js", "app-text-viewer.js", "app-sequence-viewer.js", "app-resource-viewer.js", "app-artifact-viewers.js", "app-html-workspace-artifacts.js"]) {
   vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context, { filename: file });
 }
 
@@ -650,17 +650,17 @@ function settle() { return new Promise(resolve => setImmediate(resolve)); }
   assert.ok(revokedUrls.includes(ownedUrl), "cache owner revokes verified binary blob URLs on close");
 
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
-  assert.ok(index.includes("app-text-viewer.js?v=artifact-text-20260831-1"));
-  assert.ok(index.includes("app-text-viewer.css?v=artifact-text-20260831-1"));
-  assert.ok(index.includes("app-sequence-viewer.js?v=artifact-gallery-20260902-1"));
-  assert.ok(index.includes("app-sequence-viewer.css?v=theme-tokens-20261019-1"));
-  assert.ok(index.includes("app-resource-viewer.js?v=agent-planning-20261002-2"));
-  assert.ok(index.includes("app-resource-viewer.css?v=agent-planning-20261002-2"));
+  assert.match(index, /app\-text\-viewer\.js\?v=[^"\s]+/);
+  assert.match(index, /app\-text\-viewer\.css\?v=[^"\s]+/);
+  assert.match(index, /app\-sequence\-viewer\.js\?v=[^"\s]+/);
+  assert.match(index, /app\-sequence\-viewer\.css\?v=[^"\s]+/);
+  assert.match(index, /app\-resource\-viewer\.js\?v=[^"\s]+/);
+  assert.match(index, /app\-resource\-viewer\.css\?v=[^"\s]+/);
   assert.ok(index.includes("js/vendor/viewer.min.js"));
   assert.ok(index.includes("css/vendor/viewer.min.css"));
   assert.ok(index.indexOf("js/vendor/viewer.min.js") < index.indexOf("app-resource-viewer.js"));
   assert.ok(index.indexOf("app-sequence-viewer.js") < index.indexOf("app-resource-viewer.js"));
-  assert.ok(index.includes("app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"));
+  assert.match(index, /app\-artifact\-viewer\-actions\.js\?v=[^"\s]+/);
   assert.ok(index.indexOf("app-viewer-registry.js") < index.indexOf("app-text-viewer.js"));
   assert.ok(index.indexOf("app-artifact-viewer-actions.js") < index.indexOf("app-html-workspace-actions.js"));
   const viewerSource = fs.readFileSync(path.join(root, "web/js/app-text-viewer.js"), "utf8");

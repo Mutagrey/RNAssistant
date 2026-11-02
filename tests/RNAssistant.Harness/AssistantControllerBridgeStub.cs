@@ -92,6 +92,7 @@ namespace RNAssistant.Office
         public string LastExpectedHtmlArtifactId { get; private set; }
         public string LastArtifactViewerResourceUri { get; private set; }
         public string LastArtifactViewerCursor { get; private set; }
+        public string LastArtifactViewerDocumentId { get; private set; }
         public string LastTrajectoryCursor { get; private set; }
         public string LastTrajectoryView { get; private set; }
         public string LastDiagnosticsWorkspaceId { get; private set; }
@@ -667,9 +668,10 @@ namespace RNAssistant.Office
         public ChatStateResponse DeleteDocumentArtifact(ArtifactDeleteRequest request)
         { LastChatId = request.ChatId; LastArtifactViewerResourceUri = request.ResourceUri; return new ChatStateResponse { ActiveChatId = request.ChatId }; }
         public ArtifactViewerPageDto ReadArtifactViewerPage(string chatId, string resourceUri, string cursor,
-            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken))
+            System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken), string documentId = null)
         {
             LastChatId = chatId;
+            LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;
             LastArtifactViewerCursor = cursor;
             return new ArtifactViewerPageDto
@@ -690,9 +692,10 @@ namespace RNAssistant.Office
                 MaximumDocumentCharacters = 512000
             };
         }
-        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactImageViewerDto ReadArtifactImage(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
             LastChatId = chatId;
+            LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;
             return new ArtifactImageViewerDto
             {
@@ -705,9 +708,10 @@ namespace RNAssistant.Office
                 Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
-        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactImageThumbnailDto ReadArtifactImageThumbnail(string chatId, string resourceUri, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
             LastChatId = chatId;
+            LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;
             return new ArtifactImageThumbnailDto
             {
@@ -722,9 +726,10 @@ namespace RNAssistant.Office
                 Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
-        public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri)
+        public ArtifactPdfViewerDto ReadArtifactPdfInfo(string chatId, string resourceUri, string documentId = null)
         {
             LastChatId = chatId;
+            LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;
             return new ArtifactPdfViewerDto
             {
@@ -740,9 +745,10 @@ namespace RNAssistant.Office
                 ExtractedCharacters = 5
             };
         }
-        public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactPdfPageDto ReadArtifactPdfPage(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
             LastChatId = chatId;
+            LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;
             return new ArtifactPdfPageDto
             {
@@ -759,9 +765,10 @@ namespace RNAssistant.Office
                 Data = new ResourceDataOpenResponse { LeaseId = new string('a', 64), Url = "https://rnassistant.local-resource/v1/" + new string('a', 64) }
             };
         }
-        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken))
+        public ArtifactPdfPageDto ReadArtifactPdfThumbnail(string chatId, string resourceUri, int pageIndex, CancellationToken cancellationToken = default(CancellationToken), string documentId = null)
         {
             LastChatId = chatId;
+            LastArtifactViewerDocumentId = documentId;
             LastArtifactViewerResourceUri = resourceUri;
             return new ArtifactPdfPageDto
             {

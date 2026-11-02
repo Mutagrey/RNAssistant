@@ -22,7 +22,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const uri = name => "rna://chat/doc/artifact/" + name + "/revision/1";
       window.fixtureItems = [
         { title: "Отчёт по продажам", kind: "html_workspace", resourceUri: uri("html_ws_a_r1"), linked: false, selected: false },
-        { title: "План исследования", kind: "markdown", resourceUri: uri("artifact_md_b_r1"), linked: false },
+        { title: "Другой HTML-проект", kind: "html_workspace", resourceUri: uri("html_ws_b_r1"), linked: false },
         { title: "Данные за октябрь.json", kind: "file", resourceUri: uri("artifact_c"), linked: false }
       ].map((item, index) => ({ ...item, documentId: "doc", documentTitle: "Продажи.xlsx",
         updatedUtc: "2026-10-18T10:" + String(30 - index).padStart(2, "0") + ":00Z", canTransfer: true, canDelete: true }));
@@ -31,7 +31,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.RNAssistantArtifactVisuals = { libraryHead: artifact => artifact.libraryHead };
       state.artifacts = fixtureItems.slice(0, 2).map((item, index) => ({ id: "head-" + index, resourceUri: item.resourceUri,
         libraryHead: { artifactId: "head-" + index, resourceUri: item.resourceUri, revision: 3, historyCount: 3,
-          resourceClass: index ? "versioned_document" : "versioned_aggregate" } }));
+          resourceClass: "versioned_aggregate" } }));
       window.commands = []; window.historyRequests = []; window.exportRequests = []; window.historyWait = null;
       window.renderHtmlWorkspace = () => RNAssistantHtmlWorkspaceTree.render({ root: $("htmlWorkspaceTree"), selected: {}, files: [], artifacts: [] });
       window.applyChatStateForChat = () => {};
@@ -58,12 +58,16 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.RNAssistantResourceDownload = { read: async data => new TextEncoder().encode(data.uri.includes("html_ws") ? JSON.stringify({ Project: {
         EntryPath: "index.html", Files: [{ Path: "index.html", Kind: "html", Content: "<h1>" + (data.uri.endsWith("-v1") ? "Старая версия" : "Продажи") + "</h1>" },
           { Path: "styles.css", Kind: "css", Content: data.uri.endsWith("-v1") ? "body { color: red; }" : "body { color: blue; }" }],
-        Data: [], ExternalDependencies: [] }, Views: [] }) : "План исследования\n\n1. Собрать данные\n2. Проверить результат") };
+        Data: [], ExternalDependencies: [] }, Views: [] }) : "Другой HTML-проект\n\n1. Собрать данные\n2. Проверить результат") };
       window.RNAssistantHtmlWorkspacePreview = { ensureVendors: async () => {}, build: () => '<style>body{font:15px system-ui;padding:20px;color:#243246}h1{font-size:24px}.card{padding:20px;background:#f3f6fa;border-radius:12px}</style><h1>Продажи за октябрь</h1><div class="card">Выручка<br><strong style="font-size:30px">1 240 000 ₽</strong></div>' };
     });
     for (const file of ["app-icons.js", "app-navigation-tree.js", "app-action-menu.js", "app-navigation-pane.js", "app-dock-workspace.js", "app-tree-adapter.js", "vendor/purify.min.js", "vendor/marked.min.js", "app-markdown.js", "app-viewer-registry.js", "app-text-viewer.js", "app-json-viewer.js", "app-html-workspace-tree.js", "app-artifact-versions.js", "app-artifact-catalog.js", "app-panel-toggle.js", "app-layout.js"])
       await page.addScriptTag({ content: read("js/" + file) });
-    await page.evaluate(() => { RNAssistantArtifactCatalog.show("document"); initializeSplitPanes(); });
+    await page.evaluate(() => { window.openTargets = [];
+      window.RNAssistantMaterialView = { target: (item, context) => Object.assign({ view: 'material' }, item, context) };
+      window.nativeOpenTarget = RNAssistantDockWorkspace.openTarget;
+      RNAssistantDockWorkspace.openTarget = (target, options) => { openTargets.push(target); return true; };
+      RNAssistantArtifactCatalog.show("document"); initializeSplitPanes(); });
     await page.locator("#htmlWorkspaceTree").getByText("В документе", { exact: true }).waitFor();
     assert.equal(await page.locator("#htmlWorkspaceTree").getByText("HTML-проекты", { exact: true }).count(), 1,
       "source adapter preserves the HTML project group inside its owner");
@@ -162,14 +166,14 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await versions.locator("summary").click();
     await page.waitForFunction(() => historyRequests.length === 3);
     await page.setViewportSize({ width: 1100, height: 760 });
-    await page.locator("#htmlWorkspaceTree").getByText("План исследования", { exact: true }).click();
+    await page.locator("#htmlWorkspaceTree").getByText("Другой HTML-проект", { exact: true }).click();
     await page.evaluate(() => { releaseHistory(); historyWait = null; });
     await page.locator("#artifactCatalogActions .artifact-action-menu > summary").click();
     await versions.locator("summary").click();
     await versions.getByRole("button", { name: /v3 · текущая/ }).waitFor();
     assert.equal(await page.evaluate(() => historyRequests.at(-1).headArtifactId), "head-1", "each file requests its own history");
     await versions.getByRole("button", { name: /v2 · другая ветка/ }).click();
-    await page.getByRole("heading", { name: "План исследования · v2", exact: true }).waitFor();
+    await page.getByRole("heading", { name: "Другой HTML-проект · v2", exact: true }).waitFor();
     assert.equal(await page.evaluate(() => exportRequests.at(-1).resourceUri), await page.evaluate(() => fixtureItems[1].resourceUri + "-v2"), "late history cannot select another file's revision");
     await page.locator("#artifactCatalogActions .artifact-action-menu > summary").click();
     await page.getByRole("button", { name: "К текущей версии", exact: true }).click();
@@ -177,11 +181,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     page.once("dialog", dialog => dialog.accept());
     await page.getByRole("button", { name: "Удалить из документа…" }).click();
     await page.locator("#artifactCatalogOverview").waitFor({ state: "visible" });
-    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("План исследования", { exact: true }).count(), 0);
+    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("Другой HTML-проект", { exact: true }).count(), 0);
     await page.locator("#htmlWorkspaceTree").getByText("Данные за октябрь.json", { exact: true }).click();
-    assert.equal(await versions.count(), 0, "originals without revision history have no chooser");
+    assert.equal(await page.evaluate(() => openTargets.at(-1).resourceUri), await page.evaluate(() => fixtureItems.at(-1).resourceUri), "non-HTML selection delegates the exact object to Dockview");
     assert.equal(await page.evaluate(() => commands.filter(c => c === "changeArtifactLink").length), 0, "browsing linked HTML, revisions and files never changes chat context");
-    assert.equal(await page.evaluate(() => RNAssistantDockWorkspace.openTarget({ view: "material", resourceUri: fixtureItems[0].resourceUri, chatId: "other", documentId: "doc", navigationVersion: 1 })), false, "stale scope is not retargeted");
+    assert.equal(await page.evaluate(() => nativeOpenTarget({ view: "material", resourceUri: fixtureItems[0].resourceUri, chatId: "other", documentId: "doc", navigationVersion: 1 })), false, "stale scope is not retargeted");
     // Shared loading/error/paging states; navigation never replaces an open exact viewer.
     const selectedTitle = await page.locator('#artifactCatalogPreviewTitle').textContent();
     await page.evaluate(() => {

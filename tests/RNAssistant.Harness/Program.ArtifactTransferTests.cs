@@ -151,13 +151,27 @@ namespace RNAssistant.Harness
                     var exported = catalog.Export(session, new ArtifactTransferRequest { ChatId = session.Id, DocumentId = session.DocumentAuthorityId,
                         ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, item) });
                     AssertTrue(bytes.SequenceEqual(exported.Bytes), "exact file bytes survive " + name);
+                    AssertEqual(session.DocumentAuthorityId, ChatArtifactDto.From(new[] { item }).Single().DocumentId, "chat card keeps source document metadata");
                     AssertTrue(exported.FileName.Length <= 180 && exported.FileName.EndsWith(Path.GetExtension(name)), "bounded names preserve file extensions");
                     var found = executor.ResourceGateway.Find(session, item.Title, "document").Items.Single();
                     AssertEqual(!binary, found.Representations.Contains("text"), "discovery advertises retained text only for authored files");
                     if (!binary)
+                    {
+                        var actor = NewSession(adapter);
+                        actor.DocumentAuthorityId = new DocumentAuthorityRegistry(paths).Resolve("excel", "reader", Path.Combine(paths.Root, "reader.xlsx")).Id;
+                        var captured = catalog.Source(actor, session.DocumentAuthorityId);
+                        AssertEqual(actor.Id, captured.Id, "viewer leases retain the addressed actor chat");
+                        AssertEqual(session.DocumentAuthorityId, captured.DocumentAuthorityId, "reader pins the source document independently of the actor");
+                        using (var plane = new ResourceDataPlaneService(executor.ResourceGateway))
+                        {
+                            var viewer = new ArtifactViewerService(executor.ResourceGateway);
+                            var page = viewer.ReadPage(captured, ChatResourceUri.CreateArtifactRevisionUri(session, item), null, plane);
+                            AssertEqual(Encoding.UTF8.GetString(bytes), ReadViewerBatch(plane, page), "closed document exact body uses the existing reader");
+                        }
                         AssertEqual(Encoding.UTF8.GetString(bytes), executor.ResourceGateway.Read(session, new ResourceReadRequest {
                             Reference = ChatResourceUri.CreateArtifactRevision(session, item), Representation = "text", MaxChars = 1000 }).Result.Text,
                             "advertised text reads exact authored bytes");
+                    }
                 }
             });
         }

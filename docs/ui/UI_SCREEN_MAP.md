@@ -288,6 +288,29 @@ Loading/error/retry/paging находятся под деревом. При до
 VBA, документы/чаты, проекты и будущие Файлы используют ту же модель подключения;
 очередь и пределы — [таблица S3b/S4](UI_MIGRATION_PLAN.md#s3b-общая-навигация-и-независимые-просмотры--proposed).
 
+### Независимые материалы S3b.2 — In Review
+
+Rail Материалы открывает каталог в основной Dock group. Дерево/таблица и chat card
+открывают один `material` view по actor chat + document + exact URI; повторный target
+активирует существующую вкладку, новая revision открывается отдельно. Header показывает
+название и исходные документ/чат/версию; format viewer содержит readable/source/JSON
+и свои контролы. Меню содержит download/copy-link/reload и доступные команды Catalog.
+Фильтр, переключение чата или выбор другого источника не меняют сохранённый target.
+Выбор rail Чат показывает conversation; вкладки материалов остаются рядом и доступны.
+
+Ready view сохраняет свой DOM/mode/scroll на возврате, move и restore текущего окна.
+Loading отменяется при hide; поздний lease закрывается; ошибка показывает retry.
+Unknown/слишком большой формат имеет объяснение и доступ к оригиналу. Текст читается
+по 32 000 chars (последние 16 страниц), full readable ≤512 000, image preview ≤8 MiB;
+PDF сохраняет имеющиеся page/thumbnail limits. Не более шести material views.
+Download использует streaming save при поддержке browser API; fallback ≤8 MiB с
+явной причиной отказа. Восстановление после перезапуска возвращает target, но пока
+не mode/search/scroll специализированного viewer.
+
+HTML workspace остаётся в Catalog/редакторе до общего Browser S3b.3; raw HTML file
+пока показан инертным исходником. Library и VBA editors — S4. Эти ограничения
+не заменяются дополнительными browser/chat UI. [Ревью](UI_MIGRATION_PLAN.md#s3b2-независимые-просмотры-материалов--in-review-2026-11-02).
+
 ## Сквозная навигация — предлагаемое поведение
 
 1. Rail выбирает контекст левой навигации. Выбор leaf вызывает общую команду

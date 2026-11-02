@@ -3,7 +3,7 @@ function setMobileNavigationOpen(open) {
 }
 
 function switchTab(name, options) {
-  var workspaceView = name === "settings" || name === "request" ? name : name === "chat" ? "conversation" : null;
+  var workspaceView = RNAssistantDockWorkspace.sectionView(name) || (name === "settings" || name === "request" ? name : null);
   if (name === "settings" || name === "request") {
     // These are workspace views. Keep existing callers, with one placement path.
     name = "chat";
@@ -59,9 +59,6 @@ function switchTab(name, options) {
     renderInstructions();
   } else if (name === "plugins" && window.RNAssistantPlugins) {
     window.RNAssistantPlugins.show();
-  } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {
-    renderHtmlWorkspace();
-    if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.show();
   } else if (name === "vba" && typeof renderVbaProject === "function") {
     renderVbaProject();
     if (typeof updateVbaMacroRunState === "function") updateVbaMacroRunState();
@@ -117,6 +114,7 @@ document.addEventListener("DOMContentLoaded", function () {
   RNAssistantNavigationPane.bindSearches(document);
   if (typeof initializeSplitPanes === "function") initializeSplitPanes();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
+  window.RNAssistantMaterialView.register(window.RNAssistantDockWorkspace);
   window.RNAssistantDockWorkspace.bind();
   if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.bind();
   window.RNAssistantShellLayout.refresh();

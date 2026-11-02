@@ -36,9 +36,9 @@ namespace RNAssistant.Office.Services
         }
         private static string Title(DocumentAuthorityEntry entry)
         { return string.IsNullOrEmpty(entry.Locator) ? entry.Host + " · " + entry.AuthorityId.Substring(0, Math.Min(8, entry.AuthorityId.Length)) : Path.GetFileName(entry.Locator); }
-        private ChatSession Source(ChatSession actor, string documentId)
+        internal ChatSession Source(ChatSession actor, string documentId)
         {
-            if (documentId == actor.DocumentAuthorityId) return actor;
+            if (string.IsNullOrEmpty(documentId) || documentId == actor.DocumentAuthorityId) return actor;
             var entry = Documents(actor).SingleOrDefault(d => d.AuthorityId == documentId);
             if (entry == null) throw new InvalidOperationException("Документ отсутствует в локальном каталоге.");
             // Read-only context for exact saved content. Never passed to live Office tools.
@@ -66,7 +66,7 @@ namespace RNAssistant.Office.Services
                         !string.IsNullOrEmpty(request.Query) && (item.Title ?? "").IndexOf(request.Query.Trim(), StringComparison.OrdinalIgnoreCase) < 0) continue;
                     items.Add(new ArtifactCatalogItem { DocumentId = doc.AuthorityId, DocumentTitle = Title(doc),
                         ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(source, item), Title = item.Title ?? "Недоступный ресурс",
-                        Kind = item.Kind, UpdatedUtc = item.CreatedUtc, Linked = linked,
+                        Kind = item.Kind, MimeType = item.MimeType, Revision = Math.Max(1, item.Revision), ByteLength = item.ContentByteLength, UpdatedUtc = item.CreatedUtc, Linked = linked,
                         Selected = linked && (item.Id == actor.ActiveHtmlArtifactId || item.Id == actor.ActivePlanDocumentArtifactId ||
                             MarkdownDocumentIdentity.LogicalId(item.Id) != null && actor.ArtifactLinks.Any(l => !l.Detached && l.Reference.Uri == ChatResourceUri.CreateArtifactRevisionUri(actor, item))), AvailabilityIssue = item.AvailabilityIssue,
                         CanTransfer = CanTransfer(item), CanDelete = doc.AuthorityId == actor.DocumentAuthorityId });

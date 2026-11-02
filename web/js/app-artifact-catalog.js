@@ -1,9 +1,7 @@
 (function () {
   "use strict";
   if (!document.getElementById("artifactCatalog")) return;
-  var generation = 0, previewGeneration = 0, pending = false, response = null, next = null, chat = null, previewUrl = null;
-  var typedPreview = null;
-  var sequencePreview = null;
+  var generation = 0, previewGeneration = 0, pending = false, response = null, next = null, chat = null;
   var selected = null, selectedRevision = null, collapsed = {}, loading = false, overviewRequested = true;
   var overviewLoading = false, overviewError = "", queryDirty = false, catalogNotice = "";
   var maximumCatalogItems = 500;
@@ -23,11 +21,6 @@
       commandLabel: "Добавить материал", status: el("Status"), more: el("More")
     }, { searchDelay: 200, onQueryPending: function () { generation++; loading = false; queryDirty = true; },
       onQuery: function () { if (typeof isPanelActive !== "function" || isPanelActive("artifacts")) load(); }, onRetry: function () { load(); }, onMore: function () { if (!loading && next) load(next); } });
-    RNAssistantDockWorkspace.registerTargetRoute("material", {
-      accepts: function (target) { return !!response && current(target.chatId, target.navigationVersion) &&
-        target.documentId === response.documentId && response.items.some(function (item) { return item.resourceUri === target.resourceUri; }); },
-      open: function (target) { return openSelected(target.resourceUri); }
-    });
     return navigationPane;
   }
   function navigationState() {
@@ -109,9 +102,6 @@
       state.activeChatId ? "По этим условиям материалов нет." : "Откройте чат документа, чтобы увидеть материалы.");
   }
   function clearPreview() {
-    typedPreview = null;
-    if (sequencePreview) sequencePreview.destroy();
-    sequencePreview = null;
     el("PreviewBody").querySelectorAll(".artifact-viewer-host, .collection-page").forEach(function (target) {
       if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
     });
@@ -120,89 +110,6 @@
     el("Preview").classList.remove("is-media-preview");
     delete el("PreviewBody").dataset.productViewer;
     $("htmlWorkspaceEditor").hidden = false;
-    if (previewUrl) URL.revokeObjectURL(previewUrl); previewUrl = null;
-  }
-  function renderSequence(text) {
-    var source = JSON.parse(text), items = source && source.items;
-    if (!Array.isArray(items) || !items.length || items.length > 10000) throw new Error("Коллекция не содержит доступных элементов.");
-    var body = el("PreviewBody"), page = node("div", "", "collection-page product-viewer");
-    body.dataset.productViewer = "collection";
-    function itemTitle(value, index) { return String(value && (value.region || value.title || value.name) || "Элемент " + (index + 1)); }
-    function amount(value) {
-      return typeof value === "number" && Number.isFinite(value)
-        ? (value / 1000000).toLocaleString("ru-RU", { maximumFractionDigits: 2 }) + " млн ₽" : "";
-    }
-    function select(index) {
-      var value = items[index], title = itemTitle(value, index), lines = ["# " + title];
-      if (value && typeof value === "object") {
-        Object.keys(value).forEach(function (key) {
-          if (key === "region" || key === "title" || key === "name") return;
-          var label = { revenue: "Выручка", changePercent: "Изменение к прошлому периоду", status: "Статус" }[key] || key;
-          var content = key === "revenue" ? amount(value[key]) : key === "changePercent" && typeof value[key] === "number"
-            ? value[key].toLocaleString("ru-RU") + "%" :
-            typeof value[key] === "string" ? value[key] : JSON.stringify(value[key]);
-          lines.push("**" + label.replace(/[\\*_`]/g, "\\$&") + "** — " + String(content).replace(/[\\*_`]/g, "\\$&") + ".");
-        });
-      } else lines.push(String(value));
-      window.RNAssistantViewerRegistry.mount("markdown", page, {
-        text: lines.join("\n\n"), fullText: lines.join("\n\n"), complete: true, sourceComplete: true,
-        onCopy: window.copyTextResult
-      });
-    }
-    var rail = window.RNAssistantSequenceViewer.createRail({
-      title: "Элементы", ariaLabel: "Элементы коллекции", count: items.length,
-      currentIndex: 0, orientation: "horizontal", className: "collection-rail",
-      showJump: false, showNumbers: false, itemExtent: 156,
-      getItem: function (index) { return items[index]; },
-      itemLabel: function (index, value) { return itemTitle(value, index); },
-      onSelect: select,
-      renderItem: function (index, value, preview) {
-        var title = node("strong", itemTitle(value, index));
-        var summary = value && (amount(value.revenue) || value.status) || "";
-        preview.append(title, node("span", String(summary)));
-        return "ready";
-      }
-    });
-    sequencePreview = rail;
-    body.append(rail.element, page);
-    select(0);
-  }
-  function refreshViewer() {
-    if (!typedPreview || el("Preview").hidden || !current(typedPreview.chatId, typedPreview.navigation)) return;
-    var body = el("PreviewBody"), currentPreview = typedPreview;
-    body.querySelectorAll(".artifact-viewer-host").forEach(function (target) {
-      window.RNAssistantViewerRegistry.unmount(target);
-    });
-    body.replaceChildren(); body.dataset.productViewer = currentPreview.kind;
-    var viewer = window.RNAssistantHtmlWorkspaceViewerActions.artifactViewerState(currentPreview.uri);
-    if (viewer && viewer.status === "error") {
-      showRawMedia(currentPreview.title, currentPreview.mime, currentPreview.url,
-        "Просмотр страниц недоступен: " + (viewer.message || "ошибка чтения") + ". Открыт исходный файл.");
-      typedPreview = null;
-      return;
-    }
-    var artifact = { Kind: currentPreview.kind, Title: currentPreview.title,
-      ResourceUri: currentPreview.uri, MimeType: currentPreview.mime };
-    if (!window.RNAssistantHtmlWorkspaceArtifacts.appendTypedViewer(body, artifact,
-      window.RNAssistantHtmlWorkspaceViewerActions)) {
-      status("Просмотр этого формата недоступен.");
-    }
-  }
-  function showRawMedia(title, mime, url, reason) {
-    var body = el("PreviewBody");
-    body.replaceChildren(); body.dataset.productViewer = /^image\//i.test(mime) ? "image" : "pdf";
-    if (reason) body.appendChild(node("p", reason, "artifact-viewer-fallback-note"));
-    if (/^image\/(?:jpeg|png|gif|webp)(?:;|$)/i.test(mime)) {
-      var target = node("div", "", "artifact-viewer-host artifact-typed-viewer product-viewer");
-      body.appendChild(target);
-      window.RNAssistantViewerRegistry.mount("image", target, {
-        title: title, mimeType: mime, data: { objectUrl: url }
-      });
-    } else if (/^image\//i.test(mime)) {
-      var image = document.createElement("img"); image.src = url; image.alt = title; body.appendChild(image);
-    } else {
-      var pdf = document.createElement("iframe"); pdf.src = url; pdf.title = title; body.appendChild(pdf);
-    }
   }
   function show(scope) {
     if (!canMutate()) return false;
@@ -331,6 +238,27 @@
     if (actionId === "delete-document" && item.canDelete) return remove(item, listed);
     return false;
   }
+  function itemCommands(item, listed) {
+    var id = listed.chatId, nav = state.chatNavigationVersion, artifact = localArtifact(item), items = [];
+    function add(label, icon, run, disabled, danger) {
+      items.push({ label: label, icon: icon, disabled: pending || !!disabled, danger: !!danger,
+        onSelect: function (button) { if (current(id, nav) && response === listed) return run(button); } });
+    }
+    if (item.documentId === listed.documentId) add(item.linked ? "Убрать из чата" : "Подключить к чату", item.linked ? "minus" : "link",
+      function (button) { return changeLink(id, listed.sessionRevision, item.resourceUri, item.linked, button); }, !item.linked && item.availabilityIssue);
+    var requiresSelection = item.kind === "html_workspace" || item.kind === "plan_document";
+    if (item.linked && item.documentId === listed.documentId && requiresSelection && !item.selected)
+      add("Использовать в чате", "check", function (button) { return changeLink(id, listed.sessionRevision, item.resourceUri, false, button); }, !!item.availabilityIssue);
+    if (artifact && (!requiresSelection || item.selected) && ["html_workspace", "plan_document", "markdown"].indexOf(item.kind) >= 0)
+      add("Редактировать", "edit", function () {
+        if (!canMutate()) return;
+        state.htmlWorkspaceMode = "edit"; window.openArtifactResource(artifact, null, null, { purpose: "edit" }); render();
+      });
+    if (item.canTransfer) add("Независимая копия", "copy", function (button) { return copyItem(item, button, listed); });
+    if (item.kind === "html_workspace" && item.canTransfer) add("Экспорт проекта", "download", function () { return download(item); });
+    if (item.canDelete) add("Удалить из документа…", "trash", function (button) { return remove(item, listed, button); }, false, true);
+    return items;
+  }
   function actions() {
     var root = el("Actions"); root.replaceChildren(); root.hidden = !selected || overviewRequested;
     if (!selected || !response) return;
@@ -369,31 +297,9 @@
       root.appendChild(menu);
       return;
     }
-    if (item.documentId === listed.documentId) {
-      action(options, item.linked ? "Убрать из чата" : "Подключить к чату", item.linked ? "minus" : "link", async function (b) {
-        if (await changeLink(id, listed.sessionRevision, item.resourceUri, item.linked, b)) {
-          if (selected && !item.linked) select(selected.resourceUri);
-          else if (selected) preview(selected);
-        }
-      }, !item.linked && item.availabilityIssue);
-    }
-    var requiresSelection = item.kind === "html_workspace" || item.kind === "plan_document";
-    if (item.linked && item.documentId === listed.documentId && requiresSelection && !item.selected) {
-      action(options, "Использовать в чате", "check", function (button) {
-        changeLink(id, listed.sessionRevision, item.resourceUri, false, button);
-      }, !!item.availabilityIssue);
-    }
-    if (artifact && (!requiresSelection || item.selected) && ["html_workspace", "plan_document", "markdown"].indexOf(item.kind) >= 0) {
-      action(options, "Редактировать", "edit", function () {
-        if (!canMutate()) return;
-        state.htmlWorkspaceMode = "edit"; window.openArtifactResource(artifact); render();
-      });
-    }
-    if (item.canTransfer) {
-      action(options, "Независимая копия", "copy", function (b) { copyItem(item, b, listed); });
-      action(options, item.kind === "html_workspace" ? "Экспорт проекта" : "Скачать", "download", function () { download(item); });
-    }
-    if (item.canDelete) action(options, "Удалить из документа…", "trash", function (b) { remove(item, listed, b); }, false, "danger-soft");
+    itemCommands(item, listed).forEach(function (entry) {
+      action(options, entry.label, entry.icon, entry.onSelect, entry.disabled, entry.danger ? "danger-soft" : "");
+    });
     if (options.children.length) root.appendChild(menu);
   }
   function localArtifact(item) {
@@ -401,8 +307,15 @@
   }
   function select(uri) {
     navigation();
-    return RNAssistantDockWorkspace.openTarget({ view: "material", resourceUri: uri, documentId: response && response.documentId,
-      chatId: state.activeChatId, navigationVersion: state.chatNavigationVersion });
+    var item = response && response.items.find(function (entry) { return entry.resourceUri === uri; });
+    if (!item) return false;
+    if (item.kind === "html_workspace") return openSelected(uri);
+    selected = item; selectedRevision = null;
+    var artifact = localArtifact(item), head = artifact && RNAssistantArtifactVisuals.libraryHead(artifact);
+    var target = RNAssistantMaterialView.target(item, { chatId: response.chatId, documentId: item.documentId,
+      documentTitle: item.documentTitle, sessionRevision: response.sessionRevision, head: head });
+    render();
+    return RNAssistantDockWorkspace.openTarget(target, { referencePanel: "materials" });
   }
   function openSelected(uri) {
     if (!canMutate() || !response) return false;
@@ -473,7 +386,7 @@
       }
     });
     var roots = [chatGroup, documentGroup, otherGroup].filter(Boolean);
-    var selection = options.selected || {}, selectedKey = !overviewRequested && selected ? "catalog::" + selected.resourceUri : null;
+    var selection = options.selected || {}, selectedKey = selected ? "catalog::" + selected.resourceUri : null;
     if (!overviewRequested && el("Preview").hidden && selection.id) {
       selectedKey = byId[selection.id] ? "catalog::" + byId[selection.id] : null;
     }
@@ -593,38 +506,7 @@
         el("PreviewBody").insertBefore(toolbar, el("PreviewBody").firstChild);
         el("PreviewBody").appendChild(picker); el("PreviewBody").appendChild(pre);
         mode(showSource);
-      } else if (/^application\/pdf(?:;|$)/i.test(mime) || /^image\//i.test(mime)) {
-        previewUrl = URL.createObjectURL(new Blob([result.bytes], { type: mime }));
-        el("Preview").classList.add("is-media-preview");
-        if (item.documentId === response.documentId &&
-            (/^application\/pdf(?:;|$)/i.test(mime) || /^image\/(?:jpeg|png|gif|webp)(?:;|$)/i.test(mime))) {
-          typedPreview = { chatId: id, navigation: nav, uri: item.resourceUri, url: previewUrl,
-            title: item.title, mime: mime, kind: /^image\//i.test(mime) ? "image" : "pdf" };
-          refreshViewer();
-        } else showRawMedia(item.title, mime, previewUrl, "");
-      } else if (/text|json|javascript|xml/.test(mime)) {
-        var text = new TextDecoder("utf-8", { fatal: true }).decode(result.bytes);
-        if (item.kind === "sequence") {
-          try { renderSequence(text); }
-          catch (error) {
-            el("PreviewBody").appendChild(node("p", "Коллекция не открыта: " + error.message + " Исходные данные доступны ниже.", "artifact-viewer-fallback-note"));
-            var rawSequence = node("div", "", "artifact-viewer-host product-viewer");
-            el("PreviewBody").appendChild(rawSequence);
-            window.RNAssistantViewerRegistry.mount("json", rawSequence, {
-              text: text, pageText: text, fullText: text, complete: true,
-              sourceComplete: true, completeness: "full", onCopy: window.copyTextResult
-            });
-          }
-          status(""); return;
-        }
-        var kind = item.kind === "task_list" ? "task_list" :
-          item.kind === "markdown" || item.kind === "plan_document" || /markdown/.test(mime) ? "markdown" : /json/.test(mime) ? "json" : "text";
-        el("PreviewBody").dataset.productViewer = kind;
-        window.RNAssistantViewerRegistry.mount(kind, el("PreviewBody"), {
-          text: text, pageText: text, fullText: text, complete: true,
-          sourceComplete: true, completeness: "full", onCopy: window.copyTextResult
-        });
-      } else el("PreviewBody").appendChild(node("p", "Файл: " + result.transfer.fileName + " · " + result.bytes.length + " байт. Используйте «Скачать» для открытия."));
+      }
       status("");
     } catch (error) { if (current(id, nav) && version === previewGeneration) status(error.detail || error.message); }
   }
@@ -659,7 +541,11 @@
   el("Import").addEventListener("click", function () { if (canMutate()) el("File").click(); });
   el("File").addEventListener("change", function () { var file = this.files[0]; this.value = ""; importFile(file); });
   window.RNAssistantArtifactCatalog = { show: show, editor: editor, sync: sync, changeLink: changeLink,
-    refreshViewer: refreshViewer,
+    commands: function (target) {
+      var item = response && target.chatId === state.activeChatId && response.chatId === target.chatId &&
+        response.items.find(function (entry) { return entry.resourceUri === target.resourceUri; });
+      return item ? itemCommands(item, response) : [];
+    },
     renderTree: function (root, nodes, options) { navigation().render(nodes, options); },
     tree: tree, select: select, canSelect: canMutate, treeAction: treeAction, remove: function (uri) {
       var item = response && response.items.find(function (item) { return item.resourceUri === uri; });

@@ -670,6 +670,7 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("createdUtc")] public System.DateTime CreatedUtc { get; set; }
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("documentScoped")] public bool DocumentScoped { get; set; }
+        [JsonProperty("documentId")] public string DocumentId { get; set; }
         [JsonProperty("libraryHead", NullValueHandling = NullValueHandling.Ignore)]
         public ArtifactLibraryHeadDto LibraryHead { get; set; }
         [JsonProperty("libraryRevision", NullValueHandling = NullValueHandling.Ignore)]
@@ -697,6 +698,7 @@ namespace RNAssistant.Office.Contracts
                 if (item != null && artifacts.TryGetValue(item.Id ?? string.Empty, out artifact))
                 {
                     item.ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(session, artifact);
+                    item.DocumentId = artifact.DocumentAuthorityId ?? session.DocumentAuthorityId;
                 }
             }
             return result;
@@ -716,6 +718,7 @@ namespace RNAssistant.Office.Contracts
                     AvailabilityIssue = artifact.AvailabilityIssue,
                     Id = artifact.Id,
                     DocumentScoped = !string.IsNullOrWhiteSpace(artifact.DocumentAuthorityId),
+                    DocumentId = artifact.DocumentAuthorityId,
                     Kind = artifact.Kind,
                     Title = artifact.Title,
                     MimeType = artifact.MimeType,

@@ -23,18 +23,19 @@ class Element {
 const ids = ["", "Scope", "Import", "File", "Kind", "Status", "PreviewStatus", "More", "Preview", "Actions", "PreviewTitle", "PreviewBody",
   "All", "Overview", "OverviewRows", "OverviewTable", "OverviewEmpty", "OverviewCreate"];
 const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new Element()]));
-elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.artifactNavSearch = new Element();
+elements.artifactOverviewCreate = new Element(); elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.artifactNavSearch = new Element();
 elements.artifactCatalogScope.value = "chat"; elements.artifactCatalogPreview.hidden = true;
 const requests = [], applied = [], previews = [];
 const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout, clearTimeout, confirm: () => true,
   Option: function (text, value) { const e = new Element("option"); e.textContent = text; e.value = value; return e; },
-  document: { getElementById: id => elements[id], createElement: tag => new Element(tag) },
+  document: { querySelectorAll: () => [], getElementById: id => elements[id], createElement: tag => new Element(tag) },
   $: id => elements[id], state: { activeChatId: "a", chatNavigationVersion: 1, htmlWorkspaceEditVersion: 0 },
   send: (type, payload) => new Promise((resolve, reject) => requests.push({ type, payload, resolve, reject })),
   applyChatStateForChat: (data, id) => applied.push({ data, id }), fetch() {},
   RNAssistantResourceDownload: { read: async () => new TextEncoder().encode(JSON.stringify({ Project: { Files: [{ Path: "index.html", Kind: "html", Content: "<h1>Saved</h1>" }], EntryPath: "index.html", Data: [], ExternalDependencies: [] }, Views: [] })) },
   RNAssistantHtmlWorkspacePreview: { ensureVendors: async () => {}, build: options => { previews.push(options); return "<h1>Saved</h1>"; } }
 });
+context.RNAssistantNavigationPane = { mount(options, adapter) { options.more.addEventListener("click", adapter.onMore); return { setState() {} }; } };
 context.RNAssistantNavigationTree = { icon: () => "" };
 context.RNAssistantIcons = { render: () => "" };
 context.window = context;
@@ -54,7 +55,7 @@ async function finishPreview() {
   context.RNAssistantArtifactCatalog.show("all");
   assert.equal(requests[0].payload.scope, "all"); requests.shift().resolve(answer()); await flush();
   assert.equal(tree()[0].title, "В документе", "current document keeps its ownership group");
-  assert.deepEqual(Array.from(tree()[0].children[0].rowActions, action => action.id), ["delete-document"],
+  assert.deepEqual(Array.from(tree()[0].children[0].children[0].rowActions, action => action.id), ["delete-document"],
     "an unlinked material can be deleted from its document from the tree");
   await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   assert.equal(elements.htmlWorkspaceEditor.hidden, true, "external preview uses the same right pane");
@@ -66,7 +67,7 @@ async function finishPreview() {
   context.RNAssistantArtifactCatalog.show("document"); const staleList = requests.shift();
   context.RNAssistantArtifactCatalog.show("chat"); const latestList = requests.shift();
   latestList.resolve(answer("b", 8)); await flush(); staleList.resolve({ ...answer("b"), items: [] }); await flush();
-  assert.equal(tree()[0].children[0].title, "Dashboard", "late query cannot replace current tree");
+  assert.equal(tree()[0].children[0].children[0].title, "Dashboard", "late query cannot replace current tree");
   await context.RNAssistantArtifactCatalog.select(itemUri); await finishPreview();
   context.state.htmlWorkspaceDirty = true; button("Независимая копия").click();
   assert.equal(await context.RNAssistantArtifactCatalog.select(itemUri), false);
@@ -83,12 +84,12 @@ async function finishPreview() {
   deletion.resolve({ activeChatId: "b" }); await flush();
   requests.shift().resolve({ ...answer("b", 9), items: [] }); await flush();
   assert.equal(tree().length, 0); assert.equal(elements.artifactCatalogActions.hidden, true);
-  assert.equal(elements.artifactCatalogPreviewTitle.textContent, "Выберите артефакт", "removed selection never keeps stale preview");
+  assert.equal(elements.artifactCatalogPreview.hidden, true, "removed selection never keeps a visible stale preview");
   context.RNAssistantArtifactCatalog.show(); requests.shift().resolve({ ...answer("b", 9), nextCursor: "page2" }); await flush();
   elements.artifactCatalogMore.click(); assert.equal(requests[0].payload.cursor, "page2");
   const second = { ...answer("b", 9).items[0], title: "Second", resourceUri: itemUri.replace("_a_", "_b_") };
   requests.shift().resolve({ ...answer("b", 9), items: [second] }); await flush();
-  assert.equal(tree()[0].children.length, 2, "pagination appends without replacing the first page");
+  assert.equal(tree()[0].children[0].children.length, 2, "pagination appends without replacing the first page");
   // A preview begun before navigation cannot overwrite the new selection.
   await context.RNAssistantArtifactCatalog.select(itemUri); const oldRead = requests.shift();
   context.RNAssistantArtifactCatalog.editor();
@@ -98,7 +99,7 @@ async function finishPreview() {
   context.RNAssistantArtifactCatalog.show("chat");
   const linkedItem = { ...answer("b", 10).items[0], linked: true };
   requests.shift().resolve({ ...answer("b", 10), items: [linkedItem] }); await flush();
-  assert.deepEqual(Array.from(tree()[0].children[0].rowActions, action => action.id), ["detach", "delete-document"],
+  assert.deepEqual(Array.from(tree()[0].children[0].children[0].rowActions, action => action.id), ["detach", "delete-document"],
     "a linked material exposes separate detach and document deletion actions");
   const unlink = context.RNAssistantArtifactCatalog.treeAction("detach", itemUri);
   const detachment = requests.shift();

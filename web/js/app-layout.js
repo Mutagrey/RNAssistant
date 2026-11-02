@@ -28,7 +28,7 @@
       text("workspaceLayoutStatus", layout.visible ? "Вкладки: " + layout.panels + " · группы: " + layout.groups : "");
       if (layout.visible) {
         ["settings", "chat"].forEach(function (section) {
-          var selected = (layout.activeView === "settings") === (section === "settings");
+          var selected = section === "settings" ? layout.activeView === "settings" : layout.section === "chat" && layout.activeView !== "settings";
           var button = document.querySelector('.section-rail [data-section="' + section + '"]');
           button.classList.toggle("active", selected);
           if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");

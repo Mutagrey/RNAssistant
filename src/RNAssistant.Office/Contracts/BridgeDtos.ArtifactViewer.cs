@@ -3,40 +3,21 @@ using Newtonsoft.Json;
 
 namespace RNAssistant.Office.Contracts
 {
-    public sealed class ArtifactViewerPagePayload : ChatPayload
+    public class ArtifactResourcePayload : ChatPayload
     {
-        [JsonProperty("resourceUri")]
-        public string ResourceUri { get; set; }
-
-        [JsonProperty("cursor")]
-        public string Cursor { get; set; }
+        [JsonProperty("documentId")] public string DocumentId { get; set; }
+        [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
     }
-
-    public sealed class ArtifactImageViewerPayload : ChatPayload
+    public sealed class ArtifactViewerPagePayload : ArtifactResourcePayload
     {
-        [JsonProperty("resourceUri")]
-        public string ResourceUri { get; set; }
+        [JsonProperty("cursor")] public string Cursor { get; set; }
     }
-
-    public sealed class ArtifactImageThumbnailPayload : ChatPayload
+    public sealed class ArtifactImageViewerPayload : ArtifactResourcePayload { }
+    public sealed class ArtifactImageThumbnailPayload : ArtifactResourcePayload { }
+    public sealed class ArtifactPdfViewerPayload : ArtifactResourcePayload { }
+    public sealed class ArtifactPdfPagePayload : ArtifactResourcePayload
     {
-        [JsonProperty("resourceUri")]
-        public string ResourceUri { get; set; }
-    }
-
-    public sealed class ArtifactPdfViewerPayload : ChatPayload
-    {
-        [JsonProperty("resourceUri")]
-        public string ResourceUri { get; set; }
-    }
-
-    public sealed class ArtifactPdfPagePayload : ChatPayload
-    {
-        [JsonProperty("resourceUri")]
-        public string ResourceUri { get; set; }
-
-        [JsonProperty("pageIndex")]
-        public int PageIndex { get; set; }
+        [JsonProperty("pageIndex")] public int PageIndex { get; set; }
     }
 
     public sealed class ArtifactViewerPageDto

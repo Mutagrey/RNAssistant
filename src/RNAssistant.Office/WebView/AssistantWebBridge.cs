@@ -821,39 +821,39 @@ namespace RNAssistant.Office.WebView
                         responsePayload = _controller.ReadArtifactViewerPage(
                             artifactViewerPage.ChatId,
                             artifactViewerPage.ResourceUri,
-                            artifactViewerPage.Cursor, cancellationToken);
+                            artifactViewerPage.Cursor, cancellationToken, artifactViewerPage.DocumentId);
                         break;
                     case BridgeOperationId.ReadArtifactImage:
                         var artifactImage = Payload<ArtifactImageViewerPayload>(payload);
                         responsePayload = _controller.ReadArtifactImage(
                             artifactImage.ChatId,
-                            artifactImage.ResourceUri, cancellationToken);
+                            artifactImage.ResourceUri, cancellationToken, artifactImage.DocumentId);
                         break;
                     case BridgeOperationId.ReadArtifactImageThumbnail:
                         var artifactImageThumbnail = Payload<ArtifactImageThumbnailPayload>(payload);
                         responsePayload = _controller.ReadArtifactImageThumbnail(
                             artifactImageThumbnail.ChatId,
-                            artifactImageThumbnail.ResourceUri, cancellationToken);
+                            artifactImageThumbnail.ResourceUri, cancellationToken, artifactImageThumbnail.DocumentId);
                         break;
                     case BridgeOperationId.ReadArtifactPdfInfo:
                         var artifactPdf = Payload<ArtifactPdfViewerPayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfInfo(
                             artifactPdf.ChatId,
-                            artifactPdf.ResourceUri);
+                            artifactPdf.ResourceUri, artifactPdf.DocumentId);
                         break;
                     case BridgeOperationId.ReadArtifactPdfPage:
                         var artifactPdfPage = Payload<ArtifactPdfPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfPage(
                             artifactPdfPage.ChatId,
                             artifactPdfPage.ResourceUri,
-                            artifactPdfPage.PageIndex, cancellationToken);
+                            artifactPdfPage.PageIndex, cancellationToken, artifactPdfPage.DocumentId);
                         break;
                     case BridgeOperationId.ReadArtifactPdfThumbnail:
                         var artifactPdfThumbnail = Payload<ArtifactPdfPagePayload>(payload);
                         responsePayload = _controller.ReadArtifactPdfThumbnail(
                             artifactPdfThumbnail.ChatId,
                             artifactPdfThumbnail.ResourceUri,
-                            artifactPdfThumbnail.PageIndex, cancellationToken);
+                            artifactPdfThumbnail.PageIndex, cancellationToken, artifactPdfThumbnail.DocumentId);
                         break;
                     case BridgeOperationId.ImportUploadedHtmlToWorkspace:
                         var htmlImport = Payload<HtmlWorkspaceImportPayload>(payload);

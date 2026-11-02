@@ -338,7 +338,6 @@
     },
     render: function () {
       renderHtmlWorkspace();
-      if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.refreshViewer();
     }
   });
   window.RNAssistantHtmlWorkspaceViewerActions = workspaceActions;
@@ -610,6 +609,7 @@
     ensureSelection();
     if (state.htmlWorkspaceDirty && window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     renderHtmlWorkspaceList();
+    if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.isVisible("materials")) { workspaceEditor.suspendPreview(); return; }
     if ($("htmlWorkspaceEditor").hidden) { workspaceEditor.suspendPreview(); return; }
     renderHtmlWorkspaceEditor();
     applyHtmlWorkspaceMode();

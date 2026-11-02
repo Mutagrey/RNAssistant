@@ -51,8 +51,10 @@
             if (label === "→") { button.setAttribute("aria-label", "Следующая страница"); icon(button, "right", true); }
           });
         });
-        root.querySelectorAll('.rn-json-actions .rn-json-action').forEach(function (button, index) {
-          icon(button, index === 0 ? "collapse" : "copy", true);
+        root.querySelectorAll('.rn-json-actions').forEach(function (toolbar) {
+          toolbar.querySelectorAll('.rn-json-action').forEach(function (button, index) {
+            icon(button, index === 0 ? "collapse" : "copy", true);
+          });
         });
         root.querySelectorAll('.rn-markdown-viewer-copy, .rn-pdf-viewer-copy, .rn-task-list-copy').forEach(function (button) {
           icon(button, "copy", true);
