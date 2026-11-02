@@ -210,9 +210,12 @@
     var chat = panel("conversation"); if (chat && chat.title !== title) chat.api.setTitle(title || "Чат");
     var names = { settings: "Настройки", diagnostics: "Диагностика", artifacts: "Материалы", instructions: "Библиотека", vba: "VBA", plugins: "Плагины" };
     var context = names[section];
-    if (!context) context = owner === "office" ? (activeChatSummary() ? chatDocumentTitle(activeChatSummary()) : "") : roots.conversation.querySelector("#projectChatContext").textContent;
+    var activeOfficeChat = owner === "office" ? activeChatSummary() : null;
+    var officeHost = activeOfficeChat && chatHost(activeOfficeChat) || state.host || "";
+    if (!context) context = owner === "office" ? (activeOfficeChat ? chatDocumentTitle(activeOfficeChat) : "") : roots.conversation.querySelector("#projectChatContext").textContent;
     RNAssistantShellLayout.renderWorkspace({ context: { title: context || "Рабочая область",
-      icon: section === "chat" ? owner === "office" ? "table" : "folder" : "layers",
+      icon: section === "chat" ? owner === "office" ? "host:" + officeHost : "folder" : "layers",
+      iconHtml: section === "chat" && owner === "office" ? documentHostIcon(officeHost) : null,
       hostStatus: window.PrototypeFixtures ? "Mock · без подключения к Office" : state.bridgeUnavailable ? "Нет связи с хостом" : "Локальное пространство" } });
   }
   function header(group) {

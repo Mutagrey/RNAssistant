@@ -11,10 +11,10 @@
 
   function renderWorkspaceChrome(model) {
     function text(id, value) { var node = document.getElementById(id); if (node.textContent !== value) node.textContent = value; }
-    function icon(node, value) { if (node.dataset.icon !== value) { node.dataset.icon = value; node.innerHTML = RNAssistantIcons.render(value); } }
+    function icon(node, value, markup) { if (node.dataset.icon !== value) { node.dataset.icon = value; node.innerHTML = markup || RNAssistantIcons.render(value); } }
     if (model.context) {
       text("workspaceSectionTitle", model.context.title);
-      icon(document.getElementById("workspaceContextIcon"), model.context.icon);
+      icon(document.getElementById("workspaceContextIcon"), model.context.icon, model.context.iconHtml);
       text("workspaceHostStatus", model.context.hostStatus);
     }
     if (model.layout) {
