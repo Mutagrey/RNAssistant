@@ -500,7 +500,7 @@
       await refresh(selected ? null : { workspaceId: projectId(), sessionId: currentId() });
       if (selected) notice(error.detail || error.message, true); }
   }
-  async function runChat(action, reportFailure, applyPreference) {
+  async function runChat(action, reportFailure) {
     if (!active || !project() || !project().available) return false;
     var pid = projectId(), sid = currentId();
     if (!pid || !sid) return false;
@@ -511,7 +511,6 @@
     function selected() { return version === serial && projectId() === pid && currentId() === sid; }
     render();
     try { var result = await action(pid, sid); if (selected()) {
-      if (applyPreference) { applyPreference(result, pid, sid); notice(statusText()); render(); return true; }
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
       // Catalog refresh is presentation work; an accepted input must release
       // the composer even if this separate read is slow or never returns.
@@ -519,10 +518,6 @@
         .catch(function () { /* The accepted chat result remains available. */ });
     } return true; }
     catch (error) {
-      if (applyPreference) await refreshUncertainChatPreference(error, selected, async function () {
-        var snapshot = await readProjectChat({ workspaceId: pid, sessionId: sid });
-        if (selected()) active = window.RNAssistantWorkspaceChat.latestSnapshot(active, snapshot);
-      });
       if (selected()) notice(error.detail || error.message, true);
       if (reportFailure) throw error; return false;
     }
@@ -665,18 +660,36 @@
       clear: function () { el("Input").value = ""; el("Input").dispatchEvent(new Event("input", { bubbles: true })); el("Input").focus(); },
       cancelEdit: function () { window.RNAssistantWorkspaceChat.cancelMessageEdit(true); render(); },
       snapshot: function () { return active; },
-      selectModel: function (model) {
-        return runChat(function (pid, sid) {
-          return send("setProjectChatModel", { workspaceId: pid, sessionId: sid, model: model });
-        }, false, function (result, pid, sid) {
-          if (!result || result.workspaceId !== pid || result.sessionId !== sid ||
-              !Number.isSafeInteger(result.revision) || result.model !== null && typeof result.model !== "string" ||
-              (result.model || "") !== model) throw new Error("Выбор модели не подтверждён.");
-          if (result.revision < field(runState(), "revision", "Revision")) return;
-          active.state.Model = active.state.model = result.model;
-          active.state.Revision = active.state.revision = result.revision;
-        });
+      preferences: function () { return composer ? composer.preferences() : { disabled: true }; },
+      preferenceService: function (scope) {
+        var target = scope.target, pid = target.workspaceId, sid = target.sessionId;
+        return {
+          write: function (change) {
+            if (change.name === "model") return send("setProjectChatModel", { workspaceId: pid, sessionId: sid, model: change.value });
+            composer.savePreference(change, target);
+          },
+          read: function () { return readProjectChat(target); },
+          apply: function (result, change) {
+            if (projectId() !== pid || currentId() !== sid) return false;
+            if (!change) {
+              if (!result || result.sessionId !== sid || !result.project || result.project.workspaceId !== pid)
+                throw new Error("Настройки получены для другого чата.");
+              active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); return true;
+            }
+            if (change.name !== "model") return true;
+            if (!result || result.workspaceId !== pid || result.sessionId !== sid ||
+                !Number.isSafeInteger(result.revision) || result.model !== null && typeof result.model !== "string" ||
+                (result.model || "") !== change.value) throw new Error("Выбор модели не подтверждён.");
+            if (result.revision < field(runState(), "revision", "Revision")) return false;
+            active.state.Model = active.state.model = result.model;
+            active.state.Revision = active.state.revision = result.revision;
+            return true;
+          }
+        };
       },
+      preferenceChanged: render,
+      preferenceFailed: function (error) { notice(error.detail || error.message, true); },
+      preferenceUnavailable: function (error) { failBridgeTransport(null, error); },
       refresh: render,
       suspend: function () { runObserver.select(null, false); },
       loadPrevious: async function () {

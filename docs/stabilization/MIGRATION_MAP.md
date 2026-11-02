@@ -35,6 +35,11 @@ global inbox observer/history-refresh map удалены. Source adapters исп
 full push delivery и preference/draft owner ещё требуют per-target factory;
 temporary singleton adapter не размножать для Dockview tabs.
 
+S2b.5: команды model/mode/reasoning и pending lifecycle принадлежат ChatComposer;
+source preferenceService захватывает exact target. Global saving flags и прежний
+Workspace preference dispatch/render удалены. Facts всё ещё читаются через selected
+Office/Workspace adapter; полный snapshot и draft/file binding остаются removal gate.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

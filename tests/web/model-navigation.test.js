@@ -37,7 +37,16 @@ function fixture() {
   context.readSettings = () => ({ Model: "form-model" });
   context.renderSendControls = context.renderActiveModelCapability = () => {};
   context.applyChatState = value => { context.state.activeChatId = value.activeChatId; return true; };
-  ["app-model-data.js", "app-model-picker.js", "app-model-render.js", "app-models.js", "app-chat-session.js"].forEach(file => vm.runInContext(read(file), context, { filename: file }));
+  ["app-conversation-input.js", "app-chat-composer.js", "app-model-data.js", "app-model-picker.js", "app-model-render.js", "app-models.js", "app-chat-session.js"].forEach(file => vm.runInContext(read(file), context, { filename: file }));
+  context.renderSendControls = context.updateComposerInputState = () => {}; // Full composer DOM is covered in model-settings.
+  const composer = context.RNAssistantChatComposer.create({});
+  context.chatComposer = () => composer;
+  composer.register("office", {
+    target: context.officeComposerTarget, preferences: context.officeChatPreferences,
+    preferenceService: context.officePreferenceService,
+    preferenceChanged: context.renderModelControls,
+    preferenceFailed: () => {}, preferenceUnavailable: error => context.failBridgeTransport(null, error)
+  });
   return { context, nodes, creations: () => creations };
 }
 
@@ -140,12 +149,12 @@ function fixture() {
     context.send = async type => {
       calls.push(type);
       if (type === "setChatModel") { const error = Error("reply lost"); error.resultUncertain = true; throw error; }
-      return { activeChatModel: "saved-model" };
+      return { activeChatId: "excel-chat", activeChatModel: "saved-model" };
     };
     assert.equal(await context.saveChatModelSelection("saved-model"), false);
     assert.deepEqual(calls, ["setChatModel", "getChatState"], "uncertain preference is read back, never retried");
     assert.equal(context.state.activeChatModel, "saved-model");
-    assert.equal(context.state.modelSaving, false);
+    assert.equal(context.chatComposer().preferenceBusy(), false);
     context.send = async type => { const error = Error("unreachable"); error.resultUncertain = true; throw error; };
     context.failBridgeTransport = () => { context.state.bridgeUnavailable = true; };
     await context.saveChatModelSelection("unconfirmed-model");

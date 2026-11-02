@@ -151,6 +151,29 @@ preference/draft adapter и вспомогательные inbox/approval/contex
 остаются у прежних owners. Глобальная доставка full push snapshots и оставшиеся one-off
 service operations ещё требуют адресации перед несколькими live Chat View.
 
+### S2b.5: общие команды настроек чата
+
+Owner — существующий ChatComposer. `preferences()` даёт общий presentation contract
+модели, режима, reasoning и доступности; `setPreference()` захватывает exact target,
+владеет ожиданием и проверяет binding до доставки результата. Source adapter создаёт
+короткоживущий `preferenceService(scope)` с write/read/apply; UI не знает bridge
+операций. Общий ConversationInput сохраняет единственный барьер отправки по адресу.
+
+Удалены `state.modelSaving/modeSaving/reasoningSaving`, отдельные Workspace команды
+настройки и их renderer, preference-ветка Workspace runChat. Source factories
+сохраняют Office navigation drain и Workspace revision guard. Неопределённый ответ
+не повторяет запись: выполняется read-back; его отказ отдаётся transport owner.
+После A→B→A старый ответ не применяется, текущий визит получает свежее чтение.
+
+Office режим отображается после ACK, ввод во время сохранения остаётся доступным,
+Send ждёт завершения. Workspace mode/reasoning остаются в существующем ChatDrafts и
+передаются при отправке; это прежний service contract, не второй UI/store. Модель
+сохраняется сервисом обоих источников. Геометрия и список возможностей не менялись.
+
+Полные Office/Workspace snapshots, draft/file binding и вспомогательные readers
+ещё используют singleton adapters. Срез адресует команды настроек, а не завершает
+per-target data factory или несколько production chat views.
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

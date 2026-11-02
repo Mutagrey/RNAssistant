@@ -515,6 +515,38 @@ evidence остаётся открытым; откат — diff среза бе�
 active selection, затем preference/draft, inbox/approval/context/attachment
 consumers. Пока общая карта Dockview сохраняет один conversation; S2 не завершён.
 
+### S2b.5: адресные настройки общего composer — 2026-11-02
+
+По «Коммит и далее» S2b.4 сохранён в `e7e8c47f`. Следующий ограниченный участок
+пункта 1 — модель/режим/reasoning. Один ChatComposer владеет командами и ожиданием;
+источники предоставляют факты и exact-target preference service. Заменённые global
+saving flags, Workspace preference dispatch/render и ветка runChat удалены.
+Нет нового store, registry, CSS, C# или bridge contract.
+
+Сохранены input barriers, draft versions, uncertain read-back без повторной записи,
+Office navigation drain и Workspace revisions. A→B→A получает свежий read вместо
+применения старого ответа. Office mode не показывается принятым до ACK; пока настройка
+сохраняется, можно писать следующий текст, но Send заблокирован. Workspace mode и
+reasoning по прежнему сохраняются в ChatDrafts для следующей отправки.
+
+Baseline: `model-navigation` и Chromium `model-settings`. Проверки среза:
+`conversation-preferences`, `conversation-composer`, `model-navigation`,
+`multi-chat-requests`, `attachment-ingestion-order`, `message-actions`;
+Chromium `model-settings` и `workspace-shared-draft`. Браузерная проверка отделена
+от параллельного S3b.2: baseline `e7e8c47f` + только этот diff. Office preferences
+добавлены в существующий mock для проверки ACK/режима, не в замороженную Shell Demo.
+Это local mock evidence; Windows/Office и объединённое состояние параллельных срезов
+не объявляются квалифицированными.
+
+**In Review**. Запуск production preview — `python3 prototypes/serve_ui.py`,
+`/preview/web/?scenario=ready`. Проверить: выбрать модель и включить план/reasoning;
+написать текст и переключить Office → проект → плагин → назад; проверить свои
+настройки и черновик. Компоновка прежняя. Откат — diff среза без миграции данных.
+
+Остаток пункта 1: адресные snapshot factories/full push routing, общий draft/file
+binding и вспомогательные inbox/approval/context/media consumers. Затем независимые
+chat targets в Dockview. Полный S2 и несколько вкладок чатов пока не завершены.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

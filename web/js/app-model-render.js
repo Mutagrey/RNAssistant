@@ -95,15 +95,12 @@ function renderModelControls() {
 }
 
 function renderReasoningToggle() {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
-    window.RNAssistantWorkspaceChat.refreshComposer(); return;
-  }
   var button = $("chatReasoningToggle");
   if (!button) return;
-  var model = activeChatModel() || settingsModel();
-  var support = effectiveModelSupportsReasoning(model);
-  var active = !!state.activeChatReasoning && support !== false;
-  var disabled = chatModelSelection().disabled || support === false;
+  var selection = chatModelSelection();
+  var support = effectiveModelSupportsReasoning(selection.runningModel || selection.selected || settingsModel());
+  var active = !!selection.reasoning && support !== false;
+  var disabled = selection.disabled || support === false;
 
   renderReasoningControl(button, active, disabled, support);
 }

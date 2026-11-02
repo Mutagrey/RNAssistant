@@ -59,6 +59,10 @@ S2b.4: `conversation-observer` checks two view bindings, stop/hide/dispose, stal
 success/errors, coalesced follow-up and hidden passive refresh. `chat-inbox` covers
 the nested history-read boundary; `message-actions` checks actual late delete
 delivery. Pair with Chromium `workspace-chat-progress` / `chat-input-delivery`.
+S2b.5: `conversation-preferences` covers exact-target pending/ACK, A→B→A read-back,
+uncertain delivery and disposal; `model-navigation` retains discovery/drain guards.
+Chromium `model-settings` checks confirmed Office mode with editable text during
+save; `workspace-shared-draft` retains project/plugin mode/reasoning and receipt checks.
 The separate composer unknown-warning mismatch remains in the risk register.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,

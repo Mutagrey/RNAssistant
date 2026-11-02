@@ -71,36 +71,7 @@ function officeHostChatUnavailableReason() {
   return "";
 }
 
-async function saveChatMode(mode) {
-  mode = mode || "agent";
-  if (state.chatReadOnly || !state.activeChatId || state.bridgeUnavailable || state.modeSaving || state.chatNavigationPending || state.initializePromise ||
-      state.chatDetailPending || state.chatDetailError || currentActiveSend() || hasActiveMessageEdit()) {
-    return false;
-  }
-  if (mode === state.activeChatMode) {
-    return true;
-  }
-  var targetChatId = state.activeChatId;
-  var previousMode = state.activeChatMode || "agent";
-  state.modeSaving = true;
-  state.activeChatMode = mode;
-  renderChatSessions();
-  try {
-    var applied = applyChatStateForChat(await sendChatPreference("setChatMode", {
-      chatId: targetChatId,
-      mode: mode
-    }), targetChatId);
-    if (applied) log("Режим чата: " + state.activeChatMode + ".");
-    return applied && state.activeChatMode === mode;
-  } catch (error) {
-    if (state.activeChatId === targetChatId) state.activeChatMode = previousMode;
-    log(error.detail || error.message, "error");
-    return false;
-  } finally {
-    state.modeSaving = false;
-    renderChatSessions();
-  }
-}
+function saveChatMode(mode) { return chatComposer().setPreference("mode", mode || "agent"); }
 
 function bindChatActions() {
   bindMessageScrollControls();
@@ -120,6 +91,11 @@ function bindChatActions() {
   window.addEventListener("resize", resizeChatInput);
   chatComposer().register("office", {
     target: function () { return officeComposerTarget(); },
+    preferences: officeChatPreferences,
+    preferenceService: officePreferenceService,
+    preferenceChanged: function () { renderModelControls(); renderSendControls(); },
+    preferenceFailed: function (error) { log(error.detail || error.message, "error"); },
+    preferenceUnavailable: function (error) { failBridgeTransport(null, error); },
     canMessageAction: officeCanMessageAction,
     messageAction: officeMessageAction,
     loadPrevious: loadPreviousChatMessages,

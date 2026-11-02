@@ -339,9 +339,8 @@
       form.title = pinned ? "Office: " + field(office, "host") + " · " + (field(office, "documentTitle") || "документ") :
         activeRun ? "Office: документ не привязан" : "Office: при отправке";
     }
-    var picker = document.getElementById("composerAddPicker"), plan = document.getElementById("chatPlanButton");
+    var picker = document.getElementById("composerAddPicker");
     var fileAction = document.getElementById("attachFileButton"), fileInput = document.createElement("input");
-    var think = document.getElementById("chatReasoningToggle");
     var fileTarget = null, fileOptions = null;
     fileInput.id = "workspaceFileInput"; fileInput.type = "file"; fileInput.multiple = true; fileInput.hidden = true;
     picker.appendChild(fileInput);
@@ -361,25 +360,25 @@
       fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
       picker.open = false; fileInput.click();
     }
-    function modelSelection() {
+    function preferences() {
       var snapshot = field(dispatch("snapshot"), "state"), status = runStatus(snapshot);
-      return { selected: field(snapshot, "model") || "",
+      return { selected: field(snapshot, "model") || "", mode: mode, reasoning: reasoning,
         runningModel: status === "running" || status === "awaiting_confirmation"
           ? field(field(snapshot, "modelConfiguration"), "model") : null,
         disabled: locked || !current || state.bridgeUnavailable };
     }
     function effectiveModel() {
-      var selection = modelSelection();
+      var selection = preferences();
       return selection.runningModel || selection.selected || settingsModel();
     }
     function update() {
       if (chatComposer().owner() === "office") return;
       renderComposerInputState(input.value.trim() || loaded && loaded.attachments && loaded.attachments.length);
       setComposerPickerDisabled(picker, locked || !current);
-      plan.classList.toggle("is-selected", mode === "plan"); plan.setAttribute("aria-pressed", String(mode === "plan")); plan.disabled = locked;
+      renderChatModePicker();
       fileAction.disabled = locked || !current || !fileOptions ||
         chatComposer().owner() !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
-      renderReasoningControl(think, reasoning, locked || !current, effectiveModelSupportsReasoning(effectiveModel()));
+      renderReasoningToggle();
       renderChatModelPicker();
     }
     attachFiles(options);
@@ -387,14 +386,14 @@
       attachFiles: attachFiles,
       refresh: update,
       input: function () { save(); update(); },
-      modelSelection: modelSelection,
-      selectModel: function (value) {
-        if (!modelSelection().disabled) return dispatch("selectModel", String(value || "").trim());
-        return Promise.resolve(false);
+      preferences: preferences,
+      savePreference: function (change, target) {
+        if (!sameTarget(current, target)) throw new Error("Чат изменился до сохранения настройки.");
+        if (change.name === "mode") mode = change.value;
+        else reasoning = change.value;
+        save();
       },
       pickFiles: pickFiles,
-      togglePlan: function () { if (!locked) { mode = mode === "plan" ? "agent" : "plan"; save(); update(); } },
-      toggleReasoning: function () { if (!think.disabled) { reasoning = !reasoning; save(); update(); } },
       select: function (target, snapshot) {
         showOfficeContext(snapshot);
         var next = target && target.workspaceId && target.sessionId
@@ -462,8 +461,6 @@
     currentMessageEdit: currentMessageEdit,
     composerAction: function (name) { if (sharedComposer && chatComposer().owner() !== "office" && sharedComposer[name]) sharedComposer[name](); },
     refreshComposer: function () { if (sharedComposer) sharedComposer.refresh(); },
-    modelSelection: function () { return sharedComposer ? sharedComposer.modelSelection() : { selected: "", disabled: true }; },
-    selectModel: function (value) { return sharedComposer && sharedComposer.selectModel(value); },
     snapshot: function () { return dispatch("snapshot"); }, runStatus: runStatus,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     latestSnapshot: latestSnapshot, prependMessages: prependMessages,

@@ -73,84 +73,32 @@ function discardModelCatalogPreview() {
   modelCatalogPreview.modelCatalog = null;
 }
 
-// An uncertain preference write is never retried. Re-read the selected chat before allowing another send.
-async function refreshUncertainChatPreference(error, isCurrent, refresh) {
-  if (!error.resultUncertain || !isCurrent()) return false;
-  try { await refresh(); return isCurrent(); }
-  catch (refreshError) {
-    if (isCurrent()) failBridgeTransport(null, refreshError);
-    return false;
-  }
-}
-
-function refreshOfficeChatPreference(error, chatId) {
-  function selected() {
-    return state.activeChatId === chatId && (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office");
-  }
-  return refreshUncertainChatPreference(error, selected, async function () {
-    var response = await send("getChatState", { chatId: chatId });
-    if (selected()) applyChatStateForChat(response, chatId);
-  });
-}
-
-async function saveChatModelSelection(value) {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
-    return window.RNAssistantWorkspaceChat.selectModel(value);
-  value = String(value || "").trim();
-  if (chatModelSelection().disabled) {
-    return false;
-  }
-  if (value === activeChatModel()) {
-    return true;
-  }
-
-  state.modelSaving = true;
-  if ($("sendButton") && (!window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office")) {
-    $("sendButton").disabled = true;
-  }
-  var targetChatId = state.activeChatId;
-  try {
-    var response = await sendChatPreference("setChatModel", { chatId: targetChatId, model: value });
-    if (!applyChatPreferenceStateForChat(response, targetChatId)) return false;
-    renderContextMeter();
-    log(value ? ("Chat model selected: " + value) : "Chat model uses default.");
-    return activeChatModel() === value;
-  } catch (error) {
-    await refreshOfficeChatPreference(error, targetChatId);
-    renderModelControls();
-    log(error.detail || error.message, "error");
-    return false;
-  } finally {
-    state.modelSaving = false;
-    renderModelControls();
-    if (typeof updateComposerInputState === "function") {
-      updateComposerInputState();
+// The service captures an exact address; the common composer owns pending/delivery.
+function officePreferenceService(scope) {
+  var chatId = scope.target.sessionId;
+  return {
+    write: function (change) {
+      if (change.name === "model") return sendChatPreference("setChatModel", { chatId: chatId, model: change.value });
+      if (change.name === "mode") return sendChatPreference("setChatMode", { chatId: chatId, mode: change.value });
+      return sendChatPreference("setChatReasoning", { chatId: chatId, enabled: change.value });
+    },
+    read: function () { return send("getChatState", { chatId: chatId }); },
+    apply: function (response, change) {
+      var full = !change || change.name === "mode";
+      if (full && (!response || (response.activeChatId || response.ActiveChatId) !== chatId))
+        throw new Error("Настройки получены для другого чата.");
+      var applied = full ? applyChatStateForChat(response, chatId) :
+        applyChatPreferenceStateForChat(response, chatId);
+      return applied && (!change || officeChatPreferences()[change.name === "model" ? "selected" : change.name] === change.value);
     }
-  }
+  };
 }
-
-async function saveChatReasoningSelection(enabled) {
-  if (chatModelSelection().disabled) {
-    return false;
-  }
-  state.reasoningSaving = true;
-  renderReasoningToggle();
-  renderSendControls();
-  var targetChatId = state.activeChatId;
-  try {
-    var response = await sendChatPreference("setChatReasoning", { chatId: targetChatId, enabled: !!enabled });
-    if (!applyChatPreferenceStateForChat(response, targetChatId)) return false;
-    log(enabled ? "Reasoning enabled." : "Reasoning disabled.");
-    return state.activeChatReasoning === !!enabled;
-  } catch (error) {
-    await refreshOfficeChatPreference(error, targetChatId);
-    log(error.detail || error.message, "error");
-    return false;
-  } finally {
-    state.reasoningSaving = false;
-    renderModelControls();
-    renderSendControls();
-  }
+function saveChatModelSelection(value) { return chatComposer().setPreference("model", String(value || "").trim()); }
+function saveChatReasoningSelection(enabled) {
+  var selection = chatModelSelection();
+  if (effectiveModelSupportsReasoning(selection.runningModel || selection.selected || settingsModel()) === false)
+    return Promise.resolve(false);
+  return chatComposer().setPreference("reasoning", !!enabled);
 }
 
 function bindModelActions() {
@@ -163,11 +111,7 @@ function bindModelActions() {
     renderModelControls();
   });
   $("chatReasoningToggle").addEventListener("click", function () {
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
-      window.RNAssistantWorkspaceChat.composerAction("toggleReasoning"); return;
-    }
-    if (effectiveModelSupportsReasoning(activeChatModel() || settingsModel()) === false) return;
-    saveChatReasoningSelection(!state.activeChatReasoning);
+    if (!this.disabled) saveChatReasoningSelection(!chatComposer().preferences().reasoning);
   });
   $("loadModelsButton").addEventListener("click", function () {
     loadModelCatalog(true);

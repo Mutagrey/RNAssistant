@@ -1,11 +1,11 @@
 // One presentation contract; domain adapters provide only their current selection and availability.
-function chatModelSelection() {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
-    return window.RNAssistantWorkspaceChat.modelSelection();
-  return { selected: activeChatModel(),
-    disabled: !!(state.modelSaving || state.reasoningSaving || state.chatNavigationPending || state.initializePromise ||
-      state.chatDetailPending || state.chatDetailError || state.chatReadOnly || currentActiveSend() || hasActiveMessageEdit() ||
-      state.bridgeUnavailable || !state.activeChatId || state.activeRunViewState && state.activeRunViewState.lifecycle === "awaiting_confirmation") };
+function chatModelSelection() { return chatComposer().preferences(); }
+
+function officeChatPreferences() {
+  return { selected: activeChatModel(), mode: state.activeChatMode || "agent", reasoning: !!state.activeChatReasoning,
+    disabled: !!(state.chatNavigationPending || state.initializePromise || state.chatDetailPending || state.chatDetailError ||
+      state.chatReadOnly || currentActiveSend() || hasActiveMessageEdit() || state.bridgeUnavailable || !state.activeChatId ||
+      state.activeRunViewState && state.activeRunViewState.lifecycle === "awaiting_confirmation") };
 }
 
 function settingsModel() {

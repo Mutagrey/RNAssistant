@@ -196,11 +196,16 @@
         payload.projectRevision !== workspaceRevision)
       fail("Проект примера изменился.", "preview_project_changed");
   }
+  var chatPreferences = Object.create(null);
+  function officePreferences() {
+    return chatPreferences[activeChatId] || (chatPreferences[activeChatId] = { model: "preview-model", mode: "agent", reasoning: false });
+  }
   function chatState() {
     var lastRunMessage = messages.slice().reverse().find(function (item) { return item.RunViewState || item.runViewState; });
     var report = artifactExamples.find(function (item) { return item.id === "report" && item.linked; });
-    return { sessionRevision: revision, activeChatId: activeChatId, activeChatMode: "agent",
-      activeChatModel: "preview-model", activeChatReasoning: false, chats: clone(chats), documents: clone(documentItems),
+    var preferences = officePreferences();
+    return { sessionRevision: revision, activeChatId: activeChatId, activeChatMode: preferences.mode,
+      activeChatModel: preferences.model, activeChatReasoning: preferences.reasoning, chats: clone(chats), documents: clone(documentItems),
       messages: clone(messages), messageStartIndex: 0, messageTotalCount: messages.length,
       skills: skillLibrary(), tools: toolLibrary(), context: {},
       contextUsage: { lastPromptTokens: 6200, lastCompletionTokens: 240, lastTotalTokens: 6440, contextWindowTokens: 32000 },
@@ -479,6 +484,17 @@
       ] } };
     }
     if (type === "reportClientTiming" || type === "focusState") return {};
+    if (type === "setChatModel" || type === "setChatMode" || type === "setChatReasoning") {
+      requireChat(payload);
+      if (previewRuns[activeChatId]) fail("Дождитесь завершения ответа примера.", "preview_run_busy");
+      var preferences = officePreferences();
+      if (type === "setChatModel") preferences.model = payload.model || "";
+      else if (type === "setChatMode") preferences.mode = payload.mode === "plan" ? "plan" : "agent";
+      else preferences.reasoning = !!payload.enabled;
+      revision++;
+      return type === "setChatMode" ? chatState() : { chatId: activeChatId, sessionRevision: revision,
+        model: preferences.model, mode: preferences.mode, reasoningEnabled: preferences.reasoning };
+    }
     if (type === "listChats" || type === "getChatState") {
       if (type === "getChatState") requireChat(payload);
       return chatState();

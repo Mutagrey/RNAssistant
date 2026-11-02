@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Общие команды настроек чата S2b.5 — 2026-11-02
+
+S2b.4 сохранён в `e7e8c47f`. Модель/режим/reasoning используют ChatComposer и
+exact-target service adapters; global saving flags и Workspace preference path
+удалены. Сохранены draft/barrier/revision guards, uncertain read-back; A→B→A
+не применяет старый ответ. Office mode ждёт ACK, ввод доступен во время сохранения.
+[Scope, проверки и ревью](../ui/UI_MIGRATION_PLAN.md#s2b5-адресные-настройки-общего-composer--2026-11-02).
+In Review; полные snapshots/draft adapters и несколько chat tabs ещё не завершены.
+Локальный UI проверяется отдельно от параллельного S3b.2; Windows evidence открыт.
+
 ## Наблюдение за чатом и поздние ответы S2b.4 — 2026-11-02
 
 S2b.3 сохранён в `60b04d71`. UI-чтения Office inbox/history и Workspace snapshots

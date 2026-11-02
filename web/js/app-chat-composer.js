@@ -5,7 +5,7 @@
   }
   function create(nodes) {
     var sources = Object.create(null), owner = "office", selected = "", generation = 0, bound = false, disposed = false;
-    var edits = new Map(), listeners = [], frames = new Set();
+    var edits = new Map(), listeners = [], frames = new Set(), preferenceWrites = new Set();
     function invalidate() {
       ++generation;
       frames.forEach(function (frame) { window.cancelAnimationFrame(frame); }); frames.clear();
@@ -29,6 +29,42 @@
     }
     function dispatch(name, value) { return capture().invoke(name, value); }
     function current(target) { return key(target) !== "" && key(context().target) === key(target); }
+    function preferenceBusy(target) { return preferenceWrites.has(key(target || context().target)); }
+    function inputTarget(target) { return target.source === "office" ? { chatId: target.sessionId } : target; }
+    function preferences() {
+      var scope = capture(), values = scope.invoke("preferences") || {};
+      return Object.assign({}, values, { disabled: !scope.target || !scope.target.sessionId || !scope.isCurrent() ||
+        !scope.adapter || !scope.adapter.preferenceService || !!values.disabled || preferenceBusy(scope.target) ||
+        window.RNAssistantConversationInput.isPending(scope.target.source, inputTarget(scope.target)) });
+    }
+    async function setPreference(name, value) {
+      var scope = capture(), values = preferences();
+      if (values.disabled || ["model", "mode", "reasoning"].indexOf(name) < 0) return false;
+      if (values[name === "model" ? "selected" : name] === value) return true;
+      var service = scope.adapter.preferenceService(scope), id = key(scope.target);
+      var release = window.RNAssistantConversationInput.begin(scope.target.source, inputTarget(scope.target));
+      if (!release) return false;
+      var change = Object.freeze({ name: name, value: value });
+      preferenceWrites.add(id);
+      async function reconcile(binding) {
+        try { var response = await service.read(); if (binding.isCurrent()) service.apply(response, null); }
+        catch (error) { binding.invoke("preferenceUnavailable", error); }
+      }
+      try {
+        scope.invoke("preferenceChanged");
+        var response = await service.write(change);
+        return scope.isCurrent() && service.apply(response, change) !== false;
+      } catch (error) {
+        if (error.resultUncertain && scope.isCurrent()) await reconcile(scope);
+        scope.invoke("preferenceFailed", error);
+        return false;
+      } finally {
+        // A new visit to A must read its current state, not adopt the old A reply.
+        if (!scope.isCurrent() && !disposed && current(scope.target)) await reconcile(capture());
+        release(); preferenceWrites.delete(id);
+        if (!disposed && current(scope.target)) dispatch("preferenceChanged");
+      }
+    }
     function edit(target) { return edits.get(key(target)) || null; }
     function defer(action) {
       var scope = capture(), frame = window.requestAnimationFrame(function () {
@@ -100,11 +136,12 @@
     return { register: function (name, adapter) { sources[name] = adapter; },
       activate: function (name) { owner = name; context(); }, owner: function () { return owner; },
       capture: capture, dispatch: dispatch, sync: context, current: current, defer: defer,
+      preferences: preferences, setPreference: setPreference, preferenceBusy: preferenceBusy,
       edit: edit, startEdit: startEdit, cancelEdit: cancelEdit, bind: bind,
       dispose: function () {
         if (disposed) return;
         disposed = true; invalidate(); listeners.forEach(function (remove) { remove(); });
-        listeners = []; edits.clear(); sources = Object.create(null);
+        listeners = []; edits.clear(); preferenceWrites.clear(); sources = Object.create(null);
       }
     };
   }
@@ -160,18 +197,11 @@ function bindComposerTooltip(wrap, trigger, tooltip, canShow) {
 }
 
 function renderChatModePicker() {
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") {
-    window.RNAssistantWorkspaceChat.refreshComposer(); return;
-  }
   var button = $("chatPlanButton");
   if (!button) return;
-  var plan = state.activeChatMode === "plan";
-  var disabled = !!state.chatReadOnly || !!state.chatNavigationPending || !!state.initializePromise ||
-    !!currentActiveSend() || window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId }) || hasActiveMessageEdit() ||
-    state.modeSaving || state.reasoningSaving || state.bridgeUnavailable ||
-    state.chatDetailPending || state.chatDetailError || !state.activeChatId;
+  var selection = chatComposer().preferences(), plan = selection.mode === "plan";
   button.classList.toggle("is-selected", plan);
-  button.disabled = !!disabled;
+  button.disabled = selection.disabled;
   button.setAttribute("aria-pressed", String(plan));
 }
 
@@ -179,9 +209,7 @@ function bindComposerPickers() {
   $("composerOpenMaterialsButton").addEventListener("click", function () { switchTab("artifacts"); });
   $("chatPlanButton").addEventListener("click", function () {
     if (this.disabled) return;
-    if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office")
-      window.RNAssistantWorkspaceChat.composerAction("togglePlan");
-    else saveChatMode(state.activeChatMode === "plan" ? "agent" : "plan");
+    saveChatMode(chatComposer().preferences().mode === "plan" ? "agent" : "plan");
   });
   var pickers = [$("composerAddPicker"), $("chatModelPicker")].filter(Boolean);
   pickers.forEach(function (picker) {
@@ -296,7 +324,7 @@ function renderSendControls() {
   var activeSend = currentActiveSend();
   var isEditing = hasActiveMessageEdit();
   var isSending = !!activeSend;
-  var isPreparingAttachments = !isSending && !!state.activeChatId &&
+  var isPreparingAttachments = !isSending && !chatComposer().preferenceBusy(officeComposerTarget()) && !!state.activeChatId &&
     window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId });
   var isCanceling = isSending && !!activeSend.canceling;
   var approvalPending = !isEditing && typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity();
@@ -313,7 +341,7 @@ function renderSendControls() {
     readOnly: state.chatReadOnly, loading: navigating || state.chatDetailPending,
     loadError: !!state.chatDetailError, unavailable: state.bridgeUnavailable, noChat: !state.activeChatId,
     inputReadOnly: state.chatReadOnly || navigating || detailUnavailable || isPreparingAttachments ||
-      state.modeSaving || state.reasoningSaving || state.bridgeUnavailable || !state.activeChatId,
+      state.bridgeUnavailable || !state.activeChatId,
     queue: isSending && (runningMessageDelivery() === "Queue" || typeof exactOfficeSteerTarget !== "function" ||
       !exactOfficeSteerTarget(state.activeChatId).runId) });
   setComposerPickerDisabled($("composerAddPicker"), navigating || detailUnavailable ||
@@ -369,9 +397,6 @@ function updateSendButtonAvailability(hasContent) {
     !!state.chatNavigationPending || !!state.initializePromise ||
     !!state.chatDetailPending || !!state.chatDetailError ||
     !!state.activeChatId && window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId }) ||
-    state.modelSaving ||
-    state.modeSaving ||
-    state.reasoningSaving ||
     state.bridgeUnavailable ||
     !state.activeChatId ||
     !!(unfinishedAnnotation && unfinishedAnnotation.pendingVisualAnnotation && !hasActiveMessageEdit()) ||

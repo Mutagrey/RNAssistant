@@ -17,15 +17,12 @@ async function submitChatInput(value, scope) {
   if (!scope.isCurrent() || !scope.target || scope.target.source !== "office" || !scope.target.sessionId) return;
   if (state.chatNavigationPending || state.initializePromise || state.chatDetailPending || state.chatDetailError) return;
   if (hasActiveMessageEdit()) {
-    if (!currentActiveSend() && !state.modelSaving && !state.modeSaving && !state.reasoningSaving) {
+    if (!currentActiveSend() && !window.RNAssistantConversationInput.isPending("office", { chatId: scope.target.sessionId })) {
       officeMessageEdit().text = $("chatInput").value;
       saveMessageEdit();
     } else {
       focusMessageEditComposer();
     }
-    return;
-  }
-  if (state.modelSaving || state.modeSaving || state.reasoningSaving) {
     return;
   }
   if (window.RNAssistantConversationInput.isPending("office", { chatId: state.activeChatId })) {
@@ -56,7 +53,7 @@ async function submitChatInput(value, scope) {
       renderSendControls();
     }
     if (!ingestionSucceeded || state.activeChatId !== targetChatId ||
-        state.modelSaving || state.modeSaving || state.reasoningSaving) {
+        window.RNAssistantConversationInput.isPending("office", { chatId: targetChatId })) {
       return;
     }
     attachments = (state.draftAttachments || []).slice();
