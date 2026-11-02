@@ -597,7 +597,7 @@
       } else loaded = refresh(target);
     }
     if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.refresh();
-    if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
+    if (window.RNAssistantPlugins) window.RNAssistantPlugins.refreshPresentation();
     return loaded;
   }
   function bind() {
@@ -829,11 +829,11 @@
   document.addEventListener("DOMContentLoaded", bind);
   window.RNAssistantProjectChats = { show: function (options) {
     if (options && options.preserveChatOwner && window.RNAssistantWorkspaceChat.owner() === "plugin") {
-      render(); if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout(); return;
+      render(); if (window.RNAssistantPlugins) window.RNAssistantPlugins.refreshPresentation(); return;
     }
     if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); }
     else if (window.RNAssistantWorkspaceChat.mount("office")) renderMessages();
-    if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
+    if (window.RNAssistantPlugins) window.RNAssistantPlugins.refreshPresentation();
   }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,
     snapshot: currentSnapshot,

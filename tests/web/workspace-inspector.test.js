@@ -225,6 +225,7 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#chatInput").inputValue(), "Черновик Office");
     assert.equal(await page.locator("#chatInspectorViewTitle").textContent(), "Контекст");
     await page.evaluate(() => RNAssistantPlugins.select("data-templates"));
+    await page.locator("#pluginWorkbench").getByRole("button", {name: "Чат исходников", exact: true}).click();
     await page.locator("#pluginPreviewMount iframe").waitFor();
     assert.equal(await page.locator('#messages .agent-activity-row .message-inspect-action').count(), 0,
       "plugin calls use the same clean transcript rows");
@@ -248,7 +249,7 @@ const { chromium } = require("playwright");
     await view("activity");
     assert.equal(await page.evaluate(() => document.querySelector("#projectChatLayout #chatInspector") === inspectorNode), true);
     assert.equal(await page.locator(".chat-inspector-step").count(), 2);
-    assert.equal(await page.locator("#pluginPreviewMount").isHidden(), true);
+    assert.equal(await page.locator("#pluginPreviewMount iframe").count(), 1);
     await footerButton(1).click();
     await reportStep().locator('.chat-inspector-step-detail > summary').click();
     assert.match(await reportStep().textContent(), /Чтение отчёта/);

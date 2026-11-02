@@ -60,7 +60,7 @@
       reserve: function () { return window.RNAssistantChatDrafts.reserveOfficeAnnotationNumber(state.activeChatId); },
       openSource: function () {
         return document.getElementById("tab-artifacts").classList.contains("active") && this.isOpen() ||
-          window.RNAssistantChatBrowser.openCurrent();
+          window.RNAssistantHtmlWorkspaceSurface.openCurrent();
       },
       status: function (message) { setAttachmentStatus(state.activeChatId, message, "warning"); }
     };

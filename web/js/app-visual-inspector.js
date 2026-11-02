@@ -292,12 +292,12 @@
       button.disabled = !ready || activating || typeof options.enabled === "function" && !options.enabled();
       button.setAttribute("aria-pressed", active ? "true" : "false");
       if (button.dataset.browserControl === "true" && window.RNAssistantIcons) {
-        button.classList.add("chat-browser-annotate");
+        button.classList.add("browser-annotate");
         button.innerHTML = window.RNAssistantIcons.render("selection") + "<span>Аннотировать</span>";
         button.setAttribute("aria-label", active ? "Выключить выбор элемента" : "Аннотировать: выбрать элемент");
         button.title = button.getAttribute("aria-label");
       } else {
-        button.classList.remove("chat-browser-annotate");
+        button.classList.remove("browser-annotate");
         button.textContent = active ? "Выключить выбор" : "Выбрать элемент";
         button.removeAttribute("aria-label");
         button.removeAttribute("title");

@@ -1,0 +1,32 @@
+{
+  "fixture": "same <input> iframe, 1280x900, five Dockview saved-layout restores",
+  "note": "Inline reproduces the replaced embedding mechanism on the same current Dockview. Timings include automation; not a global product speed claim.",
+  "results": [
+    {
+      "mode": "inline",
+      "initialLoads": 1,
+      "afterLoads": 6,
+      "inputAfter": "initial",
+      "restoreActionMs": [
+        86.2,
+        85.9,
+        77.2,
+        87.5,
+        79.4
+      ]
+    },
+    {
+      "mode": "browser",
+      "initialLoads": 1,
+      "afterLoads": 1,
+      "inputAfter": "retained",
+      "restoreActionMs": [
+        81.6,
+        82.3,
+        82.2,
+        85.2,
+        83
+      ]
+    }
+  ]
+}

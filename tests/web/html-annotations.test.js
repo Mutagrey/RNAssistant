@@ -55,19 +55,25 @@ const path = require("node:path");
       };
     }, fixtureHtml);
     await seedWorkspace();
-    await page.evaluate(() => { switchTab("artifacts"); RNAssistantArtifactCatalog.editor(); });
-    await page.frameLocator("#tab-artifacts #htmlWorkspacePreviewFrame").locator("#target").waitFor();
+    await page.evaluate(() => { switchTab("artifacts"); RNAssistantArtifactCatalog.editor(); RNAssistantHtmlWorkspaceSurface.openCurrent(); });
+    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").waitFor();
+    const browserTab = await page.locator('[data-tab-panel-id="html-browser"]').boundingBox();
+    const inspectorTab = await page.locator('[data-tab-panel-id="inspector"]').boundingBox();
+    await page.mouse.move(browserTab.x + 20, browserTab.y + 15); await page.mouse.down();
+    await page.mouse.move(inspectorTab.x + 30, inspectorTab.y + 15, { steps: 15 }); await page.mouse.up();
+    await page.evaluate(() => { switchTab("chat"); RNAssistantDockWorkspace.show("conversation"); });
+
     await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
     assert.equal(await page.locator("#inspectHtmlWorkspaceButton").textContent(), "Аннотировать",
       "Materials exposes the same annotation control");
     await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.frameLocator("#tab-artifacts #htmlWorkspacePreviewFrame").locator("#target").click({ position: { x: 20, y: 28 } });
+    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").click({ position: { x: 20, y: 28 } });
     await page.locator("#htmlWorkspacePreview .visual-annotation-editor textarea").waitFor();
     await page.locator("#htmlWorkspacePreview .visual-annotation-editor button").first().click();
     await page.locator("#inspectHtmlWorkspaceButton").click();
     await page.evaluate(() => switchTab("chat"));
-    assert.equal(await page.evaluate(() => RNAssistantChatBrowser.openCurrent()), true);
-    const frame = page.frameLocator("#chatBrowser #htmlWorkspacePreviewFrame");
+    assert.equal(await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.openCurrent()), true);
+    const frame = page.frameLocator("#htmlWorkspacePreviewFrame");
     await frame.locator("#target").waitFor();
     await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
     await page.waitForFunction(() => !document.getElementById("chatLayout").classList.contains("browser-transition"));
@@ -174,7 +180,7 @@ const path = require("node:path");
     assert.equal(await page.locator("#sendButton").isDisabled(), true,
       "an unfinished annotation cannot be silently omitted from the message");
     await seedWorkspace();
-    assert.equal(await page.evaluate(() => RNAssistantChatBrowser.openCurrent()), true);
+    assert.equal(await page.evaluate(() => RNAssistantHtmlWorkspaceSurface.openCurrent()), true);
     await frame.locator("#target").waitFor();
     await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
     assert.equal(await page.locator(".visual-annotation-marker").count(), 0);
@@ -209,8 +215,8 @@ const path = require("node:path");
     assert.equal(await page.locator(".visual-annotation-sent textarea").count(), 0,
       "sent annotations open read-only from the immutable message");
     await page.locator(".visual-annotation-sent button").click();
-    await page.evaluate(() => { switchTab("artifacts"); RNAssistantArtifactCatalog.editor(); });
-    await page.frameLocator("#tab-artifacts #htmlWorkspacePreviewFrame").locator("#target").waitFor();
+    await page.evaluate(() => { switchTab("artifacts"); RNAssistantArtifactCatalog.editor(); RNAssistantHtmlWorkspaceSurface.openCurrent(); });
+    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").waitFor();
     await page.waitForFunction(() => !document.getElementById("inspectHtmlWorkspaceButton").disabled);
     await page.locator("#inspectHtmlWorkspaceButton").click();
     await page.locator("#tab-artifacts .visual-annotation-marker.is-sent").waitFor();
@@ -218,7 +224,7 @@ const path = require("node:path");
     assert.equal(await page.locator("#tab-artifacts .visual-annotation-marker").count(), 0,
       "Materials is clean after exiting annotation mode following a right-panel round trip");
     await page.locator("#inspectHtmlWorkspaceButton").click();
-    await page.frameLocator("#tab-artifacts #htmlWorkspacePreviewFrame").locator("#target").click();
+    await page.frameLocator("#htmlWorkspacePreviewFrame").locator("#target").click();
     await page.locator(".visual-annotation-editor textarea").press("Enter");
     await page.waitForFunction(() => state.draftAttachments.length === 1 &&
       !RNAssistantChatDrafts.readOffice(state.activeChatId).pendingVisualAnnotation);

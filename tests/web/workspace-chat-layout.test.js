@@ -260,78 +260,16 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await page.evaluate(() => chatTest.requests.length), 2,
       'the same project composer retries once and clears only after its receipt');
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-    const pluginToggle=page.locator('#toggleChatInspectorButton');
-    await page.waitForFunction(() => RNAssistantWorkspaceChat.owner()==='plugin' &&
-      document.querySelector('#workspaceChatView').parentElement.id==='conversationView');
-    assert.equal(await page.locator('#tab-chat').getAttribute('class').then(value=>value.includes('active')),true,
-      'plugin opens its source project in the common chat screen');
-    assert.equal(await page.evaluate(() => RNAssistantShellLayout.isNavigationOpen()),true,
-      'the project and chat tree remains open');
-    assert.equal(await page.locator('#pluginRail [data-plugin-id="data-templates"]').getAttribute('aria-current'),'page',
-      'the plugin icon identifies the selected project shell');
-    await page.evaluate(()=>{window.railReads=0;const original=send;send=function(type,...args){if(type==='getPluginChat')railReads++;return original(type,...args);};});
-    await page.locator('#pluginRail [data-plugin-id="data-templates"]').click();
-    assert.equal(await page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen()),false);
-    await page.locator('#pluginRail [data-plugin-id="data-templates"]').click();
-    assert.equal(await page.evaluate(()=>RNAssistantShellLayout.isNavigationOpen()),true);
-    assert.equal(await page.evaluate(()=>railReads),0,'repeated active plugin rail clicks toggle navigation without re-reading the chat');
-    assert.equal(await pluginToggle.getAttribute('aria-controls'),'pluginPreviewMount');
-    assert.equal(await pluginToggle.getAttribute('aria-expanded'),'true');
-    assert.equal(await pluginToggle.evaluate(node=>node.parentElement.classList.contains('workspace-panel-controls')),true,
-      'the common panel control remains in the topbar');
+    assert.notEqual(await page.evaluate(()=>RNAssistantWorkspaceChat.owner()),'plugin','preview leaves the conversation unchanged');
+    await page.locator('#pluginWorkbench').getByRole('button',{name:'Чат исходников',exact:true}).click();
+    await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
     const sourceWorkspace='preview-plugin-workspace';
-    await page.locator('[data-tree-key="project:'+sourceWorkspace+'"]').waitFor();
-    assert.equal(await page.locator('#projectChatTree').isVisible(),true);
-    assert.deepEqual(await page.evaluate(() => [document.querySelector('#messages').parentElement.id,
-      document.querySelector('#messages').dataset.testIdentity]), ['workspaceChatTranscriptMount',transcriptIdentity],
-      'plugin uses the same physical transcript as Office and project chats');
-    assert.equal(await page.locator('#chatScrollBottomButton').evaluate(node => node.parentElement.id),
-      'workspaceChatTranscriptMount', 'plugin keeps the shared scroll control');
-    assert.deepEqual(await dimensions('#chatForm','#messages'),office,'plugin uses shared message and composer metrics');
-    await page.frameLocator('#pluginPreviewMount iframe').locator('#dtViewSources h3').waitFor();
     const frame=page.locator('#pluginPreviewMount iframe');
     await frame.evaluate(node=>{node.dataset.routeProbe='same-instance';});
-    await page.locator('#pluginNavigationToggle').click();
-    assert.equal(await page.locator('#pluginNavigationPane').isVisible(),true,'plugin sections open inside the preview');
-    await page.locator('#pluginNavigationToggle').click();
-    await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin.png')});
-    const split=page.locator('#pluginSurfaceSplitter'), before=Number(await split.getAttribute('aria-valuenow'));
-    await split.press('ArrowLeft');
-    assert.ok(Number(await split.getAttribute('aria-valuenow'))>before,'the right preview width can be changed');
-    const widePreviewMax=Number(await split.getAttribute('aria-valuemax'));
-    await page.setViewportSize({width:1080,height:900});
-    await page.waitForFunction(max=>!document.querySelector('#projectChatLayout').classList.contains('plugin-surface-overlay') &&
-      Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuemax'))<max,widePreviewMax);
-    assert.equal(await split.isVisible(),true,'the preview divider stays available when chat and preview both fit');
-    const paneBefore=await page.locator('#pluginWorkbench').evaluate(node=>node.getBoundingClientRect().width);
-    const dragStart=Number(await split.getAttribute('aria-valuenow')), dragBox=await split.boundingBox();
-    await page.mouse.move(dragBox.x+dragBox.width/2,dragBox.y+dragBox.height/2);
-    await page.mouse.down();
-    await page.mouse.move(dragBox.x+dragBox.width/2+40,dragBox.y+dragBox.height/2,{steps:4});
-    await page.mouse.up();
-    await page.waitForFunction(value=>Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuenow'))<value,dragStart);
-    await page.waitForFunction(width=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width<width-25,paneBefore);
-    await page.setViewportSize({width:1920,height:900});
-    await page.waitForFunction(()=>Number(document.querySelector('#pluginSurfaceSplitter').getAttribute('aria-valuemax'))>780);
-    await split.press('End');
-    await page.waitForFunction(()=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width>780);
-    assert.ok(await page.locator('#workspaceChatView').evaluate(node=>node.getBoundingClientRect().width)>=280,
-      'wide previews can stretch past the former 780px cap while keeping the chat usable');
-    await split.press('Enter');
-    await page.setViewportSize({width:1360,height:900});
-    await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(false));
-    assert.equal(await split.isVisible(),true,'preview divider remains usable with the project tree collapsed');
-    await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(true));
-    await pluginToggle.click();
-    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,'the common panel button closes the preview');
-    assert.equal(await page.locator('#workspaceChatView').isVisible(),true,'closing preview keeps the chat');
-    const selectedSource=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
-    await page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+selectedSource+'"] .navigation-tree-label').click();
-    await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
-    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,
-      'selecting a source chat does not reopen a closed preview');
-    await pluginToggle.click();
-    assert.equal(await frame.getAttribute('data-route-probe'),'same-instance','reopening keeps the live plugin frame');
+    assert.deepEqual(await page.evaluate(()=>[document.querySelector('#messages').parentElement.id,
+      document.querySelector('#messages').dataset.testIdentity]),['workspaceChatTranscriptMount',transcriptIdentity]);
+    assert.deepEqual(await dimensions('#chatForm','#messages'),office,'plugin source chat uses shared composer metrics');
+    // Browser geometry, drag/restore and keyboard behavior are covered by browser-views.test.js.
     const firstSession=await page.evaluate(id=>RNAssistantWorkspaceChat.selectedSession(id),sourceWorkspace);
     await page.locator('#chatInput').fill('Черновик первой беседы');
     await page.locator('#projectChatNew').click();
@@ -357,13 +295,12 @@ fs.mkdirSync(captures, {recursive:true});
       'the ordinary project restores the workspace rail selection');
     await page.locator('[data-tree-key="project-chat:'+sourceWorkspace+':'+secondSession+'"] .navigation-tree-label').click();
     await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
-    assert.equal(await page.locator('#pluginWorkbench').isVisible(),true,
-      'opening a plugin source chat from Projects restores its HTML preview without the plugin icon');
+    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,
+      'source chat navigation does not activate the Browser tab');
     assert.equal(await page.locator('#projectChatTree').isVisible(),true);
     await page.setViewportSize({width:390,height:844});
-    await page.waitForFunction(()=>document.querySelector('#pluginWorkbench').getBoundingClientRect().width>=innerWidth-2);
-    assert.equal(await pluginToggle.evaluate(node=>node.parentElement.classList.contains('workspace-panel-controls')),true,
-      'the same button remains reachable when the preview covers the narrow chat');
+    await page.evaluate(()=>{RNAssistantShellLayout.setNavigationOpen(false);RNAssistantDockWorkspace.show('plugin-browser');});
+    await page.locator('#pluginWorkbench').waitFor();
     await page.screenshot({animations:'disabled',path:path.join(captures,'chat-plugin-narrow.png')});
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'plugin preview fits the narrow viewport');
     await page.setViewportSize({width:1360,height:900});

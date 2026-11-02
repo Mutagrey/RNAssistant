@@ -5,11 +5,6 @@
     var bar = document.createElement("div");
     bar.className = "preview-surface-bar";
     bar.hidden = true;
-    var panelHead = document.createElement("div");
-    panelHead.className = "preview-surface-panel-head";
-    var section = document.createElement("div");
-    section.className = "preview-surface-section";
-    panelHead.appendChild(section);
     var resourceRow = document.createElement("div");
     resourceRow.className = "preview-surface-resource-row";
     var location = document.createElement("span");
@@ -44,7 +39,7 @@
     }
     actions.appendChild(reload);
     resourceRow.append(location, status, actions);
-    bar.append(panelHead, resourceRow);
+    bar.appendChild(resourceRow);
     root.insertBefore(bar, root.firstChild);
 
     var pending = null;
@@ -69,7 +64,7 @@
       location.title = title.textContent + (path.textContent ? " · " + path.textContent : "");
       path.hidden = !path.textContent;
       setStatus(message, false);
-      reload.disabled = false;
+      reload.disabled = options.canReload ? !options.canReload() : false;
     }
     function fail(label, message) {
       detach();
@@ -90,7 +85,6 @@
     }
     return {
       actions: actions,
-      panelHead: panelHead,
       watch: watch,
       waiting: function (label, message) { detach(); show(label, message || "Загрузка…"); },
       fail: fail,

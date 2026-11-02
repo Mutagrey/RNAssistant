@@ -215,7 +215,8 @@
   });
   window.RNAssistantHtmlWorkspaceAnnotations = visualAnnotations;
   var previewSurface = window.RNAssistantPreviewSurface.attach($("htmlWorkspacePreview"), {
-    reload: function () { if (workspaceEditor) workspaceEditor.reloadPreview(); },
+    reload: function () { window.RNAssistantHtmlWorkspaceSurface.reload(); },
+    canReload: function () { return !!browserBinding && !state.htmlWorkspaceDirty; },
     reloadLabel: "Обновить HTML"
   });
   var workspaceEditor = window.RNAssistantHtmlWorkspaceEditor.create({
@@ -600,17 +601,15 @@
   }
 
   function renderHtmlWorkspace() {
-    if (window.RNAssistantChatBrowser && window.RNAssistantChatBrowser.hasSource()) {
-      window.RNAssistantChatBrowser.syncSource();
-      if (window.RNAssistantChatBrowser.hasSource()) workspaceEditor.renderPreview();
-    }
+    syncBrowserSource();
+    if (browserBinding && browserVisible && !state.htmlWorkspaceDirty) workspaceEditor.renderPreview();
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
     workspace();
     ensureSelection();
     if (state.htmlWorkspaceDirty && window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     renderHtmlWorkspaceList();
-    if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.isVisible("materials")) { workspaceEditor.suspendPreview(); return; }
-    if ($("htmlWorkspaceEditor").hidden) { workspaceEditor.suspendPreview(); return; }
+    if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.isVisible("materials")) return;
+    if ($("htmlWorkspaceEditor").hidden) return;
     renderHtmlWorkspaceEditor();
     applyHtmlWorkspaceMode();
     updateHtmlWorkspaceStatus();
@@ -777,8 +776,28 @@
   }
 
   window.renderHtmlWorkspace = renderHtmlWorkspace;
-  window.RNAssistantHtmlWorkspaceSurface = {
-    prepare: function () {
+  // Temporary live-editor provider. Source authority stays here until exact HTML targets land in S3b.3b.
+  var browserBinding = null, browserVisible = false, browserView = null;
+  function releaseBrowser() {
+    browserBinding = null;
+    visualInspector.deactivate(); visualAnnotations.collapseEditor();
+    workspaceEditor.suspendPreview();
+    previewSurface.waiting({ title: "HTML", path: "Материалы" }, "Откройте HTML из материалов.");
+  }
+  function syncBrowserSource() {
+    if (browserBinding && (browserBinding.chatId !== state.activeChatId || browserBinding.artifactId !== state.activeHtmlArtifactId)) {
+      releaseBrowser();
+      previewSurface.waiting({ title: "HTML", path: "Источник изменился" }, "Выберите HTML в материалах и откройте просмотр.");
+    }
+    if (browserBinding && state.htmlWorkspaceDirty)
+      previewSurface.waiting({ title: "HTML", path: "Последняя сохранённая версия" }, "Есть несохранённые изменения.");
+  }
+  function openBrowser(fromArtifact) {
+      var selectedPreview = selectedItem();
+      if (fromArtifact !== true && selectedPreview && (selectedPreview.type === "plan" || selectedPreview.type === "artifact")) {
+        // Saved objects retain their existing reader route until the exact HTML provider is migrated.
+        return window.RNAssistantMaterialView.openArtifact(selectedPreview.item);
+      }
       if (state.htmlWorkspaceDirty || !state.activeChatId || !state.activeHtmlArtifactId) return null;
       var available = files(), selected = selectedItem();
       if (!available.some(function (file) { return fileKind(file) === "html"; })) return null;
@@ -789,16 +808,38 @@
       }
       state.htmlWorkspaceMode = "preview";
       workspaceSource.ensure(available);
-      return { chatId: state.activeChatId, artifactId: state.activeHtmlArtifactId };
+      syncBrowserSource();
+      browserBinding = { chatId: state.activeChatId, artifactId: state.activeHtmlArtifactId };
+      RNAssistantDockWorkspace.show("html-browser");
+      workspaceEditor.renderPreview();
+      return true;
+  }
+  window.RNAssistantHtmlWorkspaceSurface = {
+    register: function (dock) {
+      var root = $("htmlWorkspacePreview"), mount = document.createElement("div");
+      mount.className = "browser-view";
+      var detail = $("artifactDetailPreview");
+      detail.classList.add("html-workspace-view"); detail.dataset.htmlView = "preview";
+      root.before(detail);
+      root.classList.remove("html-workspace-view"); root.classList.add("preview-side-panel");
+      previewSurface.actions.prepend($("inspectHtmlWorkspaceButton"));
+      root.appendChild($("htmlWorkspaceInspectStatus"));
+      browserView = RNAssistantViewerRegistry.mount("browser", mount, { surface: root, portalHost: document.querySelector(".shell") });
+      dock.registerView("html-browser", { title: "HTML", icon: "panel", placement: "within", renderer: "onlyWhenVisible", element: function () { return mount; },
+        onVisible: function (shown) {
+          browserVisible = shown;
+          if (shown) { browserView.activate(); syncBrowserSource(); if (browserBinding) workspaceEditor.renderPreview(); }
+          else { browserView.deactivate(); visualInspector.deactivate(); visualAnnotations.collapseEditor(); }
+        }, onLayout: browserView.layout, onClose: releaseBrowser });
+      $("openHtmlWorkspaceBrowserButton").addEventListener("click", openBrowser);
+      releaseBrowser();
+      window.addEventListener("pagehide", function (event) { if (!event.persisted) browserView.deactivate(); });
     },
-    binding: function () {
-      if (!state.activeChatId || !state.activeHtmlArtifactId || state.htmlWorkspaceDirty ||
-          state.htmlWorkspaceMode !== "preview" || !files().some(function (file) { return fileKind(file) === "html"; })) return null;
-      return { chatId: state.activeChatId, artifactId: state.activeHtmlArtifactId };
-    },
-    reload: workspaceEditor.reloadPreview,
-    suspend: workspaceEditor.suspendPreview,
-    refreshInspectorControl: visualInspector.refresh
+    openCurrent: openBrowser,
+    openArtifact: function (artifact) { return String(artifact && (artifact.Id || artifact.id) || "") === String(state.activeHtmlArtifactId) && openBrowser(true); },
+    hasSource: function () { return !!browserBinding; },
+    isVisible: function () { return browserVisible; },
+    reload: function () { syncBrowserSource(); if (browserBinding && !state.htmlWorkspaceDirty) workspaceEditor.reloadPreview(); }
   };
   window.bindHtmlWorkspaceActions = bindHtmlWorkspaceActions;
   window.saveHtmlWorkspaceSelection = workspaceActions.saveSelection;

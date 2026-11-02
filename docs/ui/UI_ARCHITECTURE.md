@@ -373,7 +373,7 @@ native previews остаются зарегистрированными migratio
 | Office/Workspace/plugin chat | Один messages, chatForm и chatInput; [WorkspaceChat.mount](../../web/js/app-workspace-chat.js) перемещает существующие узлы между owners office/project/plugin | Уже есть общий UI. Клонирование DOM создаст конфликт глобальных IDs и состояния |
 | Data owners | Office: [chat-session](../../web/js/app-chat-session.js), [chat-state](../../web/js/app-chat-state.js), [inbox](../../web/js/app-chat-inbox.js). Workspace: [project-chats](../../web/js/app-project-chats.js), Application [WorkspaceConversationService](../../src/RNAssistant.Application/Workspace/WorkspaceConversationService.cs) | Различия target/receipts допустимы; не заменять их универсальным UI-store |
 | Общие conversation rules | [ConversationState](../../web/js/app-conversation-state.js), [ConversationInput](../../web/js/app-conversation-input.js), [ConversationObserver](../../web/js/app-conversation-observer.js), [RunViewState](../../web/js/app-run-view-state.js) | Повторно использовать identity, revision, receipt и stale-response guards |
-| Inspector/browser | Один [ChatInspector](../../web/js/app-chat-inspector.js) с owner switching; отдельный [ChatBrowser](../../web/js/app-chat-browser.js) для HTML preview | Inspector уже размещает Dockview; у browser остаётся прежний preview placement до S3 |
+| Inspector/browser | Один [ChatInspector](../../web/js/app-chat-inspector.js) с owner switching; общий [Browser](../../web/js/app-browser-viewer.js) для HTML/plugin | S3b.3a: отдельные Dock views; singleton source providers остаются до S3b.3b |
 | Viewers | [ViewerRegistry](../../web/js/app-viewer-registry.js), text/Markdown/JSON/image/PDF/task-list, [ViewerUI](../../web/js/app-viewer-ui.js) | Это registry форматов содержимого, не второй workspace/panel registry |
 | Plugins/vendor | [RNPlugin SDK](../../web/plugin-host/sdk.js), [plugins](../../web/js/app-plugins.js), [vendor packages](../../web/vendor-packages.json), существующие generators | Есть Ready handshake и resource/command APIs; общего публичного UI/panel SDK пока нет |
 | Data Templates | Отдельное переносимое приложение, [shell](../../web/data-templates/ui/shell.js), [browser](../../web/data-templates/ui/browser.js), [plugin adapter](../../web/data-templates/ui/plugin-adapter.js) | Его предметные вкладки и standalone entry не являются второй RNAssistant Shell |
@@ -585,8 +585,8 @@ extension API не возникает автоматически из внутр
 
 Iframe lifetime — отдельный инвариант, не обещание сохранения одного DOM-узла.
 Локальный probe Dockview 8.8.3: `renderer:always` сохраняет document при move,
-но `fromJSON` пересоздаёт его. Общий browser host должен решить это для HTML и
-plugin вместе; отдельный plugin-only overlay пока не реализуется. Layout persistence
+но `fromJSON` пересоздаёт его. S3b.3a переносит HTML и plugin surface в общий
+стабильный портал; Dockview перемещает только placeholder. Layout persistence
 не хранит тела, secrets или runtime instance IDs и не обещает пережить reload сессии.
 
 ### S3b.1: реализованные владельцы — In Review
@@ -670,3 +670,29 @@ L3 — host capabilities. File API/worker/module/storage/file:// поддерж�
 допустим только с owner, флагом при необходимости и условием удаления в
 [Migration Map](../stabilization/MIGRATION_MAP.md). После проверки старый путь
 удаляется вместе с consumers и мёртвыми зависимостями.
+
+### S3b.3a: общий Browser и раздельные views — In Review
+
+`app-browser-viewer.js` зарегистрирован в существующем ViewerRegistry как `browser`.
+Его вход — provider-owned surface и portalHost; выход — element/activate/deactivate/
+layout/destroy. Он не читает bridge, протокол, HTML или состояние чата. Постоянный
+parent iframe сохраняет document; placeholder получает положение от Dockview.
+ResizeObserver/rAF ограничивают запись геометрии; destroy снимает listeners/observer.
+Shell передаёт изменение доступности навигации через существующий bindWorkspace.
+Dockview получает CSS pixels; Browser placeholders используют `onlyWhenVisible`,
+поскольку скрытому placeholder не нужен собственный retained render overlay.
+
+`app-html-workspace.js` владеет текущей парой chatId/artifactId, исходниками,
+resource leases, sandbox и аннотациями. Смена пары очищает просмотр с объяснением;
+несохранённая правка обозначает показ последней сохранённой версии. Код редактируется
+в Материалах, просмотр — вкладка HTML. Close инвалидирует preview generation/leases.
+`app-plugins.js` владеет check/open/close, публикацией, версиями, SDK и аннотациями.
+Выбор плагина не меняет разговор. «Чат исходников» — отдельная адресная команда;
+выбор исходного чата не открывает Browser. Hidden прекращает polling; close меняет
+epoch и закрывает instance; запоздалый open закрывается без восстановления вкладки.
+
+Временные bounded owners: один live HTML workspace и один plugin workbench.
+Сохранённые HTML objects и несколько plugin/release targets — **S3b.3b**; их нельзя
+клонировать из текущих глобальных controllers. Catalog HTML adapter остаётся явно.
+ChatBrowser, его CSS, splitter/overlay plugin placement и preview-пункт Inspector
+удалены. Новый transport, store или runtime pipeline не добавлены.

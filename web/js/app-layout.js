@@ -8,6 +8,7 @@
   var navigationToggle = null;
   var navigationSizes = null;
   var workspaceNoticeTimer = null;
+  var workspaceLayoutChanged = null;
 
   function renderWorkspaceChrome(model) {
     function text(id, value) { var node = document.getElementById(id); if (node.textContent !== value) node.textContent = value; }
@@ -101,7 +102,7 @@
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
     }
-    shell.querySelectorAll(".panel.active :is(.chat-dock-host, .chat-browser, .plugin-workbench, .instruction-editor, .vba-editor, .html-workspace-editor, .product-dt-main, .plugin-content)").forEach(function (main) {
+    shell.querySelectorAll(".panel.active :is(.chat-dock-host, .instruction-editor, .vba-editor, .html-workspace-editor, .product-dt-main, .plugin-content)").forEach(function (main) {
       main.inert = mode !== "wide" && open && !!active;
     });
     var scrim = document.getElementById("productNavigationScrim"), section = shell.querySelector(".panel.active");
@@ -111,7 +112,7 @@
       scrim.hidden = mode === "wide" || !open || !active;
     }
     if (!open && focusedInNavigation && button) button.focus({ preventScroll: true });
-    if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.refresh();
+    if (workspaceLayoutChanged) workspaceLayoutChanged();
   }
 
   function setProductNavigationOpen(open) {
@@ -135,6 +136,7 @@
     renderWorkspace: renderWorkspaceChrome,
     notice: workspaceNotice,
     bindWorkspace: function (actions) {
+      workspaceLayoutChanged = actions.onLayoutChanged;
       [["workspacePanels", actions.panels], ["workspaceLayout", actions.layout], ["workspaceMaximize", actions.maximize]].forEach(function (entry) {
         document.getElementById(entry[0]).onclick = function () { entry[1](this); };
       });

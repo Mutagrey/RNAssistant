@@ -1,5 +1,17 @@
 # Stabilization progress
 
+## Общий Browser S3b.3a — 2026-11-02
+
+HTML и plugin получили общий стабильный renderer в ViewerRegistry и отдельные Dock
+views. Плагин не переключает чат; Inspector не управляет Browser. ChatBrowser JS/CSS,
+plugin splitters/overlay и смешанный переключатель удалены. На одинаковом iframe
+5 restores: 6→1 загрузок, ввод сохраняется; общего ускорения не заявляем.
+Focused Browser/annotation, Dock и Material проверки + VersionFormat пройдены.
+[Ревью и ограничения](../ui/UI_MIGRATION_PLAN.md#s3b3a-общий-browser-host-и-раздельное-размещение--in-review).
+In Review. Следом S3b.3b: независимые exact saved HTML/plugin providers; текущие
+bounded singleton owners и HTML Catalog/detail adapter ещё остаются. S4 включает
+Library/VBA и другие панели. Windows/Office и старые qualification gaps открыты.
+
 ## Повторный разбор тяжёлого чтения чатов — 2026-11-02
 
 Owner: Core ChatStore/JSONL; Office session service — выбор метаданных для recovery.

@@ -364,3 +364,18 @@ ActionMenu portalled API: `open(trigger, items, {label, className})`, item —
 Arrow Up/Down, Home/End, Tab и Escape доступны; открытие нового меню закрывает
 предыдущее, Escape/выбор возвращают focus, resize/pagehide удаляют popup.
 API проверен в standalone component fixture; public plugin export ещё не заявлен.
+
+### Browser S3b.3a
+
+Общий renderer — [Browser](../../web/js/app-browser-viewer.js); общий toolbar —
+[PreviewSurface](../../web/js/app-preview-surface.js). Provider не задаёт собственный
+splitter, ширину, overlay или переключатель инспектора. Dock tabs/menus/buttons и
+focus используют общие компоненты/tokens. Toolbar содержит источник/версию, действия
+и отдельную строку статуса; до 450 CSS px действия переходят на следующую строку,
+имя источника остаётся читаемым. Причина ошибки переносится, не маскируется под успех.
+
+Browser placeholder доступен с клавиатуры: Enter переводит фокус к содержимому.
+Hidden view/открытая узкая навигация не перехватывают ввод; при drag поверхность
+временно скрыта от hit testing, document не выгружается. Собственные CSS задают
+только portal geometry и компоновку content/toolbar. Аннотации используют прежние
+VisualInspector/VisualAnnotations и черновик адресного чата.

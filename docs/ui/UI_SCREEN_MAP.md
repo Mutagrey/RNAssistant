@@ -260,7 +260,7 @@ conversation singleton; параметризованные chat IDs ниже —
 | Inspector: Возможности агента | Тот же Inspector, capability library/services | Раздел того же inspector | selected/pending/available/unavailable/permission required |
 | Inspector: Токены и прогноз | context-meter, model-context summaries | Раздел того же inspector | usage unknown/known, local estimate отдельно от actual usage |
 | Inspector: Текущий запуск | run-view-state, agent-activity, task-list | Раздел inspector, deep link в Diagnostics | live/completed/failed/cancelled/awaiting/unknown, grouped steps |
-| Правый HTML preview и аннотации | [chat-browser](../../web/js/app-chat-browser.js), preview-surface, visual-inspector/annotations | browser:resource справа, перемещаемый view | loading/ready/error, reload, selection/annotation, preserved frame session |
+| HTML Browser и аннотации | [browser-viewer](../../web/js/app-browser-viewer.js), HtmlWorkspace, preview-surface, visual-inspector/annotations | Отдельная вкладка HTML, placement у Dockview | loading/ready/error, reload, selection/annotation, preserved frame session |
 | Материалы: дерево, общий каталог, история версий | [artifact-catalog](../../web/js/app-artifact-catalog.js), [artifact-versions](../../web/js/app-artifact-versions.js), ArtifactLibraryProjectionService | materials navigation + resource view в центре | paged heads/history, search/filter, removed/unavailable, revision |
 | Markdown / текст / JSON | [text-viewer](../../web/js/app-text-viewer.js), [json-viewer](../../web/js/app-json-viewer.js), ViewerRegistry | resource:ref, центр; один viewer на нужный формат | load/read error, preview/source, truncation, copy/download |
 | PDF / изображение / коллекция / task list | [resource-viewer](../../web/js/app-resource-viewer.js), [sequence-viewer](../../web/js/app-sequence-viewer.js) | Тот же resource view | pages/zoom/rotation, lazy media, unavailable/leased/disposed |
@@ -323,7 +323,8 @@ Download использует streaming save при поддержке browser A
 явной причиной отказа. Восстановление после перезапуска возвращает target, но пока
 не mode/search/scroll специализированного viewer.
 
-HTML workspace остаётся в Catalog/редакторе до общего Browser S3b.3; raw HTML file
+S3b.3a вынес live HTML preview в Browser; saved HTML Catalog adapter остаётся до
+S3b.3b. Raw HTML file
 пока показан инертным исходником. Library и VBA editors — S4. Эти ограничения
 не заменяются дополнительными browser/chat UI. [Ревью](UI_MIGRATION_PLAN.md#s3b2-независимые-просмотры-материалов--in-review-2026-11-02).
 
@@ -438,3 +439,21 @@ Escape возвращает фокус, смена scope/deactivate закрыв
 Это source inventory всех основных экранных семейств и их перечисленных режимов,
 а не утверждение, что каждый runtime-сценарий воспроизведён. Непроверенные размеры,
 focus transitions, performance и host behavior остаются gates Migration Plan.
+
+### Маршруты Browser S3b.3a — In Review
+
+- HTML текущего чата → «Открыть просмотр» → вкладка HTML. Редактор Материалов
+  показывает ссылку на просмотр вместо второй iframe-панели.
+- Плагин в rail → вкладка его просмотра; выбранный чат и черновик сохраняются.
+  «Чат исходников» открывает обычный Conversation view. Переходы по дереву исходных
+  чатов не переключают Browser и не создают новую plugin instance.
+- Inspector и Browser — отдельные вкладки: можно разместить рядом; переключатель
+  инспектора содержит только Контекст/Возможности/Токены/Текущий запуск.
+- Перенос/restore/переключение Office–Workspace–Материалы сохраняют iframe document
+  в текущем окне. Close закрывает instance/leases; повторное открытие начинает новую
+  сессию просмотра, разговор продолжает выполняться независимо.
+- После смены текущего HTML source прежний live Browser показывает причину и путь
+  обратно к Материалам. После холодного старта выбор источника явный.
+
+Ограничение S3b.3a: один Browser каждого действующего provider-owner. Независимые
+exact saved HTML/plugin release objects — S3b.3b; Library/VBA editors — S4.

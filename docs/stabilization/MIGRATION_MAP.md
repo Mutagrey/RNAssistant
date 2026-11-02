@@ -9,9 +9,11 @@ catalog preview/refresh удалён. Library adapter остаётся до S4 d
 
 Временный HTML catalog preview/editor остаётся у ArtifactCatalog/HtmlWorkspace;
 shared format presentation вынесена в ArtifactViewers без второго renderer/store.
-Removal gate S3b.3: общий Browser surface для HTML/plugin, отдельный conversation,
-проверенный iframe identity при move/restore, переключение всех consumers и удаление
-ChatBrowser/plugin splitters. S4 подключает Library/VBA и остальные navigation adapters
+S3b.3a удалил ChatBrowser/plugin splitters и смешанный Preview/Inspector switcher.
+Общий Browser сохраняет iframe document. Временные singleton providers остаются у
+HtmlWorkspace и Plugins: удаление adapter в S3b.3b после exact saved HTML и отдельных
+plugin/release factories, typed source ownership, annotation/close/stale evidence.
+S4 подключает Library/VBA и остальные navigation adapters
 к тому же Pane и descriptors; не создаёт отдельную VBA Shell. Cold restart viewer
 mementos (mode/search/scroll) остаются явным gap; target уже восстанавливается.
 

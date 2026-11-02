@@ -272,6 +272,7 @@
       state.htmlWorkspaceMode = mode === "edit" ? "edit" : "preview";
       applyHtmlWorkspaceMode();
       renderHtmlWorkspaceEditor();
+      if (mode === "preview" && window.RNAssistantHtmlWorkspaceSurface) window.RNAssistantHtmlWorkspaceSurface.openCurrent();
     }
 
     function applyHtmlWorkspaceMode() {
@@ -320,6 +321,7 @@
       var isPlan = !!selected && selected.type === "plan";
       var isArtifact = !!selected && selected.type === "artifact";
       var isCollection = !!selected && selected.type === "collection";
+      $("htmlWorkspacePreviewLink").hidden = isPlan || isArtifact || isCollection;
       var blocked = recoveryBlocked();
       var wanted = isPlan || isArtifact || isCollection || !selected ? [] :
         state.htmlWorkspaceMode === "edit" ? (selected.type === "file" ? [selected.item] : []) : files();
@@ -370,8 +372,8 @@
           selected && selected.type === "file" && !source.ready(selected.item);
       }
       var isWorkspace = !!selected && !isPlan && !isArtifact && !isCollection;
-      var openRight = $("openHtmlWorkspaceRightButton");
-      if (openRight) openRight.hidden = !isWorkspace || state.htmlWorkspaceMode !== "preview" ||
+      var openBrowser = $("openHtmlWorkspaceBrowserButton");
+      if (openBrowser) openBrowser.disabled = !isWorkspace || state.htmlWorkspaceMode !== "preview" ||
         !files().some(function (file) { return fileKind(file) === "html"; });
       ["refreshHtmlDataButton", "reloadHtmlWorkspaceSourceButton", "exportHtmlWorkspaceButton"].forEach(function (id) {
         if ($(id)) $(id).classList.toggle("hidden", !isWorkspace);
@@ -403,19 +405,18 @@
       if (!frame || !detail) {
         return;
       }
-      if ($("htmlWorkspaceEditor") && $("htmlWorkspaceEditor").hidden &&
-          !(window.RNAssistantChatBrowser && window.RNAssistantChatBrowser.hasSource())) { clearPreview(frame); return; }
       var selected = selectedItem();
       var special = selected && (selected.type === "plan" || selected.type === "artifact" || selected.type === "collection");
-      frame.classList.toggle("hidden", !!special);
       detail.classList.toggle("hidden", !special);
       if (special) {
-        clearPreview(frame);
-        workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.artifactActions);
+        if (window.RNAssistantDockWorkspace.isVisible("materials"))
+          workspaceArtifacts.renderDetail(detail, selected, selectedEditorValue(selected), options.artifactActions);
         return;
       }
       detail.replaceChildren();
-      if (state.htmlWorkspaceMode === "edit") { clearPreview(frame); return; }
+      if (!window.RNAssistantHtmlWorkspaceSurface || !window.RNAssistantHtmlWorkspaceSurface.hasSource() ||
+          !window.RNAssistantHtmlWorkspaceSurface.isVisible() || state.htmlWorkspaceDirty) return;
+      frame.classList.remove("hidden");
       var workspaceFiles = files();
       if (!source.current(workspace()) || !workspaceFiles.every(source.ready)) {
         clearPreview(frame);

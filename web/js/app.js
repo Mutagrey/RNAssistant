@@ -15,7 +15,6 @@ function switchTab(name, options) {
   }
   if (name === "tools") name = "instructions";
   if (name === "html") name = "artifacts";
-  if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.onTabChange(name);
   var section = name === "instructions" ? "library" : name;
   var active = document.querySelector(".panel.active");
   var changed = !active || active.id !== "tab-" + name;
@@ -115,8 +114,8 @@ document.addEventListener("DOMContentLoaded", function () {
   if (typeof initializeSplitPanes === "function") initializeSplitPanes();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
   window.RNAssistantMaterialView.register(window.RNAssistantDockWorkspace);
+  window.RNAssistantHtmlWorkspaceSurface.register(window.RNAssistantDockWorkspace);
   window.RNAssistantDockWorkspace.bind();
-  if (window.RNAssistantChatBrowser) window.RNAssistantChatBrowser.bind();
   window.RNAssistantShellLayout.refresh();
   window.addEventListener("load", function () {
     if (window.hljs) {

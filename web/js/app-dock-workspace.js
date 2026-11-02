@@ -56,6 +56,7 @@
     Object.keys(objectViews).forEach(function (id) {
       var record = objectViews[id], shown = visible(id);
       record.view.element.inert = !shown;
+      if (shown && record.view.layout) record.view.layout();
       if (record.active === shown) return;
       record.active = shown;
       if (shown) record.view.activate(); else record.view.deactivate();
@@ -118,6 +119,7 @@
     Object.keys(views).forEach(function (id) {
       var view = views[id], shown = visible(id);
       if (view.onVisible && view.active !== shown) { view.active = shown; view.onVisible(shown); }
+      if (shown && view.onLayout) view.onLayout();
     });
     syncObjectViews();
     updateContext();
@@ -157,20 +159,21 @@
       },
       dispose: function () {
         if (visibility) visibility.dispose();
-        parking.appendChild(roots[id]);
+        // A replacement component may already own the root during a move/restore.
+        if (roots[id].parentElement === content) parking.appendChild(roots[id]);
+        Promise.resolve().then(function () { if (!panel(id) && views[id].onClose) views[id].onClose(); });
       }
     };
   }
   function add(id, position) {
     return api.addPanel({ id: id, component: id, title: views[id].title,
       // Bounded singleton views retain their existing DOM and draft owners.
-      renderer: "always", minimumWidth: 150, minimumHeight: 120, position: position });
+      renderer: views[id].renderer || "always", minimumWidth: 150, minimumHeight: 120, position: position });
   }
   function show(id, group, direction) {
     if (!api || !views[id] || views[id].targetRoute) return;
     direction = direction || views[id].placement;
     if (views[id].prepare) views[id].prepare();
-    if (id === "inspector") RNAssistantChatInspector.prepareOpen();
     var item = panel(id);
     // The gear opens in the main group; repeat clicks activate without relocating it.
     if ((id === "settings" || id === "request") && !item && !group) {
@@ -382,7 +385,7 @@
     var dock = element("div", "chat-dock"); host.appendChild(dock);
     api = window["dockview-core"].createDockview(dock, {
       theme: { name: "rnassistant", className: "rna-product-dock", gap: Number.parseFloat(tokens.getPropertyValue("--shell-dock-gap")), dndOverlayMounting: "absolute", dndPanelOverlay: "content" },
-      disableFloatingGroups: true, dndStrategy: "pointer",
+      disableFloatingGroups: true, disableAutoResizing: true, dndStrategy: "pointer",
       messages: { closeTab: function (title) { return "Закрыть «" + title + "»"; }, closeTabPlain: "Закрыть вкладку" },
       createComponent: createComponent, createRightHeaderActionComponent: header,
       defaultTabComponent: "guarded", createTabComponent: createTab,
@@ -392,6 +395,13 @@
         return { element: empty, init: function () {} };
       }
     });
+    function endDrag() { document.documentElement.classList.remove("workspace-dragging"); }
+    api.onWillDragPanel(function () { document.documentElement.classList.add("workspace-dragging"); });
+    api.onWillDragGroup(function () { document.documentElement.classList.add("workspace-dragging"); });
+    var dragListeners = new AbortController();
+    document.addEventListener("pointerup", endDrag, { capture: true, signal: dragListeners.signal });
+    document.addEventListener("pointercancel", endDrag, { capture: true, signal: dragListeners.signal });
+    window.addEventListener("blur", endDrag, { signal: dragListeners.signal });
     restoring = true;
     try { var saved = JSON.parse(localStorage.getItem(storageKey)); if (saved && saved.version === 1 && validateLayout(saved.layout)) api.fromJSON(saved.layout); else { reset(); if (saved) notice("Прежняя компоновка недоступна. Открыт исходный вид."); } }
     catch (error) { reset(); notice("Не удалось прочитать компоновку. Открыт исходный вид."); }
@@ -400,6 +410,7 @@
     api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () { sync(); revealActiveTab(); }); api.onDidMaximizedGroupChange(sync);
     api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
+      onLayoutChanged: sync,
       panels: function (trigger) {
         RNAssistantActionMenu.open(trigger, viewIds().map(function (id) {
           return { label: views[id].title, icon: views[id].icon, status: panel(id) ? "Открыт" : "", onSelect: function () { show(id); } };
@@ -434,8 +445,12 @@
       }
       if (event.key === "Escape" && api.hasMaximizedGroup()) { api.exitMaximizedGroup(); event.preventDefault(); }
     });
-    var observer = new ResizeObserver(function (entries) { resize(entries[0].contentRect.width); }); observer.observe(host);
-    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { messageView().dispose(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
+    // Dockview's default bounding rect uses scaled pixels under CSS zoom. Layout accepts CSS pixels.
+    var observer = new ResizeObserver(function (entries) {
+      var rect = entries[0].contentRect;
+      if (rect.width && rect.height) { resize(rect.width); api.layout(rect.width, rect.height); sync(); }
+    }); observer.observe(dock);
+    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { dragListeners.abort(); endDrag(); messageView().dispose(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
     sync();
   }
   window.RNAssistantDockWorkspace = {

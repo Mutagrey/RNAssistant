@@ -1,5 +1,19 @@
 # Stabilization risk register
 
+## Browser S3b.3a: оставшиеся boundaries — 2026-11-02
+
+Owner: Web Browser / HtmlWorkspace / Plugins. Общий renderer проверен локально,
+но providers ещё singleton: один live HTML и один выбранный plugin. Exact saved
+HTML/release scopes, несколько экземпляров и cold restart source state — S3b.3b.
+Catalog/detail HTML adapter сохраняется явно до этого gate. Старые широкие
+plugin/annotation suites полностью не квалифицированы; адресный browser-views
+проверяет обе аннотации, stale close, move/restore и узкие состояния.
+
+При CSS zoom vendor retained overlay (`renderer:always`) измеряет размеры в scaled
+pixels. Browser placeholders переведены на `onlyWhenVisible`, Dock получает CSS
+размеры; Browser 125% проверен. Общий аудит retained overlays остальных тяжёлых
+views — отдельное Shell evidence, не скрытое обещание полной zoom qualification.
+
 ## Web browser checks во время визуальной правки — 2026-11-02
 
 Owner: Web UI validation. В текущем рабочем дереве три более широкие проверки

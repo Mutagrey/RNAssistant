@@ -119,6 +119,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     const railWidths={};
     for(const [section,label] of [['chat','Рабочая область'],['artifacts','Материалы'],['library','Библиотека'],['vba','VBA'],['settings','Настройки']]){
       await page.locator('.section-rail [data-section="'+section+'"]').hover();
+      await page.locator('.rail-hover-title').getByText(label,{exact:true}).waitFor();
       assert.equal(await page.locator('.rail-hover-title').textContent(),label,'one shared rail label for '+section);
       railWidths[section]=(await page.locator('.rail-hover-card').boundingBox()).width;
     }
@@ -127,14 +128,15 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(await page.locator('.rail-hover-title').evaluate(node=>getComputedStyle(node).fontWeight),'400','menu labels use regular weight');
     assert.equal(await page.locator('.section-rail [data-section="chat"]').getAttribute('title'),null,'native rail tooltip is replaced');
     await page.evaluate(()=>RNAssistantPlugins.select('example'));
+    await page.locator('#pluginWorkbench').getByRole('button',{name:'Чат исходников',exact:true}).click();
     await page.locator('#messages').getByText('Чатов пока нет').waitFor();
     assert.equal(sourceChatCreateCalls,0,'opening development does not create a source chat');
     assert.equal(await page.locator('#sendButton').isDisabled(),true,'empty source chat locks the composer');
     assert.equal(await page.locator('#projectChatNew').isEnabled(),true,'source chat creation uses the project tree');
     await page.locator('#pluginAdd').hover();
     await page.locator('.rail-hover-card').getByText('Удалённых с панели плагинов нет.').waitFor();
-    assert.equal(await page.locator('.rail-hover-title').textContent(),'Добавить плагины');
-    assert.equal(await page.locator('.rail-hover-title').evaluate(node=>getComputedStyle(node).fontSize),'10px','add menu heading is muted and small');
+    assert.equal(await page.locator('.rail-hover-title').textContent(),'Добавить плагин');
+    assert.equal(await page.locator('.rail-hover-title').evaluate(node=>getComputedStyle(node).fontSize),'12px','add menu heading uses shared menu typography');
     await page.locator('.rail-hover-card').getByRole('button',{name:'Создать плагин'}).waitFor();
     await page.locator('#pluginAdd').focus();
     await page.locator('#pluginAdd').press('Tab');
@@ -189,7 +191,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.equal(sourceChatCreateCalls,1,'creation task explicitly opens one source chat before submit');
     assert.equal(await page.locator('#pluginCheck').count(),0,'package check is integrated into preview refresh');
     assert.equal(await page.locator('#pluginPreview').getAttribute('aria-label'),'Проверить исходники и обновить предпросмотр');
-    assert.equal(await page.locator('#chatInspectorViewTitle').textContent(),'Предпросмотр');
+    await page.evaluate(()=>RNAssistantChatInspector.setOpen(true));
     const visibleFrame=await page.locator('#pluginPreviewMount iframe').getAttribute('src');
     await page.locator('#chatInspectorSwitcher summary').click();
     await page.screenshot({path:path.join(captures,'plugin-panel-sections.png'),animations:'disabled'});
@@ -198,32 +200,30 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     assert.match(await page.locator('#chatInspectorBody').textContent(),/Проверка исходников/,
       'plugin activity derives from the selected chat history');
     assert.equal(await page.locator('#chatInspectorViewTitle').textContent(),'Ход работы');
-    assert.equal(await page.locator('#pluginPreview').isVisible(),false,'refresh belongs only to preview');
     await page.screenshot({path:path.join(captures,'plugin-activity.png'),animations:'disabled'});
-    await page.locator('#chatInspectorSwitcher summary').click();
-    await page.locator('[data-chat-inspector-view="preview"]').click();
+    await page.evaluate(()=>RNAssistantDockWorkspace.show('plugin-browser'));
     assert.equal(await page.locator('#pluginPreviewMount iframe').getAttribute('src'),visibleFrame,
-      'switching right-panel sections keeps the exact plugin frame');
-    const splitter=page.locator('#pluginSurfaceSplitter');
-    const splitBefore=Number(await splitter.getAttribute('aria-valuenow'));
-    await splitter.press('ArrowLeft');
-    assert.ok(Number(await splitter.getAttribute('aria-valuenow'))>splitBefore,'development split resizes from the keyboard');
-    assert.match(iconPrompt,/workspace\.plugin_authoring/);
+      'independent Inspector retains the exact plugin frame');
+    assert.match(iconPrompt,/skills\.workspace\.plugin\.authoring/);
     assert.match(iconPrompt,/Сводка продаж/);
     assert.doesNotMatch(iconPrompt,/Таблица с восходящей линией/,'created icon is already in source');
     assert.equal(drawCalls,1,'creation reuses the drawn icon');
-    await page.locator('#pluginPreviewMount .chat-browser-annotate').waitFor({state:'visible'});
-    assert.equal(await page.locator('#pluginPreviewMount .chat-browser-annotate').evaluate(node=>
-      node.parentElement.classList.contains('preview-surface-panel-head')&&
+    const browserTab=await page.locator('[data-tab-panel-id="plugin-browser"]').boundingBox(), inspectorTab=await page.locator('[data-tab-panel-id="inspector"]').boundingBox();
+    if(browserTab&&inspectorTab){await page.mouse.move(browserTab.x+20,browserTab.y+15);await page.mouse.down();await page.mouse.move(inspectorTab.x+30,inspectorTab.y+15,{steps:15});await page.mouse.up();}
+    await page.evaluate(()=>RNAssistantDockWorkspace.show('conversation'));
+    await page.locator('#pluginPreviewMount .browser-annotate').waitFor({state:'visible'});
+    assert.equal(await page.locator('#pluginPreviewMount .browser-annotate').evaluate(node=>
+      node.parentElement.classList.contains('preview-surface-actions')&&
       getComputedStyle(node.querySelector('span')).display!=='none'),true,
       'plugin annotation action has a visible label in the panel header');
-    await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount .chat-browser-annotate').disabled);
-    await page.locator('#pluginPreviewMount .chat-browser-annotate').click();
+    await page.waitForFunction(()=>!document.querySelector('#pluginPreviewMount .browser-annotate').disabled);
+    await page.locator('#pluginPreviewMount .browser-annotate').click();
     await page.frameLocator('#pluginPreviewMount iframe').locator('h1').hover();
     await page.frameLocator('#pluginPreviewMount iframe').locator('h1').click();
     await page.locator('#pluginPreviewFrameHost .visual-annotation-editor textarea').fill('Fix the heading');
     await page.screenshot({path:path.join(captures,'plugin-annotation-editor.png'),animations:'disabled'});
     await page.locator('#pluginPreviewFrameHost .visual-annotation-editor textarea').press('Enter');
+    await page.evaluate(()=>RNAssistantDockWorkspace.show('conversation'));
     await page.locator('#pluginAnnotationDrafts .visual-annotation-list').waitFor();
     assert.equal(visualRequest.selection.tag,'h1','the shared inspector captures the plugin DOM target');
     assert.equal(visualRequest.annotationNumber,1,'plugin annotations use the shared numbered draft');
@@ -231,9 +231,10 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#sendButton').click();
     await page.waitForFunction(()=>document.querySelector('#messages')?.textContent.includes('Fix the heading'));
     assert.equal(visualSent,true,'the shared chat submits the exact staged attachment ID');
+    await page.evaluate(()=>RNAssistantDockWorkspace.show('plugin-browser'));
     await page.locator('#pluginPreviewFrameHost .visual-annotation-marker.is-sent').waitFor();
     await page.screenshot({path:path.join(captures,'plugin-annotation-sent.png'),animations:'disabled'});
-    await page.locator('#pluginPreviewMount .chat-browser-annotate').click();
+    await page.locator('#pluginPreviewMount .browser-annotate').click();
     assert.equal(await page.locator('#pluginPreviewFrameHost .visual-annotation-marker').count(),0,
       'plugin annotation numbers disappear when mode is off');
     await page.frameLocator('#pluginPreviewMount iframe').locator('#run').click();

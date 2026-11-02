@@ -496,8 +496,8 @@
       card.setAttribute("aria-label", card.title);
     }
     if (!removed && !unavailable) card.addEventListener("click", function () {
-      if (kind === "html_workspace" && window.RNAssistantChatBrowser &&
-          window.RNAssistantChatBrowser.openArtifact(artifact)) return;
+      if (kind === "html_workspace" && window.RNAssistantHtmlWorkspaceSurface &&
+          window.RNAssistantHtmlWorkspaceSurface.openArtifact(artifact)) return;
       openArtifactResource(artifact);
     });
     return card;

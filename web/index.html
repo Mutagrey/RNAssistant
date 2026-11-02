@@ -59,7 +59,6 @@
   <link rel="stylesheet" href="css/app-product-materials.css?v=navigation-s3b1-20261102-materials-s3b2">
   <link rel="stylesheet" href="css/app-product-screens.css?v=navigation-s3b1-20261102-materials-s3b2">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
-  <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
   <link rel="stylesheet" href="css/app-diagnostics.css?v=request-dock-20261102">
   <link rel="stylesheet" href="css/app-dock-workspace.css?v=shell-reference-20261102-materials-s3b2">
@@ -259,7 +258,6 @@
               <details class="panel-switcher chat-inspector-switcher" id="chatInspectorSwitcher">
                 <summary aria-label="Раздел боковой панели" aria-haspopup="menu"><span id="chatInspectorViewTitle">Контекст</span><svg data-rna-icon="down" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
                 <div class="popover-menu" role="menu" aria-label="Раздел боковой панели">
-                  <button type="button" role="menuitem" data-chat-inspector-view="preview" hidden><svg data-rna-icon="panel" viewBox="0 0 24 24" aria-hidden="true"></svg>Предпросмотр</button>
                   <button type="button" role="menuitem" data-chat-inspector-view="context"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg>Контекст</button>
                   <button type="button" role="menuitem" data-chat-inspector-view="abilities"><svg data-rna-icon="tool" viewBox="0 0 24 24" aria-hidden="true"></svg>Возможности агента</button>
                   <button type="button" role="menuitem" data-chat-inspector-view="usage"><svg data-rna-icon="chart" viewBox="0 0 24 24" aria-hidden="true"></svg>Токены и прогноз</button>
@@ -270,8 +268,6 @@
             <div class="chat-inspector-body" id="chatInspectorBody"></div>
 
           </aside>
-          <div class="splitter chat-browser-splitter" id="chatBrowserSplitter" role="separator" aria-orientation="vertical" aria-controls="chatBrowser" aria-label="Ширина браузера" tabindex="0"></div>
-          <aside class="chat-browser" id="chatBrowser" aria-label="Предпросмотр HTML" aria-hidden="true"><div class="chat-browser-frame-mount" id="chatBrowserFrameMount"></div></aside>
         </div>
         <div class="project-chat-layout chat-workspace split-layout" id="projectChatLayout" data-navigation hidden>
           <aside class="chat-sidebar global-nav" aria-label="Проекты и чаты">
@@ -291,7 +287,6 @@
             <div class="workspace-chat-control" id="workspaceChatControl" hidden><div class="workspace-chat-pending" id="workspaceChatPending"></div><button type="button" id="workspaceChatApprove">Разрешить</button><button type="button" id="workspaceChatReject">Отклонить</button></div>
             <div class="workspace-chat-questions" id="workspaceChatQuestions" hidden></div>
           </div>
-          <div class="splitter plugin-surface-splitter" id="pluginSurfaceSplitter" role="separator" aria-orientation="vertical" aria-controls="pluginWorkbench" aria-label="Ширина предпросмотра плагина" tabindex="0" hidden></div>
           <aside class="plugin-workbench" id="pluginWorkbench" aria-label="Предпросмотр плагина" hidden>
             <p class="plugin-status" id="pluginWorkbenchStatus" role="status"></p>
             <div class="plugin-toolbar" id="pluginToolbar" hidden>
@@ -588,7 +583,6 @@
                 </div>
                 <button class="button compact html-workspace-inspect-button" id="inspectHtmlWorkspaceButton" type="button" data-browser-control="true" aria-pressed="false" disabled>Аннотировать</button>
                 <button class="button compact html-workspace-inspect-button" id="attachHtmlWorkspaceSelectionButton" type="button" hidden disabled>В чат</button>
-                <button class="button compact" id="openHtmlWorkspaceRightButton" type="button" hidden>Открыть справа</button>
                 <span class="html-workspace-inspect-status" id="htmlWorkspaceInspectStatus" role="status"></span>
                 <div class="resource-editor-actions">
                   <button class="icon-btn html-workspace-icon" id="copyHtmlWorkspaceButton" type="button" title="Копировать исходный текст" aria-label="Копировать исходный текст"><svg data-rna-icon="copy" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -629,6 +623,7 @@
               <div class="resource-editor-empty-title">Артефакт не выбран</div>
               <div class="resource-editor-empty-text">Создайте план или HTML, либо выберите артефакт слева.</div>
             </div>
+            <div class="resource-editor-empty html-workspace-view" id="htmlWorkspacePreviewLink" data-html-view="preview"><p>Просмотр открывается в отдельной вкладке.</p><button class="button compact" id="openHtmlWorkspaceBrowserButton" type="button">Открыть просмотр</button></div>
             <div class="html-workspace-preview html-workspace-view" id="htmlWorkspacePreview" data-html-view="preview">
               <iframe class="html-workspace-frame" id="htmlWorkspacePreviewFrame" title="HTML preview" sandbox="allow-scripts allow-modals" referrerpolicy="no-referrer"></iframe>
               <div class="artifact-detail-preview product-viewer hidden" id="artifactDetailPreview"></div>
@@ -1135,6 +1130,7 @@
   <script src="js/app-diagnostics.js?v=diagnostics-20261101"></script>
   <script src="js/app-model-diagnostics.js?v=diagnostics-20261101"></script>
   <script src="js/app-viewer-registry.js?v=artifact-preview-20260902-2-materials-s3b2"></script>
+  <script src="js/app-browser-viewer.js?v=browser-s3b3a-20261102"></script>
   <script src="js/app-viewer-ui.js?v=request-dock-20261102-materials-s3b2"></script>
   <script src="js/app-json-viewer.js?v=request-dock-20261102"></script>
   <script src="js/app-text-viewer.js?v=request-dock-20261102"></script>
@@ -1177,7 +1173,6 @@
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1-materials-s3b2"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1"></script>
   <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1-materials-s3b2"></script>
-  <script src="js/app-chat-browser.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-context.js?v=office-draft-20261023-1"></script>
   <script src="js/app-model-context-contents.js?v=request-dock-20261102"></script>
   <script src="js/app-model-context.js?v=request-dock-20261102"></script>

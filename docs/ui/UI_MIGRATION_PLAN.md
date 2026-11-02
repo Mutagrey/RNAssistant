@@ -781,13 +781,66 @@ providers, sandbox/authority, iframe identity при move/restore. Текущи�
 панели — **S4**, с теми же NavigationPane и view descriptors. Cold restart viewer
 mementos, реальный WebView2/Office и прежние diagnostics qualification gaps не закрыты.
 
+### S3b.3a: общий Browser host и раздельное размещение — In Review
+
+Разрешён пользователем «Далее» после `75c59e88`. Общий renderer `browser` расширяет
+PreviewSurface/ViewerRegistry: provider владеет созданием содержимого, чтением,
+sandbox, reload и dispose; renderer — стабильным surface, видимостью и размерами.
+Iframe остаётся подключённым к одному DOM parent вне перемещаемого Dock subtree;
+его место соответствует placeholder view. Это портал отображения, не второй layout
+engine: геометрию задаёт существующий Dockview. Layout/drag/resize/restore не меняют
+src/srcdoc и не выполняют reload. Native SDK/transport/resource builders сохраняются.
+
+Первый законченный шаг подключает существующие HTML editor preview и plugin owner
+как отдельные Browser views; удаляет ChatBrowser и plugin splitter/overlay placement,
+а также смешивание Preview/Inspector в одном переключателе. Общий чат остаётся своим
+view. Plugin workbench пока имеет один selected source и не клонируется: factory
+per plugin/release и exact saved HTML из Catalog — следующий S3b.3b. Source change
+не должен незаметно превращать чужой preview в другой объект; текущая зависимость
+live HTML editor от выбранного чата явно показывается и остаётся до scoping owner.
+Это не завершение всего S3b.3 или перенос Library/VBA editors S4.
+
+Макет: `source navigation | [Чат] [HTML] [Плагин] | [Инспектор]`;
+Browser содержит общие location/status/reload и provider actions. Смена Inspector
+не прячет Browser; close Browser не останавливает разговор. Narrow — те же вкладки.
+Гейты: iframe document marker и пользовательский ввод сохраняются при move/split/
+restore/смене source layout, close/reopen освобождает/создаёт provider instance;
+stale opens, annotation binding, full keyboard/focus, light/dark и 420/1280/125%.
+Реализовано: существующие providers зарегистрированы в одном Dock catalog;
+плагин открывается без смены чата, «Чат исходников» — отдельная команда. Старые
+ChatBrowser JS/CSS, их DOM/splitters и Preview-пункт Inspector удалены. HTML saved
+Catalog/detail adapter сохранён до S3b.3b; он не переводится молча в другой live HTML.
+
+Проверено synthetic Chromium: browser-views (HTML/plugin annotations, точный адрес,
+5 restores, реальный drag, смена Office/Workspace/Материалов, late close, error,
+420/1280, light/dark, 125%, keyboard entry), dock-workspace и material-object-views.
+VersionFormat пройден; реальные модели/Office/VSTO не запускались. Широкие старые
+plugin/annotation suites не объявляются полностью зелёными; новый адресный fixture
+покрывает именно изменённые маршруты и lifecycle.
+
+[Измерение одинакового iframe](review/s3b3a-browser-lifetime.json): пять restore
+при прямом встраивании дают 6 загрузок и сброс ввода; общий Browser — 1 загрузку,
+ввод сохранён. Это воспроизведение прежнего механизма в том же Dockview, не замер
+всего старого приложения. Медиана UI-действия 85,9/82,3 мс включает automation;
+ускорение приложения не заявляется. Ограничение: два singleton provider surfaces,
+hidden plugin не poll-ит; новые independent provider factories — S3b.3b.
+
+Ревью: запустить `python3 -B prototypes/serve_ui.py --port 0`, открыть указанный
+`/preview/web/?scenario=ready`. (1) Открыть плагин, проверить сохранение текущего
+чата; (2) «Чат исходников», затем вкладка плагина; (3) переместить Browser, сохранить
+и вернуть раскладку; (4) проверить узкую навигацию и общую вкладку Inspector.
+[Wide/error](review/s3b3a-light-1280.png), [narrow/dark](review/s3b3a-dark-420.png).
+Следом S3b.3b: scoped HTML/plugin targets и независимые source factories; затем S4
+Library/VBA/navigation consumers. Cold restart source state, WebView2/Office и
+предыдущий Diagnostics Qualification Plan остаются открытыми.
+
 ### S3b: общая навигация и независимые просмотры — Proposed
 
 Пользователь сначала разрешил отдельный plugin preview, затем потребовал zoom out:
 Материалы/Библиотека/будущие Файлы используют общую навигацию; HTML/plugin — общий
 browser; остальные форматы — независимые экземпляры действующих viewers.
 Прежний plugin-only порядок заменён. S3b.1 и S3b.2 реализованы и проходят ревью;
-Browser S3b.3 остаётся следующим срезом. Исходный audit/iframe probe — `c01daa34`;
+Browser S3b.3a реализован; независимые providers S3b.3b — следующий срез. Исходный audit/iframe probe — `c01daa34`;
 S3a завершён (`c01daa34`),
 S2a model/capability work имеет свой scope и не смешивается с этой миграцией.
 
