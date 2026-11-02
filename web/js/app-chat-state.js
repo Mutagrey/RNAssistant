@@ -1,8 +1,13 @@
 // Temporary selected source adapter. Hidden Office and the mounted Workspace must
 // not replace each other's data; per-view factories will remove this selection.
 var selectedOfficeProjection = null;
-var emptyOfficeChatSnapshot = Object.freeze({ activeChatId: "", messages: Object.freeze([]),
-  messageStartIndex: 0, messageTotalCount: 0, activeChatModel: "", activeChatMode: "agent", activeChatReasoning: false });
+function createOfficeChatSnapshot(chatId) {
+  return { activeChatId: chatId, messages: [], messageStartIndex: 0, messageTotalCount: 0,
+    activeChatModel: "", activeChatMode: "agent", activeChatReasoning: false,
+    context: {}, contextUsage: {}, artifacts: [], artifactLibrary: { sessionRevision: 0, heads: [] },
+    activeContextCheckpointId: "", activeHtmlArtifactId: "", activeTaskListArtifactId: "", activePlanDocumentArtifactId: "" };
+}
+var emptyOfficeChatSnapshot = Object.freeze(createOfficeChatSnapshot(""));
 function officeChatProjection() { return selectedOfficeProjection; }
 function officeChatSnapshot() {
   return selectedOfficeProjection && selectedOfficeProjection.snapshot() || emptyOfficeChatSnapshot;
@@ -23,7 +28,7 @@ function selectOfficeChatProjection(chatId) {
   if (!chatId) return null;
   selectedOfficeProjection = window.RNAssistantConversationState.createSnapshotOwner(officeChatSource(chatId),
     function (current, incoming) { return incoming; });
-  selectedOfficeProjection.accept(Object.assign({}, emptyOfficeChatSnapshot, { activeChatId: chatId, messages: [] }));
+  selectedOfficeProjection.accept(createOfficeChatSnapshot(chatId));
   return selectedOfficeProjection;
 }
 
@@ -622,11 +627,11 @@ function applyChatState(response, skipDraftCapture, options) {
       state.messages = [];
       state.messageStartIndex = 0;
       state.messageTotalCount = response.messageTotalCount || response.MessageTotalCount || 0;
+      state.context = {};
+      state.contextUsage = {};
+      state.artifacts = [];
+      state.artifactLibrary = { sessionRevision: incomingRevision || 0, heads: [] };
     }
-    state.context = {};
-    state.contextUsage = {};
-    state.artifacts = [];
-    state.artifactLibrary = { sessionRevision: incomingRevision || 0, heads: [] };
     state.htmlWorkspace = { files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [],
       recovery: { status: "empty", canMutate: false } };
   }
@@ -656,7 +661,7 @@ function applyChatState(response, skipDraftCapture, options) {
     state.documents = response.documents || response.Documents || [];
   }
   var libraryChanged = applyLibraryCatalogState(response);
-  if (response.context || response.Context) {
+  if (nextChatId && (response.context || response.Context)) {
     state.context = response.context || response.Context || {};
   }
   if (response.messages || response.Messages) {
@@ -683,25 +688,25 @@ function applyChatState(response, skipDraftCapture, options) {
     }
     if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages);
   }
-  if (response.artifacts !== undefined || response.Artifacts !== undefined) {
+  if (nextChatId && (response.artifacts !== undefined || response.Artifacts !== undefined)) {
     state.artifacts = response.artifacts || response.Artifacts || [];
   }
-  if (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined) {
+  if (nextChatId && (response.artifactLibrary !== undefined || response.ArtifactLibrary !== undefined)) {
     state.artifactLibrary = response.artifactLibrary || response.ArtifactLibrary || { sessionRevision: incomingRevision || 0, heads: [] };
   }
-  if (response.activeContextCheckpointId !== undefined || response.ActiveContextCheckpointId !== undefined) {
+  if (nextChatId && (response.activeContextCheckpointId !== undefined || response.ActiveContextCheckpointId !== undefined)) {
     state.activeContextCheckpointId = response.activeContextCheckpointId || response.ActiveContextCheckpointId || "";
   }
-  if (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined) {
+  if (nextChatId && (response.activeHtmlArtifactId !== undefined || response.ActiveHtmlArtifactId !== undefined)) {
     state.activeHtmlArtifactId = response.activeHtmlArtifactId || response.ActiveHtmlArtifactId || "";
   }
-  if (response.activeTaskListArtifactId !== undefined || response.ActiveTaskListArtifactId !== undefined) {
+  if (nextChatId && (response.activeTaskListArtifactId !== undefined || response.ActiveTaskListArtifactId !== undefined)) {
     state.activeTaskListArtifactId = response.activeTaskListArtifactId || response.ActiveTaskListArtifactId || "";
   }
-  if (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined) {
+  if (nextChatId && (response.activePlanDocumentArtifactId !== undefined || response.ActivePlanDocumentArtifactId !== undefined)) {
     state.activePlanDocumentArtifactId = response.activePlanDocumentArtifactId || response.ActivePlanDocumentArtifactId || "";
   }
-  if (response.contextUsage || response.ContextUsage) {
+  if (nextChatId && (response.contextUsage || response.ContextUsage)) {
     state.contextUsage = response.contextUsage || response.ContextUsage || {};
     syncTokenEstimateCalibrationFromUsage();
   }

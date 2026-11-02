@@ -94,6 +94,13 @@ empty selection, release and late history/preference replies after same-ID recon
 Pair with `chat-sync`, `chat-history-paging`, `model-navigation`, snapshot source and
 Chromium draft/delivery checks. The isolated `office-host-chat-layout` fixture misses
 NavigationTree on baseline too; see RISK_REGISTER. Per-view Office cutover remains open.
+S2b.10: `office-context-projection` exercises real text/selection/remove/clear handlers
+across A→B→A and same-ID reset, current ACK/refresh, one context/material projection
+and empty selection. It reproduces stale context overwrite on `205b6cf6` (red→green).
+Pair with Office projection, `context-usage`, `chat-sync`, Chromium
+`workspace-shared-draft` / `material-object-views`. The draft fixture explicitly opens
+the plugin source chat under the accepted Browser route. Independent HTML source
+validation fails on unchanged baseline; details and owner are in RISK_REGISTER.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,

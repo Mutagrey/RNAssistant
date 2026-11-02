@@ -678,6 +678,48 @@ factory, context/artifacts/live delivery и остальные service adapters.
 переключения consumers удалить selected adapter и accessors (Migration Map), затем
 включать независимые chat tabs. Текущий facade не является архитектурой новых вкладок.
 
+### S2b.10: адресный контекст и метаданные материалов — 2026-11-02
+
+Срез принят пользователем по «Коммит».
+S2b.9 принят и сохранён в `205b6cf6`. Следующий production-срез передаёт context,
+usage, artifacts/library metadata и active artifact/checkpoint IDs тому же Office
+SnapshotOwner. Прежние восемь stored fields заменены accessors; источник начальных
+значений один. HTML working copy/редактор и runtime/storage не меняются.
+
+На `205b6cf6` воспроизведено: addTextContext из A → перейти B → открыть A снова →
+старый ответ заменяет свежий контекст. Теперь text/selection/remove/clear захватывают
+owner и после A → B → A или same-ID reset не меняют новое представление и не
+запускают его refresh. Empty selection/частичный ответ другого чата не наследуют
+контекст и метаданные; dispose освобождает их вместе с лентой. Bound history,
+адресные drafts/receipts и MaterialView leases сохраняются.
+
+Проверки: новый `office-context-projection` (baseline red → green, все четыре
+команды, reconnect, один объект context/material metadata и empty selection),
+`office-conversation-projection`, `context-usage`, `chat-sync`; Chromium
+`workspace-shared-draft`, `material-object-views` на `205b6cf6` + diff S2b.10.
+Draft fixture приведён к уже принятому Browser route: после выбора плагина явно
+открывается «Чат исходников». Прежний сценарий ждал скрытый input в Browser.
+Независимые материалы сохраняют scope/DOM, ограниченные pages и late lease cleanup.
+
+При осмотре обнаружен отдельный baseline-дефект HTML source validation:
+`html-workspace-source` не читает исходник из-за `skills is not defined`. Production
+файл и тест идентичны `205b6cf6`; дефект сохранён в RISK_REGISTER отдельным owner,
+в этот срез не включён. Ни чтение HTML source, ни Office/Windows не объявляются
+квалифицированными по проверкам mock.
+
+Ревью: `python3 prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+1. Переключить Office-чаты и открыть Inspector: лента, контекст и материалы
+   соответствуют выбранному чату, empty state не показывает прежние данные.
+2. Открыть два материала, перейти в другой чат/проект: вкладки материалов остаются
+   на исходных объектах; вернуться в Office и проверить черновик.
+3. Плагин → «Чат исходников» → проект с тем же source chat: ввод и настройки общие.
+Гонки context commands проверены через synthetic DTO; selection/Office mutations
+в mock не квалифицированы. Компоновка прежняя; откат — diff без миграции данных.
+
+Далее: отдельное исправление найденного HTML source read, затем live run delivery,
+explicit source/view factory и удаление selected facade перед независимыми chat tabs.
+HTML editor working copy остаётся у своего owner; фасад не клонировать для вкладок.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

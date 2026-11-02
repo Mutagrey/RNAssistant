@@ -518,11 +518,6 @@ function applyBridgeUnavailableState(error) {
   state.liveAgentRun = null;
   state.liveStreamContent = null;
   if (typeof resetLiveReasoning === "function") resetLiveReasoning();
-  state.artifacts = [];
-  state.artifactLibrary = { sessionRevision: 0, heads: [] };
-  state.activeContextCheckpointId = "";
-  state.activeHtmlArtifactId = "";
-  state.activePlanDocumentArtifactId = "";
   state.tools = [];
   state.skills = [];
   if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();
@@ -530,8 +525,6 @@ function applyBridgeUnavailableState(error) {
   state.vba = { modules: [], backups: [], selectedModule: "" };
   state.toolsPath = "";
   state.skillsPath = "";
-  state.context = {};
-  state.contextUsage = { usedChars: 0, limitChars: 0, percent: 0, actual: false };
   state.htmlWorkspace = { activeFileId: "", files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [], recovery: { status: "empty", canMutate: true, candidates: [] } };
   state.htmlWorkspaceDirty = false;
   restoreChatDraft("");

@@ -43,6 +43,17 @@ retained DOM двух views. [Ревью, измерения и ограниче
 In Review. Далее общий HTML/plugin Browser S3b.3; Library/VBA и остальные панели S4.
 Cold restart mode/search/scroll, Windows/Office и прежние qualification gaps открыты.
 
+## Контекст и метаданные чата S2b.10 — 2026-11-02
+
+S2b.9 сохранён в `205b6cf6`. Context/usage и метаданные материалов используют тот же
+Office SnapshotOwner без второй копии. Исправлена воспроизведённая гонка context
+response после A → B → A; четыре команды проверяют owner, включая same-ID reset.
+Focused JS и Chromium drafts/material views прошли; HTML working copy не менялась.
+[Ревью и ограничения](../ui/UI_MIGRATION_PLAN.md#s2b10-адресный-контекст-и-метаданные-материалов--2026-11-02).
+Принят пользователем. Отдельный HTML source read defect сохранён в RISK_REGISTER. Далее этот
+read fix, live delivery и explicit source/view factory; selected facade, multiple
+chat tabs и Windows evidence ещё открыты.
+
 ## Проекция Office-чата S2b.9 — 2026-11-02
 
 S2b.8 сохранён в `8a2ee0fd`. Office transcript/window/model/mode/reasoning используют

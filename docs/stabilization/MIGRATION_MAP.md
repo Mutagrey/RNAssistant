@@ -73,6 +73,13 @@ Removal gate: explicit source/view factories принимают context/artifact
 и delivery, все consumers читают адресный owner; затем удалить selected adapter и
 accessors перед независимыми chat tabs. Не создавать из facade новую per-tab копию.
 
+S2b.10: context/usage, material metadata и active artifact/checkpoint ID перенесены
+в тот же Office owner; добавлено восемь accessors вместо отдельного хранения этих
+полей. Все context commands используют захваченный owner, а не только chat ID.
+HTML working copy/source cache/editor не перенесены. Owner/removal gate прежние:
+explicit source/view factory, live delivery и consumers должны заменить selected
+adapter; 14 accessors удалить, не размножать в независимых chat tabs.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

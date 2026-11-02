@@ -47,8 +47,8 @@ domain owners; вкладка не создаёт второй durable store и�
 несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
 singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
 
-В S2b.8 Workspace snapshot передан общему view owner. S2b.9 использует тот же
-SnapshotOwner для Office transcript/preferences через временный selected adapter;
+В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.10 используют тот же
+SnapshotOwner для Office transcript/preferences/context и метаданных материалов через временный selected adapter;
 полный Office snapshot и навигация ещё не принадлежат независимым views.
 
 ### S2b.1: состояние отрисовки и lifecycle представления
@@ -251,6 +251,25 @@ delivery consumers ещё используют selected state. Следующа�
 source/view factory и адресная доставка этих данных; затем убрать selected adapter
 и шесть accessors, до включения независимых chat tabs. Копировать этот facade для
 новой вкладки запрещено. Draft/receipt/runtime/storage остаются у прежних владельцев.
+
+### S2b.10: контекст и метаданные материалов у source owner
+
+Context, usage, artifacts/library metadata и четыре active artifact/checkpoint ID
+переданы тому же Office SnapshotOwner. `createOfficeChatSnapshot` задаёт один набор
+начальных значений; current facade содержит 14 accessors без собственных данных.
+Полный ответ заимствуется по полям, без клонирования истории, контекста или материалов.
+Смена source/reconnect/reset освобождает их вместе; частичный ответ нового чата
+не наследует контекст/артефакты предыдущего. Empty selection не создаёт source.
+
+Все четыре context commands передают `applyContextResponse` захваченный owner.
+Поздний ответ после A → B → A или same-ID reset не меняет новую projection, не
+закрывает её UI и не запускает refresh от имени нового визита. Staged selection
+attachments по-прежнему принадлежат адресному draft store; команды не повторяются.
+
+Это metadata/presentation cutover. HTML working copy, dirty state, source cache и
+редактор остаются у HtmlWorkspace; независимые MaterialView сохраняют свой exact
+target и leases. Live run projection, source/view factory и selected facade ещё
+мигрируют. Новые вкладки не должны клонировать этот temporary adapter.
 
 ## S1b: фактическая граница переноса
 

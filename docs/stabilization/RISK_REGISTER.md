@@ -1,5 +1,17 @@
 # Stabilization risk register
 
+## HTML source validation читает постороннюю переменную — 2026-11-02
+
+Owner: Web HtmlWorkspace source reader. В
+[`validate`](../../web/js/app-html-workspace-source.js) список файлов читается через
+`skills.skills.workspace.files` вместо переданного `workspace.files`.
+`html-workspace-source` не получает content уже в первом lazy-read сценарии;
+диагностическая проба того же fixture показывает `sourceError: skills is not defined`.
+Файл и тест идентичны `205b6cf6`, перенос context/material metadata S2b.10 их не менял.
+Это реальный open read defect, не пробел Office qualification. Исправление — отдельный
+срез source reader с существующими checks bounds/cache/cancel/lease cleanup; mutation,
+runtime и format contracts менять не требуется.
+
 ## Office host menu fixture — 2026-11-02
 
 Owner: Web test fixtures. `office-host-chat-layout` подключает ChatState без

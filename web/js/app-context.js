@@ -202,11 +202,12 @@ async function syncActiveChatState() {
   await synchronizeChatState(true);
 }
 
-function applyContextResponse(response, expectedChatId) {
-  if (expectedChatId && state.activeChatId !== expectedChatId) return false;
+function applyContextResponse(response, projection) {
+  if (!projection || projection !== officeChatProjection() || !projection.isCurrent() ||
+      projection.target.sessionId !== state.activeChatId) return false;
   var context = response && (response.context || response.Context) || response;
   if (!context || typeof context !== "object") return false;
-  state.context = context;
+  projection.snapshot().context = context;
   renderContext();
   return true;
 }
@@ -220,8 +221,9 @@ async function refreshContext() {
 }
 
 async function addSelectionContext(mode) {
-  var targetChatId = state.activeChatId;
-  if (!targetChatId) return;
+  var projection = officeChatProjection();
+  if (!projection) return;
+  var targetChatId = projection.target.sessionId;
   setControlBusy("addSelectionContextButton", true);
   try {
     if (document.activeElement && typeof document.activeElement.blur === "function") {
@@ -244,21 +246,24 @@ async function addSelectionContext(mode) {
       log("Снимок выделения прикреплён к следующему сообщению.");
       return;
     }
-    applyContextResponse(
+    var applied = applyContextResponse(
       await send("addSelectionContext", { chatId: targetChatId, mode: mode || "full" }),
-      targetChatId);
-    if (state.activeChatId === targetChatId) await syncActiveChatState();
-    log("Выделение добавлено в контекст.");
+      projection);
+    if (applied) {
+      await syncActiveChatState();
+      if (projection === officeChatProjection()) log("Выделение добавлено в контекст.");
+    }
   } catch (error) {
-    log(error.detail || error.message, "error");
+    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
   } finally {
     setControlBusy("addSelectionContextButton", false);
   }
 }
 
 async function addTextContext(role, kind, title, reference, text, details) {
-  var targetChatId = state.activeChatId;
-  if (!targetChatId) return false;
+  var projection = officeChatProjection();
+  if (!projection) return false;
+  var targetChatId = projection.target.sessionId;
   var applied = applyContextResponse(await send("addTextContext", {
     chatId: targetChatId,
     role: role,
@@ -267,8 +272,8 @@ async function addTextContext(role, kind, title, reference, text, details) {
     reference: reference,
     text: text,
     detailsJson: typeof details === "string" ? details : JSON.stringify(details || {})
-  }), targetChatId);
-  if (state.activeChatId === targetChatId) await syncActiveChatState();
+  }), projection);
+  if (applied) await syncActiveChatState();
   return applied;
 }
 
@@ -277,16 +282,20 @@ async function removeContextItem(id) {
     return;
   }
 
+  var projection = officeChatProjection();
+  if (!projection) return;
   try {
-    var targetChatId = state.activeChatId;
+    var targetChatId = projection.target.sessionId;
     var applied = applyContextResponse(
       await send("removeContextItem", { chatId: targetChatId, id: id }),
-      targetChatId);
+      projection);
     if (applied && !contextNotes().length) setContextManagerOpen(false);
-    if (state.activeChatId === targetChatId) await syncActiveChatState();
-    log("Элемент контекста удален.");
+    if (applied) {
+      await syncActiveChatState();
+      if (projection === officeChatProjection()) log("Элемент контекста удален.");
+    }
   } catch (error) {
-    log(error.detail || error.message, "error");
+    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
   }
 }
 
@@ -320,18 +329,21 @@ function bindContextActions() {
   $("closeContextManagerButton").addEventListener("click", function () { setContextManagerOpen(false); });
   $("addSelectionContextButton").addEventListener("click", function () { addSelectionContext("full"); });
   $("clearContextButton").addEventListener("click", async function () {
-    var targetChatId = state.activeChatId;
-    if (!targetChatId) return;
+    var projection = officeChatProjection();
+    if (!projection) return;
+    var targetChatId = projection.target.sessionId;
     setControlBusy("clearContextButton", true);
     try {
       var applied = applyContextResponse(
         await send("clearContext", { chatId: targetChatId }),
-        targetChatId);
+        projection);
       if (applied) setContextManagerOpen(false);
-      if (state.activeChatId === targetChatId) await syncActiveChatState();
-      log("Контекст очищен.");
+      if (applied) {
+        await syncActiveChatState();
+        if (projection === officeChatProjection()) log("Контекст очищен.");
+      }
     } catch (error) {
-      log(error.message, "error");
+      if (projection === officeChatProjection()) log(error.message, "error");
     } finally {
       setControlBusy("clearContextButton", false);
     }

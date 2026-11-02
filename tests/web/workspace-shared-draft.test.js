@@ -23,6 +23,11 @@ const root = path.resolve(__dirname, '../..');
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
+    const openPluginChat = async () => {
+      await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+      await page.locator('#pluginWorkbench').getByRole('button', {name:'Чат исходников', exact:true}).click();
+      await page.waitForFunction(() => RNAssistantWorkspaceChat.owner() === 'plugin');
+    };
     const officeSource = await page.evaluate(async () => {
       const original = send, messages = state.messages;
       send = async function (type, payload) {
@@ -34,7 +39,7 @@ const root = path.resolve(__dirname, '../..');
       finally { send = original; }
     });
     assert.equal(officeSource, true, 'Office full read rejects another chat without changing its history');
-    await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+    await openPluginChat();
     await page.locator('#chatInput').waitFor({state:'visible'});
     const viewIdentity = await page.evaluate(() => {
       const view = document.querySelector('#workspaceChatView');
@@ -90,7 +95,7 @@ const root = path.resolve(__dirname, '../..');
     await chooser.setFiles({name:'draft.txt', mimeType:'text/plain', buffer:Buffer.from('hello')});
     await page.waitForFunction(() => document.querySelector('#chatInput').value.includes('Файл проекта: chat-files/'));
     const projectDraft = await page.locator('#chatInput').inputValue();
-    await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+    await openPluginChat();
     await page.locator('#chatInput').waitFor({state:'visible'});
     assert.equal(await page.locator('#chatInput').inputValue(), projectDraft,
       'file reference and text share the source chat draft');
@@ -128,7 +133,8 @@ const root = path.resolve(__dirname, '../..');
     await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
     assert.match(await page.locator('#projectChatFileStatus').textContent(), /Файл добавлен в проект:.*older\.txt/,
       'the source chat retains the completed upload status after switching back');
-    await page.evaluate(() => { send = uploadRace.original; return RNAssistantPlugins.select('data-templates'); });
+    await page.evaluate(() => { send = uploadRace.original; });
+    await openPluginChat();
 
     await page.evaluate(() => {
       const original = send;
@@ -185,7 +191,7 @@ const root = path.resolve(__dirname, '../..');
       await page.locator('#chatInput').press('Enter');
       await page.waitForFunction(() => retryTest.requests.length === 1 &&
         !document.querySelector('#projectChatNew').disabled);
-      if (destination === 'plugin') await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+      if (destination === 'plugin') await openPluginChat();
       else await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
       await page.waitForFunction(() => !document.querySelector('#chatInput').value);
       const retried = await page.evaluate(() => retryTest.requests);
