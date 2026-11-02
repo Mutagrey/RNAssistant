@@ -10,6 +10,16 @@ target/generation, DOM cache, scroll/anchor, frames и visibility для все�
 [Ревью, проверки и следующий шаг](../ui/UI_MIGRATION_PLAN.md#s2b1-общий-owner-отрисовки--2026-11-02).
 Изменение presentation-only, In Review; Windows/Office evidence остаётся открытым.
 
+## S3b: zoom out навигации и просмотров — 2026-11-02
+
+По уточнению пользователя частный перенос plugin preview остановлен на
+проектировании. Source audit выявил смешение каталогов/выбора/reader, несколько
+HTML paths и global selection. Общая navigation presentation, независимые object
+views и Browser для HTML/plugin описаны как Proposed в canonical UI-docs;
+[порядок S3b.1–S3b.3](../ui/UI_MIGRATION_PLAN.md#s3b-общая-навигация-и-независимые-просмотры--proposed).
+Код S3b не менялся, перенос ещё не выполнен. S3a сохранён; S2a остаётся отдельной
+работой. Существующие preview overlap/iframe lifetime gaps не объявлены закрытыми.
+
 ## Модель общего чата S2a — 2026-11-02
 
 По прямому уточнению пользователя Office/project/plugin получили один picker и

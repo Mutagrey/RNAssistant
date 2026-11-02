@@ -31,6 +31,11 @@ Settings/rail S1c (`26f4d87f`, Approved) → Request/diagnostics controls S3a (�
 до S5: каждый новый view подключается к уже существующему механизму. Следующий
 функциональный срез автоматически не начинается до ревью предыдущего.
 
+После уточнения пользователя о единой системе навигации частный plugin-only S3b
+заменён проектом S3b.1–S3b.3 ниже. Предыдущая карта экранов не считалась готовым
+контрактом объединения; следующий шаг здесь — ревью общего маршрута и его owners,
+затем первый законченный срез с двумя реальными consumers.
+
 ## Фактические результаты P0–P3
 
 | Этап | Результат | Evidence / ограничения |
@@ -423,21 +428,62 @@ chat targets одновременно. Ни общий чат целиком, н
 | S1a / S1b | Общие chat rules и production Chat workspace + Inspector реализованы; визуальное ревью S1b по эталону Demo | Дубли composer presentation и старый Inspector grid/split/open-width удалены. Остальные splitters пока нужны |
 | S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
 | S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
-| S3b — отдельно после текущего S3a | Общий Chat View и отдельный plugin preview view в существующем Dockview; пользователь подтвердил разделение 2026-11-02 | Связанные preview/chat placement и toggle paths, прежний plugin splitter после переключения consumers |
-| S4 | Library/VBA/project navigation; Settings вынесен в S1c; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
+| S3b — пересмотрен после zoom out | Общая навигация → exact объект → независимый view; общий Browser для HTML/plugin, существующие специализированные viewers | Дубли navigation chrome/commands, inline preview placement, ChatBrowser/plugin splitters после переключения их consumers |
+| S4 | Предметные Library/VBA/project views и редакторы на общей navigation/view основе S3b; Settings вынесен в S1c | Только подтверждённые duplicate controls/styles, global editor-selection paths и legacy routes после consumer switch |
 | S5 | Оставшиеся plugin views, portable export/public API и финальная сверка единства | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
 
 Каждый срез: problem/scope → baseline → маленький diff → behavior/perf checks →
 визуальное ревью → согласование → удаление заменённого пути. Нет автоматического
 массового rename, нового npm/bundler/loader, универсального store или SDK framework.
 
-S3b — уточнение уже запланированного переноса browser/plugin preview, не второй
-чат. Scope: независимые open/close/move/split; закрытие предпросмотра не скрывает
-чат и не отменяет run; перенос сохраняет iframe/session и черновик. Владельцы —
-DockWorkspace (placement), Plugins/PreviewSurface (preview lifecycle), общий
-Conversation view (чат). Сначала завершаются commit/push S3a; S3b здесь не реализован.
-S2a capabilities общего чата остаётся самостоятельной работой. Перед S3b нужны
-baseline и отдельное визуальное ревью.
+### S3b: общая навигация и независимые просмотры — Proposed
+
+Пользователь сначала разрешил отдельный plugin preview, затем потребовал zoom out:
+Материалы/Библиотека/будущие Файлы используют общую навигацию; HTML/plugin — общий
+browser; остальные форматы — независимые экземпляры действующих viewers.
+Прежний plugin-only порядок заменён. Код размещения S3b ещё не менялся; выполнены
+source audit и локальный iframe probe на `c01daa34`. S3a завершён (`c01daa34`),
+S2a model/capability work имеет свой scope и не смешивается с этой миграцией.
+
+[Границы и owners](UI_ARCHITECTURE.md#единая-навигация-и-вкладки-объектов--проектирование-2026-11-02),
+[маршруты и схема экрана](UI_SCREEN_MAP.md#общая-навигация-и-независимые-объекты--proposed-2026-11-02),
+[общие элементы](UI_DESIGN_SYSTEM.md#общая-панель-навигации-и-object-views--proposed-2026-11-02).
+
+| Порядок | Законченный результат | Удаление и проверка |
+|---|---|---|
+| S3b.0 — общая модель, сейчас проектирование | Source/object/commands/view type/view instance/renderer, матрица возможностей и группировка всей карты по семействам UI; явная точка подключения в существующие каталоги | Не начинать с копирования конкретного экрана. На трёх маршрутах проверить ownership, identity, dirty/close/restore и отсутствие особых условий по имени source в Shell |
+| S3b.1 — навигация и команды | Общий каркас на существующем NavigationTree для Материалов и Библиотеки, adapters источников; один open route в нынешний DockWorkspace. Открытие отделено от attach/use/edit/delete | Заменённые headers/search/menu handlers и CSS удаляются. Два реальных consumers; одинаковые focus/selection/empty/error/paging; открытие не меняет контекст чата |
+| S3b.2 — самостоятельные object views | Exact target и local presentation state на вкладку; текущие Markdown/JSON/text/PDF/image/task/sequence renderers. Несколько разных материалов одновременно; source/revision видимы | Старый singleton catalog preview переключён и удалён. Bounded lazy reads, cancel/stale reply, leases; смена активного чата не подменяет открытые объекты. Нельзя клонировать global IDs/active-selection controllers |
+| S3b.3 — общий Browser | HTML из материалов/чата и plugin используют общий Browser surface/lifecycle. Providers сохраняют существующий resource builder, sandbox и plugin instance authority | Удалены раздельные ChatBrowser/plugin placement и splitters; нет plugin-only renderer. Проверены iframe document identity при move/restore, независимый chat, source change, аннотации и dispose |
+
+S3b.1 не выдаёт legacy singleton редактор Библиотеки за несколько независимых:
+переход к нему сохраняет dirty/save guard и явно регистрируется как временный
+adapter до предметного editor-среза S4. Общая навигация не переносит globals
+редактора в общий компонент. Просмотр файлов подключается будущим adapter лишь
+после определения реального owner/root и typed paged contract; отдельный файловый
+store, произвольный path read и фиктивный Files экран сейчас не создаются.
+
+До первого production-среза: конкретный макет на существующих components и 3 маршрута
+из Screen Map; baseline на тех же objects/размерах. Для каждого среза — счётчики
+metadata/body reads, DOM/retained view bounds, open/close/move/restore, narrow/theme/
+zoom, keyboard и late response. Общий компонент подтверждается двумя consumers,
+а не названием файла. Число тяжёлых views и лимиты байтов задаются явно до gate.
+Итоговый gate — два разных объекта открыты одновременно, смена каталога/чата
+сохраняет их состояние, ни один read не меняет domain selection, старые consumers
+удалены или имеют точный owner/removal gate в MIGRATION_MAP.
+
+Общие типы и возможности проектируются **до** частных экранов. Первая реализация
+сразу подключает реальные разные consumers; последующий экран добавляет свой
+adapter/descriptor и предметный контент. Новые `if (source === ...)` в Shell,
+второй registry размещения, новый store или копия renderer означают, что граница
+ещё не выделена правильно. Исключения допустимы только как названный временный
+adapter с точным условием удаления; большой рефакторинг без ближайшего consumer
+не становится самостоятельным этапом.
+
+Iframe probe выявил отдельный риск: vendor `renderer:always` сохраняет document
+при move, но не при `fromJSON`. Постоянный frame host — кандидат общего Browser,
+а не уже утверждённый отдельный overlay плагина. Его реализация должна брать
+placement только из Dockview и пройти реальные операции restore/close/reopen.
 
 ## S3a: запрос и общие controls диагностики — production 2026-11-02
 

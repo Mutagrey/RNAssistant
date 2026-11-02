@@ -281,10 +281,37 @@ Production JSON (включая меню узла), журнал/связи со
 
 ## Контракт компонента и ревью
 
-Для отдельного plugin preview в S3b используются те же Dock tabs, header/actions
-и общие controls. Чат и предпросмотр — независимые views; preview не получает
-собственный composer или вторую оболочку. Размещение narrow/wide и focus/close
-проверяются отдельно при переносе, после завершения request S3a.
+### Общая панель навигации и object views — Proposed, 2026-11-02
+
+Материалы/Библиотека/будущие Файлы переиспользуют один каркас панели: source/scope,
+поиск/фильтры, compact toolbar, дерево или табличный список, paging и состояния.
+Основа — действующие NavigationTree, TreeAdapter там, где он подходит данным,
+ActionMenu, forms и tokens. Новый tree widget, собственная тема каждого источника
+и универсальный framework provider-ов не нужны. Предметная группировка остаётся
+у adapter: library categories не изображают файловые папки, revision не file path.
+
+Общая строка кликабельна целиком; expander раскрывает группу, явное открытие/Enter
+открывает объект. Поиск не загружает тела всех найденных объектов. Selected row,
+keyboard focus и active Dock tab — разные состояния. Scope, поиск, раскрытия и
+scroll возвращаются при смене источника; ошибки/partial/cancel не выглядят пустым
+успешным каталогом. Возможность команды задаёт предметный owner, а не тип иконки.
+
+Общий каркас просмотра содержит название, источник/версию, статус и действия
+объекта; controls формата принадлежат ViewerRegistry renderer. Для HTML/plugin
+расширяется существующий PreviewSurface: одинаковые loading/ready/error/reload,
+единое размещение browser surface, provider-specific действия рядом. При embed
+viewer toolbar не дублируется внешним header. Адрес/название показывает источник,
+не превращается в разрешение произвольной навигации или доступа к файлам.
+
+Ревью проверяет одновременно два разных объекта, смену навигационного источника,
+несохранённый editor, узкий режим, обе темы, move/split/restore и клавиатуру.
+Простого сходства отдельных screenshot недостаточно: важны сохранность состояния,
+отсутствие hidden side effects и bounded reads/retained memory.
+
+Для общего Browser в S3b используются те же Dock tabs, header/actions и controls.
+Чат и preview — независимые views; preview не получает собственный composer
+или вторую оболочку. HTML и plugin проверяются вместе на narrow/wide, focus/close
+и сохранность frame session; отдельный plugin-only path не является целью среза.
 
 Для выделяемого компонента здесь фиксировать source/public API, реальные consumers,
 владельца данных, states, keyboard/focus, tokens, события, cleanup, portability и

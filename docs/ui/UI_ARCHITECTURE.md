@@ -181,9 +181,10 @@ Office, project и plugin chat. Реализация — In Review; это пе�
 ### Повторная сверка с исходным планом — 2026-11-02
 
 Перечитаны исходная спецификация, четыре canonical UI-docs, решения P1/P2,
-реальные CSS/JS/HTML и замороженный Demo. В текущем `web/index.html` один Shell,
-шесть root sections, 118 script и 44 stylesheet подключения. Dockview один;
-его каталог пока содержит conversation/inspector/settings, а не все целевые виды.
+реальные CSS/JS/HTML и замороженный Demo. На checkpoint S1b/S1c в `web/index.html`
+один Shell, шесть root sections, 118 script и 44 stylesheet подключения, один
+Dockview. Это исторический snapshot; request добавлен позднее в S3a. Каталог
+не содержит все целевые виды. Проект общей модели приведён ниже отдельно.
 
 | Responsibility | Текущий единственный owner | Результат сверки / открытая граница |
 |---|---|---|
@@ -317,14 +318,118 @@ Existing source/evidence/resource helpers переиспользуются, не
 Move/split сохраняют DOM; transient removal Dockview не считается закрытием. Activate возобновляет только прерванное чтение по exact scope/generation;
 dispose очищает scoped reads/listeners/leases, presentation cache остаётся bounded.
 
-## Plugin preview S3b: отдельный view
+## Единая навигация и вкладки объектов — проектирование 2026-11-02
 
-Уточнение пользователя 2026-11-02 для следующего S3b: plugin preview — отдельный
-Dockview view, conversation остаётся общим для Office/Workspace/plugin. Каждый
-view владеет своим presentation lifecycle; iframe/session принадлежат существующему
-Plugins/PreviewSurface, chat draft/run — прежним conversation owners. Их размещение
-и закрытие независимы. Текущий S3a не переносит preview: сохранён прежний adapter;
-исправлена лишь синхронизация его видимости после закрытия Inspector.
+**Proposed, после zoom out пользователя.** Прежняя карта была инвентаризацией,
+а S3b описывал слишком частный перенос plugin preview. Общие Tree и стили уже есть;
+единого поведения каталог → объект → независимый view ещё нет. Реализация S3b
+остановлена на проектировании по прямому уточнению пользователя, не на согласовании
+косметики. Следующая единица миграции — пользовательский маршрут через общие owners.
+
+| Проверенный разрыв | Действующий код / следствие |
+|---|---|
+| Материалы смешивают каталог, выбор, команды и reader | `app-artifact-catalog.js`: `select` вызывает `clearPreview`, иногда `changeLink`/`openArtifactResource`; `preview` привязан к global activeChat/navigation. Просмотр другого объекта заменяет прежний, а выбор иногда меняет состояние чата |
+| Библиотека переиспользует дерево, но имеет отдельное управление экраном | `app-prompts.js`: `renderInstructions` + `LibraryGroups`; выбранный prompt/skill/tool и редактор глобальны. Общее дерево не делает редакторы независимыми |
+| HTML имеет несколько путей отображения | Catalog preview, HTML workspace/editor и `app-chat-browser.js`; последний переносит frame и явно перезагружает его после move |
+| Плагин связан с chat placement | `app-plugins.js`: свой splitter, previewOpen/width, переключение Inspector и mount чата при открытии preview |
+| Форматные renderers уже общие | ViewerRegistry + text/JSON/resource viewers. Их нужно размещать в отдельных instances, а не писать заново |
+| Файлового обозревателя пока нет | Общий навигационный UI не создаёт файловый backend, произвольный доступ к path или новый store |
+
+```mermaid
+flowchart LR
+  D[Предметные services и typed данные] --> A[Адаптер источника]
+  A --> N[Общая панель навигации: дерево или список]
+  N --> O[Открыть объект по точному target]
+  O --> W[Существующий каталог views DockWorkspace]
+  W --> V[Отдельный экземпляр просмотра или редактора]
+  V --> R[ViewerRegistry: MD / JSON / PDF / image / ...]
+  V --> B[Общий Browser surface: HTML / plugin]
+```
+
+| Ответственность | Единственный owner / направление |
+|---|---|
+| Панель навигации | Общая обвязка существующего NavigationTree: заголовок источника/scope, поиск, фильтры, loading/error/empty, paging, выбор и раскрытия. Первый reuse доказывается на Материалах и Библиотеке. Table остаётся альтернативой дерева |
+| Содержание и операции источника | Тематический adapter Материалов/Библиотеки/будущих Файлов преобразует существующие DTO, загружает ограниченные страницы и выполняет свои команды. Он не размещает views; общий UI не знает bridge/COM и не угадывает права |
+| Открытие, identity, placement | Расширение нынешнего каталога `views` и маршрутов DockWorkspace для параметризованных объектов. Не второй registry или command bus. `ViewerRegistry` остаётся только фабрикой форматов |
+| Состояние открытого объекта | Один view instance: exact target, собственные generation/reads/leases, scroll, format/page/zoom, dirty state. Domain services остаются владельцами данных и записи |
+| Просмотр HTML | Расширение общего PreviewSurface/Browser presentation; один host кадров и lifecycle. HTML resource builder и plugin instance provider сохраняют разные источники, sandbox/permissions и host APIs |
+| Редактирование | Предметный editor с dirty/save/conflict guard. Library tool editor не превращается в generic text editor. До scoping существующего editor нельзя объявлять несколько его экземпляров безопасными |
+
+DockWorkspace выбирает тип view и управляет вкладкой; ViewerRegistry выбирает
+renderer внутри просмотра. Общий Browser подключается как ещё один allowlisted
+renderer этой же registry при миграции обоих consumers, а не через новый каталог
+viewer-ов. Его provider не выдаёт привилегии renderer-у по одному имени формата.
+
+Контракт открытия содержит **source + exact owner/document/workspace/session +
+object identity + revision или явно обозначенный draft + purpose (view/edit)**.
+Данные identity приходят от действующего владельца; UI key не становится authority.
+Названия и индексы строк не являются identity. Повторное открытие того же target
+активирует его вкладку; другой объект/явно выбранная версия открывается отдельно.
+Markdown/JSON/исходник одного объекта — режимы его viewer, не новые global sections.
+
+### Общие типы и возможности — до частных экранов
+
+Требование пользователя: проектировать от общего к частному. Сначала фиксируются
+типы, ownership, возможности и правила композиции; затем проверяется, какие
+существующие экраны являются их экземплярами. Название текущего раздела не должно
+определять устройство общих компонентов.
+
+| Тип | Что описывает | Чего не содержит |
+|---|---|---|
+| Source adapter | Scope, metadata query/search, страницы/раскрытие веток, представление объектов и доступные команды | Dock placement, viewer DOM, копию durable данных |
+| Object target | Точная identity и версия/draft, источник/owner, предметный тип | Название вместо ID, текущий индекс строки, выдуманные UI права |
+| Capabilities / commands | Реально поддержанные данным объектом операции: открыть, редактировать, использовать в чате, скачать, версии и предметные действия | Автоматическую выдачу полномочий; host повторно проверяет доступ и revision |
+| View type descriptor | Factory, проверку target, заголовок, singleton/per-object identity, поддерживаемые lifecycle/close/restore policies | Условия по именам экранов внутри Shell, данные объектов или новый transport |
+| View instance | Target + локальное состояние представления + scoped async/resources | Глобальную выбранную запись как источник данных для всех вкладок |
+| Renderer | Форматное отображение и его controls: text/MD/JSON/PDF/image/browser | Каталог источников, авторизацию, выбор чата, исполнение tools |
+
+Source, предметный тип и renderer независимы: Markdown может прийти из Материалов,
+Библиотеки или файлов; один HTML object может открываться для просмотра или в
+предметном редакторе; plugin и HTML resource используют browser presentation с
+разными привилегированными providers. Chat, Settings и Inspector остаются своими
+view types и используют общий lifecycle, не притворяются файловыми viewers.
+
+Минимальная матрица возможностей для проектирования (не утверждение backend parity):
+
+| Семейство | Общая навигация | Просмотр | Изменение / особая возможность |
+|---|---|---|---|
+| Материалы | Scope, поиск, дерево/таблица, страницы, версии | Renderer по метаданным ресурса | Attach/use/edit/delete только отдельными командами владельца |
+| Библиотека | Категории, поиск, дерево, selection | Те же форматные renderers либо предметные details | Сохранение/revision/built-in restrictions у prompt/skill/tool owner |
+| Файлы (будущий source) | Разрешённый root, scoped paged tree | Те же renderers | Только операции будущего typed host contract, без прав по одному path |
+| HTML resource | Открытие из любого поддержанного source | Общий Browser | Resource bindings, sandbox и аннотации действующего resource owner |
+| Plugin instance | Выбор plugin/source workspace | Тот же Browser | Instance lifecycle, публикация/версии/SDK у plugin owner |
+
+В точке сборки существующего UI связываются adapters, view descriptors и
+renderer factories. Навигация получает adapter явно; она не строит свой registry
+экранов. DockWorkspace остаётся единственным каталогом размещаемых view types;
+ViewerRegistry — единственным каталогом форматов. Private plugin SDK/public
+extension API не возникает автоматически из внутренних descriptors.
+
+**Gate масштабируемости:** подключение второго source/viewer не требует новой
+ветки по его имени в `switchTab`, `DockWorkspace.sync/createComponent` или общем
+дереве. Lifecycle вызывается через descriptor/instance, зависимости передаются
+предметной фабрике явно. Изменять общий компонент допустимо для новой общей
+возможности с реальными consumers. Service locator, универсальный контроллер,
+схема генерации всех форм и новый loader не являются необходимыми следствиями.
+
+Состояние навигации (scope/search/filter/cursor/selection/expansion/scroll) отдельно
+от состояния вкладки и durable data. Изменение дерева или активного чата не
+подменяет target уже открытого просмотра. `open` ничего не подключает к запросу:
+`use in chat`, attach, select active artifact, edit, delete — отдельные команды.
+Для прежнего `changeLink` при выборе требуется явный перенос этого действия в UI.
+
+Общие lifecycle hooks: mount/activate/deactivate/dispose. Закрытие просмотра не
+удаляет объект и не отменяет run. Reader освобождает leases/object URLs; закрытие
+редактора проверяет dirty/save; для живого plugin instance политика удержания
+явная и ограниченная. Hidden view не делает eager reads/render. Лимиты открытых
+тяжёлых views/байтов устанавливаются по baseline первого среза; без них срез не
+закрывается. Нельзя молча выгружать dirty editor или живую сессию плагина.
+
+Iframe lifetime — отдельный инвариант, не обещание сохранения одного DOM-узла.
+Локальный probe Dockview 8.8.3: `renderer:always` сохраняет document при move,
+но `fromJSON` пересоздаёт его. Общий browser host должен решить это для HTML и
+plugin вместе; отдельный plugin-only overlay пока не реализуется. Layout persistence
+не хранит тела, secrets или runtime instance IDs и не обещает пережить reload сессии.
 
 ## Производительность, portability и поддержка
 
