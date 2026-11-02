@@ -757,6 +757,15 @@ Draft fixture приведён к уже принятому Browser route: по�
 explicit source/view factory и удаление selected facade перед независимыми chat tabs.
 HTML editor working copy остаётся у своего owner; фасад не клонировать для вкладок.
 
+### Исправление HTML source после S2b.10 — 2026-11-02
+
+Owner: Web HtmlWorkspace source reader. В validation и export ошибочное
+`skills.skills.workspace.files` заменено переданным `workspace.files`.
+Это отдельное исправление подтверждённого baseline-дефекта, без изменения
+mutation/storage/runtime. `html-workspace-source` — 9/9: lazy read, exact bytes,
+bounded cache, cancel/stale/revision guards, late lease cleanup и export.
+Cache query обновлён. Реальный Office read/export остаётся Windows evidence.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

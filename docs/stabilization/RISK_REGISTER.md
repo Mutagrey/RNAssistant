@@ -32,9 +32,11 @@ Owner: Web HtmlWorkspace source reader. В
 `html-workspace-source` не получает content уже в первом lazy-read сценарии;
 диагностическая проба того же fixture показывает `sourceError: skills is not defined`.
 Файл и тест идентичны `205b6cf6`, перенос context/material metadata S2b.10 их не менял.
-Это реальный open read defect, не пробел Office qualification. Исправление — отдельный
-срез source reader с существующими checks bounds/cache/cancel/lease cleanup; mutation,
-runtime и format contracts менять не требуется.
+Исправлен локально отдельным source-reader diff: validation и export читают
+`workspace.files`; cache query обновлён. `html-workspace-source` — 9/9, включая
+bounds/cache/cancel/stale/late lease cleanup и export. Mutation/runtime/format
+contracts не менялись. Это закрывает воспроизведённый read defect; реальная
+Windows/Office/WebView2 qualification чтения/экспорта остаётся открытой.
 
 ## JSON-профиль: оставшееся evidence — 2026-11-02
 
