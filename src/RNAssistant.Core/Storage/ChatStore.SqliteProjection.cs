@@ -41,6 +41,9 @@ namespace RNAssistant.Core.Storage
             public long MessageCount;
             public long ArtifactCount;
             public bool Materialized;
+            // This read rebuilt every projection row from verified source records.
+            // A typed/domain materialization error cannot be repaired by repeating it.
+            public bool SourceVerified;
             public JObject Root;
             public ChatHeaderReducer Header;
         }
@@ -63,6 +66,24 @@ namespace RNAssistant.Core.Storage
                 (sqlite.SqliteErrorCode == 1 || sqlite.SqliteErrorCode == 11 || sqlite.SqliteErrorCode == 26);
         }
 
+        private static string ProjectionFailureDetail(Exception error)
+        {
+            while (error is ProjectionDataException && error.InnerException != null) error = error.InnerException;
+            var json = error as JsonSerializationException;
+            var sqlite = error as SqliteException;
+            return "cause=" + error.GetType().Name +
+                (json == null || string.IsNullOrEmpty(json.Path) ? string.Empty : ", field=" + json.Path) +
+                (sqlite == null ? string.Empty : ", sqlite=" + sqlite.SqliteErrorCode + "/" + sqlite.SqliteExtendedErrorCode) +
+                (error.InnerException == null ? string.Empty : ", inner=" + error.InnerException.GetType().Name);
+        }
+
+        private ChatProjectionUnavailableException ProjectionUnavailable(string path, Exception error)
+        {
+            var detail = ProjectionFailureDetail(error);
+            LogStorageDiagnostic("Chat projection unavailable: file=" + Path.GetFileName(path) + ", " + detail + ".");
+            return new ChatProjectionUnavailableException(detail, error);
+        }
+
         // Retry only disposable index damage. Busy, I/O and canonical event failures
         // propagate; a rebuild never changes or repairs the authoritative JSONL.
         private T ReadSqliteProjection<T>(string path, Func<SqliteConnection, T> read)
@@ -75,8 +96,13 @@ namespace RNAssistant.Core.Storage
                 }
                 catch (Exception ex) when (attempt == 0 && IsDamagedSqliteProjection(ex))
                 {
-                    LogStorageDiagnostic("Chat index reset: reason=damaged-sidecar.");
+                    LogStorageDiagnostic("Chat index reset: reason=damaged-sidecar, file=" + Path.GetFileName(path) +
+                        ", " + ProjectionFailureDetail(ex) + ".");
                     DeleteSqliteProjection(path);
+                }
+                catch (Exception ex) when (IsDamagedSqliteProjection(ex))
+                {
+                    throw ProjectionUnavailable(path, ex);
                 }
                 catch (SqliteException ex) when (ex.SqliteErrorCode == 5 || ex.SqliteErrorCode == 6)
                 {
@@ -401,6 +427,7 @@ namespace RNAssistant.Core.Storage
                     MessageCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM messages")),
                     ArtifactCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM artifacts")),
                     Materialized = materializeSession,
+                    SourceVerified = materializeSession && previous == null,
                     Root = root,
                     Header = header
                 };
@@ -718,7 +745,7 @@ namespace RNAssistant.Core.Storage
                                 "SELECT 1 FROM messages WHERE item_id=$p0 COLLATE NOCASE", id) != null)
                             .ToList();
                     }
-                    var session = ProjectSqliteSession(root, cursor, false, true);
+                    var session = ProjectSqliteSession(path, root, cursor, false, true);
                     var pageMessages = session.Messages.ToArray();
                     // Artifact tombstones are applicable only while their source message
                     // exists. Keep ID-only context for presentation without reading bodies.
@@ -810,15 +837,21 @@ namespace RNAssistant.Core.Storage
                         root["Messages"] = ReadSqliteList(connection, transaction, "messages", cursor.SessionId);
                         root["Artifacts"] = ReadSqliteList(connection, transaction, "artifacts", cursor.SessionId);
                     }
-                    var session = ProjectSqliteSession(root, cursor, hydrateActiveArtifacts, rebuildDerivedProjections);
-                    if (session != null && !cursor.IncompleteTail) StoreProjectionCache(path, root, session);
+                    // Retain only a fully verified source root before typed hydration.
+                    // Subsequent attempts use the same bounded cache and exact tail check.
+                    if (cursor.SourceVerified && !cursor.IncompleteTail)
+                        StoreProjectionCache(path, root, cursor.SessionId, cursor.Sequence, cursor.HeadHash,
+                            cursor.TailOffset, cursor.ByteLength, cursor.LastWriteUtcTicks);
+                    var session = ProjectSqliteSession(path, root, cursor, hydrateActiveArtifacts, rebuildDerivedProjections);
+                    if (session != null && !cursor.IncompleteTail && !cursor.SourceVerified)
+                        StoreProjectionCache(path, root, session);
                     return session;
                 }
                 throw new ChatConcurrencyException("Chat index changed while the session was being read.");
             });
         }
 
-        private ChatSession ProjectSqliteSession(JObject root, SqliteCursor cursor,
+        private ChatSession ProjectSqliteSession(string path, JObject root, SqliteCursor cursor,
             bool hydrateActiveArtifacts, bool rebuildDerivedProjections)
         {
             try
@@ -828,7 +861,10 @@ namespace RNAssistant.Core.Storage
             }
             catch (Exception ex) when (IsInvalidProjectionValue(ex))
             {
-                throw new ProjectionDataException(ex);
+                // Only malformed typed SQLite data warrants index repair. Domain
+                // projections, or data just rebuilt from source, cannot be repaired here.
+                if (ex is ProjectionDataException && !cursor.SourceVerified) throw;
+                throw ProjectionUnavailable(path, ex);
             }
         }
 

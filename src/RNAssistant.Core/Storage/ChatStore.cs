@@ -30,6 +30,13 @@ namespace RNAssistant.Core.Storage
         }
     }
 
+    public sealed class ChatProjectionUnavailableException : InvalidOperationException
+    {
+        internal ChatProjectionUnavailableException(string detail, Exception inner)
+            : base("CHAT_PROJECTION_UNAVAILABLE: stored history exists but cannot be read (" + detail +
+                "). History was not changed.", inner) { }
+    }
+
     /// <summary>
     /// Append-only canonical session store. ChatSession is a rebuildable projection and is never
     /// persisted as a mutable snapshot. Each Save appends one atomic commit containing typed state
@@ -1002,16 +1009,27 @@ namespace RNAssistant.Core.Storage
                 {
                     var operations = BuildStateOperations(projectedBefore, projectedAfter);
                     {
-                        var writes = commit.Messages.Select(write => Operation(write.Operation,
-                            new JObject { ["Value"] = JObject.FromObject(write.Message,
-                                JsonSerializer.Create(ProjectionJsonSettings)) })).ToList();
+                        var previousMessages = ((JArray)projectedBefore["Messages"]).OfType<JObject>()
+                            .ToDictionary(message => (string)message["Id"], StringComparer.OrdinalIgnoreCase);
+                        var writes = new List<SessionOperation>();
+                        foreach (var write in commit.Messages)
+                        {
+                            var value = JObject.FromObject(write.Message, JsonSerializer.Create(ProjectionJsonSettings));
+                            JObject previousMessage;
+                            // Presentation updates may repeat at finalization. Accepted calls,
+                            // execution facts and input receipts must retain their event semantics.
+                            if (write.Operation == SessionOperationTypes.MessageUpdated &&
+                                previousMessages.TryGetValue(write.Message.Id, out previousMessage) &&
+                                JToken.DeepEquals(previousMessage, value)) continue;
+                            writes.Add(Operation(write.Operation, new JObject { ["Value"] = value }));
+                        }
                         writes.AddRange(commit.RemovedMessageIds.Select(id => Operation(SessionOperationTypes.MessageRemove,
                             new JObject { ["Id"] = id })));
-                        projectedAfter["Messages"] = projectedBefore["Messages"]?.DeepClone() ?? new JArray();
                         projectedAfter["ResourceReferenceIndex"] = projectedBefore["ResourceReferenceIndex"]?.DeepClone() ?? new JArray();
                         projectedAfter["ToolCallReferenceSequence"] = projectedBefore["ToolCallReferenceSequence"]?.DeepClone() ?? new JValue(0L);
                         projectedAfter["EvidenceReferenceSequence"] = projectedBefore["EvidenceReferenceSequence"]?.DeepClone() ?? new JValue(0L);
-                        var replay = new ProjectionReplayState(projectedAfter);
+                        var replay = new ProjectionReplayState(projectedBefore["Messages"] as JArray,
+                            projectedAfter["Artifacts"] as JArray);
                         ApplyOperations(projectedAfter, writes, replay);
                         replay.Materialize(projectedAfter);
                         var actualIds = ((JArray)projectedAfter["Messages"]).Select(item => (string)item["Id"]).ToArray();
@@ -1247,9 +1265,13 @@ namespace RNAssistant.Core.Storage
             ProjectionCacheEntry cached;
             if (TryReadProjectionCache(path, out cached))
             {
-                var cachedSession = Project(cached.Root, cached.Sequence, cached.HeadHash, cached.TailByteOffset,
-                    cached.ByteLength, cached.LastWriteUtcTicks,
-                    hydrateActiveArtifacts, rebuildDerivedProjections);
+                ChatSession cachedSession;
+                try
+                {
+                    cachedSession = Project(cached.Root, cached.Sequence, cached.HeadHash, cached.TailByteOffset,
+                        cached.ByteLength, cached.LastWriteUtcTicks, hydrateActiveArtifacts, rebuildDerivedProjections);
+                }
+                catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw ProjectionUnavailable(path, ex); }
                 LogPerformance("projectionCache", timer.ElapsedMilliseconds,
                     "bytes=" + cached.ByteLength + ", characters=" + cached.EstimatedCharacters);
                 return cachedSession;

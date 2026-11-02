@@ -130,6 +130,7 @@ namespace RNAssistant.Core.Storage
                 if (root == null) throw new ProjectionDataException(new JsonException("The chat index has no session seed."));
                 cursor.Root = root;
                 cursor.Materialized = true;
+                cursor.SourceVerified = true;
                 cursor.MessageCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM messages"));
                 cursor.ArtifactCount = Convert.ToInt64(Scalar(connection, transaction, "SELECT COUNT(*) FROM artifacts"));
                 StoreSqliteCursor(connection, transaction, cursor, protector);

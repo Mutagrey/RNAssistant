@@ -46,6 +46,16 @@ unindexed and unchanged, return complete empty detail and exact catalog deltas.
 Web `run-view-state` and `chat-sync` cover additive catalog delivery and navigation
 draining. These checks do not qualify Windows/Office/WebView2 latency.
 
+`storage: terminal projection failure is not missing chat` uses a valid event hash
+with an unreadable typed field: one verified rebuild, explicit cause on repeated
+selection, unchanged JSONL. `storage: terminal commit omits unchanged messages`
+checks completion/cancellation of 300 messages, one changed body, cold replay and
+bounded appended bytes; timing/allocation output has no machine-dependent gate.
+`chat sessions: saved content does not rewrite selection` checks first-persistence
+selection, ten subsequent notifications without pointer writes and another pane's
+newer selection. Index-damage, append-fault/CAS and typed event semantics checks
+remain necessary when changing these storage boundaries.
+
 `storage: canonical record encoding is stable` compares the streamed encoder with
 schema-4 canonical bytes for SHA/HMAC, encrypted/plain records, Unicode and large
 values. `storage: jsonl byte offsets are exact` also covers a record larger than the

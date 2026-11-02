@@ -92,6 +92,13 @@ without loading old history or scanning the global catalog/recovery. Known Save 
 migration remains guarded. Typed `catalogChanges` carries only the new summary and
 replaced transient ID to the existing Web catalog owner; there is no second store.
 
+Content persistence and navigation have separate owners: `NotifySaved` updates
+memory and selects only a newly durable draft, while explicit selection writes the
+active pointer. Core suppresses unchanged presentation updates in typed commits,
+never kernel execution facts. Index repair handles disposable data errors; derived
+domain/materialization failures retain their cause instead of appearing as missing
+chats. These boundaries do not depend on the current renderer or Shell.
+
 ### Whole-conversation Application boundary (planned, 2026-10-27)
 
 The current dependency sketch describes the implemented Office path; a shared

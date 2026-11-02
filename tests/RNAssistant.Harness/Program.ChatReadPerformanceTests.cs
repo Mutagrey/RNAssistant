@@ -8,6 +8,7 @@ using System.Text;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using RNAssistant.Core.Models;
+using RNAssistant.Core.Persistence;
 using RNAssistant.Core.Storage;
 using RNAssistant.Office.Services;
 
@@ -15,6 +16,110 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void UnreadableProjectionIsNotMissingChat()
+        {
+            WithTempPaths(paths =>
+            {
+                var writer = new ChatStore(paths);
+                var adapter = new FakeOfficeAdapter();
+                var session = writer.CreateTransient(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Retained history");
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Do not lose this body" });
+                writer.Commit(session, new ConversationCommit(session.Messages));
+                var path = SessionEventFile(paths, session);
+                var seed = JObject.Parse(File.ReadAllText(path));
+                // Valid event integrity, but a body the current typed reader cannot interpret.
+                seed["Data"]["MutationPolicy"] = new JArray(1, 2);
+                var protector = typeof(ChatStore).GetMethod("Protection", BindingFlags.NonPublic | BindingFlags.Instance)
+                    .Invoke(writer, new object[0]);
+                var record = typeof(ChatStore).GetMethod("ParseSessionEvent", BindingFlags.NonPublic | BindingFlags.Static)
+                    .Invoke(null, new object[] { seed.ToString(Formatting.None) });
+                seed["Hash"] = (string)typeof(ChatStore).GetMethod("ComputeHash", BindingFlags.NonPublic | BindingFlags.Static)
+                    .Invoke(null, new[] { record, protector });
+                File.WriteAllText(path, seed.ToString(Formatting.None) + "\n", new UTF8Encoding(false));
+                File.Delete(path + ".projection.sqlite");
+                var bytes = File.ReadAllBytes(path);
+                var diagnostics = new System.Collections.Generic.List<string>();
+                var reader = new ChatStore(paths) { PerformanceLog = diagnostics.Add };
+                AssertEqual(1, reader.ReadEvents(session.Host, session.DocumentKey, session.Id).Count,
+                    "fixture source has valid event integrity");
+                for (var attempt = 0; attempt < 2; attempt++)
+                {
+                    Exception failure = null;
+                    try { new ChatSessionService(adapter, ConversationStore(reader)).SelectSession(session.Id); }
+                    catch (Exception ex) { failure = ex; }
+                    Console.WriteLine("PROJECTION_FAILURE attempt=" + attempt + " builds=" + reader.SqliteProjectionFullBuildCount +
+                        " error=" + failure?.Message);
+                    if (failure == null || !failure.Message.Contains("CHAT_PROJECTION_UNAVAILABLE"))
+                        Console.WriteLine(string.Join("\n", diagnostics));
+                    AssertTrue(failure != null && failure.Message.Contains("CHAT_PROJECTION_UNAVAILABLE") &&
+                        failure.Message.Contains("MutationPolicy"), "existing unreadable history reports its cause instead of not found");
+                }
+                AssertEqual(1L, reader.SqliteProjectionFullBuildCount, "verified source is not indexed again for a typed materialization failure");
+                AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(path)), "failed opening never modifies source history");
+                AssertTrue(diagnostics.Any(line => line.Contains("MutationPolicy")), "screen diagnostics identify the failing field");
+            });
+        }
+
+        private static void TerminalCommitOmitsUnchangedMessages()
+        {
+            foreach (var status in new[] { "completed", "cancelled" })
+            WithTempPaths(paths =>
+            {
+                var store = new ChatStore(paths);
+                var session = store.CreateTransient("Excel", "terminal-save", "Save.xlsx", "Save");
+                for (var i = 0; i < 300; i++) session.Messages.Add(new ChatMessage
+                    { Role = "assistant", Content = i + ":" + new string('x', 8192) });
+                session.LastRun = new ChatRunRecord { RunId = "run", TurnId = "turn", Status = "running" };
+                store.Commit(session, new ConversationCommit(session.Messages));
+                var path = SessionEventFile(paths, session);
+                var previousBytes = new FileInfo(path).Length;
+                session.LastRun.Status = status;
+                session.Messages.Last().Content = "Terminal " + status;
+                var allocated = GC.GetAllocatedBytesForCurrentThread();
+                var timer = Stopwatch.StartNew();
+                store.Commit(session, new ConversationCommit(session.Messages));
+                var elapsed = timer.ElapsedMilliseconds;
+                allocated = GC.GetAllocatedBytesForCurrentThread() - allocated;
+                var addedBytes = new FileInfo(path).Length - previousBytes;
+                var commit = store.ReadEvents(session.Host, session.DocumentKey, session.Id).Last(item => item.Type == SessionEventTypes.SessionCommit);
+                var writes = ((JArray)commit.Data["Operations"]).Count(item => (string)item["Type"] == SessionOperationTypes.MessageUpdated);
+                Console.WriteLine("TERMINAL_SAVE status=" + status + " writes=" + writes + " bytes=" + addedBytes +
+                    " elapsedMs=" + elapsed + " allocatedBytes=" + allocated);
+                AssertEqual(1, writes, "only changed presentation is rewritten; kernel fact kinds remain distinct");
+                AssertTrue(addedBytes < 32768, "finalizing a large history does not append its unchanged bodies again");
+                var replay = new ChatStore(paths).Load(session.Id);
+                AssertEqual(status, replay.LastRun.Status, "terminal state is durable");
+                AssertEqual(300, replay.Messages.Count, "all original messages remain available");
+                AssertEqual(session.Messages[0].Content, replay.Messages[0].Content, "unchanged content survives cold replay");
+                AssertEqual(session.Messages.Last().Content, replay.Messages.Last().Content, "changed content survives cold replay");
+            });
+        }
+
+        private static void SavedSessionDoesNotRewriteSelection()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var writes = new CatalogReadStore(ConversationStore(store));
+                var service = new ChatSessionService(adapter, writes);
+                var chat = service.CreateChat("First draft");
+                var message = new ChatMessage { Role = "user", Content = "Persist once" };
+                chat.Messages.Add(message);
+                store.Commit(chat, ConversationCommit.UserInput(message));
+                service.NotifySaved(chat);
+                AssertEqual(1, writes.SelectionWrites, "first persistence selects the new draft once");
+                var other = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Other pane selection");
+                writes.SelectionWrites = 0;
+                for (var i = 0; i < 10; i++) service.NotifySaved(chat);
+                AssertEqual(0, writes.SelectionWrites, "save notifications do not rewrite the active pointer");
+                AssertEqual(other.Id, store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey),
+                    "background persistence preserves another pane's newer selection");
+                service.SelectSession(chat.Id);
+                AssertEqual(1, writes.SelectionWrites, "explicit navigation still selects exactly once");
+            });
+        }
+
         private static void ChatRecordCanonicalEncodingIsStable()
         {
             // Published schema-4 canonical bytes, including escapes, non-ASCII,

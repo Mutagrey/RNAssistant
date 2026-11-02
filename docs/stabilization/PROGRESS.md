@@ -1,5 +1,27 @@
 # Stabilization progress
 
+## Завершение, сохранение и повторная перестройка индекса — 2026-11-02
+
+Owner: Core ChatStore; Office ChatSessionService — selection notifications.
+Новый снимок показывает damaged-sidecar → rebuild → «чат не найден». Механизм
+воспроизведён с валидным журналом и нечитаемым typed field: до исправления три
+перестройки на выбор, после — одна и явная причина. Проверенный canonical root
+использует прежний bounded cache; domain errors не считаются повреждением SQLite.
+Точное поле в Windows-чате по старому логу неизвестно; новая диагностика его покажет.
+
+Завершение/отмена больше не дублируют неизменённые MessageUpdated; удалена одна
+полная копия массива при commit replay. Kernel facts/fsync/revision guards сохранены.
+На локальном fixture 300 сообщений: 300 → 1 message write, 2 665 227 → 2 179 байт
+append; один sample 83 → 31 мс, allocations 53,1 → 10,4 MB. Это не Windows timing.
+NotifySaved больше не перезаписывает active pointer на каждом fact: десять
+уведомлений после первого сохранения дают 0 записей и сохраняют выбор другого окна.
+
+Focused storage/session/inbox checks прошли; шесть ошибок runtime-commits/kernel
+replay воспроизведены на копии без этого diff (outcome/confirmation fixtures).
+Полная десериализация перед save, detached snapshots, производные artifact reads
+и финальный addressed reload остаются стоимостью; [границы и gaps](RISK_REGISTER.md#лишняя-работа-ui-и-оставшаяся-стоимость-чтений--2026-10-30).
+Windows/Office/WebView2 qualification не заявлена.
+
 ## Сохранённые Browser objects S3b.3b — 2026-11-02
 
 HTML-проекты и опубликованные версии плагинов открываются в отдельных адресных

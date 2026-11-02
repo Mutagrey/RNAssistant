@@ -106,6 +106,11 @@ namespace RNAssistant.Office.Services
                     RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                         "Chat recovery deferred: exact runtime payload unavailable, chat=" + header.Id + ".");
                 }
+                catch (ChatProjectionUnavailableException ex)
+                {
+                    RNAssistant.Office.Diagnostics.RuntimeLog.Info(
+                        "Chat recovery deferred: chat=" + header.Id + ", " + ex.Message);
+                }
             }
         }
 
@@ -638,9 +643,13 @@ namespace RNAssistant.Office.Services
             {
                 return;
             }
+            var firstPersistence = !_activeSessionPersisted;
             _activeSession = session;
             _activeSessionPersisted = true;
-            _conversations.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
+            // Saving content is not navigation. Rewriting this pointer on every
+            // kernel fact also overwrites a newer selection from another pane.
+            if (firstPersistence)
+                _conversations.SaveActiveSessionId(session.Host, session.DocumentKey, _activeSessionId);
         }
 
         internal bool TryApplyGeneratedTitle(

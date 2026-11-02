@@ -42,6 +42,19 @@ Busy/I/O failures are not treated as index corruption. All chat event
 readers share the same integrity/error contract: malformed authoritative streams
 remain untouched and unavailable, without stopping the catalog of healthy chats.
 
+Typed session deserialization is distinct from derived document/material projection.
+Only a disposable index data failure permits index repair; a domain projection
+failure does not. A cursor rebuilt from verified source records carries that fact
+only for the current read. Its full canonical JSON root can enter the existing
+bounded cache before typed hydration, so repeated attempts do not rebuild the same
+verified source while that entry remains valid. No error/quarantine store is added.
+An unrecoverable projection failure propagates `ChatProjectionUnavailableException`,
+not a missing-chat result; startup recovery defers only the affected chat. Screen
+diagnostics include the hashed file name, exception type, JSON field and SQLite
+codes, without message bodies. Genuine index damage still repairs once. After
+restart/cache eviction another verification may be needed; unreadable source data
+is neither rewritten nor silently substituted.
+
 Within one process, up to 16 recently used canonical projection roots are also cached in memory (maximum about 16 million characters each and 32 million in total). An unchanged warm read checks the exact final record. The cache and SQLite projection are disposable and do not serve trajectory export or CAS reachability. Routine tail checks are a checkpoint trust boundary: a changed prefix that preserves the exact tail and file metadata is detected by the explicit full maintenance audit, not by every navigation read. That audit validates every JSONL event, compares the canonical projection with SQLite and repairs divergence. This preserves fast routine reads without presenting the sidecar as an independent authority.
 
 Catalog reads also use the existing bounded header cache: at most 256 entries,
@@ -153,6 +166,21 @@ Application `ConversationInputJournal`/inbox own transition validation and deliv
 Web rendering consumes the bounded message DTO (80 newest messages) and cannot
 choose the storage/replay strategy. A CSS or renderer change must not add a second
 detail request, reread the event stream or move cache policy into the DOM layer.
+
+Content-save notifications update the selected in-memory session but write the
+active pointer only when its transient draft first becomes durable. Explicit
+selection remains the pointer owner; saving an already persisted run cannot
+overwrite a newer selection from another pane.
+
+Completion/cancellation still commits terminal state, preserves exact revision CAS
+and flushes the append-only events before UI publication. `ChatStore` omits a
+`MessageUpdated` operation only when its serialized value equals the stored value.
+Input, accepted-call, execution and result fact kinds are never suppressed by this
+comparison. Replay uses the previous message array as an immutable input and copies
+it once into the new root, avoiding the preceding full-array clone. This does not
+remove the stored-session materialization, serialization of requested updates,
+derived artifact rebuilds, or detached active-run snapshots; those remain separate
+costs, not permission to weaken persistence or publication ownership.
 The storage regression checks assert exact event equivalence, no trace reads on
 indexed input replay, header-to-session reuse, foreign-append catch-up, index damage
 recovery and incomplete-stream refusal independently of UI markup. The opt-in

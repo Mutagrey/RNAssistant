@@ -132,7 +132,9 @@ namespace RNAssistant.Core.Storage
                 (readable["LastRun"] as JObject)?.Remove("KernelState");
             }
             else readable = RuntimePayloadService.HydrateActiveExecution(root, _blobs);
-            var session = readable.ToObject<ChatSession>();
+            ChatSession session;
+            try { session = readable.ToObject<ChatSession>(); }
+            catch (Exception ex) when (IsInvalidProjectionValue(ex)) { throw new ProjectionDataException(ex); }
             ArtifactWorkingSet.Validate(session);
             var sessionMs = timer.ElapsedMilliseconds;
             session.Revision = sequence;
@@ -417,9 +419,15 @@ namespace RNAssistant.Core.Storage
             private readonly ProjectionReplayList _artifacts;
 
             public ProjectionReplayState(JObject root)
+                : this(root == null ? null : root["Messages"] as JArray,
+                    root == null ? null : root["Artifacts"] as JArray)
             {
-                _messages = new ProjectionReplayList(root == null ? null : root["Messages"] as JArray);
-                _artifacts = new ProjectionReplayList(root == null ? null : root["Artifacts"] as JArray);
+            }
+
+            public ProjectionReplayState(JArray messages, JArray artifacts)
+            {
+                _messages = new ProjectionReplayList(messages);
+                _artifacts = new ProjectionReplayList(artifacts);
             }
 
             public void Upsert(string property, JToken value)

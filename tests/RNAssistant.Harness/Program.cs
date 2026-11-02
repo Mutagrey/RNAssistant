@@ -541,6 +541,9 @@ namespace RNAssistant.Harness
                 Test("documents: saved identity uses full path or legacy id", SavedDocumentIdentityUsesFullPathOrLegacyId),
 
                 Test("storage: chat roundtrip", CreatesAndListsChatsInTempRoot),
+                Test("storage: terminal projection failure is not missing chat", UnreadableProjectionIsNotMissingChat),
+                Test("storage: terminal commit omits unchanged messages", TerminalCommitOmitsUnchangedMessages),
+                Test("chat sessions: saved content does not rewrite selection", SavedSessionDoesNotRewriteSelection),
                 Test("storage: session read waits for document writer", SessionReadUsesDocumentBoundary),
                 Test("storage: busy chat stays visible and recovers after lock release", BusyChatDoesNotBecomeNewChat),
                 Test("storage: sqlite projection pages messages", SqliteProjectionPagesMessages),

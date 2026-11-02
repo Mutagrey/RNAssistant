@@ -156,6 +156,29 @@ Owner: Office settings/controller, Web settings; evidence — экран Windows
 ## Лишняя работа UI и оставшаяся стоимость чтений — 2026-10-30
 
 Owner: Office chat presentation; Application inbox; Web UI.
+Дополнительное фото 2026-11-02 показывает повторный damaged-sidecar и потерю причины
+в «Chat session was not found». Подтверждён общий механизм: typed/domain projection
+errors попадали в repair, а исчерпанный JsonException превращался в null; scoped
+load затем повторял всё в global lookup. Теперь verified source не перестраивается
+повторно в том же чтении/валидном bounded cache, domain errors не запускают repair,
+а unrecoverable projection выдаёт отдельную ошибку с типом/полем. Точное содержимое
+ошибочного Windows-чата и поведение после restart/cache eviction остаются открытыми.
+
+В общем save убраны одинаковые MessageUpdated и одна полная копия массива;
+NotifySaved больше не пишет выбор уже сохранённого чата, устраняя также возврат
+старого выбора после переключения в другом pane. Остаются: полная materialization
+stored session для reference allocation/diff; сериализация всех заявленных updates;
+derived artifact rebuilds после commit; полные detached snapshots активного Office
+run; reload в OfficeQueuePort.Changed после освобождения worker. Дальнейший срез —
+передавать exact changed IDs и committed revision через существующих владельцев,
+а не создавать второй store или отдавать изменяемую live session без lease.
+Два tool-result commits разделяют durable effect и последующую model/media
+preparation; объединять их без сохранения recovery boundary нельзя.
+
+Проверки runtime-commits и пять kernel replay cases падают одинаково с этим diff
+и без него: отсутствующий обязательный outcome / устаревшие confirmation fixtures.
+Это отдельный protocol test gap; исправление storage его не маскирует.
+
 Создание пустого чата 2026-11-02 отделено от загрузки предыдущей истории, глобального
 recovery и полного каталога: typed catalogChanges обновляет существующий UI owner.
 13 service checks, Web delivery/navigation и реальный host-neutral controller
