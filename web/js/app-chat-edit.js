@@ -109,9 +109,7 @@ function applyEditedMessagePreview(target, text) {
   message.Activity = null;
   message.activity = null;
   state.messages[target.index] = message;
-  state.liveActivity = null;
-  state.liveAgentRun = null;
-  state.liveStreamContent = null;
+  publishOfficeChatRun(state.activeChatId, null);
   renderMessages();
   renderContextMeter();
   if (typeof renderHtmlWorkspace === "function") {

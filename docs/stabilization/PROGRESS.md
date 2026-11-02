@@ -1,5 +1,21 @@
 # Stabilization progress
 
+## Адресный поток чата S2b.11 — 2026-11-02
+
+Owner: Web conversation presentation. Office source заимствует существующий run;
+вторая selected копия stream/reasoning/activities и её writers удалены. Bridge
+передаёт progress в ChatRun. Release не отменяет domain run; поздние deltas не
+воссоздают source, возврат берёт текущий run. Kernel/runtime/storage не менялись.
+Focused source/lifecycle/DOM/boot checks и две Chromium fixtures прошли. 1000 узлов
+истории сохраняются; 100 фоновых deltas дают одно обновление дерева. Изолированная
+браузерная проверка использовала `f0bfba8e` + Web diff без соседних изменений.
+Срез принят пользователем по «Коммит»; далее source/view factories и удаление selected facade,
+затем независимые chat tabs. Windows/Office qualification остаётся открытой.
+
+Отдельно исправлен HTML source read/export: неверный `skills.skills.workspace.files`
+заменён `workspace.files`; 9/9 existing checks, включая bounds/cache/cancel/cleanup.
+Подробности и границы — [Migration Plan](../ui/UI_MIGRATION_PLAN.md).
+
 ## Завершение, сохранение и повторная перестройка индекса — 2026-11-02
 
 Owner: Core ChatStore; Office ChatSessionService — selection notifications.

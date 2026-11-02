@@ -104,6 +104,11 @@ production tokens. Адаптер tab spacing/close icon ограничен Dock
 
 ## Применение правил сейчас
 
+S2b.11 сохраняет общий transcript, composer и существующий вид stream/reasoning.
+Убрана выбранная копия live-данных, без новых controls/CSS. Token paints сохраняют
+узлы истории, фокус и раскрытые блоки; отмена/повтор удаляют непринятый draft.
+HTML source repair также не меняет дизайн: исправлены чтение и экспорт исходника.
+
 Оптимизация создания Office-чата меняет только доставку данных: пустая переписка и
 catalog delta используют существующие NavigationTree/composer/transcript. Новых
 controls, геометрии и локальных CSS overrides нет; остальные строки дерева сохраняются.

@@ -4,6 +4,7 @@ var selectedOfficeProjection = null;
 function createOfficeChatSnapshot(chatId) {
   return { activeChatId: chatId, messages: [], messageStartIndex: 0, messageTotalCount: 0,
     activeChatModel: "", activeChatMode: "agent", activeChatReasoning: false,
+    activeRunViewState: null, liveRun: null,
     context: {}, contextUsage: {}, artifacts: [], artifactLibrary: { sessionRevision: 0, heads: [] },
     activeContextCheckpointId: "", activeHtmlArtifactId: "", activeTaskListArtifactId: "", activePlanDocumentArtifactId: "" };
 }
@@ -11,6 +12,13 @@ var emptyOfficeChatSnapshot = Object.freeze(createOfficeChatSnapshot(""));
 function officeChatProjection() { return selectedOfficeProjection; }
 function officeChatSnapshot() {
   return selectedOfficeProjection && selectedOfficeProjection.snapshot() || emptyOfficeChatSnapshot;
+}
+function officeChatLiveRun() { return officeChatSnapshot().liveRun; }
+function publishOfficeChatRun(chatId, run) {
+  var projection = officeChatProjection();
+  if (!projection || !projection.isCurrent() || projection.target.sessionId !== chatId) return false;
+  projection.snapshot().liveRun = run || null;
+  return true;
 }
 function setOfficeChatSnapshotField(name, value) {
   if (!selectedOfficeProjection || !selectedOfficeProjection.isCurrent())
@@ -635,7 +643,7 @@ function applyChatState(response, skipDraftCapture, options) {
     state.htmlWorkspace = { files: [], dataSources: [], history: [], redoHistory: [], redoBranches: [],
       recovery: { status: "empty", canMutate: false } };
   }
-  state.activeRunViewState = window.RNAssistantRunViewState.normalize(
+  if (nextChatId) state.activeRunViewState = window.RNAssistantRunViewState.normalize(
     response.runViewState !== undefined ? response.runViewState : response.RunViewState);
   if (nextChatId && (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined)) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
@@ -665,10 +673,6 @@ function applyChatState(response, skipDraftCapture, options) {
     state.context = response.context || response.Context || {};
   }
   if (response.messages || response.Messages) {
-    state.liveActivity = null;
-    state.liveAgentRun = null;
-    state.liveStreamContent = null;
-    if (typeof resetLiveReasoning === "function") resetLiveReasoning();
     var incomingMessages = response.messages || response.Messages || [];
     var incomingStart = response.messageStartIndex !== undefined
       ? response.messageStartIndex : (response.MessageStartIndex || 0);

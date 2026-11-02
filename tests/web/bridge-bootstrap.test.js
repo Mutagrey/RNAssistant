@@ -33,6 +33,7 @@ function createContext() {
     }
   };
   vm.runInContext(source, context, { filename: "app-core.js" });
+  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-run.js"), "utf8"), context, { filename: "app-chat-run.js" });
   const contract = { version: 2, operations: ["init", "getSettings", "listChats", "getChatState", "runTool", "clearRuntimeData", "selectChat", "createOfficeHostChat"].map(name =>
     ({ name, idleTimeoutMs: name === "init" ? 30000 : 120000, cancellable: name === "runTool" })) };
   context.acceptBridgeContract(contract);
@@ -46,7 +47,7 @@ function installChatProjection(context) {
   }
   context.document.body = { classList: { add() {}, remove() {} } };
   context.$ = () => ({ textContent: "", classList: { contains: () => false } });
-  for (const name of ["captureChatDraft", "restoreChatDraft", "resetMessageEditState", "resetLiveReasoning",
+  for (const name of ["captureChatDraft", "restoreChatDraft", "resetMessageEditState",
     "acceptToolLibraryState", "acceptSkillLibraryState", "renderSettings",
     "renderChatSessions", "renderMessages", "renderContext", "renderContextMeter", "renderModelControls",
     "renderSendControls", "syncTokenEstimateCalibrationFromUsage", "log"]) context[name] = () => {};
@@ -195,10 +196,10 @@ function appInit(host, chatId) {
 
   {
     const { context, posted } = createContext();
+    installChatProjection(context);
     context.document.body = { classList: { add: () => {} } };
     context.captureChatDraft = () => {};
     context.resetMessageEditState = () => {};
-    context.resetLiveReasoning = () => {};
     context.acceptToolLibraryState = () => {};
     context.acceptSkillLibraryState = () => {};
     context.restoreChatDraft = () => {};

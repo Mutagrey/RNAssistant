@@ -56,8 +56,3 @@ function appendMessageReasoning(parent, message) {
   if (block) parent.appendChild(block);
   return block;
 }
-
-function resetLiveReasoning() {
-  state.liveReasoning = "";
-  state.liveReasoningComplete = false;
-}

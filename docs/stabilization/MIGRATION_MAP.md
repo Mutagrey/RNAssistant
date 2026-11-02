@@ -94,6 +94,13 @@ HTML working copy/source cache/editor не перенесены. Owner/removal g
 explicit source/view factory, live delivery и consumers должны заменить selected
 adapter; 14 accessors удалить, не размножать в независимых chat tabs.
 
+S2b.11: activeRunViewState перенесён в тот же source, liveRun заимствуется из
+существующего chatRuns. Пять live accessors теперь read-only; прежние writers и
+resetLiveReasoning удалены. Office progress reducer принадлежит ChatRun, bridge
+только маршрутизирует; release не отменяет run и delivery не создаёт source.
+Owner прежний. Остаток: explicit source/view factory, адресные consumers и удаление
+всех selected accessors перед независимыми chat tabs; per-tab копия запрещена.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

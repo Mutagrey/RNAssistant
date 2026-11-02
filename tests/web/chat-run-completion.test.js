@@ -48,6 +48,7 @@ function ui() {
   }
   ctx.RNAssistantNavigationTree = { icon: () => "" };
   ctx.state.activeChatId = "a";
+  ctx.selectOfficeChatProjection("a");
   ctx.state.chats = [summary("a", "running"), summary("b", "completed")];
   ctx.rows = {}; ctx.sidebarRenders = 0;
   ctx.renderChatSessions = () => {
@@ -55,7 +56,6 @@ function ui() {
     ctx.state.chats.forEach(chat => { ctx.rows[chat.Id] = ctx.chatTreeNode(chat); });
   };
   for (const name of ["renderMessages", "renderSendControls", "renderContext", "renderContextMeter", "renderModelControls"]) ctx[name] = () => {};
-  ctx.resetLiveReasoning = () => { ctx.state.liveReasoning = ""; ctx.state.liveReasoningComplete = false; };
   ctx.progress = id => receive({ data: { type: "progress", id: "inbox:" + id,
     payload: { chatId: id, runId: "run-" + id, contentDelta: "Answer" } } });
   ctx.newProgress = (id, runId) => receive({ data: { type: "progress", id: "inbox:" + id,
@@ -122,6 +122,8 @@ function assertStoppedIndicator(ctx, id) {
   ctx.applyChatInbox(inbox("a", true), true);
   ctx.progress("a");
   ctx.state.activeChatId = "b";
+  ctx.selectOfficeChatProjection("b");
+  ctx.state.chats[1] = summary("b", "running", 2);
   ctx.progress("b");
   const selectedRun = ctx.state.chatRuns.b;
   const selectedMessages = ctx.state.messages;
@@ -137,6 +139,7 @@ function assertStoppedIndicator(ctx, id) {
   const ctx = ui();
   ctx.progress("a");
   ctx.state.activeChatId = "b";
+  ctx.selectOfficeChatProjection("b");
   ctx.applyChatCatalogState({ chats: [summary("a", "failed", 2), summary("b", "completed", 1)] });
   assert.equal(ctx.state.chatRuns.a, undefined, "background terminal catalog retires the exact run");
   ctx.progress("a");
@@ -190,4 +193,49 @@ function assertStoppedIndicator(ctx, id) {
   ctx.newProgress("a", "run-next");
   assert.equal(ctx.state.chatRuns.a.runId, "run-next", "a distinct new run can start normally");
   console.log("PASS completion: queued work and a new run remain distinct from late old-run progress");
+}
+
+{
+  const ctx = ui();
+  ctx.progress("a");
+  const first = ctx.officeChatProjection(), run = ctx.state.chatRuns.a;
+  assert.equal(first.snapshot().liveRun, run, "the source borrows the tracked run, without another stream buffer");
+  assert.equal(ctx.state.liveAgentRun, run.activities);
+  for (const key of ["liveActivity", "liveAgentRun", "liveStreamContent", "liveReasoning", "liveReasoningComplete"]) {
+    const descriptor = Object.getOwnPropertyDescriptor(ctx.state, key);
+    assert.equal(typeof descriptor.get, "function");
+    assert.equal(descriptor.set, undefined, key + " has no selected copy writer");
+  }
+  ctx.applyOfficeChatProgress({ chatId: "a", runId: "run-a", reasoningDelta: "r".repeat(25000) }, null, "inbox:a");
+  assert.equal(ctx.state.liveReasoning.length, 24000, "reasoning remains bounded");
+  ctx.state.activeRunViewState = ctx.RNAssistantRunViewState.normalize(summary("a", "running").RunViewState);
+  assert.equal(first.snapshot().activeRunViewState, ctx.state.activeRunViewState);
+
+  ctx.clearOfficeChatProjection();
+  ctx.progress("a");
+  assert.equal(ctx.state.chatRuns.a, run, "view release does not stop or replace the run");
+  assert.equal(run.stream, "AnswerAnswer", "background progress continues without a mounted source");
+  assert.equal(first.snapshot(), null);
+  assert.equal(ctx.officeChatProjection(), null, "delivery cannot recreate a disposed source");
+  assert.equal(ctx.state.liveStreamContent, null);
+  assert.equal(ctx.state.activeRunViewState, null);
+
+  ctx.state.activeChatId = "b"; ctx.selectOfficeChatProjection("b");
+  ctx.newProgress("b", "new-b");
+  ctx.progress("a");
+  assert.equal(ctx.state.liveStreamContent, "Next", "another source never receives the background text");
+  ctx.state.activeChatId = "a"; const returned = ctx.selectOfficeChatProjection("a");
+  ctx.restoreActiveChatRun(false);
+  assert.notEqual(returned, first);
+  assert.equal(returned.snapshot().liveRun, run, "returning borrows the current run without replay or copy");
+  assert.equal(ctx.state.liveStreamContent, "AnswerAnswerAnswer");
+  assert.equal(first.isCurrent(), false);
+  ctx.newProgress("a", "new-a");
+  assert.notEqual(ctx.state.chatRuns.a, run);
+  assert.equal(ctx.state.liveStreamContent, "Next", "a new run cannot inherit the previous draft");
+  const runCount = Object.keys(ctx.state.chatRuns).length;
+  ctx.applyOfficeChatProgress({ contentDelta: "unaddressed" }, null, "inbox:missing");
+  assert.equal(Object.keys(ctx.state.chatRuns).length, runCount);
+  assert.equal(ctx.state.liveStreamContent, "Next");
+  console.log("PASS live ownership: addressed borrowed runs, bounded reasoning, release, return and run replacement");
 }

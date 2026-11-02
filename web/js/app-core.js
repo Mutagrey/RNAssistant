@@ -69,12 +69,14 @@ var state = {
   activeSends: {},
   chatRuns: {},
   chatProjectionRevisions: {},
-  activeRunViewState: null,
-  liveActivity: null,
-  liveAgentRun: null,
-  liveStreamContent: null,
-  liveReasoning: "",
-  liveReasoningComplete: false,
+  get activeRunViewState() { return officeChatSnapshot().activeRunViewState; },
+  set activeRunViewState(value) { setOfficeChatSnapshotField("activeRunViewState", value); },
+  // Live fields borrow the tracked run; there is no second selected stream buffer.
+  get liveActivity() { var run = officeChatLiveRun(); return run && run.activity || null; },
+  get liveAgentRun() { var run = officeChatLiveRun(); return run && run.activities || null; },
+  get liveStreamContent() { var run = officeChatLiveRun(); return run && run.stream || null; },
+  get liveReasoning() { var run = officeChatLiveRun(); return run && run.reasoning || ""; },
+  get liveReasoningComplete() { var run = officeChatLiveRun(); return !!(run && run.reasoningComplete); },
   modelCatalog: { configUrl: "", defaultModel: "", models: [], loaded: false, loading: false, error: "" },
   modelCatalogRequest: null,
   chatPreferencePromise: null,
@@ -371,17 +373,6 @@ function cancelChatRun(chatId, runId) {
   return send("cancelChatRun", { chatId: chatId, runId: runId });
 }
 
-function recordChatRunActivityState(chatId, activity) {
-  if (!chatId || !activity) return;
-  var run = state.chatRuns[chatId] = state.chatRuns[chatId] || { activities: [], stream: "", modelAttemptActive: false, streamRetrying: false };
-  if (typeof recordActivityTimeline === "function") {
-    return recordActivityTimeline(run.activities, activity);
-  }
-  var copy = cloneActivity(activity);
-  run.activities.push(copy);
-  return copy;
-}
-
 function isKeyboardElement(element) {
   if (!element) {
     return false;
@@ -479,128 +470,7 @@ if (window.chrome && window.chrome.webview) {
         if (window.RNAssistantWorkspaceChat) window.RNAssistantWorkspaceChat.acceptProgress(progress);
         return;
       }
-      var isChatProgress = String(response.id || "").indexOf("inbox:") === 0 || progressPending && (progressPending.type === "confirmAgentTool" || progressPending.type === "editMessage");
-      var progressChatId = progress.chatId || (progressPending && progressPending.payload && progressPending.payload.chatId) || "";
-      var progressRunId = progress.runId || "";
-      // Saved kernel state wins over a delayed progress frame for the same run.
-      if (isChatProgress && progressRunId && typeof chatRunTerminalView === "function" &&
-          chatRunTerminalView(progressChatId, progressRunId)) return;
-      if (progressPending && typeof progressPending.onProgress === "function") progressPending.onProgress(progress);
-      if (progressChatId && isChatProgress) {
-        trackChatProgressRun(progressChatId, progressRunId).phase = progress.phase || "working";
-      }
-      var contentReset = !!(progress.contentReset);
-      var reasoningReset = !!(progress.reasoningReset);
-      var contentDelta = progress.contentDelta || "";
-      var reasoningDelta = progress.reasoningDelta || "";
-      var reasoningComplete = !!(progress.reasoningComplete);
-      var hasReasoningProgress = !!(reasoningDelta || reasoningComplete);
-      var cancellingRun = isChatProgress && progressChatId && state.chatRuns[progressChatId];
-      if (cancellingRun && cancellingRun.cancelRequested &&
-          (contentReset || reasoningReset || contentDelta || hasReasoningProgress)) return;
-      if ((contentReset || reasoningReset) && isChatProgress) {
-        // A reset invalidates the draft immediately, including while a retry has no output.
-        var resetRun = progressChatId ? state.chatRuns[progressChatId] : null;
-        if (resetRun) {
-          resetRun.streamRetrying = !!resetRun.modelAttemptActive;
-          resetRun.modelAttemptActive = true;
-          if (contentReset) resetRun.stream = "";
-          if (reasoningReset) {
-            resetRun.reasoning = "";
-            resetRun.reasoningComplete = false;
-          }
-        }
-        if (progressChatId === state.activeChatId) {
-          if (contentReset) state.liveStreamContent = null;
-          if (reasoningReset) resetLiveReasoning();
-        }
-        if (!contentDelta && !hasReasoningProgress) {
-          if (progressChatId !== state.activeChatId) scheduleChatProgressRender();
-          else if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
-          else renderMessages();
-          return;
-        }
-      }
-      if (contentDelta && isChatProgress) {
-        var contentRun = progressChatId ? state.chatRuns[progressChatId] : null;
-        if (contentRun) {
-          contentRun.stream = (contentRun.stream || "") + contentDelta;
-          contentRun.modelAttemptActive = true;
-          contentRun.streamRetrying = false;
-        }
-        if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
-        state.liveStreamContent = progressChatId
-          ? contentRun.stream
-          : (state.liveStreamContent || "") + contentDelta;
-        if (contentRun && !contentRun.reasoning) resetLiveReasoning();
-        if (progressChatId) {
-          state.liveAgentRun = state.chatRuns[progressChatId].activities;
-          if (!state.liveActivity && state.liveAgentRun && state.liveAgentRun.length) {
-            state.liveActivity = state.liveAgentRun[state.liveAgentRun.length - 1];
-          }
-        }
-        if (typeof scheduleLiveStreamRender === "function") {
-          scheduleLiveStreamRender();
-        } else {
-          renderMessages();
-        }
-        return;
-      }
-      if (hasReasoningProgress && isChatProgress) {
-        var reasoningRun = progressChatId ? state.chatRuns[progressChatId] : null;
-        if (reasoningRun) {
-          reasoningRun.modelAttemptActive = true;
-          if (reasoningDelta && reasoningRun.reasoningComplete) reasoningRun.reasoning = "";
-          reasoningRun.reasoning = (reasoningRun.reasoning || "") + reasoningDelta;
-          if (reasoningRun.reasoning.length > 24000) reasoningRun.reasoning = reasoningRun.reasoning.substring(0, 24000);
-          reasoningRun.reasoningComplete = reasoningComplete;
-        }
-        if (progressChatId === state.activeChatId) {
-          state.liveReasoning = reasoningRun ? reasoningRun.reasoning : reasoningDelta;
-          state.liveReasoningComplete = reasoningRun ? !!reasoningRun.reasoningComplete : reasoningComplete;
-          if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender();
-          else renderMessages();
-        } else {
-          scheduleChatProgressRender();
-        }
-        return;
-      }
-      if (isChatProgress) {
-        var activityPhase = String(progress.phase || "").toLowerCase();
-        if ((activityPhase === "thinking" || activityPhase === "preparing_context") && !progress.activity && progressChatId) {
-          // The next request is being compiled; the previous request is no longer current.
-          state.chatRuns[progressChatId].requestContext = { phase: "preparing_context" };
-          if (progressChatId === state.activeChatId && typeof renderContextMeter === "function") renderContextMeter();
-        }
-        var acceptedStepReasoning = null;
-        if ((activityPhase === "acting" || activityPhase === "reflection") && progressChatId) {
-          var acceptedRun = state.chatRuns[progressChatId];
-          acceptedStepReasoning = { ReasoningContent: acceptedRun.reasoning || "" };
-          acceptedRun.reasoning = ""; acceptedRun.reasoningComplete = false;
-          if (progressChatId === state.activeChatId) resetLiveReasoning();
-        }
-        if ((activityPhase === "acting" || activityPhase === "reflection" || activityPhase === "tool_running") && progressChatId) {
-          state.chatRuns[progressChatId].stream = "";
-          state.chatRuns[progressChatId].modelAttemptActive = false;
-          state.chatRuns[progressChatId].streamRetrying = false;
-          if (progressChatId === state.activeChatId) state.liveStreamContent = null;
-        }
-        var normalizedActivity = normalizeProgressActivity(progress);
-        if (acceptedStepReasoning) normalizedActivity.__reasoningMessage = acceptedStepReasoning;
-        var storedActivity = recordChatRunActivityState(progressChatId, normalizedActivity);
-        if (progressChatId === state.activeChatId) {
-          state.liveActivity = storedActivity || normalizedActivity;
-          state.liveAgentRun = state.chatRuns[progressChatId].activities;
-        }
-        if (state.chatRuns[progressChatId] && state.chatRuns[progressChatId].cancelRequested &&
-            typeof updateChatModelStage === "function") updateChatModelStage(progressChatId);
-      }
-      if (progressChatId !== state.activeChatId) { scheduleChatProgressRender(); return; }
-      if (isChatProgress) {
-        if (typeof scheduleLiveStreamRender === "function") scheduleLiveStreamRender(true);
-        else renderMessages();
-      }
-      log("[" + (progress.phase || "working") + "] " + (progress.message || "Выполняю..."));
+      applyOfficeChatProgress(progress, progressPending, response.id);
       return;
     }
     if (response && response.type === "chatState") {

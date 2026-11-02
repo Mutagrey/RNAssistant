@@ -131,8 +131,16 @@ across A→B→A and same-ID reset, current ACK/refresh, one context/material pr
 and empty selection. It reproduces stale context overwrite on `205b6cf6` (red→green).
 Pair with Office projection, `context-usage`, `chat-sync`, Chromium
 `workspace-shared-draft` / `material-object-views`. The draft fixture explicitly opens
-the plugin source chat under the accepted Browser route. Independent HTML source
-validation fails on unchanged baseline; details and owner are in RISK_REGISTER.
+the plugin source chat under the accepted Browser route. The independent HTML source
+read/export repair passes `html-workspace-source` (9/9); Windows delivery remains open.
+S2b.11: `chat-run-completion` also checks one borrowed live run per source, disposal
+without cancellation/recreation, background delivery, return, new-run replacement
+and bounded reasoning. `live-run-projection` now uses the real core/source accessors;
+`stream-render-cost` preserves 1000 history nodes and coalesced foreground/background
+paints. Pair with Office projection, run-view-state, bridge-bootstrap, message-actions
+and Chromium `workspace-chat-progress` / `chat-input-delivery`. The progress fixture
+explicitly opens the plugin source chat. Independent chat tabs and Windows evidence
+are still open; source/view factories must replace the selected facade first.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,

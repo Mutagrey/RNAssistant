@@ -47,9 +47,10 @@ domain owners; вкладка не создаёт второй durable store и�
 несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
 singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
 
-В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.10 используют тот же
-SnapshotOwner для Office transcript/preferences/context и метаданных материалов через временный selected adapter;
-полный Office snapshot и навигация ещё не принадлежат независимым views.
+В S2b.8 Workspace snapshot передан общему view owner. S2b.9–S2b.11 используют тот же
+SnapshotOwner для Office transcript/preferences/context, метаданных материалов и
+run projection через временный selected adapter; полный Office view и навигация
+ещё не принадлежат независимым вкладкам.
 
 Создание Office-чата возвращает пустую detail projection и typed `catalogChanges`:
 новая строка и ID заменённого transient. Существующий revision-aware catalog merger
@@ -280,6 +281,26 @@ attachments по-прежнему принадлежат адресному draf
 редактор остаются у HtmlWorkspace; независимые MaterialView сохраняют свой exact
 target и leases. Live run projection, source/view factory и selected facade ещё
 мигрируют. Новые вкладки не должны клонировать этот temporary adapter.
+
+### S2b.11: адресная проекция потока Office
+
+Office SnapshotOwner хранит normalized kernel `activeRunViewState` и заимствует
+`liveRun` из существующего transient `chatRuns[chatId]`. У stream, reasoning и
+activities больше нет второй выбранной копии. Пять `state.live*` — read-only
+accessors к этому run; прежние writers и `resetLiveReasoning` удалены. Текущая
+activity — ссылка на элемент единственной timeline. Kernel остаётся владельцем
+lifecycle/outcome; этот срез не создаёт второй runtime/store.
+
+Bridge маршрутизирует Office progress в существующий `app-chat-run.js`; reducer
+обновляет exact chat/run и публикует ссылку только живому Office source того же
+адреса. Неадресный chat progress отвергается. Release не создаёт новый source и
+не отменяет run: background deltas продолжаются, возврат заимствует текущий run.
+Новый run заменяет draft; retry/cancel/terminal guards и reasoning bound 24 000
+сохранены. Полный snapshot и live output показываются без промежуточного сброса.
+
+Selected adapter пока остаётся для одного физического transcript. Это ещё не
+независимые chat tabs: следующий срез — explicit source/view factories, адресные
+consumers и удаление selected facade. Нельзя размножать эти accessors по вкладкам.
 
 ## S1b: фактическая граница переноса
 

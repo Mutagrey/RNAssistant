@@ -511,13 +511,8 @@ function applyBridgeUnavailableState(error) {
   state.activeChatId = "";
   state.chatDetailPending = false;
   state.chatDetailError = "";
-  state.activeRunViewState = null;
   state.chatProjectionRevisions = {};
   clearOfficeChatProjection();
-  state.liveActivity = null;
-  state.liveAgentRun = null;
-  state.liveStreamContent = null;
-  if (typeof resetLiveReasoning === "function") resetLiveReasoning();
   state.tools = [];
   state.skills = [];
   if (typeof acceptToolLibraryState === "function") acceptToolLibraryState();

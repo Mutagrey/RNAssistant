@@ -68,10 +68,13 @@ const bridge = vm.createContext({ console }); bridge.window = bridge;
 bridge.document = { getElementById: () => null };
 bridge.setTimeout = callback => timers.push(callback);
 bridge.chrome = { webview: { addEventListener: (_, callback) => { listener = callback; } } };
-bridge.renderChatSessions = () => sidebarRenders++;
 vm.runInContext(read("app-core.js"), bridge);
+vm.runInContext(read("app-conversation-state.js"), bridge);
+vm.runInContext(read("app-chat-state.js"), bridge);
 vm.runInContext(read("app-chat-run.js"), bridge);
+bridge.renderChatSessions = () => sidebarRenders++;
 bridge.state.activeChatId = "foreground";
+bridge.selectOfficeChatProjection("foreground");
 
 for (let i = 0; i < 100; i++) listener({ data: { type: "progress", id: "inbox:background", payload: { chatId: "background", contentDelta: "x" } } });
 assert.equal(bridge.state.chatRuns.background.stream.length, 100, "every delta is retained immediately");
@@ -105,7 +108,6 @@ foregroundFrames.shift()();
 assert.equal(foregroundRenders, 1, "activity burst produces one full projection, not 100");
 console.log("PASS foreground progress: 100 activities and content deltas share one frame without dropping events");
 
-bridge.resetLiveReasoning = () => { bridge.state.liveReasoning = ""; bridge.state.liveReasoningComplete = false; };
 let outputPaints = 0;
 bridge.renderStreamingMessages = outputOnly => { assert.equal(outputOnly, true); outputPaints++; };
 const progress = (payload, chatId = "foreground") => listener({ data: { type: "progress", id: "inbox:" + chatId,
@@ -141,6 +143,7 @@ progress({ contentReset: true, reasoningReset: true }, "background");
 assert.equal(bridge.state.chatRuns.background.stream, "", "background reset clears the saved transient draft");
 assert.equal(bridge.state.chatRuns.background.streamRetrying, true);
 bridge.state.activeChatId = "background";
+bridge.selectOfficeChatProjection("background");
 bridge.restoreActiveChatRun(false);
 assert.equal(bridge.state.liveStreamContent, null, "switching chats cannot revive the invalid background draft");
 bridge.endChatRunTracking("background");
@@ -148,6 +151,7 @@ assert.equal(bridge.state.chatRuns.background, undefined, "completion retires at
 console.log("PASS stream lifecycle: immediate reset, empty retries, background navigation and coalesced first-token paints");
 
 bridge.state.activeChatId = "foreground";
+bridge.selectOfficeChatProjection("foreground");
 progress({ reasoningDelta: "Accepted reflection reasoning" });
 progress({ phase: "reflection", message: "Accepted reflection" });
 const acceptedReflection = bridge.state.chatRuns.foreground.activities.slice(-1)[0];

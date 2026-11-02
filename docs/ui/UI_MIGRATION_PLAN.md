@@ -766,6 +766,41 @@ mutation/storage/runtime. `html-workspace-source` — 9/9: lazy read, exact byte
 bounded cache, cancel/stale/revision guards, late lease cleanup и export.
 Cache query обновлён. Реальный Office read/export остаётся Windows evidence.
 
+### S2b.11: live run у адресного source — принято, 2026-11-02
+
+Срез принят пользователем по «Коммит».
+S2b.10 сохранён в `29888056`. Owner: Web conversation presentation, существующие
+ChatState/ChatRun. SnapshotOwner теперь хранит normalized run DTO и заимствует
+transient run; stream/reasoning/activities не копируются в selected state.
+Office progress reducer перенесён из bridge boot в `app-chat-run.js`.
+Старые live writers и reset helper удалены; повтор, отмена, terminal guard,
+reasoning bound и объединение paints в кадр сохранены. Layout/runtime не менялись.
+
+Проверки: `chat-run-completion` включает release → background → A/B/return,
+замену run и отсутствие второй копии; `stream-render-cost`, `live-run-projection`,
+`office-conversation-projection`, `run-view-state`, `bridge-bootstrap`,
+`message-actions` прошли. Fixture завершения теперь действительно запускает B:
+прежний мог принять оставшийся текст A за ответ B. DOM fixture использует реальные
+source accessors. Chromium `workspace-chat-progress` и `chat-input-delivery`
+прошли на изолированном `f0bfba8e` + этот Web diff, без параллельных C#/CSS edits.
+Progress fixture явно открывает «Чат исходников» после выбора plugin Browser.
+1000 узлов истории сохраняются, 100 background deltas дают одно обновление дерева;
+30 Workspace updates меняют только live leaf. Общего ускорения не заявляем.
+
+Ревью: `python3 prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+1. Начать ответ Office, перейти в другой чат и вернуться: каждый показывает свой
+   поток; background delivery не переключает выбранный чат.
+2. Повтор/отмена: непринятый текст очищается, поздний токен не возвращает его.
+3. Проект и plugin → «Чат исходников»: во время потока раскрыть reasoning,
+   прокрутить вверх; раскрытие, фокус и ручная прокрутка сохраняются.
+Mock/synthetic delivery проверяет UI, не квалифицирует Windows/Office.
+Откат — отдельный Web diff; миграции данных нет.
+
+Далее: explicit source/view factory и удаление selected facade, затем независимые
+chat tabs. Attachments/approval/context auxiliary consumers сверяются при этом
+с тем же owner. HTML working copy остаётся у HtmlWorkspace; новые вкладки не
+должны клонировать selected adapter. Принятие среза не закрывает Windows evidence.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |
