@@ -289,6 +289,7 @@
     var catalog = window.RNAssistantArtifactCatalog;
     var catalogTree = catalog && catalog.tree(nodes, htmlChildren, options);
     var mounted = adapter.mount(root, {
+      renderTree: catalog && catalog.renderTree,
       nodes: catalogTree ? catalogTree.nodes : nodes,
       selectedKey: catalogTree && catalogTree.selectedKey || selectedKey(options),
       emptyText: query ? "Ничего не найдено." : "Артефактов пока нет.",

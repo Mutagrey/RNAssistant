@@ -1,0 +1,47 @@
+{
+  "fixture": "2000 library metadata items, 1280x900, headless Chrome, 12 renders, first 2 discarded. No model/body IO. Single session sample, not a speed qualification.",
+  "before": {
+    "rows": 2000,
+    "medianMs": 86.59999990463257,
+    "times": [
+      112.7999997138977,
+      89.90000009536743,
+      87.40000009536743,
+      96.2999997138977,
+      81.7000002861023,
+      85.7999997138977,
+      89.80000019073486,
+      88.30000019073486,
+      83.69999980926514,
+      83.59999990463257,
+      85.2000002861023,
+      92.5
+    ],
+    "filterMs": 13,
+    "selectedBefore": "prompt:0",
+    "selectedAfter": "tool:0",
+    "dom": 22
+  },
+  "after": {
+    "rows": 2000,
+    "medianMs": 89.10000014305115,
+    "times": [
+      115,
+      91.59999990463257,
+      85.7000002861023,
+      95.39999961853027,
+      83.10000038146973,
+      84.5,
+      101.09999990463257,
+      93.5,
+      88.19999980926514,
+      89.7000002861023,
+      88.5,
+      96.89999961853027
+    ],
+    "filterMs": 4.200000286102295,
+    "selectedBefore": "prompt:0",
+    "selectedAfter": "prompt:0",
+    "dom": 22
+  }
+}

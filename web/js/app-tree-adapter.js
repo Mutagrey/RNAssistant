@@ -109,7 +109,7 @@
     if (!record) return root;
     delete mounts[id];
     record.stale = true;
-    window.RNAssistantNavigationTree.unmount(record.root, "materials");
+    window.RNAssistantNavigationTree.unmount(record.root, record.positionKey);
     if (root) {
       root.className = record.originalClassName;
       root.removeAttribute("role");
@@ -182,11 +182,11 @@
       status(root, unavailable.message, "error");
       return { count: 0, error: unavailable, ready: Promise.resolve(false), destroy: function () { root.replaceChildren(); } };
     }
-    var record = { root: root, originalClassName: originalClassName, stale: false };
+    var record = { root: root, originalClassName: originalClassName, positionKey: options.positionKey || id, stale: false };
     mounts[id] = record;
-    tree.render(root, navigationNodes(normalized.nodes, options, tree), {
+    (options.renderTree || tree.render)(root, navigationNodes(normalized.nodes, options, tree), {
       label: root.getAttribute("aria-label") || "Материалы",
-      positionKey: "materials",
+      positionKey: record.positionKey,
       emptyText: options.emptyText || "Элементов пока нет.",
       onSelect: function (node) {
         if (!node.itemType || typeof options.onActivate !== "function") return true;

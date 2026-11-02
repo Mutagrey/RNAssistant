@@ -43,7 +43,7 @@
 .shell.navigation-closed .split-layout[data-navigation],
 .shell.navigation-overlay .split-layout[data-navigation] { --navigation-column: 0px; --navigation-divider: 0px; }
 .shell .panel.active .split-layout[data-navigation]:not(.chat-workspace) { display: grid; gap: 0; grid-template-columns: var(--navigation-column) var(--navigation-divider) minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr); }
-.shell .panel.active :is(.instruction-editor, .vba-editor, .html-workspace-editor, .product-dt-main) { grid-column: 3 !important; grid-row: 1; min-width: 0; }
+.shell .panel.active :is(.instruction-editor, .vba-editor, .html-workspace-editor, .artifact-workspace-content, .product-dt-main) { grid-column: 3 !important; grid-row: 1; min-width: 0; }
 .shell.navigation-closed .panel.active .global-nav { visibility: hidden; opacity: 0; pointer-events: none; }
 .shell:is(.navigation-closed, .navigation-overlay) .global-nav + .splitter { display: none !important; }
 .shell.navigation-overlay .panel.active .global-nav { position: fixed; top: var(--shell-top-height); bottom: var(--shell-status-height); left: calc(var(--shell-rail-width) + 1px); z-index: 25; width: min(var(--split-left, var(--nav-width)), calc(100% - var(--shell-rail-width) - var(--navigation-overlay-inset))); height: auto; max-height: none; box-shadow: var(--shadow); border-right: 1px solid var(--line); }
@@ -58,7 +58,6 @@
 .shell.navigation-wide :is(.chatbar, .resource-editor-head, .dt-header, .artifact-overview-heading, .artifact-catalog-actions) { padding-left: calc(var(--page-inset)) !important; }
 .shell .global-nav { min-width: 0; background: var(--surface-subtle); border-right: 1px solid var(--line); }
 .shell .split-layout > .global-nav { border-right: 0; }
-.shell .product-nav-heading { display: flex; align-items: center; min-height: var(--navigation-heading-height); padding: 0 var(--space-3); margin: 0; border-bottom: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 600; }
 .shell .chat-sidebar-head { position: relative; display: flex; flex-wrap: nowrap; align-items: center; gap: 0; height: var(--navigation-heading-height); min-height: var(--navigation-heading-height); padding: 0; background: var(--surface-subtle); }
 .shell .chat-sidebar-head .product-nav-heading { flex: 1; min-width: 0; gap: var(--space-2); height: 100%; min-height: 0; padding: 0 var(--space-3); border-bottom: 0; font-size: var(--text-sm); }
 .shell .chat-sidebar-head .product-nav-heading #chatScopeIcon,
@@ -67,8 +66,8 @@
 .shell .global-nav :is(.tree-toolbar, .chat-tree-toolbar), .plugin-navigation .tree-toolbar { --control: var(--shell-control); }
 .shell .chat-sidebar-head.searching .product-nav-heading { display: none; }
 .shell .chat-sidebar-head.searching .chat-tree-toolbar { flex: 1; padding-left: 8px; }
-.shell .instruction-layout .tool-list-panel { grid-template-rows: var(--navigation-heading-height) minmax(0, 1fr); padding: 0 var(--space-2) var(--space-4); }
-.shell .instruction-layout .product-nav-heading { margin: 0 calc(-1 * var(--space-2)); }
+.shell .instruction-layout .tool-list-panel { grid-template-rows: var(--navigation-heading-height) minmax(0, 1fr) auto; padding: 0 var(--space-2) var(--space-4); }
+.shell :is(.instruction-layout, .html-workspace-layout) .product-nav-heading { margin: 0 calc(-1 * var(--space-2)); }
 .shell .vba-layout .tool-list-panel { grid-template-rows: var(--navigation-heading-height) auto minmax(0, 1fr); padding: 0 var(--space-2) var(--space-4); }
 .shell .vba-layout .product-nav-heading { margin: 0 calc(-1 * var(--space-2)); }
 @media (max-width: 820px) {

@@ -29,6 +29,8 @@ function fixture(loadPrompts = true) {
     $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {}, createElement: () => new Element(),
       documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
+    RNAssistantNavigationPane: { mount(options) { return { render(nodes) { trees.push(nodes); options.tree.treeNodes = nodes; }, setState() {} }; } },
+    RNAssistantDockWorkspace: { registerTargetRoute() {} },
     RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },
     modelImageSupportOverrides: () => ({}), modelAudioSupportOverrides: () => ({}), modelCapabilitiesForSettings: () => ({}), attachmentModelPriorityForSettings: () => [], textToHeaders: () => ({}),
     modelCatalogPreview: { modelCatalog: null }, renderModelControls() {}, renderModelCapabilityList() {},

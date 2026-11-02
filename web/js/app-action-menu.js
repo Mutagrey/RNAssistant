@@ -49,6 +49,7 @@
     open(trigger, Array.from(root.children).filter(function (item) {
       return item.tagName === "BUTTON" && !item.hidden && !item.classList.contains("hidden");
     }).map(function (item) { return { label: item.textContent.trim(), disabled: item.disabled,
+      icon: item.dataset.menuIcon || (item.querySelector("[data-rna-icon]") || { dataset: {} }).dataset.rnaIcon,
       onSelect: function () { item.click(); } }; }));
   }
   function render(items, options) {

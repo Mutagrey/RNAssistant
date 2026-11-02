@@ -46,18 +46,18 @@
   <link rel="stylesheet" href="css/app-model-diagnostics.css?v=request-dock-20261102">
 
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
-  <link rel="stylesheet" href="css/app-artifacts.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="css/app-html-workspace.css?v=shared-palette-20261025-2-annotation-surface-20261026-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=settings-dock-20261102">
+  <link rel="stylesheet" href="css/app-artifacts.css?v=navigation-s3b1-20261102">
+  <link rel="stylesheet" href="css/app-html-workspace.css?v=navigation-s3b1-20261102">
+  <link rel="stylesheet" href="css/app-responsive.css?v=navigation-s3b1-20261102">
   <link rel="stylesheet" href="css/app-agent.css?v=aligned-feed-20261029-5">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=request-dock-20261102">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=request-dock-20261102">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=host-icon-20261102">
-  <link rel="stylesheet" href="css/app-product-components.css?v=request-dock-20261102">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=navigation-s3b1-20261102">
+  <link rel="stylesheet" href="css/app-product-components.css?v=navigation-s3b1-20261102">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=settings-dock-20261102">
+  <link rel="stylesheet" href="css/app-product-materials.css?v=navigation-s3b1-20261102">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=navigation-s3b1-20261102">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
@@ -365,12 +365,12 @@
       <section class="panel" id="tab-instructions">
         <div class="tool-layout instruction-layout split-layout" id="instructionsLayout" data-navigation>
           <div class="tool-list-panel surface-panel global-nav">
-            <div class="product-nav-heading product-search-heading"><strong>Библиотека</strong><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="skillSearchInput" aria-label="Поиск в библиотеке" aria-expanded="false" aria-controls="skillSearchInput"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tool-search product-nav-search-input" id="skillSearchInput" type="search" placeholder="Найти…" aria-label="Поиск в библиотеке" autocomplete="off" hidden><details class="product-create-menu"><summary class="icon-btn" title="Создать в библиотеке" aria-label="Создать в библиотеке"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></summary>
-              <div class="tool-list-actions">
-                <button class="primary icon-text-button" id="addSkillButton" type="button" title="Новый навык"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Навык</span></button>
-                <button class="secondary icon-text-button" id="addToolButton" type="button" title="Новый инструмент"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span>Инструмент</span></button>
-              </div>
-            </details></div></div>
+            <div id="libraryNavigationHeading"></div>
+            <input class="tool-search" id="skillSearchInput" type="search" placeholder="Найти…" aria-label="Поиск в библиотеке" autocomplete="off" hidden>
+            <div id="libraryCreateCommands" hidden>
+              <button data-menu-icon="skill" id="addSkillButton" type="button">Навык</button>
+              <button data-menu-icon="tool" id="addToolButton" type="button">Инструмент</button>
+            </div>
             <aside class="tool-list" id="instructionsList"></aside>
           </div>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка инструкций"></div>
@@ -528,21 +528,17 @@
       <section class="panel" id="tab-artifacts">
         <div class="tool-layout html-workspace-layout split-layout" id="htmlWorkspaceLayout" data-navigation>
           <aside class="tool-list-panel html-workspace-sidebar global-nav" id="htmlWorkspaceSidebar">
-            <div class="artifact-catalog-toolbar product-search-heading">
-              <strong>Материалы</strong>
-              <div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" type="button" data-nav-search-toggle="artifactNavSearch" aria-label="Поиск материалов" aria-expanded="false" aria-controls="artifactNavSearch"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tool-search product-nav-search-input" id="artifactNavSearch" type="search" placeholder="Найти…" aria-label="Поиск материалов" autocomplete="off" hidden><details class="html-workspace-menu html-workspace-create-menu product-material-menu" id="artifactCreateMenu">
-                <summary class="icon-btn" title="Добавить материал" aria-label="Добавить материал"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg><span class="artifact-create-label">Добавить</span></summary>
-                <div class="html-workspace-menu-items">
+            <div id="materialNavigationHeading"></div>
+            <input class="tool-search" id="artifactNavSearch" type="search" placeholder="Найти…" aria-label="Поиск материалов" autocomplete="off" hidden>
+            <div id="artifactCreateCommands" hidden>
                   <button id="artifactCatalogImport" type="button"><svg data-rna-icon="upload" viewBox="0 0 24 24" aria-hidden="true"></svg>Импортировать файл</button>
                   <button id="addPlanButton" type="button"><svg data-rna-icon="plan" viewBox="0 0 24 24" aria-hidden="true"></svg>План</button>
                   <button id="addHtmlFileButton" type="button"><svg data-rna-icon="html" viewBox="0 0 24 24" aria-hidden="true"></svg>HTML-страницу</button>
                   <button id="addCssFileButton" type="button"><svg data-rna-icon="css" viewBox="0 0 24 24" aria-hidden="true"></svg>Стили CSS</button>
                   <button id="addJsFileButton" type="button"><svg data-rna-icon="js" viewBox="0 0 24 24" aria-hidden="true"></svg>Скрипт JS</button>
                   <button id="addHtmlDataButton" type="button"><svg data-rna-icon="json" viewBox="0 0 24 24" aria-hidden="true"></svg>Данные JSON</button>
-                </div>
-              </details></div>
-              <input type="file" id="artifactCatalogFile" hidden>
             </div>
+            <input type="file" id="artifactCatalogFile" hidden>
             <div class="tool-list-controls">
               <div class="html-workspace-create hidden" id="htmlWorkspaceCreateBox">
                 <input class="tool-search" id="htmlWorkspaceCreateNameInput" autocomplete="off">
@@ -554,17 +550,15 @@
             </div>
             <button type="button" id="artifactCatalogAll" class="rna-nav-button" aria-current="page"><span class="navigation-tree-expander" aria-hidden="true"></span><span class="navigation-tree-icon" aria-hidden="true"><svg data-rna-icon="files" viewBox="0 0 24 24" aria-hidden="true"></svg></span><span class="navigation-tree-label">Все материалы</span></button>
             <div class="tool-list html-workspace-tree" id="htmlWorkspaceTree" role="tree" aria-label="Артефакты"></div>
-            <div class="artifact-tree-footer">
-              <p id="artifactCatalogStatus" role="status" aria-live="polite"></p>
-              <button type="button" class="link-button" id="artifactCatalogMore" hidden>Показать ещё 50</button>
-              <span id="htmlWorkspaceStatus" class="hidden"></span>
-            </div>
+            <p id="artifactCatalogStatus"></p>
+            <button type="button" class="link-button" id="artifactCatalogMore" hidden>Показать ещё 50</button>
+            <span id="htmlWorkspaceStatus" hidden></span>
           </aside>
           <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину списка артефактов"></div>
           <div class="artifact-workspace-content" id="artifactCatalog">
             <p id="artifactCatalogPreviewStatus" class="artifact-inline-status" role="status" aria-live="polite"></p>
             <section id="artifactCatalogOverview" class="artifact-catalog-overview" hidden aria-label="Каталог материалов">
-              <div class="artifact-overview-heading"><div><p>Результаты работы и файлы</p><h2>Материалы</h2></div></div>
+              <div class="artifact-overview-heading"><div><p>Результаты работы и файлы</p><h2>Материалы</h2></div><button id="artifactOverviewCreate" class="button primary" type="button" aria-haspopup="menu" aria-expanded="false">Добавить</button></div>
               <div class="artifact-overview-content">
                 <div class="artifact-overview-toolbar">
                   <select id="artifactCatalogScope" aria-label="Принадлежность материалов"><option value="all">Все материалы</option><option value="chat">Этот чат</option><option value="document">В документе</option></select>
@@ -1119,13 +1113,14 @@
   <script src="js/app-panel-toggle.js?v=right-sections-sent-20261024-1"></script>
   <script src="js/app-preview-surface.js?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1"></script>
   <script src="js/app-rail-popovers.js"></script>
-  <script src="js/app-navigation-tree.js?v=shell-reference-20261102"></script>
+  <script src="js/app-navigation-tree.js?v=navigation-s3b1-20261102"></script>
   <script src="js/app-conversation-state.js?v=shared-chat-20261102"></script>
   <script src="js/app-conversation-view.js?v=chat-composer-s2b2-20261102"></script>
   <script src="js/app-conversation-observer.js?v=addressed-poll-20261027-1"></script>
   <script src="js/app-conversation-input.js?v=addressed-pending-20261027-1"></script>
   <script src="js/app-library-groups.js?v=20261029-first-group-1"></script>
-  <script src="js/app-action-menu.js?v=request-dock-20261102"></script>
+  <script src="js/app-action-menu.js?v=navigation-s3b1-20261102"></script>
+  <script src="js/app-navigation-pane.js?v=navigation-20261102"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=effect-facts-20261029-1"></script>
   <script src="js/app-layout.js?v=host-icon-20261102"></script>
@@ -1150,7 +1145,7 @@
   <script src="js/app-resource-upload.js?v=attachment-input-20261012-1"></script>
   <script src="js/app-trajectory-payload.js?v=trajectory-payload-20260906-1-workspace-diagnostics-20261025-1"></script>
   <script src="js/app-trajectory.js?v=request-dock-20261102"></script>
-  <script src="js/app-prompts.js?v=library-demand-20261030-1"></script>
+  <script src="js/app-prompts.js?v=navigation-s3b1-20261102"></script>
   <script src="js/app-model-data.js?v=chat-models-s2a-20261102"></script>
   <script src="js/app-model-picker.js?v=chat-models-s2a-20261102"></script>
   <script src="js/app-model-capabilities.js?v=chat-models-s2a-20261102"></script>
@@ -1175,8 +1170,8 @@
   <script src="js/app-html-workspace-source.js?v=html-memory-20261002-1"></script>
   <script src="js/app-html-workspace-model.js?v=html-read-20260906-1"></script>
   <script src="js/app-html-workspace-editor.js?v=html-memory-20261002-1-preview-surface-20261024-1-html-right-2"></script>
-  <script src="js/app-tree-adapter.js?v=artifact-gallery-20260902-1-artifact-tree-20261013-1"></script>
-  <script src="js/app-html-workspace-tree.js?v=html-memory-20261002-1-artifact-tree-20261013-1"></script>
+  <script src="js/app-tree-adapter.js?v=navigation-s3b1-20261102"></script>
+  <script src="js/app-html-workspace-tree.js?v=navigation-s3b1-20261102"></script>
   <script src="js/app-artifact-viewer-actions.js?v=binary-chunks-20260906-1"></script>
   <script src="js/app-html-workspace-actions.js?v=html-action-guard-20260908-1-large-chat-1-artifact-tree-20261013-1-annotation-surface-20261026-1-shared-source-20261029-1"></script>
   <script src="js/app-html-workspace.js?v=addressed-pending-20261027-1"></script>
@@ -1192,7 +1187,7 @@
   <script src="js/app-chart-artifacts.js?v=chart-chat-scope-20260908-1"></script>
   <script src="js/app-artifacts.js?v=chat-view-s2-20261102"></script>
   <script src="js/app-artifact-versions.js?v=artifact-versions-20261014-1"></script>
-  <script src="js/app-artifact-catalog.js?v=artifact-versions-20261014-1"></script>
+  <script src="js/app-artifact-catalog.js?v=navigation-s3b1-20261102"></script>
   <script src="js/app-task-list.js?v=run-outcome-20261013-1"></script>
   <script src="js/app-questions.js?v=questions-pager-20261023-2"></script>
   <script src="js/app-agent-activity.js?v=aligned-feed-20261029-3"></script>
@@ -1212,7 +1207,7 @@
   <script src="js/app-plugins.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-project-chats.js?v=chat-composer-s2b2-20261102"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
-  <script src="js/app-dock-workspace.js?v=chat-view-s2-20261102"></script>
-  <script src="js/app.js?v=request-dock-20261102"></script>
+  <script src="js/app-dock-workspace.js?v=navigation-s3b1-20261102"></script>
+  <script src="js/app.js?v=navigation-s3b1-20261102"></script>
 </body>
 </html>

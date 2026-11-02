@@ -170,12 +170,12 @@ async function serve() {
       "skills use the shared Excel namespace group");
     assert.equal(await normal.locator('#instructionsList [data-tree-key="library:tools:excel"]').count(), 1,
       "tools use the shared Excel namespace group");
-    await normal.locator('#instructionsList [data-tree-key="skill:0"]').click();
+    await normal.locator('#instructionsList [data-tree-key="skill:excel.sales_analysis"]').click();
     assert.equal(await normal.evaluate(() => {
-      const box = document.querySelector('#instructionsList [data-tree-key="skill:0"] .navigation-tree-icon svg').getBBox();
+      const box = document.querySelector('#instructionsList [data-tree-key="skill:excel.sales_analysis"] .navigation-tree-icon svg').getBBox();
       return box.x >= 0 && box.y >= 0 && box.x + box.width <= 24 && box.y + box.height <= 24;
     }), true, "skill icon stays inside the shared 24px viewBox");
-    assert.match(await normal.locator('#instructionsList [data-tree-key="skill:0"]').textContent(), /Анализ продаж/);
+    assert.match(await normal.locator('#instructionsList [data-tree-key="skill:excel.sales_analysis"]').textContent(), /Анализ продаж/);
     assert.equal(await normal.locator("#skillTitle").textContent(), "Анализ продаж");
     async function libraryEdges() {
       return normal.evaluate(() => {
@@ -245,9 +245,9 @@ async function serve() {
     await normal.waitForFunction(() => state.skills[state.selectedSkillIndex]._sourceLoaded["references/details.md"] === true);
     assert.match(await normal.evaluate(() => getCodeEditorValue("skillBodyInput")), /# details/);
     assert.equal(await normal.locator("#skillForm.rna-skill-fields").count(), 1);
-    await normal.locator('#instructionsList [data-tree-key="tool:0"]').click();
+    await normal.locator('#instructionsList [data-tree-key="tool:excel.format_sales"]').click();
     assert.deepEqual(await libraryEdges(), skillEdges, "tool and skill use one full-width editor grid");
-    const selectedToolRow = normal.locator('#instructionsList [data-tree-key="tool:0"] > .navigation-tree-row');
+    const selectedToolRow = normal.locator('#instructionsList [data-tree-key="tool:excel.format_sales"] > .navigation-tree-row');
     const selectedBeforeHover = await selectedToolRow.evaluate(node => ({
       background: getComputedStyle(node).backgroundColor,
       labelWidth: node.querySelector('.navigation-tree-label').getBoundingClientRect().width
@@ -262,7 +262,7 @@ async function serve() {
     await normal.locator('.tool-page-tabs [data-tool-page="schema"]').click();
     assert.equal(await normal.locator('.tool-page-tabs [data-tool-page="schema"][aria-current="page"]').count(), 1);
     assert.equal(await normal.locator('[data-tool-page-view="schema"]').isVisible(), true);
-    await normal.locator('#instructionsList [data-tree-key="prompt:0"]').click();
+    await normal.locator('#instructionsList [data-tree-key="prompt:systemPrompt"]').click();
     assert.deepEqual(await libraryEdges(), skillEdges, "instruction header and controls meet the tree line");
     await normal.locator('.section-rail [data-section="vba"]').click();
     assert.equal(await normal.locator("#tab-vba .rna-editor-tabs.vba-mode-toggle").count(), 1);
@@ -603,7 +603,7 @@ async function serve() {
     failed.on("pageerror", error => errors.push(error.message));
     await failed.goto(server.address + "preview/web/?scenario=error");
     await failed.locator('.section-rail [data-section="library"]').click();
-    await failed.locator('#instructionsList [data-tree-key="skill:0"]').click();
+    await failed.locator('#instructionsList [data-tree-key="skill:excel.sales_analysis"]').click();
     await failed.waitForFunction(() => document.querySelector("#logBox").textContent.includes("Демонстрационная ошибка чтения навыка"));
     assert.equal(await failed.evaluate(() => !!state.skills[0]._sourceLoaded[""]), false);
     assert.deepEqual(errors, []);

@@ -128,7 +128,7 @@
     }
 
     root.replaceChildren();
-    if (!nodes.length) root.appendChild(element("p", "tree-empty", options.emptyText || "Ничего не найдено"));
+    if (!nodes.length && options.emptyText !== "") root.appendChild(element("p", "tree-empty", options.emptyText || "Ничего не найдено"));
     else root.appendChild(build(nodes, 1, ""));
     mounts.set(root, record);
 

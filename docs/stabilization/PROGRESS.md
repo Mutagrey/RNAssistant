@@ -21,15 +21,17 @@ target/generation, DOM cache, scroll/anchor, frames и visibility для все�
 [Ревью, проверки и следующий шаг](../ui/UI_MIGRATION_PLAN.md#s2b1-общий-owner-отрисовки--2026-11-02).
 Изменение presentation-only, In Review; Windows/Office evidence остаётся открытым.
 
-## S3b: zoom out навигации и просмотров — 2026-11-02
+## Общая навигация S3b.1 — 2026-11-02
 
-По уточнению пользователя частный перенос plugin preview остановлен на
-проектировании. Source audit выявил смешение каталогов/выбора/reader, несколько
-HTML paths и global selection. Общая navigation presentation, независимые object
-views и Browser для HTML/plugin описаны как Proposed в canonical UI-docs;
-[порядок S3b.1–S3b.3](../ui/UI_MIGRATION_PLAN.md#s3b-общая-навигация-и-независимые-просмотры--proposed).
-Код S3b не менялся, перенос ещё не выполнен. S3a сохранён; S2a остаётся отдельной
-работой. Существующие preview overlap/iframe lifetime gaps не объявлены закрытыми.
+После архитектурного плана `535da5b3` реализован общий NavigationPane для Материалов
+и Библиотеки, target routes и отделение просмотра от изменения контекста чата.
+Фильтр сохраняет открытый объект; старые header/menu/search и mobile-layout дубли
+удалены. Проверены scoped/lazy reads, ошибки/late replies, ограничение каталога,
+клавиатура, narrow/themes/zoom и общий компонент на VBA-shaped fixture без Office.
+[Ревью, измерения и остаток](../ui/UI_MIGRATION_PLAN.md#s3b1-общая-навигация--in-review-2026-11-02).
+S3b.1 In Review. Независимые object views S3b.2, Browser S3b.3 и реальный VBA adapter
+S4 ещё впереди; S2b идёт отдельно. Общего ускорения дерева и Windows qualification
+не заявляем.
 
 ## Модель общего чата S2a — 2026-11-02
 

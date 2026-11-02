@@ -15,13 +15,13 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const errors = []; page.on("pageerror", error => errors.push(error.message));
     const index = read("index.html");
     const css = [...index.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)].map(match => read(match[1])).join("\n");
-    const panel = index.slice(index.indexOf('      <section class="panel" id="tab-artifacts">'), index.indexOf('      <section class="panel" id="tab-settings">'));
-    await page.setContent(`<style>${css}\nbody{display:block;height:100vh}</style>${panel.replace('class="panel"', 'class="panel active"')}`);
+    const panel = index.slice(index.indexOf('      <section class="panel" id="tab-artifacts">'), index.indexOf('      <section class="panel" id="tab-diagnostics"'));
+    await page.setContent(`<style>${css}\nbody{display:block;height:100vh}</style><div class="shell app-shell"><header class="workspace-topbar"><button id="productMobileMenuButton"></button></header><button id="productNavigationScrim" class="navigation-scrim"></button><button id="workspaceDiagnostics" hidden></button><main class="content">${panel.replace('class="panel"', 'class="panel active"')}</main></div>`);
     await page.evaluate(() => {
       window.$ = id => document.getElementById(id);
       const uri = name => "rna://chat/doc/artifact/" + name + "/revision/1";
       window.fixtureItems = [
-        { title: "Отчёт по продажам", kind: "html_workspace", resourceUri: uri("html_ws_a_r1"), linked: false },
+        { title: "Отчёт по продажам", kind: "html_workspace", resourceUri: uri("html_ws_a_r1"), linked: false, selected: false },
         { title: "План исследования", kind: "markdown", resourceUri: uri("artifact_md_b_r1"), linked: false },
         { title: "Данные за октябрь.json", kind: "file", resourceUri: uri("artifact_c"), linked: false }
       ].map((item, index) => ({ ...item, documentId: "doc", documentTitle: "Продажи.xlsx",
@@ -32,10 +32,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       state.artifacts = fixtureItems.slice(0, 2).map((item, index) => ({ id: "head-" + index, resourceUri: item.resourceUri,
         libraryHead: { artifactId: "head-" + index, resourceUri: item.resourceUri, revision: 3, historyCount: 3,
           resourceClass: index ? "versioned_document" : "versioned_aggregate" } }));
-      window.historyRequests = []; window.exportRequests = []; window.historyWait = null;
+      window.commands = []; window.historyRequests = []; window.exportRequests = []; window.historyWait = null;
       window.renderHtmlWorkspace = () => RNAssistantHtmlWorkspaceTree.render({ root: $("htmlWorkspaceTree"), selected: {}, files: [], artifacts: [] });
       window.applyChatStateForChat = () => {};
       window.send = async (command, args) => {
+        commands.push(command);
         if (command === "listArtifactCatalog") return { chatId: "chat", sessionRevision: 3, documentId: "doc", documents: [{ id: "doc", title: "Продажи.xlsx" }], items: fixtureItems };
         if (command === "getArtifactLibraryHistory") {
           historyRequests.push(args);
@@ -60,29 +61,31 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         Data: [], ExternalDependencies: [] }, Views: [] }) : "План исследования\n\n1. Собрать данные\n2. Проверить результат") };
       window.RNAssistantHtmlWorkspacePreview = { ensureVendors: async () => {}, build: () => '<style>body{font:15px system-ui;padding:20px;color:#243246}h1{font-size:24px}.card{padding:20px;background:#f3f6fa;border-radius:12px}</style><h1>Продажи за октябрь</h1><div class="card">Выручка<br><strong style="font-size:30px">1 240 000 ₽</strong></div>' };
     });
-    for (const file of ["app-icons.js", "app-navigation-tree.js", "app-tree-adapter.js", "vendor/purify.min.js", "vendor/marked.min.js", "app-markdown.js", "app-viewer-registry.js", "app-text-viewer.js", "app-json-viewer.js", "app-html-workspace-tree.js", "app-artifact-versions.js", "app-artifact-catalog.js", "app-layout.js"])
+    for (const file of ["app-icons.js", "app-navigation-tree.js", "app-action-menu.js", "app-navigation-pane.js", "app-dock-workspace.js", "app-tree-adapter.js", "vendor/purify.min.js", "vendor/marked.min.js", "app-markdown.js", "app-viewer-registry.js", "app-text-viewer.js", "app-json-viewer.js", "app-html-workspace-tree.js", "app-artifact-versions.js", "app-artifact-catalog.js", "app-panel-toggle.js", "app-layout.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => { RNAssistantArtifactCatalog.show("document"); initializeSplitPanes(); });
     await page.locator("#htmlWorkspaceTree").getByText("В документе", { exact: true }).waitFor();
-    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("HTML-проекты", { exact: true }).count(), 0,
-      "catalog groups by ownership rather than format");
+    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("HTML-проекты", { exact: true }).count(), 1,
+      "source adapter preserves the HTML project group inside its owner");
     await page.locator("#artifactCatalogOverview").waitFor({ state: "visible" });
     assert.equal(await page.locator("#artifactCatalogOverviewRows tr").count(), 3, "demo-style catalog table uses the loaded projection");
     assert.equal(await page.locator("#htmlWorkspaceSearchInput").count(), 0, "catalog and tree use one material search");
     assert.equal(await page.locator("#artifactNavSearch").count(), 1);
     await page.evaluate(() => { window.createCalls = 0;
       document.getElementById("addPlanButton").addEventListener("click", () => createCalls++); });
-    await page.locator("#artifactCreateMenu > summary").click();
-    assert.equal(await page.locator("#artifactCreateMenu .html-workspace-menu-items button svg").count(), 6);
-    await page.locator("#artifactCreateMenu").getByRole("button", { name: "План" }).click();
+    await page.locator("#artifactOverviewCreate").click();
+    assert.equal(await page.locator(".rna-action-menu-popup button svg").count(), 6);
+    await page.getByRole("menuitem", { name: "План", exact: true }).click();
     assert.equal(await page.evaluate(() => createCalls), 1, "main Add entry uses the existing material action owner");
     if (process.env.LAYOUT_SCREENSHOT) {
       await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT.replace(/\.png$/, "-overview-1100.png") });
     }
     await page.setViewportSize({ width: 420, height: 760 });
+    await page.waitForFunction(() => document.querySelector(".shell").classList.contains("navigation-overlay"));
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), "overview does not overflow narrow pane");
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT.replace(/\.png$/, "-overview-420.png") });
     await page.setViewportSize({ width: 1100, height: 760 });
+    await page.evaluate(() => { fixtureItems[0].linked = true; return RNAssistantArtifactCatalog.show(); });
     await page.locator("#artifactCatalogOverview").getByRole("button", { name: "Отчёт по продажам" }).click();
     await page.locator("#artifactCatalogPreviewBody iframe").waitFor({ state: "visible" });
     await page.evaluate(() => RNAssistantArtifactCatalog.show());
@@ -98,6 +101,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(await page.evaluate(() => historyRequests.length), 0, "history stays lazy");
     for (const width of [1100, 420]) {
       await page.setViewportSize({ width, height: 760 });
+      await page.waitForFunction(width => document.querySelector(".shell").classList.contains(width > 560 ? "navigation-wide" : "navigation-overlay"), width);
       const sidebar = await page.locator("#htmlWorkspaceSidebar").boundingBox();
       const viewer = await page.locator("#artifactCatalogPreview").boundingBox();
       const content = await page.locator("#artifactCatalog").boundingBox();
@@ -172,10 +176,47 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.locator("#artifactCatalogActions .artifact-action-menu > summary").click();
     page.once("dialog", dialog => dialog.accept());
     await page.getByRole("button", { name: "Удалить из документа…" }).click();
-    await page.getByText("Выберите артефакт", { exact: true }).waitFor();
+    await page.locator("#artifactCatalogOverview").waitFor({ state: "visible" });
     assert.equal(await page.locator("#htmlWorkspaceTree").getByText("План исследования", { exact: true }).count(), 0);
     await page.locator("#htmlWorkspaceTree").getByText("Данные за октябрь.json", { exact: true }).click();
     assert.equal(await versions.count(), 0, "originals without revision history have no chooser");
+    assert.equal(await page.evaluate(() => commands.filter(c => c === "changeArtifactLink").length), 0, "browsing linked HTML, revisions and files never changes chat context");
+    assert.equal(await page.evaluate(() => RNAssistantDockWorkspace.openTarget({ view: "material", resourceUri: fixtureItems[0].resourceUri, chatId: "other", documentId: "doc", navigationVersion: 1 })), false, "stale scope is not retargeted");
+    // Shared loading/error/paging states; navigation never replaces an open exact viewer.
+    const selectedTitle = await page.locator('#artifactCatalogPreviewTitle').textContent();
+    await page.evaluate(() => {
+      window.catalogSend = send;
+      send = async (command, args) => {
+        if (command !== 'listArtifactCatalog') return catalogSend(command, args);
+        if (window.catalogFailure) throw new Error('Каталог временно недоступен');
+        return { chatId:'chat', sessionRevision:3, documentId:'doc', items:fixtureItems.filter(item=>item.title.includes(args.query || '')) };
+      };
+    });
+    await page.getByRole('button',{name:'Поиск материалов',exact:true}).click();
+    await page.locator('#artifactNavSearch').fill('нет такого файла');
+    await page.waitForFunction(()=>document.getElementById('artifactCatalogStatus').textContent==='Артефакты не найдены.');
+    assert.equal(await page.locator('#artifactCatalogPreviewTitle').textContent(),selectedTitle,'filter keeps the exact opened resource');
+    await page.evaluate(()=>{ catalogFailure=true; RNAssistantArtifactCatalog.show(); });
+    await page.getByRole('button',{name:'Повторить загрузку',exact:true}).waitFor();
+    await page.evaluate(()=>{ catalogFailure=false; });
+    await page.getByRole('button',{name:'Повторить загрузку',exact:true}).click();
+    await page.getByRole('button',{name:'Повторить загрузку',exact:true}).waitFor({state:'hidden'});
+    await page.evaluate(()=>{
+      window.pendingCatalogs=[];
+      send=(command,args)=>command==='listArtifactCatalog'?new Promise(resolve=>pendingCatalogs.push(resolve)):catalogSend(command,args);
+      RNAssistantArtifactCatalog.show(); RNAssistantArtifactCatalog.show();
+    });
+    await page.evaluate(()=>pendingCatalogs[1]({chatId:'chat',sessionRevision:3,documentId:'doc',items:[{...fixtureItems[0],title:'Новый каталог'}]}));
+    await page.locator('#htmlWorkspaceTree').getByText('Новый каталог',{exact:true}).waitFor();
+    await page.evaluate(()=>pendingCatalogs[0]({chatId:'chat',sessionRevision:3,documentId:'doc',items:[{...fixtureItems[0],title:'Устаревший каталог'}]}));
+    assert.equal(await page.locator('#htmlWorkspaceTree').getByText('Устаревший каталог',{exact:true}).count(),0);
+    await page.evaluate(()=>{
+      send=async(command,args)=>command==='listArtifactCatalog'?{chatId:'chat',sessionRevision:3,documentId:'doc',nextCursor:'next',items:Array.from({length:2000},(_,i)=>({...fixtureItems[0],title:'Материал '+i,kind:'file',resourceUri:'rna://chat/doc/artifact/'+i+'/revision/1'}))}:catalogSend(command,args);
+      RNAssistantArtifactCatalog.show();
+    });
+    await page.locator('#artifactCatalogStatus').filter({hasText:'Показаны первые 500'}).waitFor();
+    assert.equal(await page.locator('#htmlWorkspaceTree [data-tree-key^="catalog::"]').count(),500,'bounded metadata rendering');
+    assert.equal(await page.locator('#artifactCatalogMore').isVisible(),false,'bound is explicit, not an endless append');
     assert.equal(errors.length, 0, errors.join("\n"));
     console.log("PASS artifact layout: 1100/420 px, lazy paged per-file versions, exact preview/download, dirty/late guards and deletion");
   } finally { await browser.close(); }

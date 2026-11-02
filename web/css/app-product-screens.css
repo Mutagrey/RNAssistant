@@ -68,7 +68,6 @@
 .shell .chat-main .messages .table-wrap tr:last-child td { border-bottom: 0; }
 .shell .chat-main .messages .table-wrap th { color: var(--ink-muted); font-size: 11px; font-weight: 500; }
 
-.shell .product-nav-heading strong { flex: 1; font-size: inherit; }
 .shell .product-create-menu { position: relative; margin-left: auto; }
 .shell #tab-instructions .tool-list-controls,
 .shell #tab-vba .tool-list-controls { margin: 8px 0; }

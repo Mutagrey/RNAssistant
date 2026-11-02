@@ -461,6 +461,31 @@ Iframe lifetime — отдельный инвариант, не обещание
 plugin вместе; отдельный plugin-only overlay пока не реализуется. Layout persistence
 не хранит тела, secrets или runtime instance IDs и не обещает пережить reload сессии.
 
+### S3b.1: реализованные владельцы — In Review
+
+`app-navigation-pane.js` — общий header/search, command menu, loading/error/retry,
+paging и cleanup. Он получает DOM nodes и явные callbacks, не знает bridge,
+названий источников или протокола. NavigationTree остаётся единственным renderer;
+TreeAdapter нормализует материалы и передаёт rendering в Pane, ключ позиции теперь
+принадлежит конкретному дереву. Общий search binding вынесен из app.js; остальные
+панели используют тот же обработчик уже до их полного переноса.
+
+`app-prompts.js` владеет library metadata/dirty/save и стабильными ключами Id/key;
+`app-artifact-catalog.js` — catalog query/generation, exact URI, paging (50 за запрос,
+не более 500 накопленных строк) и отдельными командами изменения связи. Фильтр не
+переключает открытый объект. Library filtering не вызывает renderer редактора.
+Новый store, transport или bridge contract не добавлены.
+
+`DockWorkspace.registerTargetRoute/openTarget` использует **существующий** каталог
+views. Два explicit temporary section adapters валидируют target: library — host,
+kind, Id/key и revision; materials — document/chat/navigation generation/URI.
+Это маршруты к текущим singleton presentation owners, не самостоятельные Dock
+instances. Они не предлагаются как восстанавливаемые Dock panels. Условия удаления
+— [Migration Map](../stabilization/MIGRATION_MAP.md#navigation-target-routes-s3b1--2026-11-02).
+
+S3b.2 заменит доставку material route независимым view; S4 — Library/VBA editors.
+Ни общий Browser, ни независимость material от смены чата этим срезом не завершены.
+
 ## Производительность, portability и поддержка
 
 Сохранить bounded message windows, incremental rendering, lazy payload/media,

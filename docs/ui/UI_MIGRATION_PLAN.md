@@ -465,6 +465,56 @@ Dock tab вместо скрытого прежнего header. Откат — d
 визуальное ревью → согласование → удаление заменённого пути. Нет автоматического
 массового rename, нового npm/bundler/loader, универсального store или SDK framework.
 
+### S3b.1: общая навигация — In Review, 2026-11-02
+
+План сохранён в `535da5b3`; первый production-срез реализован. Owner: Web navigation
+presentation; данные/команды у Library и ArtifactCatalog, placement у Shell.
+Общий NavigationPane, стабильные library keys и explicit target routes подключены
+к двум consumers. Выбор HTML больше не вызывает `changeArtifactLink`; фильтр не
+подменяет редактор/материал. Заменённые headers/search/menu handlers и CSS удалены.
+VBA-подобное дерево проверяет применимость компонента без source-name условий;
+реальный VBA consumer переносится в S4 по таблице ниже.
+
+Минимальные проверки: `instruction-loading`, `tree-adapter`, browser
+`shared-navigation-tree`, `artifact-catalog-layout`. Покрыты lazy/coalesced loading,
+retry/late replies, stale scope, предел 500 строк, exact preview/version/download,
+delete/dirty guard, whole-row/keyboard, два production consumers и disposal.
+Старый изолированный artifact fixture переведён на настоящий Shell layout.
+Chromium: 1280/420 px, light/dark, CSS zoom 125%, menus внутри viewport и видимый focus.
+Windows/Office/реальные модели не запускались.
+
+Ревью (запуск `python3 -B prototypes/serve_ui.py --port 0`, затем напечатанный URL +
+`preview/web/?scenario=ready`):
+1. Библиотека → открыть навык → поиск другой записи: редактор остаётся; Escape
+   возвращает полное дерево. Переключить раздел и вернуться — query/collapse/scroll
+   принадлежат прежнему источнику.
+2. Материалы → открыть HTML в таблице/дереве → посмотреть исходник/историю. Просмотр
+   не меняет контекст чата; команда использования остаётся явной.
+3. Сузить до 420 px → открыть навигацию верхней кнопкой → «+» → Escape. Дерево
+   использует высоту панели, menu не обрезается. Повторить в тёмной теме.
+
+[Библиотека, wide](review/s3b1-library-wide.png),
+[Библиотека, narrow/dark](review/s3b1-library-narrow-dark.png),
+[Материалы, wide/dark](review/s3b1-materials-wide-dark.png),
+[Материалы, narrow](review/s3b1-materials-narrow.png).
+
+Измерение на одинаковых 2000 metadata items: 12 синхронных render/layout, первые
+2 исключены; медиана **86,6 → 89,1 ms**. Ускорения полного дерева нет. Один filter
+route **13 → 4,2 ms** и перестал менять selected editor; короткая выборка не
+доказывает общее ускорение. Тела не входили в замер, DOM фильтрованного списка
+одинаков — 22 узла. [Raw samples](review/s3b1-navigation-metrics.json),
+[повторяемый probe](../../tests/web/navigation-pane-benchmark.js): передать URL
+production preview (можно отдельного baseline checkout). Крупная Библиотека пока
+рисуется целиком; virtualisation не объявлена выполненной.
+
+Остаток: S3b.2 — независимые exact-target viewers и bounded/cancellable body reads;
+S3b.3 — единый Browser HTML/plugin и iframe lifetime; S4 — предметные Library/VBA
+редакторы и остальные adapters. Сейчас preview/editor остаются singleton, выбор
+чата ещё сбрасывает material view; legacy chat artifact route и detail toolbar
+заменяются с соответствующим viewer, а не дублируются новой системой сейчас.
+Move/split/restore для новых object views ещё не существует и не квалифицирован.
+Откат среза — его UI diff, без изменения durable данных или product version.
+
 ### S3b: общая навигация и независимые просмотры — Proposed
 
 Пользователь сначала разрешил отдельный plugin preview, затем потребовал zoom out:
@@ -480,7 +530,7 @@ S2a model/capability work имеет свой scope и не смешиваетс
 
 | Порядок | Законченный результат | Удаление и проверка |
 |---|---|---|
-| S3b.0 — общая модель, сейчас проектирование | Source/object/commands/view type/view instance/renderer, матрица возможностей и группировка всей карты по семействам UI; явная точка подключения в существующие каталоги | Не начинать с копирования конкретного экрана. На трёх маршрутах проверить ownership, identity, dirty/close/restore и отсутствие особых условий по имени source в Shell |
+| S3b.0 — общая модель, план `535da5b3` | Source/object/commands/view type/view instance/renderer, матрица возможностей и группировка всей карты по семействам UI; явная точка подключения в существующие каталоги | Не начинать с копирования конкретного экрана. На трёх маршрутах проверить ownership, identity, dirty/close/restore и отсутствие особых условий по имени source в Shell |
 | S3b.1 — навигация и команды | Общий каркас на существующем NavigationTree для Материалов и Библиотеки, adapters источников; один open route в нынешний DockWorkspace. Открытие отделено от attach/use/edit/delete | Заменённые headers/search/menu handlers и CSS удаляются. Два реальных consumers; одинаковые focus/selection/empty/error/paging; открытие не меняет контекст чата |
 | S3b.2 — самостоятельные object views | Exact target и local presentation state на вкладку; текущие Markdown/JSON/text/PDF/image/task/sequence renderers. Несколько разных материалов одновременно; source/revision видимы | Старый singleton catalog preview переключён и удалён. Bounded lazy reads, cancel/stale reply, leases; смена активного чата не подменяет открытые объекты. Нельзя клонировать global IDs/active-selection controllers |
 | S3b.3 — общий Browser | HTML из материалов/чата и plugin используют общий Browser surface/lifecycle. Providers сохраняют существующий resource builder, sandbox и plugin instance authority | Удалены раздельные ChatBrowser/plugin placement и splitters; нет plugin-only renderer. Проверены iframe document identity при move/restore, независимый chat, source change, аннотации и dispose |
@@ -491,6 +541,22 @@ adapter до предметного editor-среза S4. Общая навиг�
 редактора в общий компонент. Просмотр файлов подключается будущим adapter лишь
 после определения реального owner/root и typed paged contract; отдельный файловый
 store, произвольный path read и фиктивный Files экран сейчас не создаются.
+
+Подключение остальных панелей к той же основе (уточнение пользователя):
+
+| Панель | Общий слой | Срез подключения / что остаётся предметным |
+|---|---|---|
+| Материалы, Библиотека | NavigationPane + NavigationTree, поиск/состояния/команды | S3b.1, первые два production consumers |
+| VBA | Тот же NavigationPane, дерево проекта/модулей | S4; typed Office reads, locked/unavailable, выбор процедуры и команды записи/запуска у VBA owner |
+| Документы/чаты, проекты/чаты | Тот же каркас и renderer с metadata adapters | S2/S4 после текущего chat scoping; pagination, run/rename/delete guards не переносятся в общий UI |
+| Проект плагина | Общие navigation elements и Browser lifecycle | S3b.3/S4; предметные разделы plugin и SDK остаются у plugin owner |
+| Будущие Файлы | Тот же каркас, scoped paged adapter | После typed root/read contract; нового tree widget не требуется |
+| Settings categories, оглавление запроса, встроенные деревья Inspector | Общие Tree/search/menu primitives | Внутренние навигационные элементы, не обязательная копия полной панели источника |
+
+VBA не получает отдельный navigation framework. Первый общий компонент не должен
+зависеть от названий Материалы/Библиотека; его контракт проверяется также на форме
+данных дерева модулей без запуска Office. Перенос всех consumers не объявляется
+завершённым после первых двух.
 
 До первого production-среза: конкретный макет на существующих components и 3 маршрута
 из Screen Map; baseline на тех же objects/размерах. Для каждого среза — счётчики

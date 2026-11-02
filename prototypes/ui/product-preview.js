@@ -70,9 +70,10 @@
     if (section === "library") {
       view.switchTab("instructions");
       if (scenario.value === "empty") return;
-      var key = sub === "prompt" ? "prompt:0" : ["skill", "references"].includes(sub) ? "skill:0" : "tool:0";
+      var kind = sub === "prompt" ? "prompt" : ["skill", "references"].includes(sub) ? "skill" : "tool";
       var row = await waitFor(view, function (target) {
-        return target.document.querySelector('#instructionsList [data-tree-key="' + key + '"]');
+        var id = kind === "prompt" ? "systemPrompt" : (target.state[kind === "skill" ? "skills" : "tools"][0] || {}).Id;
+        return id && target.document.querySelector('#instructionsList [data-tree-key="' + kind + ':' + CSS.escape(id) + '"]');
       }, current);
       if (!row) return;
       row.click();

@@ -177,14 +177,16 @@
   }
 
   function instructionRowKey(row) {
-    return row.kind + ":" + row.index;
+    return row.kind + ":" + (row.kind === "prompt" ? row.value.key : row.value.Id);
   }
 
   function selectedInstructionKey() {
     var index = state.selectedInstructionKind === "skill"
       ? state.selectedSkillIndex
       : (state.selectedInstructionKind === "tool" ? state.selectedToolIndex : state.selectedPromptIndex);
-    return state.selectedInstructionKind + ":" + index;
+    var kind = state.selectedInstructionKind;
+    var values = kind === "skill" ? state.skills : kind === "tool" ? state.tools : promptDefinitions;
+    return values && values[index] ? instructionRowKey({ kind: kind, value: values[index] }) : "";
   }
 
   function selectInstructionRow(row) {
@@ -261,41 +263,56 @@
     });
   }
 
-  function renderInstructions() {
+  var navigationPane;
+  function libraryNavigation() {
+    if (navigationPane) return navigationPane;
+    navigationPane = RNAssistantNavigationPane.mount({
+      root: $("instructionsList").parentElement, heading: $("libraryNavigationHeading"),
+      tree: $("instructionsList"), search: $("skillSearchInput"), title: "Библиотека",
+      commands: $("libraryCreateCommands"), commandLabel: "Создать в библиотеке"
+    }, { onQuery: function () { renderInstructions(true); },
+      onRetry: function () { libraryError = ""; renderInstructions(); } });
+    RNAssistantDockWorkspace.registerTargetRoute("library-object", {
+      accepts: function (target) { return target.host === state.host && ["prompt", "skill", "tool"].indexOf(target.kind) >= 0 && typeof target.id === "string"; },
+      open: function (target) {
+        var values = target.kind === "prompt" ? promptDefinitions : state[target.kind === "skill" ? "skills" : "tools"];
+        var index = values.findIndex(function (value) { return (target.kind === "prompt" ? value.key : value.Id) === target.id && String(value.Revision || "") === target.revision; });
+        if (index < 0) return false;
+        syncSelectedInstruction(); selectInstructionRow({ kind: target.kind, index: index });
+        if (typeof isPanelActive === "function" && !isPanelActive("instructions")) switchTab("instructions");
+        else renderInstructions();
+        return true;
+      }
+    });
+    return navigationPane;
+  }
+
+  function renderInstructions(navigationOnly) {
     if (typeof isPanelActive === "function" && !isPanelActive("instructions")) return;
     var list = $("instructionsList");
     if (!list) return;
+    var navigation = libraryNavigation();
     var ready = !!state.toolLibraryLoaded && !!state.skillLibraryLoaded;
     ["addToolButton", "addSkillButton"].forEach(function (id) {
       if ($(id)) $(id).disabled = !ready || !!state.bridgeUnavailable;
     });
     if (!ready) {
       loadInstructionLibraries();
-      list.replaceChildren();
-      var status = document.createElement("p");
-      status.className = "muted"; status.setAttribute("role", "status");
-      status.textContent = libraryError || (state.bridgeUnavailable ? "Библиотека недоступна." : "Загрузка библиотеки…");
-      list.appendChild(status);
-      if (libraryError && !state.bridgeUnavailable) {
-        var retry = document.createElement("button");
-        retry.type = "button"; retry.textContent = "Повторить загрузку";
-        retry.onclick = function () { libraryError = ""; renderInstructions(); };
-        list.appendChild(retry);
-      }
-      renderInstructionEditor();
+      navigation.render([], { emptyText: "" });
+      navigation.setState({ busy: !!libraryRead,
+        message: libraryError || (state.bridgeUnavailable ? "Библиотека недоступна." : "Загрузка библиотеки…"),
+        retry: !!libraryError && !state.bridgeUnavailable });
+      if (navigationOnly !== true) renderInstructionEditor();
       return;
     }
     var rows = instructionRows();
+    navigation.setState({});
     if (!rows.length) {
-      window.RNAssistantNavigationTree.render(list, [], { label: "Библиотека", emptyText: "В библиотеке ничего не найдено." });
-      renderInstructionEditor();
+      navigation.render([], { emptyText: "В библиотеке ничего не найдено." });
+      if (navigationOnly !== true) renderInstructionEditor();
       return;
     }
     var key = selectedInstructionKey();
-    if (!rows.some(function (row) { return instructionRowKey(row) === key; })) {
-      selectInstructionRow(rows[0]);
-      key = instructionRowKey(rows[0]);
-    }
     var prompts = rows.filter(function (row) { return row.kind === "prompt"; });
     var skills = rows.filter(function (row) { return row.kind === "skill"; });
     var tools = rows.filter(function (row) { return row.kind === "tool"; });
@@ -308,19 +325,17 @@
       expanded: searching || !(state.collapsedResourceGroups && state.collapsedResourceGroups["library:tools"]),
       children: instructionTreeCategories("tools", tools, key) });
     if (prompts.length) nodes.push(instructionTreeGroup("library:prompts", "Инструкции", prompts, key));
-    window.RNAssistantNavigationTree.render(list, nodes, {
-      label: "Библиотека",
+    navigation.render(nodes, {
       onToggle: function (node, expanded) {
         state.collapsedResourceGroups = state.collapsedResourceGroups || {};
         state.collapsedResourceGroups[node.key] = !expanded;
       },
       onSelect: function (node) {
-        syncSelectedInstruction();
-        selectInstructionRow(node.row);
-        renderInstructions();
+        RNAssistantDockWorkspace.openTarget({ view: "library-object", kind: node.row.kind, host: state.host, revision: String(node.row.value.Revision || ""),
+          id: node.row.kind === "prompt" ? node.row.value.key : node.row.value.Id });
       }
     });
-    renderInstructionEditor();
+    if (navigationOnly !== true) renderInstructionEditor();
   }
 
   function renderInstructionEditor() {
@@ -577,10 +592,7 @@
 
   function bindPromptSettingsActions() {
     mountUnifiedLibrary();
-    $("skillSearchInput").addEventListener("input", function () {
-      syncSelectedInstruction();
-      renderInstructions();
-    });
+    libraryNavigation();
     $("promptEditInput").addEventListener("input", function () {
       syncSelectedPromptFromEditor();
       settingsDirty = true;

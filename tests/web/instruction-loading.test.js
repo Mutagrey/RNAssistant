@@ -16,7 +16,8 @@ function fixture() {
     isPanelActive: () => !!context.visible,
     toolLibraryItemsFromContract: value => value.items,
     skillLibraryItemsFromContract: value => value.items,
-    RNAssistantNavigationTree: { render() {} },
+    RNAssistantNavigationPane: { mount(options, adapter) { context.navAdapter = adapter; return { render() {}, setState(value) { context.navState = value; } }; } },
+    RNAssistantDockWorkspace: { registerTargetRoute() {} },
     send(type) { calls.push(type); return new Promise((resolve, reject) => pending.push({ resolve, reject, type })); }
   });
   context.window = context;
@@ -43,9 +44,8 @@ function fixture() {
     pending[0].resolve({ items: [] }); pending[1].reject(new Error("skills unavailable")); await tick();
     context.renderInstructions();
     assert.equal(calls.length, 2, "failure does not create a render/retry loop");
-    const retry = context.$("instructionsList").children.find(node => node.textContent === "Повторить загрузку");
-    assert.ok(retry, "failed read exposes an explicit retry");
-    retry.onclick();
+    assert.equal(context.navState.retry, true, "failed read exposes an explicit retry");
+    context.navAdapter.onRetry();
     assert.deepEqual(calls, ["getTools", "getSkills", "getSkills"], "retry only reads the failed catalog");
     pending[2].resolve({ items: [] }); await tick();
     assert.equal(context.state.skillLibraryLoaded, true);

@@ -2,48 +2,6 @@ function setMobileNavigationOpen(open) {
   if (window.RNAssistantShellLayout) window.RNAssistantShellLayout.setNavigationOpen(open);
 }
 
-function bindProductNavSearches() {
-  document.querySelectorAll("[data-nav-search-toggle]").forEach(function (button) {
-    var input = document.getElementById(button.dataset.navSearchToggle);
-    var heading = button.closest(".product-search-heading");
-    if (!input || !heading) return;
-    var defaultTitle = button.title || button.getAttribute("aria-label") || "Поиск";
-    function updateQueryState() {
-      var query = input.value.trim();
-      button.classList.toggle("has-search-query", !!query);
-      button.title = query ? "Фильтр: " + input.value + " · изменить поиск" : defaultTitle;
-      button.setAttribute("aria-description", query ? "Активен фильтр: " + input.value : "");
-    }
-    function close(clear) {
-      if (clear && input.value) {
-        input.value = "";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      input.hidden = true;
-      heading.classList.remove("searching");
-      button.setAttribute("aria-expanded", "false");
-      updateQueryState();
-    }
-    button.addEventListener("pointerdown", function (event) {
-      if (document.activeElement === input) event.preventDefault();
-    });
-    button.addEventListener("click", function () {
-      if (input.disabled) { close(true); return; }
-      if (!input.hidden) { close(true); button.focus(); return; }
-      input.hidden = false;
-      heading.classList.add("searching");
-      button.setAttribute("aria-expanded", "true");
-      input.focus();
-    });
-    input.addEventListener("input", updateQueryState);
-    input.addEventListener("blur", function () { close(false); });
-    input.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") return;
-      event.preventDefault(); close(true); button.focus();
-    });
-  });
-}
-
 function switchTab(name, options) {
   var workspaceView = name === "settings" || name === "request" ? name : name === "chat" ? "conversation" : null;
   if (name === "settings" || name === "request") {
@@ -115,7 +73,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var chatScopeIcon = document.getElementById("chatScopeIcon");
   if (chatScopeIcon) chatScopeIcon.innerHTML = window.RNAssistantNavigationTree.icon("office");
   document.querySelector(".content").addEventListener("click", function (event) {
-    var creationMenu = event.target.closest(".product-create-menu, .product-material-menu");
+    var creationMenu = event.target.closest(".product-create-menu");
     if (creationMenu && event.target.closest("button")) {
       creationMenu.removeAttribute("open");
     }
@@ -156,7 +114,7 @@ document.addEventListener("DOMContentLoaded", function () {
   bindTrajectoryActions();
   bindToolActions();
   bindSkillActions();
-  bindProductNavSearches();
+  RNAssistantNavigationPane.bindSearches(document);
   if (typeof initializeSplitPanes === "function") initializeSplitPanes();
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.bind();
   window.RNAssistantDockWorkspace.bind();

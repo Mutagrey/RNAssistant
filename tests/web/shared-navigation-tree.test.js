@@ -35,9 +35,38 @@ const root=path.resolve(__dirname,'../..');
   await standalone.locator('[data-operation-part=cancel]').click();assert.equal(await standalone.evaluate(()=>calls.cancel),1);
   await standalone.evaluate(()=>{operation.dispose();document.querySelector('[data-operation-part=cancel]').click();RNAssistantNavigationTree.unmount(document.getElementById('tree'));document.querySelector('[data-tree-select=c]').click();});
   assert.deepEqual(await standalone.evaluate(()=>[calls.cancel,calls.select]),[1,1],'dispose releases component callbacks');
+  // A third, VBA-shaped adapter proves the pane has no source-name branches or host dependency.
+  await standalone.addScriptTag({path:path.join(root,'web/js/app-navigation-pane.js')});
+  await standalone.evaluate(()=>{
+   const nav=document.createElement('section');nav.id='nav';nav.style.width='318px';
+   nav.innerHTML='<div id="paneHeading"></div><input id="paneQuery" aria-label="Поиск модулей" placeholder="Найти…"><div id="paneCommands" hidden><button>Добавить модуль</button></div><div id="paneTree" style="height:160px;overflow:auto"></div>';
+   document.body.appendChild(nav);calls.query=0;calls.retry=0;calls.more=0;
+   const options={root:nav,heading:nav.querySelector('#paneHeading'),search:nav.querySelector('input'),tree:nav.querySelector('#paneTree'),commands:nav.querySelector('#paneCommands'),title:'Проект с очень длинным названием',commandLabel:'Создать модуль'};
+   const adapter={onQuery:()=>calls.query++,onRetry:()=>calls.retry++,onMore:()=>calls.more++};
+   window.pane=RNAssistantNavigationPane.mount(options,adapter);
+   if(pane!==RNAssistantNavigationPane.mount(options,adapter))throw Error('duplicate pane');
+   RNAssistantNavigationPane.bindSearches(document);
+   pane.render([{key:'project',kind:'group',title:'VBAProject',expanded:true,children:[{key:'module',kind:'leaf',title:'Модуль с длинным названием',selected:true}]}],{onSelect:()=>calls.select++});pane.setState({});
+  });
+  await standalone.getByRole('button',{name:'Поиск модулей',exact:true}).click();
+  await standalone.locator('#paneQuery').fill('Модуль');
+  await standalone.keyboard.press('Escape');
+  assert.equal(await standalone.evaluate(()=>calls.query),2,'one query handler even after repeat bind; Escape clears filter');
+  assert.equal(await standalone.locator('#paneQuery').isVisible(),false);
+  assert.equal(await standalone.evaluate(()=>document.activeElement.getAttribute('aria-label')),'Поиск модулей');
+  await standalone.locator('[data-tree-key=module]').focus();await standalone.keyboard.press('Enter');
+  assert.equal(await standalone.evaluate(()=>calls.select),2,'keyboard opens the adapter target');
+  await standalone.evaluate(()=>pane.setState({message:'Модули недоступны',retry:true,more:true}));
+  await standalone.getByRole('button',{name:'Повторить загрузку'}).click();await standalone.getByRole('button',{name:'Показать ещё',exact:true}).click();
+  assert.deepEqual(await standalone.evaluate(()=>[calls.retry,calls.more]),[1,1]);
+  await standalone.evaluate(()=>{pane.setState({busy:true,message:'Загрузка…',retry:true,more:true});});
+  assert.equal(await standalone.getByRole('button',{name:'Повторить загрузку'}).isDisabled(),true);
+  await standalone.evaluate(()=>{pane.dispose();document.querySelector('#paneQuery').dispatchEvent(new Event('input'));});
+  assert.equal(await standalone.evaluate(()=>calls.query),2,'dispose releases query callbacks');
   await product.goto(address+'preview/web/?scenario=ready');await product.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
-  for(const [section,selector] of [['instructions','#instructionsList'],['vba','#vbaModuleList'],['settings','#settingsNavTree']]){
+  for(const [section,selector] of [['instructions','#instructionsList'],['artifacts','#htmlWorkspaceTree'],['vba','#vbaModuleList'],['settings','#settingsNavTree']]){
    await product.locator(section==='instructions'?'#libraryRootTab':'.rail-button[data-tab="'+section+'"]').click();
+   await product.waitForFunction(selector=>document.querySelector(selector)?.getAttribute('role')==='tree',selector);
    assert.equal(await product.locator(selector).getAttribute('role'),'tree');
    const heading=product.locator(section==='settings'?'.settings-nav-heading':'.panel.active .global-nav .product-nav-heading').first();
    assert.equal((await heading.boundingBox()).height,41,'shared sidebar heading: '+section);
@@ -45,6 +74,16 @@ const root=path.resolve(__dirname,'../..');
    const geometry=await product.locator('.panel.active .global-nav').evaluate(n=>({edge:n.getBoundingClientRect().right,divider:n.nextElementSibling.getBoundingClientRect().left,width:n.nextElementSibling.getBoundingClientRect().width}));
    assert.equal(geometry.divider,geometry.edge,'no legacy grid gap beside navigation: '+section);assert.equal(geometry.width,4);
   }
+  await product.locator('#libraryRootTab').click();
+  await product.locator('#instructionsList [data-tree-key="skill:excel.sales_analysis"]').click();
+  assert.equal(await product.locator('#skillTitle').textContent(),'Анализ продаж');
+  assert.equal(await product.evaluate(()=>RNAssistantDockWorkspace.openTarget({view:'library-object',kind:'skill',id:'excel.sales_analysis',host:'other',revision:''})),false,'wrong host cannot retarget a library object');
+  const original=await product.evaluate(()=>[state.selectedInstructionKind,state.selectedSkillIndex,state.selectedToolIndex,state.selectedPromptIndex]);
+  await product.getByRole('button',{name:'Поиск в библиотеке',exact:true}).click();
+  await product.locator('#skillSearchInput').fill('несуществующий объект');
+  assert.deepEqual(await product.evaluate(()=>[state.selectedInstructionKind,state.selectedSkillIndex,state.selectedToolIndex,state.selectedPromptIndex]),original,'filter preserves the open editor');
+  await product.keyboard.press('Escape');
+  await product.locator('.rail-button[data-tab="settings"]').click();
   const rowStyle=(page,selector)=>page.locator(selector).first().evaluate(n=>{const s=getComputedStyle(n);return[s.minHeight,s.borderRadius,s.padding,s.fontSize,s.lineHeight];});
   assert.deepEqual(await rowStyle(product,'#settingsNavTree .navigation-tree-row'),await rowStyle(standalone,'#tree [data-tree-key=c] > .navigation-tree-row'));
   for(const theme of ['light','dark']){

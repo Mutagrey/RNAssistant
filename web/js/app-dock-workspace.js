@@ -13,6 +13,18 @@
     request: { title: "Запрос модели", icon: "code" },
     settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
+  function viewIds() { return Object.keys(views).filter(function (id) { return !views[id].targetRoute; }); }
+  // Temporary section adapters live in this catalog, not a second navigation registry.
+  // S3b.2/S4 replace their delivery with independently mounted object views.
+  function registerTargetRoute(id, route) {
+    if (views[id]) throw new Error("Workspace route already registered: " + id);
+    views[id] = { targetRoute: true, accepts: route.accepts, open: route.open };
+  }
+  function openTarget(target) {
+    var view = target && views[target.view];
+    if (!view || !view.targetRoute || !view.accepts(target)) return false;
+    return view.open(Object.freeze(Object.assign({}, target)));
+  }
   function element(tag, className, label) {
     var node = document.createElement(tag); node.className = className || "";
     if (label) node.textContent = label;
@@ -73,7 +85,7 @@
   function createComponent(options) {
     if (options.name === "chooser") return createChooser(options.id);
     var id = options.name, content = element("div", "dock-view");
-    if (!views[id]) throw new Error("Unknown workspace view: " + id);
+    if (!views[id] || views[id].targetRoute) throw new Error("Unknown workspace view: " + id);
     var visibility;
     return {
       element: content,
@@ -93,7 +105,7 @@
       renderer: "always", minimumWidth: 150, minimumHeight: 120, position: position });
   }
   function show(id, group, direction) {
-    if (!api || !views[id]) return;
+    if (!api || !views[id] || views[id].targetRoute) return;
     if (id === "inspector") RNAssistantChatInspector.prepareOpen();
     var item = panel(id);
     // The gear opens in the main group; repeat clicks activate without relocating it.
@@ -162,7 +174,7 @@
     body.append(element("h2", "", "Что открыть?"), input, list, empty);
     body.appendChild(element("p", "", "Открытый экран будет перенесён сюда. Чат общий для выбранного документа или проекта."));
     root.appendChild(body); root.dataset.chooserId = id;
-    Object.keys(views).forEach(function (viewId) {
+    viewIds().forEach(function (viewId) {
       var row = button(views[viewId].title, views[viewId].icon, function () {
         var chooserPanel = panel(id); if (!chooserPanel) return;
         show(viewId, chooserPanel.group, "within"); chooserPanel.api.close(); changed();
@@ -227,7 +239,7 @@
   }
   function validateLayout(layout) {
     if (!layout || !layout.grid || !layout.panels) return false;
-    return Object.keys(layout.panels).every(function (id) { return views[id] && layout.panels[id].contentComponent === id || /^choose-\d+$/.test(id) && layout.panels[id].contentComponent === "chooser"; });
+    return Object.keys(layout.panels).every(function (id) { return views[id] && !views[id].targetRoute && layout.panels[id].contentComponent === id || /^choose-\d+$/.test(id) && layout.panels[id].contentComponent === "chooser"; });
   }
   function reset() {
     if (!canClose(api.panels)) return;
@@ -302,7 +314,7 @@
       defaultTabComponent: "guarded", createTabComponent: createTab,
       createWatermarkComponent: function () {
         var empty = element("div", "dock-empty"); empty.appendChild(element("p", "", "Выберите экран"));
-        Object.keys(views).forEach(function (id) { var b = button(views[id].title, views[id].icon, function () { show(id); }); b.appendChild(element("span", "", views[id].title)); empty.appendChild(b); });
+        viewIds().forEach(function (id) { var b = button(views[id].title, views[id].icon, function () { show(id); }); b.appendChild(element("span", "", views[id].title)); empty.appendChild(b); });
         return { element: empty, init: function () {} };
       }
     });
@@ -315,7 +327,7 @@
     api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
       panels: function (trigger) {
-        RNAssistantActionMenu.open(trigger, Object.keys(views).map(function (id) {
+        RNAssistantActionMenu.open(trigger, viewIds().map(function (id) {
           return { label: views[id].title, icon: views[id].icon, status: panel(id) ? "Открыт" : "", onSelect: function () { show(id); } };
         }));
       },
@@ -353,6 +365,7 @@
     sync();
   }
   window.RNAssistantDockWorkspace = {
+    registerTargetRoute: registerTargetRoute, openTarget: openTarget,
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext,
     isVisible: visible,
     setTitle: function (id, title) { var item = panel(id); if (item && item.title !== title) item.api.setTitle(title); },

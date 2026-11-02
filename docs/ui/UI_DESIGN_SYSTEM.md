@@ -282,6 +282,20 @@ Production JSON (включая меню узла), журнал/связи со
 
 ## Контракт компонента и ревью
 
+### NavigationPane S3b.1 — production, In Review
+
+[NavigationPane](../../web/js/app-navigation-pane.js) объединяет общий header,
+поиск, кнопки команд, footer состояния и NavigationTree; source adapters передают
+данные и callbacks. Header — 41 px, controls и focus/selected/menu — существующие
+tokens/ActionMenu. Общие title ellipsis и search styles работают без Shell.
+Отдельные Materials header/menu CSS и перенос одного menu DOM между sidebar и
+каталогом удалены: оба trigger используют одни command handlers через ActionMenu.
+Scroll/keyboard/expanded остаются у NavigationTree и source adapter. Повторный
+mount не создаёт обработчики; dispose снимает listeners/timer/tree binding.
+
+Проверены реальные consumers и независимый VBA-shaped fixture без Office/bridge;
+[ревью и ограничения](UI_MIGRATION_PLAN.md#s3b1-общая-навигация--in-review-2026-11-02).
+
 ### Общая панель навигации и object views — Proposed, 2026-11-02
 
 Материалы/Библиотека/будущие Файлы переиспользуют один каркас панели: source/scope,

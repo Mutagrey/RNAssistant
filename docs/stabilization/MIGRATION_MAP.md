@@ -1,5 +1,17 @@
 # Current-to-target migration map
 
+## Navigation target routes S3b.1 — 2026-11-02
+
+Owner: Web Library / ArtifactCatalog / DockWorkspace. `library-object` и `material`
+зарегистрированы в одном существующем views catalog как temporary section routes.
+Они валидируют явный target и доставляют его старому singleton presentation owner;
+не копируют DOM и не создают второй registry. Общий Pane не зависит от этих routes.
+Removal gate: S3b.2 — material view factory принимает exact target, scoped reads,
+close/dispose и сохраняет объект при смене чата; S4 — scoped Library editors с
+реальными dirty/save guards. Тогда удалить section adapters/заменённые singleton
+selection paths, не оставлять fallback. VBA включается тем же Pane adapter в S4.
+
+
 ## Conversation composer S2b.2 — 2026-11-02
 
 Owner: Web conversation presentation, `app-chat-composer.js`. Общий controller

@@ -387,10 +387,8 @@
   }
 }
 /* One artifact tree and one adjacent viewer/editor. */
-.artifact-catalog-toolbar, .artifact-catalog-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
-.artifact-catalog-toolbar { padding:8px 12px; border-bottom:1px solid var(--line); background:var(--panel); }
-.artifact-catalog-toolbar label { display:flex; align-items:center; gap:8px; font-weight:500; }
-.artifact-catalog-toolbar select, #artifactCatalogPreviewBody select {
+.artifact-catalog-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+#artifactCatalogPreviewBody select {
   min-width:0; max-width:100%; border:1px solid var(--line); border-radius:var(--control-radius); padding:5px 8px; color:var(--text); background:var(--panel);
 }
 .artifact-workspace-content { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
@@ -412,15 +410,13 @@
 #artifactCatalogPreviewBody iframe { width:100%; flex:1; min-height:240px; border:0; background:white; }
 #artifactCatalogPreviewBody img { max-width:100%; max-height:100%; object-fit:contain; }
 #artifactCatalogPreviewBody pre { margin:0; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; background:var(--code); border:1px solid var(--code-border); border-radius:6px; padding:12px; }
-.artifact-tree-footer { padding:6px 0; }
 #artifactCatalogStatus { color:var(--muted); font-size:12px; margin:0; overflow-wrap:anywhere; }
-#artifactCatalog [hidden], .artifact-tree-footer [hidden] { display:none; }
+#artifactCatalog [hidden] { display:none; }
 #htmlWorkspaceSidebar { grid-template-rows:auto auto minmax(0,1fr) auto; }
 @media (max-width:560px) {
   #htmlWorkspaceLayout .html-workspace-tree { max-height:none; }
   #htmlWorkspaceSidebar { padding:6px 4px; }
   #htmlWorkspaceSidebar .tool-list-controls { gap:4px; }
-  .artifact-catalog-toolbar { gap:6px; }
   .artifact-catalog-actions { padding:6px; gap:4px; }
   .artifact-catalog-preview { padding:8px; }
 }
