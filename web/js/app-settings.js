@@ -3,6 +3,26 @@ var settingsFormRevision = 0;
 var settingsSaveInProgress = false;
 var agentProtocolExampleViewers = {};
 
+// Placement retains this form; its draft/save owner stays here, never in Dockview.
+var RNAssistantSettingsView = {
+  activate: function () {
+    if (!settingsDirty && !settingsSaveInProgress) renderSettings();
+    loadSettingsModelCatalogIfNeeded();
+  },
+  deactivate: function () {
+    // Keep edited controls, but cancel form-derived catalog requests on leaving the view.
+    // A later activation can reload that preview from the same unapplied inputs.
+    discardModelCatalogPreview();
+  },
+  canClose: function () {
+    if (settingsSaveInProgress) {
+      RNAssistantShellLayout.notice("Настройки сохраняются. Дождитесь результата.");
+      return false;
+    }
+    return !settingsDirty || window.confirm("Закрыть вкладку настроек?\n\nНесохранённые правки останутся до перезапуска приложения. Чтобы применить их сейчас, нажмите «Отмена», затем «Применить».");
+  }
+};
+
 var modelSettingsDefaults = {
   model: "",
   reasoningRequestMode: "chat_template_kwargs",
@@ -311,7 +331,9 @@ function formatAppVersionLabel(value) {
   return identified[3] ? label + " · " + identified[3].toLowerCase() : label;
 }
 
-function renderSettings() {
+function renderSettings(options) {
+  // Host/chat refreshes may arrive while this global view has an edited form.
+  if ((settingsDirty || settingsSaveInProgress) && !(options && options.committed)) return;
   var s = state.settings || {};
   applyUiFontScale(s);
   var uiTheme = applyUiTheme(s);
@@ -471,7 +493,7 @@ async function persistSettingsFromForm() {
     state.hasHistorySecret = !!(response.hasHistorySecret || response.HasHistorySecret);
     if ($("apiKeyInput").value === apiKey) $("apiKeyInput").value = "";
     if ($("historySecretInput").value === historySecret) $("historySecretInput").value = "";
-    if (submittedRevision === settingsFormRevision) renderSettings();
+    if (submittedRevision === settingsFormRevision) renderSettings({ committed: true });
     else {
       // A confirmed save applies its captured values, not edits made while it was in flight.
       if (typeof renderPromptSettings === "function") renderPromptSettings(state.prompts);
@@ -564,7 +586,7 @@ function bindSettingsActions() {
     Array.prototype.slice.call(document.querySelectorAll(".settings-page")).forEach(function (item) {
       item.classList.toggle("active", item.getAttribute("data-settings-page") === page);
     });
-    var pages = document.querySelector("#tab-settings .settings-pages");
+    var pages = document.querySelector("#settingsView .settings-pages");
     if (pages) pages.scrollTop = 0;
     renderSettingsNavigation();
     updateSettingsSaveButton();
@@ -575,6 +597,7 @@ function bindSettingsActions() {
     var query = navSearch.value.trim().toLocaleLowerCase("ru");
     var active = document.querySelector(".settings-page.active");
     var selectedPage = active && active.getAttribute("data-settings-page");
+    $("settingsPageSelect").value = selectedPage;
     var nodes = navItems.filter(function (item) { return !query || item[1].toLocaleLowerCase("ru").includes(query); })
       .map(function (item) {
         return {
@@ -587,6 +610,12 @@ function bindSettingsActions() {
       label: "Настройки", onSelect: function (node) { selectSettingsPage(node.page); }
     });
   }
+
+  navItems.forEach(function (item) {
+    var option = document.createElement("option"); option.value = item[0]; option.textContent = item[1];
+    $("settingsPageSelect").appendChild(option);
+  });
+  $("settingsPageSelect").addEventListener("change", function () { selectSettingsPage(this.value); });
 
   var railPopovers = window.RNAssistantRailPopovers;
   if (railPopovers) {
@@ -659,10 +688,10 @@ function bindSettingsActions() {
     }
   });
 
-  Array.prototype.slice.call(document.querySelectorAll("#tab-settings input, #tab-settings textarea, #tab-settings select")).forEach(function (control) {
+  Array.prototype.slice.call(document.querySelectorAll("#settingsView input, #settingsView textarea, #settingsView select")).forEach(function (control) {
     control.addEventListener(control.type === "checkbox" || control.tagName === "SELECT" ? "change" : "input", function () {
       if (control.closest(".diagnostics-tab-panel")) return;
-      if (control.id === "promptSearchInput" || control.id === "settingsNavSearch" || control.id === "modelCapabilitySearch") {
+      if (control.id === "promptSearchInput" || control.id === "settingsNavSearch" || control.id === "modelCapabilitySearch" || control.id === "settingsPageSelect") {
         return;
       }
       markSettingsDirty();
@@ -700,6 +729,7 @@ function updateSettingsSaveButton() {
     return;
   }
 
+  $("settingsSaveStatus").textContent = settingsSaveInProgress ? "Применение настроек…" : "Есть неприменённые изменения";
   row.hidden = !visible;
   button.hidden = !visible;
   button.disabled = !visible || settingsSaveInProgress;

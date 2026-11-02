@@ -19,7 +19,8 @@
 | «Закрыть группу» действует только на эту группу | Approved |
 | Вид Dockview до A/B, возможность выбрать тему/акцент | Approved — направление |
 | Крестики и split icons меньше, область нажатия остаётся удобной | Approved — направление; точные размеры In Review |
-| Имя документа в topbar, конкретная компоновка настроек, responsive thresholds | In Review |
+| Настройки вкладкой Dockview, gear снизу слева, сохранение hover menus | Approved — направление S1c; конкретные вид и responsive In Review |
+| Имя документа в topbar, responsive thresholds | In Review |
 | P3 production-чат в Dockview без повторного заголовка | In Review; iframe только Demo evidence |
 | S1a: общие подписи ввода, edit/reply/stop, reasoning и окно истории Office/Workspace/plugin | Реализовано, детали presentation In Review; не полная унификация capabilities |
 
@@ -41,7 +42,7 @@ P1/P2 (`95afa3b8`, `3e2433c9`), после возврата оформления
 
 - Верхняя полоса без бренда: слева документ/проект или название текущего раздела;
   справа компактная группа navigation / Inspector / maximize, затем «Панели»,
-  «Компоновка», настройки. Отступы и иконки соответствуют reference.
+  «Компоновка». Настройки по согласованию S1c перенесены вниз rail, диагностика над ними. Отступы и иконки соответствуют reference.
 - Узкая вертикальная полоса разделов и отдельное дерево слева. У активного раздела
   спокойная заливка и тонкий акцентный маркер. Дерево не является Dockview-группой.
 - Светлая нейтральная подложка, небольшие отступы вокруг рабочей области и между
@@ -147,6 +148,21 @@ CSS owner; sidebar headers используют общую геометрию. C
 не объявляется завершённым. Сравнение с Demo и снимки — в
 [Migration Plan](UI_MIGRATION_PLAN.md#уточнение-s1b-общая-геометрия-после-визуального-ревью).
 
+## Settings и hover menus S1c
+
+Направление согласовано; конкретный результат **In Review**. Gear сохраняет общий
+размер/состояния rail button. Hover cards используют поверхность/строки того же
+menu component, общие spacing, icon, radius, shadow и theme tokens. У tooltip
+только подпись; у интерактивного меню есть заголовок и действия. Версия остаётся
+внизу меню настроек. Отдельные размеры plugin/settings menus удалены.
+
+Категории Settings используют NavigationTree и существующий поиск. Компактный
+select потребляет те же nav items и общий `.rna-form-control`, без второй карты
+разделов. Responsive зависит от контейнера Dockview. Footer «Применить» остаётся
+видимым при dirty/saving, не перекрывает заголовок или поля. Геометрия содержимого
+принадлежит `app-product-screens.css`; Shell не управляет внутренней навигацией.
+[Снимок с меню](review/s1c-settings-hover.png), [узкая группа](review/s1c-settings-narrow.png).
+
 ## Каталог существующих компонентов
 
 L1 = host-independent component; L2 = browser requirements; L3 = host integration.
@@ -156,7 +172,7 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 | Компонент / источник | Повторное использование и граница | Состояния / lifecycle |
 |---|---|---|
 | [ShellLayout](../../web/js/app-layout.js) | Shell chrome/navigation; renderWorkspace получает context/layout snapshot, bindWorkspace — callbacks трёх workspace-команд; без mirror store | navigation state, responsive, topbar/footer, notice cleanup |
-| [Dock Workspace](../../web/js/app-dock-workspace.js) | Один Dockview; descriptors conversation/inspector и временный chooser; placement и domain-view adapters, не chat store | move/resize/close/restore, narrow, pending layout save, DOM lifecycle |
+| [Dock Workspace](../../web/js/app-dock-workspace.js) | Один Dockview; descriptors conversation/inspector/settings и временный chooser; placement и domain-view adapters, не chat store | move/resize/close/restore, narrow, pending layout save, DOM lifecycle |
 | [Icons](../../web/js/app-icons.js), [accent](../../web/js/app-accent.js) | Общие уже сейчас; кандидаты L1 без Shell | Theme/size/accessible label у consumer; shared catalog |
 | Buttons/toolbar/forms/menu CSS: app-product-components, app-theme, app-composer | Сохранять привычные controls; извлечь затронутые rules, не копировать по views | default/hover/focus/pressed/disabled/invalid/loading |
 | [NavigationTree](../../web/js/app-navigation-tree.js) | Реальный общий renderer, options/callbacks + icons; L1 candidate | selected/expanded/filter/keyboard; unmount освобождает state |

@@ -24,9 +24,9 @@ function fixture(loadPrompts = true) {
   const elements = new Map(), calls = [], errors = [], downloads = new Map(), uploads = new Map(), trees = []; let next = 1, revision = 1;
   const get = id => { if (!ids.has(id)) return null; if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id); };
   const bodies = Object.fromEntries(keys.map(key => [key, " custom " + key + " "]));
-  const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, Blob, Response, setTimeout, clearTimeout, crypto: crypto.webcrypto,
+  const context = vm.createContext({ AbortController, TextEncoder, TextDecoder, Uint8Array, Blob, Response, setTimeout, clearTimeout, crypto: crypto.webcrypto, addEventListener() {},
     state: { settings: { AgentPromptSchemaVersion: 0 }, prompts: metadata(), activeChatId: "chat", promptDrafts: {}, selectedInstructionKind: "prompt", selectedPromptIndex: 0, skills: [], tools: [], toolLibraryLoaded: true, skillLibraryLoaded: true },
-    $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {},
+    $: get, document: { querySelectorAll: () => [], querySelector: () => null, addEventListener() {}, createElement: () => new Element(),
       documentElement: { getAttribute: () => "light", setAttribute() {}, style: { setProperty() {} } } },
     isPanelActive: () => !!context.libraryVisible, markdown: text => text,
     RNAssistantNavigationTree: { icon: name => `<svg data-icon="${name}"></svg>`, render: (root, nodes) => { trees.push(nodes); root.treeNodes = nodes; } },

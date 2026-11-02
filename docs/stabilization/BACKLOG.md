@@ -60,6 +60,17 @@ assertion с действующим guard-контрактом отдельно;
 новая возможность требует явной задачи, scope и owner; дефекты работающей системы
 приоритетнее расширения без конкретного пользовательского результата.
 
+## Settings: model capability draft boundary — 2026-11-02
+
+Owner: Web models/Settings; следующий предметный срез — S2a capabilities.
+Source audit S1c: `setStoredModelCapabilityField`, `setModelCapabilityOverride` и
+attachment priority в `app-model-capabilities.js` уже редактируют in-memory
+`state.settings` до «Применить». Это старый path, не новый store S1c; источник
+риска при внешнем refresh/позднем save и разделении applied/draft capabilities.
+Нужно локально отделить этот editor draft у текущего owner, проверить save race,
+ошибку и cancel; не создавать вторую копию Settings UI. S1c сохраняет текущую
+форму и проверяет form revision, но не объявляет этот старый boundary исправленным.
+
 ## Settings navigation fixture: версия в hover — 2026-10-30
 
 Owner: Web settings navigation tests. `settings-navigation-layout.test.js:79`
@@ -73,6 +84,10 @@ Owner: Web settings navigation tests. `settings-navigation-layout.test.js:79`
 Настройки и их список этим исправлением Shell не менялись. Современный сценарий
 выбора страницы и overlay dismissal покрыт `shell-navigation.test.js`; старый fixture
 нужно привести к текущей структуре до дальнейшего использования как gate.
+
+Закрыто в S1c 2026-11-02: fixture обновлён под шесть разделов, текущий NavigationTree,
+отдельную строку версии и Settings Dockview. Проходит вместе с hover/close/save
+проверками; прежний UI ради stale assertions не восстанавливался.
 
 ## Интеграционные fixtures после перехода на Core tools — 2026-10-28
 

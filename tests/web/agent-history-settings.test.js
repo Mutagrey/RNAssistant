@@ -9,16 +9,16 @@ const { chromium } = require("playwright");
   const browser = await chromium.launch({ headless: true,
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   try {
-    const page = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto("file://" + path.resolve(__dirname, "../../web/index.html"));
     await page.locator('.rail-button[data-tab="settings"]').click();
     await page.evaluate(() => {
       state.settings = { AgentResponseMode: "json_object", ToolResultRole: "tool" };
-      renderSettings();
+      renderSettings({ committed: true });
     });
-    await page.locator('#settingsNavTree .navigation-tree-label[data-settings-page="agent"]').click();
+    await page.locator('#settingsNavTree [data-tree-key="settings:agent"] .navigation-tree-label').click();
     assert.equal(await page.locator('#agentHistoryFormatInput').inputValue(), 'native_tools', 'saved tool history is preserved');
     assert.equal(await page.locator('#toolResultRoleInput').isDisabled(), true);
     assert.equal(await page.locator('#toolResultRoleInput').inputValue(), 'tool', 'fixed native role is explicit');
@@ -38,7 +38,7 @@ const { chromium } = require("playwright");
           assert.equal(saved.AgentResponseMode, response);
           assert.equal(saved.SystemPromptRole, instruction);
           assert.equal(saved.ToolResultRole, role);
-          await page.evaluate(settings => { state.settings = settings; renderSettings(); }, saved);
+          await page.evaluate(settings => { state.settings = settings; renderSettings({ committed: true }); }, saved);
           assert.equal(await page.locator('#agentHistoryFormatInput').inputValue(), history, 'save/reopen restores history choice');
           assert.equal(await page.locator('#toolResultRoleInput').inputValue(), role);
           assert.equal(await page.locator('#toolResultRoleInput').isDisabled(), role === 'tool');
@@ -74,7 +74,7 @@ const { chromium } = require("playwright");
     await page.locator('#agentProtocolExample > summary').click();
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => applyUiTheme({ UiTheme: theme }), theme);
-      for (const width of [1100, 740, 390, 320]) {
+      for (const width of [1440, 1100, 740, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         for (const history of ['native_tools', 'json_content']) {
           await page.locator('#agentHistoryFormatInput').selectOption(history);
@@ -89,6 +89,7 @@ const { chromium } = require("playwright");
                 const label = control.parentElement.querySelector('span').getBoundingClientRect();
                 return { id, top: rect.top, left: rect.left, right: rect.right, gap: rect.top - label.bottom };
               }),
+              wide: document.getElementById("settingsView").clientWidth > 640 && innerWidth > 760,
               left: bounds.left, right: bounds.right
             };
           });
@@ -97,7 +98,7 @@ const { chromium } = require("playwright");
             assert.ok(field.left >= geometry.left - 1 && field.right <= geometry.right + 1, `${width}: ${field.id} stays inside the form`);
             assert.ok(field.gap >= 4 && field.gap <= 6, `${width}: ${field.id} label stays next to its control`);
           }
-          if (width === 1100) {
+          if (geometry.wide) {
             assert.ok(Math.abs(geometry.fields[0].top - geometry.fields[1].top) <= 1, 'response/history controls share a baseline');
             assert.equal(geometry.fields[1].left, geometry.fields[2].left, 'result role belongs to the history column');
           }
@@ -120,7 +121,7 @@ const { chromium } = require("playwright");
     await page.setViewportSize({ width: 1100, height: 1000 });
     await page.evaluate(() => {
       state.settings = { AgentResponseMode: 'json_object', ToolResultRole: 'user', SystemPromptRole: 'developer' };
-      renderSettings();
+      renderSettings({ committed: true });
       loadModelCatalog = () => Promise.resolve(false);
       saveSettingsWithPromptChanges = async settings => {
         await new Promise(resolve => { window.releaseSettingsSave = resolve; });

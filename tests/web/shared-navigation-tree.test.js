@@ -39,8 +39,9 @@ const root=path.resolve(__dirname,'../..');
   for(const [section,selector] of [['instructions','#instructionsList'],['vba','#vbaModuleList'],['settings','#settingsNavTree']]){
    await product.locator(section==='instructions'?'#libraryRootTab':'.rail-button[data-tab="'+section+'"]').click();
    assert.equal(await product.locator(selector).getAttribute('role'),'tree');
-   const heading=product.locator('.panel.active .global-nav :is(.product-nav-heading,.settings-nav-heading)').first();
+   const heading=product.locator(section==='settings'?'.settings-nav-heading':'.panel.active .global-nav .product-nav-heading').first();
    assert.equal((await heading.boundingBox()).height,41,'shared sidebar heading: '+section);
+   if(section==='settings') continue; // View-local categories no longer have a Shell splitter.
    const geometry=await product.locator('.panel.active .global-nav').evaluate(n=>({edge:n.getBoundingClientRect().right,divider:n.nextElementSibling.getBoundingClientRect().left,width:n.nextElementSibling.getBoundingClientRect().width}));
    assert.equal(geometry.divider,geometry.edge,'no legacy grid gap beside navigation: '+section);assert.equal(geometry.width,4);
   }

@@ -48,7 +48,8 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .shell .form-grid label { color: var(--ink); font-size: 12px; font-weight: 500; }
 .shell .form-grid label > input:not([type="checkbox"]),
 .shell .form-grid label > select,
-.shell .form-grid label > textarea { min-height: 36px; border-color: var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font-size: 13px; }
+.shell .form-grid label > textarea,
+.rna-form-control { min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font: 400 13px var(--font); }
 .shell .form-grid label > small { color: var(--ink-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
 .rna-skill-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
 .rna-skill-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
@@ -105,10 +106,10 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .rna-action-menu > .rna-action-menu-trigger:hover, .rna-action-menu[open] > .rna-action-menu-trigger { background: var(--surface-hover); color: var(--ink); }
 .rna-action-menu-trigger svg, .rna-action-menu-body > button svg { flex: 0 0 auto; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 .rna-action-menu-body { display: grid; gap: 2px; }
-.rna-action-menu-popup { position: fixed; z-index: 100; width: var(--menu-width); max-width: calc(100vw - 2 * var(--space-2)); max-height: calc(100dvh - 2 * var(--space-2)); overflow: auto; gap: 0; padding: var(--menu-padding); border: 1px solid var(--line); border-radius: var(--menu-radius); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font: var(--text-sm)/1.5 var(--font); }
-.rna-action-menu-popup > button { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); width: 100%; min-height: var(--tree-row-height); padding: var(--menu-row-padding); border: 0; border-radius: var(--menu-radius); background: transparent; color: inherit; font: inherit; text-align: left; }
-.rna-action-menu-popup > button:hover { background: var(--surface-hover); }
-.rna-action-menu-popup > button svg { width: var(--shell-icon); height: var(--shell-icon); flex: none; }
+:is(.rna-action-menu-popup, .rail-hover-card) { position: fixed; z-index: 100; width: var(--menu-width); max-width: calc(100vw - 2 * var(--space-2)); max-height: calc(100dvh - 2 * var(--space-2)); overflow: auto; gap: 0; padding: var(--menu-padding); border: 1px solid var(--line); border-radius: var(--menu-radius); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font: var(--text-sm)/1.5 var(--font); }
+:is(.rna-action-menu-popup > button, .rail-hover-body > button) { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); width: 100%; min-height: var(--tree-row-height); padding: var(--menu-row-padding); border: 0; border-radius: var(--menu-radius); background: transparent; color: inherit; font: inherit; text-align: left; }
+:is(.rna-action-menu-popup > button, .rail-hover-body > button):is(:hover, :focus-visible) { background: var(--surface-hover); }
+:is(.rna-action-menu-popup > button, .rail-hover-body > button) svg { width: var(--shell-icon); height: var(--shell-icon); flex: none; }
 .rna-action-menu-popup small { margin-left: auto; color: var(--accent); font-size: var(--text-xs); }
 .rna-action-menu-body > button:disabled { opacity: .5; cursor: default; }
 .rna-action-menu-body > button:disabled:hover { background: transparent; }
@@ -240,3 +241,15 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .rna-history-summary::-webkit-details-marker { display: none; }
 .rna-history-summary:hover { background: var(--surface-hover); color: var(--ink); }
 .rna-history-summary:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* RailPopovers owns hover/focus behavior; the menu surface and rows are shared above. */
+.rail-hover-card[hidden] { display: none; }
+.rail-hover-card[role="tooltip"] { width: max-content; }
+.rail-hover-title { display: block; padding: var(--space-1) var(--space-2); color: var(--ink-muted); font-size: var(--text-sm); font-weight: 400; overflow-wrap: anywhere; }
+.rail-hover-card[role="tooltip"] .rail-hover-title { color: var(--ink); }
+.rail-hover-body { display: grid; }
+.rail-hover-body:empty { display: none; }
+.rail-hover-body button span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.rail-hover-body .rail-hover-danger { color: var(--danger); }
+.rail-hover-version, .rail-hover-empty { display: block; margin: 0; padding: var(--space-1) var(--space-2); color: var(--ink-muted); font-size: var(--text-xs); font-weight: 400; overflow-wrap: anywhere; }
+.rail-hover-separator { display: block; height: 1px; margin: var(--space-1) var(--space-2); background: var(--line); }

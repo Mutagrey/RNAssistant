@@ -29,8 +29,8 @@
   <link rel="stylesheet" href="css/app-composer.css?v=shared-chat-20261102">
   <link rel="stylesheet" href="css/app-reasoning.css?v=accent-chat-20261012-1">
   <link rel="stylesheet" href="css/app-context-chips.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="css/app-models.css?v=shared-palette-20261025-2">
-  <link rel="stylesheet" href="css/app-workspace.css?v=diagnostics-20261101">
+  <link rel="stylesheet" href="css/app-models.css?v=settings-dock-20261102">
+  <link rel="stylesheet" href="css/app-workspace.css?v=settings-dock-20261102">
   <link rel="stylesheet" href="css/app-plugins.css?v=shell-reference-20261102">
   <link rel="stylesheet" href="css/app-preview-surface.css?v=right-sections-sent-20261024-1-pane-header-20261025-1-annotate-action-1">
   <link rel="stylesheet" href="css/app-json-viewer.css?v=shared-palette-20261025-2">
@@ -48,16 +48,16 @@
   <link rel="stylesheet" href="css/app-chart-artifacts.css?v=theme-tokens-20261019-1">
   <link rel="stylesheet" href="css/app-artifacts.css?v=shared-palette-20261025-2">
   <link rel="stylesheet" href="css/app-html-workspace.css?v=shared-palette-20261025-2-annotation-surface-20261026-1">
-  <link rel="stylesheet" href="css/app-responsive.css?v=shell-reference-20261102">
+  <link rel="stylesheet" href="css/app-responsive.css?v=settings-dock-20261102">
   <link rel="stylesheet" href="css/app-agent.css?v=aligned-feed-20261029-5">
   <link rel="stylesheet" href="css/app-agent-data.css?v=compact-tool-json-20261029-1">
   <link rel="stylesheet" href="css/app-theme.css?v=agent-protocol-20261030-1">
   <link rel="stylesheet" href="css/app-product-tokens.css?v=shell-reference-20261102">
-  <link rel="stylesheet" href="css/app-product-navigation.css?v=shell-reference-20261102">
-  <link rel="stylesheet" href="css/app-product-components.css?v=shell-reference-20261102">
+  <link rel="stylesheet" href="css/app-product-navigation.css?v=settings-dock-20261102">
+  <link rel="stylesheet" href="css/app-product-components.css?v=settings-dock-20261102">
   <link rel="stylesheet" href="css/app-product-viewers.css?v=product-ui-20261018-1">
   <link rel="stylesheet" href="css/app-product-materials.css?v=product-ui-20261018-1">
-  <link rel="stylesheet" href="css/app-product-screens.css?v=shell-reference-20261102">
+  <link rel="stylesheet" href="css/app-product-screens.css?v=settings-dock-20261102">
   <link rel="stylesheet" href="css/app-questions.css?v=questions-pager-20261023-2">
   <link rel="stylesheet" href="css/app-chat-browser.css?v=dock-sidebar-20261102">
   <link rel="stylesheet" href="css/app-visual-annotations.css?v=right-sections-sent-20261024-1-annotation-surface-20261026-1">
@@ -77,7 +77,6 @@
           <button type="button" class="workspace-menu-button" id="workspacePanels" aria-label="Панели" title="Панели" aria-haspopup="menu"><svg data-rna-icon="layers" aria-hidden="true"></svg><span>Панели</span></button>
           <button type="button" class="workspace-menu-button" id="workspaceLayout" aria-label="Компоновка" title="Компоновка" aria-haspopup="menu"><svg data-rna-icon="panel" aria-hidden="true"></svg><span>Компоновка</span></button>
         </div>
-      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       </div>
     </header>
     <nav class="section-rail" aria-label="Разделы ассистента">
@@ -87,8 +86,9 @@
       <button class="rail-button" data-section="vba" data-tab="vba" aria-label="VBA" title="VBA"><svg data-rna-icon="code" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <span class="rail-divider" role="separator"></span>
       <span id="pluginRail" class="plugin-rail"></span>
-      <button class="rail-button" id="pluginAdd" data-rail-popover="plugin-add" data-rail-label="Добавить плагины" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+      <button class="rail-button" id="pluginAdd" data-rail-popover="plugin-add" data-rail-label="Добавить плагин" title="Добавить плагин" aria-label="Добавить плагин"><svg data-rna-icon="plus" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
       <button class="rail-button" data-section="diagnostics" data-tab="diagnostics" aria-label="Диагностика" title="Диагностика"><svg data-rna-icon="chart" aria-hidden="true"></svg></button>
+      <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
     <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
@@ -647,15 +647,15 @@
         </div>
       </section>
 
-      <section class="panel" id="tab-settings">
-        <div class="settings-shell split-layout" id="settingsLayout" data-navigation>
-          <nav class="settings-nav global-nav" aria-label="Разделы настроек">
+      <section class="settings-view" id="settingsView" aria-label="Настройки" hidden>
+        <div class="settings-shell" id="settingsLayout">
+          <label class="settings-compact-navigation">Раздел<select class="rna-form-control" id="settingsPageSelect" aria-label="Раздел настроек"></select></label>
+          <nav class="settings-nav" aria-label="Разделы настроек">
             <div class="settings-navigation-content">
               <div class="workspace-heading settings-nav-heading product-search-heading"><h2 class="nav-label">Настройки</h2><div class="tree-toolbar"><button class="product-nav-search-toggle icon-btn" id="settingsNavSearchToggle" data-nav-search-toggle="settingsNavSearch" type="button" aria-label="Поиск в настройках" aria-expanded="false" aria-controls="settingsNavSearch" title="Поиск в настройках"><svg data-rna-icon="search" viewBox="0 0 24 24" aria-hidden="true"></svg></button><input class="tree-search-input" id="settingsNavSearch" type="search" aria-label="Найти раздел настроек" placeholder="Найти…" autocomplete="off" hidden></div></div>
               <div class="section-tree-scroll settings-nav-list" id="settingsNavTree"></div>
             </div>
           </nav>
-          <div class="splitter" role="separator" aria-orientation="vertical" aria-label="Изменить ширину разделов настроек"></div>
 
           <div class="settings-pages">
             <section class="settings-page active" data-settings-page="connection">
@@ -912,9 +912,10 @@
             </section>
 
             <input id="debugModelTrafficInput" type="checkbox" hidden>
-            <div class="settings-actions-row action-bar" hidden>
-              <button class="primary" id="saveSettingsButton" type="button" hidden>Применить</button>
-            </div>
+          </div>
+          <div class="settings-actions-row" hidden>
+            <span role="status" id="settingsSaveStatus">Есть неприменённые изменения</span>
+            <button class="primary" id="saveSettingsButton" type="button" hidden>Применить</button>
           </div>
         </div>
       </section>
@@ -1134,13 +1135,13 @@
   <script src="js/app-action-menu.js?v=shell-reference-20261102"></script>
   <script src="js/app-utils.js?v=run-view-state-20260830-1"></script>
   <script src="js/app-run-view-state.js?v=effect-facts-20261029-1"></script>
-  <script src="js/app-layout.js?v=shell-reference-20261102"></script>
+  <script src="js/app-layout.js?v=settings-dock-20261102"></script>
   <script src="js/app-chat-inspector.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-vba-completion.js?v=vba-completion-20260903-1"></script>
   <script src="js/app-editors.js?v=html-memory-20261002-1"></script>
   <script src="js/app-chat-visuals.js?v=chat-visuals-20261025-5-auto-html-20261026-1"></script>
   <script src="js/app-markdown.js?v=accent-chat-20261012-1-visuals-20261025-4"></script>
-  <script src="js/app-settings.js?v=diagnostics-20261101"></script>
+  <script src="js/app-settings.js?v=settings-dock-20261102"></script>
   <script src="js/app-logs.js?v=diagnostics-clarity-20260930-1"></script>
   <script src="js/app-diagnostics-navigation.js?v=diagnostics-20261101"></script>
   <script src="js/app-diagnostics.js?v=diagnostics-20261101"></script>
@@ -1217,7 +1218,7 @@
   <script src="js/app-plugins.js?v=dock-sidebar-20261102"></script>
   <script src="js/app-project-chats.js?v=shell-reference-20261102"></script>
   <script src="js/vendor/dockview-core.min.js"></script>
-  <script src="js/app-dock-workspace.js?v=shell-reference-20261102"></script>
-  <script src="js/app.js?v=shell-reference-20261102"></script>
+  <script src="js/app-dock-workspace.js?v=settings-dock-20261102"></script>
+  <script src="js/app.js?v=settings-dock-20261102"></script>
 </body>
 </html>

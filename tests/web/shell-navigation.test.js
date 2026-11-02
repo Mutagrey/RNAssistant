@@ -85,8 +85,8 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
    await toggle.click();assert.equal(await opened(),true);await page.keyboard.press('Escape');assert.equal(await opened(),false);
    await toggle.click();await scrim.click({position:{x:width-90,y:360}});assert.equal(await opened(),false);
    assert.equal(await page.locator('#chatDockHost').evaluate(n=>n.inert),false);
-   await page.locator('.workspace-topbar [data-section=settings]').click();assert.equal(await opened(),true);
-   await page.locator('#settingsNavTree [data-tree-key="settings:interface"] .navigation-tree-label').click();
+   await page.locator('.section-rail [data-section=settings]').click();assert.equal(await opened(),false,'Settings does not open the global sidebar');
+   await page.locator('#settingsPageSelect').selectOption('interface');
    assert.equal(await opened(),false);await page.locator('[data-settings-page=interface].active').waitFor();
    await rail.click();assert.equal(await opened(),true);await rail.click();assert.equal(await opened(),false);
    assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
@@ -100,6 +100,7 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   await toggle.click();await page.setViewportSize({width:900,height:800});await toggle.click();await page.keyboard.press('Escape');
   await page.setViewportSize({width:1280,height:900});await page.waitForFunction(()=>document.querySelector('.shell').classList.contains('navigation-wide'));assert.equal(await opened(),false,'explicit wide collapse is also retained');
   // The only remaining tool group cannot be hidden into an empty workspace.
+  await page.evaluate(()=>RNAssistantDockWorkspace.close('settings'));
   await page.locator('[data-tab-panel-id=conversation]').getByRole('button').click();
   await page.locator('#toggleChatInspectorButton').click();assert.equal(await page.locator('#chatInspector').isVisible(),true);
   assert.match(await page.locator('#workspaceLayoutNotice').textContent(),/единственная рабочая область/);

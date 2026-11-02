@@ -130,7 +130,8 @@ evidence и ADR — только когда нужны причина, точн�
 - Исходная стратегия сохранена как [reference](docs/ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md);
   её сверка A–H / S1–S5 — в Migration Plan. Не объявляй перенос Shell завершением
   миграции всех views. Registry/команды и удаление дублей уточняются в каждом срезе,
-  а не откладываются на финальную чистку; следующий gate сейчас — ревью целой Shell S1b.
+  а не откладываются на финальную чистку; Shell S1b сохранена; текущий gate — ревью согласованного среза Settings/rail S1c.
+  Его scope и остаток очереди — в Migration Plan; автоматического старта S2 нет.
 - Сохраняй pagination/bounds, incremental streaming, lazy payload/media, caches,
   receipts, async generations, exact session/run ownership и оптимизации.
   Для heavy views задай mount/activate/deactivate/dispose; close UI не отменяет run.

@@ -119,7 +119,7 @@
 .model-capability-body { display: grid; gap: 12px; padding: 12px; border-top: 1px solid var(--line); }
 .model-capability-body > p { margin: 0; color: var(--ink-muted); font-size: 11px; line-height: 1.4; }
 
-.shell #tab-settings #modelCapabilitySearch {
+.shell #settingsView #modelCapabilitySearch {
   box-sizing: border-box;
   width: 100%;
   min-height: 36px;

@@ -45,6 +45,12 @@ function bindProductNavSearches() {
 }
 
 function switchTab(name, options) {
+  var workspaceView = name === "settings" ? "settings" : name === "chat" ? "conversation" : null;
+  if (name === "settings") {
+    // Settings is a workspace view. Keep existing callers, with one placement path.
+    name = "chat";
+    options = { preserveChatOwner: true };
+  }
   if (window.RNAssistantShellLayout && window.RNAssistantShellLayout.mode() !== "wide") setMobileNavigationOpen(false);
   if ($("tab-instructions") && $("tab-instructions").classList.contains("active") && name !== "instructions" && typeof syncSelectedLibraryItem === "function") {
     syncSelectedLibraryItem();
@@ -57,9 +63,6 @@ function switchTab(name, options) {
   var changed = !active || active.id !== "tab-" + name;
   if (changed && active && active.id === "tab-artifacts" && typeof deactivateHtmlWorkspaceInspector === "function") {
     deactivateHtmlWorkspaceInspector();
-  }
-  if (changed && active && active.id === "tab-settings" && typeof discardModelCatalogPreview === "function") {
-    discardModelCatalogPreview();
   }
   Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     var selected = tab.dataset.section === section && (!tab.dataset.pluginId || window.RNAssistantPlugins.selectedId() === tab.dataset.pluginId);
@@ -83,7 +86,10 @@ function switchTab(name, options) {
   }
   if (changed && window.RNAssistantDiagnostics) RNAssistantDiagnostics.onTabChange(name);
   if (window.RNAssistantDockWorkspace) window.RNAssistantDockWorkspace.onTabChange(name);
-  if (!changed) return;
+  if (!changed) {
+    if (workspaceView) RNAssistantDockWorkspace.show(workspaceView);
+    return;
+  }
   if (name === "chat") {
     if (window.RNAssistantProjectChats) window.RNAssistantProjectChats.show(options);
     renderChatSessions();
@@ -93,10 +99,6 @@ function switchTab(name, options) {
     renderModelControls();
   } else if (name === "instructions" && typeof renderInstructions === "function") {
     renderInstructions();
-  } else if (name === "settings") {
-    if (!settingsDirty) renderSettings();
-    loadSettingsModelCatalogIfNeeded();
-    if (window.RNAssistantPerformanceDiagnostics) window.RNAssistantPerformanceDiagnostics.render();
   } else if (name === "plugins" && window.RNAssistantPlugins) {
     window.RNAssistantPlugins.show();
   } else if (name === "artifacts" && typeof renderHtmlWorkspace === "function") {
@@ -106,6 +108,7 @@ function switchTab(name, options) {
     renderVbaProject();
     if (typeof updateVbaMacroRunState === "function") updateVbaMacroRunState();
   }
+  if (workspaceView) RNAssistantDockWorkspace.show(workspaceView);
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -135,6 +138,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   Array.prototype.slice.call(document.querySelectorAll(".shell [data-section]")).forEach(function (tab) {
     tab.addEventListener("click", function () {
+      if (tab.dataset.tab === "settings") { switchTab("settings"); return; }
       RNAssistantShellLayout.selectSection(function () { switchTab(tab.dataset.defaultTab || tab.dataset.tab); }, tab.getAttribute("aria-current") === "page");
     });
   });

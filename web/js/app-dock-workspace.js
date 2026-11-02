@@ -3,13 +3,14 @@
   // Placement only. Conversation state, commands and drafts retain their existing owners.
   var api, host, parking, roots = {}, owner = "office", section = "chat";
   var dirtyConversation = false, conversationVisible = true, saveTimer, restoring = false;
-  var compact = false, wideLayout = null;
-  var conversationPosition = null, activation = 0;
+  var compact = false, wideLayout = null, settingsVisible = false;
+  var conversationPosition = null, activation = 0, tabFrame;
   var inspectorWidth;
   var storageKey = "rnassistant.ui.dock.s1.v1", savedKey = storageKey + ".saved", nextChooser = 1;
   var views = {
     conversation: { title: "Чат", icon: "chat" },
-    inspector: { title: "Инспектор", icon: "panel" }
+    inspector: { title: "Инспектор", icon: "panel" },
+    settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
   function element(tag, className, label) {
     var node = document.createElement(tag); node.className = className || "";
@@ -40,9 +41,14 @@
     conversationVisible = nextVisible;
     roots.conversation.inert = !nextVisible;
     roots.inspector.inert = !visible("inspector");
+    var nextSettings = visible("settings"), activateSettings = nextSettings && !settingsVisible;
+    var deactivateSettings = !nextSettings && settingsVisible;
+    settingsVisible = nextSettings; roots.settings.inert = !nextSettings;
+    if (deactivateSettings) RNAssistantSettingsView.deactivate();
+    if (activateSettings) RNAssistantSettingsView.activate();
     RNAssistantChatInspector.onDockState(!!panel("inspector"), visible("inspector"));
     RNAssistantShellLayout.renderWorkspace({ layout: { visible: section === "chat", canMaximize: !!api.activePanel,
-      maximized: api.hasMaximizedGroup(), panels: api.panels.length,
+      maximized: api.hasMaximizedGroup(), panels: api.panels.length, activeView: api.activePanel && api.activePanel.id,
       groups: api.groups.filter(function (group) { return group.api.isVisible; }).length } });
     updateContext();
     if (activate && conversationPosition && conversationPosition.key === conversationKey()) {
@@ -62,6 +68,14 @@
     }
   }
   function notice(message) { RNAssistantShellLayout.notice(message); }
+  function revealActiveTab() {
+    cancelAnimationFrame(tabFrame);
+    tabFrame = requestAnimationFrame(function () {
+      if (!api.activePanel || section !== "chat") return;
+      var tab = host.querySelector('[data-tab-panel-id="' + api.activePanel.id + '"]');
+      if (tab) tab.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }
   function persist() {
     try { localStorage.setItem(storageKey, JSON.stringify({ version: 1, layout: compact && wideLayout || api.toJSON() })); }
     catch (error) { notice("Компоновка не сохранена: хранилище недоступно"); }
@@ -91,13 +105,18 @@
   }
   function add(id, position) {
     return api.addPanel({ id: id, component: id, title: views[id].title,
-      // Only these two bounded, existing views retain DOM. Hidden work is explicitly gated.
+      // Bounded singleton views retain their existing DOM and draft owners.
       renderer: "always", minimumWidth: 150, minimumHeight: 120, position: position });
   }
   function show(id, group, direction) {
     if (!api || !views[id]) return;
     if (id === "inspector") RNAssistantChatInspector.prepareOpen();
     var item = panel(id);
+    // The gear opens in the main group; repeat clicks activate without relocating it.
+    if (id === "settings" && !item && !group) {
+      group = panel("conversation") ? panel("conversation").group : api.activeGroup;
+      direction = "within";
+    }
     if (api.hasMaximizedGroup() && (!item || !item.api.isMaximized() || group && group !== item.group)) api.exitMaximizedGroup();
     if (compact && direction && direction !== "within") direction = "within";
     if (item && group) item.api.moveTo({ group: group, position: direction === "within" ? "center" : direction === "below" ? "bottom" : direction });
@@ -131,10 +150,25 @@
     if (focusGroup) focusGroup.api.setActive();
     changed();
   }
+  function canClose(items) {
+    return items.every(function (item) { return !views[item.id] || !views[item.id].canClose || views[item.id].canClose(); });
+  }
   function close(id) {
     var item = panel(id); if (!item) return;
+    if (!canClose([item])) return;
     wideLayout = null;
     api.exitMaximizedGroup(); item.api.close(); changed();
+  }
+  function createTab(options) {
+    // Keep the pinned vendor tab renderer; route its close action through view guards.
+    var tab = new window["dockview-core"].DefaultTab();
+    function click(event) {
+      if (!event.target.closest(".dv-default-tab-action")) return;
+      event.preventDefault(); event.stopPropagation(); close(options.id);
+    }
+    tab.element.addEventListener("click", click, true);
+    return { element: tab.element, init: function (params) { tab.init(params); },
+      dispose: function () { tab.element.removeEventListener("click", click, true); tab.dispose(); } };
   }
   function createChooser(id) {
     var root = element("div", "dock-screen-chooser"), body = element("div", "dock-screen-chooser-body");
@@ -194,8 +228,11 @@
     var actions = button("Действия с вкладкой", "more", function () {
       menu(actions, [
         ["Собрать в одну группу", "layers", function () { join(); }],
-        ["Закрыть вкладку", "close", function () { if (group.activePanel) group.activePanel.api.close(); changed(); }],
-        ["Закрыть группу", "close", function () { wideLayout = null; api.exitMaximizedGroup(); group.panels.slice().forEach(function (item) { item.api.close(); }); changed(); }]
+        ["Закрыть вкладку", "close", function () { if (group.activePanel) close(group.activePanel.id); }],
+        ["Закрыть группу", "close", function () {
+          var items = group.panels.slice(); if (!canClose(items)) return;
+          wideLayout = null; api.exitMaximizedGroup(); items.forEach(function (item) { item.api.close(); }); changed();
+        }]
       ]);
     }); actions.setAttribute("aria-haspopup", "menu"); root.appendChild(actions);
     var dimensions = group.api.onDidDimensionsChange(updateButtons); updateButtons();
@@ -206,14 +243,16 @@
     return Object.keys(layout.panels).every(function (id) { return views[id] && layout.panels[id].contentComponent === id || /^choose-\d+$/.test(id) && layout.panels[id].contentComponent === "chooser"; });
   }
   function reset() {
+    if (!canClose(api.panels)) return;
     restoring = true; wideLayout = null; api.clear();
     var chat = add("conversation"); add("inspector", { referencePanel: chat, direction: compact || host.clientWidth < 560 ? "within" : "right" }).api.setSize({ width: inspectorWidth });
     chat.api.setActive(); restoring = false; changed();
   }
   function join() {
     wideLayout = null; api.exitMaximizedGroup();
-    var group = api.activeGroup || api.groups[0];
-    api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); }); changed();
+    var group = api.activeGroup || api.groups[0], active = api.activePanel;
+    api.panels.slice().forEach(function (item) { if (item.group !== group) item.api.moveTo({ group: group, position: "center" }); });
+    if (active) active.api.setActive(); changed();
   }
   function mount(nextOwner) {
     var changedOwner = owner !== nextOwner;
@@ -242,7 +281,7 @@
     } else if (!compact && wideLayout) {
       var saved = wideLayout; wideLayout = null; api.fromJSON(saved);
     }
-    restoring = false; sync();
+    restoring = false; sync(); revealActiveTab();
     // Dockview can settle visibility after the group move. Restore at the next paint,
     // without taking focus back if the user already moved it elsewhere.
     requestAnimationFrame(function () {
@@ -259,7 +298,9 @@
     roots.conversation = element("div", "dock-conversation"); roots.conversation.id = "conversationView";
     roots.conversation.append(document.getElementById("chatDropZone"), document.getElementById("workspaceChatView"));
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
-    parking.append(roots.conversation, roots.inspector);
+    roots.settings = document.getElementById("settingsView");
+    parking.append(roots.conversation, roots.inspector, roots.settings);
+    roots.settings.hidden = false;
     host = element("div", "chat-dock-host"); host.id = "chatDockHost";
     host.setAttribute("role", "region"); host.setAttribute("aria-label", "Рабочее пространство");
     host.setAttribute("aria-description", "Размер группы: Alt+Shift+стрелки при фокусе во вкладке.");
@@ -270,6 +311,7 @@
       disableFloatingGroups: true, dndStrategy: "pointer",
       messages: { closeTab: function (title) { return "Закрыть «" + title + "»"; }, closeTabPlain: "Закрыть вкладку" },
       createComponent: createComponent, createRightHeaderActionComponent: header,
+      defaultTabComponent: "guarded", createTabComponent: createTab,
       createWatermarkComponent: function () {
         var empty = element("div", "dock-empty"); empty.appendChild(element("p", "", "Выберите экран"));
         Object.keys(views).forEach(function (id) { var b = button(views[id].title, views[id].icon, function () { show(id); }); b.appendChild(element("span", "", views[id].title)); empty.appendChild(b); });
@@ -281,7 +323,7 @@
     catch (error) { reset(); notice("Не удалось прочитать компоновку. Открыт исходный вид."); }
     restoring = false;
     document.getElementById("workspaceChatView").hidden = true;
-    api.onDidLayoutChange(changed); api.onDidActivePanelChange(sync); api.onDidMaximizedGroupChange(sync);
+    api.onDidLayoutChange(changed); api.onDidActivePanelChange(function () { sync(); revealActiveTab(); }); api.onDidMaximizedGroupChange(sync);
     api.onDidRemovePanel(function () { if (!restoring) wideLayout = null; });
     RNAssistantShellLayout.bindWorkspace({
       panels: function (trigger) {
@@ -293,9 +335,17 @@
       layout: function (trigger) {
         menu(trigger, [["Чат и инспектор", "panel", reset], ["Одна группа вкладок", "layers", join],
           ["Сохранить раскладку", "check", function () { try { localStorage.setItem(savedKey, JSON.stringify(api.toJSON())); notice("Раскладка сохранена"); } catch (error) { notice("Не удалось сохранить раскладку"); } }],
-          ["Вернуть сохранённую", "refresh", function () { try { var layout = JSON.parse(localStorage.getItem(savedKey)); if (validateLayout(layout)) { restoring = true; api.fromJSON(layout); restoring = false; changed(); notice("Раскладка восстановлена"); } else notice("Сохранённой раскладки нет или её формат недоступен"); } catch (error) { restoring = false; notice("Не удалось восстановить раскладку"); } }]]);
+          ["Вернуть сохранённую", "refresh", function () { try { var layout = JSON.parse(localStorage.getItem(savedKey)); if (validateLayout(layout)) {
+            if (!canClose(api.panels.filter(function (item) { return !layout.panels[item.id]; }))) return;
+            restoring = true; wideLayout = null; api.fromJSON(layout); restoring = false; changed(); notice("Раскладка восстановлена");
+          } else notice("Сохранённой раскладки нет или её формат недоступен"); } catch (error) { restoring = false; notice("Не удалось восстановить раскладку"); } }]]);
       }
     });
+    host.addEventListener("keydown", function (event) {
+      var tab = event.target.closest("[data-tab-panel-id]");
+      if (!tab || event.target.closest("input, textarea, [contenteditable=true]") || !/^(Delete|Backspace)$/.test(event.key)) return;
+      event.preventDefault(); event.stopPropagation(); close(tab.dataset.tabPanelId);
+    }, true);
     document.addEventListener("keydown", function (event) {
       if (event.key === "Escape" && event.defaultPrevented) return;
       var tab = event.target.closest && event.target.closest("[data-tab-panel-id]");
@@ -311,7 +361,7 @@
       if (event.key === "Escape" && api.hasMaximizedGroup()) { api.exitMaximizedGroup(); event.preventDefault(); }
     });
     var observer = new ResizeObserver(function (entries) { resize(entries[0].contentRect.width); }); observer.observe(host);
-    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); persist(); if (!event.persisted) { ++activation; observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
+    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { ++activation; observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
     sync();
   }
   window.RNAssistantDockWorkspace = {

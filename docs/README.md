@@ -105,10 +105,10 @@ request diff, дальнейшая детализация блоков, D4 Scena
 | Data Templates: independent app workspace, export, UI/core and host adapters | [Data Templates](data-templates.md), [ADR-0014](decisions/ADR-0014-data-templates.md) |
 | VBA safety, packages, UserForms | [Mutation journal](vba-mutation-journal.md), [packages](vba-tool-packages.md), [UserForms](vba-userforms.md) |
 | Desktop shell and Office target selection | [Desktop runtime](desktop-runtime.md) |
-| UI architecture, аудит и ownership | [UI Architecture](ui/UI_ARCHITECTURE.md) — одна production Shell/Dockview; S1b на визуальном ревью по эталону Demo |
+| UI architecture, аудит и ownership | [UI Architecture](ui/UI_ARCHITECTURE.md) — одна production Shell/Dockview; Shell S1b сохранена, Settings/rail S1c на визуальном ревью |
 | Экраны, навигация и состояния Office/Workspace | [UI Screen Map](ui/UI_SCREEN_MAP.md) — текущие реализации и целевое размещение |
 | Общие tokens, компоненты и визуальные решения | [UI Design System](ui/UI_DESIGN_SYSTEM.md); сюда перенесён эталон Dockview P1/P2; согласования — [UI Decisions](ui/UI_DECISIONS.md) |
-| Порядок UI-миграции, performance, rollback | [UI Migration Plan](ui/UI_MIGRATION_PLAN.md) — P0–P3, сверка исходных A–H с S1–S5, повторный аудит Shell и gates; [исходник v1.0](ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md) сохранён как reference, не параллельный нормативный документ |
+| Порядок UI-миграции, performance, rollback | [UI Migration Plan](ui/UI_MIGRATION_PLAN.md) — P0–P3, сверка исходных A–H с S1–S5, повторный аудит Shell, согласованный S1c и gates; [исходник v1.0](ui/reference/RNAssistant_UI_Architecture_and_Agent_Rules.md) сохранён как reference, не параллельный нормативный документ |
 | Исторические UI/UX источники | [Прежний UI design](ui-design.md), [Demo P0–P3](ui/UI_LAYOUT_UX.md), [Prototype Package](ui-prototype/00_START_HERE.md); не параллельные нормативные планы |
 | Проверка на Windows/Office и evidence | [Проверка](qualification.md), [release](operations/RELEASE_PROCESS.md) |
 | Versioning and release | [Versioning](operations/VERSIONING.md), [release](operations/RELEASE_PROCESS.md), [build evidence](operations/BUILD_EVIDENCE.md) |

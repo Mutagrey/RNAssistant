@@ -26,6 +26,14 @@
       document.getElementById("workspaceViewActions").hidden = !layout.visible;
       document.getElementById("toggleChatInspectorButton").hidden = !layout.visible;
       text("workspaceLayoutStatus", layout.visible ? "Вкладки: " + layout.panels + " · группы: " + layout.groups : "");
+      if (layout.visible) {
+        ["settings", "chat"].forEach(function (section) {
+          var selected = (layout.activeView === "settings") === (section === "settings");
+          var button = document.querySelector('.section-rail [data-section="' + section + '"]');
+          button.classList.toggle("active", selected);
+          if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+        });
+      }
     }
   }
 
@@ -93,7 +101,7 @@
       active.inert = !open;
       active.setAttribute("aria-hidden", String(!open));
     }
-    shell.querySelectorAll(".panel.active :is(.chat-dock-host, .chat-browser, .plugin-workbench, .instruction-editor, .vba-editor, .html-workspace-editor, .settings-pages, .product-dt-main, .plugin-content)").forEach(function (main) {
+    shell.querySelectorAll(".panel.active :is(.chat-dock-host, .chat-browser, .plugin-workbench, .instruction-editor, .vba-editor, .html-workspace-editor, .product-dt-main, .plugin-content)").forEach(function (main) {
       main.inert = mode !== "wide" && open && !!active;
     });
     var scrim = document.getElementById("productNavigationScrim"), section = shell.querySelector(".panel.active");

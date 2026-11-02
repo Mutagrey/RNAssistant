@@ -3,7 +3,7 @@
 Обновлено: 2026-11-02. Owner: Web presentation.
 Исходная карта — source audit baseline 4ea3d6e4; ниже сохранена карта будущих срезов.
 S1a объединяет bounds/composer presentation; S1b размещает общий conversation и
-настоящий Inspector в одном production Dockview. Остальные целевые views Proposed;
+настоящий Inspector в одном production Dockview. Settings подключён срезом S1c; остальные целевые views Proposed;
 полная parity capabilities и несколько одновременных чатов ещё не реализованы.
 Canonical карта UI; владение/lifecycle — [Architecture](UI_ARCHITECTURE.md),
 компоненты — [Design System](UI_DESIGN_SYSTEM.md).
@@ -22,9 +22,10 @@ Owner: Shell chrome — `app-layout.js`, placement/команды workspace —
 | «⋯» → закрыть вкладку / закрыть группу | Только выбранная вкладка / вся её группа; остальные группы и domain run продолжают жить |
 | «⋯» → собрать в одну группу | Объединяет существующие вкладки без повторного чтения данных |
 | Верхние navigation / Inspector / maximize | Навигация по контракту ниже; отдельная группа Inspector скрывается/возвращается с прежним размером; смешанная/узкая группа активирует вкладку Inspector; maximize и Escape/restore |
-| «Панели» | Общий каталог доступных **подключённых** экранов: Чат, Инспектор; возвращает закрытый или активирует открытый |
+| «Панели» | Общий каталог доступных **подключённых** экранов: Чат, Инспектор, Настройки; возвращает закрытый или активирует открытый |
 | «Компоновка» | Пресеты «Чат и инспектор», «Одна группа вкладок»; сохранить/вернуть пользовательскую раскладку |
-| Настройки / Диагностика | Существующие реальные sections в той же Shell; ещё не независимые Dockview views |
+| Настройки | Singleton Dockview view S1c; вход снизу rail, повторное нажатие активирует существующую вкладку |
+| Диагностика | Реальный section той же Shell; Dockview-перенос ещё впереди |
 
 Chooser использует компоновку Demo, показывает «Ничего не найдено» при пустой выдаче.
 «Панели» — компактное меню подключённых видов с отметкой уже открытого.
@@ -82,6 +83,25 @@ Inspector в ней активируется. Единственную види�
 Крестик и «Закрыть группу» остаются отдельными командами фактического закрытия.
 HTML/plugin preview пока управляется прежним adapter через общий верхний контрол.
 
+## Настройки и меню rail S1c
+
+- Gear открывает настройки в группе чата; повторное нажатие активирует существующую
+  вкладку на её текущем месте. «+» и «Панели» используют тот же descriptor.
+- Поиск и категории перемещаются вместе с формой. При недостатке ширины группы
+  тот же список разделов доступен через компактный select. Глобальное дерево
+  документов/проектов остаётся независимым; gear не переключает его open/closed.
+- Крестик/закрытие группы спрашивает о dirty форме; «Отмена» оставляет всё на месте,
+  подтверждение закрывает вкладку с сохранением правок в памяти до перезапуска.
+  «Применить» — существующее действие сохранения. Pending save блокирует закрытие;
+  ошибка и новые правки во время запроса остаются видимыми и неприменёнными.
+- Наведение на gear показывает шесть разделов и версию; выбор открывает нужный
+  раздел единственной вкладки. У остальных rail buttons сохранены подписи,
+  у plugins — существующие действия. Короткая задержка hover убирает случайные
+  открытия и запросы при пересечении полосы курсором.
+- В меню можно перейти курсором через зазор, Tab/стрелками — с клавиатуры.
+  Escape закрывает его и возвращает фокус без повторного открытия. Уход курсора
+  закрывает подсказку; устаревший async plugin response не заменяет новое меню.
+
 ## Entry points и оболочки
 
 | Вход | Что реально запускается | Будущее назначение |
@@ -127,7 +147,7 @@ conversation singleton; параметризованные chat IDs ниже —
 | Data Templates: источники, шаблоны/черновики | [browser](../../web/data-templates/ui/browser.js), loader/source-intake, template-library/editor | Один plugin view; его предметная навигация | paged source list, unsupported files, draft/validation/save |
 | Data Templates: параметры, mapping, формат | parameter-editor, mapping-editor, project-dictionary-controller | Подэкраны того же plugin view | selected/invalid/dirty/published; неподключённые форматы явно отмечены |
 | Data Templates: processing, results, project files | processing/operation-view, browser-project-results/files | Plugin view, факт операции в общем StatusBar через будущий публичный API | running/progress unknown or measured/cancelled/failed/completed/staged |
-| Настройки: connection/model/context/agent/interface/protection | [settings](../../web/js/app-settings.js), models/model-data/model-render, [HTML](../../web/index.html) | settings, отдельный view; вход сверху справа | loading/dirty/saving/validation/error, model catalog preview/cancel |
+| Настройки: connection/model/context/agent/interface/protection | [settings](../../web/js/app-settings.js), models/model-data/model-render, [HTML](../../web/index.html) | settings, singleton Dockview view; шестерёнка снизу слева | loading/dirty/saving/validation/error, model catalog preview/cancel |
 | Диагностика: Запуски, фильтры, события/trajectory/payload | [diagnostics-navigation](../../web/js/app-diagnostics-navigation.js), run-journal/trajectory/payload | diagnostics:runs, tool view | scoped loading, live follow, paged events, pending cancel, read errors |
 | Reader запроса: Итог/Вход/Ответ/Доказательства/Ресурсы/Сравнение/Исходник | [model-context](../../web/js/app-model-context.js), model-context-details | request:owner:run:event, центр или справа | metadata-first, lazy bodies, unavailable/truncated, bounded retained views |
 | Лаборатория моделей | [model-diagnostics](../../web/js/app-model-diagnostics.js) | diagnostics:lab | selected scenario, running/cancel requested/finished/failed, redacted evidence |
@@ -153,7 +173,7 @@ adapters, а не новый файловый store. Инструменты уж
 5. При узкой ширине сначала сворачивается navigation, затем группы становятся
    вкладками. Конкретные пороги Demo не утверждены как production thresholds.
 6. Материалы, библиотека, diagnostics, plugin работают при скрытом Chat View.
-   Настройки доступны сверху справа; управление областями вынесено наверх.
+   Настройки доступны снизу слева; управление областями вынесено наверх.
 
 ## Общая матрица состояний
 

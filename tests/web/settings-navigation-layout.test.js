@@ -8,13 +8,14 @@ const { chromium } = require("playwright");
   const browser = await chromium.launch({ headless: true,
     ...(process.env.BROWSER_EXECUTABLE ? { executablePath: process.env.BROWSER_EXECUTABLE } : {}) });
   try {
-    const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 760 } });
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto("file://" + path.resolve(__dirname, "../../web/index.html"));
     await page.locator('.rail-button[data-tab="settings"]').click();
-    assert.equal(await page.locator("#settingsNavTree .navigation-tree-icon svg").count(), 7, "demo navigation uses icons for every section");
-    assert.equal(await page.locator("#settingsNavTree .navigation-tree-item:visible").count(), 7);
+    await page.locator('#settingsNavTree .navigation-tree-item').first().waitFor();
+    assert.equal(await page.locator("#settingsNavTree .navigation-tree-icon svg").count(), 6, "demo navigation uses icons for every section");
+    assert.equal(await page.locator("#settingsNavTree .navigation-tree-item:visible").count(), 6);
     assert.equal(await page.locator("#appVersion").count(), 0, "version no longer takes space in the service page");
     await page.evaluate(() => { state.appVersion = "16.1.0-dev+g2a2f69c38d90"; });
 
@@ -22,8 +23,8 @@ const { chromium } = require("playwright");
     await page.locator("#settingsNavSearch").fill("мод");
     assert.deepEqual(await page.locator("#settingsNavTree .navigation-tree-label:visible").allTextContents(), ["Модель"]);
     assert.equal(await page.locator("#saveSettingsButton").isVisible(), false, "navigation search never dirties settings");
-    await page.locator('#settingsNavTree .navigation-tree-label[data-settings-page="model"]').click();
-    assert.equal(await page.locator('#settingsNavTree .navigation-tree-label[aria-current="page"]').getAttribute("data-settings-page"), "model");
+    await page.locator('#settingsNavTree [data-tree-key="settings:model"] .navigation-tree-label').click();
+    assert.equal(await page.locator('#settingsNavTree [aria-selected="true"]').getAttribute("data-tree-key"), "settings:model");
     assert.ok(await page.locator('.settings-page[data-settings-page="model"]').isVisible());
     assert.equal(await page.locator("#modelSelect").count(), 0, "model selection has one visible field");
     assert.equal(await page.locator(".product-model-disclosure").count(), 1, "generation details remain collapsible");
@@ -73,13 +74,13 @@ const { chromium } = require("playwright");
     assert.equal(await page.locator("#settingsNavSearch").isVisible(), false, "blur collapses the search field without losing its filter");
     await page.locator("#settingsNavSearchToggle").click();
     await page.locator("#settingsNavSearch").press("Escape");
-    assert.equal(await page.locator("#settingsNavTree .navigation-tree-item:visible").count(), 7, "Escape clears the filter");
+    assert.equal(await page.locator("#settingsNavTree .navigation-tree-item:visible").count(), 6, "Escape clears the filter");
     assert.equal(await page.locator("#settingsNavSearchToggle").getAttribute("aria-expanded"), "false");
     await page.locator('.section-rail [data-section="settings"]').hover();
-    assert.match(await page.locator('.rail-hover-card[data-kind="settings-menu"] .rail-hover-title').textContent(),
-      /Настройки.*v16\.1\.0-dev · 2a2f69c/, "settings hover title includes the current version");
+    assert.match(await page.locator('.rail-hover-card[data-kind="settings-menu"] .rail-hover-version').textContent(),
+      /v16\.1\.0-dev · 2a2f69c/, "settings hover footer includes the current version");
     assert.equal(await page.locator('.rail-hover-version').evaluate(node => getComputedStyle(node).fontWeight), "400");
-    assert.equal(await page.locator('.rail-hover-card[data-kind="settings-menu"] button svg').count(), 7,
+    assert.equal(await page.locator('.rail-hover-card[data-kind="settings-menu"] button svg').count(), 6,
       "hover menu offers an icon for each settings page");
     await page.locator('.settings-pages').evaluate(node => { node.scrollTop = 200; });
     await page.locator('.rail-hover-card').getByRole('button', { name: 'Контекст и вложения' }).click();
@@ -95,11 +96,11 @@ const { chromium } = require("playwright");
       state.modelCatalog.loaded = false;
       loadModelCatalog = useForm => { window.catalogRequests.push(useForm); return Promise.resolve(true); };
     });
-    await page.locator('#settingsNavTree .navigation-tree-label[data-settings-page="model"]').click();
+    await page.locator('#settingsNavTree [data-tree-key="settings:model"] .navigation-tree-label').click();
     assert.deepEqual(await page.evaluate(() => window.catalogRequests), [true],
       "opening Model loads the catalog with current form settings");
     await page.evaluate(() => { state.bridgeUnavailable = true; });
-    for (const name of ["connection", "model", "context", "agent", "interface", "protection", "service"]) {
+    for (const name of ["connection", "model", "context", "agent", "interface", "protection"]) {
       await page.evaluate(pageName => {
         document.querySelectorAll('.settings-page').forEach(node =>
           node.classList.toggle('active', node.dataset.settingsPage === pageName));
@@ -109,7 +110,7 @@ const { chromium } = require("playwright");
     }
     await page.locator('.section-rail [data-section="chat"]').click();
     await page.locator('.section-rail [data-section="settings"]').focus();
-    assert.equal(await page.locator('.rail-hover-card[data-kind="settings-menu"] button').count(), 7,
+    assert.equal(await page.locator('.rail-hover-card[data-kind="settings-menu"] button').count(), 6,
       "keyboard focus opens the same settings menu");
     await page.keyboard.press('Tab');
     assert.equal(await page.locator('.rail-hover-card button').first().evaluate(node => node === document.activeElement), true);
@@ -118,16 +119,14 @@ const { chromium } = require("playwright");
     await page.setViewportSize({ width: 560, height: 760 });
     await page.mouse.move(300, 300);
     await page.evaluate(() => RNAssistantRailPopovers.hide());
-    if (await page.locator('#productMobileMenuButton').getAttribute('aria-expanded') !== 'true')
-      await page.locator('#productMobileMenuButton').click();
     await page.locator('.section-rail [data-section="settings"]').hover();
-    await page.locator('.rail-hover-card').getByRole('button', { name: 'Помощь и обслуживание' }).click();
+    await page.locator('.rail-hover-card').getByRole('button', { name: 'Защита' }).click();
     assert.equal(await page.locator('.settings-page.active .settings-heading h2').evaluate(node =>
-      node.getBoundingClientRect().top >= 0), true, "narrow service heading is not clipped");
+      node.getBoundingClientRect().top >= 0), true, "narrow settings heading is not clipped");
     assert.equal(await page.locator('.settings-pages').evaluate(node => node.scrollWidth <= node.clientWidth + 1), true,
       "narrow settings fit without horizontal overflow");
     assert.deepEqual(errors, [], "settings screen has no page errors");
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT });
-    console.log("PASS settings: demo navigation icons/search, active page and version location");
+    console.log("PASS settings: shared navigation icons/search, model controls, active page and hover version");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

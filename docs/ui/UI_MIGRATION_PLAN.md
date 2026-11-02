@@ -25,8 +25,9 @@ Canonical план последовательности, проверки, basel
 | G — остальные views | S3 → S4 → S5 | Переносить по одному функциональному срезу через существующий каталог; сохранять native host/session boundaries |
 | H — удаление legacy | Обязательная часть каждого среза, финальная сверка S5 | Заменённые paths удаляются сразу после проверки; временные границы имеют owner/removal gate в MIGRATION_MAP |
 
-Очередь: **завершение и визуальное ревью целой Shell S1b → S2a capabilities общего
-чата → остальные части S2 → S3/S4/S5**. Единство registry/commands не откладывается
+Очередь уточнена прямым запросом пользователя: **Shell S1b (`2a4831c5`) →
+Settings/rail S1c и визуальное ревью → S2a capabilities общего чата → остальные
+части S2 → S3/S4/S5**. S1c выделен из Settings-части S4; исходный план сохранён. Единство registry/commands не откладывается
 до S5: каждый новый view подключается к уже существующему механизму. Следующий
 функциональный срез автоматически не начинается до ревью предыдущего.
 
@@ -165,7 +166,7 @@ Inspector в одном Dockview**, внутри текущей production Shell
    maximize/restore и сохранённым layout. Inspector сохраняет реальные разделы,
    scope, lazy data и ссылки в Diagnostics.
 3. Оставить существующие domain commands, bridge, run ownership и storage.
-   Библиотека, материалы, VBA, plugins, settings, diagnostics пока открываются
+   Библиотека, материалы, VBA, plugins, diagnostics пока открываются
    существующим switchTab в той же Shell; это временная граница миграции,
    не второе приложение или второй Dockview.
 4. Сделать явными activate/deactivate для двух views, сохранив drafts, active
@@ -209,15 +210,16 @@ wide/overlay, постоянный rail, повторный клик разде�
 `shell-navigation.test.js` проверяет 900/420/360 px, выбор мышью/клавиатурой,
 settings, сохранение draft/DOM, hide/restore Inspector и защиту единственной группы.
 Существующие dock-workspace, chat-inspector и workspace-chat-layout проходят.
-Старый settings-navigation-layout останавливается на устаревшем количестве разделов
-(7 против текущих 6); gap уточнён в [BACKLOG](../stabilization/BACKLOG.md#settings-navigation-fixture-версия-в-hover--2026-10-30).
+На этом checkpoint старый settings-navigation-layout имел устаревшие ожидания
+количества разделов/версии. В S1c fixture приведён к реальному UI и проходит;
+[gap закрыт](../stabilization/BACKLOG.md#settings-navigation-fixture-версия-в-hover--2026-10-30).
 Текущий выбор страницы настроек и закрытие её дерева покрыты новым Shell-тестом.
 Снимки: [900 px](review/s1b-navigation-900.png), [360 px](review/s1b-navigation-360.png).
 
-Следующий предлагаемый подсрез **S2a** — единые model/context/attachment capabilities
+После отдельно согласованного Settings/rail S1c следующий предлагаемый подсрез **S2a** — единые model/context/attachment capabilities
 и controls Office/Workspace/plugin. View-scoping, несколько живых чатов и paging
 следуют отдельными ограниченными изменениями, когда для них готовы владельцы.
-Сначала визуальное ревью уточнённого S1b; параллельный большой UI Kit/refactor не нужен.
+Сначала визуальное ревью текущего среза; параллельный большой UI Kit/refactor не нужен.
 
 ### Уточнение S1b: общая геометрия после визуального ревью
 
@@ -279,6 +281,53 @@ DOM после смены owner — 2268 в обоих случаях; getProjec
 полный перенос всех domain views и Windows qualification не заявлены.
 [Shell со вкладкой выбора](review/s1b-shell-chooser.png).
 
+## S1c — Settings view и rail menus
+
+Scope явно согласован пользователем после commit `2a4831c5`: одна вкладка настроек,
+gear снизу слева, сохранение hover menus/подписей в общем стиле. Это ограниченный
+перенос существующей формы, не переписывание Settings/domain/runtime и не P4.
+Визуальные детали **In Review**.
+
+- Один descriptor/DOM/form/save owner; `#tab-settings` и его глобальный splitter
+  удалены. Шесть прежних категорий и поиск внутри view; узкая группа использует
+  select из того же списка. Save footer не перекрывает контент.
+- Draft живёт в текущей форме при switch/move/close; close предупреждает, что он
+  сохранён только до перезапуска. Cancel group-close атомарен; keyboard, preset и
+  restore используют тот же guard. Save race/error сохраняют новые правки.
+- Прежняя cancellation catalog preview сохранена; late response не гидратирует
+  скрытую форму. Новый cache/store не создан. Join сохраняет активный view.
+- RailPopovers сохраняет существующие plugin/settings actions и tooltip labels.
+  Общий menu CSS заменяет его прежние overrides. Hover intent задерживает
+  случайные открытия; Escape не переоткрывает меню, generation отсекает stale reply.
+
+Проверены `settings-dock`, `settings-navigation-layout`, `agent-history-settings`,
+`dock-workspace`, `shell-navigation`, `shared-navigation-tree`; отдельно
+`settings-version` и `prompt-review` (13 checks). Существующие fixtures обновлены
+для нового расположения, шести разделов, common Tree API и container width.
+Проверены обе темы, узкие группы/окно, масштаб текста, move/close/restore,
+один DOM, сохранение черновика, late save/error и late catalog/hover responses.
+
+Минимальная performance-проверка: четыре open/close чистой формы не вызывают
+bridge reads; DOM форма/composer имеют прежнюю identity. Подключения остаются
+118 scripts / 44 stylesheets, vendor неизменен, новых dependencies нет.
+Это не измерение ускорения и не Windows/Office/WebView2 qualification.
+
+Ревью: `python3 -B prototypes/serve_ui.py`,
+[рабочий UI](http://127.0.0.1:8897/preview/web/?scenario=ready&review=settings-dock).
+Навести на gear → выбрать раздел; открыть настройки повторно; перенести через «+»;
+изменить поле и закрыть вкладку/группу с отменой; сузить окно.
+[Широкий вид](review/s1c-settings-dock.png), [меню](review/s1c-settings-hover.png),
+[узкая группа](review/s1c-settings-narrow.png).
+
+Rollback: отменить только diff S1c поверх `2a4831c5`; данные/bridge/runtime не
+мигрировались. Старый валидатор явно сбросит layout с новым `settings` descriptor,
+если такой layout уже сохранён. Неприменённые правки не являются durable data.
+Активный заголовок вкладки прокручивается в видимую часть узкой полосы.
+Открытая source-audit граница model capability drafts —
+[BACKLOG](../stabilization/BACKLOG.md#settings-model-capability-draft-boundary--2026-11-02);
+общая изоляция applied/draft capabilities остаётся S2a.
+После ревью — предложенный S2a; полного переноса остальных views этот срез не означает.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |
@@ -286,7 +335,7 @@ DOM после смены owner — 2268 в обоих случаях; getProjec
 | S1a / S1b | Общие chat rules и production Chat workspace + Inspector реализованы; визуальное ревью S1b по эталону Demo | Дубли composer presentation и старый Inspector grid/split/open-width удалены. Остальные splitters пока нужны |
 | S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
 | S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
-| S4 | Library/VBA/settings/project navigation; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
+| S4 | Library/VBA/project navigation; Settings вынесен в S1c; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
 | S5 | Оставшиеся plugin views, portable export/public API и финальная сверка единства | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
 
 Каждый срез: problem/scope → baseline → маленький diff → behavior/perf checks →

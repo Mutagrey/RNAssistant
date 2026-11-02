@@ -50,7 +50,7 @@ NavigationTree остаётся одним renderer для Office/Workspace/plug
 Владение CSS и границы version-pinned vendor adapter — в
 [Design System](UI_DESIGN_SYSTEM.md#применение-правил-сейчас).
 
-Два bounded views сохраняют свои DOM nodes: renderer `always` выбран только для
+Три bounded singleton views (conversation, inspector, settings) сохраняют свои DOM nodes: renderer `always` выбран только для
 них, не как глобальная политика. Закрытие паркует узел, а не уничтожает controller,
 черновик или run. Listener компонента Dockview удаляется на dispose. На скрытом
 conversation transcript paint откладывается; возвращение применяет актуальное
@@ -72,19 +72,45 @@ Dockview скрывает самостоятельную группу Inspector 
 vendor manifests. Demo использует тот же файл; второго loader нет. Host проектов
 уже включает `web/**`, C# project/bridge/runtime/storage не менялись.
 
+## Settings view S1c
+
+Пользователь согласовал этот ограниченный срез после checkpoint Shell `2a4831c5`.
+`settings` добавлен в существующий каталог DockWorkspace. Он размещает тот же
+`#settingsView`, не копию формы. Прежние `#tab-settings`, navigation splitter и
+root section удалены. Совместимый вызов `switchTab("settings")` только направляет
+команду в workspace; собственного маршрута размещения больше нет.
+
+`app-settings.js` владеет формой, dirty/revision/save и hooks `activate`,
+`deactivate`, `canClose`. Переключение/перемещение не сбрасывает правки; фоновый
+render также не перезаписывает dirty форму. Deactivation сохраняет поля, но
+отменяет catalog preview прежним механизмом generation/cancellation. Сохранение
+использует прежние contracts и подтверждённую revision; UI не считает ранний click
+успехом. При согласии закрыть dirty вкладку её форма паркуется до перезапуска
+приложения, без нового persistence/store. Save-in-flight не закрывается.
+
+Все пользовательские close paths (крестик, Delete/Backspace, меню, группа,
+замена раскладки) проверяют view guard до изменения группы. Движение/resize
+не является закрытием. Pinned vendor DefaultTab сохраняет собственный renderer;
+локальный adapter маршрутизирует close action. Browser reload восстанавливает
+placement, но не обещает сохранение неприменённых настроек на диск.
+
+Hover/focus остаётся у `RailPopovers`, click menus — у `ActionMenu`; поверхность,
+строки и иконки принадлежат общему `app-product-components.css`. Старые отдельные
+rail menu CSS удалены. Нового popup engine, registry, библиотеки или vendor нет.
+
 ## Фактический аудит
 
 ### Повторная сверка с исходным планом — 2026-11-02
 
 Перечитаны исходная спецификация, четыре canonical UI-docs, решения P1/P2,
 реальные CSS/JS/HTML и замороженный Demo. В текущем `web/index.html` один Shell,
-семь root sections, 118 script и 44 stylesheet подключения. Dockview один;
-его каталог пока содержит conversation/inspector, а не все целевые виды.
+шесть root sections, 118 script и 44 stylesheet подключения. Dockview один;
+его каталог пока содержит conversation/inspector/settings, а не все целевые виды.
 
 | Responsibility | Текущий единственный owner | Результат сверки / открытая граница |
 |---|---|---|
-| Shell chrome, navigation, topbar/footer DOM | `app-layout.js` / ShellLayout; `app-product-navigation.css` | Убраны дубли rail/topbar/footer в Dock CSS, прежний flex Shell и старые navigation media rules. Настройки находятся сверху уже в HTML |
-| Dock placement и presentation lifecycle | `app-dock-workspace.js` / Dockview | Передаёт Shell вычисленный context/layout snapshot и callbacks команд; не владеет DOM topbar/footer. Domain hooks conversation/Inspector пока адаптированы здесь для двух singleton views |
+| Shell chrome, navigation, topbar/footer DOM | `app-layout.js` / ShellLayout; `app-product-navigation.css` | Убраны дубли rail/topbar/footer в Dock CSS, прежний flex Shell и старые navigation media rules. Шестерёнка находится снизу rail; настройки — singleton Dockview view S1c |
+| Dock placement и presentation lifecycle | `app-dock-workspace.js` / Dockview | Передаёт Shell вычисленный context/layout snapshot и callbacks команд; не владеет DOM topbar/footer. Domain hooks conversation/Inspector пока адаптированы здесь для трёх singleton views |
 | Menus | `app-action-menu.js` / ActionMenu | Один компонент для существующих меню и портального варианта в clipped Dock headers; прежний Dock menu renderer/keyboard path удалён |
 | Tokens и навигационные элементы | `app-product-tokens.css`, `app-product-components.css` | Общие размеры/типографика/темы. Заголовки sidebar, дерево и контроли проверены в нескольких sections. CSS содержимого settings возвращён его screen owner |
 | View catalog / command routes | `views` в DockWorkspace; ещё не мигрировавшие sections — `switchTab` | Единого расширенного публичного panel/command API для plugins пока нет. Расширять существующий каталог при переносе следующего view; не откладывать единство до финальной чистки |

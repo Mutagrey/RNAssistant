@@ -1,10 +1,10 @@
 # Current-to-target migration map
 
-## Production UI S1b — 2026-11-02
+## Production UI S1b/S1c — 2026-11-02
 
-Owner: Web Shell / DockWorkspace. Conversation и Inspector используют один Dockview;
-два DOM mounts живут с текущим global active owner. Temporary boundary: остальные
-root sections ещё размещает switchTab; HTML/plugin preview имеют прежние splitters.
+Owner: Web Shell / DockWorkspace. Conversation, Inspector и Settings используют один Dockview;
+три singleton DOM mounts живут с текущим global active owner. Temporary boundary: остальные
+root sections (кроме перенесённого Settings) ещё размещает switchTab; HTML/plugin preview имеют прежние splitters.
 Removal gate: соответствующий функциональный срез перенёс всех consumers, сохранил
 lazy/deactivation, native frame identity и проверил old route aliases. После этого
 его прежние placement/CSS удаляются; постоянный dual path не вводится.
@@ -19,6 +19,11 @@ DockWorkspace передаёт snapshots/callbacks, ActionMenu обслужив�
 Прежний flex Shell, дубли rail/topbar/footer, `#tab-workspace` CSS и Dock menu
 renderer удалены. Root sections/native previews остаются временной границей выше;
 наращивать их второй registry или controller нельзя.
+S1c удаляет `#tab-settings` и глобальную settings navigation/splitter.
+`switchTab("settings")` остаётся только command alias к существующему Dock catalog;
+removal gate — перевод оставшихся section consumers на единую карту в их срезах.
+Owner alias: Shell navigation, owner формы/dirty/save: app-settings.js.
+
 [Scope/review/rollback](../ui/UI_MIGRATION_PLAN.md).
 
 ## Demo-only chat embedding — 2026-11-02

@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Settings и меню rail S1c — 2026-11-02
+
+Owner: Web Shell / Settings presentation. Shell checkpoint сохранён в `2a4831c5`.
+По прямому запросу пользователя настройки перенесены во вкладку существующего
+Dockview, gear — вниз слева. Сохранены настоящие форма/save owner, hover actions
+и подписи; применены общие menu styles. Старый root Settings path удалён.
+Проверены dirty/close/save race/error, lifecycle/cancellation, narrow/theme/zoom;
+performance guard: нет bridge reads при повторном открытии чистой формы.
+S1c **In Review**; исходная очередь сохранена, следующий предлагаемый срез — S2a.
+[Scope, evidence и rollback](../ui/UI_MIGRATION_PLAN.md#s1c--settings-view-и-rail-menus).
+
 ## Production Dockview по эталону Demo — 2026-11-02
 
 Owner: Web Shell/presentation. S1b размещает общий Office/Workspace/plugin chat и
