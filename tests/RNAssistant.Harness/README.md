@@ -759,6 +759,12 @@ reply arrives; completed chats must remain writable without stale busy state.
 It also opens a run started outside the panel and observes completion through
 state polling in both project and plugin views. Late create, cancel, delete
 and project-connection replies retain the newer chat selection.
+`node tests/web/workspace-chat-cancel.test.js` checks one refresh/retry after typed
+stale refusal in project/plugin chats, exact run/view ownership, terminal state,
+uncertain delivery, bounded repeated refusal and acknowledgement without false completion.
+`plugins: admitted run cancellation and shutdown belong to application` also
+verifies stale refusal before the exact Stop. Shared-history/publication fixtures
+keep current user-role tool results hidden through the common Office DTO.
 `node tests/web/preview-workspace-identity.test.js` checks that the preview bridge
 does not reuse a visible project ID after history deletion and reconnection.
 `node tests/web/workspace-chat-run-notice.test.js` presents a failed typed run

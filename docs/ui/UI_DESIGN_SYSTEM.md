@@ -104,6 +104,10 @@ production tokens. Адаптер tab spacing/close icon ограничен Dock
 
 ## Применение правил сейчас
 
+Исправление protocol results/Stop по фото 2026-11-02 сохраняет общий transcript,
+composer и tokens. Удаляются ошибочные сообщения и разрывы блоков запуска; статус
+отмены использует существующую строку и кнопку. Новых controls/CSS overrides нет.
+
 S2b.12 меняет вход данных общего transcript, без новых UI-компонентов, controls или
 CSS. История/stream/reasoning используют прежние renderer и tokens. Два адресных
 source не означают две реализации чата; фабрика DOM-представления — следующий шаг.

@@ -499,7 +499,9 @@ owner unavailable, so a stale browser preview is cleared. Preview reads never
 append events, cancel a run or create a second durable store. Both the caller
 and owner check run/checkpoint scope. The owner requires an append after invocation
 start, so an old request cannot cancel a later continuation of the same run.
-Cursor drift returns `StaleState`; refresh state before making another explicit
+Cursor drift returns `StaleState` without dispatch. The project/plugin UI may refresh
+and retry that Stop once while the original view and run still match; other failures
+and uncertain delivery are not retried. CLI callers refresh before another explicit
 request. `Requested` confirms signal acceptance only. `Unconfirmed` covers a missing
 owner, delivery timeout or a run whose kernel start has not yet been recorded;
 it never means the run stopped. `AlreadyStopped` leaves pending approvals intact.

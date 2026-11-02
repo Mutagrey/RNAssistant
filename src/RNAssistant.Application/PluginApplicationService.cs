@@ -662,6 +662,10 @@ namespace RNAssistant.Application
         }
         internal static ChatMessageViewDto PresentWorkspaceMessage(ChatMessage message)
         {
+            // JSON-profile tool results use the user role. Keep the same hidden
+            // projection as Office; they are not user input or assistant answers.
+            if (message?.ProtocolMessage == true && message.Role != "assistant")
+                return ChatMessageViewDto.From(message);
             if (message.Role == "assistant" && message.ResponseProtocolVersion == ConversationResponse.ProtocolVersion)
             {
                 var accepted = ConversationResponseHistoryReader.Read(message);

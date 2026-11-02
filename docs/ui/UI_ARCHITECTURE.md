@@ -28,6 +28,11 @@ storage contracts остаются в domain docs из [README](../README.md).
 
 ## Единый чат: обязательная целевая граница
 
+Исправление по фото 2026-11-02: Application workspace projection использует общий
+скрытый DTO для protocol results с ролью `user`; Web project/plugin adapter
+обрабатывает stale Stop через один addressed refresh/retry. Общие renderer/composer
+и kernel guards сохранены. Это исправление consumers, не завершение S2.
+
 Уточнение пользователя 2026-11-02: один Chat View и одна реализация всех общих
 возможностей для любого чата. Office/project/plugin — источники контекста и
 адаптеры services/tools, не самостоятельные виды chat UI. Различаться могут

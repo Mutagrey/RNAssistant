@@ -106,7 +106,8 @@
   function chatRequestKey(workspaceId, sessionId) { return JSON.stringify([workspaceId, sessionId]); }
   function chatBusy() { return !!currentSnapshot() && window.RNAssistantConversationInput.isPending("workspace",
     { workspaceId: projectId(), sessionId: currentId() }); }
-  function cancelBusy() { return !!currentSnapshot() && pendingCancels.has(chatRequestKey(projectId(), currentId())); }
+  function cancelBusy() { return !!currentSnapshot() && pendingCancels.has(
+    chatRequestKey(projectId(), currentId()) + ":" + field(runState(), "runId", "RunId")); }
   function selectedUploadBusy() { return !!currentSnapshot() && uploadingFiles && !!uploadTarget &&
     uploadTarget.workspaceId === projectId() && uploadTarget.sessionId === currentId(); }
   function field(value, lower, upper) { return value && (value[lower] !== undefined ? value[lower] : value[upper]); }
@@ -192,6 +193,7 @@
     if (active.pendingId) return "Нужно подтвердить действие агента.";
     if (state.userInput) return "Нужен ваш ответ.";
     if (field(state, "interruptedEffectPossible", "InterruptedEffectPossible")) return "Возможное изменение требует проверки. Не повторяйте действие автоматически.";
+    if (status === "running" && cancelBusy()) return "Останавливаю запрос…";
     if (status === "running")
       return window.RNAssistantConversationState.status(
         !field(state, "modelProgressUnavailable"), true, false).label + "…";
@@ -797,24 +799,48 @@
           event.preventDefault(); window.RNAssistantWorkspaceChat.cancelMessageEdit(true); render();
         }
       },
-      stop: async function () {
+      stop: async function (value, scope) {
         var state = runState(), pid = projectId(), sid = currentId(), owner = conversationView.projection();
-        if (!state || !pid || !sid) return;
-        function selected() { return owner.isCurrent() && projectId() === pid && currentId() === sid; }
-        var requestKey = chatRequestKey(pid, sid);
+        if (!state || !pid || !sid || !owner) return;
+        var runId = field(state, "runId", "RunId"), target = { workspaceId: pid, sessionId: sid };
+        function selected() { return scope.isCurrent() && owner.isCurrent() && projectId() === pid && currentId() === sid; }
+        function cancel(snapshot) {
+          return send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
+            runId: runId, cursor: field(snapshot, "cursor", "Cursor") });
+        }
+        var requestKey = chatRequestKey(pid, sid) + ":" + runId;
         if (pendingCancels.has(requestKey)) return;
-        pendingCancels.add(requestKey); render();
+        pendingCancels.add(requestKey); notice(statusText()); render();
         try {
-          var result = await send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
-            runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
-          window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sid }).accept(result);
-          if (selected()) {
-            owner.accept(result); render();
-            notice(result.cancelStatus === "Requested" && runStatus(result.state) === "running"
-              ? "Отмена запрошена…" : statusText());
+          var result;
+          try { result = await cancel(state); }
+          catch (error) {
+            // StaleState proves that no cancellation was dispatched. Refresh
+            // once; never repeat an uncertain delivery or target another run.
+            if (error.code !== "project_chat_stale" || !selected()) throw error;
+            var refreshed = await readProjectChat(target);
+            if (!selected()) return;
+            owner.accept(refreshed); render();
+            var current = field(owner.snapshot(), "state", "State");
+            if (field(current, "runId", "RunId") !== runId) {
+              notice("Запуск сменился. Для нового запуска нажмите «Стоп» ещё раз.", true);
+              return;
+            }
+            if (runStatus(current) !== "running") { notice(statusText()); return; }
+            result = await cancel(current);
           }
-        } catch (error) { if (selected()) notice(error.detail || error.message, true); }
-        finally { pendingCancels.delete(requestKey); render(); }
+          window.RNAssistantWorkspaceChat.snapshotSource(target).accept(result);
+          if (selected()) owner.accept(result);
+        } catch (error) { if (selected() && field(runState(), "runId", "RunId") === runId) notice(error.code === "project_chat_stale"
+          ? "Состояние запуска снова изменилось. Нажмите «Стоп» ещё раз."
+          : error.code === "project_chat_cancel_unknown"
+            ? "Не удалось подтвердить отмену. Обновите состояние чата перед повторной попыткой."
+            : error.detail || error.message, true); }
+        finally {
+          pendingCancels.delete(requestKey); render();
+          if (selected() && result && result.cancelStatus === "Requested" && runStatus() === "running" &&
+              field(runState(), "runId", "RunId") === runId) notice("Отмена запрошена…");
+        }
       },
       resolve: function (approve) {
         var pendingId = currentSnapshot() && currentSnapshot().pendingId;

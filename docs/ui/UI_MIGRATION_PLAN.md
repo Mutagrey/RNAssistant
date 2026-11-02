@@ -1,5 +1,24 @@
 # План модернизации production UI
 
+## Исправления чата по трём фото — принято, 2026-11-02
+
+Принято пользователем по «Коммит пуш».
+Owner: Application plugin/workspace projection, Web project chat adapter.
+До исправления native history fixture воспроизводит видимый protocol result с
+ролью `user`, Chromium — отсутствие обновления после stale Stop. Служебные результаты
+переключены на общую Office DTO-проекцию; Stop получил один scoped refresh/retry,
+защиту от смены run/view и читаемый статус. Kernel/storage/форматы не менялись.
+Проверены native projection, страницы истории, stale отказ и реальная отмена
+loopback model wait; Chromium — единый блок запуска без ложной ошибки протокола,
+16 project/plugin сценариев Stop, включая terminal, unknown и уход из view.
+Визуально сверены 1280/420 px; после resize геометрия composer совпадает с baseline.
+
+Ревью: `python3 -B prototypes/serve_ui.py --port 0`, `/preview/web/?scenario=ready`;
+для плагина открыть Browser → «Чат исходников». Проверить единый блок действий,
+Stop во время ответа и переход в другой чат без чужой ошибки. Mock не доказывает
+Windows/Office cancellation. Возврат — diff projection/Stop, без миграции данных.
+Полный S2 остаётся незавершённым; детали фото и Windows gap — в RISK_REGISTER.
+
 ## JSON-профиль агента — In Review, 2026-11-02
 
 Ограниченный срез настроек/Lab: один формат ответа, JSON-история без независимых

@@ -17,6 +17,15 @@ UI правок; VBA skill admission проверен при 32768 tokens. Ре�
 и прежние baseline gaps не квалифицированы.
 Карта ролей и форматов — [v8 contract](../protocols/CONVERSATION_RESPONSE_V8.md#runtime-presentation-and-message-roles--2026-11-02).
 
+## Ошибки чата проекта/плагина по фото — 2026-11-02
+
+Owner: Application message projection / Web project adapter. Tool results с ролью
+`user` ошибочно становились сообщениями «неподдерживаемый протокол», разрывая run.
+Теперь они используют общий скрытый DTO Office. Stop при stale cursor обновляет
+snapshot и повторяется один раз только для того же run/view; unknown не повторяется.
+Адресные native/Chromium проверки прошли. Это исправления общего чата, не закрытие
+S2; Windows/Office Stop и пользовательский plugin.json остаются открытым evidence.
+
 ## Адресный source Office S2b.12 — 2026-11-02
 
 Owner: Web ChatState / transcript. Создание и нормализация source выделены из

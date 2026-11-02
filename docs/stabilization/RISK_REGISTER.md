@@ -1,5 +1,21 @@
 # Stabilization risk register
 
+## Три фото: workspace transcript, Stop и preview — 2026-11-02
+
+Owner: Application plugin/workspace projection, Web project adapter. Воспроизведено:
+JSON-profile tool result (`user`, ProtocolMessage) показывался как неподдерживаемый
+assistant ответ. Это разрывало run и порождало блоки без runtime state. Исправлено
+общей скрытой DTO-проекцией; реальные unsupported assistant records не скрываются.
+Stale cursor отклоняет Stop без dispatch; прежний UI оставлял тот же cursor.
+Теперь один refresh/retry сохраняет exact run/view, unknown не повторяется.
+Native и Chromium проверки пройдены, точная причина отказа Stop на Windows по фото
+не установлена; реальная Office/WebView2 проверка остаётся открытой.
+
+Фото 3: preview отклонён из-за отсутствующего `description` у поля `id` результата
+команды `create-window` в пользовательском plugin.json. Это действующий manifest
+contract; показан прежний preview, а не подтверждение новых исходников. Сам workspace
+локально недоступен. Схема не ослаблена, файлы пользователя не изменялись.
+
 ## Artifact commit fixture: старое C# ordering expectation — 2026-11-02
 
 Owner: Office conversation delivery / Harness fixture. При S2b.12 Web-часть

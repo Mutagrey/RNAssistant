@@ -85,6 +85,7 @@ const root = path.resolve(__dirname, '../..');
       if (owner === 'project') await page.evaluate(() => RNAssistantProjectChats.setScope('projects'));
       else {
         await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
+        await page.locator('#pluginSourceChat').click();
       }
       const notice = page.locator('#workspaceChatNotice');
       await page.waitForFunction(() => document.querySelector('#workspaceChatNotice').textContent ===
@@ -119,15 +120,20 @@ const root = path.resolve(__dirname, '../..');
             ToolId: 'core.read', ToolCallId: id, Status: 'completed', ResultMessage: id } });
         RNAssistantWorkspaceChat.renderMessages(list, { sessionId: 'grouped-session',
           project: { workspaceId: 'grouped-workspace' }, messages: [activity('first', 'step-1'),
-            activity('second', 'step-2'), { Id: 'final', Role: 'assistant', RunId: runId,
+            { Id: 'result-1', Role: 'user', RunId: runId, ProtocolMessage: true },
+            activity('second', 'step-2'),
+            { Id: 'result-2', Role: 'user', RunId: runId, ProtocolMessage: true },
+            { Id: 'final', Role: 'assistant', RunId: runId,
               Content: 'Готово.', RunViewState: { RunId: runId, TurnId: 'turn', Lifecycle: 'completed',
-                ExecutionHealth: 'clean', ModelResults: [], FailedCalls: 0, UnknownEffects: 0 } }] });
+                ExecutionHealth: 'clean', ModelResults: [], SuccessfulReads: 2, VerifiedWrites: 0,
+                NoChangeWrites: 0, UnverifiedWrites: 0, FailedCalls: 0, UnknownEffects: 0 } }] });
         const article = list.querySelector('article.agent-run');
         const history = article && article.querySelector('.agent-run-overview');
         if (history) history.ensureDisclosureContent();
         const result = !!article && list.querySelectorAll('article.message').length === 1 &&
           article.querySelectorAll('.agent-activity-row').length === 2 &&
           article.textContent.includes('Готово.') &&
+          !article.querySelector('.agent-run-notice') &&
           !article.querySelector('[title="Ответвить чат отсюда"], [title="Удалить сообщения запуска"]');
         list.remove(); return result;
       });

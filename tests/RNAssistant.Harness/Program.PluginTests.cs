@@ -289,6 +289,11 @@ namespace RNAssistant.Harness
                         else
                         {
                             var current = service.ProjectChat(request);
+                            PluginFailure(() => service.ControlProjectChatAsync(new ProjectChatRequest {
+                                WorkspaceId = workspaceId, SessionId = chat.SessionId,
+                                RunId = current.State.RunId, Cursor = chat.State.Cursor }, true,
+                                settings, () => "", CancellationToken.None).GetAwaiter().GetResult(), "project_chat_stale");
+                            AssertTrue(!worker.IsCompleted, "stale cancellation leaves the run active for an addressed refresh");
                             var cancelled = service.ControlProjectChatAsync(new ProjectChatRequest {
                                 WorkspaceId = workspaceId, SessionId = chat.SessionId,
                                 RunId = current.State.RunId, Cursor = current.State.Cursor }, true,
@@ -821,6 +826,19 @@ namespace RNAssistant.Harness
                     "project and plugin chats retain accepted provider usage in the shared feed");
                 AssertTrue(!JsonConvert.SerializeObject(presented).Contains("README.md"),
                     "workspace browser view never exposes accepted call arguments");
+                var result = new ChatMessage { Role = ToolResultRoles.User, ProtocolMessage = true,
+                    RunId = "protocol-run", ToolCallId = "call-1", ToolName = "core.read",
+                    ToolResultProtocolVersion = ToolResultWire.CurrentVersion, Content = "private tool_results" };
+                var hiddenResult = PluginApplicationService.PresentWorkspaceMessage(result);
+                AssertTrue(hiddenResult.ProtocolMessage && hiddenResult.Content == null &&
+                    hiddenResult.Role == ToolResultRoles.User && hiddenResult.RunId == result.RunId,
+                    "current user-role tool results stay hidden, not unsupported assistant answers");
+                AssertEqual(JsonConvert.SerializeObject(ChatMessageViewDto.From(result)),
+                    JsonConvert.SerializeObject(hiddenResult), "Office and workspace share the hidden-result projection");
+                var unsupported = PluginApplicationService.PresentWorkspaceMessage(new ChatMessage {
+                    Role = "assistant", ProtocolMessage = true, ResponseProtocolVersion = 7, Content = "old protocol" });
+                AssertTrue(unsupported.Content.Contains("неподдерживаемый протокол"),
+                    "unsupported assistant history still has an explicit skip notice");
                 wire.ToolCallId = null;
                 AssertTrue(PluginApplicationService.PresentWorkspaceMessage(wire).Content.Contains("неполная"),
                     "source chat does not present an unpaired model action as accepted history");
@@ -1099,7 +1117,8 @@ namespace RNAssistant.Harness
                     var session = service.Conversations.GetSession(workspace, created.SessionId);
                     var messages = Enumerable.Range(0, 170).Select(index => new ChatMessage {
                         Role = "user", Content = "Message " + index }).ToList();
-                    messages.Insert(30, new ChatMessage { Role = "tool", ProtocolMessage = true,
+                    messages.Insert(30, new ChatMessage { Role = ToolResultRoles.User, ProtocolMessage = true,
+                        ToolResultProtocolVersion = ToolResultWire.CurrentVersion,
                         Content = "private protocol body" });
                     session.Messages.AddRange(messages);
                     new ChatStore(paths).Commit(session, new ConversationCommit(messages));
@@ -1113,8 +1132,8 @@ namespace RNAssistant.Harness
                         WorkspaceId = workspaceId, SessionId = created.SessionId,
                         BeforeIndex = latest.MessageStartIndex });
                     AssertEqual(11, middle.StartIndex, "previous page follows raw indexes");
-                    AssertTrue(middle.Messages.Single(item => item.Role == "tool").ProtocolMessage &&
-                        middle.Messages.Single(item => item.Role == "tool").Content == null,
+                    AssertTrue(middle.Messages[19].ProtocolMessage && middle.Messages[19].Content == null &&
+                        middle.Messages[19].Role == ToolResultRoles.User,
                         "paged protocol body remains hidden without shifting indexes");
                     var oldest = service.ProjectChatMessages(new ProjectChatHistoryRequest {
                         WorkspaceId = workspaceId, SessionId = created.SessionId,
