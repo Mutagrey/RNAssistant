@@ -44,6 +44,13 @@
     var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus();
   }
 
+  // Reuse existing command handlers when a view already owns DOM-backed commands.
+  function openButtons(trigger, root) {
+    open(trigger, Array.from(root.children).filter(function (item) {
+      return item.tagName === "BUTTON" && !item.hidden && !item.classList.contains("hidden");
+    }).map(function (item) { return { label: item.textContent.trim(), disabled: item.disabled,
+      onSelect: function () { item.click(); } }; }));
+  }
   function render(items, options) {
     options = options || {};
     var label = options.label || "Дополнительные действия";
@@ -113,7 +120,7 @@
     ] }
   };
 
-  window.RNAssistantActionMenu = Object.freeze({ render: render, open: open, closeAll: closeAll,
+  window.RNAssistantActionMenu = Object.freeze({ render: render, open: open, openButtons: openButtons, closeAll: closeAll,
     closeWithin: function (root) { if (popupTrigger && root.contains(popupTrigger)) closePopup(false); }
   });
   document.querySelectorAll("[data-rna-action-menu]").forEach(function (mount) {

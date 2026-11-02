@@ -15,7 +15,7 @@
         control.dataset.uiIcon = name;
       }
       function decorate() {
-        root.querySelectorAll('button.secondary, button.rn-json-more, button.rn-json-copy').forEach(function (button) {
+        root.querySelectorAll('button.secondary, button.rn-json-more').forEach(function (button) {
           button.classList.add("button", "compact", "ghost");
         });
         root.querySelectorAll('.rn-text-viewer-search, .rn-sequence-input').forEach(function (input) { input.classList.add("control-input"); });
@@ -40,7 +40,7 @@
           if (options.draft) status.textContent = "Есть несохранённые изменения";
           else if (!full) status.textContent = status.textContent.replace("exact source", "текст").replace("viewer bound", "лимит просмотра");
           var search = reader.querySelector('.rn-text-viewer-search');
-          search.placeholder = "Найти в тексте"; search.setAttribute("aria-label", "Найти в тексте");
+          if (search) { search.placeholder = "Найти в тексте"; search.setAttribute("aria-label", "Найти в тексте"); }
           reader.querySelector('.rn-text-viewer-source').setAttribute("role", "document");
           reader.querySelector('.rn-text-viewer-source').setAttribute("aria-label", "Текст документа · только чтение");
           reader.querySelectorAll('.rn-text-viewer-toolbar button').forEach(function (button) {

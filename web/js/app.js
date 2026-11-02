@@ -45,9 +45,9 @@ function bindProductNavSearches() {
 }
 
 function switchTab(name, options) {
-  var workspaceView = name === "settings" ? "settings" : name === "chat" ? "conversation" : null;
-  if (name === "settings") {
-    // Settings is a workspace view. Keep existing callers, with one placement path.
+  var workspaceView = name === "settings" || name === "request" ? name : name === "chat" ? "conversation" : null;
+  if (name === "settings" || name === "request") {
+    // These are workspace views. Keep existing callers, with one placement path.
     name = "chat";
     options = { preserveChatOwner: true };
   }

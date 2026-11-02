@@ -198,7 +198,75 @@ L1 = host-independent component; L2 = browser requirements; L3 = host integratio
 Не создавать универсальный VirtualList/DataTable, если существующих bounded
 renderers/Tabulator достаточно для конкретного сценария.
 
+## Структура запроса — production, 2026-11-02
+
+[Макет](review/request-structure.html) — ревью содержимого view, не новая Shell
+или развитие замороженного Demo. [Маршруты и типы](UI_SCREEN_MAP.md#структура-запроса--production-2026-11-02).
+
+- Общий NavigationTree: selected/focus, клавиатура, whole-row selection, spacing,
+  иконки. Локальное оглавление не становится global-nav; его выбор не закрывает
+  Shell navigation. Максимум раздел → сообщение, содержимое читается рядом.
+- EditorTabs/общие controls: Состав/Ответ/Изменения, Markdown/JSON/Текст.
+  Viewer API расширен внешним управлением toolbar; standalone controls других consumers сохранены. Внутренние controls не скрываются через CSS, renderer общий. В макете Markdown использует общий
+  sanitized renderer, JSON/text — ViewerRegistry; это не новый production API.
+- Роль/размер/тип — короткие подписи. Причина отказа — текст; статус не только цвет.
+  Без новых цветов групп, крупных карточек и повторного текста в каждом раскрытии.
+- Feature CSS владеет только оглавление/reader layout и переходом список/detail
+  по ширине view. Tree/buttons/forms берут геометрию из общих tokens/components.
+  Новый splitter и собственная тема не вводятся.
+
+Ревью: обе темы, narrow/zoom, длинные имена, JSON-строка, partial/unavailable,
+видимый фокус и возврат к списку. Формат не маскирует исходный тип; текущий snapshot
+не становится runtime proof. Production lifecycle/performance evidence — в Migration Plan.
+
+### Кнопки, формы и меню диагностики
+
+Scope подтверждён пользователем: диагностика и её реальные общие consumers.
+Production включён по прямому указанию; визуальная проверка выполнена на synthetic bridge. Новая тема диагностики и локальные варианты кнопок не нужны.
+В production используются EditorTabs, mode-toggle, rna-form-control, NavigationTree
+и портальный ActionMenu; CSS макета задаёт только раскладку/состояние narrow.
+
+Заменённые дубли (старые paths удалены):
+
+| Удалённый путь | Действующий owner |
+|---|---|
+| `app-trajectory.css`: собственные размеры icon-btn, SVG, menu buttons/body и fields | `app-product-components.css` + product tokens; в trajectory остаётся layout/filter composition |
+| ModelContext buttons смешивают `button secondary compact`; details helper создаёт только `secondary` | Один вариант общего button для соответствующей роли, не новые размеры у каждого helper |
+| Компактный JSON viewer самостоятельно собирает details-menu с actions | Общий ActionMenu с адаптером команд viewer; parse/format/copy остаются у JSON viewer |
+| Отдельные toolbar controls в source/messages и их metadata details | Один reader toolbar и actions выбранного объекта; никакого параллельного «копировать то же» |
+| Feature CSS задаёт мелкие интервалы и control density буквально | Общие tokens/components для повторяемой геометрии; feature CSS только размещает элементы |
+
+Расширение общего compact control допускается там, где текущего варианта не хватает:
+значения живут в tokens/components и используются всеми затронутыми consumers.
+Не копировать размеры в HTML/JS и не компенсировать старые rules новыми overrides.
+Native dropdown списка остаётся form control, меню команд — ActionMenu; смешивать
+их только ради похожего вида не надо. Просмотр форматного JSON сохраняет отдельный
+выбор дерево/текст/исходный: это формы одного viewer, не глобальные разделы.
+
+Production JSON (включая меню узла), журнал/связи событий и reader используют
+портальный ActionMenu. `openButtons` принимает существующие DOM-команды, сохраняя
+их handlers и disabled state. При unmount меню закрывается. Viewer API `toolbar:false`
+передаёт controls выбранного сообщения reader; standalone consumers сохраняют toolbar.
+`sourceLabel` отличает декодированную строку от точного JSON. Compact controls используют
+`--control-compact`; log filters — общие pressed buttons без отдельной dark-палитры.
+
+Снимки макета: [Markdown](review/request-structure-wide.png),
+[JSON-строка](review/request-structure-json.png),
+[меню запроса](review/request-structure-menu.png),
+[узкий dark view](review/request-structure-narrow.png).
+Локально проверены реальные Tree/EditorTabs/ActionMenu/ViewerRegistry в макете:
+форматы, полный JSON сообщения, исходник запроса, Escape/возврат фокуса, меню
+в пределах viewport, partial/missing и ширины 320–1200 px. Это ревью layout,
+история проектного ревью. Production screenshots и измерения перечислены в Migration Plan.
+Запуск из корня: `python3 -m http.server 8898 --bind 127.0.0.1`, затем
+`/docs/ui/review/request-structure.html`. Ни bridge, ни модели не подключаются.
+
 ## Контракт компонента и ревью
+
+Для отдельного plugin preview в S3b используются те же Dock tabs, header/actions
+и общие controls. Чат и предпросмотр — независимые views; preview не получает
+собственный composer или вторую оболочку. Размещение narrow/wide и focus/close
+проверяются отдельно при переносе, после завершения request S3a.
 
 Для выделяемого компонента здесь фиксировать source/public API, реальные consumers,
 владельца данных, states, keyboard/focus, tokens, события, cleanup, portability и

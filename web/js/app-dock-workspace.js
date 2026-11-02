@@ -10,6 +10,7 @@
   var views = {
     conversation: { title: "Чат", icon: "chat" },
     inspector: { title: "Инспектор", icon: "panel" },
+    request: { title: "Запрос модели", icon: "code" },
     settings: { title: "Настройки", icon: "settings", canClose: function () { return RNAssistantSettingsView.canClose(); } }
   };
   function element(tag, className, label) {
@@ -46,6 +47,12 @@
     settingsVisible = nextSettings; roots.settings.inert = !nextSettings;
     if (deactivateSettings) RNAssistantSettingsView.deactivate();
     if (activateSettings) RNAssistantSettingsView.activate();
+    roots.request.inert = !visible("request");
+    if (panel("request")) RNAssistantModelContext.onDockState(true, visible("request"));
+    else Promise.resolve().then(function () {
+      // Dockview briefly removes a panel while moving it; dispose only after that transaction.
+      if (!restoring && !panel("request")) RNAssistantModelContext.onDockState(false, false);
+    });
     RNAssistantChatInspector.onDockState(!!panel("inspector"), visible("inspector"));
     RNAssistantShellLayout.renderWorkspace({ layout: { visible: section === "chat", canMaximize: !!api.activePanel,
       maximized: api.hasMaximizedGroup(), panels: api.panels.length, activeView: api.activePanel && api.activePanel.id,
@@ -113,7 +120,7 @@
     if (id === "inspector") RNAssistantChatInspector.prepareOpen();
     var item = panel(id);
     // The gear opens in the main group; repeat clicks activate without relocating it.
-    if (id === "settings" && !item && !group) {
+    if ((id === "settings" || id === "request") && !item && !group) {
       group = panel("conversation") ? panel("conversation").group : api.activeGroup;
       direction = "within";
     }
@@ -302,7 +309,8 @@
     roots.conversation.append(document.getElementById("chatDropZone"), document.getElementById("workspaceChatView"));
     roots.inspector = document.getElementById("chatInspector"); roots.inspector.hidden = false;
     roots.settings = document.getElementById("settingsView");
-    parking.append(roots.conversation, roots.inspector, roots.settings);
+    roots.request = document.getElementById("modelContextDialog"); roots.request.classList.remove("hidden");
+    parking.append(roots.conversation, roots.inspector, roots.settings, roots.request);
     roots.settings.hidden = false;
     host = element("div", "chat-dock-host"); host.id = "chatDockHost";
     host.setAttribute("role", "region"); host.setAttribute("aria-label", "Рабочее пространство");
@@ -369,6 +377,8 @@
   }
   window.RNAssistantDockWorkspace = {
     bind: bind, mount: mount, show: show, close: close, updateContext: updateContext,
+    isVisible: visible,
+    setTitle: function (id, title) { var item = panel(id); if (item && item.title !== title) item.api.setTitle(title); },
     toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel,
     canRenderConversation: function () { if (!api || conversationVisible) return true; dirtyConversation = true; return false; },
     onTabChange: function (name) {

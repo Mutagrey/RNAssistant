@@ -1,0 +1,92 @@
+{
+  "cleanupTwentyCycles": [
+    8087836,
+    8383424
+  ],
+  "route": "Dock request / selected message / exact request via menu",
+  "browser": "156.0.8078.79",
+  "stylesheetVerified": true,
+  "heapAfterFiveRuns": {
+    "open": 8244760,
+    "closed": 8051276
+  },
+  "fixture": "2000 messages, 55 repeated text fragments each",
+  "bytes": 4473924,
+  "samples": [
+    {
+      "openingMs": 18,
+      "inputMs": 116,
+      "tabRoundTripsMs": 2713,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 175
+    },
+    {
+      "openingMs": 16,
+      "inputMs": 75,
+      "tabRoundTripsMs": 2958,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 175
+    },
+    {
+      "openingMs": 13,
+      "inputMs": 68,
+      "tabRoundTripsMs": 2651,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 175
+    },
+    {
+      "openingMs": 15,
+      "inputMs": 78,
+      "tabRoundTripsMs": 2853,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 175
+    },
+    {
+      "openingMs": 13,
+      "inputMs": 72,
+      "tabRoundTripsMs": 2634,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 175
+    }
+  ]
+}

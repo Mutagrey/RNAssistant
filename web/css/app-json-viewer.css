@@ -41,7 +41,6 @@
 
 .rn-json-mode,
 .rn-json-action,
-.rn-json-copy,
 .rn-json-more {
   min-height: 24px;
   padding: 2px 7px;
@@ -56,7 +55,6 @@
 
 .rn-json-mode:hover,
 .rn-json-action:hover,
-.rn-json-copy:hover,
 .rn-json-more:hover,
 .rn-json-mode.active {
   border-color: var(--accent);
@@ -69,7 +67,6 @@
 
 .rn-json-mode:focus-visible,
 .rn-json-action:focus-visible,
-.rn-json-copy:focus-visible,
 .rn-json-more:focus-visible,
 .rn-json-row:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -233,23 +230,6 @@
   right: 4px;
   color: var(--muted);
 }
-.rn-json-copy-menu {
-  cursor: pointer;
-  list-style: none;
-  min-width: 24px;
-  text-align: center;
-}
-.rn-json-copy-menu::-webkit-details-marker { display: none; }
-.rn-json-node-actions[open] { position: static; flex-basis: 100%; }
-.rn-json-node-actions[open] > .rn-json-copy-menu { text-align: right; }
-.rn-json-node-actions .rn-json-copy { margin: 3px 4px 2px 0; }
-
-.rn-json-copy {
-  min-height: 20px;
-  padding: 1px 4px;
-  font-size: .7857rem;
-}
-
 .rn-json-more {
   margin: 6px 8px;
 }
@@ -269,19 +249,15 @@
 .rn-json-viewer.is-compact { border: 0; border-radius: 0; background: var(--surface); font-size: 11px; }
 .rn-json-viewer.is-compact .rn-json-toolbar { flex-direction: row; align-items: center; flex-wrap: nowrap; gap: 6px; padding: 2px 0; background: transparent; border-bottom: 1px solid var(--line); overflow: visible; }
 .rn-json-viewer.is-compact .rn-json-modes, .rn-json-viewer.is-compact .rn-json-actions { flex: none; }
-.rn-json-mode-select { height: 26px; min-height: 26px; max-width: 105px; padding: 2px 22px 2px 6px; border: 0; border-radius: 4px; background: var(--surface-subtle); color: var(--ink); font-family: var(--font-family, "Segoe UI", sans-serif); font-size: 11px; }
+.rn-json-mode-select { max-width: 130px; }
 .rn-json-viewer.is-compact .rn-json-status { flex: 1; min-width: 0; min-height: 0; padding: 0 2px; border: 0; font-family: var(--font-family, "Segoe UI", sans-serif); font-size: 10px; }
-.rn-json-viewer.is-compact .rn-json-row { min-height: 22px; padding: 2px 26px 2px 4px; border: 0; line-height: 1.55; }
+.rn-json-viewer.is-compact .rn-json-row { min-height: var(--control-compact); padding: 2px calc(var(--control-compact) + var(--space-1)) 2px var(--space-1); border: 0; line-height: 1.55; }
 .rn-json-viewer.is-compact .rn-json-children { margin-left: 10px; border: 0; }
 .rn-json-viewer.is-compact .rn-json-closing-row { display: none; }
 .rn-json-viewer.is-compact .rn-json-key { color: var(--ink); }
 .rn-json-viewer.is-compact .rn-json-count { font-size: 10px; }
 .rn-json-viewer.is-compact .rn-json-node-actions { top: 1px; right: 2px; opacity: 0; }
 .rn-json-viewer.is-compact .rn-json-row:hover > .rn-json-node-actions,
-.rn-json-viewer.is-compact .rn-json-row:focus-within > .rn-json-node-actions,
-.rn-json-viewer.is-compact .rn-json-node-actions[open] { opacity: 1; }
-.rn-json-viewer.is-compact .rn-json-node-actions[open] { position: absolute; z-index: 5; min-width: 150px; padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); box-shadow: 0 4px 14px #0002; }
-.rn-json-viewer.is-compact .rn-json-node-actions[open] .rn-json-copy { display: block; width: 100%; margin: 0; padding: 5px 8px; border: 0; text-align: left; color: var(--ink); }
-.rn-json-viewer.is-compact .rn-json-node-actions[open] .rn-json-copy:hover { background: var(--surface-hover); }
+.rn-json-viewer.is-compact .rn-json-row:focus-within > .rn-json-node-actions { opacity: 1; }
 .rn-json-viewer.is-compact .rn-json-text { padding: 6px 4px; }
 @media (hover: none) { .rn-json-viewer.is-compact .rn-json-node-actions { opacity: 1; } }

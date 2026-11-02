@@ -1,5 +1,26 @@
 # Stabilization risk register
 
+## Request view S3a: пределы измерений — 2026-11-02
+
+Owner: Web diagnostics presentation / shared viewers. Ограничены строки оглавления
+(50), active + 2 retained views; закрытие освобождает tree listeners, readers и leases.
+Synthetic before/after и 20 циклов сохранены в [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md#s3a-запрос-и-общие-controls-диагностики--production-2026-11-02).
+Новый маршрут к полному исходнику включает меню и медленнее прежнего прямого tab;
+общего ускорения не заявляем. JS heap после первого/двадцатого закрытия: ~8,09/8,38 MB;
+эта короткая выборка не квалифицирует длительную память и WebView2/process RSS.
+Поиск по всему списку/role filter и восстановление выбранного request после restart
+не входят в срез (layout восстанавливает вид, пользователь выбирает запрос).
+
+Plugin preview остаётся прежним adapter вне Dockview. Расширенный browser test
+`workspace-inspector` не проходит целиком: переключатель панели перекрывается
+project navigation splitter / conversation overlay (также при возврате после
+смены ширины). Owner: Web Plugins/PreviewSurface + DockWorkspace, перенос preview
+в отдельный view S3b. S3a исправляет обновление видимости после закрытия Inspector,
+но не квалифицирует старое размещение preview. Exact workspace scope/leases
+проверены в model-context; narrow request — в diagnostics-navigation. Полный
+pointer route и сохранность iframe после него остаются открытыми, без обхода
+неудачного UI-действия через программный open в тесте.
+
 ## Диагностика: оставшиеся границы — 2026-11-01
 
 Owner: Office diagnostics services / Web diagnostics presentation.

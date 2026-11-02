@@ -236,12 +236,6 @@ html[data-theme="dark"] .rn-code-editor .CodeMirror-gutters {
   background: var(--surface-subtle);
 }
 
-html[data-theme="dark"] .log-filter-button:hover,
-html[data-theme="dark"] .log-filter-button.active {
-  border-color: var(--line-strong);
-  background: var(--surface-selected);
-}
-
 html[data-theme="dark"] .rn-code-editor .CodeMirror-linenumber {
   color: var(--ink-faint);
 }

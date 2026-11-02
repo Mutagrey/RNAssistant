@@ -215,6 +215,39 @@ cancel requested/cancelled/failed/unknown различаются, где это 
 Существующие observer/push/fallback polling сохраняются; новый глобальный polling
 или progress/task store без доказанной необходимости не вводится.
 
+## Request view: владельцы — 2026-11-02
+
+Реализовано по «Переключи на продакшен и коммит пуш». UX —
+[Screen Map](UI_SCREEN_MAP.md#структура-запроса--production-2026-11-02).
+Перенос расширяет существующий каталог `views` DockWorkspace; второй registry,
+Shell/controller, transport или data store не вводится. Отдельные изменения
+Settings/rail S1c сохранены. Runtime/Bridge/storage не менялись.
+
+| Owner | Ответственность |
+|---|---|
+| DockWorkspace | Размещение request singleton и lifecycle; layout содержит только id вида `request`. Exact scope остаётся в памяти reader; после перезапуска нужен явный выбор запроса |
+| Diagnostics navigation | Exact owner/workspace/chat/run/request + deep links; не размещает request DOM; alias `switchTab("request")` активирует существующий DockWorkspace |
+| ModelContext reader | Existing metadata/body queries, cache/leases/generations; selection/group/page/mode. Видимость задаёт DockWorkspace; выбранный saved scope не зависит от активного чата |
+| [`app-model-context-contents.js`](../../web/js/app-model-context-contents.js) | Оглавление по recorded composition/trace и точным JSON-полям; одна подготовка для grouped/wire, без классификации протокола |
+| ViewerRegistry / text / Markdown / JSON | Один выбранный renderer, copy/source/cleanup; без знания session, bridge или исхода исполнения |
+| Existing services/compiler/event/CAS | Истина attribution, допусков и данных; не переписываются этим UI-срезом |
+
+Existing source/evidence/resource helpers переиспользуются, не копируются.
+Первый срез опирается на текущие typed DTO. Полные границы частей смешанных
+инструкций требуют compiler attribution: UI не ищет их по regex/заголовкам.
+Закрытие view отменяет только его чтения и освобождает viewers, не run.
+Move/split сохраняют DOM; transient removal Dockview не считается закрытием. Activate возобновляет только прерванное чтение по exact scope/generation;
+dispose очищает scoped reads/listeners/leases, presentation cache остаётся bounded.
+
+## Plugin preview S3b: отдельный view
+
+Уточнение пользователя 2026-11-02 для следующего S3b: plugin preview — отдельный
+Dockview view, conversation остаётся общим для Office/Workspace/plugin. Каждый
+view владеет своим presentation lifecycle; iframe/session принадлежат существующему
+Plugins/PreviewSurface, chat draft/run — прежним conversation owners. Их размещение
+и закрытие независимы. Текущий S3a не переносит preview: сохранён прежний adapter;
+исправлена лишь синхронизация его видимости после закрытия Inspector.
+
 ## Производительность, portability и поддержка
 
 Сохранить bounded message windows, incremental rendering, lazy payload/media,

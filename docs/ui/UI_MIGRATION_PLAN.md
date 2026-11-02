@@ -21,12 +21,12 @@ Canonical план последовательности, проверки, basel
 | C — shell prototype | P1/P2, production Shell в S1b | Demo выбран эталоном; production adaptation всё ещё проходит визуальное ревью |
 | D — minimum contracts | Общие tokens/components, один Dock catalog и ActionMenu | Нужный минимум используется сейчас. Standalone component fixture проверен; публичный panel SDK/plugin export не объявлен готовым |
 | E — real Chat | S1a/S1b → S2 | Общий bounded window/DOM/drafts и docking есть. Полная parity, независимые chat instances и catalog paging ещё впереди |
-| F — Inspector/diagnostics | Inspector в S1b, остальные views в S3 | Настоящий Inspector сохранён; Dock diagnostics и общий background status ещё открыты |
+| F — Inspector/diagnostics | Inspector в S1b; Request в S3a по прямому запросу | Request перенесён; журнал/Lab/Приложение и общий background status ещё открыты |
 | G — остальные views | S3 → S4 → S5 | Переносить по одному функциональному срезу через существующий каталог; сохранять native host/session boundaries |
 | H — удаление legacy | Обязательная часть каждого среза, финальная сверка S5 | Заменённые paths удаляются сразу после проверки; временные границы имеют owner/removal gate в MIGRATION_MAP |
 
 Очередь уточнена прямым запросом пользователя: **Shell S1b (`2a4831c5`) →
-Settings/rail S1c (`26f4d87f`, Approved) → S2a capabilities общего чата → остальные
+Settings/rail S1c (`26f4d87f`, Approved) → Request/diagnostics controls S3a (прямое указание пользователя) → S2a capabilities общего чата → остальные
 части S2 → S3/S4/S5**. S1c выделен из Settings-части S4; исходный план сохранён. Единство registry/commands не откладывается
 до S5: каждый новый view подключается к уже существующему механизму. Следующий
 функциональный срез автоматически не начинается до ревью предыдущего.
@@ -337,12 +337,98 @@ Rollback: отменить только diff S1c поверх `2a4831c5`; дан
 | S1a / S1b | Общие chat rules и production Chat workspace + Inspector реализованы; визуальное ревью S1b по эталону Demo | Дубли composer presentation и старый Inspector grid/split/open-width удалены. Остальные splitters пока нужны |
 | S2 | View-scoped chat presentation, полная parity model/context/attachment capabilities, chat catalog paging при необходимом typed contract | Заменённые global renderer/current-selection paths; без второго durable store |
 | S3 | Browser/material viewers + diagnostics views, lazy detail, deep links | Старые раздельные placement/toggle paths, redundant viewer mounts |
+| S3b — отдельно после текущего S3a | Общий Chat View и отдельный plugin preview view в существующем Dockview; пользователь подтвердил разделение 2026-11-02 | Связанные preview/chat placement и toggle paths, прежний plugin splitter после переключения consumers |
 | S4 | Library/VBA/project navigation; Settings вынесен в S1c; shared reusable UI для app/plugin | Только подтверждённые duplicate controls/styles, legacy route aliases после consumer switch |
 | S5 | Оставшиеся plugin views, portable export/public API и финальная сверка единства | Migration adapters, obsolete CSS и Demo runtime-копии; reference screenshots можно сохранить |
 
 Каждый срез: problem/scope → baseline → маленький diff → behavior/perf checks →
 визуальное ревью → согласование → удаление заменённого пути. Нет автоматического
 массового rename, нового npm/bundler/loader, универсального store или SDK framework.
+
+S3b — уточнение уже запланированного переноса browser/plugin preview, не второй
+чат. Scope: независимые open/close/move/split; закрытие предпросмотра не скрывает
+чат и не отменяет run; перенос сохраняет iframe/session и черновик. Владельцы —
+DockWorkspace (placement), Plugins/PreviewSurface (preview lifecycle), общий
+Conversation view (чат). Сначала завершаются commit/push S3a; S3b здесь не реализован.
+S2a capabilities общего чата остаётся самостоятельной работой. Перед S3b нужны
+baseline и отдельное визуальное ревью.
+
+## S3a: запрос и общие controls диагностики — production 2026-11-02
+
+После проектирования пользователь поручил «Переключи на продакшен и коммит пуш».
+[Карта/макет](UI_SCREEN_MAP.md#структура-запроса--production-2026-11-02),
+[владельцы](UI_ARCHITECTURE.md#request-view-владельцы--2026-11-02).
+Это выбранный срез S3; остальная очередь не объявляется завершённой.
+
+Включено: request singleton в существующем DockWorkspace; Состав/Ответ/Изменения;
+оглавление recorded composition/wire, 50 строк с заменой страницы; один выбранный
+Markdown/JSON/Текст reader, части content, источники/полнота, точные сообщение/запрос.
+Обзор читает metadata, тела — по действию. Existing typed DTO/compiler/transport/CAS
+сохранены. Active + 2 retained views, ограниченные presentation snapshots, отмена,
+leases и stale guards принадлежат прежнему reader. После restart вид открывается
+с приглашением выбрать запрос; scope не восстанавливается из active chat.
+
+Удалено: прежнее размещение запроса в Diagnostics, семь tabs, grouped/wire ленты
+раскрытий, старые CSS/handlers; локальные control/menu rules request/trajectory/log,
+самостоятельные меню JSON nodes/history. Общий ActionMenu обслуживает эти consumers;
+Lab и Приложение получили общие controls, их сценарии и данные не менялись.
+
+Проверено: model-context, diagnostics-navigation, model-context-layout, JSON/text
+viewer и artifact consumers, run-journal, chat-history-layout,
+model-diagnostics-layout, dock-workspace, shell-navigation.
+Основные маршруты: rejected tool_calls → retry → comparison → exact message,
+source → resource → message, request → run → request; no eager model checks,
+metadata-only overview, late response/cancel, partial/empty/error, pinned owner,
+move/split/restore без потери DOM. Light/dark, 320/390/420/1440, narrow list/detail,
+whole-row tree/keyboard, Escape/focus и portalled menus проверены в Chrome.
+
+Расширенный `workspace-inspector` адаптирован к новому reader, но не проходит
+целиком: старый переключатель панели перекрывается project splitter/overlay.
+Это открытая placement-граница S3b; полный preview pointer route и сохранность
+iframe после него не квалифицированы. Exact workspace scope/leases покрыты
+model-context. Исправлено обновление видимости preview после закрытия Inspector;
+новый отдельный preview view в этом срезе не создаётся.
+
+Production на synthetic bridge: [Markdown](review/request-production-markdown.png),
+[JSON-строка](review/request-production-json.png),
+[меню в узкой тёмной панели](review/request-production-menu-narrow.png),
+[масштаб 150%](review/request-production-zoom.png).
+
+Измерения — одинаковый fixture 2000 сообщений / 4 473 924 байта, Chrome 156,
+HEAD до среза `a341f7f8`, 5 повторов и отдельно 20 open/read/close. Время включает
+browser action/wait; это не latency модели. Точные отчёты и production screenshots
+сохранены в `review/`. Windows/WebView2/process memory отдельно не квалифицированы.
+
+
+| Проверка | До | После |
+|---|---:|---:|
+| Открытие metadata, медиана | 12 ms | 15 ms |
+| Открытие + чтение первого сообщения | 111 ms | 75 ms |
+| 3 перехода сообщение → исходник → сообщение | 1817 ms | 2713 ms |
+| Metadata / body reads на обзоре | 1 / 0 | 1 / 0 |
+| Body reads за все переключения | 1 | 1 |
+| Смонтированные строки сообщений | 50 | 50 |
+| DOM оглавления/reader | 504 | 175 |
+| JS heap после закрытия/GC | 7823856 | 8051276 |
+| JS heap после 1-го → 20-го дополнительных циклов | 7854164 → 7997088 | 8087836 → 8383424 |
+
+[Точные before](review/request-production-before.json) / [after](review/request-production-after.json).
+Первое сообщение стало доступно с меньшим DOM. Общего ускорения не заявляем:
+открытие добавляет Dock placement, raw round-trip теперь включает открытие меню
+вместо отдельного таба. После 20 циклов heap изменился на ~143 KB до / ~296 KB после;
+это общий V8 heap с layout/JIT, не доказательство отсутствия утечек и не process RSS.
+Следующая оптимизация маршрута: сравнить одинаковое число действий и отдельно
+измерить parse/render; рассмотреть прямую команду исходника рядом с форматом.
+Эти числа измеряют пользовательский маршрут с ожиданиями Playwright, а не CPU.
+Кэш тела уже исключает повторное чтение; дальнейший выигрыш в нём не заявляется.
+Тела не перечитываются; полный body одного запроса и максимум 2 неактивных view
+ограничены прежними лимитами. Долгий Windows memory/latency профиль остаётся открытым.
+
+Не закрывает: полный backend event scan/отмену синхронного preview, полную
+attribution D3, scenario editor/matrix D4, несколько живых request views,
+общий поиск/role filter списка сообщений, Windows/Office/real endpoints.
+Старый qualification plan не закрыт UI-срезом. Откат — revert этого UI-среза,
+без изменения данных; параллельный reader/feature flag не оставлен.
 
 ## Проверки, откат, временные пути
 

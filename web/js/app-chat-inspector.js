@@ -621,6 +621,8 @@
     open = present; visible = active;
     if (!visible) cancelUsage();
     sync();
+    var preview = previewSurface();
+    if (preview && preview.refreshLayout) preview.refreshLayout();
   }
 
   function browserToggleOwner() {

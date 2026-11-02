@@ -403,16 +403,6 @@
   gap: 5px;
 }
 
-.log-filter-button {
-  gap: 4px !important;
-  min-height: 24px;
-  padding: 0 7px;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .log-filter-button::before {
   width: 6px;
   height: 6px;
@@ -425,13 +415,6 @@
 .log-filter-button[data-log-filter="warning"]::before { background: var(--warning); }
 .log-filter-button[data-log-filter="success"]::before { background: var(--success); }
 .log-filter-button[data-log-filter="info"]::before { background: var(--accent); }
-
-.log-filter-button:hover,
-.log-filter-button.active {
-  border-color: var(--line);
-  background: var(--secondary-bg);
-  color: var(--text);
-}
 
 .log-filter-count {
   min-width: 15px;
@@ -623,25 +606,8 @@
   min-width: 0;
 }
 
-.log-scroll-button {
-  position: absolute;
-  right: 18px;
-  bottom: 14px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 50%;
-  background: var(--panel);
-  color: var(--text);
-  box-shadow: 0 2px 9px rgba(15, 23, 42, .16);
-}
-
-.log-scroll-button.is-visible { display: flex; }
-.log-scroll-button svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.log-scroll-button { position: absolute; right: var(--space-4); bottom: var(--space-3); display: none; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); }
+.log-scroll-button.is-visible { display: inline-grid; }
 
 .diagnostics-logs .log-section-head > div {
   display: grid;

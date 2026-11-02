@@ -1,0 +1,92 @@
+{
+  "cleanupTwentyCycles": [
+    7854164,
+    7997088
+  ],
+  "route": "Diagnostics request / expanded first message / exact request tab",
+  "browser": "156.0.8078.79",
+  "stylesheetVerified": true,
+  "heapAfterFiveRuns": {
+    "open": 8099964,
+    "closed": 7823856
+  },
+  "fixture": "2000 messages, 55 repeated text fragments each",
+  "bytes": 4473924,
+  "samples": [
+    {
+      "openingMs": 13,
+      "inputMs": 158,
+      "tabRoundTripsMs": 1782,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 504
+    },
+    {
+      "openingMs": 13,
+      "inputMs": 110,
+      "tabRoundTripsMs": 1817,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 504
+    },
+    {
+      "openingMs": 12,
+      "inputMs": 111,
+      "tabRoundTripsMs": 1850,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 504
+    },
+    {
+      "openingMs": 12,
+      "inputMs": 113,
+      "tabRoundTripsMs": 1767,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 504
+    },
+    {
+      "openingMs": 11,
+      "inputMs": 111,
+      "tabRoundTripsMs": 1850,
+      "initialReads": {
+        "metadata": 1,
+        "bodies": 0
+      },
+      "reads": {
+        "metadata": 1,
+        "bodies": 1
+      },
+      "messageRows": 50,
+      "domNodes": 504
+    }
+  ]
+}

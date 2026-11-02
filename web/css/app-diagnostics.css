@@ -3,12 +3,10 @@
 .diagnostics-heading { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex: none; }
 .diagnostics-heading h2 { margin: 0; font-size: var(--text-lg); }
 .diagnostics-scope { margin: 0; color: var(--ink-muted); overflow-wrap: anywhere; font-size: var(--text-sm); }
-#tab-diagnostics > .diagnostics-tab-panel.active, #tab-diagnostics > .model-context-dialog { flex: 1; min-height: 0; }
+#tab-diagnostics > .diagnostics-tab-panel.active { flex: 1; min-height: 0; }
 #tab-diagnostics .rna-editor-tabs { flex-wrap: wrap; flex: none; }
 #tab-diagnostics > .rna-editor-tabs { width: 100%; margin: 0; padding: 0; }
 #tab-diagnostics .rna-editor-tabs button { white-space: normal; }
-#tab-diagnostics .model-context-head { padding-inline: 0; }
-#tab-diagnostics .model-context-status { white-space: pre-line; }
 .diagnostic-summary { display: grid; gap: var(--space-3); max-width: 1000px; }
 .diagnostic-summary h3, .diagnostic-summary p { margin: 0; overflow-wrap: anywhere; }
 .diagnostic-summary .rna-table th { width: 38%; }

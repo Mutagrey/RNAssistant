@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ru" data-theme="light">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Состав запроса — проектное ревью</title>
+<link rel="stylesheet" href="../../../web/css/app.css">
+<link rel="stylesheet" href="../../../web/css/app-product-tokens.css">
+<link rel="stylesheet" href="../../../web/css/app-product-components.css">
+<link rel="stylesheet" href="../../../web/css/app-markdown.css">
+<link rel="stylesheet" href="../../../web/css/app-json-viewer.css">
+<link rel="stylesheet" href="../../../web/css/app-text-viewer.css">
+<link rel="stylesheet" href="../../../web/css/app-product-viewers.css">
+<style>
+  /* Review of view contents only. Shared controls/tokens are production assets. */
+  body { display:flex; flex-direction:column; font-family:var(--font); }
+  .review-bar, .request-head, .reader-head, .formats { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-2); padding:var(--space-2) var(--space-3); }
+  .review-bar { background:var(--canvas); border-bottom:1px solid var(--line); font-size:var(--text-sm); }
+  .review-bar strong { margin-right:auto; }
+  .request-view { container:request / inline-size; flex:1; display:flex; flex-direction:column; min-height:0; background:var(--surface); }
+  .request-head { justify-content:space-between; border-bottom:1px solid var(--line); }
+  .scope { min-width:0; overflow-wrap:anywhere; }
+  .scope strong { display:block; font-size:var(--text-base); }
+  .muted, .scope small { color:var(--ink-muted); font-size:var(--text-sm); }
+  #taskTabs { flex:none; min-width:0; }
+  .request-content { flex:1; display:grid; grid-template-columns:var(--list-width) minmax(0,1fr); min-height:0; }
+  .outline { display:flex; flex-direction:column; min-height:0; border-right:1px solid var(--line); background:var(--surface-subtle); }
+  .outline-head { padding:var(--space-3); display:grid; gap:var(--space-2); }
+  .outline-head label { font-size:var(--text-sm); }
+  .outline-head select { width:100%; }
+  #contentsTree { overflow:auto; flex:1; padding:var(--navigation-content-padding); }
+  .reader { min-width:0; min-height:0; display:flex; flex-direction:column; }
+  .reader-head { border-bottom:1px solid var(--line); }
+  .reader-head h2 { font-size:var(--text-base); margin:0; }
+  .reader-head .muted { width:100%; overflow-wrap:anywhere; }
+  #messageActions { margin-left:auto; }
+  #back { display:none; }
+  .formats { padding-bottom:0; }
+  #typeNote { margin:0; padding:var(--space-2) var(--space-3); font-size:var(--text-sm); overflow-wrap:anywhere; color:var(--ink-muted); }
+  #typeNote.attention { background:var(--warning-soft); color:var(--warning); }
+  #viewer { flex:1; overflow:auto; min-height:0; padding:var(--space-3); }
+  #viewer h3 { font-size:var(--text-lg); margin:0 0 var(--space-3); }
+  #viewer p { max-width:70ch; }
+  .facts { margin:0; display:grid; grid-template-columns:minmax(100px,1fr) 2fr; gap:var(--space-2); max-width:700px; }
+  .facts dt { color:var(--ink-muted); } .facts dd { margin:0; overflow-wrap:anywhere; }
+  .message-origin { border-top:1px solid var(--line); padding:var(--space-2) var(--space-3); font-size:var(--text-sm); color:var(--ink-muted); overflow-wrap:anywhere; }
+  .group-note { margin-top:var(--space-4); padding:var(--space-3); background:var(--surface-subtle); }
+  .review-note { margin:0; padding:var(--space-2) var(--space-3); color:var(--ink-muted); font-size:var(--text-xs); border-top:1px solid var(--line); }
+  @container request (max-width:640px) {
+    .request-content { display:block; overflow:hidden; }
+    .outline, .reader { height:100%; border:0; }
+    .request-content[data-detail="false"] .reader { display:none; }
+    .request-content[data-detail="true"] .outline { display:none; }
+    #back { display:inline-flex; }
+    .facts { grid-template-columns:1fr; } .facts dd { margin-bottom:var(--space-2); }
+  }
+</style>
+<body>
+<header class="review-bar"><strong>Макет вкладки «Запрос Q14» · Proposed</strong>
+  <select id="sample" class="rna-form-control" aria-label="Состояние макета"><option value="ready">Полная запись</option><option value="partial">Неполная запись</option><option value="missing">Тело недоступно</option><option value="unknown">Нет классификации</option></select>
+  <button class="button compact" id="theme">Тёмная тема</button>
+</header>
+<main class="request-view">
+  <header class="request-head"><div class="scope"><strong>Продажи.xlsx / Сверка отчёта</strong><small>Запуск 7 · попытка 2 · Q14</small></div><button class="icon-btn" id="requestActions" aria-label="Действия запроса" aria-haspopup="menu" aria-expanded="false" title="Действия запроса"></button></header>
+  <div id="taskTabs"></div>
+  <section class="request-content" data-detail="false">
+    <aside class="outline" aria-label="Состав запроса"><div class="outline-head"><label for="order">Сообщения · 7 · ≈ 580 ток.</label><select id="order" class="rna-form-control"><option value="groups">По разделам</option><option value="wire">Порядок отправки</option></select></div><div id="contentsTree"></div></aside>
+    <section class="reader" aria-label="Выбранный элемент"><header class="reader-head"><button class="button compact ghost" id="back">← К составу</button><h2 id="title" tabindex="-1">Обзор запроса</h2><button class="icon-btn" id="messageActions" aria-label="Действия сообщения" aria-haspopup="menu" aria-expanded="false" title="Действия сообщения" hidden></button><div class="muted" id="path">Metadata · тело ещё не открыто</div></header>
+      <div class="formats" hidden><div class="mode-toggle" role="group" aria-label="Формат содержимого"><button class="mode-button" data-format="markdown">Markdown</button><button class="mode-button" data-format="json">JSON</button><button class="mode-button" data-format="text">Текст</button></div></div>
+      <p id="typeNote" role="status"></p><div id="viewer" class="product-viewer artifact-detail-preview"></div><footer id="origin" class="message-origin" hidden></footer>
+    </section>
+  </section>
+  <p class="review-note">Синтетический пример, без модели и bridge. Только содержимое будущей вкладки. <span id="actionStatus" role="status"></span></p>
+</main>
+<script src="../../../web/js/vendor/marked.min.js"></script>
+<script src="../../../web/js/vendor/purify.min.js"></script>
+<script src="../../../web/js/app-icons.js"></script>
+<script src="../../../web/js/app-utils.js"></script>
+<script src="../../../web/js/app-markdown.js"></script>
+<script src="../../../web/js/app-navigation-tree.js"></script>
+<script src="../../../web/js/app-editor-tabs.js"></script>
+<script src="../../../web/js/app-action-menu.js"></script>
+<script src="../../../web/js/app-viewer-registry.js"></script>
+<script src="../../../web/js/app-json-viewer.js"></script>
+<script src="../../../web/js/app-text-viewer.js"></script>
+<script src="../../../web/js/app-viewer-ui.js"></script>
+<script src="request-structure.js"></script>
+</body></html>

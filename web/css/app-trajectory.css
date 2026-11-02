@@ -1,24 +1,17 @@
 .trajectory-panel { min-height: 0; min-width: 0; padding: 0; border: 0; background: transparent; }
-.trajectory-panel.active { display: flex; flex-direction: column; gap: 8px; }
-.trajectory-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.trajectory-panel.active { display: flex; flex-direction: column; gap: var(--space-2); }
+.trajectory-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .trajectory-scope { flex: 1; min-width: 0; color: var(--ink-muted); font-size: 11px; overflow-wrap: anywhere; }
-.trajectory-panel .icon-btn, .trajectory-panel .rna-action-menu-trigger { width: 30px; height: 30px; min-height: 30px; padding: 0; flex-basis: 30px; font-family: inherit; }
-.trajectory-panel .icon-btn svg, .trajectory-panel .rna-action-menu svg { width: 13px; height: 13px; }
-.trajectory-panel .rna-action-menu-body { z-index: 12; min-width: 190px; font-family: var(--font-family, "Segoe UI", sans-serif); font-size: 12px; }
-.trajectory-panel .rna-action-menu-body > button { width: 100%; min-height: 30px; padding: 5px 9px; border: 0; border-radius: 4px; background: transparent; font: inherit; text-align: left; white-space: normal; }
 .trajectory-field { display: grid; min-width: 0; gap: 4px; font-size: 11px; color: var(--ink-muted); }
-.trajectory-field input, .trajectory-field select { width: 100%; min-width: 0; height: 30px; min-height: 30px; padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background-color: var(--surface); color: var(--ink); font: inherit; font-size: 12px; }
 #trajectoryViewField { flex: 0 1 190px; }
-#trajectoryViewInput { border: 0; background-color: transparent; }
 .trajectory-advanced-options, .trajectory-export-options { flex: none; padding: 5px 8px; border-radius: var(--radius-sm); background: var(--surface-subtle); }
 .trajectory-advanced-options > summary, .trajectory-export-options > summary { color: var(--ink-muted); cursor: pointer; font-size: 11px; }
-.trajectory-querybar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 8px 0 2px; }
+.trajectory-querybar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin: 8px 0 2px; }
 .trajectory-export-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; padding-top: 8px; font-size: 11px; }
 .trajectory-export-cas { display: flex; align-items: center; gap: 4px; min-height: 30px; }
 #trajectoryExportNotice { flex-basis: 100%; color: var(--ink-muted); }
-.trajectory-status-row { display: flex; flex: none; min-height: 24px; gap: 8px; align-items: center; justify-content: space-between; }
-.trajectory-status { color: var(--ink-muted); font-size: 10px; overflow-wrap: anywhere; }
-.trajectory-status-row button { min-height: 26px; padding: 3px 8px; font-size: 11px; }
+.trajectory-status-row { display: flex; flex: none; min-height: 24px; gap: var(--space-2); align-items: center; justify-content: space-between; }
+.trajectory-status { color: var(--ink-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .trajectory-workspace {
   display: grid;
   grid-template-columns: minmax(160px, var(--split-left, 32%)) 6px minmax(0, 1fr);
@@ -67,7 +60,7 @@
 .trajectory-event-line {
   display: flex;
   min-width: 0;
-  gap: 6px;
+  gap: var(--space-2);
   align-items: center;
 }
 
@@ -97,7 +90,7 @@
   align-content: start;
   min-width: 0;
   min-height: 0;
-  gap: 6px;
+  gap: var(--space-2);
   overflow: auto;
   padding: 4px 0 4px 10px;
 }
@@ -106,7 +99,7 @@
   display: flex;
   flex-wrap: wrap;
   min-width: 0;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   justify-content: space-between;
 }
@@ -117,9 +110,8 @@
   gap: 5px;
 }
 
-#trajectoryDetailPart { max-width: 105px; min-width: 0; height: 28px; min-height: 28px; padding: 2px 22px 2px 6px; border: 0; border-radius: var(--radius-sm); background-color: var(--surface-subtle); color: var(--ink); font: inherit; font-size: 11px; }
+#trajectoryDetailPart { max-width: 150px; }
 .trajectory-detail-head strong { flex: 1; }
-.trajectory-detail-actions > button { min-height: 28px; padding: 3px 6px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; }
 
 .trajectory-detail-head strong {
   font-family: inherit;
@@ -160,7 +152,7 @@
 
 .trajectory-vba-component-head {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: center;
   justify-content: space-between;
   margin-bottom: 5px;
@@ -192,6 +184,5 @@
 }
 
 .trajectory-overview { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding: 6px 0 9px; }
-.trajectory-overview > div { display: grid; gap: 2px; font-size: 10px; color: var(--ink-muted); }
+.trajectory-overview > div { display: grid; gap: 2px; font-size: var(--text-xs); color: var(--ink-muted); }
 .trajectory-overview strong { font-size: 13px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
-.trajectory-overview > button { padding: 4px 7px; min-height: 28px; border: 0; font-size: 11px; color: var(--accent-strong); }

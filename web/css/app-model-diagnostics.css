@@ -1,25 +1,25 @@
 /* Layout only; tabs, tree, table, controls and disclosures belong to product components. */
-.model-diagnostics-lab.active { display: block; overflow: auto; padding: 0 4px 16px 0; container-type: inline-size; }
-.model-lab-heading { margin-bottom: 16px; }
-.model-lab-heading h3 { margin: 0 0 6px; }
+.model-diagnostics-lab.active { display: block; overflow: auto; padding: 0 var(--space-1) var(--space-4) 0; container-type: inline-size; }
+.model-lab-heading { margin-bottom: var(--space-4); }
+.model-lab-heading h3 { margin: 0 0 var(--space-2); }
 .model-lab-heading p { margin: 0; }
-.model-lab-toolbar { display: flex; align-items: end; gap: 10px; }
+.model-lab-toolbar { display: flex; align-items: end; gap: var(--space-2); }
 .model-lab-model { flex: 1; min-width: 0; grid-template-columns: minmax(0, 1fr); margin: 0; }
-.model-lab-actions { display: flex; align-items: center; gap: 6px; padding-bottom: 1px; }
-.model-lab-connection { overflow-wrap: anywhere; font-size: 11px; }
+.model-lab-actions { display: flex; align-items: center; gap: var(--space-2); padding-bottom: 1px; }
+.model-lab-connection { overflow-wrap: anywhere; font-size: var(--text-xs); }
 .model-lab-nav .product-nav-heading { padding: 0; }
-#modelLabSelectionDescription { margin: 0 0 8px; }
+#modelLabSelectionDescription { margin: 0 0 var(--space-2); }
 #modelLabScenarioList { max-height: 300px; overflow: auto; }
-.model-lab-results { max-height: 320px; overflow: auto; margin: 12px 0; }
+.model-lab-results { max-height: 320px; overflow: auto; margin: var(--space-3) 0; }
 .model-lab-results thead { position: sticky; top: 0; z-index: 1; background: var(--surface); }
 .model-lab-results td:last-child { width: 1%; white-space: nowrap; }
-.model-lab-results td small { display: block; margin-top: 4px; }
+.model-lab-results td small { display: block; margin-top: var(--space-1); }
 .model-lab-results td { overflow-wrap: anywhere; }
-.model-lab-inspector { padding-top: 12px; border-top: 1px solid var(--line); }
-.model-lab-inspector h4, .model-lab-inspector h5 { margin: 0 0 8px; }
-.model-lab-inspector p { margin: 8px 0; }
-.model-lab-inspector > section { margin: 16px 0; }
-.model-lab-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.model-lab-inspector { padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.model-lab-inspector h4, .model-lab-inspector h5 { margin: 0 0 var(--space-2); }
+.model-lab-inspector p { margin: var(--space-2) 0; }
+.model-lab-inspector > section { margin: var(--space-4) 0; }
+.model-lab-comparison { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
 .model-lab-comparison > div { min-width: 0; }
 @container (max-width: 480px) {
   .model-lab-toolbar { flex-wrap: wrap; }

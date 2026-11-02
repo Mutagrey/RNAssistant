@@ -1,7 +1,7 @@
 /* Shared components used by both the prototype and the product shell. */
 .button { display: inline-flex; gap: 7px; justify-content: center; align-items: center; min-height: var(--control); padding: 6px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font-size: var(--text-sm); font-weight: 500; text-align: center; }
 .button > svg { flex: 0 0 16px; width: 16px; height: 16px; stroke-width: 1.55; }
-.button.compact, :is(.page-header, .editor-bar, .composer-toolbar, .inspector) .button { min-height: 30px; padding: 4px 8px; font-size: var(--text-sm); }
+.button.compact, :is(.page-header, .editor-bar, .composer-toolbar, .inspector) .button { min-height: var(--control-compact); padding: var(--space-1) var(--space-2); font-size: var(--text-sm); }
 .button:hover, .icon-btn:hover, summary.icon-btn:hover { background: var(--surface-hover); }
 .button.primary { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
 .button.primary:hover { background: var(--accent-hover); }
@@ -18,8 +18,8 @@ summary.icon-btn { list-style: none; cursor: pointer; }
 summary.icon-btn::-webkit-details-marker { display: none; }
 .icon-btn > svg { flex: 0 0 18px; width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 .panel-toggle[aria-expanded="true"] { background: var(--accent-soft); color: var(--accent); }
-.tree-toolbar .icon-btn, .chat-tree-toolbar .icon-btn { flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; }
-.tree-toolbar .icon-btn > svg, .chat-tree-toolbar .icon-btn > svg { flex-basis: 16px; width: 16px; height: 16px; }
+.icon-btn.compact, .tree-toolbar .icon-btn, .chat-tree-toolbar .icon-btn { flex: 0 0 var(--control-compact); width: var(--control-compact); height: var(--control-compact); min-height: var(--control-compact); }
+.icon-btn.compact > svg, .tree-toolbar .icon-btn > svg, .chat-tree-toolbar .icon-btn > svg { flex-basis: 16px; width: 16px; height: 16px; }
 .message-actions .icon-btn { flex: 0 0 28px; width: 28px; height: 28px; min-height: 28px; }
 .message-actions .icon-btn > svg { flex-basis: 14px; width: 14px; height: 14px; }
 .message.failed .message-action:hover { color: var(--danger); }
@@ -50,6 +50,7 @@ summary.icon-btn::-webkit-details-marker { display: none; }
 .shell .form-grid label > select,
 .shell .form-grid label > textarea,
 .rna-form-control { min-width: 0; min-height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 7px 10px; background: var(--surface); color: var(--ink); font: 400 13px var(--font); }
+.rna-form-control.compact { min-height: var(--control-compact); padding: var(--space-1) var(--space-2); font-size: var(--text-sm); border-radius: var(--radius-sm); }
 .shell .form-grid label > small { color: var(--ink-muted); font-size: 11px; font-weight: 400; line-height: 1.5; }
 .rna-skill-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(130px, .45fr); align-content: start; gap: 8px 12px; min-height: 0; padding: 16px 0 12px; overflow: visible; }
 .rna-skill-fields label { display: grid; gap: 5px; min-width: 0; color: var(--ink); font-size: 12px; font-weight: 500; }
@@ -99,7 +100,7 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button > svg { flex: 0 0 16px; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items, .shell .product-create-menu .tool-list-actions) > button:hover { background: var(--surface-hover); }
 :where(.popover-menu, .toolbar-menu-body, .html-workspace-menu-items) > button.danger-text { color: var(--danger); }
-.popover-menu hr { border: 0; border-top: 1px solid var(--line); }
+.popover-menu hr, .rna-action-menu-body hr { border: 0; border-top: 1px solid var(--line); }
 .rna-action-menu { position: relative; flex: 0 0 auto; }
 .rna-action-menu > .rna-action-menu-trigger { display: grid; place-items: center; width: var(--control); height: var(--control); min-height: 0; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); cursor: pointer; list-style: none; }
 .rna-action-menu > .rna-action-menu-trigger::-webkit-details-marker { display: none; }

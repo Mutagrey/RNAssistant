@@ -17,11 +17,14 @@ class Node {
   replaceChildren(...nodes) { this.children.forEach(n => { n.isConnected = false; n.parent = null; }); this.children = []; this.text = ""; nodes.forEach(n => this.appendChild(n)); }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(n => n !== this); this.isConnected = false; }
   setAttribute() {}
+  removeAttribute() {}
+  querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
   fire(type) { return Promise.all((this.listeners[type] || []).map(fn => fn.call(this, { key: "", preventDefault() {}, stopPropagation() {} }))); }
   focus() {}
   scrollIntoView() {}
-  querySelectorAll() { return []; }
+  querySelectorAll(selector) { return descendants(this).slice(1).filter(node => selector === "details" ? node.tag === "details" :
+    selector === "details[open]" ? node.tag === "details" && node.open : false); }
 }
 async function flush() { for (let i = 0; i < 25; i++) await new Promise(resolve => setImmediate(resolve)); }
 function descendants(node) { return [node, ...node.children.flatMap(descendants)]; }
@@ -35,7 +38,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   const c = vm.createContext({ AbortController, TextDecoder, TextEncoder, Uint8Array, Blob, URL, Response,
     setTimeout: (fn, ms) => { timers.set(++timer, { fn, ms }); return timer; }, clearTimeout: id => timers.delete(id),
     crypto: crypto.webcrypto, state: { activeChatId: "chat", draftAttachments: [] }, $: get,
-    document: { createDocumentFragment: () => new Node("fragment"), createElement: tag => new Node(tag), body: new Node(), activeElement: new Node() },
+    document: { querySelectorAll: () => [], querySelector: () => null, createDocumentFragment: () => new Node("fragment"), createElement: tag => new Node(tag), body: new Node(), activeElement: new Node() },
     activeChatSummary: () => ({ revision }), contextDraftResourceIds: () => [],
     cancelBridgeRequest: async () => {}, copyTextResult() {}, formatStorageBytes: n => String(n),
     send: async (type, query) => {
@@ -163,15 +166,21 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     source() { const w = c.RNAssistantWorkspaceChat, owner = w ? w.owner() : "office", snapshot = owner !== "office" ? w.snapshot() : null;
       return { owner, chatId: snapshot ? snapshot.sessionId : c.state.activeChatId, workspaceId: snapshot?.project?.workspaceId || null }; },
     key(target) { return JSON.stringify([target.owner, target.workspaceId || null, target.chatId || target.sessionId || null]); },
-    showRequest() { requestVisible = true; }, hideRequest() { requestVisible = false; },
+    showRequest() { requestVisible = true; get("modelContextDialog").classList.remove("hidden"); }, forgetRequest() { requestVisible = false; }, returnToJournal() {},
     requestVisible() { return requestVisible && get("tab-chat").classList.contains("active"); }
   };
+  c.RNAssistantDockWorkspace = { setTitle() {}, close() { requestVisible = false; get("modelContextDialog").classList.add("hidden"); } };
+  c.RNAssistantActionMenu = { open(trigger, items) { c.menu = items; }, closeWithin() {} };
+  c.RNAssistantNavigationTree = { render(root, items, options) { c.tree = items; c.treeOptions = options; }, unmount() {} };
+  const choose = async (key, index) => { c.treeOptions.onSelect({ key: key === "messages" && index != null ? "message:" + index : key }); await flush(); };
+  const command = async label => { await get("modelContextActions").fire("click"); const item = c.menu.find(item => item.label === label); if (!item.disabled) await item.onSelect(); await flush(); };
+  const message = async (index, source = false) => { await choose("messages", index); if (source) { await get("modelContextMessageActions").fire("click"); await c.menu.find(item => item.label === "Источники и полнота").onSelect(); await flush(); } };
   c.RNAssistantViewerRegistry = { mount(kind, node, options) { mounts.push({ kind, node, options }); }, unmount() {} };
-  for (const name of ["app-resource-download.js", "app-model-context.js", "app-model-context-details.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
+  for (const name of ["app-resource-download.js", "app-model-context-contents.js", "app-model-context.js", "app-model-context-details.js"]) vm.runInContext(fs.readFileSync("web/js/" + name, "utf8"), c);
   c.bindModelContextActions();
   const open = c.RNAssistantModelContext.open;
-  c.RNAssistantModelContext.open = options => { open(options); get("modelContextMessagesTab").fire("click"); };
-  return { c, get, mounts, calls, closes, requestText, events, timers, verification,
+  c.RNAssistantModelContext.open = async options => { open(options); await flush(); if (requestVisible && c.treeOptions) await message(0); };
+  return { c, get, choose, command, message, mounts, calls, closes, requestText, events, timers, verification,
     bump() { revision++; }, hold(value) { hold = value; }, response(value) { responseText = value; },
     async tick() { const entry = Array.from(timers).find(([, t]) => t.ms === 2000); timers.delete(entry[0]); entry[1].fn(); await flush(); }
   };
@@ -188,9 +197,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     return result;
   };
   const route = { owner: "project", workspaceId: "workspace-one", sessionId: "chat" };
-  workspace.c.RNAssistantModelContext.open(); await flush();
+  await workspace.c.RNAssistantModelContext.open(); await flush();
   assert.equal(workspace.calls.length, 0, "a bare Office route cannot select a workspace session");
-  workspace.c.RNAssistantModelContext.open(route); await flush();
+  await workspace.c.RNAssistantModelContext.open(route); await flush();
   assert.equal(workspace.get("modelContextAttempt").value, "r1");
   assert.ok(workspace.calls.filter(call => call.type.startsWith("getModelContext")).every(call => call.query.workspaceId === "workspace-one"));
   assert.equal(workspace.closes[0].workspaceId, "model-context:workspace-one", "lease cleanup preserves its workspace owner");
@@ -200,32 +209,33 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.ok(!workspace.calls.some(call => call.type === "inspectModelContextPreview"));
   let exportRoute;
   workspace.c.openTrajectoryExport = target => { exportRoute = target; return false; };
-  await workspace.get("modelContextExportChat").fire("click");
+  await workspace.command("Экспорт диагностики чата");
   assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), false,
     "failed export routing keeps the Inspector open");
   workspace.c.openTrajectoryExport = target => { exportRoute = target; return true; };
-  await workspace.get("modelContextExportChat").fire("click");
+  await workspace.command("Экспорт диагностики чата");
   assert.equal(exportRoute.owner, "project");
   assert.equal(exportRoute.workspaceId, "workspace-one");
   assert.equal(exportRoute.sessionId, "chat");
-  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), true);
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), false, "export leaves request available");
   let finishWorkspacePayload;
   workspace.hold(new Promise(resolve => { finishWorkspacePayload = resolve; }));
-  workspace.c.RNAssistantModelContext.open(route); await flush();
+  await workspace.c.RNAssistantModelContext.open(route); await flush();
   const workspaceClosed = workspace.closes.length;
   selectedOwner = "plugin"; workspace.c.RNAssistantModelContext.sync();
-  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), true, "owner change closes even the same workspace/session");
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), false, "saved request stays pinned to its owner");
+  workspace.c.RNAssistantModelContext.close(false);
   finishWorkspacePayload(); workspace.hold(null); await flush();
   assert.equal(workspace.closes.length, workspaceClosed + 1, "a late workspace payload releases its lease after owner change");
   assert.equal(workspace.closes.at(-1).workspaceId, "model-context:workspace-one");
-  selectedOwner = "project"; workspace.c.RNAssistantModelContext.open(route); await flush();
+  selectedOwner = "project"; await workspace.c.RNAssistantModelContext.open(route); await flush();
   selectedWorkspace = "workspace-two"; workspace.c.RNAssistantModelContext.sync();
-  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), true, "workspace change invalidates the session route");
+  assert.equal(workspace.get("modelContextDialog").classList.contains("hidden"), false, "workspace change keeps saved source pinned");
   selectedWorkspace = "workspace-one"; replyWorkspace = "workspace-two";
-  workspace.c.RNAssistantModelContext.open(route); await flush();
+  await workspace.c.RNAssistantModelContext.open(route); await flush();
   assert.match(workspace.get("modelContextStatus").textContent, /не соответствует выбранному чату/);
   workspace.c.RNAssistantModelContext.close();
-  replyWorkspace = null; workspace.c.RNAssistantModelContext.open(route); await flush();
+  replyWorkspace = null; await workspace.c.RNAssistantModelContext.open(route); await flush();
   assert.match(workspace.get("modelContextStatus").textContent, /не соответствует выбранному чату/);
   workspace.c.RNAssistantModelContext.close();
   console.log("PASS model context: exact workspace identity, owner changes, lease cleanup and missing/foreign scope refusal");
@@ -233,42 +243,43 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   scoped.events[0].trace.RunId = "run-1"; scoped.events[0].trace.StepId = "step-1";
   scoped.events.push({ ...scoped.events[0], eventId: "other", sequence: 4,
     trace: { RunId: "run-2", StepId: "step-1", RequestId: "other" } });
-  scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run-1", stepId: "step-1" }); await flush();
+  await scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run-1", stepId: "step-1" }); await flush();
   assert.equal(scoped.get("modelContextAttempt").children.length, 1);
   assert.equal(scoped.get("modelContextAttempt").value, "r1", "exact run+step never opens a newer unrelated request");
   let officeExport;
   scoped.c.openTrajectoryExport = target => { officeExport = target; return true; };
-  await scoped.get("modelContextExportChat").fire("click");
+  await scoped.command("Экспорт диагностики чата");
   assert.equal(officeExport.owner, "office");
   assert.equal(officeExport.chatId, "chat");
   assert.equal(officeExport.runId, undefined, "export handoff selects the chat rather than the request's run");
-  scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "absent", stepId: "step-1" }); await flush();
+  await scoped.c.RNAssistantModelContext.open({ chatId: "chat", runId: "absent", stepId: "step-1" }); await flush();
   assert.match(scoped.get("modelContextStatus").textContent, /Точный запрос этого шага не найден/);
   assert.equal(scoped.get("modelContextAttempt").children.length, 0);
   scoped.c.RNAssistantModelContext.close();
-  scoped.c.RNAssistantModelContext.open({ chatId: "foreign", runId: "run-1", stepId: "step-1" });
+  await scoped.c.RNAssistantModelContext.open({ chatId: "foreign", runId: "run-1", stepId: "step-1" });
   assert.equal(scoped.get("modelContextDialog").classList.contains("hidden"), true);
   console.log("PASS model context: exact step navigation and missing/foreign request refusal");
   const history = fixture();
   history.c.state.chatReadOnly = true;
-  history.c.RNAssistantModelContext.open(); await flush();
+  await history.c.RNAssistantModelContext.open(); await flush();
   assert.equal(history.get("modelContextAttempt").value, "r1", "saved requests remain readable in history");
   assert.equal(history.closes.length, 1, "historical payloads remain downloadable");
   assert.equal(history.get("modelContextPreviewOption").disabled, true);
   history.get("modelContextMode").value = "preview";
   await history.get("modelContextMode").fire("change"); await flush();
-  await history.get("modelContextRefresh").fire("click"); await flush();
+  await history.command("Обновить"); await flush();
   assert.equal(history.calls.filter(call => call.type === "inspectModelContextPreview").length, 0);
   assert.match(history.get("modelContextStatus").textContent, /создайте новый чат/);
-  assert.equal(history.get("modelContextRefresh").disabled, true);
-  assert.equal(history.get("modelContextDownload").disabled, true);
+  assert.equal(history.get("modelContextPreviewOption").disabled, true);
+  await history.get("modelContextActions").fire("click");
+  assert.equal(!!history.c.menu.find(item => item.label === "Скачать точный запрос").disabled, true);
   const callsBeforeDownload = history.calls.length;
-  await history.get("modelContextDownload").fire("click"); await flush();
+  await history.command("Скачать точный запрос"); await flush();
   assert.equal(history.calls.length, callsBeforeDownload, "unavailable preview cannot download the last actual request");
   history.get("modelContextMode").value = "actual";
   await history.get("modelContextMode").fire("change"); await flush();
-  assert.equal(history.get("modelContextRefresh").disabled, false);
-  assert.equal(history.get("modelContextDownload").disabled, false);
+  await history.get("modelContextActions").fire("click");
+  assert.equal(!!history.c.menu.find(item => item.label === "Скачать точный запрос").disabled, false);
   history.c.state.chatReadOnly = false;
   history.c.RNAssistantModelContext.sync();
   assert.equal(history.get("modelContextPreviewOption").disabled, false);
@@ -281,9 +292,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     return { async createWritable() { return { async write(chunk) { saved.push(Buffer.from(chunk)); },
       async close() { committed = true; }, async abort() { throw new Error("unexpected abort"); } }; } };
   };
-  streamed.c.RNAssistantModelContext.open(); await flush();
+  await streamed.c.RNAssistantModelContext.open(); await flush();
   const previousCloses = streamed.closes.length;
-  await streamed.get("modelContextDownload").fire("click"); await flush();
+  await streamed.command("Скачать точный запрос"); await flush();
   for (let attempt = 0; attempt < 100 && !committed && streamed.closes.length === previousCloses; attempt++)
     await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(chosen, true, "file picker starts before the new download lease is opened");
@@ -296,12 +307,12 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   const emptyHistory = fixture();
   emptyHistory.events.length = 0;
   emptyHistory.c.state.chatReadOnly = true;
-  emptyHistory.c.RNAssistantModelContext.open(); await flush();
+  await emptyHistory.c.RNAssistantModelContext.open(); await flush();
   assert.match(emptyHistory.get("modelContextStatus").textContent, /создайте новый чат/);
   emptyHistory.c.RNAssistantModelContext.close();
 
   const retired = fixture();
-  retired.c.RNAssistantModelContext.open(); await flush();
+  await retired.c.RNAssistantModelContext.open(); await flush();
   let releasePreview;
   retired.hold(new Promise(resolve => releasePreview = resolve));
   retired.get("modelContextMode").value = "preview";
@@ -313,7 +324,8 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.equal(retired.closes.length, 2, "late preview lease is released after a read-only transition");
   assert.equal(retired.mounts.length, mountsBeforeRetiring);
   assert.match(retired.get("modelContextStatus").textContent, /создайте новый чат/);
-  assert.equal(retired.get("modelContextDownload").disabled, true);
+  await retired.get("modelContextActions").fire("click");
+  assert.equal(!!retired.c.menu.find(item => item.label === "Скачать точный запрос").disabled, true);
   retired.c.RNAssistantModelContext.close();
   console.log("PASS model context: empty history and late previews retain the read-only state");
 
@@ -329,26 +341,20 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.equal(parts[1].key, "n", "duplicate keys retained");
   assert.equal(parts[3].raw, '[{"x":true}]');
   assert.equal(api.members('["a,b",{"nested":[1,2]}]').length, 2);
-  api.open(); await flush();
-  const userMessage = descendants(f.get("modelContextBody")).find(node => node.dataset.messageIndex === "1");
-  userMessage.open = true; await userMessage.fire("toggle");
-  const userMetadata = userMessage.children[1].children.find(node => node.className === "model-context-meta");
-  assert.ok(userMetadata.children.some(node => /Операция: call-1/.test(node.textContent)),
-    "typed operation link appears in request details");
-  const userSources = userMessage.children[1].children.find(node => node.dataset.contextSource === "message/1");
+  await api.open(); await flush();
+  await f.message(1, true);
+  const userSources = descendants(f.get("modelContextBody")).find(node => node.dataset.contextSource === "message/1");
   assert.ok(descendants(userSources).some(node => /evidence-1/.test(node.textContent) &&
     /доставка тела в сообщении не установлена/.test(node.textContent)),
     "observed evidence does not claim unproved body delivery");
   assert.ok(descendants(userSources).some(node => /раздельная полнота не сохранены/.test(node.textContent)),
     "old traces do not infer requested selectors or completeness");
-  const excluded = descendants(f.get("modelContextBody")).find(node => node.dataset.contextSource === "omissions");
-  assert.equal(excluded.children.length, 1, "omission records render only on expansion");
-  excluded.open = true; await excluded.fire("toggle");
-  assert.ok(descendants(excluded).some(node => /не вошло в бюджет/.test(node.textContent)),
+  await f.choose("omissions");
+  assert.ok(descendants(f.get("modelContextBody")).some(node => /не вошло в бюджет/.test(node.textContent)),
     "inspector shows the compiler's recorded omission reason");
   assert.equal(f.closes.length, 1, "exact download lease closes after reading");
   assert.equal(f.get("modelContextAttempt").value, "r1");
-  await f.get("modelContextJsonTab").fire("click"); await flush();
+  await f.command("Точный запрос JSON"); await flush();
   assert.equal(f.mounts.at(-1).options.text, f.requestText, "large request is not clipped or reserialized");
   const count = f.mounts.length;
   f.bump(); await f.tick();
@@ -360,7 +366,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   responseDetails.open = true; await responseDetails.fire("toggle"); await flush();
   assert.equal(f.mounts.at(-1).kind, "markdown", "response message renders as Markdown independently of envelope");
   assert.equal(f.mounts.at(-1).options.fullText, "# Answer");
-  await f.get("modelContextJsonTab").fire("click"); await flush();
+  await f.command("Точный запрос JSON"); await flush();
   f.events.push({ eventId: "r2", sequence: 9, type: "llm.request", hasPayload: true, createdUtc: "2026-10-02T10:01:00Z", trace: { RequestId: "two" } });
   f.bump(); await f.tick();
   assert.equal(f.get("modelContextAttempt").value, "r2", "follow newest attempt");
@@ -370,9 +376,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   f.get("modelContextMode").value = "preview"; await f.get("modelContextMode").fire("change"); await flush();
   assert.match(f.get("modelContextStatus").textContent, /Предпросмотр/);
   f.get("chatInput").value = "changed"; await f.tick(); assert.match(f.get("modelContextStatus").textContent, /устарел/);
-  f.c.state.activeChatId = "another"; api.sync(); assert.ok(f.get("modelContextDialog").classList.contains("hidden"));
+  f.c.state.activeChatId = "another"; api.sync(); assert.equal(f.calls.filter(call => call.type === "inspectModelContextPreview").length, 1);
   const late = fixture(); let release;
-  late.hold(new Promise(resolve => release = resolve)); late.c.RNAssistantModelContext.open(); await flush();
+  late.hold(new Promise(resolve => release = resolve)); await late.c.RNAssistantModelContext.open(); await flush();
   late.c.RNAssistantModelContext.close(); release(); await flush();
   assert.equal(late.closes.length, 1, "late payload acquisition closes its lease even after dialog closed");
   assert.equal(late.mounts.length, 0, "late payload never renders into a closed or other chat");
@@ -385,20 +391,16 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     { MessageIndex: 99, Presentation: "Full", Reason: "out-of-range-source" },
     { MessageIndex: 1, Presentation: "Unknown", Parts: [{ Kind: "image_url", SourceAttachmentId: "scan",
       Presentation: "Excluded", Reason: "Лимит изображений", OmittedCount: null }] }];
-  ambiguous.c.RNAssistantModelContext.open(); await flush();
-  const firstMessage = descendants(ambiguous.get("modelContextBody")).find(node => node.dataset.messageIndex === "0");
-  firstMessage.open = true; await firstMessage.fire("toggle");
-  const ambiguousText = descendants(firstMessage).map(node => node.textContent).join(" ");
+  await ambiguous.c.RNAssistantModelContext.open(); await flush();
+  await ambiguous.message(0, true);
+  const ambiguousText = descendants(ambiguous.get("modelContextBody")).map(node => node.textContent).join(" ");
   assert.match(ambiguousText, /Неоднозначная привязка/);
-  assert.doesNotMatch(ambiguousText, /first-source|second-source|out-of-range-source|Полностью/,
-    "duplicate or out-of-range provenance never picks a source or a completeness claim");
-  const omittedParts = descendants(ambiguous.get("modelContextBody")).find(node => node.dataset.contextSource === "omissions");
-  omittedParts.open = true; await omittedParts.fire("toggle");
-  const omissionText = descendants(omittedParts).map(node => node.textContent).join(" ");
+  assert.doesNotMatch(ambiguousText, /first-source|second-source|out-of-range-source|Полностью/);
+  await ambiguous.choose("omissions");
+  const omissionText = descendants(ambiguous.get("modelContextBody")).map(node => node.textContent).join(" ");
   assert.match(omissionText, /Лимит изображений/); assert.match(omissionText, /В составе сообщения 2/);
   assert.doesNotMatch(omissionText, /Не выбрано/, "an unknown omitted-item count is not invented");
-  assert.equal(ambiguous.calls.filter(call => call.type === "getModelContextPayload").length, 1,
-    "source and omission disclosures use recorded metadata without new body reads");
+  assert.equal(ambiguous.calls.filter(call => call.type === "getModelContextPayload").length, 1);
   ambiguous.c.RNAssistantModelContext.close();
   console.log("PASS model context: missing/ambiguous provenance and attachment omissions stay explicit");
 
@@ -413,12 +415,10 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     if (variant === "method") composition.Method = "unsupported";
     cost.events[0].trace.RequestComposition = composition;
     cost.events[0].trace.PromptTokens = 999;
-    cost.c.RNAssistantModelContext.open(); await flush();
-    const nodes = descendants(cost.get("modelContextBody"));
-    const bars = nodes.filter(node => node.className === "chat-inspector-composition-chart model-context-composition-chart");
-    assert.equal(bars.length, variant === "valid" ? 1 : 0, "only a complete, supported, balanced composition gets a chart: " + variant);
-    if (variant === "valid") assert.ok(nodes.some(node => /≈ 30 ток/.test(node.textContent)));
-    else assert.ok(nodes.some(node => /Сводка не соответствует/.test(node.textContent)));
+    await cost.c.RNAssistantModelContext.open(); await flush();
+    const result = cost.c.RNAssistantRequestContents.composition(cost.events[0].trace, 2);
+    assert.equal(!!result, variant === "valid", "only supported balanced composition is grouped: " + variant);
+    if (result) assert.equal(result.total, 30);
     cost.c.RNAssistantModelContext.close();
   }
   console.log("PASS model context: saved composition conservation, schema and message scope");
@@ -427,44 +427,26 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   const grouped = fixture(false, false, JSON.stringify({ messages: groupedRequest }));
   grouped.events[0].trace.RequestComposition = { Version: 1, Method: "base_text_media_v1", HasMedia: false, TotalEstimatedTokens: 1120,
     Items: groupedRequest.map((_, index) => ({ MessageIndex: index, Group: index < 111 ? "Conversation" : "ResourceReferences", EstimatedTokens: 10 })) };
-  grouped.c.RNAssistantModelContext.open(); await flush();
-  const initialLayout = descendants(grouped.get("modelContextBody")).find(node => node.className === "model-context-message-layout");
-  initialLayout.value = "groups"; await initialLayout.fire("change"); await flush();
-  const groups = descendants(grouped.get("modelContextBody"));
-  const groupedHistory = groups.find(node => node.dataset.compositionGroup === "Conversation");
-  const references = groups.find(node => node.dataset.compositionGroup === "ResourceReferences");
-  assert.ok(groupedHistory && references, "resource references have their own section");
-  assert.equal(descendants(groupedHistory).filter(node => node.dataset.messageIndex !== undefined).length, 0, "closed groups create no message views");
-  groupedHistory.open = true; await groupedHistory.fire("toggle");
-  assert.equal(descendants(groupedHistory).filter(node => node.dataset.messageIndex !== undefined).length, 50);
-  await descendants(groupedHistory).find(node => node.textContent === "Показать ещё").fire("click");
-  await descendants(groupedHistory).find(node => node.textContent === "Показать ещё").fire("click");
-  const rendered = descendants(groupedHistory).filter(node => node.dataset.messageIndex !== undefined);
-  assert.deepEqual(rendered.map(node => Number(node.dataset.messageIndex)), Array.from({ length: 111 }, (_, index) => index));
-  rendered[100].open = true; await rendered[100].fire("toggle");
-  assert.ok(grouped.mounts.some(mount => mount.options.text === "Message 100"), "a later history page opens the exact message body");
-  const groupedBody = grouped.get("modelContextBody");
-  groupedBody.querySelectorAll = selector => descendants(groupedBody).filter(node => node.tag === "details" &&
-    (selector === "details[data-composition-count]" ? node.dataset.compositionCount !== undefined :
-      selector === "details[data-context-source][open]" && node.dataset.contextSource !== undefined && node.open));
-  let layoutControl = descendants(groupedBody).find(node => node.className === "model-context-message-layout");
-  layoutControl.value = "wire"; await layoutControl.fire("change"); await flush();
-  assert.ok(descendants(groupedBody).some(node => node.dataset.messageIndex === "100" && node.open),
-    "send-order layout restores an open message beyond the first page");
-  layoutControl = descendants(groupedBody).find(node => node.className === "model-context-message-layout");
-  layoutControl.value = "groups"; await layoutControl.fire("change"); await flush();
-  const restoredHistory = descendants(groupedBody).find(node => node.dataset.compositionGroup === "Conversation");
-  assert.equal(restoredHistory.open, true, "switching back opens the expanded message's group");
-  await restoredHistory.fire("toggle");
-  assert.ok(descendants(restoredHistory).some(node => node.dataset.messageIndex === "100" && node.open),
-    "switching back restores the matching history page");
-  assert.equal(grouped.calls.filter(call => call.type === "getModelContextPayload").length, 1, "group pages reuse one immutable payload");
+  await grouped.c.RNAssistantModelContext.open(); await flush();
+  const rows = () => grouped.c.tree.flatMap(item => item.children || [item]).filter(item => item.key.startsWith("message:"));
+  assert.equal(rows().length, 50);
+  await grouped.get("modelContextPageAfter").fire("click");
+  assert.equal(rows().length, 50, "page replacement keeps a fixed row bound");
+  await grouped.get("modelContextPageAfter").fire("click");
+  assert.equal(rows().length, 11);
+  await grouped.message(100);
+  assert.ok(grouped.mounts.some(mount => mount.options.text === "Message 100"));
+  grouped.get("modelContextOrder").value = "wire"; await grouped.get("modelContextOrder").fire("change");
+  assert.equal(grouped.get("modelContextMessagePath").textContent.includes("messages[100]"), true, "order keeps selected reader");
+  grouped.get("modelContextOrder").value = "groups"; await grouped.get("modelContextOrder").fire("change");
+  assert.equal(rows().length, 11, "return reveals the selected message page");
+  assert.equal(grouped.calls.filter(call => call.type === "getModelContextPayload").length, 1);
   grouped.c.RNAssistantModelContext.close();
   console.log("PASS model context: lazy history groups, message paging and separate resource references");
 
   const pdfRead = fixture(true, true);
-  pdfRead.c.RNAssistantModelContext.open(); await flush();
-  await pdfRead.get("modelContextResourcesTab").fire("click"); await flush();
+  await pdfRead.c.RNAssistantModelContext.open(); await flush();
+  await pdfRead.choose("resources"); await flush();
   const pdfDetails = pdfRead.get("modelContextBody").children.find(node => node.tag === "details");
   assert.match(pdfDetails.children[1].children.map(node => node.textContent).join(" "),
     /Профиль извлечения: pdf-page-range-text:content-order-v1 · Страниц в оригинале: 12/);
@@ -475,7 +457,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   const unbound = fixture(true, false, null, true);
   await unbound.c.RNAssistantModelContext.open();
   await flush();
-  await unbound.get("modelContextResourcesTab").fire("click");
+  await unbound.choose("resources");
   await flush();
   const unboundNodes = descendants(unbound.get("modelContextBody"));
   assert.ok(unboundNodes.some(node => /Ресурс без сохранённой ссылки/.test(node.textContent || "")));
@@ -489,9 +471,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     EvidenceLinks: [{ EvidenceId: "evidence-1", ScopeId: { kind: "conversation", id: "chat" },
       Resource: { uri: "rna://vba/module", revision: "r1" }, View: "source",
       ObservedCoverage: { kind: "line-range", start: 1, end: 2 }, BodyIncludedInMessage: null }] }];
-  linked.c.RNAssistantModelContext.open(); await flush();
+  await linked.c.RNAssistantModelContext.open(); await flush();
   assert.match(linked.get("modelContextAttempt").children[0].textContent, /Q1/);
-  await linked.get("modelContextResourcesTab").fire("click"); await flush();
+  await linked.choose("resources"); await flush();
   let resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
   assert.match(resource.children[0].textContent, /R1@v1 · Устаревшая/);
   assert.match(resource.children[1].children.map(node => node.textContent).join(" "),
@@ -564,7 +546,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.equal(linked.calls.at(-1).query.verifyRetainedView, "source");
   assert.match(resourceText(), /Сохранённое view source.*хеш и длина тела проверены.*хеши и длины всех частей проверены/);
   assert.match(resourceText(), /доставка неизвестна/, "CAS validity never manufactures model delivery");
-  await linked.get("modelContextRefresh").fire("click"); await flush();
+  await linked.command("Обновить"); await flush();
   assert.match(resourceText(), /сохранённое тело не проверено/, "refresh does not leave a stale verification label on screen");
   assert.doesNotMatch(resourceText(), /Сохранённые views: 1–2 из 3/, "refresh starts a new inventory snapshot");
   linked.verification.availability = "Unavailable";
@@ -576,7 +558,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   linked.get("modelContextAliasSearch").value = "O1";
   await linked.get("modelContextAliasFind").fire("click"); await flush();
   assert.equal(linked.calls.at(-1).query.alias, "O1", "search resolves through the typed bridge");
-  assert.equal(linked.get("modelContextResourcesTab").classList.contains("active"), true);
+  assert.equal(linked.get("modelContextReaderTitle").textContent, "Ресурсы");
   resource = linked.get("modelContextBody").children.find(node => node.tag === "details");
   assert.equal(resource.open, true, "evidence search focuses the linked resource revision");
   assert.match(linked.get("modelContextStatus").textContent, /Найдено O1 в Q1/);
@@ -586,12 +568,12 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   console.log("PASS model context: stable aliases, resource evidence and scoped lookup");
 
   const leaving = fixture(true);
-  leaving.c.RNAssistantModelContext.open(); await flush();
-  await leaving.get("modelContextResourcesTab").fire("click"); await flush();
+  await leaving.c.RNAssistantModelContext.open(); await flush();
+  await leaving.choose("resources"); await flush();
   let finishVerification;
   leaving.verification.hold = new Promise(resolve => finishVerification = resolve);
   const checking = checkButton(leaving).fire("click"); await flush();
-  leaving.c.state.activeChatId = "other-chat"; leaving.c.RNAssistantModelContext.sync();
+  leaving.c.RNAssistantModelContext.close(false);
   finishVerification(); await checking; await flush();
   assert.equal(leaving.get("modelContextBody").children.length, 0, "late verification cannot render into another chat");
   assert.ok(leaving.get("modelContextDialog").classList.contains("hidden"));
@@ -599,8 +581,8 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
 
   const switchingTab = fixture(true); let finishPayload;
   switchingTab.hold(new Promise(resolve => finishPayload = resolve));
-  switchingTab.c.RNAssistantModelContext.open(); await flush();
-  await switchingTab.get("modelContextResourcesTab").fire("click"); await flush();
+  await switchingTab.c.RNAssistantModelContext.open(); await flush();
+  await switchingTab.choose("resources"); await flush();
   const resourceRows = switchingTab.get("modelContextBody").children.slice();
   finishPayload(); await flush();
   assert.equal(switchingTab.get("modelContextBody").children.length === resourceRows.length &&
@@ -611,10 +593,11 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   console.log("PASS model context: late payload respects the selected tab");
 
   const refreshed = fixture();
-  refreshed.c.RNAssistantModelContext.open(); await flush();
-  await refreshed.get("modelContextRefresh").fire("click"); await flush();
+  await refreshed.c.RNAssistantModelContext.open(); await flush();
+  await refreshed.command("Обновить"); await flush();
+  await refreshed.choose("parameters");
   const parameter = descendants(refreshed.get("modelContextBody")).find(node => node.tag === "details" &&
-    node.children.some(child => child.textContent === "Параметр запроса: seed"));
+    node.children.some(child => child.textContent === "seed"));
   parameter.open = true; await parameter.fire("toggle"); await flush();
   assert.equal(refreshed.mounts.some(mount => mount.options.text === "9007199254740993123456789"), true,
     "refresh keeps unopened lazy bodies readable and exact");
@@ -631,7 +614,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     }
     return modeSend(type, query);
   };
-  changingMode.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run", stepId: "step" }); await flush();
+  await changingMode.c.RNAssistantModelContext.open({ chatId: "chat", runId: "run", stepId: "step" }); await flush();
   changingMode.get("modelContextMode").value = "preview";
   await changingMode.get("modelContextMode").fire("change"); await flush();
   changingMode.get("modelContextMode").value = "actual";
@@ -644,7 +627,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   changingMode.c.RNAssistantModelContext.close();
 
   const failedSelection = fixture();
-  failedSelection.c.RNAssistantModelContext.open(); await flush();
+  await failedSelection.c.RNAssistantModelContext.open(); await flush();
   const oldContent = failedSelection.get("modelContextBody").children[0], selectionSend = failedSelection.c.send;
   failedSelection.c.send = (type, query) => type === "getModelContext" && query.requestEventId === "r2"
     ? Promise.reject(new Error("selected-request-missing")) : selectionSend(type, query);
@@ -653,14 +636,15 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.equal(failedSelection.get("modelContextAttempt").value, "r2");
   assert.equal(failedSelection.get("modelContextBody").children.includes(oldContent), false,
     "the failed selection never displays the old request beneath the new ID");
-  assert.equal(failedSelection.get("modelContextDownload").disabled, true);
+  await failedSelection.get("modelContextActions").fire("click");
+  assert.equal(!!failedSelection.c.menu.find(item => item.label === "Скачать точный запрос").disabled, true);
   assert.match(failedSelection.get("modelContextStatus").textContent, /selected-request-missing/);
   failedSelection.c.RNAssistantModelContext.close();
 
   const cancelledSave = fixture(); let cancelPicker;
-  cancelledSave.c.RNAssistantModelContext.open(); await flush();
+  await cancelledSave.c.RNAssistantModelContext.open(); await flush();
   cancelledSave.c.showSaveFilePicker = () => new Promise((resolve, reject) => { cancelPicker = reject; });
-  await cancelledSave.get("modelContextDownload").fire("click"); await flush();
+  await cancelledSave.command("Скачать точный запрос"); await flush();
   cancelledSave.get("modelContextMode").value = "preview";
   await cancelledSave.get("modelContextMode").fire("change"); await flush();
   const previewStatus = cancelledSave.get("modelContextStatus").textContent;
@@ -695,10 +679,10 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   };
   let journalRoute;
   proof.c.openRunJournal = query => { journalRoute = query; };
-  proof.c.RNAssistantModelContext.open(); await flush();
+  await proof.c.RNAssistantModelContext.open(); await flush();
   const payloadReads = () => proof.calls.filter(call => call.type === "getModelContextPayload").length;
   const beforeProof = payloadReads();
-  await proof.get("modelContextEvidenceTab").fire("click"); await flush();
+  await proof.choose("evidence"); await flush();
   assert.equal(payloadReads(), beforeProof, "evidence reads metadata, not request/accepted-call bodies");
   assert.ok(proof.calls.some(call => call.query.requestEventId === "r1" && call.query.includeEvidence === true));
   let proofNodes = descendants(proof.get("modelContextBody"));
@@ -715,10 +699,9 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
   assert.deepEqual(JSON.parse(JSON.stringify(journalRoute)), { owner: "office", workspaceId: null, sessionId: "chat", chatId: "chat",
     runId: "run", stepId: "step", toolCallId: "call-2" });
   await descendants(proofRow).find(node => node.textContent === "Сообщение 3").fire("click"); await flush();
-  assert.equal(proof.get("modelContextMessagesTab").classList.contains("active"), true);
-  assert.equal(descendants(proof.get("modelContextBody")).find(node => node.dataset.messageIndex === "2").open, true);
+  assert.match(proof.get("modelContextMessagePath").textContent, /messages\[2\]/);
   assert.equal(payloadReads(), beforeProof, "message navigation reuses the exact saved request");
-  await proof.get("modelContextEvidenceTab").fire("click"); await flush();
+  await proof.choose("evidence"); await flush();
   proofRow = descendants(proof.get("modelContextBody")).find(node => node.dataset.evidenceCall === "call-2");
   assert.equal(proofRow.open, true, "returning preserves the expanded result");
   const excludedRow = descendants(proof.get("modelContextBody")).find(node => node.dataset.evidenceCall === "call-1");
@@ -734,8 +717,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     "canonical finish updates without a new model-response event");
   proof.get("modelContextMode").value = "preview";
   await proof.get("modelContextMode").fire("change"); await flush();
-  assert.equal(proof.get("modelContextEvidenceTab").disabled, true);
-  assert.equal(proof.get("modelContextMessagesTab").classList.contains("active"), true);
+  assert.equal(proof.c.tree.some(item => item.key === "evidence"), false);
   proof.c.RNAssistantModelContext.close();
   console.log("PASS model context: evidence claims, exact-message navigation, outcomes and live acceptance");
 
@@ -750,7 +732,7 @@ function fixture(withAliases = false, pdf = false, requestOverride = null, unbou
     decision.response(source);
     decision.events.push({ eventId: "response1", sequence: 6, type: "llm.response", hasPayload: true,
       createdUtc: "2026-10-02T10:00:30Z", trace: { RequestId: "one" } });
-    decision.c.RNAssistantModelContext.open(); await flush();
+    await decision.c.RNAssistantModelContext.open(); await flush();
     await decision.get("modelContextResponseTab").fire("click");
     const content = decision.get("modelContextBody").children[0].children.find(node => node.tag === "details");
     assert.ok(!content.open, "response bodies stay lazy");

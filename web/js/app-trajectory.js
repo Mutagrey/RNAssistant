@@ -335,7 +335,7 @@
     if (activeView === "model-replay") {
       number("Попытки", value(item, "AttemptCount", "attemptCount", null));
       if (selectedSource().chatId === selectedChatId() && value(item, "RunId", "runId", "")) {
-        var contextButton = document.createElement("button"); contextButton.type = "button"; contextButton.className = "secondary";
+        var contextButton = document.createElement("button"); contextButton.type = "button"; contextButton.className = "button compact";
         contextButton.textContent = "Состав запроса и ответа";
         var origin = scopeKey(), source = sourceSelectionKey();
         contextButton.addEventListener("click", function () {
@@ -453,19 +453,10 @@
   }
 
   function openModelContextFromHistory(target) {
-    var origin = scopeKey(), selection = sourceSelectionKey(), source = selectedSource();
-    if (source.chatId !== selectedChatId() || source.owner !== trajectoryOwner ||
-        (source.workspaceId || null) !== trajectoryWorkspaceId || !window.RNAssistantModelContext) return;
-    var scroll = $("trajectoryEvents").scrollTop, focused = document.activeElement;
-    window.RNAssistantModelContext.open({ owner: source.owner, workspaceId: source.workspaceId,
-      chatId: source.chatId, sessionId: source.chatId, runId: target.runId, stepId: target.stepId,
-      requestEventId: target.requestEventId,
-      onClose: function () {
-        if (scopeKey() !== origin || sourceSelectionKey() !== selection) return;
-        RNAssistantDiagnostics.show("runs", false);
-        $("trajectoryEvents").scrollTop = scroll;
-        if (focused && focused.isConnected) focused.focus({ preventScroll: true });
-      } });
+    if (!window.RNAssistantModelContext) return;
+    window.RNAssistantModelContext.open({ owner: trajectoryOwner, workspaceId: trajectoryWorkspaceId,
+      chatId: selectedChatId(), sessionId: selectedChatId(), label: trajectoryLabel,
+      runId: target.runId, stepId: target.stepId, requestEventId: target.requestEventId });
   }
 
   function renderRunJournal(response, previousScroll, loadedLimitReached) {
@@ -499,7 +490,7 @@
       filter: journalFilter,
       expanded: expandedJournalRows, parts: journalParts,
       onPartChange: function (id, part) { journalParts[id] = part; },
-      onOpenModelContext: selectedSource().chatId === responseChatId ? openModelContextFromHistory : null,
+      onOpenModelContext: openModelContextFromHistory,
       activeRunId: correlationFilter.runId || "",
       activeStepId: correlationFilter.stepId || "",
       activeToolCallId: correlationFilter.toolCallId || "",
@@ -1126,13 +1117,12 @@
     options = options || {};
     var exportWholeChat = options.openExport === true;
     var source = selectedSource();
-    if (source.owner !== "office") {
-      if (options.owner !== source.owner || !source.workspaceId || !source.chatId ||
-          options.workspaceId !== source.workspaceId || options.sessionId !== source.chatId) return false;
-    } else {
-      if (options.workspaceId || options.owner && options.owner !== "office") return false;
-      source.chatId = options.chatId || source.chatId;
-    }
+    if (options.owner === "office" && options.chatId && !options.workspaceId ||
+        (options.owner === "project" || options.owner === "plugin") && options.workspaceId && options.sessionId) {
+      source = { owner: options.owner, workspaceId: options.workspaceId || null, chatId: options.chatId || options.sessionId,
+        label: options.label || options.chatId || options.sessionId, document: options.document };
+    } else if (source.owner !== "office" || options.workspaceId || options.owner && options.owner !== "office") return false;
+    else source.chatId = options.chatId || source.chatId;
     if (!source.chatId) return false;
     RNAssistantDiagnostics.showJournal(Object.assign({}, source, { runId: options.runId }));
     invalidateTrajectoryRequest();
@@ -1169,6 +1159,9 @@
 
   window.bindTrajectoryActions = function () {
     window.addEventListener("pagehide", window.RNAssistantTrajectoryPayload.cancelAll);
+    [["trajectoryActionsMenu", "trajectoryCommands"], ["trajectoryCorrelationBar", "trajectoryCorrelationActions"]].forEach(function (pair) {
+      $(pair[0]).addEventListener("click", function () { RNAssistantActionMenu.openButtons(this, $(pair[1])); });
+    });
     $("trajectoryDetailPart").addEventListener("change", renderDetail);
     $("trajectoryBackButton").addEventListener("click", goBack);
     [["trajectoryFiltersButton", "trajectoryAdvancedOptions"], ["trajectoryExportOptionsButton", "trajectoryExportOptions"]].forEach(function (pair) {

@@ -1,5 +1,15 @@
 # Current-to-target migration map
 
+## Request view S3a — 2026-11-02
+
+Owner: Web diagnostics presentation / DockWorkspace. `request` — singleton в
+существующем каталоге; consumers чата/Inspector/журнала используют один reader.
+Старое размещение в Diagnostics и семь tabs удалены. `switchTab("request")` —
+маршрут к существующему DockWorkspace, не второй placement engine. Journal/Lab/
+Приложение остаются root sections: owner Web Shell, удаление границы — их будущий
+проверенный Dockview-срез. Source scope живёт в памяти view, не в layout storage.
+Новых adapters, stores, bridge contracts и параллельных readers нет.
+
 ## Production UI S1b/S1c — 2026-11-02
 
 Owner: Web Shell / DockWorkspace. Conversation, Inspector и Settings используют один Dockview;

@@ -55,7 +55,7 @@
 
   function completenessText(options, showingFull) {
     if (options.draft) return "Несохранённый Markdown draft";
-    if (showingFull) return "Полный exact source · " + options.fullText.length + " символов";
+    if (showingFull) return (options.sourceLabel || "Полный exact source") + " · " + options.fullText.length + " символов";
     var offset = Number(options.offset || 0);
     var returned = String(options.text || "").length;
     var total = Number(options.totalCharacters || 0);
@@ -124,7 +124,7 @@
     }
     actions.appendChild(actionStatus);
     toolbar.appendChild(actions);
-    root.appendChild(toolbar);
+    if (options.toolbar !== false) root.appendChild(toolbar);
 
     var source = element("div", "rn-text-viewer-source");
     var gutter = element("pre", "rn-text-viewer-lines");
@@ -205,7 +205,7 @@
     tabs.appendChild(sourceButton);
     toolbar.appendChild(tabs);
     toolbar.appendChild(actions);
-    root.appendChild(toolbar);
+    if (options.toolbar !== false) root.appendChild(toolbar);
     if (!canRender) {
       var note = element("div", "rn-markdown-viewer-note",
         "Markdown preview отключён до полного exact read; сокращённый source не рендерится.");

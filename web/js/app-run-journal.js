@@ -424,21 +424,18 @@
     button.addEventListener("click", function (event) {
       event.preventDefault();
       event.stopPropagation();
-      var parent = button.parentNode;
-      if (parent && parent.classList.contains("rna-action-menu-body")) parent.parentNode.open = false;
       onClick();
     });
     return button;
   }
 
   function actionMenu(root, label) {
-    var menu = document.createElement("details"); menu.className = "popover rna-action-menu";
-    var trigger = appendText(menu, "summary", "rna-action-menu-trigger", "");
+    var trigger = document.createElement("button"); trigger.type = "button"; trigger.className = "icon-btn compact";
     glyph(trigger, "more", "rn-run-journal-menu-icon");
-    trigger.setAttribute("aria-label", label); trigger.title = label;
-    var body = document.createElement("div"); body.className = "popover-menu rna-action-menu-body";
-    menu.appendChild(body); root.appendChild(menu);
-    return body;
+    trigger.setAttribute("aria-label", label); trigger.setAttribute("aria-haspopup", "menu"); trigger.title = label;
+    var body = document.createElement("div"); body.hidden = true;
+    trigger.addEventListener("click", function () { window.RNAssistantActionMenu.openButtons(trigger, body); });
+    root.appendChild(trigger); root.appendChild(body); return body;
   }
 
   function appendNavigationActions(root, row, options) {
@@ -879,7 +876,7 @@
     var effect = effectExplanation(row);
     if (effect) appendText(body, "p", "rn-run-journal-note", effect);
 
-    var choice = document.createElement("select"); choice.className = "rn-run-journal-data-kind";
+    var choice = document.createElement("select"); choice.className = "rna-form-control compact rn-run-journal-data-kind";
     choice.setAttribute("aria-label", "Данные события или связи");
     [["data", "Данные"], ["evidence", "Связи"]].forEach(function (item) {
       var option = appendText(choice, "option", "", item[1]); option.value = item[0];
@@ -941,7 +938,7 @@
     var toolbar = document.createElement("div");
     toolbar.className = "rn-run-journal-toolbar";
     var filters = document.createElement("select");
-    filters.className = "rn-run-journal-filters";
+    filters.className = "rna-form-control compact rn-run-journal-filters";
     filters.setAttribute("aria-label", "Фильтр истории");
     FILTERS.forEach(function (definition) {
       var count = rows.filter(function (row) { return matchesFilter(row, definition.id); }).length;
@@ -991,6 +988,7 @@
   }
 
   function unmount(root) {
+    if (window.RNAssistantActionMenu) RNAssistantActionMenu.closeWithin(root);
     if (!root) return;
     (root.rnaPayloadCleanups || []).forEach(function (cancel) { cancel(); });
     root.rnaJournalRender = null;

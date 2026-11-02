@@ -5,7 +5,7 @@
     if (cls) result.className = cls; return result;
   }
   function action(root, label, callback) {
-    var button = node("button", label, "secondary"); button.type = "button";
+    var button = node("button", label, "button compact"); button.type = "button";
     button.addEventListener("click", callback); root.appendChild(button); return button;
   }
   function facts(root, values) {

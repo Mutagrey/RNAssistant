@@ -397,7 +397,7 @@
     toolbar.setAttribute("role", "toolbar");
     toolbar.setAttribute("aria-label", "JSON viewer");
     var modes = element("div", "rn-json-modes");
-    var modeSelect = options.compact ? element("select", "rn-json-mode-select") : null;
+    var modeSelect = options.compact ? element("select", "rna-form-control compact rn-json-mode-select") : null;
     function modeControl(label, mode) {
       var control = modeSelect ? element("option", "", label) : button(label, "rn-json-mode", function () { setMode(mode); });
       control.value = mode;
@@ -418,23 +418,23 @@
       requestCopy(state.source, "source", null);
     });
     if (options.compact) {
-      var actionMenu = element("details", "popover rna-action-menu");
-      var trigger = element("summary", "rna-action-menu-trigger", "⋯");
-      trigger.setAttribute("aria-label", "Действия с данными");
-      trigger.title = "Действия с данными";
-      var menuBody = element("div", "popover-menu rna-action-menu-body");
-      [collapseButton, copyButton].forEach(function (control) {
-        menuBody.appendChild(control);
-        control.addEventListener("click", function () { actionMenu.open = false; });
+      var trigger = button("⋯", "icon-btn", function () {
+        window.RNAssistantActionMenu.open(trigger, [
+          { label: "Свернуть", icon: "up", onSelect: collapseAll },
+          { label: state.completeness === "full" ? "Копировать всё" : "Копировать фрагмент", icon: "copy",
+            onSelect: function () { requestCopy(state.source, "source", null); } }
+        ], { label: "Действия с данными" });
       });
-      actionMenu.appendChild(trigger); actionMenu.appendChild(menuBody); actions.appendChild(actionMenu);
+      trigger.setAttribute("aria-label", "Действия с данными"); trigger.setAttribute("aria-haspopup", "menu");
+      trigger.title = "Действия с данными"; actions.appendChild(trigger);
     } else { actions.appendChild(collapseButton); actions.appendChild(copyButton); }
     toolbar.appendChild(modes); toolbar.appendChild(actions);
     var status = element("div", "rn-json-status");
     status.setAttribute("aria-live", "polite");
     var body = element("div", "rn-json-body");
-    root.appendChild(toolbar); root.appendChild(status); root.appendChild(body);
-    if (options.compact) toolbar.insertBefore(status, actions);
+    if (options.toolbar !== false) root.appendChild(toolbar);
+    root.appendChild(status); root.appendChild(body);
+    if (options.compact && options.toolbar !== false) toolbar.insertBefore(status, actions);
 
     function completenessText() {
       var labels = {
@@ -648,20 +648,16 @@
     }
 
     function appendNodeActions(row, node, sourceDocument) {
-      var actions = element("details", "rn-json-node-actions");
-      var menu = element("summary", "rn-json-copy-menu", "⋯");
-      menu.setAttribute("aria-label", "Копирование значения или пути");
-      actions.appendChild(menu);
-      actions.appendChild(button("Узел", "rn-json-copy", function () { actions.open = false; requestCopy(raw(sourceDocument, node), "node", node); }));
-      actions.appendChild(button("Путь", "rn-json-copy", function () { actions.open = false; requestCopy(node.path, "path", node); }));
-      if (node.type === "string") {
-        actions.appendChild(button("Текст строки", "rn-json-copy", function () { actions.open = false; requestCopy(node.value, "string-value", node); }));
-      }
-      actions.addEventListener("keydown", function (event) {
-        if (event.key !== "Escape") return;
-        actions.open = false; menu.focus(); event.stopPropagation();
+      var trigger = button("⋯", "icon-btn compact rn-json-node-actions", function () {
+        var items = [
+          { label: "Узел", onSelect: function () { requestCopy(raw(sourceDocument, node), "node", node); } },
+          { label: "Путь", onSelect: function () { requestCopy(node.path, "path", node); } }
+        ];
+        if (node.type === "string") items.push({ label: "Текст строки", onSelect: function () { requestCopy(node.value, "string-value", node); } });
+        window.RNAssistantActionMenu.open(trigger, items);
       });
-      row.appendChild(actions);
+      trigger.setAttribute("aria-label", "Копирование значения или пути"); trigger.setAttribute("aria-haspopup", "menu");
+      row.appendChild(trigger);
     }
 
     function requestCopy(text, kind, node) {
@@ -711,8 +707,9 @@
       setSource: setSource,
       setMode: setMode,
       collapseAll: collapseAll,
+      getMode: function () { return state.mode; },
       getDocument: function () { return state.document; },
-      destroy: function () { state.copyVersion += 1; root.replaceChildren(); }
+      destroy: function () { state.copyVersion += 1; if (window.RNAssistantActionMenu) window.RNAssistantActionMenu.closeWithin(root); root.replaceChildren(); }
     };
   }
 

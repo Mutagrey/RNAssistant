@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Request view и controls диагностики S3a — 2026-11-02
+
+По прямому указанию пользователя включён production-срез: сохранённый запрос
+в существующем Dockview, компактное оглавление и Markdown/JSON/Текст выбранного
+сообщения. Старый request screen/семь tabs и локальные menu/control overrides
+удалены; журнал/Lab/Приложение используют общие controls. Source/response/runtime
+различаются; metadata overview не читает тела. Переходы, отмена/late replies,
+move/split/restore, narrow/themes и bounded performance проверены синтетически.
+Owner: Web diagnostics presentation / DockWorkspace / shared viewers.
+[Evidence, измерения и остаток](../ui/UI_MIGRATION_PLAN.md#s3a-запрос-и-общие-controls-диагностики--production-2026-11-02).
+Runtime/Bridge/CAS не переписывались. D3 attribution, D4 Scenario Lab, остальные
+Dock views и реальная Windows/Office/model qualification остаются открытыми.
+
 ## Settings и меню rail S1c — 2026-11-02
 
 Owner: Web Shell / Settings presentation. Shell checkpoint сохранён в `2a4831c5`.

@@ -35,6 +35,24 @@ const fs = require("node:fs");
       };
       RNAssistantResourceDownload.read = async () => new TextEncoder().encode(text);
     });
+    const docked = await page.locator("#modelContextStructureTab").count() > 0;
+    async function message() {
+      if (docked) {
+        const first = page.locator('#modelContextTree [data-tree-select="message:0"]');
+        if (!await first.count()) await page.locator('#modelContextTree [data-tree-select="messages"]').click();
+        else await first.click();
+        await page.locator('#modelContextBody .rn-markdown-viewer').waitFor();
+      } else {
+        await page.locator("#modelContextMessagesTab").click();
+        const first = page.locator("#modelContextBody .is-message").first(); await first.waitFor();
+        if (!await first.evaluate(node => node.open)) await first.locator(":scope > summary").click();
+        await first.locator('.rn-markdown-viewer').waitFor();
+      }
+    }
+    async function exact() {
+      if (docked) { await page.locator("#modelContextActions").click(); await page.getByRole("menuitem", { name: "Точный запрос JSON", exact: true }).click(); }
+      else await page.locator("#modelContextJsonTab").click();
+    }
     const samples = [];
     for (let iteration = 0; iteration < 5; iteration++) {
       await page.evaluate(() => { RNAssistantModelContext.close(false); switchTab("chat"); perfReads = { metadata: 0, bodies: 0 }; });
@@ -43,25 +61,30 @@ const fs = require("node:fs");
       await page.waitForFunction(() => !document.getElementById("modelContextBody").textContent.includes("Загрузка") && document.getElementById("modelContextAttempt").value === "preview-request");
       const opening = performance.now() - start;
       const initialReads = await page.evaluate(() => ({ ...perfReads }));
-      await page.locator("#modelContextMessagesTab").click();
-      await page.locator("#modelContextBody .is-message").first().waitFor();
+      await message();
       const inputMs = performance.now() - start;
       const tabStart = performance.now();
       for (let i = 0; i < 3; i++) {
-        await page.locator("#modelContextJsonTab").click();
-        await page.locator("#modelContextMessagesTab").click();
-        await page.locator("#modelContextBody .is-message").first().waitFor();
+        await exact(); await message();
       }
       samples.push({ openingMs: Math.round(opening), inputMs: Math.round(inputMs), tabRoundTripsMs: Math.round(performance.now() - tabStart), initialReads,
-        ...await page.evaluate(() => ({ reads: perfReads, messageRows: document.querySelectorAll("#modelContextBody .is-message").length, domNodes: document.querySelectorAll("#modelContextBody *").length })) });
+        ...await page.evaluate(() => ({ reads: perfReads, messageRows: document.querySelectorAll('#modelContextTree [data-tree-key^="message:"], #modelContextBody .is-message').length, domNodes: document.querySelectorAll("#modelContextBody *, #modelContextTree *").length })) });
     }
     const protocol = await page.context().newCDPSession(page);
     await protocol.send("HeapProfiler.collectGarbage");
     const retainedHeap = await protocol.send("Runtime.getHeapUsage");
     await page.evaluate(() => RNAssistantModelContext.close(false));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await protocol.send("HeapProfiler.collectGarbage");
     const closedHeap = await protocol.send("Runtime.getHeapUsage");
-    const report = { browser: browser.version(), stylesheetVerified: true, heapAfterFiveRuns: { open: retainedHeap.usedSize, closed: closedHeap.usedSize }, fixture: "2000 messages, 55 repeated text fragments each", bytes: await page.evaluate(() => perfFixtureBytes), samples };
+    const cleanup = [];
+    for (let repeat = 0; repeat < 20; repeat++) {
+      await page.evaluate(() => RNAssistantModelContext.open({ requestEventId: "preview-request" }));
+      await page.waitForFunction(() => document.getElementById("modelContextAttempt").value === "preview-request");
+      await message(); await page.evaluate(() => RNAssistantModelContext.close(false));
+      if (repeat === 0 || repeat === 19) { await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); await protocol.send("HeapProfiler.collectGarbage"); cleanup.push((await protocol.send("Runtime.getHeapUsage")).usedSize); }
+    }
+    const report = { cleanupTwentyCycles: cleanup, route: docked ? "Dock request / selected message / exact request via menu" : "Diagnostics request / expanded first message / exact request tab", browser: browser.version(), stylesheetVerified: true, heapAfterFiveRuns: { open: retainedHeap.usedSize, closed: closedHeap.usedSize }, fixture: "2000 messages, 55 repeated text fragments each", bytes: await page.evaluate(() => perfFixtureBytes), samples };
     console.log(JSON.stringify(report, null, 2));
     if (process.env.DIAGNOSTICS_PERF_OUTPUT) fs.writeFileSync(process.env.DIAGNOSTICS_PERF_OUTPUT, JSON.stringify(report, null, 2));
   } finally { if (browser) await browser.close(); server.kill(); }
