@@ -9,7 +9,7 @@
   var visualSessionId=null;
   var savedIcons=[],selectedIconId='puzzle',customSource=false,editingPlugin=null;
   var frameReady=false,pendingNavigation=null;
-  var browsingRelease=null,publishedSourceStamps=Object.create(null),versionCursor=null,versionEpoch=0;
+  var publishedSourceStamps=Object.create(null),versionCursor=null,versionEpoch=0;
   var navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
   function el(id){return window.RNAssistantWorkspaceChat.node(id)||document.getElementById('plugin'+id);}
   function ownsChat(){return window.RNAssistantWorkspaceChat.owner()==='plugin'&&
@@ -34,6 +34,10 @@
   function syncAppearance(){
     if(!dataPlugin())return;
     var frame=el('PreviewMount').querySelector('iframe');
+    if(!frame||!frame.contentWindow)return;
+    applyAppearance(frame);
+  }
+  function applyAppearance(frame){
     if(!frame||!frame.contentWindow)return;
     var root=document.documentElement,style=getComputedStyle(root);
     var names={panel:'--surface',secondary:'--surface-subtle',secondaryHover:'--surface-hover',
@@ -100,12 +104,10 @@
   });
   async function run(action){if(busy)return;busy=true;controls();try{await action();}catch(error){status(error.message,true);}finally{busy=false;controls();}}
   function controls(){['Preview','Apply','Reopen','Disable','SourceChat'].forEach(function(id){el(id).disabled=busy||previewBusy||!selected||
-    id==='Apply'&&(!candidate||!candidate.hasChanges||!!browsingRelease)||(id==='Reopen'||id==='Disable')&&!selected.enabled;});
-    el('Apply').hidden=!candidate||!candidate.hasChanges||!selected||!!browsingRelease;
-    el('RestoreVersion').hidden=!browsingRelease;el('RestoreVersion').disabled=busy||previewBusy||!selected;
-    el('DecisionStrip').hidden=el('Apply').hidden&&el('RestoreVersion').hidden;
-    el('DecisionText').textContent=browsingRelease?'Сохранённая версия v'+browsingRelease.version:
-      !el('Apply').hidden?'Проверенные изменения исходников':'';
+    id==='Apply'&&(!candidate||!candidate.hasChanges)||(id==='Reopen'||id==='Disable')&&!selected.enabled;});
+    el('Apply').hidden=!candidate||!candidate.hasChanges||!selected;
+    el('DecisionStrip').hidden=el('Apply').hidden;
+    el('DecisionText').textContent=!el('Apply').hidden?'Проверенные изменения исходников':'';
     if(ownsChat()&&window.RNAssistantProjectChats)window.RNAssistantProjectChats.refreshControls();
     if(pluginInspector)pluginInspector.refresh();
     el('CreateSubmit').disabled=busy;}
@@ -195,14 +197,14 @@
   }
   function disposeVisual(){if(pluginAnnotations){pluginAnnotations.dispose();pluginAnnotations=null;}if(pluginInspector){pluginInspector.dispose();pluginInspector=null;}window.RNAssistantPluginAnnotations=null;}
   async function closeView(){frameReady=false;pendingNavigation=null;disposeVisual();previewSurface.clear();var old=view;view=null;el('PreviewFrameHost').replaceChildren();syncPanelView();if(old)await send('closePlugin',{instanceId:old.instanceId});}
-  async function showView(preview,releaseId){var current=epoch,previous=view,opened;
-    var label={title:selected.name,path:releaseId?'Сохранённая версия':preview?'Неприменённые исходники':'Активная версия'};
+  async function showView(preview){var current=epoch,previous=view,opened;
+    var label={title:selected.name,path:preview?'Неприменённые исходники':'Активная версия'};
     try{opened=await send('openPlugin',{
-      pluginId:selected.pluginId,candidateId:preview&&!releaseId?candidate.candidateId:null,releaseId:releaseId||null});}
+      pluginId:selected.pluginId,candidateId:preview?candidate.candidateId:null});}
     catch(error){if(current===epoch)previewSurface.fail(label,error.detail||error.message);throw error;}
     if(current!==epoch){await send('closePlugin',{instanceId:opened.instanceId});return;}
     disposeVisual();view=opened;frameReady=false;if(dataPlugin())pendingNavigation={view:navigation.view,templateId:navigation.templateId};
-    var frame=document.createElement('iframe');frame.title=selected.name+(releaseId?' — сохранённая версия':preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
+    var frame=document.createElement('iframe');frame.title=selected.name+(preview?' — предпросмотр':'');frame.sandbox='allow-scripts allow-same-origin allow-downloads';frame.referrerPolicy='no-referrer';
     if(dataPlugin())frame.addEventListener('load',syncAppearance);
     previewSurface.watch(frame,label);
     el('PreviewFrameHost').replaceChildren(frame);
@@ -213,7 +215,7 @@
     status('');}
   function stopSourceWatch(){clearInterval(sourceTimer);clearTimeout(sourceDebounce);sourceTimer=null;sourceDebounce=null;sourceStamp=null;}
   async function checkAndPreview(stamp,force){
-    if(!selected||browsingRelease)return false;
+    if(!selected)return false;
     if(previewTask){await previewTask;return checkAndPreview(stamp,force);}
     var id=selected.pluginId,current=epoch,source=stamp;
     previewBusy=true;controls();
@@ -235,7 +237,7 @@
     previewTask=task;
     try{return await task;}finally{if(previewTask===task)previewTask=null;previewBusy=false;controls();}
   }
-  async function pollSource(){if(!selected||busy||browsingRelease||el('Workbench').hidden||!previewOpen||document.hidden||previewBusy)return;
+  async function pollSource(){if(!selected||busy||el('Workbench').hidden||!previewOpen||document.hidden||previewBusy)return;
     var id=selected.pluginId,current=epoch;
     try{var state=await send('getPluginSourceState',{pluginId:id});if(current!==epoch||!selected||selected.pluginId!==id||state.stamp===sourceStamp)return;
       sourceStamp=state.stamp;clearTimeout(sourceDebounce);sourceDebounce=setTimeout(function(){checkAndPreview(state.stamp);},450);
@@ -286,7 +288,7 @@
         return;
       }
       await run(async function(){
-        epoch++;stopSourceWatch();await closeView();selected=item;candidate=null;candidateStamp=null;browsingRelease=null;
+        epoch++;stopSourceWatch();await closeView();selected=item;candidate=null;candidateStamp=null;
         versionEpoch++;versionCursor=null;el('Versions').open=false;
         previewOpen=true;
         navigation={projectName:'Проект данных',view:'sources',templateId:'',templates:[],expanded:{project:true,templates:true,dictionary:true}};
@@ -318,19 +320,13 @@
       if(!page.items.length&&!cursor)list.textContent='Опубликованных версий пока нет.';
       page.items.forEach(function(item){
         var row=document.createElement('button'),name=document.createElement('strong'),meta=document.createElement('small'),marker=document.createElement('em');
-        row.type='button';row.className='plugin-version-row'+(item.active?' is-active':'')+
-          (browsingRelease&&browsingRelease.releaseId===item.releaseId?' is-selected':'');
+        row.type='button';row.className='plugin-version-row'+(item.active?' is-active':'');
         name.textContent='v'+item.version;marker.textContent=item.active?'Активная':'';
         var date=new Date(item.capturedUtc);
         meta.textContent=(Number.isNaN(date.getTime())?'Сохранённая версия':date.toLocaleString('ru-RU',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}))+
           ' · '+item.releaseId.slice(-8);
         row.append(name,marker,meta);row.title=item.name+' · '+item.releaseId;
-        row.onclick=function(){el('Versions').open=false;run(async function(){
-          var previous=browsingRelease;browsingRelease=item.active?null:item;epoch++;clearTimeout(sourceDebounce);
-          try{await showView(!item.active,item.active?null:item.releaseId);}
-          catch(error){browsingRelease=previous;throw error;}
-          controls();
-        });};
+        row.onclick=function(){el('Versions').open=false;RNAssistantPluginReleaseView.open(selected,item);};
         list.appendChild(row);
       });
       versionCursor=page.nextCursor;el('VersionMore').hidden=!versionCursor;
@@ -451,7 +447,7 @@
         else{browserView.deactivate();clearInterval(sourceTimer);sourceTimer=null;clearTimeout(sourceDebounce);
           if(pluginInspector)pluginInspector.deactivate();if(pluginAnnotations)pluginAnnotations.collapseEditor();}
         refreshPresentation();},
-      onClose:function(){epoch++;selectionSerial++;versionEpoch++;stopSourceWatch();selected=null;candidate=null;browsingRelease=null;
+      onClose:function(){epoch++;selectionSerial++;versionEpoch++;stopSourceWatch();selected=null;candidate=null;
         closeView().catch(function(error){status(error.message,true);});controls();}});
     window.addEventListener('pagehide',function(event){if(!event.persisted){epoch++;stopSourceWatch();disposeVisual();browserView.deactivate();closeView().catch(function(){});}});
     syncPanelView();
@@ -490,33 +486,39 @@
     el('Connect').onchange=function(){var connecting=this.checked;el('NewFields').hidden=connecting;el('Name').required=!connecting;el('Task').disabled=connecting;el('IconDescription').disabled=connecting||selectedIconId!=='draw';if(connecting)setIconEditor(false);updateCreatePreview();updateSourceLocation();
       el('CreateSubmit').textContent=editingPlugin?'Сохранить':connecting?'Подключить папку':'Создать плагин';el('ModeHint').textContent=editingPlugin?'Оформление на панели обновится сразу.':connecting?
         'Будет подключён существующий plugin.json без изменения исходников.':'Проверка и публикация доступны в разделе «Разработка».';};
-    el('Preview').onclick=function(){browsingRelease=null;controls();checkAndPreview(null,true);};
+    el('Preview').onclick=function(){controls();checkAndPreview(null,true);};
     el('Apply').onclick=function(){run(async function(){var latest=(await send('getPluginSourceState',{pluginId:selected.pluginId})).stamp;
       if(latest!==candidateStamp){await checkAndPreview(latest);status('Исходники изменились. Проверьте обновлённый предпросмотр и нажмите «Применить» ещё раз.');return;}
       selected=await send('applyPlugin',{pluginId:selected.pluginId,candidateId:candidate.candidateId});candidate=null;candidateStamp=null;delete publishedSourceStamps[selected.pluginId];await refresh();
       status('');});};
-    el('RestoreVersion').onclick=function(){if(!browsingRelease||!selected)return;run(async function(){
-      var id=selected.pluginId,target=browsingRelease.releaseId,expected=selected.releaseId;
-      clearTimeout(sourceDebounce);
-      selected=await send('restorePluginVersion',{pluginId:id,releaseId:target,expectedActiveReleaseId:expected});
-      candidate=null;candidateStamp=null;browsingRelease=null;versionCursor=null;versionEpoch++;
-      await showView(false);await refresh();
-      try{sourceStamp=(await send('getPluginSourceState',{pluginId:id})).stamp;publishedSourceStamps[id]=sourceStamp;}
-      catch(error){status('Версия восстановлена, но проверка исходников недоступна: '+error.message,true);return;}
-      status('Сохранённая версия восстановлена. Исходники не изменены.');
-    });};
     el('Versions').addEventListener('toggle',function(){if(this.open){versionCursor=null;loadVersionPage();}else versionEpoch++;});
     el('VersionMore').onclick=function(){if(versionCursor)loadVersionPage(versionCursor);};
     document.addEventListener('pointerdown',function(event){if(el('Versions').open&&!event.target.closest('#pluginVersions'))el('Versions').open=false;});
     el('Versions').addEventListener('keydown',function(event){if(event.key==='Escape'&&this.open){this.open=false;this.querySelector('summary').focus();event.preventDefault();event.stopPropagation();}});
-    el('Reopen').onclick=function(){el('Reopen').closest('details').open=false;run(async function(){await showView(false);browsingRelease=null;candidate=null;candidateStamp=null;publishedSourceStamps[selected.pluginId]=sourceStamp;});};
-    el('Disable').onclick=function(){el('Disable').closest('details').open=false;run(async function(){selected=await send('disablePlugin',{pluginId:selected.pluginId});candidate=null;candidateStamp=null;browsingRelease=null;await closeView();await refresh();status('Плагин отключён. Исходники и данные сохранены.');});};
+    el('Reopen').onclick=function(){el('Reopen').closest('details').open=false;run(async function(){await showView(false);candidate=null;candidateStamp=null;publishedSourceStamps[selected.pluginId]=sourceStamp;});};
+    el('Disable').onclick=function(){el('Disable').closest('details').open=false;run(async function(){selected=await send('disablePlugin',{pluginId:selected.pluginId});candidate=null;candidateStamp=null;await closeView();await refresh();status('Плагин отключён. Исходники и данные сохранены.');});};
     el('NavigationToggle').onclick=function(){var pane=el('NavigationPane');pane.hidden=!pane.hidden;
       el('NavigationToggle').setAttribute('aria-expanded',String(!pane.hidden));};
     el('VendorsRefresh').onclick=function(){run(async function(){var catalog=await send('getPluginVendors',{});el('Vendors').replaceChildren();catalog.items.forEach(function(item){var row=document.createElement('p');row.textContent=item.id+' @ '+item.version+' · '+item.license;el('Vendors').appendChild(row);});status('Каталог обновлён. Проверка хешей выполняется при разрешении зависимости.');});};
     el('VendorImport').onclick=function(){run(async function(){var result=await send('importPluginVendor',{rootPath:el('VendorRoot').value});status('Добавлен '+result.id+' @ '+result.version);});};controls();
   }
+  async function restoreVersion(target){
+    if(busy||previewBusy)throw new Error('Дождитесь завершения операции с плагином.');
+    busy=true;controls();
+    try{
+      var restored=await send('restorePluginVersion',{pluginId:target.pluginId,releaseId:target.releaseId,
+        expectedActiveReleaseId:target.expectedActiveReleaseId});
+      try{
+        if(selected&&selected.pluginId===target.pluginId){
+          epoch++;clearTimeout(sourceDebounce);candidate=null;candidateStamp=null;selected=restored;versionCursor=null;versionEpoch++;
+          await closeView();sourceStamp=null;
+        }
+        delete publishedSourceStamps[target.pluginId];await refresh();
+      }catch(error){throw new Error('Версия восстановлена, но обновить интерфейс не удалось: '+(error.detail||error.message));}
+    }finally{busy=false;controls();}
+  }
   window.RNAssistantPlugins={refreshPresentation:refreshPresentation,
+    applyAppearance:applyAppearance,restoreVersion:restoreVersion,
     bind:bind,refresh:refresh,show:function(){el('Manager').hidden=false;},select:select,
     onChatSnapshot:onChatSnapshot,isChatBusy:function(){return ownsChat()&&busy;},
     sourceWorkspaceId:function(){return ownsChat()&&selected&&selected.sourceWorkspaceId;},

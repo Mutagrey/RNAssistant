@@ -1,0 +1,74 @@
+{
+  "fixture": "Synthetic 3,968,476-byte HTML transfer, 2 sources and 2 plugin releases; 5 alternating selections each. No Office/models/network bodies.",
+  "before": {
+    "mode": "before",
+    "fixture": {
+      "packageBytes": 3968476,
+      "selections": 5
+    },
+    "html": {
+      "reads": 5,
+      "returnInput": "initial",
+      "actionMs": [
+        232.38199999999995,
+        161.717584,
+        160.41991600000006,
+        167.31850000000009,
+        165.73470799999996
+      ],
+      "sourceCharacters": 2240000,
+      "sourceMs": 37.58091599999989
+    },
+    "plugin": {
+      "opens": 5,
+      "actionMs": [
+        105.28604199999972,
+        142.16774999999961,
+        116.96950000000015,
+        133.40016699999978,
+        133.95691699999998
+      ]
+    }
+  },
+  "after": {
+    "mode": "after",
+    "fixture": {
+      "packageBytes": 3968476,
+      "selections": 5
+    },
+    "html": {
+      "reads": 2,
+      "returnInput": "retained",
+      "actionMs": [
+        219.70483300000012,
+        175.08083299999998,
+        140.37816599999996,
+        137.7417919999998,
+        148.95100000000002
+      ],
+      "sourceCharacters": 32000,
+      "sourceMs": 40.05379200000016
+    },
+    "plugin": {
+      "opens": 2,
+      "actionMs": [
+        119.15099999999984,
+        166.54358299999967,
+        160.29516600000034,
+        170.2652919999996,
+        167.53841699999975
+      ]
+    }
+  },
+  "limits": "Single paired Chromium sample. Action timings include Playwright input/waits, not pure render time. Two retained views consume more memory than a singleton; no heap/speedup claim.",
+  "mediansMs": {
+    "before": {
+      "html": 165.73,
+      "plugin": 133.4
+    },
+    "after": {
+      "html": 148.95,
+      "plugin": 166.54
+    }
+  }
+}

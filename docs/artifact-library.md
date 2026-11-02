@@ -74,10 +74,11 @@ Ownership, title search and type/document filters change both views; 50-item pag
 append to both. The table sorts by title, displayed format, owner or modification time;
 the default is newest first. Sorting is applied before paging and bound to the
 continuation cursor. The selected HTML project expands into files and data. Selecting a
-table row or tree item opens the same viewer/editor pane, while **Все материалы**
-returns to the table and releases the preview. **Просмотр / Код** switches the right
-pane. Shared Markdown/text/JSON
-viewers render exported exact content. Actions apply to the selected root. The catalog reads registered local document
+table row/tree item/chat card opens the same addressed object view. **Все материалы**
+returns to the table without closing independent views. Saved HTML uses the common
+Browser with **Страница / Исходник**, file selection and paged TextViewer. The live
+editor is explicit. Shared Markdown/text/JSON viewers remain owned by MaterialView.
+The catalog reads registered local document
 authorities, including closed documents; it is not another durable inventory. Bodies
 are loaded on demand. Enumeration still scans retained metadata; response pagination
 does not imply bounded source enumeration. Run/system/context resources are excluded.
@@ -91,9 +92,8 @@ it to the addressed chat. Copies across documents grant no live Office authority
 Catalog preview does not attach or change the selected workspace. HTML preview uses
 the existing sandboxed standalone renderer with captured data. Source inspection,
 text/image preview and downloads remain available; other binary kinds show metadata
-and a download action. Attached current resources open in the same editor pane. Unattached or foreign
-resources use the read-only viewer. Dirty editor content blocks selection-changing
-operations until explicitly saved or discarded. Late list/preview/mutation responses
+and a download action. Saved resources open read-only without changing the editor. Dirty editor content
+blocks mutations and editor source changes, but not independent read-only selection. Late list/preview/mutation responses
 cannot replace newer navigation or edits.
 
 **Экспорт проекта** writes `*.rna-html.zip` contract v1: `manifest.json`, HTML/CSS/JS
@@ -1068,16 +1068,16 @@ The catalog action bar exposes **Версия · vN** for a selected local Libra
 artifact with multiple revisions (**Версия проекта** for HTML). Opening it loads
 the existing exact history in pages of 50, with dates, current-head and alternate
 branch labels. Selecting a revision opens its read-only saved preview/source;
-**К текущей версии** returns to the current artifact. Source reads and downloads
+Each revision opens its own addressed view; selecting an already open target activates it. Source reads and downloads
 target the displayed exact artifact revision; data bindings retain the existing
 catalog export policy (dynamic head bindings read current retained data).
 Browsing does not restore, move the working head or discard edits;
-dirty drafts block version changes. Standalone files have separate histories;
+dirty drafts remain in the editor while saved versions can be compared. Standalone files have separate histories;
 HTML/CSS/JS members and bindings share the whole-project revision. The chooser uses
 loaded Library head metadata; unlinked/foreign catalog resources without that
 metadata retain their existing preview. No new durable history is introduced.
-The catalog browser check covers per-file history, continuation, exact preview and
-download, dirty/late-response guards, and layout at 1100/420 px. This is host-neutral
+The source/browser checks cover exact target routing, independent drafts, saved
+resource snapshots, bounds, late-response disposal and narrow/light/dark/zoom layout. This is host-neutral
 UI evidence; Windows/Office/WebView2 qualification remains open.
 
 Restoring never modifies an old revision. Plan restore creates a new head revision
@@ -1645,3 +1645,16 @@ Completed chat runs can compare retained authored text revisions and individual
 HTML-workspace files. This uses existing lineage/CAS and does not alter Library
 heads or resource authority. Scope, source fidelity and limits are defined in
 [Conversation protocol — Run text changes](conversation-protocol.md#run-text-changes).
+
+
+### Saved HTML Browser limits — 2026-11-02
+
+S3b.3b uses the existing exportArtifact preview package and standalone builder,
+without live Office authority. Code is pinned by exact project URI. Dynamic-head
+bindings still capture current retained data at opening/reload; the UI labels this
+separately from the saved project revision. Preview transfer is limited to 16 MiB;
+encoded snapshot data to 32 MiB / 2048 parts, each ≤8 MiB; text source displays
+32,000 characters per page. Larger projects expose the bound and original download.
+The common downloader streams when supported, otherwise limits the buffer to 8 MiB.
+Six material views maximum includes HTML; ready DOM persists within the window,
+closing releases it. Live HTML editing/annotation scoping remains S3b.3c.

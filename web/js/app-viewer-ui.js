@@ -18,7 +18,7 @@
         root.querySelectorAll('button.secondary, button.rn-json-more').forEach(function (button) {
           button.classList.add("button", "compact", "ghost");
         });
-        root.querySelectorAll('.rn-text-viewer-search, .rn-sequence-input').forEach(function (input) { input.classList.add("control-input"); });
+        root.querySelectorAll('.rn-text-viewer-search, .rn-sequence-input').forEach(function (input) { input.classList.add("rna-form-control", "compact"); });
         root.querySelectorAll('.rn-pdf-viewer-tabs, .rn-markdown-viewer-tabs').forEach(function (tabs) {
           tabs.classList.add("view-switch");
           tabs.querySelectorAll("button").forEach(function (button) {

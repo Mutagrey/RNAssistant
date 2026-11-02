@@ -296,9 +296,7 @@
       limits: { maxNodes: 1800, maxDepth: catalogTree ? 14 : 12 },
       onActivate: function (item) {
         if (catalog && item.id.indexOf("rna://") === 0) {
-          if (!catalog.canSelect()) return false;
-          catalog.select(item.id);
-          return true;
+          return catalog.select(item.id);
         }
         var accepted = typeof options.onSelect === "function" ? options.onSelect(item.type, item.id) : true;
         if (catalog && accepted) catalog.editor();

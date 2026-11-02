@@ -606,7 +606,6 @@
     if (typeof isPanelActive === "function" && !isPanelActive("artifacts")) return;
     workspace();
     ensureSelection();
-    if (state.htmlWorkspaceDirty && window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.editor();
     renderHtmlWorkspaceList();
     if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.isVisible("materials")) return;
     if ($("htmlWorkspaceEditor").hidden) return;

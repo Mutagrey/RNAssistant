@@ -12,7 +12,7 @@
       target.chatId.length <= 256 && typeof target.documentId === "string" && target.documentId.length <= 256 && typeof target.resourceUri === "string" &&
       /^rna:\/\//.test(target.resourceUri) && target.resourceUri.length <= 4096 &&
       typeof target.kind === "string" && typeof target.title === "string" && target.title.length <= 1024 &&
-      typeof target.mimeType === "string" && target.mimeType.length <= 200 && target.kind !== "html_workspace";
+      typeof target.mimeType === "string" && target.mimeType.length <= 200;
   }
   function key(target) { return "material:" + encodeURIComponent(JSON.stringify([target.chatId, target.documentId, target.resourceUri])); }
   function artifactFor(target) { return { ResourceUri: target.resourceUri, Kind: target.kind, Title: target.title, MimeType: target.mimeType }; }
@@ -32,14 +32,14 @@
       sessionRevision: context.sessionRevision || (state.artifactLibrary || {}).sessionRevision || null };
   }
   function create(target) {
+    if (target.kind === "html_workspace") return RNAssistantHtmlArtifactView.create(target);
     var root = node("section", "material-object-view"), header = node("header", "resource-editor-head");
     root.dataset.resourceUri = target.resourceUri; root.setAttribute("aria-label", target.title);
     var titleBox = node("div", "resource-editor-titlebox"), buttons = node("div", "resource-editor-actions");
     titleBox.append(node("strong", "resource-editor-title", target.title), node("small", "resource-editor-meta",
       [target.documentTitle || "Документ исходного чата", target.chatTitle, target.revision ? "Версия " + target.revision : "Сохранённый материал"].filter(Boolean).join(" · ")));
     titleBox.title = titleBox.textContent;
-    var more = node("button", "icon-btn"); more.type = "button"; more.innerHTML = RNAssistantIcons.render("more");
-    more.setAttribute("aria-label", "Действия с материалом"); more.setAttribute("aria-haspopup", "menu"); more.setAttribute("aria-expanded", "false");
+    var more = RNAssistantActionMenu.createTrigger("Действия с материалом");
     buttons.appendChild(more); header.append(titleBox, buttons);
     var message = node("p", "material-object-status"); message.setAttribute("role", "status"); message.setAttribute("aria-live", "polite");
     var retry = node("button", "button compact secondary", "Повторить чтение"); retry.type = "button"; retry.hidden = true;
@@ -111,38 +111,10 @@
       stopReads(); actions.closeAll(); rendered = false; savedScroll = 0; content.scrollTop = 0;
       abort = new AbortController(); generation++; render();
     }
-    async function download() {
-      var version = generation, transfer, writable;
-      try {
-        // Acquire the destination during the user gesture; stream through the existing reader.
-        if (typeof window.showSaveFilePicker === "function") {
-          var handle = await window.showSaveFilePicker({ suggestedName: target.title });
-          if (!current(version)) return;
-          writable = await handle.createWritable();
-        }
-        status("Подготовка оригинала…");
-        var operation = send("exportArtifact", { chatId: target.chatId, documentId: target.documentId,
-          resourceUri: target.resourceUri, preview: false });
-        if (operation.requestId) requests.add(operation.requestId);
-        try { transfer = await operation; } finally { requests.delete(operation.requestId); }
-        if (!current(version)) return;
-        var options = { maxBytes: maximumImageBytes, writable: writable,
-          fetch: window.fetch.bind(window), signal: abort.signal, isCurrent: function () { return current(version); } };
-        if (writable) {
-          await RNAssistantResourceDownload.save(transfer.data, options); writable = null; status(""); return;
-        }
-        if (transfer.data && transfer.data.payload && transfer.data.payload.byteLength > maximumImageBytes)
-          throw new Error("Скачивание больше 8 МБ требует поддержки потокового сохранения в этом браузере.");
-        var bytes = await RNAssistantResourceDownload.read(transfer.data, options);
-        if (!current(version)) return;
-        var url = URL.createObjectURL(new Blob([bytes], { type: transfer.contentType }));
-        var link = document.createElement("a"); link.href = url; link.download = transfer.fileName; link.click();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 0); status("");
-      } catch (error) { if (current(version)) status(error.name === "AbortError" ? "Сохранение отменено." : error.detail || error.message); }
-      finally {
-        if (writable) await writable.abort().catch(function () {});
-        if (transfer && transfer.data) send("closeArtifactTransfer", { chatId: target.chatId, leaseId: transfer.data.leaseId }).catch(function () {});
-      }
+    function download() {
+      var version = generation;
+      return RNAssistantArtifactDownload.save(target, { send: send, fetch: window.fetch.bind(window), signal: abort.signal,
+        isCurrent: function () { return current(version); }, status: status });
     }
     more.addEventListener("click", function () { RNAssistantActionMenu.open(more, [
       { label: "Скачать оригинал", icon: "download", onSelect: download },
@@ -167,12 +139,13 @@
       element: function () { return document.getElementById("artifactCatalog"); },
       prepare: function () { RNAssistantArtifactCatalog.show(); renderHtmlWorkspace(); },
       onVisible: function (visible) { if (!visible) deactivateHtmlWorkspaceInspector(); else renderHtmlWorkspace(); } });
+    RNAssistantPluginReleaseView.register(dock);
     dock.registerView("material", { perObject: true, accepts: accepts, key: key, create: create,
-      maximumInstances: maximumInstances, titleFor: function (target) { return target.title; } });
+      maximumInstances: maximumInstances, renderer: function (target) { return target.kind === "html_workspace" ? "onlyWhenVisible" : "always"; }, titleFor: function (target) { return target.title + (target.kind === "html_workspace" && target.revision ? " · v" + target.revision : ""); } });
   }
   window.RNAssistantMaterialView = { register: register, target: targetFor, accepts: accepts, key: key,
     openArtifact: function (artifact, context) {
-      if (readers.artifactKind(artifact) === "html_workspace" || !readers.exactArtifactUri(artifact)) return false;
+      if (!readers.exactArtifactUri(artifact)) return false;
       var target = targetFor(artifact, context);
       if (!accepts(target)) return false;
       if (!RNAssistantDockWorkspace.sectionView(document.querySelector(".panel.active").id.slice(4))) switchTab("chat", { preserveChatOwner: true });

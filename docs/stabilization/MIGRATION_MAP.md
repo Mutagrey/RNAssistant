@@ -18,12 +18,15 @@ Owner: Web Library / ArtifactCatalog / DockWorkspace. В S3b.1 `library-object` 
 per-object descriptor/factory владеет exact scope и lifecycle, non-HTML singleton
 catalog preview/refresh удалён. Library adapter остаётся до S4 dirty/save scope.
 
-Временный HTML catalog preview/editor остаётся у ArtifactCatalog/HtmlWorkspace;
-shared format presentation вынесена в ArtifactViewers без второго renderer/store.
 S3b.3a удалил ChatBrowser/plugin splitters и смешанный Preview/Inspector switcher.
-Общий Browser сохраняет iframe document. Временные singleton providers остаются у
-HtmlWorkspace и Plugins: удаление adapter в S3b.3b после exact saved HTML и отдельных
-plugin/release factories, typed source ownership, annotation/close/stale evidence.
+S3b.3b удалил HTML Catalog preview и browsingRelease из plugin workbench: exact saved
+HTML/release factories используют общий Browser lifetime/renderer и существующий
+transport. Catalog/download/source viewer не имеют второй реализации.
+Временные singleton adapters остаются у HtmlWorkspace (live editor/source/annotations)
+и Plugins (mutable source/candidate/watch/annotations). Owner: Web HtmlWorkspace/Plugins;
+условие удаления в S3b.3c — scoped live providers с exact session/source ownership,
+annotation authority, close/stale и реальным UI evidence. Их глобальный state не
+клонируется. Сохранённый HTML не расширяет annotation права активной версии чата.
 S4 подключает Library/VBA и остальные navigation adapters
 к тому же Pane и descriptors; не создаёт отдельную VBA Shell. Cold restart viewer
 mementos (mode/search/scroll) остаются явным gap; target уже восстанавливается.

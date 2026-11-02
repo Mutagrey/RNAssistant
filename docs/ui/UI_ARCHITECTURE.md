@@ -747,7 +747,36 @@ resource leases, sandbox и аннотациями. Смена пары очищ
 epoch и закрывает instance; запоздалый open закрывается без восстановления вкладки.
 
 Временные bounded owners: один live HTML workspace и один plugin workbench.
-Сохранённые HTML objects и несколько plugin/release targets — **S3b.3b**; их нельзя
-клонировать из текущих глобальных controllers. Catalog HTML adapter остаётся явно.
+Сохранённые HTML/release objects вынесены в factories S3b.3b ниже. Текущие mutable
+controllers остаются отдельным adapter до S3b.3c; их нельзя клонировать.
 ChatBrowser, его CSS, splitter/overlay plugin placement и preview-пункт Inspector
 удалены. Новый transport, store или runtime pipeline не добавлены.
+
+### S3b.3b: сохранённые Browser objects — In Review
+
+| Владелец | Ответственность |
+|---|---|
+| MaterialView / PluginReleaseView | Проверка и ключ exact target, bounded descriptor в существующем Dock catalog (6 материалов / 4 релиза) |
+| BrowserObjectView | Только UI lifetime: lazy activate, cancel/stale generation, retained ready DOM, reload/status/dispose |
+| HtmlArtifactView | exportArtifact + ResourceDownload; точные HTML/CSS/JS, сохранённые resource views, sandbox без host bridge; постраничный TextViewer |
+| HtmlResourceExport | Один encoder retained resource views → существующий standalone snapshot transport; не второй store |
+| PluginReleaseView / PluginApplicationService | openPlugin/closePlugin exact release; прежние instance authority, sandbox и пробные данные |
+| Plugins | Единственный владелец restore с expectedActiveReleaseId, invalidation кандидата/рабочего instance после успеха |
+| ArtifactDownload | Один bounded/streaming download для MaterialView, HTML Browser и Catalog; transport передаётся явно |
+
+BrowserObjectView не интерпретирует данные и не вызывает runtime напрямую. Providers
+не знают layout. Готовый frame остаётся подключённым при hide/move/restore; незавершённое
+чтение отменяется, поздний lease/instance закрывается. Перезагрузка явно пересоздаёт
+страницу. HTML transfer ≤16 МиБ; encoded resource parts ≤32 МиБ / 2048 частей,
+одна часть ≤8 МиБ; исходник ≤32 000 символов в DOM. Download использует существующий
+stream writer или fallback ≤8 МиБ. Нет фоновой загрузки скрытых targets.
+
+Project revision фиксирует код, но dynamic-head data bindings следуют прежней export
+policy: снимок retained data берётся при открытии/явном reload и далее неизменен
+внутри view. Он не обозначается историческим снимком данных на дату версии проекта.
+Самостоятельный saved view не получает права активного HTML annotation source.
+
+Удалены Catalog preview/read/source renderer/CSS и historical browsingRelease mode
+в plugin workbench. Материалы из дерева, таблицы и ленты используют один descriptor.
+Live editor/annotation и developer source watch остаются адресуемыми singleton adapters
+до S3b.3c; Library/VBA редакторы и cold-start presentation mementos — S4/открытый gap.

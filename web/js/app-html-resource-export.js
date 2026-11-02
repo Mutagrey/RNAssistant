@@ -99,6 +99,40 @@
     return { version: 2, generations: resourceExport.generations, resources: resources, parts: parts };
   }
 
+  // Exact retained views from the existing artifact transfer package. No live bindings.
+  async function fromArtifactViews(views, options) {
+    if (!Array.isArray(views) || views.length > 100) throw new Error("Некорректные данные сохранённого проекта.");
+    var bytes = 0;
+    var snapshot = { version: 2, resources: [], parts: [], generations: {} };
+    for (var view of views) {
+      var reference = view.Reference;
+      var resource = { name: view.Name, descriptor: { reference: reference, title: view.Name }, view: view.View,
+        path: view.Path, maxBatchItems: 32000, maxBatchBytes: 8 * 1024 * 1024, parts: [] };
+      var total = view.Rows ? view.Rows.length : view.Text.length;
+      var batchSize = view.Rows ? 500 : 32000;
+      for (var offset = 0; offset < total || offset === 0;) {
+        if (!options.isCurrent() || options.signal.aborted) throw new Error("Загрузка отменена.");
+        if (snapshot.parts.length >= 2048) throw new Error("Данные проекта превышают лимит просмотра.");
+        var end = Math.min(offset + batchSize, total);
+        var batch = { resource: reference, view: view.View, offset: offset, nextOffset: end, done: end === total,
+          coverage: { kind: view.Rows ? "record-range" : "character-range", start: offset, end: end, path: view.Path, fields: [] } };
+        if (view.Rows) { batch.rows = view.Rows.slice(offset, end); batch.columns = view.Columns; }
+        else batch.text = view.Text.slice(offset, end);
+        var text = JSON.stringify(batch).replace(/</g, "\\u003c");
+        var size = new TextEncoder().encode(text).length; bytes += size;
+        if (size > MAX_BATCH_BYTES || bytes > 32 * 1024 * 1024) throw new Error("Данные проекта превышают лимит просмотра 32 МиБ.");
+        var hash = await partHash(text);
+        var part = { id: "rn-export-part-" + snapshot.parts.length, offset: offset, nextOffset: end,
+          done: end === total, byteLength: size, sha256: hash };
+        snapshot.parts.push({ id: part.id, text: text }); resource.parts.push(part);
+        if (end === total) break;
+        offset = end;
+      }
+      snapshot.resources.push(resource);
+    }
+    return snapshot;
+  }
+
   // Read-only transport for an exported exact snapshot. The RN.resources handle,
   // stream/backpressure and selectors are the same as the hosted runtime.
   function installSnapshotTransport(manifest, hash) {
@@ -193,5 +227,5 @@
       installSnapshotTransport.toString() + ")(" + escapeJson(JSON.stringify(manifest)) + ", " + partHash.toString() + "));</script>";
   }
 
-  window.RNAssistantHtmlResourceExport = { capture: capture, script: script };
+  window.RNAssistantHtmlResourceExport = { capture: capture, script: script, fromArtifactViews: fromArtifactViews };
 }());

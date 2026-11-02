@@ -1,5 +1,29 @@
 # Stabilization risk register
 
+## Saved Browser S3b.3b: границы проверки — 2026-11-02
+
+Owner: Web Browser / HtmlWorkspace / Plugins. Независимые saved HTML/release views
+проверены синтетически; live HTML editor/annotation и mutable plugin workbench ещё
+singleton до S3b.3c. HTML-аннотация требует активной версии текущего чата; saved view
+это право не расширяет. Dynamic-head данные фиксируются при открытии, не на дату
+project revision. Raw HTML files пока инертный текст. Cold-start восстанавливает
+target, но не mode/search/scroll. Library/VBA editors — S4; Office/WebView2 — открыто.
+
+`html-workspace-export` проходит snapshot/lease checks, затем падает в прежнем
+refresh fixture (ожидались два runTool, получено 0); это воспроизведено до среза.
+В рабочем дереве с параллельными UI edits наблюдались pointer/geometry отказы
+`browser-views` и `dock-workspace`. Повторный Dock check прошёл. `browser-views`
+имеет успешный isolated run, но повторение снова упёрлось в положение live plugin
+после restore: этот gate остаётся открытым. `browser-saved-views` и
+`material-object-views` проходят на изолированном index. Source catalog и
+resource-download тоже прошли. Общая Shell требует отдельного ревью после объединения
+параллельных правок; одиночный успешный прогон не закрывает нестабильный маршрут.
+
+Парный замер ограничен automation sample: сохраняются две страницы вместо одной;
+heap не измерен, plugin selection стал медленнее. Границы preview 16 МиБ transfer,
+32 МиБ encoded parts, 6 material/4 release views ограничивают retained data, но
+не heap/CPU произвольного JS внутри sandbox. Нет заявления общего ускорения.
+
 ## HTML source validation читает постороннюю переменную — 2026-11-02
 
 Owner: Web HtmlWorkspace source reader. В
@@ -40,8 +64,8 @@ Full production preview `workspace-shared-draft` и Chromium `chat-input-deliver
 
 Owner: Web Browser / HtmlWorkspace / Plugins. Общий renderer проверен локально,
 но providers ещё singleton: один live HTML и один выбранный plugin. Exact saved
-HTML/release scopes, несколько экземпляров и cold restart source state — S3b.3b.
-Catalog/detail HTML adapter сохраняется явно до этого gate. Старые широкие
+HTML/release scopes и несколько saved экземпляров реализованы S3b.3b. Live
+annotation/editor scoping остаётся S3b.3c; cold restart presentation state — open gap. Старые широкие
 plugin/annotation suites полностью не квалифицированы; адресный browser-views
 проверяет обе аннотации, stale close, move/restore и узкие состояния.
 

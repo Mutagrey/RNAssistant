@@ -343,8 +343,8 @@ Download использует streaming save при поддержке browser A
 явной причиной отказа. Восстановление после перезапуска возвращает target, но пока
 не mode/search/scroll специализированного viewer.
 
-S3b.3a вынес live HTML preview в Browser; saved HTML Catalog adapter остаётся до
-S3b.3b. Raw HTML file
+S3b.3a вынес live HTML preview в Browser; S3b.3b открывает сохранённые HTML-проекты
+в адресных вкладках. Raw HTML file
 пока показан инертным исходником. Library и VBA editors — S4. Эти ограничения
 не заменяются дополнительными browser/chat UI. [Ревью](UI_MIGRATION_PLAN.md#s3b2-независимые-просмотры-материалов--in-review-2026-11-02).
 
@@ -475,5 +475,27 @@ focus transitions, performance и host behavior остаются gates Migration
 - После смены текущего HTML source прежний live Browser показывает причину и путь
   обратно к Материалам. После холодного старта выбор источника явный.
 
-Ограничение S3b.3a: один Browser каждого действующего provider-owner. Независимые
-exact saved HTML/plugin release objects — S3b.3b; Library/VBA editors — S4.
+Ограничение live providers: один HTML editor и один plugin workbench до S3b.3c.
+Сохранённые objects независимы (S3b.3b ниже); Library/VBA editors — S4.
+
+### Маршруты сохранённых Browser objects S3b.3b — In Review
+
+- Материалы: таблица/дерево/карточка чата → адресная вкладка HTML по chat/document/URI.
+  Второй документ/версия открывается рядом; повторный выбор возвращает прежний view.
+  Фильтр источника, смена чата и несохранённые правки редактора не подменяют его.
+- «Страница / Исходник» переключает presentation; выбор файла и страницы текста не
+  пересоздаёт iframe. Сохранённый код не зависит от live editor. Данные — снимок при
+  открытии, согласно export policy. Действия редактора доступны явно через material owner.
+- Меню версий материала открывает отдельный exact URI. История доступна при наличии
+  Library head metadata; отсутствие metadata не выдаётся за пустую историю.
+- Плагин → «Версии» → отдельный pinned release, даже для текущей публикации. Это пробная
+  копия данных. Workbench/candidate и выбранный чат не переключаются. Меню версии →
+  «Восстановить эту версию» с CAS guard. Успех не заменяет открытый сохранённый preview;
+  конфликт показывает причину. Редактируемые исходники остаются прежними.
+- Pending hide/close освобождает поздний ответ; ready hide сохраняет iframe/input.
+  Reload и close/reopen начинают новый просмотр. Ошибка/лимит имеют видимую причину,
+  reload и доступ к оригиналу. Метаданные и открытие экранов не запускают модель.
+
+В 420 px / 125% те же Dock tabs и общая панель действий переносятся на строки;
+Enter с placeholder вводит в содержимое, меню возвращает фокус по Escape. Результаты
+и ограничения: [S3b.3b](UI_MIGRATION_PLAN.md#s3b3b-точные-сохранённые-browser-targets--in-review).

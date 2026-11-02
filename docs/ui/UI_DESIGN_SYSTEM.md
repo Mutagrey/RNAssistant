@@ -387,3 +387,18 @@ Hidden view/открытая узкая навигация не перехват
 временно скрыта от hit testing, document не выгружается. Собственные CSS задают
 только portal geometry и компоновку content/toolbar. Аннотации используют прежние
 VisualInspector/VisualAnnotations и черновик адресного чата.
+
+
+### Сохранённые Browser objects S3b.3b
+
+Используются те же PreviewSurface, Dock tabs, ActionMenu, `view-switch`,
+`rna-form-control compact` и TextViewer. `ActionMenu.createTrigger` создаёт единый
+trigger для обычного материала, HTML и версии плагина. ViewerUI применяет существующий
+form-control к поиску общих viewers; отдельного набора цветов/кнопок нет.
+
+Порядок: имя и источник/версия → статус → ограничение/характер данных → содержимое.
+У HTML один уровень выбора «Страница / Исходник», список файлов виден только в исходнике.
+Текст имеет диапазон страницы, поиск и copy текущей страницы. Нет скрытого полного
+исходника в DOM и второй iframe под кодом. Browser CSS добавляет только flex/overflow/
+spacing для нового content layout. Длинные названия сокращаются в шапке с полным title;
+сообщения ошибок переносятся. Read-only snapshot явно отличается от редактора.

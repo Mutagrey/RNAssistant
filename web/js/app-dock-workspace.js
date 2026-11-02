@@ -37,7 +37,7 @@
       if (count >= descriptor.maximumInstances) { notice("Открыто " + count + " просмотров. Закройте один перед открытием нового."); return false; }
       var reference = options && panel(options.referencePanel);
       item = api.addPanel({ id: id, component: target.view, title: descriptor.titleFor(target),
-        params: { target: target }, renderer: "always", minimumWidth: 150, minimumHeight: 120,
+        params: { target: target }, renderer: typeof descriptor.renderer === "function" ? descriptor.renderer(target) : descriptor.renderer || "always", minimumWidth: 150, minimumHeight: 120,
         position: (reference || api.activePanel) ? { referencePanel: reference || api.activePanel, direction: "within" } : undefined });
     }
     item.group.api.setVisible(true); item.api.setActive(); changed(); return true;

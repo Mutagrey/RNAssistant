@@ -44,6 +44,12 @@
     var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus();
   }
 
+  function createTrigger(label) {
+    var button = document.createElement("button"); button.type = "button"; button.className = "icon-btn";
+    button.innerHTML = icon("more"); button.setAttribute("aria-label", label); button.title = label;
+    button.setAttribute("aria-haspopup", "menu"); button.setAttribute("aria-expanded", "false"); return button;
+  }
+
   // Reuse existing command handlers when a view already owns DOM-backed commands.
   function openButtons(trigger, root) {
     open(trigger, Array.from(root.children).filter(function (item) {
@@ -121,7 +127,7 @@
     ] }
   };
 
-  window.RNAssistantActionMenu = Object.freeze({ render: render, open: open, openButtons: openButtons, closeAll: closeAll,
+  window.RNAssistantActionMenu = Object.freeze({ createTrigger: createTrigger, render: render, open: open, openButtons: openButtons, closeAll: closeAll,
     closeWithin: function (root) { if (popupTrigger && root.contains(popupTrigger)) closePopup(false); }
   });
   document.querySelectorAll("[data-rna-action-menu]").forEach(function (mount) {

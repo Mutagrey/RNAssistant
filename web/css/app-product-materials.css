@@ -45,16 +45,8 @@
 .artifact-overview-table-wrap tbody tr:focus-visible { background: var(--surface-hover); outline: none; }
 .artifact-overview-table-wrap tbody tr:focus-visible td:first-child { box-shadow: inset 2px 0 var(--accent); }
 .artifact-overview-empty { padding: 30px 18px; color: var(--ink-muted); font-size: 13px; text-align: center; }
-.artifact-catalog-preview { padding: 16px 18px; background: var(--surface); }
-#artifactCatalogActions:not([hidden]) + .artifact-catalog-preview > h3 { display: none; }
-#artifactCatalogPreviewBody { min-height: 0; }
 .artifact-viewer-fallback-note { margin: 0; color: var(--ink-muted); font-size: 11px; }
-#artifactCatalogPreviewBody > iframe { border: 1px solid var(--line); border-radius: 10px; }
-#artifactCatalogPreviewBody .rn-markdown-viewer { width: 100%; }
-#artifactCatalogPreviewBody .rn-text-viewer-toolbar button { min-height: 30px; }
-#artifactCatalogPreviewBody .rn-text-viewer-source pre { border: 0; background: transparent; }
 .material-viewer-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-height: 40px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
-.material-viewer-toolbar .artifact-preview-modes { flex: 0 0 auto; min-width: max-content; }
 .material-copy-button { flex: 0 0 30px; width: 30px; height: 30px; min-height: 30px; margin-left: auto; }
 .material-copy-status:empty { display: none; }
 .material-copy-status { color: var(--ink-muted); font-size: 11px; }
@@ -76,7 +68,6 @@
 
 @media (max-width: 560px) {
   .artifact-inline-status:not(:empty) { display: block; padding: 7px 12px; border-bottom: 1px solid var(--line); color: var(--ink-muted); font-size: 11px; }
-  .artifact-catalog-preview,
   .artifact-overview-content { padding: 12px; }
   .artifact-overview-toolbar { gap: 6px; }
   .artifact-overview-toolbar select { flex: 1 1 115px; max-width: none; }

@@ -1,8 +1,8 @@
 (function () {
   "use strict";
   if (!document.getElementById("artifactCatalog")) return;
-  var generation = 0, previewGeneration = 0, pending = false, response = null, next = null, chat = null;
-  var selected = null, selectedRevision = null, collapsed = {}, loading = false, overviewRequested = true;
+  var generation = 0, pending = false, response = null, next = null, chat = null;
+  var selected = null, editorNavigation = false, collapsed = {}, loading = false, overviewRequested = true;
   var overviewLoading = false, overviewError = "", queryDirty = false, catalogNotice = "";
   var maximumCatalogItems = 500;
   var overviewSort = { key: "updated", descending: true };
@@ -28,7 +28,7 @@
     navigation().setState({ busy: loading, message: catalogNotice && message.indexOf(catalogNotice) < 0 ?
       [message, catalogNotice].filter(Boolean).join("\n") : message, retry: !!overviewError, more: !!next });
   }
-  function status(text) { el("Status").textContent = text || ""; el("PreviewStatus").textContent = text || ""; navigationState(); }
+  function status(text) { el("Status").textContent = text || ""; el("Message").textContent = text || ""; navigationState(); }
   function icon(item) {
     var suffix = String(item.title || "").split(".").pop().toLowerCase();
     if (item.kind === "file" || item.kind === "attachment") return suffix === "json" ? "braces" : "file";
@@ -67,7 +67,6 @@
     else el("All").removeAttribute("aria-current");
     if (!overviewRequested) return;
     $("htmlWorkspaceEditor").hidden = true;
-    el("Preview").hidden = true;
     rows.replaceChildren();
     document.querySelectorAll("#artifactCatalogOverviewTable [data-artifact-sort-head]").forEach(function (head) {
       var key = head.getAttribute("data-artifact-sort-head");
@@ -101,51 +100,42 @@
     el("OverviewEmpty").textContent = overviewError || (overviewLoading ? "Загрузка материалов…" :
       state.activeChatId ? "По этим условиям материалов нет." : "Откройте чат документа, чтобы увидеть материалы.");
   }
-  function clearPreview() {
-    el("PreviewBody").querySelectorAll(".artifact-viewer-host, .collection-page").forEach(function (target) {
-      if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(target);
-    });
-    if (window.RNAssistantViewerRegistry) window.RNAssistantViewerRegistry.unmount(el("PreviewBody"));
-    previewGeneration++; el("PreviewBody").replaceChildren(); el("Preview").hidden = true;
-    el("Preview").classList.remove("is-media-preview");
-    delete el("PreviewBody").dataset.productViewer;
-    $("htmlWorkspaceEditor").hidden = false;
-  }
   function show(scope) {
     if (!canMutate()) return false;
     if (scope) el("Scope").value = scope;
     if (scope) {
-      selected = null; selectedRevision = null; overviewRequested = true; clearPreview(); actions();
+      selected = null; overviewRequested = true; $("htmlWorkspaceEditor").hidden = false; actions();
     }
     load();
     return true;
   }
   function backToOverview() {
     if (!canMutate()) return false;
-    selected = null; selectedRevision = null; overviewRequested = true;
-    clearPreview(); actions(); render();
+    selected = null; overviewRequested = true;
+    $("htmlWorkspaceEditor").hidden = false; actions(); render();
     return true;
+  }
+  function editorItem(artifact) {
+    if (!response) return null;
+    var selection = state.htmlWorkspaceSelection || {};
+    var id = selection.type === "file" || selection.type === "data" ? state.activeHtmlArtifactId : selection.id;
+    var uri = artifact && (artifact.ResourceUri || artifact.resourceUri);
+    return response.items.find(function (item) {
+      var local = localArtifact(item);
+      return uri ? item.resourceUri === uri : local && (local.Id || local.id) === id;
+    }) || null;
   }
   function editor(artifact, preserveOverview) {
     if (!preserveOverview) overviewRequested = false;
-    selectedRevision = null;
-    clearPreview();
-    if (response) {
-      var selection = state.htmlWorkspaceSelection || {};
-      var id = selection.type === "file" || selection.type === "data" ? state.activeHtmlArtifactId : selection.id;
-      var uri = artifact && (artifact.ResourceUri || artifact.resourceUri);
-      selected = response.items.find(function (item) {
-        var local = localArtifact(item);
-        return uri ? item.resourceUri === uri : local && (local.Id || local.id) === id;
-      }) || null;
-    }
+    $("htmlWorkspaceEditor").hidden = false;
+    selected = editorItem(artifact); editorNavigation = true;
     actions(); renderOverview();
   }
   function sync() {
     if (chat !== state.activeChatId) {
-      chat = state.activeChatId; generation++; response = null; selected = null; selectedRevision = null; next = null;
+      chat = state.activeChatId; generation++; response = null; selected = null; next = null;
       overviewRequested = true; overviewError = ""; overviewLoading = false; catalogNotice = "";
-      clearPreview(); actions();
+      $("htmlWorkspaceEditor").hidden = false; actions();
       if (typeof isPanelActive === "function" && isPanelActive("artifacts")) load();
     } else if (queryDirty && !loading && typeof isPanelActive === "function" && isPanelActive("artifacts")) {
       load();
@@ -157,8 +147,8 @@
   }
   async function load(cursor) {
     var id = state.activeChatId, nav = state.chatNavigationVersion, version = ++generation;
-    if (!id) { response = null; next = null; loading = false; selected = null; selectedRevision = null; overviewError = ""; overviewLoading = false; catalogNotice = "";
-      clearPreview(); actions(); status("Откройте или создайте чат документа."); render(); return; }
+    if (!id) { response = null; next = null; loading = false; selected = null; overviewError = ""; overviewLoading = false; catalogNotice = "";
+      $("htmlWorkspaceEditor").hidden = false; actions(); status("Откройте или создайте чат документа."); render(); return; }
     if (!cursor) next = null;
     queryDirty = false; chat = id; loading = true; overviewLoading = !cursor; overviewError = ""; catalogNotice = "";
     status("Загрузка…"); el("More").hidden = true; renderOverview();
@@ -177,7 +167,7 @@
       el("More").hidden = !next;
       catalogNotice = limited ? "Показаны первые " + maximumCatalogItems + " материалов. Уточните поиск или фильтр." : "";
       status(result.items.length ? "" : "Артефакты не найдены.");
-      if (!selected && el("Preview").hidden) editor(null, true);
+      if (!selected) editor(null, true);
       actions(); render();
     } catch (error) {
       if (current(id, nav) && version === generation) {
@@ -222,8 +212,8 @@
     return mutate("deleteDocumentArtifact", { chatId: listed.chatId, expectedSessionRevision: listed.sessionRevision,
       resourceUri: item.resourceUri, confirmed: true }, button).then(function (removed) {
         if (removed && selected && selected.resourceUri === item.resourceUri) {
-          selected = null; selectedRevision = null; overviewRequested = true;
-          clearPreview(); actions(); render();
+          selected = null; overviewRequested = true;
+      $("htmlWorkspaceEditor").hidden = false; actions(); render();
         }
         return removed;
       });
@@ -260,9 +250,9 @@
     return items;
   }
   function actions() {
-    var root = el("Actions"); root.replaceChildren(); root.hidden = !selected || overviewRequested;
-    if (!selected || !response) return;
-    var item = selected, listed = response, id = state.activeChatId, nav = state.chatNavigationVersion;
+    var item = editorItem(), root = el("Actions"); root.replaceChildren(); root.hidden = !item || overviewRequested;
+    if (!item || !response) return;
+    var listed = response, id = state.activeChatId, nav = state.chatNavigationVersion;
     function action(parent, label, iconName, fn, disabled, className) {
       var b = node("button", label, className); b.type = "button"; b.disabled = pending || !!disabled;
       b.insertAdjacentHTML("afterbegin", RNAssistantIcons.render(iconName));
@@ -271,7 +261,7 @@
     var heading = node("div", "", "artifact-detail-heading");
     heading.appendChild(node("span", "Материалы / " + (item.linked ? "Этот чат" :
       item.documentId === listed.documentId ? "В документе" : item.documentTitle || "Все документы")));
-    heading.appendChild(node("h2", item.title + (selectedRevision ? " · v" + selectedRevision.revision : "")));
+    heading.appendChild(node("h2", item.title));
     root.appendChild(heading);
     var menu = node("details", "", "html-workspace-menu artifact-action-menu");
     var summary = node("summary", "⋯");
@@ -279,24 +269,10 @@
     var options = node("div", "", "html-workspace-menu-items"); menu.appendChild(options);
     var artifact = localArtifact(item);
     var head = artifact && window.RNAssistantArtifactVisuals && window.RNAssistantArtifactVisuals.libraryHead(artifact);
-    if (window.RNAssistantArtifactVersions) window.RNAssistantArtifactVersions.append(options, head, selectedRevision, function (revision) {
-      if (selected !== item || response !== listed || !current(id, nav) || !canMutate()) return false;
-      if (revision.resourceUri === item.resourceUri) { select(item.resourceUri); return true; }
-      selectedRevision = revision;
-      actions();
-      preview(Object.assign({}, item, { resourceUri: revision.resourceUri, title: revision.title || item.title }), revision);
-      render();
-      return true;
+    if (window.RNAssistantArtifactVersions) window.RNAssistantArtifactVersions.append(options, head, null, function (revision) {
+      if (editorItem() !== item || response !== listed || !current(id, nav)) return false;
+      return openItem(item, revision);
     });
-    if (selectedRevision) {
-      options.appendChild(node("span", "Только просмотр", "artifact-version-readonly"));
-      action(options, "К текущей версии", "rotateLeft", function () { select(item.resourceUri); });
-      if (item.canTransfer) action(options, "Скачать v" + selectedRevision.revision, "download", function () {
-        download(Object.assign({}, item, { resourceUri: selectedRevision.resourceUri }));
-      });
-      root.appendChild(menu);
-      return;
-    }
     itemCommands(item, listed).forEach(function (entry) {
       action(options, entry.label, entry.icon, entry.onSelect, entry.disabled, entry.danger ? "danger-soft" : "");
     });
@@ -309,25 +285,16 @@
     navigation();
     var item = response && response.items.find(function (entry) { return entry.resourceUri === uri; });
     if (!item) return false;
-    if (item.kind === "html_workspace") return openSelected(uri);
-    selected = item; selectedRevision = null;
+    var opened = openItem(item);
+    if (opened) { selected = item; editorNavigation = false; render(); }
+    return opened;
+  }
+  function openItem(item, revision) {
     var artifact = localArtifact(item), head = artifact && RNAssistantArtifactVisuals.libraryHead(artifact);
     var target = RNAssistantMaterialView.target(item, { chatId: response.chatId, documentId: item.documentId,
       documentTitle: item.documentTitle, sessionRevision: response.sessionRevision, head: head });
-    render();
+    if (revision) Object.assign(target, { resourceUri: revision.resourceUri, revision: revision.revision, title: revision.title || item.title });
     return RNAssistantDockWorkspace.openTarget(target, { referencePanel: "materials" });
-  }
-  function openSelected(uri) {
-    if (!canMutate() || !response) return false;
-    var item = response.items.find(function (value) { return value.resourceUri === uri; });
-    if (!item) return false;
-    overviewRequested = false;
-    selected = item; selectedRevision = null; clearPreview(); actions();
-    if (item.availabilityIssue) {
-      $("htmlWorkspaceEditor").hidden = true; el("Preview").hidden = false; el("PreviewTitle").textContent = item.title;
-      el("PreviewBody").appendChild(node("p", "Артефакт недоступен. Можно убрать ссылку из чата или удалить артефакт из документа.")); render(); return true;
-    }
-    preview(item); render(); return true;
   }
   function tree(nodes, htmlChildren, options) {
     if (!response) return null;
@@ -387,128 +354,15 @@
     });
     var roots = [chatGroup, documentGroup, otherGroup].filter(Boolean);
     var selection = options.selected || {}, selectedKey = selected ? "catalog::" + selected.resourceUri : null;
-    if (!overviewRequested && el("Preview").hidden && selection.id) {
+    if (editorNavigation && !overviewRequested && selection.id) {
       selectedKey = byId[selection.id] ? "catalog::" + byId[selection.id] : null;
     }
     return { nodes: roots, selectedKey: selectedKey };
   }
-  async function read(item, preview, id, nav, isCurrent) {
-    var transfer;
-    try {
-      transfer = await send("exportArtifact", { chatId: id, documentId: item.documentId, resourceUri: item.resourceUri, preview: preview });
-      var bytes = await window.RNAssistantResourceDownload.read(transfer.data, { maxBytes: Number.MAX_SAFE_INTEGER,
-        fetch: window.fetch.bind(window), isCurrent: isCurrent || function () { return current(id, nav); } });
-      return { transfer: transfer, bytes: bytes };
-    } finally {
-      if (transfer && transfer.data) await send("closeArtifactTransfer", { chatId: id, leaseId: transfer.data.leaseId }).catch(function () {});
-    }
-  }
-  async function download(item) {
+  function download(item) {
     var id = state.activeChatId, nav = state.chatNavigationVersion;
-    try {
-      status("Подготовка файла…"); var result = await read(item, false, id, nav);
-      if (!current(id, nav)) return;
-      var url = URL.createObjectURL(new Blob([result.bytes], { type: result.transfer.contentType }));
-      var a = document.createElement("a"); a.href = url; a.download = result.transfer.fileName; a.click();
-      setTimeout(function () { URL.revokeObjectURL(url); }, 1000); status("Файл подготовлен для скачивания.");
-    } catch (error) { if (current(id, nav)) status(error.detail || error.message); }
-  }
-  async function previewSnapshot(views) {
-    var snapshot = { version: 2, resources: [], parts: [], generations: {} };
-    for (var view of views) {
-      var reference = view.Reference;
-      var resource = { name: view.Name, descriptor: { reference: reference, title: view.Name }, view: view.View,
-        path: view.Path, maxBatchItems: 32000, maxBatchBytes: 8 * 1024 * 1024, parts: [] };
-      var total = view.Rows ? view.Rows.length : view.Text.length;
-      var batchSize = view.Rows ? 500 : 32000;
-      for (var offset = 0; offset < total || offset === 0;) {
-        var end = Math.min(offset + batchSize, total);
-        var batch = { resource: reference, view: view.View, offset: offset, nextOffset: end, done: end === total,
-          coverage: { kind: view.Rows ? "record-range" : "character-range", start: offset, end: end, path: view.Path, fields: [] } };
-        if (view.Rows) { batch.rows = view.Rows.slice(offset, end); batch.columns = view.Columns; }
-        else batch.text = view.Text.slice(offset, end);
-        var text = JSON.stringify(batch).replace(/</g, "\\u003c");
-        var hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), function (n) { return n.toString(16).padStart(2, "0"); }).join("");
-        var part = { id: "rn-export-part-" + snapshot.parts.length, offset: offset, nextOffset: end,
-          done: end === total, byteLength: new TextEncoder().encode(text).length, sha256: hash };
-        snapshot.parts.push({ id: part.id, text: text }); resource.parts.push(part);
-        if (end === total) break;
-        offset = end;
-      }
-      snapshot.resources.push(resource);
-    }
-    return snapshot;
-  }
-  async function preview(item, revision) {
-    var id = state.activeChatId, nav = state.chatNavigationVersion, version;
-    var previousPicker = revision && el("PreviewBody").querySelector('select[aria-label="Файл проекта"]');
-    var previousSource = revision && el("PreviewBody").querySelector(".artifact-catalog-source");
-    var previousPath = previousPicker && previousPicker.value;
-    var showSource = !!revision && (previousSource ? !previousSource.hidden : state.htmlWorkspaceMode === "edit");
-    clearPreview(); version = previewGeneration;
-    $("htmlWorkspaceEditor").hidden = true; el("Preview").hidden = false;
-    var title = item.title + (revision ? " · v" + revision.revision : "");
-    el("PreviewTitle").textContent = title; status("Загрузка предпросмотра…");
-    try {
-      var result = await read(item, true, id, nav, function () { return current(id, nav) && version === previewGeneration; });
-      if (!current(id, nav) || version !== previewGeneration) return;
-      el("PreviewTitle").textContent = title; el("Preview").hidden = false;
-      var mime = result.transfer.contentType || "";
-      if (item.kind === "html_workspace") {
-        var envelope = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(result.bytes));
-        var project = envelope.Project;
-        var files = project.Files.map(function (f) { return { id: f.Path.toLowerCase(), path: f.Path, kind: f.Kind, content: f.Content }; });
-        var picker = document.createElement("select"); picker.setAttribute("aria-label", "Файл проекта");
-        files.forEach(function (f) { picker.appendChild(new Option(f.path, f.id)); });
-        var pre = node("pre", "", "artifact-catalog-source");
-        function source() { pre.textContent = files.find(function (f) { return f.id === picker.value; }).content; }
-        var selection = state.htmlWorkspaceSelection || {};
-        var currentFile = revision && selection.type === "file" && ((state.htmlWorkspace || {}).files || [])
-          .find(function (f) { return (f.id || f.Id) === selection.id; });
-        var path = previousPath || currentFile && (currentFile.path || currentFile.Path);
-        var selectedFile = path && files.find(function (f) { return f.path.toLowerCase() === path.toLowerCase(); });
-        picker.addEventListener("change", source); picker.value = (selectedFile || files[0]).id; source();
-        if (path && !selectedFile) el("PreviewBody").appendChild(node("p", "Файл «" + path + "» отсутствует в этой версии проекта."));
-
-        if (project.ExternalDependencies.length) el("PreviewBody").appendChild(node("p", "Внешние зависимости: " + project.ExternalDependencies.join(", ")));
-        // Source inspection is always available; use the established sandbox renderer for HTML.
-        {
-          var snapshot = await previewSnapshot(envelope.Views);
-          await window.RNAssistantHtmlWorkspacePreview.ensureVendors(files);
-          if (!current(id, nav) || version !== previewGeneration) return;
-          var frame = document.createElement("iframe"); frame.title = item.title; frame.setAttribute("sandbox", "allow-scripts");
-          frame.srcdoc = window.RNAssistantHtmlWorkspacePreview.build({ files: files, activeFileId: project.EntryPath.toLowerCase(), dataSources: project.Data.map(function (d) { return { name: d.Name }; }), resourceSnapshot: snapshot, hostBridge: false });
-          el("PreviewBody").appendChild(frame);
-        }
-        var modes = node("div", "", "view-switch artifact-preview-modes");
-        var viewButton = node("button", "Просмотр", "button compact active"), sourceButton = node("button", "Код", "button compact");
-        var toolbar = node("div", "", "material-viewer-toolbar");
-        var copy = node("button", "", "icon-btn material-copy-button");
-        var copyStatus = node("span", "", "material-copy-status");
-        viewButton.type = sourceButton.type = copy.type = "button";
-        modes.setAttribute("role", "group"); modes.setAttribute("aria-label", "Режим материала");
-        copy.setAttribute("aria-label", "Копировать выбранный файл");
-        copy.title = "Копировать выбранный файл";
-        copy.innerHTML = RNAssistantIcons.render("copy");
-        copyStatus.setAttribute("role", "status");
-        copy.addEventListener("click", function () {
-          Promise.resolve(window.copyTextResult(pre.textContent)).then(function () { copyStatus.textContent = "Скопировано"; })
-            .catch(function () { copyStatus.textContent = "Не удалось скопировать"; });
-        });
-        function mode(code) {
-          frame.hidden = code; picker.hidden = !code; pre.hidden = !code;
-          viewButton.classList.toggle("active", !code); sourceButton.classList.toggle("active", code);
-          viewButton.setAttribute("aria-pressed", String(!code)); sourceButton.setAttribute("aria-pressed", String(code));
-        }
-        viewButton.addEventListener("click", function () { mode(false); }); sourceButton.addEventListener("click", function () { mode(true); });
-        modes.appendChild(viewButton); modes.appendChild(sourceButton);
-        toolbar.appendChild(modes); toolbar.appendChild(copy); toolbar.appendChild(copyStatus);
-        el("PreviewBody").insertBefore(toolbar, el("PreviewBody").firstChild);
-        el("PreviewBody").appendChild(picker); el("PreviewBody").appendChild(pre);
-        mode(showSource);
-      }
-      status("");
-    } catch (error) { if (current(id, nav) && version === previewGeneration) status(error.detail || error.message); }
+    return RNAssistantArtifactDownload.save({ chatId: id, documentId: item.documentId, resourceUri: item.resourceUri, title: item.title },
+      { send: send, fetch: window.fetch.bind(window), isCurrent: function () { return current(id, nav); }, status: status });
   }
   async function importFile(file) {
     if (!file || !canMutate()) return;
@@ -544,10 +398,10 @@
     commands: function (target) {
       var item = response && target.chatId === state.activeChatId && response.chatId === target.chatId &&
         response.items.find(function (entry) { return entry.resourceUri === target.resourceUri; });
-      return item ? itemCommands(item, response) : [];
+      return item ? itemCommands(item, response).filter(function (command) { return command.icon !== "download"; }) : [];
     },
     renderTree: function (root, nodes, options) { navigation().render(nodes, options); },
-    tree: tree, select: select, canSelect: canMutate, treeAction: treeAction, remove: function (uri) {
+    tree: tree, select: select, treeAction: treeAction, remove: function (uri) {
       var item = response && response.items.find(function (item) { return item.resourceUri === uri; });
       if (!item || !item.canDelete) { status("Обновите дерево и выберите актуальную версию артефакта для удаления."); return false; }
       return remove(item, response);

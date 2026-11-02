@@ -1,5 +1,19 @@
 # Stabilization progress
 
+## Сохранённые Browser objects S3b.3b — 2026-11-02
+
+HTML-проекты и опубликованные версии плагинов открываются в отдельных адресных
+вкладках. Общий Browser lifetime, TextViewer/ActionMenu и download; singleton
+Catalog HTML preview и historical mode plugin workbench удалены. Смена чата/источника
+не подменяет открытый target; поздние leases/instances закрываются. Runtime не менялся.
+
+Synthetic проверки: независимые HTML/plugin targets, snapshot data, source paging,
+CAS refusal/success, restore, bounds, 420/1280/light/dark/125% и клавиатура. На пяти
+выборах HTML reads/plugin opens 5→2; исходник DOM 2,24 млн→32 тыс. символов.
+Общее ускорение не заявлено, plugin route в парном sample медленнее. Следом S3b.3c
+live providers/annotations после общего Shell ревью; Library/VBA — S4.
+Windows/Office и полный старый diagnostics qualification plan остаются открытыми.
+
 ## Создание чата без чтения предыдущей истории — 2026-11-02
 
 Owner: Office ChatSessionService/controller; Web — существующий catalog merger.

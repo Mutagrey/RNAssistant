@@ -938,13 +938,88 @@ hidden plugin не poll-ит; новые independent provider factories — S3b.
 Library/VBA/navigation consumers. Cold restart source state, WebView2/Office и
 предыдущий Diagnostics Qualification Plan остаются открытыми.
 
+### S3b.3b: точные сохранённые Browser targets — In Review
+
+Следующий инвариант: выбор материала/версии открывает адресный view, а не заменяет
+страницу текущего редактора. HTML target — `(chatId, documentId, resourceUri)`;
+plugin target — `(pluginId, releaseId)`. Повторный выбор активирует тот же view.
+Заголовок показывает источник и версию; смена чата не подменяет target.
+
+Маршруты и макет до реализации:
+
+```text
+Материалы / дерево → [Чат] [Отчёт · v1] [Отчёт · v2]
+  Отчёт · v1 | документ / чат / точная версия             ↻ ⋯
+  Сохранённый проект · просмотр без связи с Office
+  [Страница] [Исходник]    [index.html ▾] (только в исходнике)
+  ┌ страница sandbox ИЛИ общий TextViewer по 32 000 символов ┐
+
+Плагин / Версии → [Разработка] [Плагин · v1] [Плагин · v2]
+  Плагин · v1 | releaseId                                 ↻ ⋯
+  Сохранённая версия · пробная копия данных
+  ┌ существующий plugin instance / sandbox ┐
+  ⋯ → явное восстановление с expectedActiveReleaseId
+```
+
+Общий Browser object lifecycle отвечает только за lazy load, status, отмену,
+поздний результат, retention и dispose; Browser renderer — за placement. HTML
+provider использует exportArtifact/resource lease и существующий HTML builder;
+plugin provider — openPlugin/closePlugin. Новый store, runtime и registry не нужны.
+HTML snapshot encoder перенесён из Catalog к HtmlResourceExport. Исходник использует
+общий TextViewer; DOM страницы не пересоздаётся при выборе файла или режима.
+Catalog сохраняет навигацию/редактор и предметные команды; plugin workbench —
+изменяемые исходники, проверку и публикацию. Старые singleton saved previews удалены.
+
+Границы: до 6 material views (включая HTML), до 4 release views; HTML preview до
+16 МиБ transfer, исходник по 32 000 символов. Скрытие отменяет незавершённое чтение,
+готовая страница сохраняется; close закрывает lease/instance, в том числе поздний.
+Ошибка и отмена видимы, повторное чтение — явно. Открытие не запускает модель.
+
+Отдельно остаётся mutable owner текущего HTML editor/annotations и plugin workbench.
+Runtime разрешает HTML-аннотацию только для активной версии текущего чата; saved
+view не получает это право. Следующий срез scoping live providers должен сохранить
+эту authority и адресные annotation routes. S4 Library/VBA editors этим не закрывается.
+
+Реализовано без новых bridge contracts: exact targets используют действующие typed
+exportArtifact/openPlugin/closePlugin/restorePluginVersion. Переключены дерево, таблица,
+карточки материалов и строки версий. ActionMenu trigger и material download общие;
+старые Catalog HTML render/read/CSS и historical mode workbench удалены.
+
+Проверки: `browser-saved-views` — snapshots RN.resources, разные documents/targets,
+retained iframe/input и source mode, restore, exact scope после смены чата, 16 МиБ
+отказ, late lease/instance close, CAS refusal/success, отсутствие model calls,
+420/1280, light/dark, 125%, клавиатура/меню. `material-object-views`,
+`artifact-catalog-layout`, `artifact-working-set`, `resource-download` проходят.
+`browser-views` имеет успешный isolated run, но повторение нестабильно; это не закрытый
+Shell gate. Повторный `dock-workspace` прошёл.
+Старые широкие suites имеют отдельные gaps, перечисленные в RISK_REGISTER.
+
+[Парный замер](review/s3b3b-saved-browser.json): пакет 3 968 476 bytes, пять выборов
+A/B/A/B/A. HTML reads 5→2, plugin opens 5→2; ввод после возврата `initial→retained`.
+Исходник в DOM 2 240 000→32 000 chars. Median selection HTML 165.73→148.95 ms,
+plugin 133.40→166.54 ms; source action 37.58→40.05 ms. Timings включают automation;
+общего ускорения и сокращения heap не заявляем. Готовые вкладки намеренно удерживают
+страницы (ограничены числом views), что дороже singleton по памяти.
+
+[Исходник, wide](review/s3b3b-source-wide.png) · [Лимит, narrow/dark](review/s3b3b-bound-narrow.png).
+
+Ревью: (1) открыть два HTML в Материалах; (2) выбрать CSS в «Исходнике», вернуться
+к странице; (3) открыть две опубликованные версии плагина; (4) вернуть сохранённую
+раскладку; (5) проверить меню восстановления и его причину отказа при конфликте.
+
+Далее **S3b.3c**: scoped live HTML/plugin providers и адресные аннотации. Сначала
+провести общее Shell/Browser ревью после параллельных UI edits; затем переносить mutable owner.
+**S4**: Library/VBA и другие редакторы через тот же catalog и NavigationPane;
+cold-start mode/search/scroll остаётся отдельным gap. Новый UI не закрывает прежние
+Office/endpoint qualification gates.
+
 ### S3b: общая навигация и независимые просмотры — Proposed
 
 Пользователь сначала разрешил отдельный plugin preview, затем потребовал zoom out:
 Материалы/Библиотека/будущие Файлы используют общую навигацию; HTML/plugin — общий
 browser; остальные форматы — независимые экземпляры действующих viewers.
 Прежний plugin-only порядок заменён. S3b.1 и S3b.2 реализованы и проходят ревью;
-Browser S3b.3a реализован; независимые providers S3b.3b — следующий срез. Исходный audit/iframe probe — `c01daa34`;
+Browser S3b.3a и сохранённые providers S3b.3b реализованы; live scoping S3b.3c открыт. Исходный audit/iframe probe — `c01daa34`;
 S3a завершён (`c01daa34`),
 S2a model/capability work имеет свой scope и не смешивается с этой миграцией.
 
