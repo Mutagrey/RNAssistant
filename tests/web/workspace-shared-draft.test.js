@@ -203,6 +203,26 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatModelMenu [data-value=""]').count(), 1,
       'workspace uses the same explicit default-model option');
     assert.ok(await page.locator('#chatModelMenu .composer-model-item').count() > 1, 'workspace can select catalog models');
+    const lateCancel = await page.evaluate(async () => {
+      const original = send, before = RNAssistantProjectChats.snapshot();
+      const target = { workspaceId: before.project.workspaceId, sessionId: before.sessionId };
+      let rejectCancel;
+      send = function (type, payload, progress) {
+        return type === 'cancelProjectChat' ? new Promise((resolve, reject) => { rejectCancel = reject; }) :
+          original(type, payload, progress);
+      };
+      try {
+        const cancelling = chatComposer().dispatch('stop');
+        await RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean');
+        await RNAssistantProjectChats.open(target.workspaceId, target.sessionId);
+        const reopened = RNAssistantProjectChats.snapshot();
+        rejectCancel(Error('Cancellation from the old visit'));
+        await cancelling;
+        return RNAssistantProjectChats.snapshot() === reopened &&
+          !document.querySelector('#workspaceChatNotice').textContent.includes('Cancellation from the old visit');
+      } finally { send = original; }
+    });
+    assert.equal(lateCancel, true, 'a cancellation error from the old A visit cannot update a reopened A view');
     await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
     await page.locator('#chatModelPicker summary').click();
     await page.waitForFunction(() => !document.querySelector('#chatModelMenu').textContent.includes('Настройки модели'));

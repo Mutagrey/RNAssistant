@@ -8,19 +8,19 @@ const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(source, workspaceId) {
   let target = { source, workspaceId, sessionId: "a" }, data = { selected: "old", mode: "agent", reasoning: false };
   const controller = window.RNAssistantChatComposer.create({}), writes = [], reads = [], applied = [], failures = [], unavailable = [];
-  let refreshes = 0;
+  let refreshes = 0, visit = 0;
   controller.register("office", {
     target: () => target, preferences: () => data,
-    preferenceService: scope => ({
+    preferenceService: scope => { const capturedVisit = visit; return {
       write: change => { const wait = deferred(); writes.push({ target: scope.target, change, ...wait }); return wait.promise; },
       read: () => { const wait = deferred(); reads.push({ target: scope.target, ...wait }); return wait.promise; },
-      apply: (value, change) => { data = value; applied.push({ value, change }); return true; }
-    }),
+      apply: (value, change) => { if (capturedVisit !== visit) return false; data = value; applied.push({ value, change }); return true; }
+    }; },
     preferenceChanged: () => refreshes++, preferenceFailed: error => failures.push(error),
     preferenceUnavailable: error => unavailable.push(error)
   });
   return { controller, writes, reads, applied, failures, unavailable, refreshes: () => refreshes,
-    select: sessionId => { target = { source, workspaceId, sessionId }; data = { selected: "old", mode: "agent", reasoning: false }; controller.sync(); } };
+    select: sessionId => { ++visit; target = { source, workspaceId, sessionId }; data = { selected: "old", mode: "agent", reasoning: false }; controller.sync(); } };
 }
 (async () => {
   const a = fixture("office"), b = fixture("workspace", "w");

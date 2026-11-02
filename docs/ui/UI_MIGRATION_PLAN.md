@@ -606,6 +606,42 @@ assertion не проходит и на `fa6f2c6a`; существующий gap
 Полный S2 остаётся открыт: selected snapshots/full push должны принадлежать scope
 view, затем остальные adapters и независимые chat tabs. Windows evidence открыт.
 
+### S2b.8: snapshot у общего представления — 2026-11-02
+
+Срез принят пользователем для production по «Коммит и далее».
+S2b.7 сохранён в `182236c6`. Первый consumer общего SnapshotOwner — проект/плагин
+в production `web/`: модульный `active` и удерживаемый snapshot run observer удалены.
+ConversationView хранит один bounded object; renderer, composer и Inspector
+заимствуют его. Смена адреса/dispose освобождает объект и инвалидирует прежние
+callbacks до следующего paint; hide/reparent сохраняет данные. Office selected
+state ещё не переключён, новые chat tabs не включены. Runtime/storage/Bridge прежние.
+
+Read/open/submit/cancel/preference/history delivery захватывает owner. Поздняя ошибка
+отмены после A → B → A не попадает в повторно открытый чат; reconciliation настроек
+получает свежий adapter без повтора mutation. Сохранены revision/terminal/live guards,
+240 сообщений, раннее окно истории при refresh и явный переход к последним сообщениям.
+
+Проверки: `conversation-projection`, `conversation-view`, `chat-history-paging`,
+`conversation-preferences`, `model-navigation`; Chromium `workspace-shared-draft`,
+`workspace-chat-progress`, `workspace-chat-layout`. Новый сценарий проверяет позднюю
+ошибку отмены; unit-проверка — два независимых owner, A → B → A, dispose и освобождение
+100 посещённых targets. Stream сохраняет DOM и обновляет только live leaf.
+Browser evidence снят на `182236c6` + diff S2b.8, отдельно от параллельного S3b.3;
+production layout визуально сохранён. Это mock bridge, Windows/Office evidence открыт.
+
+Ревью: `python3 prototypes/serve_ui.py`, затем `/preview/web/?scenario=ready`.
+1. Открыть проект, перейти в другой чат и вернуться: текст, история и настройки
+   принадлежат выбранному чату; незавершённый ввод сохраняется.
+2. Переключить проект → плагин → Office → назад, скрыть/показать область чата:
+   composer и прокрутка сохраняют прежнее поведение.
+3. Во время ответа сменить чат и вернуться: нет чужого текста/ошибок; сообщение
+   продолжает обновляться без перестройки всей ленты.
+
+Откат — diff среза, без миграции данных. Следующий участок — Office на том же owner
+и адресная full push delivery; затем оставшиеся file/context/approval/media adapters
+и удаление singleton перед независимыми chat tabs. Временный adapter и removal gate
+указаны в Migration Map; полный S2 остаётся открыт.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

@@ -101,7 +101,7 @@
     return window.RNAssistantRunViewState.runNotice(
       window.RNAssistantRunViewState.normalize(field(state, "runViewState")));
   }
-  function latestSnapshot(current, incoming) {
+  function latestSnapshot(current, incoming, options) {
     if (!current || field(current, "sessionId") !== field(incoming, "sessionId") ||
         field(field(current, "project"), "workspaceId") !== field(field(incoming, "project"), "workspaceId"))
       return window.RNAssistantConversationState.messageWindow(null, incoming, false);
@@ -122,7 +122,7 @@
         (!incomingPreview || field(currentPreview, "sequence") > field(incomingPreview, "sequence")))
       incomingState.modelProgress = currentPreview;
     return window.RNAssistantConversationState.messageWindow(current, incoming,
-      Number.isSafeInteger(previousRevision) && previousRevision === nextRevision);
+      !(options && options.latestMessages) && Number.isSafeInteger(previousRevision) && previousRevision === nextRevision);
   }
   function prependMessages(current, page) {
     var start = field(current, "messageStartIndex"), total = field(current, "messageTotalCount");
@@ -138,7 +138,7 @@
     return current;
   }
   function createRunObserver(view, read, changed, failed, progressChanged) {
-    var target = null, selected = null, generation = 0, lastPushAt = 0, polling = false;
+    var target = null, generation = 0, lastPushAt = 0, polling = false;
     var observer = view.observe({
       current: function () { return target ? { source: "workspace", workspaceId: target.workspaceId,
         sessionId: target.sessionId, generation: generation } : null; },
@@ -149,7 +149,6 @@
       var workspaceId = field(field(snapshot, "project"), "workspaceId"), sessionId = field(snapshot, "sessionId");
       var observe = !!(workspaceId && sessionId &&
         (pending || runStatus(field(snapshot, "state")) === "running"));
-      selected = snapshot;
       if (!target || target.workspaceId !== workspaceId || target.sessionId !== sessionId) {
         if (target || workspaceId && sessionId) ++generation;
         target = workspaceId && sessionId ? { workspaceId: workspaceId, sessionId: sessionId } : null;
@@ -160,6 +159,7 @@
         if (polling) observer.start(); else observer.stop();
       }
     }, acceptProgress: function (payload) {
+      var owner = view.projection(), selected = owner && owner.snapshot();
       if (!view.matches(conversationTarget(selected)) || !target || target.workspaceId !== field(payload, "workspaceId") ||
           target.sessionId !== field(payload, "sessionId")) return;
       var preview = field(payload, "modelProgress"), state = field(selected, "state");

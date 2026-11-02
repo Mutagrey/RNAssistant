@@ -21,6 +21,22 @@
       read: async function (load) { return accept(await load(address)); } };
   }
 
+  // One bounded projection per owner; the runtime/store still owns durable data.
+  function createSnapshotOwner(source, merge) {
+    var snapshot = null, disposed = false;
+    return { target: source.target,
+      snapshot: function () { return snapshot; },
+      isCurrent: function () { return !disposed; },
+      accept: function (incoming, options) {
+        if (disposed) return null;
+        source.accept(incoming);
+        snapshot = boundedWindow(merge(snapshot, incoming, options), false);
+        return snapshot;
+      },
+      dispose: function () { disposed = true; snapshot = null; }
+    };
+  }
+
   function boundedWindow(snapshot, keepStart) {
     if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length <= messageWindowLimit) return snapshot;
     var offset = keepStart ? 0 : snapshot.messages.length - messageWindowLimit;
@@ -99,5 +115,5 @@
 
   window.RNAssistantConversationState = { status: status, lifecycle: lifecycle,
     messageWindow: messageWindow, prependMessageWindow: prependMessageWindow,
-    createSnapshotSource: createSnapshotSource };
+    createSnapshotSource: createSnapshotSource, createSnapshotOwner: createSnapshotOwner };
 })();

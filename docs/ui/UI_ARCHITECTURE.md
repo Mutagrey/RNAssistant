@@ -47,6 +47,9 @@ domain owners; вкладка не создаёт второй durable store и�
 несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
 singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
 
+В S2b.8 Workspace snapshot передан общему view owner; Office selected state и
+навигационный singleton adapter ещё требуют переключения на этот механизм.
+
 ### S2b.1: состояние отрисовки и lifecycle представления
 
 Первый ограниченный шаг S2 после уточнения единого чата, 2026-11-02. Owner —
@@ -207,6 +210,25 @@ Office selection проверяет также вложенный init при с
 Это граница приёма, а не завершённый per-view data owner: Office selected state,
 Workspace active snapshot и full push routing к нескольким views ещё мигрируют.
 Singleton adapters не размножаются; следующим шагом переносится их владение данными.
+
+### S2b.8: snapshot принадлежит представлению
+
+ConversationView владеет одним `SnapshotOwner` из ConversationState. Owner получает
+exact source и merge policy, хранит единственный принятый объект с окном ≤240
+сообщений. `bindProjection` переиспользует owner того же target; замена/clear/dispose
+освобождают его snapshot и делают старые callbacks неактуальными ещё до нового paint.
+Hide/reparent сохраняют объект. View не владеет durable history, run или draft store.
+
+Первый production consumer — проект/плагин. Удалены `active` из ProjectChats и
+удержание snapshot в Workspace run observer. Renderer, preferences, история,
+Inspector и plugin consumers заимствуют один объект у view; второй read model не
+создан. Revision/terminal/preview sequence и paging guards остаются у source policy.
+Read/open/stop/submit/preferences захватывают owner; ответ старого визита A не
+обновляет новый A. Preference read-back создаёт service для нового binding.
+
+`ProjectChats` пока обращается к одному `conversationView` через temporary adapter.
+Office snapshot и полная адресная доставка push ещё не перенесены. Это первый
+consumer общего owner, не завершение S2 и не включение нескольких chat tabs.
 
 ## S1b: фактическая граница переноса
 

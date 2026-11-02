@@ -12,6 +12,17 @@ retained DOM двух views. [Ревью, измерения и ограниче
 In Review. Далее общий HTML/plugin Browser S3b.3; Library/VBA и остальные панели S4.
 Cold restart mode/search/scroll, Windows/Office и прежние qualification gaps открыты.
 
+## Состояние чата у общего представления S2b.8 — 2026-11-02
+
+После `182236c6` snapshot проекта/плагина передан ConversationView: удалены модульный
+`active` и удержание второго snapshot у observer. Смена адреса/dispose отсекает
+прежние callbacks, hide сохраняет данные; лимит 240 и stream/paging guards прежние.
+Проверены независимость owners, поздняя отмена и настройки после A → B → A;
+focused JS и Chromium draft/progress/layout прошли на изолированном diff S2b.8.
+[Ревью и остаток](../ui/UI_MIGRATION_PLAN.md#s2b8-snapshot-у-общего-представления--2026-11-02).
+Принят пользователем. Далее Office snapshot/full push на том же owner; singleton adapter,
+независимые chat tabs и Windows/Office qualification ещё открыты.
+
 ## Адресный приём состояния чата S2b.7 — 2026-11-02
 
 S2b.6 сохранён в `fa6f2c6a`, production `web/`. Общий snapshot source отклоняет

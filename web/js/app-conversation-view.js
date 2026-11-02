@@ -1,6 +1,6 @@
 (function () {
   "use strict";
-  // Presentation only: no conversation data, drafts, transport or run ownership.
+  // Presentation and one bounded snapshot; no durable store, drafts or run ownership.
   var views = new WeakMap(), positionLimit = 16;
   function emptyCache() {
     return { units: Object.create(null), liveBase: null, liveBaseSignature: null,
@@ -14,6 +14,20 @@
     var frames = Object.create(null), positions = new Map(), listeners = [], subscriptions = [], bound = false, bindingGeneration = 0;
     var following = true, position = 0, interaction = 0, pendingPosition = null, resizeObserver, contentObserver;
     var view = { cache: emptyCache() };
+    var projection = null;
+    function clearProjection() {
+      if (projection) { projection.dispose(); invalidate(); ++bindingGeneration; }
+      projection = null;
+    }
+    function bindProjection(source, merge) {
+      if (disposed) return null;
+      var actual = projection && projection.target, next = source.target;
+      if (actual && projection.isCurrent() && actual.source === next.source && actual.sessionId === next.sessionId &&
+          actual.workspaceId === next.workspaceId) return projection;
+      clearProjection();
+      projection = window.RNAssistantConversationState.createSnapshotOwner(source, merge);
+      return projection;
+    }
     function cancelFrames() {
       Object.keys(frames).forEach(function (name) {
         var frame = frames[name];
@@ -188,6 +202,7 @@
       });
     }
     Object.assign(view, { begin: begin, reset: reset, suspend: suspend, schedule: schedule,
+      projection: function () { return projection; }, bindProjection: bindProjection, clearProjection: clearProjection,
       observe: function (options) {
         if (disposed) throw new Error("Conversation view is disposed");
         var observer = window.RNAssistantConversationObserver.create(Object.assign({}, options, {
@@ -202,6 +217,7 @@
         return { target: target, generation: stamp, isCurrent: function () { return !disposed && stamp === bindingGeneration; } };
       },
       matches: function (target) { return !disposed && key === JSON.stringify(target); },
+      isDisposed: function () { return disposed; },
       canRender: function () { if (disposed) return false; if (!visible) dirty = true; return visible; },
       setVisible: setVisible, bind: bind, capture: capture, restore: restore, shouldFollow: shouldFollow,
       updateButton: updateButton, bottom: bottom, sync: sync,
@@ -212,6 +228,7 @@
         invalidate(); disconnect(); listeners.forEach(function (remove) { remove(); }); listeners = [];
         subscriptions.forEach(function (observer) { observer.dispose(); }); subscriptions = [];
         if (view.composer) view.composer.dispose();
+        clearProjection();
         reset(); positions.clear(); disposed = true; views.delete(box);
       }
     });

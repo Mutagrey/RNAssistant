@@ -55,6 +55,14 @@ Office/Workspace предоставляют только DTO address adapter. Д
 Остаток: selected Office state / Workspace active snapshot и доставка full push
 должны перейти к per-view owner; затем остальные consumers и удаление singleton.
 
+S2b.8: Workspace `active` и retained snapshot у run observer удалены. Единственный
+bounded snapshot теперь у общего ConversationView / SnapshotOwner; source policy
+сохраняет revisions, paging и live ordering. `ProjectChats` временно заимствует
+один `conversationView`; owner — Web conversation presentation. Removal gate:
+Office использует тот же owner, navigation/commands/push получают explicit view,
+проверены независимые targets; после этого удалить singleton accessor, не копировать
+его в новые вкладки. Domain receipts/drafts/runtime не принадлежат projection.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

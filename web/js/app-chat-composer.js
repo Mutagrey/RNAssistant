@@ -47,7 +47,11 @@
       var change = Object.freeze({ name: name, value: value });
       preferenceWrites.add(id);
       async function reconcile(binding) {
-        try { var response = await service.read(); if (binding.isCurrent()) service.apply(response, null); }
+        try {
+          var currentService = binding.adapter.preferenceService(binding);
+          var response = await currentService.read();
+          if (binding.isCurrent()) currentService.apply(response, null);
+        }
         catch (error) { binding.invoke("preferenceUnavailable", error); }
       }
       try {

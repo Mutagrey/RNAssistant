@@ -71,6 +71,12 @@ The separate composer unknown-warning mismatch remains in the risk register.
 S2b.7: `conversation-snapshot-source` checks immutable exact addresses, concurrent
 reads and wrong-target rejection before UI delivery; `chat-sync` checks addressed
 host init. Chromium `workspace-shared-draft` injects wrong Office/workspace replies.
+S2b.8: `conversation-projection` checks independent bounded snapshot owners, address/
+revision guards, retained hide, replaced callbacks and disposal over 100 targets.
+`conversation-preferences` checks a fresh read-back adapter after A→B→A; Chromium
+`workspace-shared-draft` rejects a late cancellation error from the old visit.
+Pair with `workspace-chat-progress` / `workspace-chat-layout` for retained live DOM,
+shared composer and project/plugin navigation. Office selected state is not yet migrated.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,
