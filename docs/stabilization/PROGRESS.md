@@ -43,6 +43,16 @@ retained DOM двух views. [Ревью, измерения и ограниче
 In Review. Далее общий HTML/plugin Browser S3b.3; Library/VBA и остальные панели S4.
 Cold restart mode/search/scroll, Windows/Office и прежние qualification gaps открыты.
 
+## Проекция Office-чата S2b.9 — 2026-11-02
+
+S2b.8 сохранён в `8a2ee0fd`. Office transcript/window/model/mode/reasoning используют
+общий SnapshotOwner; прежние поля state — временный accessor без дублирования данных.
+Release/reset отсекает прежние history/preference callbacks, full push не заменяет
+Workspace и не создаёт released owner. Focused JS и Chromium draft/delivery прошли.
+[Границы, ревью и отдельный fixture gap](../ui/UI_MIGRATION_PLAN.md#s2b9-office-transcriptpreferences-у-общего-owner--2026-11-02).
+Принят пользователем. Следующая граница — explicit source/view factory, context/artifacts/live
+delivery и удаление selected facade; независимые chat tabs и Windows evidence открыты.
+
 ## Состояние чата у общего представления S2b.8 — 2026-11-02
 
 После `182236c6` snapshot проекта/плагина передан ConversationView: удалены модульный

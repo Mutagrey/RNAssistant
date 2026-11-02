@@ -48,6 +48,7 @@ assert.throws(() => ui.RNAssistantWorkspaceChat.snapshotSource({ sessionId: "a" 
   assert.equal(ui.applyChatStateForChat(officeValue, "a"), true);
   assert.equal(ui.applyChatStateForChat({ activeChatId: "background" }, "background"), false);
   assert.equal(ui.state.activeChatId, "a"); assert.equal(catalog, 1);
+  ui.selectOfficeChatProjection("a");
   assert.equal(ui.applyPushedChatState({ scope: "full", payload: { activeChatId: "background" } }), false);
   assert.equal(detail, 1, "a background full push does not select another chat");
   assert.equal(ui.applyPushedChatState({ scope: "full", payload: officeValue }), true);

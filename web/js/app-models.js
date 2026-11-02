@@ -75,7 +75,7 @@ function discardModelCatalogPreview() {
 
 // The service captures an exact address; the common composer owns pending/delivery.
 function officePreferenceService(scope) {
-  var chatId = scope.target.sessionId;
+  var chatId = scope.target.sessionId, projection = officeChatProjection();
   return {
     write: function (change) {
       if (change.name === "model") return sendChatPreference("setChatModel", { chatId: chatId, model: change.value });
@@ -84,6 +84,7 @@ function officePreferenceService(scope) {
     },
     read: function () { return loadChatState(chatId); },
     apply: function (response, change) {
+      if (projection !== officeChatProjection()) return false;
       var full = !change || change.name === "mode";
       var applied = full ? applyChatStateForChat(response, chatId) :
         applyChatPreferenceStateForChat(response, chatId);

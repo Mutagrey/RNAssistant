@@ -642,6 +642,42 @@ production layout визуально сохранён. Это mock bridge, Windo
 и удаление singleton перед независимыми chat tabs. Временный adapter и removal gate
 указаны в Migration Map; полный S2 остаётся открыт.
 
+### S2b.9: Office transcript/preferences у общего owner — 2026-11-02
+
+Срез принят пользователем по «Коммит и далее».
+S2b.8 принят и сохранён в `8a2ee0fd`. В production Office использует общий
+SnapshotOwner для messages/window/model/mode/reasoning; прежние шесть stored fields
+заменены accessor facade без второй копии истории. Это следующий ограниченный
+участок Office cutover: `state` также содержит каталоги, документы и редакторы,
+которые не следует передавать владельцу transcript одной массовой заменой.
+
+Owner освобождается при смене чата, init/reconnect и bridge reset. Full push
+доставляется только живому выбранному Office owner, не заменяет Workspace и не
+воскрешает released source. History/latest/retry и preference read-back проверяют
+identity owner, даже если после reset совпали chat ID/navigation version. Bounds,
+draft/receipt, navigation drain и revision guards сохранены; новых CSS/DOM нет.
+
+Проверки: `office-conversation-projection` на реальном core state/accessors,
+`chat-sync`, `chat-history-paging`, `model-navigation`, `conversation-snapshot-source`;
+Chromium `workspace-shared-draft`, `chat-input-delivery`. Browser evidence —
+`8a2ee0fd` + diff S2b.9, без параллельных Browser/protocol/storage changes.
+`office-host-chat-layout` не проходит и на исходном ChatState из `8a2ee0fd`:
+fixture не подключает NavigationTree; этот отдельный gap сохранён в RISK_REGISTER.
+Windows/Office qualification не выполнялась.
+
+Ревью: `python3 prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+1. В Office выбрать модель/режим, написать черновик, перейти проект → плагин →
+   Office: настройки и ввод принадлежат прежнему чату.
+2. Перейти между Office-чатами, открыть старую историю и вернуться к последним
+   сообщениям: окно ограничено, refresh сохраняет место чтения.
+3. После переподключения открыть прежний чат: старые ответы истории/настроек
+   не подменяют новые данные. Смена домена не создаёт второй transcript.
+
+Откат — diff среза, без миграции данных. Для S2 ещё нужны explicit Office source/view
+factory, context/artifacts/live delivery и остальные service adapters. После
+переключения consumers удалить selected adapter и accessors (Migration Map), затем
+включать независимые chat tabs. Текущий facade не является архитектурой новых вкладок.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

@@ -88,6 +88,12 @@ revision guards, retained hide, replaced callbacks and disposal over 100 targets
 `workspace-shared-draft` rejects a late cancellation error from the old visit.
 Pair with `workspace-chat-progress` / `workspace-chat-layout` for retained live DOM,
 shared composer and project/plugin navigation. Office selected state is not yet migrated.
+S2b.9: `office-conversation-projection` uses real core accessors and ChatState to
+check one Office transcript/preference owner, bounded history, independent Workspace,
+empty selection, release and late history/preference replies after same-ID reconnect.
+Pair with `chat-sync`, `chat-history-paging`, `model-navigation`, snapshot source and
+Chromium draft/delivery checks. The isolated `office-host-chat-layout` fixture misses
+NavigationTree on baseline too; see RISK_REGISTER. Per-view Office cutover remains open.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,

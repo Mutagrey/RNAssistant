@@ -1,5 +1,14 @@
 # Stabilization risk register
 
+## Office host menu fixture — 2026-11-02
+
+Owner: Web test fixtures. `office-host-chat-layout` подключает ChatState без
+NavigationTree и падает в `renderOfficeHostLaunchRows` на `undefined.render`.
+Одинаково воспроизведено на S2b.9 и исходном `app-chat-state.js` из `8a2ee0fd`;
+ошибка возникает до проверок действий меню. В этой задаче fixture не исправлялся.
+Full production preview `workspace-shared-draft` и Chromium `chat-input-delivery`
+проходят; это не заменяет отдельную проверку Office host menu или Windows evidence.
+
 ## Browser S3b.3a: оставшиеся boundaries — 2026-11-02
 
 Owner: Web Browser / HtmlWorkspace / Plugins. Общий renderer проверен локально,

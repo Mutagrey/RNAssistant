@@ -190,16 +190,17 @@ async function loadPreviousChatMessages(event) {
   var beforeIndex = state.messageStartIndex;
   var revision = state.chatProjectionRevisions[chatIdValue];
   var navigationVersion = state.chatNavigationVersion;
+  var projection = officeChatProjection();
   state.messagePageBusy = true;
   if (button) button.disabled = true;
   try {
     var page = await send("getPreviousChatMessages", { chatId: chatIdValue, beforeIndex: beforeIndex });
-    if (state.activeChatId !== chatIdValue || state.messageStartIndex !== beforeIndex ||
+    if (projection !== officeChatProjection() || state.activeChatId !== chatIdValue || state.messageStartIndex !== beforeIndex ||
         state.chatProjectionRevisions[chatIdValue] !== revision ||
         state.chatNavigationVersion !== navigationVersion) return;
     if (page.chatId !== chatIdValue || page.sessionRevision !== revision) {
       var refreshed = await loadChatState(chatIdValue);
-      if (state.activeChatId === chatIdValue && state.messageStartIndex === beforeIndex &&
+      if (projection === officeChatProjection() && state.activeChatId === chatIdValue && state.messageStartIndex === beforeIndex &&
           state.chatProjectionRevisions[chatIdValue] === revision &&
           state.chatNavigationVersion === navigationVersion)
         applyChatState(refreshed);
@@ -230,7 +231,7 @@ async function loadPreviousChatMessages(event) {
     renderMessages({ preserveTop: true, previousScrollHeight: previousScrollHeight });
     renderChatSessions();
   } catch (error) {
-    log(error.detail || error.message, "error");
+    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
   } finally {
     state.messagePageBusy = false;
     if (button) button.disabled = false;
@@ -242,15 +243,16 @@ async function jumpToLatestChatMessages() {
   var chatIdValue = state.activeChatId;
   var navigationVersion = state.chatNavigationVersion;
   var revision = state.chatProjectionRevisions[chatIdValue];
+  var projection = officeChatProjection();
   try {
     var response = await loadChatState(chatIdValue);
-    if (state.activeChatId === chatIdValue && state.chatNavigationVersion === navigationVersion &&
+    if (projection === officeChatProjection() && state.activeChatId === chatIdValue && state.chatNavigationVersion === navigationVersion &&
         state.chatProjectionRevisions[chatIdValue] === revision) {
       applyChatState(response, false, { latestMessages: true });
       if (typeof renderMessages === "function") renderMessages({ forceScroll: true });
     }
   } catch (error) {
-    log(error.detail || error.message, "error");
+    if (projection === officeChatProjection()) log(error.detail || error.message, "error");
   }
 }
 
@@ -464,6 +466,7 @@ function applyInitState(init) {
   state.chats = [];
   state.htmlWorkspace = null;
   state.htmlWorkspaceDirty = false;
+  clearOfficeChatProjection();
   applyChatState(init);
   $("toolsPath").textContent = state.toolsPath ? "Хранилище: " + state.toolsPath : "";
   if ($("skillsPath")) $("skillsPath").textContent = state.skillsPath ? "Хранилище: " + state.skillsPath : "";
@@ -510,8 +513,7 @@ function applyBridgeUnavailableState(error) {
   state.chatDetailError = "";
   state.activeRunViewState = null;
   state.chatProjectionRevisions = {};
-  state.activeChatReasoning = false;
-  state.messages = [];
+  clearOfficeChatProjection();
   state.liveActivity = null;
   state.liveAgentRun = null;
   state.liveStreamContent = null;
@@ -612,6 +614,7 @@ async function retryChatDetail() {
   if (!state.activeChatId) return initialize();
   var targetChatId = state.activeChatId;
   var version = state.chatNavigationVersion;
+  var projection = officeChatProjection();
   state.chatDetailPending = true;
   state.chatDetailError = "";
   renderChatSessions();
@@ -619,7 +622,7 @@ async function retryChatDetail() {
   if (typeof renderSendControls === "function") renderSendControls();
   try {
     var detail = await loadChatState(targetChatId);
-    if (state.activeChatId === targetChatId && state.chatNavigationVersion === version &&
+    if (projection === officeChatProjection() && state.activeChatId === targetChatId && state.chatNavigationVersion === version &&
         !applyChatState(detail)) {
       state.chatDetailPending = false;
       state.chatDetailError = "Состояние чата изменилось. Повторите загрузку.";
@@ -628,7 +631,7 @@ async function retryChatDetail() {
       if (typeof renderSendControls === "function") renderSendControls();
     }
   } catch (error) {
-    if (state.activeChatId === targetChatId && state.chatNavigationVersion === version) {
+    if (projection === officeChatProjection() && state.activeChatId === targetChatId && state.chatNavigationVersion === version) {
       state.chatDetailPending = false;
       state.chatDetailError = error.detail || error.message || "Не удалось загрузить чат";
       renderChatSessions();

@@ -14,6 +14,7 @@ async function testPageBoundary() {
   let renderOptions;
   const context = vm.createContext({ console });
   context.window = context;
+  context.officeChatProjection = () => null; // Paging-only fixture; owner lifecycle has separate coverage.
   context.state = {
     activeChatId: "chat-a", messageStartIndex: 80, messageTotalCount: 160,
     chatProjectionRevisions: { "chat-a": 7 },
@@ -100,6 +101,7 @@ function testSharedWindowBounds() {
 async function testStaleRefreshDoesNotSelectOldChat() {
   const context = vm.createContext({ console });
   context.window = context;
+  context.officeChatProjection = () => null; // Paging-only fixture; owner lifecycle has separate coverage.
   context.state = {
     activeChatId: "chat-a", chatNavigationVersion: 1,
     messageStartIndex: 80, messageTotalCount: 160,

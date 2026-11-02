@@ -1,3 +1,32 @@
+// Temporary selected source adapter. Hidden Office and the mounted Workspace must
+// not replace each other's data; per-view factories will remove this selection.
+var selectedOfficeProjection = null;
+var emptyOfficeChatSnapshot = Object.freeze({ activeChatId: "", messages: Object.freeze([]),
+  messageStartIndex: 0, messageTotalCount: 0, activeChatModel: "", activeChatMode: "agent", activeChatReasoning: false });
+function officeChatProjection() { return selectedOfficeProjection; }
+function officeChatSnapshot() {
+  return selectedOfficeProjection && selectedOfficeProjection.snapshot() || emptyOfficeChatSnapshot;
+}
+function setOfficeChatSnapshotField(name, value) {
+  if (!selectedOfficeProjection || !selectedOfficeProjection.isCurrent())
+    throw new Error("Нет представления Office-чата для обновления.");
+  selectedOfficeProjection.snapshot()[name] = value;
+}
+function clearOfficeChatProjection() {
+  if (selectedOfficeProjection) selectedOfficeProjection.dispose();
+  selectedOfficeProjection = null;
+}
+function selectOfficeChatProjection(chatId) {
+  if (selectedOfficeProjection && selectedOfficeProjection.isCurrent() &&
+      selectedOfficeProjection.target.sessionId === chatId) return selectedOfficeProjection;
+  clearOfficeChatProjection();
+  if (!chatId) return null;
+  selectedOfficeProjection = window.RNAssistantConversationState.createSnapshotOwner(officeChatSource(chatId),
+    function (current, incoming) { return incoming; });
+  selectedOfficeProjection.accept(Object.assign({}, emptyOfficeChatSnapshot, { activeChatId: chatId, messages: [] }));
+  return selectedOfficeProjection;
+}
+
 function sortedChatSessions(chats) {
   return (chats || []).slice().sort(function (left, right) {
     var leftTime = Date.parse(left.LastActivityUtc || left.lastActivityUtc) || 0;
@@ -466,7 +495,9 @@ function applyPushedChatState(message) {
       return applyChatState(response);
     return false;
   }
-  if (scope === "full" && state.activeChatId && officeChatSource(state.activeChatId).matches(response)) {
+  var projection = officeChatProjection();
+  if (scope === "full" && projection && projection.isCurrent() &&
+      projection.target.sessionId === state.activeChatId && officeChatSource(projection.target.sessionId).matches(response)) {
     return applyChatState(response);
   }
   applyChatCatalogState(response);
@@ -582,13 +613,16 @@ function applyChatState(response, skipDraftCapture, options) {
     state.artifactViewerThumbnails = { items: {}, order: [], queue: [], pending: 0 };
     state.artifactImageGalleryContext = null;
   }
+  selectOfficeChatProjection(nextChatId);
   state.activeChatId = nextChatId;
   state.chatDetailPending = detailDeferred;
   state.chatDetailError = "";
   if (detailDeferred) {
-    state.messages = [];
-    state.messageStartIndex = 0;
-    state.messageTotalCount = response.messageTotalCount || response.MessageTotalCount || 0;
+    if (nextChatId) {
+      state.messages = [];
+      state.messageStartIndex = 0;
+      state.messageTotalCount = response.messageTotalCount || response.MessageTotalCount || 0;
+    }
     state.context = {};
     state.contextUsage = {};
     state.artifacts = [];
@@ -598,20 +632,24 @@ function applyChatState(response, skipDraftCapture, options) {
   }
   state.activeRunViewState = window.RNAssistantRunViewState.normalize(
     response.runViewState !== undefined ? response.runViewState : response.RunViewState);
-  if (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined) {
+  if (nextChatId && (response.activeChatModel !== undefined || response.ActiveChatModel !== undefined)) {
     state.activeChatModel = response.activeChatModel || response.ActiveChatModel || "";
   }
   if (response.activeChatMode !== undefined || response.ActiveChatMode !== undefined) {
-    state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
+    if (nextChatId) state.activeChatMode = response.activeChatMode || response.ActiveChatMode || "agent";
     state.mutationPolicy = response.mutationPolicy || "Ask";
     state.chatReadOnly = response.chatReadOnly === true;
   }
-  if (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined) {
+  if (nextChatId && (response.activeChatReasoning !== undefined || response.ActiveChatReasoning !== undefined)) {
     state.activeChatReasoning = !!(response.activeChatReasoning || response.ActiveChatReasoning);
   }
   if (response.chats !== undefined || response.Chats !== undefined) {
     state.chats = window.RNAssistantRunViewState.mergeCatalog(
       state.chats, response.chats || response.Chats || [], state.chatProjectionRevisions);
+  }
+  if (response.catalogChanges || response.CatalogChanges) {
+    state.chats = window.RNAssistantRunViewState.applyCatalogChanges(
+      state.chats, response.catalogChanges || response.CatalogChanges, state.chatProjectionRevisions);
   }
   if (typeof reconcileTerminalChatRuns === "function") reconcileTerminalChatRuns();
   if (response.documents !== undefined || response.Documents !== undefined) {
@@ -638,9 +676,11 @@ function applyChatState(response, skipDraftCapture, options) {
     }, { messages: incomingMessages, messageStartIndex: incomingStart,
       messageTotalCount: incomingTotal }, !(options && options.latestMessages) && !chatChanged && !detailDeferred &&
       Number.isSafeInteger(previousRevision) && previousRevision === incomingRevision);
-    state.messages = windowed.messages;
-    state.messageStartIndex = windowed.messageStartIndex;
-    state.messageTotalCount = windowed.messageTotalCount;
+    if (nextChatId) {
+      state.messages = windowed.messages;
+      state.messageStartIndex = windowed.messageStartIndex;
+      state.messageTotalCount = windowed.messageTotalCount;
+    }
     if (typeof reconcileChatInputEchoes === "function") reconcileChatInputEchoes(nextChatId, state.messages);
   }
   if (response.artifacts !== undefined || response.Artifacts !== undefined) {

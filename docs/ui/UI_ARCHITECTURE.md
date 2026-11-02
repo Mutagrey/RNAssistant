@@ -47,8 +47,9 @@ domain owners; вкладка не создаёт второй durable store и�
 несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
 singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
 
-В S2b.8 Workspace snapshot передан общему view owner; Office selected state и
-навигационный singleton adapter ещё требуют переключения на этот механизм.
+В S2b.8 Workspace snapshot передан общему view owner. S2b.9 использует тот же
+SnapshotOwner для Office transcript/preferences через временный selected adapter;
+полный Office snapshot и навигация ещё не принадлежат независимым views.
 
 ### S2b.1: состояние отрисовки и lifecycle представления
 
@@ -229,6 +230,27 @@ Read/open/stop/submit/preferences захватывают owner; ответ ст�
 `ProjectChats` пока обращается к одному `conversationView` через temporary adapter.
 Office snapshot и полная адресная доставка push ещё не перенесены. Это первый
 consumer общего owner, не завершение S2 и не включение нескольких chat tabs.
+
+### S2b.9: проекция Office без второй копии данных
+
+Лента, границы истории и model/mode/reasoning Office хранятся в общем SnapshotOwner.
+Прежние шесть полей `state` — явный временный accessor facade к этому объекту,
+без собственного значения, dual-write или сохранения response DTO. Нормализация
+и revision/paging policy остаются в ChatState; одно окно ≤240 сообщений. Смена
+выбранного чата, init/reconnect и bridge reset освобождают прежний owner.
+
+`selectedOfficeProjection` — временный source adapter, а не ещё один ConversationView.
+Office и Workspace пока используют один физический transcript. Поэтому скрытая
+Office projection сохраняется отдельно от смонтированного Workspace view: full push
+обновляет только живой owner своего адреса и не создаёт его после release. История,
+retry detail и preference service проверяют захваченный owner, включая повторную
+инициализацию того же chat ID без изменения navigation version.
+
+Это ограниченный срез: context/artifacts, live run projection, navigation и часть
+delivery consumers ещё используют selected state. Следующая граница — explicit
+source/view factory и адресная доставка этих данных; затем убрать selected adapter
+и шесть accessors, до включения независимых chat tabs. Копировать этот facade для
+новой вкладки запрещено. Draft/receipt/runtime/storage остаются у прежних владельцев.
 
 ## S1b: фактическая граница переноса
 

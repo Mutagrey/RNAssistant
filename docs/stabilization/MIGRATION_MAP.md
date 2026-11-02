@@ -65,6 +65,14 @@ Office использует тот же owner, navigation/commands/push полу
 проверены независимые targets; после этого удалить singleton accessor, не копировать
 его в новые вкладки. Domain receipts/drafts/runtime не принадлежат projection.
 
+S2b.9: Office transcript/window/model/mode/reasoning использует тот же SnapshotOwner.
+Шесть прежних полей `state` не хранят значения, а делегируют `selectedOfficeProjection`.
+Owner — Web conversation presentation. Это temporary selected source adapter для
+нынешнего общего DOM; скрытый Office не должен вытеснять Workspace projection.
+Removal gate: explicit source/view factories принимают context/artifacts/live data
+и delivery, все consumers читают адресный owner; затем удалить selected adapter и
+accessors перед независимыми chat tabs. Не создавать из facade новую per-tab копию.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий
