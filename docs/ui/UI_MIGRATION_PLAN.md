@@ -575,6 +575,30 @@ ACK во время правки, `multi-chat-requests`. Chromium `chat-input-de
 Затем остальные file/context/approval/media adapters перед независимыми chat tabs.
 Временные singleton consumers перечислены в Migration Map; полный S2 ещё открыт.
 
+### S2b.7: адресные snapshot sources — 2026-11-02
+
+S2b.6 сохранён в `fa6f2c6a`; оба среза находятся в production `web/`.
+По «Переноси в продакшен и далее и коммит» продолжена граница источников данных.
+Baseline воспроизвёл запрос Office A → ответ B → выбор B. Общий snapshot source
+теперь проверяет адрес до UI/receipt; Office selection/init/full push и Workspace
+чтения/команды используют его. Прежние точечные проверки заменены общим matcher.
+Источник хранит только адрес и callbacks; store, C#/Bridge, renderer и styles прежние.
+
+Проверки: `conversation-snapshot-source`, `chat-sync`, `chat-history-paging`,
+`model-navigation` (включая uncertain preference read-back через общий source);
+Chromium `workspace-shared-draft` (включая неверные chat/workspace ответы),
+`workspace-chat-progress`, `chat-input-delivery`. Первый параллельный draft-прогон
+остановился на перекрытии кнопки plugin preview; отдельный повтор прошёл без изменений
+кода. Финальный `workspace-shared-draft` прошёл отдельно на `fa6f2c6a` + staged diff,
+без параллельного S3b.3. UI assertions `artifact-commit-projection` прошли, но его старый C# source-order
+assertion не проходит и на `fa6f2c6a`; существующий gap уточнён в RISK_REGISTER.
+
+Ревью: `/preview/web/?scenario=ready` через `python3 prototypes/serve_ui.py`;
+переключить Office/проект/плагин, отправить текст, проверить план/reasoning и черновик
+после возврата. Компоновка прежняя. Откат — отдельный commit, без миграции данных.
+Полный S2 остаётся открыт: selected snapshots/full push должны принадлежать scope
+view, затем остальные adapters и независимые chat tabs. Windows evidence открыт.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

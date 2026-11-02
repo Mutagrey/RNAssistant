@@ -12,6 +12,15 @@ retained DOM двух views. [Ревью, измерения и ограниче
 In Review. Далее общий HTML/plugin Browser S3b.3; Library/VBA и остальные панели S4.
 Cold restart mode/search/scroll, Windows/Office и прежние qualification gaps открыты.
 
+## Адресный приём состояния чата S2b.7 — 2026-11-02
+
+S2b.6 сохранён в `fa6f2c6a`, production `web/`. Общий snapshot source отклоняет
+полный ответ чужого чата до UI/receipt; прежний Office path мог сменить A на B.
+Проверены адреса, init при смене host, история и Chromium draft/delivery/stream.
+[Ревью и ограничения](../ui/UI_MIGRATION_PLAN.md#s2b7-адресные-snapshot-sources--2026-11-02).
+Selected snapshots/full push ещё требуют per-view ownership; несколько chat tabs
+и Windows/Office qualification остаются открытыми.
+
 ## Общая привязка черновика S2b.6 — 2026-11-02
 
 S2b.5 сохранён в `159a8fcc`. Office/Workspace используют общий draft binding

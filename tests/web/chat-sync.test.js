@@ -13,6 +13,8 @@ function createSyncContext() {
   const fullStates = [];
   const context = vm.createContext({ console });
   context.window = context;
+  for (const file of ["app-conversation-state.js", "app-chat-state.js"])
+    vm.runInContext(fs.readFileSync(path.join(root, "web/js", file), "utf8"), context);
   context.RNAssistantChatDrafts = { hydrate: async () => {}, hydrationFailed: error => { throw error; } };
   context.document = { hidden: false, hasFocus: () => true };
   context.state = {
@@ -60,6 +62,7 @@ function createSyncContext() {
     context.state.messages = response.messages || response.Messages || [];
   };
   context.logOnce = () => {};
+  context.renderChatSessions = () => {};
   context.send = async (type, payload) => {
     calls.push({ type, payload });
     if (type === "listChats") return context.nextCatalog;
@@ -146,6 +149,19 @@ function createSyncContext() {
     await context.selectChat("word-chat");
     assert.equal(applied.length, 1, "existing foreign chat reloads the target host in this pane");
     console.log("PASS Office chat selection: current pane applies target initialization");
+  }
+
+  {
+    const { context, fullStates } = createSyncContext();
+    let initialized = false;
+    context.applyInitState = () => { initialized = true; };
+    context.send = async () => ({ init: { host: "Word", activeChatId: "foreign-chat" } });
+    await assert.rejects(context.navigateChat("selectChat", { chatId: "word-chat" }), /другого чата/);
+    assert.equal(initialized, false, "a wrong-host reply cannot initialize another chat");
+    assert.equal(fullStates.length, 0);
+    assert.equal(context.state.activeChatId, "chat-a");
+    assert.equal(context.state.chatNavigationPending, 0);
+    console.log("PASS Office chat selection: addressed init reply is required before applying host state");
   }
 
   {
@@ -394,7 +410,7 @@ function createSyncContext() {
     assert.match(index, new RegExp('src="js/' + name + '\\.js\\?v=[^"]+"'), name + " has a cache key");
   assert.ok(fs.readFileSync(path.join(root, "web/js/app.js"), "utf8")
     .includes("window.setInterval(synchronizeChatState, 60000)"), "background catalog scan is limited to once per minute");
-  console.log("OK 14/14");
+  console.log("OK chat sync and addressed navigation");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

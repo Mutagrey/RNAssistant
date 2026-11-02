@@ -192,6 +192,20 @@ file/service adapter единственной form; полные snapshots, full
 вспомогательные context/approval/media consumers ещё требуют instance scope.
 Несколько независимых chat views этим срезом не включаются.
 
+### S2b.7: адресный приём полного состояния
+
+ConversationState создаёт immutable snapshot source с точным source/workspace/session.
+Office и Workspace adapters описывают адрес в своих DTO; общие `read/accept/matches`
+проверяют его до изменения UI и обработки receipt. Source не хранит данные, не
+клонирует историю и не создаёт registry. Revision/window/lifecycle guards прежние.
+Office selection проверяет также вложенный init при смене host; full push использует
+тот же matcher. Workspace read/submit/confirmation/cancel/delete и создание/fork
+проверяют ожидаемый адрес (для новой сессии — исходный workspace и возвращённый ID).
+
+Это граница приёма, а не завершённый per-view data owner: Office selected state,
+Workspace active snapshot и full push routing к нескольким views ещё мигрируют.
+Singleton adapters не размножаются; следующим шагом переносится их владение данными.
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

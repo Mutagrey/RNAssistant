@@ -24,6 +24,8 @@ function fixture() {
   nodes.chatModelPicker.summary = new Node();
   nodes.apiKeyInput.value = "unsaved-key";
   const context = vm.createContext({ console, Promise, Date }); context.window = context;
+  for (const file of ["app-conversation-state.js", "app-chat-state.js"])
+    vm.runInContext(read(file), context, { filename: file });
   context.state = { settings: { Model: "default-model" }, bridgeToken: "excel-token", activeChatId: "excel-chat",
     modelCatalog: { models: [], loaded: false, loading: false, error: "" }, chatNavigationPending: 0, chatNavigationVersion: 1 };
   context.$ = id => nodes[id] || null;
@@ -36,6 +38,7 @@ function fixture() {
   context.log = () => {};
   context.readSettings = () => ({ Model: "form-model" });
   context.renderSendControls = context.renderActiveModelCapability = () => {};
+  context.renderChatSessions = () => {};
   context.applyChatState = value => { context.state.activeChatId = value.activeChatId; return true; };
   ["app-conversation-input.js", "app-chat-composer.js", "app-model-data.js", "app-model-picker.js", "app-model-render.js", "app-models.js", "app-chat-session.js"].forEach(file => vm.runInContext(read(file), context, { filename: file }));
   context.renderSendControls = context.updateComposerInputState = () => {}; // Full composer DOM is covered in model-settings.

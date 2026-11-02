@@ -2301,6 +2301,10 @@ real-model or Windows/Office/WebView2 qualification is claimed.
   used by the current settings form, so it stops before upload coverage. The
   attachment fix updates shared-upload body mocks, without changing those
   unrelated assertions or the settings fixture; these three suites are not green.
+  S2b.7 recheck (2026-11-02): after loading the real ConversationState dependency,
+  `artifact-commit-projection` passes four UI scenarios, then fails on obsolete
+  `_conversationStore.Save(session)` / publication order source markers. They are
+  also absent in committed `fa6f2c6a`; this is not evidence of a new UI regression.
 - **Open browser-demo transport / MockDemo owner:** `MockBridgeScript` forwards
   bridge controls, but `MockDemoServer` does not serve the internal resource
   data-plane route. A browser demo upload therefore cannot exercise real chunk

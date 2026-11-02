@@ -23,6 +23,17 @@ const root = path.resolve(__dirname, '../..');
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
+    const officeSource = await page.evaluate(async () => {
+      const original = send, messages = state.messages;
+      send = async function (type, payload) {
+        const result = await original(type, payload);
+        return type === 'getChatState' ? Object.assign({}, result, { activeChatId: 'foreign-chat' }) : result;
+      };
+      try { await loadChatState('preview-chat'); return false; }
+      catch (error) { return /другого чата/.test(error.message) && state.activeChatId === 'preview-chat' && state.messages === messages; }
+      finally { send = original; }
+    });
+    assert.equal(officeSource, true, 'Office full read rejects another chat without changing its history');
     await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
     await page.locator('#chatInput').waitFor({state:'visible'});
     const viewIdentity = await page.evaluate(() => {
@@ -53,6 +64,22 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик из плагина');
     assert.equal(await page.locator('#chatPlanButton').getAttribute('aria-pressed'), 'true');
     assert.equal(await page.locator('#chatReasoningToggle').getAttribute('aria-pressed'), 'true');
+
+    const workspaceSource = await page.evaluate(async target => {
+      const original = send, before = RNAssistantWorkspaceChat.snapshot();
+      send = async function (type, payload) {
+        const result = await original(type, payload);
+        return type === 'getProjectChat' ? Object.assign({}, result,
+          { project: Object.assign({}, result.project, { workspaceId: 'foreign-workspace' }) }) : result;
+      };
+      try {
+        await RNAssistantProjectChats.open(target.workspaceId, target.sessionId);
+        return RNAssistantWorkspaceChat.snapshot() === before &&
+          document.querySelector('#workspaceChatNotice').textContent.includes('другого чата');
+      } finally { send = original; }
+    }, {workspaceId, sessionId});
+    assert.equal(workspaceSource, true, 'Workspace rejects another workspace even when its session id matches');
+    await page.evaluate(target => RNAssistantProjectChats.open(target.workspaceId, target.sessionId), {workspaceId, sessionId});
 
     await page.locator('#chatInput').fill('Черновик из проекта');
     await page.locator('#composerAddPicker .composer-add-trigger').click();
@@ -182,6 +209,6 @@ const root = path.resolve(__dirname, '../..');
     assert.equal(await page.locator('#chatModelMenu').getByText('Настройки модели').count(), 0,
       'the shared picker restores Office model choices when its owner changes');
     assert.deepEqual(errors, [], 'no browser errors');
-    console.log('PASS workspace shared draft: project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface receipt reconnect');
+    console.log('PASS workspace shared draft: addressed snapshot reads, project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface receipt reconnect');
   } finally { await browser.close(); server.kill(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -193,6 +193,9 @@
     return { source: "workspace", workspaceId: field(field(chat, "project"), "workspaceId") || "",
       sessionId: field(chat, "sessionId") || "" };
   }
+  function snapshotSource(target) {
+    return window.RNAssistantConversationState.createSnapshotSource(workspaceComposerTarget(target), conversationTarget);
+  }
   function renderMessages(list, chat, emptyOptions, options) {
     var view = messageView(list);
     if (!view.canRender()) return;
@@ -458,6 +461,7 @@
     snapshot: function () { return dispatch("snapshot"); }, runStatus: runStatus,
     rememberSession: rememberSession, selectedSession: function (workspaceId) { return selectedSessions.get(workspaceId); },
     latestSnapshot: latestSnapshot, prependMessages: prependMessages,
+    snapshotSource: snapshotSource,
     createRunObserver: createRunObserver, paintProgress: paintProgress,
     acceptProgress: function (payload) { dispatch("progress", payload); },
     readOnly: readOnly, runNotice: runNotice };

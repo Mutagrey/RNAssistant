@@ -50,6 +50,11 @@ Office ACK и Workspace больше не назначают обычный inpu
 Остаток adapter: `sharedComposer` file/service binding, selected source snapshots,
 full push routing и вспомогательные consumers. Owner/removal gate выше сохраняются.
 
+S2b.7: общий snapshot source проверяет адрес read/command/full push до применения;
+Office/Workspace предоставляют только DTO address adapter. Данные не копируются.
+Остаток: selected Office state / Workspace active snapshot и доставка full push
+должны перейти к per-view owner; затем остальные consumers и удаление singleton.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

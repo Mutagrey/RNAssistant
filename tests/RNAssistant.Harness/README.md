@@ -68,6 +68,9 @@ source isolation and stable textarea binding. `chat-inbox` covers Office ACK dur
 a later edit; Chromium `chat-input-delivery`, `chat-draft-reload` and
 `workspace-shared-draft` retain persistence, receipt, late file and preference checks.
 The separate composer unknown-warning mismatch remains in the risk register.
+S2b.7: `conversation-snapshot-source` checks immutable exact addresses, concurrent
+reads and wrong-target rejection before UI delivery; `chat-sync` checks addressed
+host init. Chromium `workspace-shared-draft` injects wrong Office/workspace replies.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,
 native pairing and decision content, retained finish/reflection through the compiler,

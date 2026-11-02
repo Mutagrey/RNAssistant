@@ -2,6 +2,25 @@
   "use strict";
   var messageWindowLimit = 240;
 
+  // An addressed source validates delivery; it retains no snapshot or history.
+  function createSnapshotSource(target, identify) {
+    if (!target || !target.source || !target.sessionId ||
+        target.source === "workspace" && !target.workspaceId)
+      throw new Error("Не задан адрес чата.");
+    var address = Object.freeze({ source: target.source, workspaceId: target.workspaceId || "", sessionId: target.sessionId });
+    function matches(snapshot) {
+      var actual = snapshot && identify(snapshot);
+      return !!actual && actual.source === address.source && actual.sessionId === address.sessionId &&
+        (actual.workspaceId || "") === address.workspaceId;
+    }
+    function accept(snapshot) {
+      if (!matches(snapshot)) throw new Error("Состояние получено для другого чата. Повторите загрузку.");
+      return snapshot;
+    }
+    return { target: address, matches: matches, accept: accept,
+      read: async function (load) { return accept(await load(address)); } };
+  }
+
   function boundedWindow(snapshot, keepStart) {
     if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length <= messageWindowLimit) return snapshot;
     var offset = keepStart ? 0 : snapshot.messages.length - messageWindowLimit;
@@ -79,5 +98,6 @@
   }
 
   window.RNAssistantConversationState = { status: status, lifecycle: lifecycle,
-    messageWindow: messageWindow, prependMessageWindow: prependMessageWindow };
+    messageWindow: messageWindow, prependMessageWindow: prependMessageWindow,
+    createSnapshotSource: createSnapshotSource };
 })();

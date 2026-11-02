@@ -34,6 +34,8 @@
   function ownsView() { return window.RNAssistantWorkspaceChat.owner() === "project" ||
     window.RNAssistantWorkspaceChat.owner() === "plugin"; }
   async function readProjectChat(target) {
+    var source = window.RNAssistantWorkspaceChat.snapshotSource(target);
+    target = source.target;
     var drafts = window.RNAssistantChatDrafts, pending = drafts.pendingWorkspaceInput(target);
     if (!pending) {
       // Progress may already have acknowledged/cleared the draft while the
@@ -47,9 +49,8 @@
     }
     var query = { workspaceId: target.workspaceId, sessionId: target.sessionId };
     if (pending) query.receiptRequestId = pending.input.requestId;
-    var snapshot = await send("getProjectChat", query);
-    if (pending && snapshot && snapshot.sessionId === target.sessionId &&
-        snapshot.project && snapshot.project.workspaceId === target.workspaceId &&
+    var snapshot = await source.read(function () { return send("getProjectChat", query); });
+    if (pending &&
         window.RNAssistantConversationInput.accepted("workspace", target, pending.input.requestId,
           snapshot.inputReceipt, pending.input.SteerRunId)) {
       if (pending.input.EditMessageId) drafts.acknowledgeWorkspaceInput(target, pending.input);
@@ -412,6 +413,7 @@
     var version = ++serial, pid = projectId(); catalogBusy = true; creatingSessionId = null; render();
     try {
       var result = await send("createProjectChat", { workspaceId: pid, title: "Новый чат" });
+      window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: result && result.sessionId }).accept(result);
       var selected = version === serial && projectId() === pid;
       if (selected) {
         creatingSessionId = result.sessionId;
@@ -510,7 +512,8 @@
     var version = serial;
     function selected() { return version === serial && projectId() === pid && currentId() === sid; }
     render();
-    try { var result = await action(pid, sid); if (selected()) {
+    try { var result = await window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sid })
+      .read(function () { return action(pid, sid); }); if (selected()) {
       active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); notice(statusText()); render();
       // Catalog refresh is presentation work; an accepted input must release
       // the composer even if this separate read is slow or never returns.
@@ -537,12 +540,7 @@
             function (progress) {
               if (progress.workspaceId === pid && progress.sessionId === sid)
                 acceptReceipt(progress.inputReceipt);
-            }).then(function (result) {
-              if (!result || result.sessionId !== sid || !result.project ||
-                  result.project.workspaceId !== pid)
-                throw new Error("Ответ получен для другого чата. Обновите беседу перед повтором.");
-              return result;
-            });
+            }).then(window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sid }).accept);
         }, function (result) { return result.inputReceipt; });
     }, reportFailure);
   }
@@ -672,8 +670,7 @@
           apply: function (result, change) {
             if (projectId() !== pid || currentId() !== sid) return false;
             if (!change) {
-              if (!result || result.sessionId !== sid || !result.project || result.project.workspaceId !== pid)
-                throw new Error("Настройки получены для другого чата.");
+              window.RNAssistantWorkspaceChat.snapshotSource(target).accept(result);
               active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); return true;
             }
             if (change.name !== "model") return true;
@@ -709,8 +706,7 @@
         try {
           var result = await readProjectChat({ workspaceId: pid, sessionId: sid });
           if (version !== serial || projectId() !== pid || currentId() !== sid ||
-              field(runState(), "revision", "Revision") !== revision || result.sessionId !== sid ||
-              !result.project || result.project.workspaceId !== pid ||
+              field(runState(), "revision", "Revision") !== revision ||
               field(result.state, "revision", "Revision") < revision) return;
           active = window.RNAssistantConversationState.messageWindow(null, result, false);
           render();
@@ -733,6 +729,8 @@
         try {
           var result = await send(action.name === "fork" ? "forkProjectChat" : "deleteProjectChatMessage", { workspaceId: pid, sessionId: sid,
             messageId: action.message.Id });
+          window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid,
+            sessionId: action.name === "fork" ? result && result.sessionId : sid }).accept(result);
           var selected = version === serial && projectId() === pid && currentId() === sid;
           if (selected) {
             if (action.name === "fork") ++serial;
@@ -780,6 +778,7 @@
         try {
           var result = await send("cancelProjectChat", { workspaceId: pid, sessionId: sid,
             runId: field(state, "runId", "RunId"), cursor: field(state, "cursor", "Cursor") });
+          window.RNAssistantWorkspaceChat.snapshotSource({ workspaceId: pid, sessionId: sid }).accept(result);
           if (projectId() === pid && currentId() === sid) {
             active = window.RNAssistantWorkspaceChat.latestSnapshot(active, result); render();
             notice(result.cancelStatus === "Requested" && runStatus(result.state) === "running"

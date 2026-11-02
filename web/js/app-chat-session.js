@@ -23,6 +23,7 @@ function sendChatPreference(type, payload) {
 }
 
 function navigateChat(type, payload) {
+  var selectionSource = type === "selectChat" ? officeChatSource(payload.chatId) : null;
   var clock = function () { return window.performance && window.performance.now ? window.performance.now() : Date.now(); };
   var startedAt = clock(), sentAt = null, queueMs = 0;
   var timing = window.RNAssistantPerformanceDiagnostics;
@@ -57,7 +58,8 @@ function navigateChat(type, payload) {
     var bridgeMs = clock() - sentAt;
     // Apply each completed switch before dispatching the next. If the next request
     // fails, the visible chat still matches the controller's committed binding.
-    var selectedState = response && (response.state || response);
+    var selectedState = response && (response.init || response.state || response);
+    if (selectionSource) selectionSource.accept(selectedState);
     var appliedNavigation = true;
     if (type === "init" || response.init) applyInitState(response.init || response);
     else if (response.state) appliedNavigation = applyChatNavigationState(selectedState, version, type);
@@ -600,7 +602,9 @@ function shouldReloadChatDetailFromCatalog(payload) {
 async function loadChatState(chatIdValue) {
   var targetChatId = chatIdValue || state.activeChatId || "";
   if (!targetChatId) return initialize();
-  return send("getChatState", { chatId: targetChatId });
+  return officeChatSource(targetChatId).read(function (target) {
+    return send("getChatState", { chatId: target.sessionId });
+  });
 }
 
 async function retryChatDetail() {

@@ -416,8 +416,16 @@ function restoreChatDraft(chatIdValue) {
   }
 }
 
+function officeChatSource(chatId) {
+  return window.RNAssistantConversationState.createSnapshotSource({ source: "office", sessionId: chatId }, function (response) {
+    return { source: "office", sessionId: response.activeChatId || response.ActiveChatId || "" };
+  });
+}
+
 function applyChatStateForChat(response, expectedChatId) {
-  if (!expectedChatId || state.activeChatId === expectedChatId) {
+  if (!expectedChatId) return false;
+  officeChatSource(expectedChatId).accept(response);
+  if (state.activeChatId === expectedChatId) {
     return applyChatState(response);
   }
   applyChatCatalogState(response);
@@ -450,16 +458,15 @@ function applyPushedChatState(message) {
   message = message || {};
   var response = message.payload || message.Payload || {};
   var scope = String(message.scope || message.Scope || "catalog").toLowerCase();
-  var responseChatId = response.activeChatId || response.ActiveChatId || "";
   if (scope === "selection") {
     var requestId = message.id || message.Id || "";
     var pending = (state.pending || {})[requestId];
-    if (pending && pending.type === "selectChat" && pending.payload &&
-        pending.payload.chatId === responseChatId && (response.detailDeferred || response.DetailDeferred))
+    if (pending && pending.type === "selectChat" && pending.payload && pending.payload.chatId &&
+        officeChatSource(pending.payload.chatId).matches(response) && (response.detailDeferred || response.DetailDeferred))
       return applyChatState(response);
     return false;
   }
-  if (scope === "full" && responseChatId && responseChatId === state.activeChatId) {
+  if (scope === "full" && state.activeChatId && officeChatSource(state.activeChatId).matches(response)) {
     return applyChatState(response);
   }
   applyChatCatalogState(response);

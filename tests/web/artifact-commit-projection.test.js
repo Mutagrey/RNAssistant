@@ -18,6 +18,8 @@ ui.$ = () => null;
 });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-run-view-state.js"), "utf8"), ui,
   { filename: "app-run-view-state.js" });
+vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-conversation-state.js"), "utf8"), ui,
+  { filename: "app-conversation-state.js" });
 vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-state.js"), "utf8"), ui,
   { filename: "app-chat-state.js" });
 

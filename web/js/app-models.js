@@ -82,11 +82,9 @@ function officePreferenceService(scope) {
       if (change.name === "mode") return sendChatPreference("setChatMode", { chatId: chatId, mode: change.value });
       return sendChatPreference("setChatReasoning", { chatId: chatId, enabled: change.value });
     },
-    read: function () { return send("getChatState", { chatId: chatId }); },
+    read: function () { return loadChatState(chatId); },
     apply: function (response, change) {
       var full = !change || change.name === "mode";
-      if (full && (!response || (response.activeChatId || response.ActiveChatId) !== chatId))
-        throw new Error("Настройки получены для другого чата.");
       var applied = full ? applyChatStateForChat(response, chatId) :
         applyChatPreferenceStateForChat(response, chatId);
       return applied && (!change || officeChatPreferences()[change.name === "model" ? "selected" : change.name] === change.value);
