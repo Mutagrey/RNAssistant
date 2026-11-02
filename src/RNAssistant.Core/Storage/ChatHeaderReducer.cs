@@ -367,10 +367,12 @@ namespace RNAssistant.Core.Storage
         {
             storedByteLength = 0;
             missingBlobCount = 0;
+            // Metadata-only callers explicitly omit advisory usage, not integrity.
+            if (storageSizes == null) return;
             foreach (var reference in _casReferences)
             {
                 long length;
-                if (storageSizes == null || !storageSizes.TryGetStoredByteLength(reference.Key, out length))
+                if (!storageSizes.TryGetStoredByteLength(reference.Key, out length))
                 {
                     missingBlobCount = SaturatingIncrement(missingBlobCount);
                     continue;

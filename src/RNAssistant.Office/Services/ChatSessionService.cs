@@ -69,7 +69,7 @@ namespace RNAssistant.Office.Services
             var busyDocuments = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var timer = Stopwatch.StartNew();
             IReadOnlyList<ChatSessionHeader> headers;
-            try { headers = _conversations.ListHeaders(); }
+            try { headers = _conversations.ListHeaders(includeStorageUsage: false); }
             catch (ChatStorageLockTimeoutException)
             {
                 // Catalog indexing also uses document locks. Recovery of a busy
@@ -929,7 +929,7 @@ namespace RNAssistant.Office.Services
             }
 
             var timer = Stopwatch.StartNew();
-            var headers = _conversations.ListHeaders();
+            var headers = _conversations.ListHeaders(includeStorageUsage: false);
             if (timer.ElapsedMilliseconds >= 250)
                 RNAssistant.Office.Diagnostics.RuntimeLog.Info(
                     "Chat alias headers timing: scan=" + timer.ElapsedMilliseconds +

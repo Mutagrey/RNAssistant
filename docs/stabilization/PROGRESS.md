@@ -1,5 +1,24 @@
 # Stabilization progress
 
+## Повторный разбор тяжёлого чтения чатов — 2026-11-02
+
+Owner: Core ChatStore/JSONL; Office session service — выбор метаданных для recovery.
+На новом фото recovery ждёт глобальный header index примерно 90 с; один журнал
+501 282 984 байт строится 48 586 мс. Это холодная индексация перед показом выбранного
+чата, а не время DOM. Причина инвалидирования прежним логом не различалась.
+Убраны повторное копирование Data, полные промежуточные строки/байты canonical hash
+и перевыделение обычного JSONL-буфера на каждую запись. Recovery и alias scans
+больше не перечисляют CAS для ненужных им размеров. Добавлены причины rebuild и
+объёмы commit/request/other records; schema 8 и источники не меняются.
+
+На одинаковом локальном fixture (300 сообщений, 21,2 MiB nested JSON) cold catalog
+796 → 285 мс, выделенная память 698,5 → 248,3 MiB; индекс после рестарта 5 мс,
+тёплый header 2 мс. Это synthetic host-neutral evidence, не Windows acceleration.
+28 целевых checks и profile прошли на копии `182236c6` с этим diff; текущие
+параллельные protocol edits временно не компилировали HistoryProtocolTests и не
+исправлялись в этой задаче. Полная первичная проверка всех холодных журналов,
+точная причина rebuild на Windows и Office/WebView2 qualification остаются открытыми.
+
 ## Независимые материалы S3b.2 — 2026-11-02
 
 После `20b11dc0` Материалы подключены к существующему Dockview: отдельные exact-target

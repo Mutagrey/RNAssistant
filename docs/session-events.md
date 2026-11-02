@@ -52,6 +52,20 @@ rereading the same JSONL records. Full maintenance audits invalidate both memory
 caches. SQLite row batches capture their protection configuration once instead of
 checking settings/key files for every message or finish locator.
 
+Recovery and document-alias resolution explicitly request metadata-only headers
+(`includeStorageUsage: false`); they validate the same stream/cursor but do not
+enumerate CAS directories to calculate advisory stored sizes or missing-body counts.
+The displayed catalog still requests fresh storage usage. Metadata-only results
+must not be used to present storage health. This choice belongs to the service/read
+contract, independently of the chat renderer.
+
+Record validation parses `Data` once and streams the unchanged canonical JSON
+encoding into SHA/HMAC. It does not clone the parsed subtree or allocate a complete
+canonical string and UTF-8 array per record. The JSONL reader reuses its record
+buffer, retaining at most 1 MiB between records; larger records remain readable and
+release their buffer after decoding. Event hashes, schema and strict error handling
+are unchanged. SQLite schema remains 8; these changes require no index rebuild.
+
 Writes to separate documents may proceed concurrently under their existing ordered
 cross-process document locks. A shared reader/writer gate excludes CAS reachability
 scans from writes without serializing ordinary writes across documents. Full-session
@@ -102,6 +116,13 @@ for each input's latest revision (including terminal receipts). Recovery hydrate
 only changed inputs, and finishes required body reads before advancing its live
 projection. Historical bodies remain available through explicit event reads.
 These timings do not include the document lock wait, reported separately.
+Index-reset diagnostics identify missing/schema-version/damaged sidecars and
+cursor/tail/source invalidation. Slow index builds report record count and byte
+totals for session commits, model requests and other events without their contents.
+Thus a photo can distinguish an expected first rebuild from repeated invalidation
+and reveal which event category dominates a large journal. An initial recovery
+still validates every cold chat before the first detail response; its cost scales
+with all retained JSONL bytes, not with the selected chat's visible message count.
 
 ### Chat selection ownership and performance
 

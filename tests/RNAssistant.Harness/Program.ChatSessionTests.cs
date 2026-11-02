@@ -1976,6 +1976,8 @@ namespace RNAssistant.Harness
         {
             private readonly IConversationStore _inner;
             internal bool ForbidFullLoads;
+            internal bool ForbidStorageUsage;
+            internal int MetadataReads;
             internal int FullLoads, SelectionWrites;
             internal CatalogReadStore(IConversationStore inner) { _inner = inner; }
             private void RequireFullLoad()
@@ -1994,7 +1996,12 @@ namespace RNAssistant.Harness
             public void SetReasoningEnabled(ChatSession session, bool value) { _inner.SetReasoningEnabled(session, value); }
             public ConversationMessageWindow ReadMessageWindow(string id, int before, int count)
             { RequireFullLoad(); return _inner.ReadMessageWindow(id, before, count); }
-            public IReadOnlyList<ChatSessionHeader> ListHeaders() { return _inner.ListHeaders(); }
+            public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
+            {
+                if (includeStorageUsage && ForbidStorageUsage) throw new InvalidOperationException("Unexpected CAS size scan.");
+                if (!includeStorageUsage) MetadataReads++;
+                return _inner.ListHeaders(includeStorageUsage);
+            }
             public IReadOnlyList<ChatSessionHeader> ListHeaders(string host, string key, string title)
             { return _inner.ListHeaders(host, key, title); }
             public ChatSession Move(ChatSession session, string host, string key, string title)

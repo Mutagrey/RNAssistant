@@ -10,6 +10,7 @@ namespace RNAssistant.Core.Storage
         private readonly FileStream _stream;
         private readonly byte[] _buffer;
         private readonly long _length;
+        private MemoryStream _lineBuffer = new MemoryStream();
         private int _bufferIndex;
         private int _bufferCount;
         private long _position;
@@ -55,58 +56,58 @@ namespace RNAssistant.Core.Storage
         {
             if (_position >= _length) return null;
             var startOffset = _position;
-            using (var content = new MemoryStream())
+            var content = _lineBuffer;
+            content.SetLength(0);
+            while (true)
             {
-                while (true)
+                if (_bufferIndex >= _bufferCount && !FillBuffer())
                 {
-                    if (_bufferIndex >= _bufferCount && !FillBuffer())
-                    {
-                        if (_position == startOffset) return null;
-                        return Line(startOffset, false, content);
-                    }
-
-                    var segmentStart = _bufferIndex;
-                    var terminatorIndex = -1;
-                    for (var index = _bufferIndex; index < _bufferCount; index++)
-                    {
-                        if (_buffer[index] == (byte)'\n' || _buffer[index] == (byte)'\r')
-                        {
-                            terminatorIndex = index;
-                            break;
-                        }
-                    }
-
-                    if (terminatorIndex < 0)
-                    {
-                        var count = _bufferCount - segmentStart;
-                        content.Write(_buffer, segmentStart, count);
-                        _bufferIndex = _bufferCount;
-                        _position += count;
-                        continue;
-                    }
-
-                    var contentCount = terminatorIndex - segmentStart;
-                    if (contentCount > 0) content.Write(_buffer, segmentStart, contentCount);
-                    var terminator = _buffer[terminatorIndex];
-                    _bufferIndex = terminatorIndex + 1;
-                    _position += contentCount + 1;
-
-                    if (terminator == (byte)'\r')
-                    {
-                        byte next;
-                        if (TryPeekByte(out next) && next == (byte)'\n')
-                        {
-                            _bufferIndex += 1;
-                            _position += 1;
-                        }
-                    }
-                    return Line(startOffset, true, content);
+                    if (_position == startOffset) return null;
+                    return Line(startOffset, false, content);
                 }
+
+                var segmentStart = _bufferIndex;
+                var terminatorIndex = -1;
+                for (var index = _bufferIndex; index < _bufferCount; index++)
+                {
+                    if (_buffer[index] == (byte)'\n' || _buffer[index] == (byte)'\r')
+                    {
+                        terminatorIndex = index;
+                        break;
+                    }
+                }
+
+                if (terminatorIndex < 0)
+                {
+                    var count = _bufferCount - segmentStart;
+                    content.Write(_buffer, segmentStart, count);
+                    _bufferIndex = _bufferCount;
+                    _position += count;
+                    continue;
+                }
+
+                var contentCount = terminatorIndex - segmentStart;
+                if (contentCount > 0) content.Write(_buffer, segmentStart, contentCount);
+                var terminator = _buffer[terminatorIndex];
+                _bufferIndex = terminatorIndex + 1;
+                _position += contentCount + 1;
+
+                if (terminator == (byte)'\r')
+                {
+                    byte next;
+                    if (TryPeekByte(out next) && next == (byte)'\n')
+                    {
+                        _bufferIndex += 1;
+                        _position += 1;
+                    }
+                }
+                return Line(startOffset, true, content);
             }
         }
 
         public void Dispose()
         {
+            _lineBuffer.Dispose();
             _stream.Dispose();
         }
 
@@ -137,12 +138,20 @@ namespace RNAssistant.Core.Storage
         private JsonlByteLine Line(long startOffset, bool terminated, MemoryStream content)
         {
             var bytes = content.GetBuffer();
+            var text = StrictUtf8.GetString(bytes, 0, checked((int)content.Length));
+            // Reuse ordinary record buffers, but do not retain an exceptional huge
+            // record throughout the remaining scan or random-access batch.
+            if (content.Capacity > 1024 * 1024)
+            {
+                content.Dispose();
+                _lineBuffer = new MemoryStream();
+            }
             return new JsonlByteLine
             {
                 Offset = startOffset,
                 NextOffset = _position,
                 Terminated = terminated,
-                Text = StrictUtf8.GetString(bytes, 0, checked((int)content.Length))
+                Text = text
             };
         }
     }

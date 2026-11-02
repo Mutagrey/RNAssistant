@@ -81,6 +81,18 @@ Owner: Office settings/controller, Web settings; evidence — экран Windows
 ## Лишняя работа UI и оставшаяся стоимость чтений — 2026-10-30
 
 Owner: Office chat presentation; Application inbox; Web UI.
+Повторное фото 2026-11-02: startup recovery всё ещё ждёт индексацию всех 75 чатов;
+один JSONL 501 MB занял 48,6 с. Прежний лог не сообщает, вызван ли rebuild обновлением
+schema, отсутствием/повреждением sidecar или изменением источника; повторное
+инвалидирование на Windows пока не доказано. Теперь причины и распределение байтов
+commit/request/other видны в storage log. Убраны лишние JSON-копии/буферы и CAS size
+scans из recovery/alias reads; 21,2 MiB synthetic profile дал 796 → 285 мс и
+698,5 → 248,3 MiB allocations. Первая полная проверка остаётся линейной по всем
+журналам и блокирует первый detail. Schema 8 не менялась, новый rebuild не требуется.
+Дальнейшее отделение холодного глобального каталога от открытия одного чата должно
+сохранить recovery, alias migration, cross-window freshness и явную полноту каталога;
+просто убрать ожидание или проверки целостности нельзя. Windows timing остаётся gap.
+
 Убраны полная загрузка активной истории при catalog poll, phase-only detail reload,
 catalog на завершении очереди и eager tools/skills в bootstrap. Убрано построение
 возвращаемого DTO для queue turn/queued confirmation, где consumer использует

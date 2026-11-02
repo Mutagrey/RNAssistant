@@ -57,9 +57,9 @@ namespace RNAssistant.Core.Storage
             return _store.IsPersisted(session);
         }
 
-        public IReadOnlyList<ChatSessionHeader> ListHeaders()
+        public IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
         {
-            return _store.ListHeaders();
+            return _store.ListHeaders(includeStorageUsage);
         }
 
         public IReadOnlyList<ChatSessionHeader> ListHeaders(

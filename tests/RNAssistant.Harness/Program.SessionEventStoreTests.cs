@@ -592,6 +592,20 @@ namespace RNAssistant.Harness
                     AssertEqual(thirdText, third.Text, "reader seeks directly to a known record offset");
                     AssertEqual(thirdOffset, third.Offset, "seek preserves absolute offsets");
                 }
+
+                var hugeText = new string('я', 1024 * 1024) + "😀";
+                File.WriteAllBytes(path, Encoding.UTF8.GetBytes(hugeText + "\r\nsmall\n"));
+                using (var reader = new JsonlByteReader(path))
+                {
+                    var huge = reader.ReadLine();
+                    AssertEqual(hugeText, huge.Text, "oversized record is decoded before its reusable buffer is released");
+                    var small = reader.ReadLine();
+                    AssertEqual("small", small.Text, "the next record uses a fresh bounded buffer");
+                    reader.Seek(0);
+                    AssertEqual(hugeText, reader.ReadLine().Text, "backward seek works after an oversized record");
+                    reader.Seek(small.Offset);
+                    AssertEqual("small", reader.ReadLine().Text, "forward seek preserves the exact next record");
+                }
             });
         }
 

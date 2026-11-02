@@ -80,6 +80,10 @@ single validated SQLite projection and shared canonical event locators; Applicat
 owns inbox transitions/recovery; Office session service owns selection and binding.
 Web consumes bounded DTOs and owns DOM reconciliation. Host rebinding uses one
 selected-session initialization, not a selection DTO followed by a second load.
+Recovery and document-alias scans request metadata-only headers; advisory CAS size
+enumeration belongs to an explicit catalog read. Core owns allocation-bounded JSONL
+reading and canonical hash encoding as well as cache policy; renderer changes do
+not select these algorithms or force an index rebuild.
 The [selection read boundary](session-events.md#chat-selection-ownership-and-performance)
 and storage regression checks preserve this behavior independently of UI redesigns.
 

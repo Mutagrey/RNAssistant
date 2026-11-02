@@ -154,8 +154,13 @@ namespace RNAssistant.Core.Storage
         private void LogPerformance(string stage, long milliseconds, string detail = null)
         {
             if (milliseconds < 250 || PerformanceLog == null) return;
-            try { PerformanceLog("Chat storage timing: stage=" + stage + ", elapsed=" + milliseconds +
-                "ms" + (string.IsNullOrEmpty(detail) ? string.Empty : ", " + detail) + "."); }
+            LogStorageDiagnostic("Chat storage timing: stage=" + stage + ", elapsed=" + milliseconds +
+                "ms" + (string.IsNullOrEmpty(detail) ? string.Empty : ", " + detail) + ".");
+        }
+
+        private void LogStorageDiagnostic(string message)
+        {
+            try { PerformanceLog?.Invoke(message); }
             catch { /* Diagnostics must not affect storage authority. */ }
         }
 
@@ -839,13 +844,13 @@ namespace RNAssistant.Core.Storage
                 .ToList();
         }
 
-        internal IReadOnlyList<ChatSessionHeader> ListHeaders()
+        internal IReadOnlyList<ChatSessionHeader> ListHeaders(bool includeStorageUsage = true)
         {
             if (!Directory.Exists(_paths.ChatDirectory)) return new List<ChatSessionHeader>();
             var timer = Stopwatch.StartNew();
             long readTicks = 0, sizeTicks = 0;
             Action<long, long> recordTiming = (read, size) => { readTicks += read; sizeTicks += size; };
-            var storageSizes = _blobs.CreateStorageSizeSnapshot();
+            var storageSizes = includeStorageUsage ? _blobs.CreateStorageSizeSnapshot() : null;
             var headers = new List<ChatSessionHeader>();
             foreach (var directory in SafeGetDirectories(_paths.ChatDirectory))
             {

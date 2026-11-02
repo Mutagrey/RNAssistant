@@ -65,7 +65,7 @@ namespace RNAssistant.Core.Storage
 
         // Retry only disposable index damage. Busy, I/O and canonical event failures
         // propagate; a rebuild never changes or repairs the authoritative JSONL.
-        private static T ReadSqliteProjection<T>(string path, Func<SqliteConnection, T> read)
+        private T ReadSqliteProjection<T>(string path, Func<SqliteConnection, T> read)
         {
             for (var attempt = 0; ; attempt++)
             {
@@ -75,6 +75,7 @@ namespace RNAssistant.Core.Storage
                 }
                 catch (Exception ex) when (attempt == 0 && IsDamagedSqliteProjection(ex))
                 {
+                    LogStorageDiagnostic("Chat index reset: reason=damaged-sidecar.");
                     DeleteSqliteProjection(path);
                 }
                 catch (SqliteException ex) when (ex.SqliteErrorCode == 5 || ex.SqliteErrorCode == 6)
@@ -98,7 +99,7 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private static SqliteConnection OpenProjectionDatabase(string eventPath)
+        private SqliteConnection OpenProjectionDatabase(string eventPath)
         {
             InitializeSqliteProvider();
             var builder = new SqliteConnectionStringBuilder
@@ -114,8 +115,11 @@ namespace RNAssistant.Core.Storage
                 connection.Open();
                 ExecuteSql(connection, null, "PRAGMA busy_timeout=100");
                 ExecuteSql(connection, null, "PRAGMA synchronous=NORMAL");
-                if (Convert.ToInt32(Scalar(connection, null, "PRAGMA user_version")) != SqliteProjectionVersion)
+                var version = Convert.ToInt32(Scalar(connection, null, "PRAGMA user_version"));
+                if (version != SqliteProjectionVersion)
                 {
+                    LogStorageDiagnostic("Chat index reset: reason=" + (version == 0 ? "missing-schema" : "schema-version") +
+                        ", previousVersion=" + version + ", currentVersion=" + SqliteProjectionVersion + ".");
                     using (var transaction = connection.BeginTransaction())
                     {
                         if (Convert.ToInt32(Scalar(connection, transaction, "PRAGMA user_version")) != SqliteProjectionVersion)
@@ -328,6 +332,11 @@ namespace RNAssistant.Core.Storage
             // Catalog reads need only the reducer. Build message/artifact rows when
             // this chat is opened, not for every stored chat before the UI can start.
             if (append && saved.Materialized && !requireSession) return EnsureSqliteProjection(connection, path);
+            if (!append)
+                LogStorageDiagnostic("Chat index rebuild: reason=" + (saved == null ? "missing-or-invalid-cursor" :
+                    saved.IncompleteTail ? "incomplete-tail" : current.ByteLength < saved.ByteLength ? "stream-shrank" :
+                    current.ByteLength == saved.ByteLength && current.LastWriteUtcTicks != saved.LastWriteUtcTicks ?
+                    "stream-replaced" : "tail-mismatch") + ", bytes=" + current.ByteLength + ".");
             return MaterializeSqliteProjection(connection, path, append ? saved : null,
                 requireSession || (append && saved.Materialized));
         }
@@ -359,8 +368,12 @@ namespace RNAssistant.Core.Storage
                 };
                 var startOffset = previous == null ? 0 : previous.NextOffset;
                 var protector = Protection();
+                long records = 0, commitBytes = 0, requestBytes = 0;
                 var summary = ReadValidatedChatRecords(path, startOffset, last, protector, (item, line) =>
                 {
+                    records++;
+                    if (item.Type == SessionEventTypes.SessionCommit) commitBytes += line.NextOffset - line.Offset;
+                    else if (item.Type == SessionEventTypes.LlmRequest) requestBytes += line.NextOffset - line.Offset;
                     HydrateEventData(item, protector);
                     header.Apply(item);
                     IndexProjectionEvent(connection, transaction, item, line.NextOffset, protector);
@@ -406,7 +419,9 @@ namespace RNAssistant.Core.Storage
                 LogPerformance(materializeSession
                         ? (previous == null ? "projectionIndexBuild" : "projectionIndexSuffix")
                         : (previous == null ? "headerIndexBuild" : "headerIndexSuffix"),
-                    timer.ElapsedMilliseconds, "bytes=" + (summary.TailNextByteOffset - startOffset));
+                    timer.ElapsedMilliseconds, "bytes=" + (summary.TailNextByteOffset - startOffset) +
+                    ", records=" + records + ", commitBytes=" + commitBytes + ", modelRequestBytes=" + requestBytes +
+                    ", otherBytes=" + (summary.TailNextByteOffset - startOffset - commitBytes - requestBytes));
                 return cursor;
             }
         }

@@ -163,7 +163,13 @@ namespace RNAssistant.Core.Storage
             {
                 throw new JsonSerializationException("Unsupported session event property: " + unknown.Name + ".");
             }
-            return root.ToObject<SessionEvent>();
+            // The envelope is small; Data can contain a complete saved turn.
+            // ToObject would walk and clone that already parsed subtree again.
+            var data = root["Data"];
+            root.Remove("Data");
+            var result = root.ToObject<SessionEvent>();
+            result.Data = data;
+            return result;
         }
 
         private static string ComputeHash(SessionEvent sessionEvent, StorageProtector protector)
@@ -182,9 +188,7 @@ namespace RNAssistant.Core.Storage
                 ["PreviousHash"] = sessionEvent.PreviousHash == null ? JValue.CreateNull() : new JValue(sessionEvent.PreviousHash),
                 ["HashAlgorithm"] = sessionEvent.HashAlgorithm,
                 ["ProtectionKeyId"] = sessionEvent.ProtectionKeyId == null ? JValue.CreateNull() : new JValue(sessionEvent.ProtectionKeyId),
-                ["Data"] = string.IsNullOrWhiteSpace(sessionEvent.EncryptedData) && sessionEvent.Data != null
-                    ? sessionEvent.Data.DeepClone()
-                    : JValue.CreateNull(),
+                ["Data"] = JValue.CreateNull(),
                 ["EncryptedData"] = string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)
                     ? JValue.CreateNull()
                     : new JValue(sessionEvent.EncryptedData),
@@ -192,9 +196,26 @@ namespace RNAssistant.Core.Storage
             };
             try
             {
-                var bytes = Utf8.GetBytes(canonical.ToString(Formatting.None));
                 return (protector ?? StorageProtector.None).ComputeEventHash(
-                    bytes,
+                    stream =>
+                    {
+                        using (var text = new StreamWriter(stream, Utf8, 1024, true))
+                        using (var json = new JsonTextWriter(text) { Formatting = Formatting.None })
+                        {
+                            json.WriteStartObject();
+                            foreach (var property in canonical.Properties())
+                            {
+                                json.WritePropertyName(property.Name);
+                                // Keep the exact canonical field order/encoding without
+                                // copying Data or allocating the entire encoded record.
+                                var value = property.Name == "Data" && string.IsNullOrWhiteSpace(sessionEvent.EncryptedData)
+                                    ? sessionEvent.Data : property.Value;
+                                if (value == null) json.WriteNull();
+                                else value.WriteTo(json);
+                            }
+                            json.WriteEndObject();
+                        }
+                    },
                     sessionEvent.HashAlgorithm,
                     sessionEvent.ProtectionKeyId);
             }

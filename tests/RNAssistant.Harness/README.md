@@ -24,6 +24,17 @@ and Windows timings remain separate qualification.
 active-pointer write, including explicit navigation during deferred Save As
 migration. Both ordinary selection and host initialization use this service owner.
 
+`storage: canonical record encoding is stable` compares the streamed encoder with
+schema-4 canonical bytes for SHA/HMAC, encrypted/plain records, Unicode and large
+values. `storage: jsonl byte offsets are exact` also covers a record larger than the
+reusable-buffer limit followed by small records and backward/forward seeks.
+`chat sessions: recovery omits storage usage` forbids advisory CAS size scans during
+startup recovery and document-alias resolution, while ordinary catalog usage stays
+fresh. The opt-in `storage perf: structured chat records` case uses 300 messages and
+a 21 MiB journal of nested objects; it reports cold allocation volume, cold time,
+restart and warm reuse. It complements the earlier large-string profile and has no
+machine-dependent time assertion.
+
 UI demand loading: `chat sessions: catalog avoids active history` forbids full
 loads during routine catalog reads while checking fresh metadata and selection
 rebinds. `inbox: durable FIFO edit and recovery` counts latest-input CAS reads and

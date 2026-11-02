@@ -400,6 +400,24 @@ namespace RNAssistant.Core.Storage
         public string ComputeEventHash(byte[] canonicalBytes, string algorithm, string keyId)
         {
             canonicalBytes = canonicalBytes ?? new byte[0];
+            using (var hash = CreateEventHash(algorithm, keyId))
+                return Hex(hash.ComputeHash(canonicalBytes));
+        }
+
+        internal string ComputeEventHash(Action<Stream> writeCanonical, string algorithm, string keyId)
+        {
+            if (writeCanonical == null) throw new ArgumentNullException(nameof(writeCanonical));
+            using (var hash = CreateEventHash(algorithm, keyId))
+            using (var stream = new CryptoStream(Stream.Null, hash, CryptoStreamMode.Write))
+            {
+                writeCanonical(stream);
+                stream.FlushFinalBlock();
+                return Hex(hash.Hash);
+            }
+        }
+
+        private HashAlgorithm CreateEventHash(string algorithm, string keyId)
+        {
             algorithm = HistoryIntegrityModes.Normalize(algorithm);
             if (string.Equals(algorithm, HistoryIntegrityModes.HmacSha256, StringComparison.Ordinal))
             {
@@ -408,15 +426,9 @@ namespace RNAssistant.Core.Storage
                 {
                     throw new CryptographicException("History event HMAC key is unavailable or does not match.");
                 }
-                using (var hmac = new HMACSHA256(_eventChainKey))
-                {
-                    return Hex(hmac.ComputeHash(canonicalBytes));
-                }
+                return new HMACSHA256(_eventChainKey);
             }
-            using (var sha = SHA256.Create())
-            {
-                return Hex(sha.ComputeHash(canonicalBytes));
-            }
+            return SHA256.Create();
         }
 
         public static bool IsProtectedPayload(byte[] value)
