@@ -136,6 +136,12 @@
       function interrupt(up) { ++interaction; if (up) following = false; }
       listen(box, "wheel", function (event) { interrupt(event.deltaY < 0); }, { passive: true });
       listen(box, "pointerdown", function () { interrupt(false); }, { passive: true });
+      listen(box, "click", function (event) {
+        var disclosure = event.target.closest && event.target.closest("summary, button[aria-expanded], .agent-tool-more, .agent-json-expand, .rn-json-more");
+        if (!disclosure || !box.contains(disclosure)) return;
+        // Opening a card is a reading action: later content must not pull it to the tail.
+        interrupt(true); updateButton();
+      }, true);
       var touchY = 0;
       listen(box, "touchstart", function (event) { touchY = event.touches[0].clientY; interrupt(false); }, { passive: true });
       listen(box, "touchmove", function (event) {

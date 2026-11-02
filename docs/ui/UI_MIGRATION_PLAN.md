@@ -416,6 +416,13 @@ headless mock не квалифицирует Windows/Office. Нет C# build и
 Проверяются прежняя позиция чтения, неизменность ввода и отсутствие чужих сообщений.
 Откат — атомарный diff S2b.1: изменён только presentation, без durable migration.
 
+Адресная визуальная коррекция 2026-11-02 — In Review: слоты действий дерева не
+меняют ширину/высоту строки (32 px) при наведении; повторный render с тем же
+выбором сохраняет scroll. Раскрытие карточки чата останавливает tail-follow до
+явного перехода вниз. Проверки: `shared-navigation-tree`, `chat-tree-layout`,
+`conversation-view`, `conversation-scroll-interaction`; расстояния ленты сверены
+в production preview при 1280/420 px. Windows/Office evidence остаётся открытым.
+
 Далее завершить пункт 1: common builders/composer/commands и подписки получают
 explicit view scope вместо global active owner. Только затем включать разные
 chat targets одновременно. Ни общий чат целиком, ни multiple chat UI этим срезом

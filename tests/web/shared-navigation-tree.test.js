@@ -35,6 +35,24 @@ const root=path.resolve(__dirname,'../..');
   await standalone.locator('[data-operation-part=cancel]').click();assert.equal(await standalone.evaluate(()=>calls.cancel),1);
   await standalone.evaluate(()=>{operation.dispose();document.querySelector('[data-operation-part=cancel]').click();RNAssistantNavigationTree.unmount(document.getElementById('tree'));document.querySelector('[data-tree-select=c]').click();});
   assert.deepEqual(await standalone.evaluate(()=>[calls.cancel,calls.select]),[1,1],'dispose releases component callbacks');
+  await standalone.evaluate(()=>{
+   const root=document.createElement('div');root.id='stableTree';root.style.cssText='width:240px;height:96px;overflow:auto';document.body.appendChild(root);
+   window.stableNodes=Array.from({length:20},(_,i)=>({key:'row-'+i,kind:'chat',title:'Чат с длинным названием '+i,
+    selected:i===0,actions:[{title:'Изменить',iconHtml:RNAssistantIcons.render('edit')},{title:'Удалить',iconHtml:RNAssistantIcons.render('trash')}]}));
+   RNAssistantNavigationTree.render(root,stableNodes);
+  });
+  const dimensions=()=>standalone.locator('#stableTree [data-tree-key="row-0"]').evaluate(item=>{
+   const row=item.firstElementChild,label=row.querySelector('.navigation-tree-label');
+   return [row.getBoundingClientRect().width,row.getBoundingClientRect().height,label.getBoundingClientRect().width];
+  });
+  const idleDimensions=await dimensions();
+  assert.equal(idleDimensions[1],32,'action slots preserve the Demo tree row height');
+  await standalone.locator('#stableTree [data-tree-key="row-0"]').hover();
+  assert.deepEqual(await dimensions(),idleDimensions,'hover keeps tree row and label geometry stable');
+  assert.equal(await standalone.locator('#stableTree .tree-actions').first().evaluate(n=>getComputedStyle(n).visibility),'visible');
+  await standalone.evaluate(()=>{const root=document.getElementById('stableTree');root.scrollTop=160;RNAssistantNavigationTree.render(root,stableNodes);});
+  await standalone.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await standalone.locator('#stableTree').evaluate(n=>n.scrollTop),160,'passive render does not jump back to selected row');
   // A third, VBA-shaped adapter proves the pane has no source-name branches or host dependency.
   await standalone.addScriptTag({path:path.join(root,'web/js/app-navigation-pane.js')});
   await standalone.evaluate(()=>{

@@ -18,13 +18,15 @@
   function render(root, nodes, options) {
     options = options || {};
     var old = mounts.get(root);
+    var previousSelectedKey = old && old.selectedKey;
+    var savedPosition = !old && options.positionKey && positions[options.positionKey];
     var focused = root.contains(document.activeElement) && document.activeElement.closest('[role="treeitem"]');
     var focusKey = options.focusKey || (focused && focused.dataset.treeKey);
     var scroll = root.scrollTop;
     if (old) old.events.abort();
-    else if (options.positionKey && positions[options.positionKey]) {
-      focusKey = options.focusKey || positions[options.positionKey].focusKey;
-      scroll = positions[options.positionKey].scroll;
+    else if (savedPosition) {
+      focusKey = options.focusKey || savedPosition.focusKey;
+      scroll = savedPosition.scroll;
     }
 
     root.classList.add("navigation-tree");
@@ -130,6 +132,7 @@
     root.replaceChildren();
     if (!nodes.length && options.emptyText !== "") root.appendChild(element("p", "tree-empty", options.emptyText || "Ничего не найдено"));
     else root.appendChild(build(nodes, 1, ""));
+    record.selectedKey = selected && selected.dataset.treeKey;
     mounts.set(root, record);
 
     function visibleRows() {
@@ -225,10 +228,11 @@
     setFocus(initial, false);
     root.scrollTop = scroll;
     if ((options.focusKey || focused) && initial) requestAnimationFrame(function () {
-      if (root.isConnected) setFocus(initial, true);
+      if (root.isConnected && mounts.get(root) === record) setFocus(initial, true);
     });
-    if (selected && !focusKey) requestAnimationFrame(function () {
-      if (root.isConnected && root.getBoundingClientRect().height) selected.scrollIntoView({ block: "nearest" });
+    if (selected && !focusKey && (old ? previousSelectedKey !== record.selectedKey : !savedPosition)) requestAnimationFrame(function () {
+      if (root.isConnected && mounts.get(root) === record && root.getBoundingClientRect().height)
+        selected.scrollIntoView({ block: "nearest" });
     });
     return record;
   }

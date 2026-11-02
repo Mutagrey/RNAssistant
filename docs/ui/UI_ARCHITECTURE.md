@@ -55,6 +55,8 @@ transcript, explicit target, generation, keyed DOM cache, scroll/follow/anchor,
 coalesced frames, visibility и освобождение listeners/observers. Office и Workspace
 используют один owner; plugin source использует тот же Workspace target, без
 отдельного кэша или правил отрисовки. DockWorkspace передаёт только visibility.
+Раскрытие карточки в transcript прекращает автоматическое следование за хвостом;
+новые сообщения сохраняют позицию чтения до явного возврата к последним.
 
 Удалены глобальные Office renderer/scroll caches, `_workspaceEntries`, отдельное
 сохранение Office viewport и `conversationPosition`/dirty paint из DockWorkspace.

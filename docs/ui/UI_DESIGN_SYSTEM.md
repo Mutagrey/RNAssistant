@@ -131,7 +131,8 @@ component или копия SVG не создавались.
   шести Shell layouts удалены. `data-navigation` обозначает только роль.
 - `app-product-components.css` владеет строками, направляющими вложенности,
   selected/hover/focus и действиями NavigationTree для всех consumers.
-  Скрытые действия не занимают место; клавиатура и touch сохраняют доступ к ним.
+  Слоты действий сохраняют ширину и высоту строки при hover/focus; клавиатура и
+  touch сохраняют доступ к ним. Высота строки остаётся 32 px при обычном pointer.
   Office/Workspace используют одну chat icon. Plugin overrides высоты/шрифта удалены.
 - `app-product-navigation.css` оформляет общий navigation splitter;
   `app-dock-workspace.css` связывает tokens с Dockview и нормализует vendor `rem`

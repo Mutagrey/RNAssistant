@@ -1,5 +1,15 @@
 # Stabilization risk register
 
+## Web browser checks во время визуальной правки — 2026-11-02
+
+Owner: Web UI validation. В текущем рабочем дереве три более широкие проверки
+остаются красными: `chat-transcript-layout` не находит `chatComposer` в fixture,
+`workspace-chat-layout` не получает прокручиваемую Office-ленту перед сменой
+источника, `shell-navigation` ждёт Demo `.dv-tab` до timeout. Причинность этих
+падений не установлена. Адресные `conversation-view`,
+`conversation-scroll-interaction`, `shared-navigation-tree`, `chat-tree-layout`
+проходят; реальные Windows/Office сценарии остаются открытыми.
+
 ## Позднее уведомление deleteMessage — 2026-11-02
 
 Owner: Web Chat delivery. Исправлено в S2b.4: `deleteMessage` получает captured
