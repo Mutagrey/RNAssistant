@@ -1,5 +1,22 @@
 # Stabilization progress
 
+## Создание чата без чтения предыдущей истории — 2026-11-02
+
+Owner: Office ChatSessionService/controller; Web — существующий catalog merger.
+Пустой чат больше не вызывает LoadSession предыдущего чата, глобальный recovery
+и повторный каталог с CAS-размерами. Ответ содержит пустую detail projection и
+typed catalogChanges; остальные строки дерева сохраняются. Известный Save As
+по-прежнему переносит историю/VBA evidence, alias discovery отложен до обычного чтения.
+
+13 адресных service checks и Web run-view-state/chat-sync прошли. Реальный controller
+проверен host-neutral на изолированной копии `205b6cf6` с этим diff: четыре сценария
+создания не индексируют и не изменяют холодную историю из 300 сообщений. Удалён
+устаревший MockDemo Compile Include уже удалённого VbaMutationService.ApplyPatch.cs.
+Параллельные protocol edits в рабочем дереве на момент проверки не компилировали
+AssistantController.Agent.cs (ToolResultWire); их исправление вне этого scope.
+Ожидание уже начатой навигации/каталога, реальный Save As и Windows timing остаются
+открытыми. Глобальное холодное восстановление существующих чатов не отменено.
+
 ## Общий Browser S3b.3a — 2026-11-02
 
 HTML и plugin получили общий стабильный renderer в ViewerRegistry и отдельные Dock

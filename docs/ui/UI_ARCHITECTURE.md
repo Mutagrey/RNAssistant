@@ -51,6 +51,12 @@ singleton или переименовывать WorkspaceChat без смены 
 SnapshotOwner для Office transcript/preferences/context и метаданных материалов через временный selected adapter;
 полный Office snapshot и навигация ещё не принадлежат независимым views.
 
+Создание Office-чата возвращает пустую detail projection и typed `catalogChanges`:
+новая строка и ID заменённого transient. Существующий revision-aware catalog merger
+сохраняет остальные строки. Загрузка старой истории и полный catalog не принадлежат
+этому пути; документ/Save As остаются у ChatSessionService, очередь навигации — у
+source adapter. Изменение renderer не должно возвращать эти чтения при создании.
+
 ### S2b.1: состояние отрисовки и lifecycle представления
 
 Первый ограниченный шаг S2 после уточнения единого чата, 2026-11-02. Owner —

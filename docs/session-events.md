@@ -120,8 +120,8 @@ Index-reset diagnostics identify missing/schema-version/damaged sidecars and
 cursor/tail/source invalidation. Slow index builds report record count and byte
 totals for session commits, model requests and other events without their contents.
 Thus a photo can distinguish an expected first rebuild from repeated invalidation
-and reveal which event category dominates a large journal. An initial recovery
-still validates every cold chat before the first detail response; its cost scales
+and reveal which event category dominates a large journal. Initial existing-chat
+recovery still validates every cold chat before its first detail response; its cost scales
 with all retained JSONL bytes, not with the selected chat's visible message count.
 
 ### Chat selection ownership and performance
@@ -136,6 +136,17 @@ recovery. `SelectChat` must not persist that same pointer a second time; its def
 preview carries selection metadata and does not initialize the inbox. A host switch
 uses `InitializeSelectedChat` to load and present the selected session once, rather
 than discarding a complete `SelectChat` DTO before loading it again for initialization.
+
+Fresh chat creation does not load the previously selected transcript, run global
+startup recovery or enumerate the catalog. The session service shares document
+binding preparation with selection: known Save As migration remains synchronous,
+while alias discovery stays pending for an ordinary catalog/selection read.
+Empty drafts remain transient; explicit persistent creation writes its new active
+pointer once. The controller returns complete empty detail and typed `catalogChanges`
+(one upsert and any replaced transient ID), not a partial `chats` snapshot. Web
+applies that delta through the existing revision-aware catalog merger. Creation
+still drains admitted navigation/catalog requests to preserve exact document binding;
+that wait and actual Save As migration can therefore still delay the response.
 
 Core `ChatStore` owns stream validation, locators, caching and lazy materialization;
 Application `ConversationInputJournal`/inbox own transition validation and delivery.

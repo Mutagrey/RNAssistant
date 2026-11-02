@@ -674,6 +674,8 @@ namespace RNAssistant.Harness
                 Test("chat sessions: addressed transient survives document switch", AddressedTransientSessionSurvivesDocumentSwitch),
                 Test("chat sessions: addressed id does not fallback", AddressedSessionDoesNotFallbackToDifferentChat),
                 Test("chat sessions: empty drafts are transient", EmptyChatDraftsAreNotPersisted),
+                Test("chat sessions: creation skips stored history", ChatCreationSkipsStoredHistory),
+                Test("chat sessions: creation preserves Save As", NewChatPreservesSaveAsMigration),
                 Test("chat sessions: Office host row persists empty chat", OfficeHostRowPersistsEmptyChat),
                 Test("chat sessions: delete selects remaining projection", DeleteSelectsRemainingProjection),
                 Test("chat sessions: background save keeps active chat", BackgroundSaveKeepsActiveChat),

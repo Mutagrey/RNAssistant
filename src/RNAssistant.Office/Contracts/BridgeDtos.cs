@@ -759,6 +759,12 @@ namespace RNAssistant.Office.Contracts
         [JsonProperty("documents")] public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }
     }
 
+    public sealed class ChatCatalogChangesDto
+    {
+        [JsonProperty("upsertedChats")] public IReadOnlyList<ChatSessionSummary> UpsertedChats { get; set; }
+        [JsonProperty("removedTransientChatIds")] public IReadOnlyList<string> RemovedTransientChatIds { get; set; }
+    }
+
     public class ChatStateResponse
     {
         [JsonProperty("detailDeferred", DefaultValueHandling = DefaultValueHandling.Ignore)]
@@ -793,6 +799,9 @@ namespace RNAssistant.Office.Contracts
 
         [JsonProperty("chats", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<ChatSessionSummary> Chats { get; set; }
+
+        [JsonProperty("catalogChanges", NullValueHandling = NullValueHandling.Ignore)]
+        public ChatCatalogChangesDto CatalogChanges { get; set; }
 
         [JsonProperty("documents", NullValueHandling = NullValueHandling.Ignore)]
         public IReadOnlyList<OpenOfficeDocumentDto> Documents { get; set; }

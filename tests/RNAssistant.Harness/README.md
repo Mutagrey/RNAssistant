@@ -24,6 +24,14 @@ and Windows timings remain separate qualification.
 active-pointer write, including explicit navigation during deferred Save As
 migration. Both ordinary selection and host initialization use this service owner.
 
+`chat sessions: creation skips stored history` forbids full/history-header reads
+for fresh, warm, persistent and archived creation; `creation preserves Save As`
+checks history and VBA evidence relocation. MockDemo `--chat-creation-test` exercises
+the real host-neutral controller: four creations leave a cold 300-message history
+unindexed and unchanged, return complete empty detail and exact catalog deltas.
+Web `run-view-state` and `chat-sync` cover additive catalog delivery and navigation
+draining. These checks do not qualify Windows/Office/WebView2 latency.
+
 `storage: canonical record encoding is stable` compares the streamed encoder with
 schema-4 canonical bytes for SHA/HMAC, encrypted/plain records, Unicode and large
 values. `storage: jsonl byte offsets are exact` also covers a record larger than the

@@ -174,6 +174,13 @@
     return merged;
   }
 
+  function applyCatalogChanges(current, changes, revisions) {
+    changes = changes || {};
+    var removed = changes.removedTransientChatIds || changes.RemovedTransientChatIds || [];
+    var retained = (current || []).filter(function (chat) { return removed.indexOf(text(chat, "Id")) < 0; });
+    return mergeCatalog(retained, changes.upsertedChats || changes.UpsertedChats || [], revisions, true);
+  }
+
   function displayStatus(viewState, liveStatus) {
     if (!viewState) return liveStatus || "unknown";
     if (viewState.lifecycle === "awaiting_confirmation" || viewState.lifecycle === "awaiting_user") return "waiting";
@@ -258,6 +265,7 @@
     chatRevision: chatRevision,
     accept: accept,
     mergeCatalog: mergeCatalog,
+    applyCatalogChanges: applyCatalogChanges,
     displayStatus: displayStatus,
     failureReasonLabel: failureReasonLabel,
     runNotice: runNotice,

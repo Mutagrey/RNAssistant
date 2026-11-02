@@ -161,6 +161,9 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-state.js"), "utf8"), ui,
     { filename: "app-chat-state.js" });
+  // This fixture checks catalog/transcript delivery; composer owns draft I/O.
+  ui.captureChatDraft = () => {};
+  ui.restoreChatDraft = () => {};
   const newest = {
     activeChatId: "chat-a", sessionRevision: 7, runViewState: state("run-new"),
     messages: [{ Content: "new" }], chats: [
@@ -209,6 +212,13 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
     messages: [{ Content: "detail" }] }), true);
   assert.equal(ui.state.chatDetailPending, false);
   assert.equal(ui.state.messages[0].Content, "detail");
+  ui.state.chats.push({ Id: "empty-draft", Revision: 0 });
+  assert.equal(ui.applyChatState({ activeChatId: "created", sessionRevision: 0, messages: [],
+    catalogChanges: { upsertedChats: [{ Id: "created", Revision: 0 }], removedTransientChatIds: ["empty-draft"] } }), true);
+  assert.equal(ui.state.activeChatId, "created");
+  assert.equal(ui.state.messages.length, 0, "creation displays the empty transcript immediately");
+  assert.deepEqual(Array.from(ui.state.chats, chat => chat.Id), ["chat-a", "chat-new", "created"],
+    "creation delta updates the real state consumer without replacing the catalog");
   console.log("PASS run view state: integrated chat state rejects stale transcript and outcome");
 }
 
@@ -306,4 +316,24 @@ function state(runId, lifecycle = "completed", health = "clean", pending = null)
   console.log("PASS chat ordering: activity ignores navigation/save time and includes background updates");
 }
 
-console.log("OK 7/7");
+{
+  const existing = { Id: "saved", Revision: 9, Title: "Existing" };
+  const transient = { Id: "draft", Revision: 0 };
+  const created = { Id: "new", Revision: 0, Title: "New chat" };
+  const revisions = { saved: 9 };
+  const changed = runView.applyCatalogChanges([existing, transient], {
+    upsertedChats: [created], removedTransientChatIds: ["draft"]
+  }, revisions);
+  assert.deepEqual(Array.from(changed, chat => chat.Id), ["saved", "new"]);
+  assert.equal(changed[0], existing, "creation retains unrelated catalog rows without reloading them");
+  const repeated = runView.applyCatalogChanges(changed, {
+    UpsertedChats: [created, { Id: "saved", Revision: 8 }], RemovedTransientChatIds: ["draft"]
+  }, revisions);
+  assert.equal(repeated.length, 2, "reapplying a creation delta does not duplicate chats");
+  assert.equal(repeated[0], existing, "a delta retains newer revision evidence");
+  const chatState = fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-state.js"), "utf8");
+  assert.match(chatState, /RNAssistantRunViewState\.applyCatalogChanges/);
+  console.log("PASS chat creation: catalog delta preserves saved rows and removes only the replaced draft");
+}
+
+console.log("OK 8/8");

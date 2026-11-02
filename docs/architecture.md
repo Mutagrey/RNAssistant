@@ -87,6 +87,11 @@ not select these algorithms or force an index rebuild.
 The [selection read boundary](session-events.md#chat-selection-ownership-and-performance)
 and storage regression checks preserve this behavior independently of UI redesigns.
 
+Fresh Office chat creation uses the session service's document binding preparation
+without loading old history or scanning the global catalog/recovery. Known Save As
+migration remains guarded. Typed `catalogChanges` carries only the new summary and
+replaced transient ID to the existing Web catalog owner; there is no second store.
+
 ### Whole-conversation Application boundary (planned, 2026-10-27)
 
 The current dependency sketch describes the implemented Office path; a shared

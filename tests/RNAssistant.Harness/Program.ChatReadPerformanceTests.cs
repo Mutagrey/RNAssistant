@@ -117,5 +117,67 @@ namespace RNAssistant.Harness
                     " restartMs=" + restartMs + " warmMs=" + timer.ElapsedMilliseconds);
             });
         }
+
+        private static void ChatCreationSkipsStoredHistory()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var old = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Existing");
+                for (var i = 0; i < 300; i++) old.Messages.Add(new ChatMessage { Role = "user", Content = "history " + i });
+                store.Save(old);
+                var bytes = File.ReadAllBytes(SessionEventFile(paths, old));
+                var reads = new CatalogReadStore(ConversationStore(store)) { ForbidFullLoads = true, ForbidHeaderReads = true };
+                var service = new ChatSessionService(adapter, reads);
+                var draft = service.CreateChat("Fresh draft");
+                AssertEqual(0, reads.FullLoads, "fresh controller does not load the previously selected chat");
+                AssertEqual(0, reads.HeaderReads, "fresh creation defers the global alias catalog");
+                AssertEqual(draft.Id, service.ActiveTransientSessionId, "the replaced draft can be addressed without loading history");
+                AssertEqual(draft.Id, service.GetChatSummary(draft).Id, "new chat summary needs no catalog scan");
+                AssertEqual(0, draft.Messages.Count, "new chat has an empty transcript");
+                AssertEqual(0, reads.SelectionWrites, "an empty draft does not replace the persisted active pointer");
+                service.SetActiveSession(old);
+                reads.SelectionWrites = 0;
+                var persistent = service.CreatePersistentChat("Persistent new chat");
+                AssertEqual(0, reads.FullLoads, "warm creation also skips the previous transcript");
+                AssertEqual(0, reads.HeaderReads, "persistent creation does not enumerate other chats");
+                AssertEqual(1, reads.SelectionWrites, "persistent creation selects its new chat once");
+                AssertTrue(store.IsPersisted(persistent), "host-row creation remains durable");
+                AssertTrue(service.ActiveTransientSessionId == null, "a persisted chat must not be removed by the next creation delta");
+                var archived = service.CreateChatForDocument("Archived", "Word", "archive", "Archive.docx", "C:\\Archive.docx");
+                AssertEqual("archive", archived.DocumentKey, "document creation preserves its exact target");
+                AssertEqual(0, reads.HeaderReads, "archived creation needs no history catalog");
+                AssertTrue(bytes.SequenceEqual(File.ReadAllBytes(SessionEventFile(paths, old))), "existing chat history is unchanged");
+                reads.ForbidFullLoads = reads.ForbidHeaderReads = false;
+                service.LoadAddressedSession(persistent.Id);
+                AssertEqual(1, reads.MetadataReads, "the next ordinary selection still reconciles pending aliases");
+            });
+        }
+
+        private static void NewChatPreservesSaveAsMigration()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = new FakeOfficeAdapter();
+                var store = new ChatStore(paths);
+                var journal = new VbaJournalStore(paths);
+                var service = new ChatSessionService(adapter, ConversationStore(store), journal);
+                var old = service.CreatePersistentChat("Before Save As");
+                old.Messages.Add(new ChatMessage { Role = "user", Content = "Retain this history" });
+                store.Save(old);
+                journal.Save(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "Module1", "StdModule", "Option Explicit");
+                var oldKey = adapter.DocumentKey;
+                adapter.DocumentKeyValue = "saved-new-chat";
+                adapter.DocumentPathValue = "C:\\Demo\\Saved.xlsx";
+                var created = service.CreateChat("After Save As");
+                AssertEqual(adapter.DocumentKey, created.DocumentKey, "new draft belongs to the saved document");
+                AssertTrue(store.Load(adapter.HostName, oldKey, old.Id) == null, "known old binding is relocated");
+                var moved = store.Load(adapter.HostName, adapter.DocumentKey, old.Id);
+                AssertEqual("Retain this history", moved.Messages.Single().Content, "Save As retains the previous transcript");
+                AssertEqual(1, journal.List(adapter.HostName, adapter.DocumentKey).Count, "VBA evidence follows the same relocation");
+                AssertEqual(created.Id, service.ActiveTransientSessionId, "migration does not reselect the previous chat");
+            });
+        }
     }
 }

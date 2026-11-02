@@ -348,75 +348,7 @@ namespace RNAssistant.Office.Services
             var title = _adapter.DocumentTitle;
             var documentPath = CurrentDocumentPath();
 
-            var activeDocumentKeyChanged = !string.IsNullOrWhiteSpace(_activeSessionId) &&
-                string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(_activeRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase);
-            var migrationDeferred = false;
-            IDisposable migrationLease = null;
-            try
-            {
-                if (activeDocumentKeyChanged && MaintenanceLeaseProvider != null)
-                {
-                    migrationLease = MaintenanceLeaseProvider();
-                }
-                migrationDeferred = activeDocumentKeyChanged && IsDocumentRunOwned(_activeHost, _activeDocumentKey);
-                if (activeDocumentKeyChanged && !migrationDeferred)
-                {
-                    var oldDocumentKey = _activeDocumentKey;
-                    if (_vbaJournalStore != null)
-                    {
-                        _vbaJournalStore.MoveDocument(
-                            _activeHost,
-                            oldDocumentKey,
-                            host,
-                            documentKey,
-                            runtimeKey,
-                            title);
-                    }
-                    if (_conversations.IsPersisted(_activeSession))
-                    {
-                        var activeSessionId = _activeSessionId;
-                        _conversations.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title, documentPath);
-                        _activeSession = _conversations.Load(host, documentKey, activeSessionId) ?? _activeSession;
-                    }
-                    else if (_activeSession != null)
-                    {
-                        ChatSessionNormalizer.RecordDocumentKeyMigration(
-                            _activeSession,
-                            oldDocumentKey,
-                            documentKey);
-                        _activeSession.Host = host;
-                        _activeSession.DocumentKey = documentKey;
-                        _activeSession.DocumentTitle = title;
-                        if (_activeSession.Context != null)
-                        {
-                            _activeSession.Context.Host = host;
-                            _activeSession.Context.DocumentKey = documentKey;
-                        }
-                    }
-                    _activeHost = host;
-                    _activeDocumentKey = documentKey;
-                    _activeRuntimeDocumentKey = runtimeKey;
-                }
-            }
-            finally
-            {
-                if (migrationLease != null) migrationLease.Dispose();
-            }
-
-            if (!AliasesReconciled(host, documentKey, runtimeKey, documentPath))
-            {
-                _aliasReconciliationPending = !ReconcileDocumentAliases(host, documentKey, title, documentPath);
-                if (!_aliasReconciliationPending)
-                {
-                    _aliasReconciledHost = host;
-                    _aliasReconciledDocumentKey = documentKey;
-                    _aliasReconciledRuntimeDocumentKey = runtimeKey;
-                    _aliasReconciledDocumentPath = documentPath;
-                }
-            }
-            ObserveCurrentDocument(host, documentKey, runtimeKey);
+            var migrationDeferred = PrepareCurrentDocumentBinding(host, documentKey, runtimeKey, title, documentPath, true);
 
             ChatSession session = null;
             if (!string.IsNullOrWhiteSpace(requestedSessionId))
@@ -509,11 +441,98 @@ namespace RNAssistant.Office.Services
             return session;
         }
 
+        private bool PrepareCurrentDocumentBinding(string host, string documentKey, string runtimeKey,
+            string title, string documentPath, bool reconcileAliases)
+        {
+            var activeDocumentKeyChanged = !string.IsNullOrWhiteSpace(_activeSessionId) &&
+                string.Equals(_activeHost, host, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(_activeRuntimeDocumentKey, runtimeKey, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(_activeDocumentKey, documentKey, StringComparison.OrdinalIgnoreCase);
+            var migrationDeferred = false;
+            IDisposable migrationLease = null;
+            try
+            {
+                if (activeDocumentKeyChanged && MaintenanceLeaseProvider != null)
+                {
+                    migrationLease = MaintenanceLeaseProvider();
+                }
+                migrationDeferred = activeDocumentKeyChanged && IsDocumentRunOwned(_activeHost, _activeDocumentKey);
+                if (activeDocumentKeyChanged && !migrationDeferred)
+                {
+                    var oldDocumentKey = _activeDocumentKey;
+                    if (_vbaJournalStore != null)
+                    {
+                        _vbaJournalStore.MoveDocument(
+                            _activeHost,
+                            oldDocumentKey,
+                            host,
+                            documentKey,
+                            runtimeKey,
+                            title);
+                    }
+                    if (_conversations.IsPersisted(_activeSession))
+                    {
+                        var activeSessionId = _activeSessionId;
+                        _conversations.MoveDocument(_activeHost, oldDocumentKey, host, documentKey, title, documentPath);
+                        _activeSession = _conversations.Load(host, documentKey, activeSessionId) ?? _activeSession;
+                    }
+                    else if (_activeSession != null)
+                    {
+                        ChatSessionNormalizer.RecordDocumentKeyMigration(
+                            _activeSession,
+                            oldDocumentKey,
+                            documentKey);
+                        _activeSession.Host = host;
+                        _activeSession.DocumentKey = documentKey;
+                        _activeSession.DocumentTitle = title;
+                        if (_activeSession.Context != null)
+                        {
+                            _activeSession.Context.Host = host;
+                            _activeSession.Context.DocumentKey = documentKey;
+                        }
+                    }
+                    _activeHost = host;
+                    _activeDocumentKey = documentKey;
+                    _activeRuntimeDocumentKey = runtimeKey;
+                }
+            }
+            finally
+            {
+                if (migrationLease != null) migrationLease.Dispose();
+            }
+
+            if (!AliasesReconciled(host, documentKey, runtimeKey, documentPath))
+            {
+                // A new empty chat does not need the history catalog. Keep alias
+                // reconciliation pending for the next ordinary catalog/selection read.
+                _aliasReconciliationPending = !reconcileAliases || !ReconcileDocumentAliases(host, documentKey, title, documentPath);
+                if (!_aliasReconciliationPending)
+                {
+                    _aliasReconciledHost = host;
+                    _aliasReconciledDocumentKey = documentKey;
+                    _aliasReconciledRuntimeDocumentKey = runtimeKey;
+                    _aliasReconciledDocumentPath = documentPath;
+                }
+            }
+            ObserveCurrentDocument(host, documentKey, runtimeKey);
+            return migrationDeferred;
+        }
+
         public ChatSession CreateChat(string title)
         {
             var session = BuildNewChat(title);
             SetActiveSession(session);
             return session;
+        }
+
+        internal string ActiveTransientSessionId
+        {
+            get { return _activeSession != null && !_conversations.IsPersisted(_activeSession) ? _activeSession.Id : null; }
+        }
+
+        internal ChatSessionSummary GetChatSummary(ChatSession session)
+        {
+            return ToSummary(session, _adapter.HostName, IsCurrentDocument(session) ? session.DocumentKey : null);
         }
 
         public ChatSession CreatePersistentChat(string title)
@@ -526,14 +545,16 @@ namespace RNAssistant.Office.Services
 
         private ChatSession BuildNewChat(string title)
         {
-            LoadSession(null);
-            var session = _conversations.CreateTransient(
-                _adapter.HostName,
-                _adapter.DocumentKey,
-                _adapter.DocumentTitle,
+            var host = _adapter.HostName;
+            var documentKey = _adapter.DocumentKey;
+            var runtimeKey = _adapter.RuntimeDocumentKey;
+            var documentTitle = _adapter.DocumentTitle;
+            var documentPath = CurrentDocumentPath();
+            PrepareCurrentDocumentBinding(host, documentKey, runtimeKey, documentTitle, documentPath, false);
+            var session = _conversations.CreateTransient(host, documentKey, documentTitle,
                 string.IsNullOrWhiteSpace(title) ? "New chat" : title.Trim());
-            BindDocumentAuthority(session, _adapter.HostName, _adapter.RuntimeDocumentKey, CurrentDocumentPath());
-            UpdateCurrentDocumentMetadata(session);
+            BindDocumentAuthority(session, host, runtimeKey, documentPath);
+            UpdateCurrentDocumentMetadata(session, documentPath);
             return session;
         }
 

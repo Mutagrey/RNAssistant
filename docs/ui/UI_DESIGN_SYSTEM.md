@@ -104,6 +104,10 @@ production tokens. Адаптер tab spacing/close icon ограничен Dock
 
 ## Применение правил сейчас
 
+Оптимизация создания Office-чата меняет только доставку данных: пустая переписка и
+catalog delta используют существующие NavigationTree/composer/transcript. Новых
+controls, геометрии и локальных CSS overrides нет; остальные строки дерева сохраняются.
+
 Общие tokens, Icons/Accents, PanelToggle, NavigationTree, composer/transcript,
 Inspector и ViewerRegistry уже используются в production. Это действующие правила
 каждого среза, а не отдельная финальная чистка. При замене переключаем consumers

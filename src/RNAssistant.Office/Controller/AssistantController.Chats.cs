@@ -413,17 +413,16 @@ namespace RNAssistant.Office
 
         public ChatStateResponse CreateChat(string title)
         {
-            EnsureStartupRecovery();
             using (_conversationLeases.AcquireMaintenance())
             {
+                var replacedDraftId = _chatSessions.ActiveTransientSessionId;
                 var session = _chatSessions.CreateChat(title);
-                return ChatState(session);
+                return NewChatState(session, replacedDraftId);
             }
         }
 
         public ChatStateResponse CreatePersistentChat(string title)
         {
-            EnsureStartupRecovery();
             using (_conversationLeases.AcquireMaintenance())
             {
                 var bound = _adapter as IOfficeDocumentSessionProvider;
@@ -437,19 +436,37 @@ namespace RNAssistant.Office
                         });
                     if (mismatch != null) throw new OfficeDocumentGuardException(mismatch);
                 }
+                var replacedDraftId = _chatSessions.ActiveTransientSessionId;
                 var session = _chatSessions.CreatePersistentChat(title);
-                return ChatState(session);
+                return NewChatState(session, replacedDraftId);
             }
         }
 
         public ChatStateResponse CreateDocumentChat(string title, string host, string documentKey, string documentTitle, string documentPath)
         {
-            EnsureStartupRecovery();
             using (_conversationLeases.AcquireMaintenance())
             {
+                var replacedDraftId = _chatSessions.ActiveTransientSessionId;
                 var session = _chatSessions.CreateChatForDocument(title, host, documentKey, documentTitle, documentPath);
-                return ChatState(session);
+                return NewChatState(session, replacedDraftId);
             }
+        }
+
+        private ChatStateResponse NewChatState(ChatSession session, string replacedDraftId)
+        {
+            // A fresh session has no interrupted run to recover. Return its own
+            // state and catalog delta without scanning every existing chat/CAS.
+            var response = new ChatStateResponse
+            {
+                CatalogChanges = new ChatCatalogChangesDto
+                {
+                    UpsertedChats = new[] { _chatSessions.GetChatSummary(session) },
+                    RemovedTransientChatIds = string.IsNullOrEmpty(replacedDraftId)
+                        ? new string[0] : new[] { replacedDraftId }
+                }
+            };
+            PopulateChatState(session, response, includeCatalog: false);
+            return response;
         }
 
         public ChatStateResponse SelectChat(string chatId, Action<ChatStateResponse> selected = null,
