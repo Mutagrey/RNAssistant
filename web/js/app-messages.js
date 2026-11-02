@@ -15,6 +15,33 @@ function messageView(box) {
   return view;
 }
 function officeConversationTarget() { return { source: "office", sessionId: state.activeChatId || "" }; }
+// A render borrows one domain snapshot. It owns no copy of durable history.
+function createMessagePresentation(view, data, commands) {
+  var scope = view.scope(), target = scope.target;
+  return { view: view, target: target, data: data, owner: commands && commands.owner, workspace: target.source === "workspace",
+    actionKey: scope.generation + ":" + (commands ? commands.generation : ""),
+    isCurrent: function () {
+      return scope.isCurrent() && !!commands && commands.isCurrent() &&
+        commands.target && commands.target.source === target.source &&
+        commands.target.sessionId === target.sessionId && commands.target.workspaceId === target.workspaceId;
+    },
+    invoke: function (name, value) { if (this.isCurrent()) return commands.invoke(name, value); }
+  };
+}
+function officeMessagePresentation(view, commands) {
+  var activities = state.liveAgentRun && state.liveAgentRun.length ? state.liveAgentRun : state.liveActivity ? [state.liveActivity] : [];
+  var run = state.chatRuns && state.chatRuns[state.activeChatId], runId = run && run.runId || "";
+  if (!runId) for (var i = activities.length - 1; i >= 0; i--) {
+    runId = activities[i].RunId || activities[i].runId;
+    if (runId) break;
+  }
+  return createMessagePresentation(view, {
+    messages: state.messages || [], start: state.messageStartIndex || 0, total: state.messageTotalCount || 0,
+    live: { activities: activities, runId: runId || "", content: state.liveStreamContent || "",
+      reasoning: state.liveReasoning || "", reasoningComplete: !!state.liveReasoningComplete,
+      retrying: !!(run && run.streamRetrying), statusText: typeof chatModelStageText === "function" ? chatModelStageText(run) : "" }
+  }, commands);
+}
 function createChatHistoryButton(direction, action) {
   var button = document.createElement("button");
   button.type = "button";
@@ -265,43 +292,16 @@ function appendMessageFooter(node, message, index, activity, options) {
 
   var actions = document.createElement("div");
   actions.className = "message-actions";
-  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
-    (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   actions.appendChild(smallIconButton("Копировать сообщение", "copy", function () {
     copyChatMessage(message.ReflectionDecision
       ? agentReflectionText(message.ReflectionDecision, messageContent(message))
       : activity ? activityText(activity) : messageContent(message));
     log("Сообщение скопировано.");
   }));
-  if (!activity) appendMessageInspectorAction(actions, message);
-  var canFork = options.workspace
-    ? window.RNAssistantWorkspaceChat.canMessageAction("fork", message, index)
-    : !historyActionsBlocked;
-  if (canFork) {
-    actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
-      if (options.workspace) window.RNAssistantWorkspaceChat.messageAction("fork", message, index);
-      else forkChatAtMessage(message, index);
-    }));
-  }
-  var canEdit = options.workspace
-    ? window.RNAssistantWorkspaceChat.canMessageAction("edit", message, index)
-    : messageSupportsEdit(message, index, activity);
-  if (canEdit) {
-    actions.appendChild(smallIconButton("Изменить сообщение", "edit", function () {
-      if (options.workspace) window.RNAssistantWorkspaceChat.messageAction("edit", message, index);
-      else startMessageEdit(message, index);
-    }));
-  }
-
-  var canDelete = options.workspace
-    ? window.RNAssistantWorkspaceChat.canMessageAction("delete", message, index)
-    : !historyActionsBlocked;
-  if (canDelete) {
-    actions.appendChild(smallIconButton("Удалить сообщение", "trash", function () {
-      if (options.workspace) window.RNAssistantWorkspaceChat.messageAction("delete", message, index);
-      else deleteMessage(message, index);
-    }));
-  }
+  if (!activity) appendMessageInspectorAction(actions, message, options.presentation);
+  appendMessageHistoryAction(actions, "Ответвить чат отсюда", "branch", "fork", message, index, options.presentation);
+  appendMessageHistoryAction(actions, "Изменить сообщение", "edit", "edit", message, index, options.presentation);
+  appendMessageHistoryAction(actions, "Удалить сообщение", "trash", "delete", message, index, options.presentation);
 
   var assistant = messageRole(message) === "assistant";
   if (assistant) footer.appendChild(actions);
@@ -310,15 +310,24 @@ function appendMessageFooter(node, message, index, activity, options) {
   node.appendChild(footer);
 }
 
-function appendMessageInspectorAction(parent, message) {
+function appendMessageHistoryAction(parent, title, icon, name, message, index, presentation) {
+  var action = { name: name, message: message, index: index };
+  if (!presentation || !presentation.invoke("canMessageAction", action)) return;
+  parent.appendChild(smallIconButton(title, icon, function () { return presentation.invoke("messageAction", action); }));
+}
+
+function appendMessageInspectorAction(parent, message, presentation) {
   if (!window.RNAssistantChatInspector || typeof window.RNAssistantChatInspector.openActivity !== "function" ||
       messageRole(message) !== "assistant") return;
-  var target = window.RNAssistantChatInspector.target();
+  if (!presentation) return;
+  var address = presentation.target;
+  var target = address.source === "office" ? { owner: "office", chatId: address.sessionId }
+    : { owner: presentation.owner, workspaceId: address.workspaceId, sessionId: address.sessionId };
   var runId = messageRunId(message);
   if ((!target.chatId && (!target.workspaceId || !target.sessionId)) || !runId) return;
   var button = smallIconButton("Открыть ход работы", "clock", function (event) {
     event.preventDefault(); event.stopPropagation();
-    window.RNAssistantChatInspector.openActivity(Object.assign({}, target, { runId: runId }), button);
+    if (presentation.isCurrent()) window.RNAssistantChatInspector.openActivity(Object.assign({}, target, { runId: runId }), button);
   });
   button.classList.add("message-inspect-action");
   parent.appendChild(button);
@@ -447,7 +456,7 @@ function renderMessageArticle(message, index, options) {
       return renderCompactionArticle(message, activity);
     }
     var activityArticle = renderActivityArticle(message, index, activity,
-      { live: false, current: false, workspace: !!options.workspace });
+      { live: false, current: false, workspace: !!options.workspace, presentation: options.presentation });
     if (typeof appendMessageReasoning === "function") {
       var activityReasoning = reasoningBlock(
         reasoningValue(message, "ReasoningContent", "reasoningContent", ""),
@@ -558,33 +567,18 @@ function appendChatMessageText(node, message) {
   enhanceMarkdown(body, { enableVisuals: true, enableJsonViewer: true, sourceText: content });
 }
 
-function liveAgentActivities() {
-  return state.liveAgentRun && state.liveAgentRun.length
-    ? state.liveAgentRun : (state.liveActivity ? [state.liveActivity] : []);
-}
-
-function liveAgentTailActivities() {
-  return liveAgentActivities().filter(function (activity) {
-    return !messageView().cache.pastActivities[activityTimelineKey(activity)] &&
-      !(activityKind(activity) === "step" && messageView().cache.pastSteps[activityStepId(activity)]);
+function liveAgentTailActivities(presentation) {
+  var cache = presentation.view.cache;
+  return presentation.data.live.activities.filter(function (activity) {
+    return !cache.pastActivities[activityTimelineKey(activity)] &&
+      !(activityKind(activity) === "step" && cache.pastSteps[activityStepId(activity)]);
   });
 }
 
-function liveAgentRunId() {
-  var tracked = state.chatRuns && state.chatRuns[state.activeChatId];
-  if (tracked && tracked.runId) return tracked.runId;
-  var activities = liveAgentActivities();
-  for (var i = activities.length - 1; i >= 0; i -= 1) {
-    var id = activities[i].RunId || activities[i].runId;
-    if (id) return id;
-  }
-  return "";
-}
-
-function renderLiveAgentRun() {
-  var activities = liveAgentTailActivities();
-  if ((!activities.length && !messageView().cache.liveBase && !hasLiveAgentOutput()) || messageView().cache.liveSuppressed) return null;
-  var items = messageView().cache.liveBase ? messageView().cache.liveBase.items.slice() : [];
+function renderLiveAgentRun(presentation) {
+  var activities = liveAgentTailActivities(presentation);
+  if ((!activities.length && !presentation.view.cache.liveBase && !hasLiveAgentOutput(presentation)) || presentation.view.cache.liveSuppressed) return null;
+  var items = presentation.view.cache.liveBase ? presentation.view.cache.liveBase.items.slice() : [];
   var byKey = Object.create(null);
   items.forEach(function (item, index) { byKey[activityTimelineKey(item.activity)] = index; });
   activities.forEach(function (activity) {
@@ -600,42 +594,34 @@ function renderLiveAgentRun() {
       items.push({ message: activity.__reasoningMessage || null, index: -1, activity: activity });
     }
   });
-  var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null, hasLiveDraft: hasLiveAgentDraft() });
-  node.liveOutputVisible = hasLiveAgentOutput();
-  node.liveDraftVisible = hasLiveAgentDraft();
-  node.liveRunId = liveAgentRunId();
-  if (messageView().cache.liveBase && typeof appendAgentRunResourceCards === "function") {
-    appendAgentRunResourceCards(node.querySelector(".agent-run-wrap"), messageView().cache.liveBase.items, null);
+  var node = renderAgentRunArticle({ live: true, items: items, finalMessage: null, hasLiveDraft: hasLiveAgentDraft(presentation) }, presentation);
+  node.liveOutputVisible = hasLiveAgentOutput(presentation);
+  node.liveDraftVisible = hasLiveAgentDraft(presentation);
+  node.liveRunId = presentation.data.live.runId;
+  if (presentation.view.cache.liveBase && typeof appendAgentRunResourceCards === "function") {
+    appendAgentRunResourceCards(node.querySelector(".agent-run-wrap"), presentation.view.cache.liveBase.items, null);
   }
   return node;
 }
 
-function hasLiveAgentOutput() {
-  return !!(state.liveReasoning || hasLiveAgentDraft());
+function hasLiveAgentOutput(presentation) {
+  return !!(presentation.data.live.reasoning || hasLiveAgentDraft(presentation));
 }
 
-function hasLiveAgentDraft() {
-  var run = state.chatRuns && state.chatRuns[state.activeChatId];
-  return !!(state.liveStreamContent || run && run.streamRetrying);
+function hasLiveAgentDraft(presentation) {
+  return !!(presentation.data.live.content || presentation.data.live.retrying);
 }
 
 // Keep streamed output inside its run and update only this leaf on token paints.
-function refreshLiveAgentOutput(node) {
-  if (!hasLiveAgentOutput()) return;
+function refreshLiveAgentOutput(node, presentation) {
+  if (!hasLiveAgentOutput(presentation)) return;
   var section = node.querySelector(".agent-stream-step");
   if (!section) {
     section = document.createElement("section");
     section.className = "agent-model-step agent-stream-step";
     node.querySelector(".agent-run-actions").appendChild(section);
   }
-  var run = state.chatRuns && state.chatRuns[state.activeChatId];
-  paintLiveModelOutput(section, {
-    content: state.liveStreamContent || "",
-    reasoning: state.liveReasoning || "",
-    reasoningComplete: !!state.liveReasoningComplete,
-    retrying: !!(run && run.streamRetrying),
-    statusText: typeof chatModelStageText === "function" ? chatModelStageText(run) : ""
-  });
+  paintLiveModelOutput(section, presentation.data.live);
 }
 
 // The same live model leaf is used by Office and workspace chat transcripts.
@@ -750,25 +736,25 @@ function appendMessageUnit(units, key, signature, render, actionsSignature, refr
     actionsSignature: actionsSignature, refreshActions: refreshActions, update: update });
 }
 
-function appendSavedRunUnit(units, run, workspace, actionsSignature, key, update) {
+function appendSavedRunUnit(units, run, presentation, actionsSignature, key, update) {
   appendMessageUnit(units, key || agentRunUnitKey(run), agentRunUnitSignature(run),
-    function () { return renderAgentRunArticle(run); }, actionsSignature, function (node) {
+    function () { return renderAgentRunArticle(run, presentation); }, actionsSignature, function (node) {
       refreshMessageFooter(node, function (target) {
         if (!run.items.length && run.finalMessage)
           appendMessageFooter(target, run.finalMessage.message, run.finalMessage.index, null,
-            { workspace: workspace, usage: run.usage });
-        else appendAgentRunFooter(target, run.items, run.finalMessage, workspace, run.usage);
+            { workspace: presentation.workspace, usage: run.usage, presentation: presentation });
+        else appendAgentRunFooter(target, run.items, run.finalMessage, presentation, run.usage);
       });
     }, update);
-  units[units.length - 1].patch = function (node) { patchAgentRunArticle(node, run); };
+  units[units.length - 1].patch = function (node) { patchAgentRunArticle(node, run, presentation); };
 }
 
-function appendSavedMessageUnit(units, message, index, workspace, actionsSignature) {
+function appendSavedMessageUnit(units, message, index, presentation, actionsSignature) {
   appendMessageUnit(units, "message:" + (messageId(message) || index), messageUnitSignature(message),
-    function () { return renderMessageArticle(message, index, workspace ? { workspace: true } : null); },
+    function () { return renderMessageArticle(message, index, { workspace: presentation.workspace, presentation: presentation }); },
     actionsSignature, function (node) {
       refreshMessageFooter(node, function (target) {
-        appendMessageFooter(target, message, index, messageActivity(message), workspace ? { workspace: true } : null);
+        appendMessageFooter(target, message, index, messageActivity(message), { workspace: presentation.workspace, presentation: presentation });
       });
     });
 }
@@ -814,63 +800,64 @@ function refreshMessageFooter(node, append) {
   append(node);
 }
 
-function buildMessageUnits() {
-  var units = [];
-  if (state.messageStartIndex > 0) {
-    appendMessageUnit(units, "older-messages", String(state.messageStartIndex), function () {
-      return createChatHistoryButton("previous", loadPreviousChatMessages);
+function buildMessageUnits(presentation, actionsSignature, pendingUnits) {
+  var units = [], data = presentation.data, cache = presentation.view.cache;
+  actionsSignature = presentation.actionKey + ":" + (actionsSignature || "");
+  if (data.start > 0) {
+    appendMessageUnit(units, "older-messages", data.start + ":" + presentation.actionKey, function () {
+      return createChatHistoryButton("previous", function () { return presentation.invoke("loadPrevious"); });
     }, "", null);
   }
-  var actionsSignature = messageActionsSignature();
-  var liveRunId = liveAgentRunId();
-  messageView().cache.liveBase = null;
-  messageView().cache.liveBaseSignature = null;
-  messageView().cache.liveSuppressed = false;
-  messageView().cache.pastActivities = {};
-  messageView().cache.pastSteps = {};
-  var lastVisibleIndex = state.messages.length - 1;
-  while (lastVisibleIndex >= 0 && messageProtocolMessage(state.messages[lastVisibleIndex])) lastVisibleIndex -= 1;
-  forEachChatDisplayEntry(state.messages, null, function (run) {
+  var liveRunId = data.live.runId;
+  cache.liveRunId = liveRunId;
+  cache.liveBase = null;
+  cache.liveBaseSignature = null;
+  cache.liveSuppressed = false;
+  cache.pastActivities = {};
+  cache.pastSteps = {};
+  var lastVisibleIndex = data.messages.length - 1;
+  while (lastVisibleIndex >= 0 && messageProtocolMessage(data.messages[lastVisibleIndex])) lastVisibleIndex -= 1;
+  forEachChatDisplayEntry(data.messages, null, function (run) {
       if (liveRunId && agentRunId(run.items, run.finalMessage) === liveRunId) {
         var savedView = agentRunViewState(run.items, run.finalMessage);
         var terminalRun = savedView && ["completed", "failed", "cancelled"].indexOf(savedView.lifecycle) >= 0;
         if (!run.finalMessage && !terminalRun && run.nextIndex > lastVisibleIndex) {
-          messageView().cache.liveBase = run;
-          messageView().cache.liveBaseSignature = agentRunUnitSignature(run);
+          cache.liveBase = run;
+          cache.liveBaseSignature = agentRunUnitSignature(run);
           return;
         }
-        if (run.finalMessage || terminalRun) messageView().cache.liveSuppressed = true;
+        if (run.finalMessage || terminalRun) cache.liveSuppressed = true;
         else run.items.forEach(function (item) {
-          messageView().cache.pastActivities[activityTimelineKey(item.activity)] = true;
+          cache.pastActivities[activityTimelineKey(item.activity)] = true;
           var stepId = activityStepId(item.activity);
-          if (stepId) messageView().cache.pastSteps[stepId] = true;
+          if (stepId) cache.pastSteps[stepId] = true;
         });
       }
-      appendSavedRunUnit(units, run, false, actionsSignature);
+      appendSavedRunUnit(units, run, presentation, actionsSignature);
     }, function (message, index) {
-      appendSavedMessageUnit(units, message, index, false, actionsSignature + ":" + index);
+      appendSavedMessageUnit(units, message, index, presentation, actionsSignature + ":" + index);
     });
 
-  if (state.messageStartIndex + state.messages.length < state.messageTotalCount) {
-    appendMessageUnit(units, "latest-messages", String(state.messageTotalCount), function () {
-      return createChatHistoryButton("latest", jumpToLatestChatMessages);
+  if (data.start + data.messages.length < data.total) {
+    appendMessageUnit(units, "latest-messages", data.total + ":" + presentation.actionKey, function () {
+      return createChatHistoryButton("latest", function () { return presentation.invoke("loadLatest"); });
     }, "", null);
   }
 
-  return units.concat(buildLiveMessageUnits());
+  return units.concat(buildLiveMessageUnits(presentation, pendingUnits));
 }
 
-function buildLiveMessageUnits() {
-  var units = [];
-  var activities = liveAgentTailActivities();
-  if (!messageView().cache.liveSuppressed && (activities.length || messageView().cache.liveBase || hasLiveAgentOutput())) {
+function buildLiveMessageUnits(presentation, pendingUnits) {
+  var units = [], cache = presentation.view.cache;
+  var activities = liveAgentTailActivities(presentation);
+  if (!cache.liveSuppressed && (activities.length || cache.liveBase || hasLiveAgentOutput(presentation))) {
     appendMessageUnit(units, "live:agent-run",
-      JSON.stringify({ stream: "agent", runId: liveAgentRunId(), value: activities,
-        base: messageView().cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(), hasDraft: hasLiveAgentDraft() }),
-      function () { return renderLiveAgentRun(); }, "", null, refreshLiveAgentOutput);
+      JSON.stringify({ stream: "agent", runId: presentation.data.live.runId, value: activities,
+        base: cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(presentation), hasDraft: hasLiveAgentDraft(presentation) }),
+      function () { return renderLiveAgentRun(presentation); }, "", null, function (node) { refreshLiveAgentOutput(node, presentation); });
   }
 
-  return units.concat(typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []);
+  return units.concat(pendingUnits || []);
 }
 
 function messageDisclosureKey(details, index) {
@@ -903,8 +890,8 @@ function restoreMessageDisclosures(node, snapshot) {
   });
 }
 
-function patchAgentRunArticle(node, run) {
-  var replacement = renderAgentRunArticle(run);
+function patchAgentRunArticle(node, run, presentation) {
+  var replacement = renderAgentRunArticle(run, presentation);
   function release(part) {
     if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(part);
     if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(part);
@@ -1044,12 +1031,14 @@ function reconcileMessageUnits(box, units, liveOnly) {
 }
 
 function scheduleLiveStreamRender(fullProjection) {
-  if (fullProjection) state.liveFullRenderPending = true;
   if (!officeTranscriptActive()) return;
-  var view = messageView();
+  var view = messageView(), commands = chatComposer().capture();
+  var run = state.chatRuns && state.chatRuns[state.activeChatId];
+  if (fullProjection || run && (run.runId || "") !== (view.cache.liveRunId || "")) view.cache.fullRenderPending = true;
   view.schedule("stream", function () {
-    var full = state.liveFullRenderPending;
-    state.liveFullRenderPending = false;
+    if (!commands.isCurrent()) return;
+    var full = view.cache.fullRenderPending;
+    view.cache.fullRenderPending = false;
     if (full) renderMessages(); else renderStreamingMessages(true);
   });
 }
@@ -1058,21 +1047,21 @@ function renderStreamingMessages(outputOnly) {
   if (currentConversationView && !currentConversationView.canRender()) return;
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   if (!officeTranscriptActive()) return;
-  var live = messageView().cache.units["live:agent-run"];
+  var view = messageView(), live = view.cache.units["live:agent-run"];
   if (!messageView().matches(officeConversationTarget()) || !live && !Object.keys(messageView().cache.units).length) {
     renderMessages();
     return;
   }
   if (outputOnly && messageView().cache.liveSuppressed) return;
-  var box = $("messages");
+  var box = $("messages"), presentation = officeMessagePresentation(view, chatComposer().capture());
   var shouldScroll = shouldFollowChatScroll(box);
   var viewport = !shouldScroll ? captureMessageViewport(box) : null;
-  if (outputOnly && live && live.node.liveOutputVisible && hasLiveAgentOutput() &&
-      live.node.liveDraftVisible === hasLiveAgentDraft() && live.node.liveRunId === liveAgentRunId()) {
+  if (outputOnly && live && live.node.liveOutputVisible && hasLiveAgentOutput(presentation) &&
+      live.node.liveDraftVisible === hasLiveAgentDraft(presentation) && live.node.liveRunId === presentation.data.live.runId) {
     // Token frames do not regroup/serialize activities, rebuild units or detach history.
-    refreshLiveAgentOutput(live.node);
+    refreshLiveAgentOutput(live.node, presentation);
   } else {
-    reconcileMessageUnits(box, buildLiveMessageUnits(), true);
+    reconcileMessageUnits(box, buildLiveMessageUnits(presentation, typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []), true);
   }
   if (!shouldScroll) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false);
@@ -1086,6 +1075,8 @@ function renderMessages(options) {
   if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
   var box = $("messages");
   var view = messageView(box), frame = view.begin(officeConversationTarget(), options);
+  var presentation = officeMessagePresentation(view, chatComposer().capture());
+  view.cache.fullRenderPending = false;
   var viewport = frame.viewport, shouldScroll = frame.follow;
   if (options.fullReset && !frame.changed) resetRenderedMessageUnits(box);
   if (state.chatDetailPending || state.chatDetailError) {
@@ -1106,7 +1097,7 @@ function renderMessages(options) {
     return;
   }
   var visibleMessages = (state.messages || []).filter(function (message) { return !messageProtocolMessage(message); });
-  if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !hasLiveAgentOutput() && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
+  if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !hasLiveAgentOutput(presentation) && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
     view.follow();
@@ -1118,7 +1109,8 @@ function renderMessages(options) {
   }
 
   if (!Object.keys(messageView().cache.units).length) box.textContent = "";
-  reconcileMessageUnits(box, buildMessageUnits());
+  reconcileMessageUnits(box, buildMessageUnits(presentation, messageActionsSignature(),
+    typeof buildPendingInputUnits === "function" ? buildPendingInputUnits() : []));
 
   renderAgentPlanDock();
   renderAgentApprovalDock();

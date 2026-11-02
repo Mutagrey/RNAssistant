@@ -173,10 +173,10 @@ const { chromium } = require("playwright");
       const oldMessage = { Id: "old-message", RunId: "older-run", Role: "assistant", Content: "", Activity: oldActivity };
       const oldFinal = { Id: "old-final", RunId: "older-run", Role: "assistant", Content: "Предыдущий ответ" };
       state.messages = [oldMessage, oldFinal];
-      const article = renderMessageArticle(oldMessage, 0); article.id = "inspector-source";
+      const article = renderMessageArticle(oldMessage, 0, { presentation: officeMessagePresentation(messageView(), chatComposer().capture()) }); article.id = "inspector-source";
       document.getElementById("messages").appendChild(article);
       const grouped = document.createElement("article"); grouped.id = "inspector-run-source";
-      appendAgentRunFooter(grouped, [{ message: oldMessage, index: 0 }], { message: oldFinal, index: 1 });
+      appendAgentRunFooter(grouped, [{ message: oldMessage, index: 0 }], { message: oldFinal, index: 1 }, officeMessagePresentation(messageView(), chatComposer().capture()));
       document.getElementById("messages").appendChild(grouped);
     });
     assert.equal(await page.locator("#inspector-source .message-inspect-action").count(), 0,
@@ -243,7 +243,7 @@ const { chromium } = require("playwright");
         return { message: { Id: "grouped-message-" + index, Role: "assistant",
           RunId: "grouped-run", Activity: activity }, activity, index };
       });
-      const article = renderAgentRunArticle({ items, live: false });
+      const article = renderAgentRunArticle({ items, live: false }, officeMessagePresentation(messageView(), chatComposer().capture()));
       article.id = "grouped-step-probe";
       document.getElementById("messages").appendChild(article);
     });

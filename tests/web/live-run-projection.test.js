@@ -44,11 +44,12 @@ const ctx = vm.createContext({
   $: () => box, renderChatResourceNavigation: () => {}, isPanelActive: () => true
 });
 ctx.window = ctx;
-for (const name of ["app-utils.js", "app-run-view-state.js", "app-conversation-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-conversation-view.js", "app-messages.js"]) {
+for (const name of ["app-utils.js", "app-run-view-state.js", "app-conversation-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-conversation-view.js", "app-messages.js", "app-chat-composer.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), ctx);
 }
 ctx.enhanceActivity = () => {};
 ctx.syncChatScroll = () => {};
+ctx.chatComposer().register("office", { target: () => ctx.officeComposerTarget() });
 ctx.messageView().begin(ctx.officeConversationTarget());
 const action = (step, id, status, args) => ({ RunId: "r", Kind: "tool", ToolId: "core.read", ToolCallId: id,
   StepId: step, StepMessage: "Narration " + step, Status: status, ArgumentsJson: args,
@@ -60,7 +61,8 @@ const saved = [action("s1", "a", "completed", null), action("s2", "b", "complete
 saved[0].ArgumentsPayload = { Hash: "blob", ContentType: "application/json" };
 ctx.state.messages = saved.map(message);
 ctx.state.liveAgentRun = live;
-function render() { ctx.reconcileMessageUnits(box, ctx.buildMessageUnits()); }
+const presentation = () => ctx.officeMessagePresentation(ctx.messageView());
+function render() { ctx.reconcileMessageUnits(box, ctx.buildMessageUnits(presentation())); }
 function assertFeed(steps, calls) {
   const nodes = walk(box);
   assert.equal(box.childNodes.length, 1, "one visible run article");
@@ -130,7 +132,7 @@ assert.deepEqual(visibleStepMessages(box), ["Narration s1", "Narration s2"],
 ctx.state.liveAgentRun = null; ctx.state.liveActivity = null; ctx.state.liveStreamContent = null; ctx.state.chatRuns = {};
 ctx.state.messages = [message(action("s1", "a", "completed", null), 0),
   { Id: "reply", Role: "user", Content: "Continue" }, message(action("s2", "b", "completed", null), 1)];
-const segments = ctx.buildMessageUnits();
+const segments = ctx.buildMessageUnits(presentation());
 assert.equal(new Set(segments.map(u => u.key)).size, segments.length, "separated run segments have unique identities");
 render();
 assert.equal(box.childNodes.length, 3);
@@ -143,7 +145,7 @@ assert.equal(box.childNodes.length, 3);
 assert.match(box.childNodes[0].messageUnitKey, /^run:r:segment:m0$/);
 assert.equal(box.childNodes[1].messageUnitKey, "message:reply");
 assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
-assert.equal(ctx.liveAgentTailActivities().map(a => a.StepId).join("|"), "s2|s2",
+assert.equal(ctx.liveAgentTailActivities(presentation()).map(a => a.StepId).join("|"), "s2|s2",
   "live replay cannot move earlier narration or actions below the applied steer");
 const prefix = box.childNodes[0], reply = box.childNodes[1];
 assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
@@ -151,7 +153,7 @@ assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
 assert.deepEqual(visibleStepMessages(prefix), ["Narration s1"],
   "the earlier comment remains inspectable above the user input");
 ctx.state.liveAgentRun.push(action("s2", "c", "running", "{}"));
-ctx.reconcileMessageUnits(box, ctx.buildLiveMessageUnits(), true);
+ctx.reconcileMessageUnits(box, ctx.buildLiveMessageUnits(presentation()), true);
 assert.equal(box.childNodes[0], prefix); assert.equal(box.childNodes[1], reply);
 assert.equal(box.childNodes[2].messageUnitKey, "live:agent-run");
 ctx.state.messages.pop(); // New input persisted before the first following action.
@@ -182,7 +184,7 @@ ctx.state.messages = [{ Id: "user", Role: "user", RunId: "r", Content: "Build an
   { Id: "terminal", Role: "assistant", RunId: "r", Content: "", RunViewState: failed,
     Activity: { RunId: "r", Kind: "diagnostic", Status: "failed", ResultMessage: "No tool progress" } }];
 ctx.resetRenderedMessageUnits(box);
-assert.equal(ctx.buildMessageUnits().length, 2, "saved progress and terminal diagnostic belong to one run");
+assert.equal(ctx.buildMessageUnits(presentation()).length, 2, "saved progress and terminal diagnostic belong to one run");
 render();
 assert.equal(walk(box).filter(n => n.classList.contains("agent-run")).length, 1);
 assert.equal(walk(box).filter(n => n.classList.contains("agent-result-card")).length, 0);

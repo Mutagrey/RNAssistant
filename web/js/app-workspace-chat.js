@@ -198,6 +198,7 @@
     if (!view.canRender()) return;
     chat = chat || { messages: [], state: {} };
     var target = conversationTarget(chat), frame = view.begin(target, options);
+    var presentation = createMessagePresentation(view, chat, chatComposer().capture());
     var changed = frame.changed, following = frame.follow;
     var snapshot = field(chat, "state"), status = runStatus(snapshot), live = field(snapshot, "modelProgress");
     if (status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
@@ -205,15 +206,15 @@
     var messages = chat.messages || [];
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && canMessageAction("fork", actionMessage, 0);
-    var signature = JSON.stringify([chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
+    var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
     if (!changed && view.cache.signature === signature) return;
     var viewport = !following ? frame.viewport : null;
     list.dataset.session = JSON.stringify([chatComposer().owner(), target.workspaceId, target.sessionId]);
     list.dataset.startIndex = String(start); view.cache.signature = signature;
     var units = [];
     if (start > 0) {
-      appendMessageUnit(units, "history:older", String(start), function () {
-        return createChatHistoryButton("previous", function () { return dispatch("loadPrevious"); });
+      appendMessageUnit(units, "history:older", start + ":" + presentation.actionKey, function () {
+        return createChatHistoryButton("previous", function () { return presentation.invoke("loadPrevious"); });
       });
     }
     var visible = messages.filter(visibleMessage);
@@ -237,29 +238,29 @@
             liveAttached = true;
           }
         }
-        appendSavedRunUnit(units, run, true, String(historyActions), run.live ? "live:workspace-model" : null,
+        appendSavedRunUnit(units, run, presentation, presentation.actionKey + ":" + historyActions, run.live ? "live:workspace-model" : null,
           run.live ? (function (progress) {
             return function (node) { paintLiveModelOutput(node.querySelector(".agent-stream-step"), progress); };
           }(liveProgress)) : null);
       }, function (message, index) {
-        appendSavedMessageUnit(units, message, index, true, String(historyActions));
+        appendSavedMessageUnit(units, message, index, presentation, presentation.actionKey + ":" + historyActions);
       });
     if (live && !liveAttached) {
       var liveRun = { items: [], workspace: true, live: true, workspaceProgress: liveProgress };
       appendMessageUnit(units, "live:workspace-model", String(liveRunId), function () {
-        return renderAgentRunArticle(liveRun);
+        return renderAgentRunArticle(liveRun, presentation);
       }, "", null, function (node) {
         paintLiveModelOutput(node.querySelector(".agent-stream-step"), liveProgress);
       });
     }
     if (start + messages.length < field(chat, "messageTotalCount")) {
-      appendMessageUnit(units, "history:latest", String(field(chat, "messageTotalCount")), function () {
-        return createChatHistoryButton("latest", function () { return dispatch("loadLatest"); });
+      appendMessageUnit(units, "history:latest", field(chat, "messageTotalCount") + ":" + presentation.actionKey, function () {
+        return createChatHistoryButton("latest", function () { return presentation.invoke("loadLatest"); });
       });
     }
     (field(snapshot, "pendingInputs") || []).forEach(function (pending) {
       var waiting = status === "running" && pending.RunId === field(snapshot, "runId");
-      appendMessageUnit(units, "input:" + pending.Id, JSON.stringify([pending, waiting]), function () {
+      appendMessageUnit(units, "input:" + pending.Id, JSON.stringify([pending, waiting, presentation.actionKey]), function () {
         var article = document.createElement("article"); article.className = "message user pending inbox-message";
         article.dataset.inputId = pending.Id;
         var status = document.createElement("div"); status.className = "inbox-item-status";
@@ -269,7 +270,7 @@
         article.append(status, body);
         if (!waiting) {
           var restore = document.createElement("button"); restore.type = "button"; restore.textContent = "Вставить в ввод";
-          restore.onclick = function () { if (sharedComposer) sharedComposer.append({
+          restore.onclick = function () { if (presentation.isCurrent() && sharedComposer) sharedComposer.append({
             workspaceId: field(field(chat, "project"), "workspaceId"), sessionId: field(chat, "sessionId") }, pending.Text); };
           article.appendChild(restore);
         }

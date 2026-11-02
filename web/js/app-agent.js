@@ -137,18 +137,22 @@ function enhanceActivity(root) {
   });
 }
 
-async function deleteAgentRun(items, finalMessage, workspace) {
+async function deleteAgentRun(items, finalMessage, presentation) {
   var targets = (items || []).slice();
   if (finalMessage) {
     targets.push(finalMessage);
   }
-  if (!targets.length || !window.confirm("Удалить сообщения этого запуска?")) {
+  if (!targets.length || !presentation || !presentation.isCurrent() || !window.confirm("Удалить сообщения этого запуска?")) {
     return;
   }
 
   for (var i = targets.length - 1; i >= 0; i -= 1) {
-    if (workspace) await window.RNAssistantWorkspaceChat.messageAction("delete", targets[i].message, targets[i].index);
-    else await deleteMessage(targets[i].message, targets[i].index);
+    // Navigation during an awaited deletion must never redirect the remaining commands.
+    if (!presentation.isCurrent()) {
+      log("Удаление остальных сообщений остановлено: выбран другой чат.", "warning");
+      break;
+    }
+    await presentation.invoke("messageAction", { name: "delete", message: targets[i].message, index: targets[i].index });
   }
 }
 
@@ -600,7 +604,7 @@ function agentRunId(items, finalMessage) {
   return "";
 }
 
-function renderAgentRunArticle(run) {
+function renderAgentRunArticle(run, presentation) {
   var items = run.items || [];
   var finalMessage = run.finalMessage || null;
   var timeline = collectVisibleAgentTimelineItems(items);
@@ -664,24 +668,24 @@ function renderAgentRunArticle(run) {
   if (!run.live && !run.workspace && typeof appendAgentRunResourceCards === "function") {
     appendAgentRunResourceCards(body, items, finalMessage);
   }
-  if (!run.live && !run.workspace && !run.continued && typeof appendRunChanges === "function") {
-    appendRunChanges(body, state.activeChatId, agentRunId(items, finalMessage));
+  if (!run.live && !run.workspace && !run.continued && presentation && typeof appendRunChanges === "function") {
+    appendRunChanges(body, presentation.target.sessionId, agentRunId(items, finalMessage));
   }
   node.appendChild(body);
 
   if (!run.live) {
     if (!items.length && finalMessage && typeof appendMessageFooter === "function") {
       appendMessageFooter(node, finalMessage.message, finalMessage.index, null,
-        { workspace: !!run.workspace, usage: run.usage });
+        { workspace: !!run.workspace, usage: run.usage, presentation: presentation });
     } else {
-      appendAgentRunFooter(node, items, finalMessage, !!run.workspace, run.usage);
+      appendAgentRunFooter(node, items, finalMessage, presentation, run.usage);
     }
   }
   enhanceActivity(body);
   return node;
 }
 
-function appendAgentRunFooter(node, items, finalMessage, workspace, usage) {
+function appendAgentRunFooter(node, items, finalMessage, presentation, usage) {
   var footer = document.createElement("div");
   footer.className = "message-footer";
   var footerMeta = document.createElement("div");
@@ -697,29 +701,16 @@ function appendAgentRunFooter(node, items, finalMessage, workspace, usage) {
   var actions = document.createElement("div");
   actions.className = "message-actions";
   var last = finalMessage || items[items.length - 1];
-  var historyActionsBlocked = !!currentActiveSend() || hasActiveMessageEdit() ||
-    (typeof pendingAgentApprovalActivity === "function" && !!pendingAgentApprovalActivity());
   actions.appendChild(smallIconButton(finalMessage ? "Копировать итоговый ответ" : "Копировать ход работы", "copy", function () {
     copyChatMessage(finalMessage ? messageContent(finalMessage.message) : agentRunText(items));
     log(finalMessage ? "Итоговый ответ скопирован." : "Ход работы скопирован.");
   }));
-  if (typeof appendMessageInspectorAction === "function") appendMessageInspectorAction(actions, last.message);
-  var canFork = workspace
-    ? window.RNAssistantWorkspaceChat.canMessageAction("fork", last.message, last.index)
-    : !historyActionsBlocked;
-  if (canFork) {
-    actions.appendChild(smallIconButton("Ответвить чат отсюда", "branch", function () {
-      if (workspace) window.RNAssistantWorkspaceChat.messageAction("fork", last.message, last.index);
-      else forkChatAtMessage(last.message, last.index);
-    }));
-  }
-
-  var canDelete = workspace
-    ? window.RNAssistantWorkspaceChat.canMessageAction("delete", last.message, last.index)
-    : !historyActionsBlocked;
-  if (canDelete) {
+  if (last && typeof appendMessageInspectorAction === "function") appendMessageInspectorAction(actions, last.message, presentation);
+  if (last && typeof appendMessageHistoryAction === "function")
+    appendMessageHistoryAction(actions, "Ответвить чат отсюда", "branch", "fork", last.message, last.index, presentation);
+  if (last && presentation && presentation.invoke("canMessageAction", { name: "delete", message: last.message, index: last.index })) {
     actions.appendChild(smallIconButton("Удалить сообщения запуска", "trash", function () {
-      deleteAgentRun(items, finalMessage, workspace);
+      return deleteAgentRun(items, finalMessage, presentation);
     }));
   }
 

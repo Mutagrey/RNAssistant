@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Адресная отрисовка и действия чата S2b.3 — 2026-11-02
+
+S2b.2 сохранён в `19a271ed`. Общие builders/footer теперь получают view, target,
+borrowed snapshot и captured commands; global pending full paint удалён.
+Исправлен риск отправки следующих delete-команд в другой чат при переключении
+между ответами. Проверены late history/A→B→A, stream coalescing/stable DOM,
+Office/Workspace/plugin, Inspector и changes summary через локальный mock.
+[Scope, ревью и остаток](../ui/UI_MIGRATION_PLAN.md#s2b3-адресные-builders-и-действия-ленты--2026-11-02).
+In Review; delivery/subscriptions и вспомогательные adapters ещё используют
+selected owner, несколько chat views и Windows/Office qualification не закрыты.
+
 ## Общий composer и состояние правки S2b.2 — 2026-11-02
 
 S2b.1 закоммичен в `bb53539b`. Продолжение объединяет bindings/commands и edit state

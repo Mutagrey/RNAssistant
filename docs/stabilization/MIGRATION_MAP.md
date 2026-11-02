@@ -23,6 +23,12 @@ Removal gate adapter: DOM/renderers, preferences/drafts и snapshots/subscriptio
 адресованы конкретному view; проверены независимые чаты и не осталось consumers
 глобального active selection. Не клонировать adapter для нескольких вкладок.
 
+S2b.3: shared message/run builders и footer уже получают explicit presentation
+context; global full-render flag удалён. Office snapshot factory остаётся adapter
+selected state, Workspace transport/subscriptions и preference/draft adapter —
+следующий шаг. Вспомогательные inbox/approval/media/context readers также должны
+получить view scope до нескольких Dockview conversation instances.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

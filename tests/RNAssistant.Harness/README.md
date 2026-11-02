@@ -50,6 +50,11 @@ not yet enabled in production.
 late focus, IME and disabled Send. `workspace-chat-layout` checks that refresh and
 Office/Workspace switches retain unfinished edits; `workspace-shared-draft` and
 `chat-draft-reload` retain receipt/draft persistence coverage.
+S2b.3 adds binding scope to `conversation-view` and borrowed-snapshot / async
+run-deletion navigation / delayed-history checks to `message-actions`. Existing
+`stream-render-cost` still checks coalescing and retained nodes; Chromium
+`workspace-chat-progress`, `chat-inspector`, `run-changes-layout` exercise the
+same explicit presentation context, including exact Inspector/changes addresses.
 The separate composer unknown-warning mismatch remains in the risk register.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,

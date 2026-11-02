@@ -38,12 +38,14 @@ const read = file => fs.readFileSync(path.join(__dirname, '../../web', file), 'u
       window.enhanceMarkdown = () => {};
       window.markdown = text => text;
     });
-    for (const file of ['app-utils.js', 'app-run-view-state.js', 'app-agent-model.js', 'app-agent.js', 'app-messages.js', 'app-agent-data.js', 'app-agent-activity.js'])
+    for (const file of ['app-utils.js', 'app-run-view-state.js', 'app-agent-model.js', 'app-agent.js', 'app-conversation-view.js', 'app-messages.js', 'app-agent-data.js', 'app-agent-activity.js'])
       await page.addScriptTag({content: read('js/' + file)});
     await page.evaluate(() => {
       const final = { Role: 'assistant', Id: 'final', Content: 'Готово.', RunId: 'run', RunViewState: {
         RunId: 'run', TurnId: 'run', Lifecycle: 'completed', ExecutionHealth: 'clean', Narrative: 'Готово.' } };
-      document.getElementById('output').appendChild(renderAgentRunArticle({items: [], finalMessage: {message: final, index: 0}, live: false}));
+      const view = RNAssistantConversationView.get(document.getElementById('output'));
+      view.begin({ source: 'office', sessionId: 'chat' });
+      document.getElementById('output').appendChild(renderAgentRunArticle({items: [], finalMessage: {message: final, index: 0}, live: false}, createMessagePresentation(view, {})));
     });
     await page.locator('.run-changes-summary').waitFor();
     assert.equal(await page.locator('.run-change-file:visible').count(), 3);

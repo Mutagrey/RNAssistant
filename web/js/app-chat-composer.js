@@ -18,6 +18,7 @@
     }
     function capture() {
       var scope = context(), stamp = generation;
+      scope.generation = stamp;
       scope.isCurrent = function () { context(); return !disposed && stamp === generation; };
       scope.invoke = function (name, value) {
         if (!scope.isCurrent()) return;

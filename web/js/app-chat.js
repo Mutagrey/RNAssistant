@@ -1,3 +1,16 @@
+function officeCanMessageAction(action) {
+  if (!action.message || state.chatNavigationPending || !state.activeChatId) return false;
+  if (action.name === "edit") return messageSupportsEdit(action.message, action.index, messageActivity(action.message));
+  return (action.name === "fork" || action.name === "delete") && !currentActiveSend() && !hasActiveMessageEdit() &&
+    !(typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity());
+}
+function officeMessageAction(action) {
+  if (!officeCanMessageAction(action)) return;
+  if (action.name === "fork") return forkChatAtMessage(action.message, action.index);
+  if (action.name === "edit") return startMessageEdit(action.message, action.index);
+  if (action.name === "delete") return deleteMessage(action.message, action.index);
+}
+
 async function runQuickAction(action) {
   var scope = chatComposer().capture();
   var response = await send("quickAction", { action: action });
@@ -107,6 +120,10 @@ function bindChatActions() {
   window.addEventListener("resize", resizeChatInput);
   chatComposer().register("office", {
     target: function () { return officeComposerTarget(); },
+    canMessageAction: officeCanMessageAction,
+    messageAction: officeMessageAction,
+    loadPrevious: loadPreviousChatMessages,
+    loadLatest: jumpToLatestChatMessages,
     refresh: function () { renderMessages(); renderSendControls(); },
     submit: submitChatInput,
     stop: stopActiveSend,

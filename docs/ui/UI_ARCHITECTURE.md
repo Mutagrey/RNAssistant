@@ -101,6 +101,29 @@ transcript. Workspace preference/draft adapter, общие builders и дост�
 ещё требуют explicit instance scope. Несколько независимых UI-вкладок пока не
 включены. Сохранение scratch edit между перезапусками приложения не добавлено.
 
+### S2b.3: адресная сборка ленты и команды истории
+
+Owner — Messages / ConversationView. Общие builders сообщений, групп запусков и
+Office live tail получают короткоживущий presentation context: view, точный target,
+borrowed snapshot и captured commands существующего ChatComposer. Helpers больше
+не выбирают `messageView()` / active chat при сборке этих units. Office adapter
+собирает snapshot из прежнего state; Workspace передаёт свой существующий snapshot.
+Нового read model, durable store или command registry нет.
+
+Footer один для источников; fork/edit/delete/history вызываются через captured
+commands. Inspector и changes summary получают адрес сообщения. Binding generation
+отличается от paint generation: hide/reparent сохраняет пригодность прежних actions,
+смена target, A→B→A и dispose её отменяют. Смена command generation обновляет footer
+без пересоздания тела сообщения. При последовательном удалении сообщений запуска
+смена чата останавливает оставшиеся команды с уведомлением; они не переадресуются.
+
+`state.liveFullRenderPending` удалён: pending full paint принадлежит view cache;
+новый run определяется по его ID. Coalescing, leaf-only token updates, stable DOM,
+scroll/disclosures и cap 240 сохранены. Это не завершает instance scoping:
+snapshot delivery/subscriptions, preference/draft adapter и вспомогательные
+inbox/approval/context/media readers ещё связаны с текущим owner. До переключения
+этих consumers production остаётся с одним conversation view.
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

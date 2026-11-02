@@ -5,13 +5,13 @@
   function emptyCache() {
     return { units: Object.create(null), liveBase: null, liveBaseSignature: null,
       liveSuppressed: false, pastActivities: Object.create(null), pastSteps: Object.create(null),
-      signature: null, liveRunId: null };
+      signature: null, liveRunId: null, fullRenderPending: false };
   }
   function get(box, options) {
     if (views.has(box)) return views.get(box);
     options = options || {};
-    var button = options.button, key = null, generation = 0, visible = true, dirty = false, disposed = false;
-    var frames = Object.create(null), positions = new Map(), listeners = [], bound = false;
+    var button = options.button, key = null, target = null, generation = 0, visible = true, dirty = false, disposed = false;
+    var frames = Object.create(null), positions = new Map(), listeners = [], bound = false, bindingGeneration = 0;
     var following = true, position = 0, interaction = 0, pendingPosition = null, resizeObserver, contentObserver;
     var view = { cache: emptyCache() };
     function cancelFrames() {
@@ -97,12 +97,13 @@
       if (options.clear) options.clear();
       view.cache = emptyCache(); box.textContent = "";
     }
-    function begin(target, renderOptions) {
+    function begin(address, renderOptions) {
       if (disposed) throw new Error("Conversation view is disposed");
-      var next = JSON.stringify(target), changed = key !== next, saved;
+      var next = JSON.stringify(address), changed = key !== next, saved;
       renderOptions = renderOptions || {};
       if (changed) {
-        remember(); invalidate(); key = next; saved = positions.get(key); pendingPosition = saved || null; reset();
+        remember(); invalidate(); ++bindingGeneration; key = next; target = Object.freeze(Object.assign({}, address));
+        saved = positions.get(key); pendingPosition = saved || null; reset();
         following = saved ? saved.following : true; position = box.scrollTop; ++interaction;
       }
       var viewport = pendingPosition ? pendingPosition.viewport : changed ? null : capture();
@@ -176,6 +177,10 @@
       });
     }
     Object.assign(view, { begin: begin, reset: reset, suspend: suspend, schedule: schedule,
+      scope: function () {
+        var stamp = bindingGeneration;
+        return { target: target, generation: stamp, isCurrent: function () { return !disposed && stamp === bindingGeneration; } };
+      },
       matches: function (target) { return !disposed && key === JSON.stringify(target); },
       canRender: function () { if (disposed) return false; if (!visible) dirty = true; return visible; },
       setVisible: setVisible, bind: bind, capture: capture, restore: restore, shouldFollow: shouldFollow,

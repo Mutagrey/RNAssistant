@@ -6,6 +6,7 @@ const vm = require("node:vm");
 class Element {
   constructor() { this.children = []; this.parentNode = null; this.className = ""; }
   get childNodes() { return this.children; }
+  addEventListener(name, handler) { (this.listeners || (this.listeners = {}))[name] = handler; }
   get classList() { return {
     contains: name => this.className.split(" ").includes(name),
     add: name => { if (!this.className.split(" ").includes(name)) this.className += " " + name; }
@@ -41,18 +42,20 @@ const ctx = vm.createContext({
   copyText: () => {}, log: () => {}
 });
 ctx.window = ctx;
-for (const name of ["app-chat-composer.js", "app-chat-edit.js", "app-conversation-view.js", "app-messages.js", "app-agent.js"]) {
+for (const name of ["app-chat-composer.js", "app-chat-edit.js", "app-conversation-view.js", "app-messages.js", "app-agent.js", "app-chat.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), ctx);
 }
-ctx.chatComposer().register("office", { target: () => ctx.officeComposerTarget() });
+ctx.chatComposer().register("office", { target: () => ctx.officeComposerTarget(), canMessageAction: ctx.officeCanMessageAction, messageAction: ctx.officeMessageAction });
+ctx.messageView().begin(ctx.officeConversationTarget());
+const presentation = () => ctx.officeMessagePresentation(ctx.messageView(), ctx.chatComposer().capture());
 ctx.messageUsageText = () => "";
 ctx.messageUnitSignature = m => JSON.stringify(m);
-ctx.renderMessageArticle = (message, index) => {
+ctx.renderMessageArticle = (message, index, options) => {
   renders++;
   const node = new Element(); node.appendChild(new Element());
-  ctx.appendMessageFooter(node, message, index, null); return node;
+  ctx.appendMessageFooter(node, message, index, null, options); return node;
 };
-const refresh = () => ctx.reconcileMessageUnits(box, ctx.buildMessageUnits());
+const refresh = () => ctx.reconcileMessageUnits(box, ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature()));
 const titles = node => {
   const footer = node.children.find(child => child.classList.contains("message-footer"));
   const actions = footer.children.find(child => child.classList.contains("message-actions"));
@@ -85,12 +88,25 @@ assert.ok(!titles(article).includes("Изменить сообщение"));
 ctx.state.bridgeUnavailable = false; refresh();
 assert.ok(titles(article).includes("Изменить сообщение"));
 assert.equal(box.firstChild, article); assert.equal(article.firstChild, body); assert.equal(renders, 1);
+// Builders use only their borrowed snapshot and their own view cache.
+const originalMessages = ctx.state.messages, firstPresentation = presentation();
+const secondView = ctx.RNAssistantConversationView.get(new Element());
+secondView.begin({ source: "office", sessionId: "second" });
+const secondPresentation = ctx.createMessagePresentation(secondView, {
+  messages: [{ Id: "second-message", Role: "user", Content: "Second" }], start: 0, total: 1,
+  live: { activities: [], runId: "", content: "", reasoning: "" }
+});
+ctx.state.messages = [{ Id: "unrelated-selection", Role: "user" }];
+assert.equal(ctx.buildMessageUnits(firstPresentation)[0].key, "message:user");
+assert.equal(ctx.buildMessageUnits(secondPresentation)[0].key, "message:second-message");
+assert.equal(box.firstChild, article, "building another view does not touch the mounted transcript");
+ctx.state.messages = originalMessages;
 // The same invalidation restores the grouped agent-run footer.
 const final = { message: { Id: "answer", Role: "assistant", Content: "Answer" }, index: 1 };
 const run = { items: [{ message: final.message, index: 0 }], finalMessage: final, nextIndex: 1 };
 ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => run;
 ctx.agentRunUnitKey = () => "run:test"; ctx.agentRunUnitSignature = () => "unchanged";
-ctx.renderAgentRunArticle = () => { const node = new Element(); ctx.appendAgentRunFooter(node, run.items, final); return node; };
+ctx.renderAgentRunArticle = (_, scope) => { const node = new Element(); ctx.appendAgentRunFooter(node, run.items, final, scope); return node; };
 sending = true; refresh(); const grouped = box.firstChild;
 assert.ok(!titles(grouped).includes("Ответвить чат отсюда"));
 sending = false; refresh();
@@ -108,19 +124,51 @@ let snapshot = { items: [persisted], finalMessage: null, nextIndex: 1 };
 ctx.canCollectAgentRunAt = () => true; ctx.collectAgentRun = () => snapshot;
 ctx.state.liveAgentRun = [activity("a", "running"), activity("b", "running")];
 ctx.renderAgentRunArticle = value => { ctx.projected = value; return new Element(); };
-let units = ctx.buildMessageUnits();
+let units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 1); assert.equal(units[0].key, "live:agent-run");
 units[0].render();
 assert.equal(ctx.projected.items.length, 2);
 assert.equal(ctx.projected.items[0].activity.Status, "completed", "persisted result wins over stale live progress");
 assert.equal(ctx.projected.items[0].message, persisted.message, "resource provenance is retained");
 ctx.agentRunUnitSignature = () => { throw new Error("stream must not serialize persisted history"); };
-ctx.buildLiveMessageUnits();
+ctx.buildLiveMessageUnits(presentation());
 ctx.agentRunUnitSignature = () => "snapshot";
 snapshot = { items: [persisted], finalMessage: { message: { RunId: "r", Id: "final" }, index: 1 }, nextIndex: 1 };
-units = ctx.buildMessageUnits();
+units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 1); assert.notEqual(units[0].key, "live:agent-run", "terminal snapshot removes live replay");
 ctx.state.liveAgentRun = [Object.assign(activity("a", "running"), { RunId: "other" })];
-units = ctx.buildMessageUnits();
+units = ctx.buildMessageUnits(presentation(), ctx.messageActionsSignature());
 assert.equal(units.length, 2, "distinct runtime runs are not merged by matching prose or call names");
 console.log("PASS run overlap: persisted/live replay merges once by runtime identity and yields to the final snapshot");
+
+(async () => {
+  sending = false; approval = false;
+  ctx.state.activeChatId = "source";
+  ctx.messageView().begin(ctx.officeConversationTarget());
+  const removed = [];
+  let finishDelete, historyReads = 0;
+  ctx.deleteMessage = message => {
+    removed.push([ctx.state.activeChatId, message.Id]);
+    return new Promise(resolve => { finishDelete = resolve; });
+  };
+  ctx.confirm = () => true;
+  ctx.chatComposer().register("office", { target: () => ctx.officeComposerTarget(),
+    canMessageAction: ctx.officeCanMessageAction, messageAction: ctx.officeMessageAction,
+    loadPrevious: () => historyReads++ });
+  const source = presentation();
+  const deleting = ctx.deleteAgentRun([{ message: { Id: "first" }, index: 0 }],
+    { message: { Id: "last" }, index: 1 }, source);
+  assert.deepEqual(removed, [["source", "last"]]);
+  const history = ctx.createChatHistoryButton("previous", () => source.invoke("loadPrevious"));
+  history.listeners.click({});
+  ctx.state.activeChatId = "other"; ctx.chatComposer().sync();
+  ctx.messageView().begin(ctx.officeConversationTarget());
+  finishDelete(); await deleting; await Promise.resolve();
+  assert.deepEqual(removed, [["source", "last"]], "an awaited run deletion never redirects remaining commands to the new chat");
+  assert.equal(historyReads, 0, "deferred history read rejects a changed target before requesting data");
+  ctx.state.activeChatId = "source"; ctx.chatComposer().sync();
+  ctx.messageView().begin(ctx.officeConversationTarget());
+  source.invoke("loadPrevious");
+  assert.equal(historyReads, 0, "A→B→A cannot revive old message handlers");
+  console.log("PASS addressed actions: async deletion, delayed history and A→B→A stay bound to their original view");
+})().catch(error => { console.error(error); process.exitCode = 1; });

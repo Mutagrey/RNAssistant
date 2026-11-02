@@ -450,6 +450,36 @@ Dock tab вместо скрытого прежнего header. Откат — d
 получать конкретный view вместо global selection. Затем — оставшиеся общие функции
 вложений/контекста и несколько разных chat targets в Dockview. S2 целиком не закрыт.
 
+### S2b.3: адресные builders и действия ленты — 2026-11-02
+
+По «Коммит и далее» S2b.2 сохранён в `19a271ed`; продолжен пункт 1 S2.
+Общие saved-message/run builders, live projection и footer получают явные данные
+и commands представления. Удалены переключение Office/Workspace внутри footer,
+неявный выбор view в live builders и global full-render flag. Existing service
+adapters сохраняют transport/receipts и правила доступности действий.
+
+Исправлен риск переадресации последовательного удаления: между awaited delete
+ответами пользователь мог выбрать другой чат, а следующая команда читала его ID.
+Теперь captured binding проверяется перед каждой командой, включая A→B→A;
+оставшаяся последовательность останавливается с уведомлением. Отложенная кнопка
+истории также проверяет binding до начала чтения.
+
+Проверки: `conversation-view`, `message-actions` (два borrowed snapshots,
+async delete/navigation, deferred history), `live-run-projection`,
+`stream-render-cost`; Chromium `workspace-chat-layout`, `workspace-chat-progress`,
+`chat-inspector`, `run-changes-layout`. Сохранены 1000 attached history nodes в
+изолированном render-cost fixture и один кадр на burst из 100 событий; это проверка
+прежних инвариантов, не заявление об общем ускорении или новом лимите истории.
+
+Статус **In Review**. В прежнем `/preview/web/?scenario=ready` проверить смену чатов
+и возврат, edit/fork/историю, «Открыть ход работы»; Dock move/hide не должны отключать
+кнопки уже показанных сообщений. Компоновка и стили не менялись. Mock/browser checks
+не закрывают Windows/Office evidence. Откат — diff этого presentation-среза.
+
+Далее: адресовать snapshot delivery/subscriptions и preference/draft adapter,
+затем inbox/approval/context/attachment consumers в общей границе; только после
+этого независимые exact targets в Dockview. S2 и несколько chat tabs не завершены.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

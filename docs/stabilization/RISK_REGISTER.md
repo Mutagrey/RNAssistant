@@ -1,5 +1,14 @@
 # Stabilization risk register
 
+## Позднее уведомление deleteMessage — 2026-11-02
+
+Owner: Web Chat delivery, остаток S2 instance scoping. В code review обнаружено:
+`app-chat-session.js:deleteMessage` сохраняет target запроса, но его catch вызывает
+общий `showSendError` без проверки выбранного чата. Поздний отказ после A→B может
+показать ошибку в B. Отдельно не воспроизводилось; исправить при адресации delivery/
+error state. S2b.3 блокирует переадресацию последующих команд удаления, но не закрывает
+этот соседний путь уведомления и не заявляет полную изоляцию всех UI-состояний.
+
 ## Request view S3a: пределы измерений — 2026-11-02
 
 Owner: Web diagnostics presentation / shared viewers. Ограничены строки оглавления
