@@ -73,11 +73,11 @@
   --navigation-content-padding: var(--space-2) var(--space-2) var(--space-4);
   --nav-width: var(--navigation-width-default);
   --tree-row-height: 32px;
-  --tree-gap: 7px;
-  --tree-parent-inset: 5px;
+  --tree-gap: 5px;
+  --tree-parent-inset: 4px;
   --tree-icon: 15px;
   --tree-parent-icon: 17px;
-  --tree-expander: 12px;
+  --tree-expander: 10px;
   /* Approved Demo shell proportions; one canonical production token source. */
   --shell-top-height: 40px;
   --shell-rail-width: 44px;

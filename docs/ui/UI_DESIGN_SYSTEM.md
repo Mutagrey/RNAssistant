@@ -133,10 +133,13 @@ component или копия SVG не создавались.
   внутренними отступами, размерами строк/иконок Tree и геометрией Dockview.
   CSS и JS читают эти значения; числа из `data-default-left`/`data-min-left`
   шести Shell layouts удалены. `data-navigation` обозначает только роль.
-- `app-product-components.css` владеет строками, направляющими вложенности,
+- `app-product-components.css` владеет строками, отступами вложенности,
   selected/hover/focus и действиями NavigationTree для всех consumers.
-  Слоты действий сохраняют ширину и высоту строки при hover/focus; клавиатура и
-  touch сохраняют доступ к ним. Высота строки остаётся 32 px при обычном pointer.
+  Вложенные списки не рисуют вертикальную линию и не добавляют внутренний padding.
+  Действия на desktop появляются поверх правого края, не резервируя ширину у
+  названия; на touch занимают место постоянно. Длинное название плавно проходит
+  под наведением или клавиатурным фокусом до конца доступной области; reduced motion
+  сохраняет обычное усечение и полную подсказку. Высота строки — 32 px при pointer.
   Office/Workspace используют одну chat icon. Plugin overrides высоты/шрифта удалены.
 - `app-product-navigation.css` оформляет общий navigation splitter;
   `app-dock-workspace.css` связывает tokens с Dockview и нормализует vendor `rem`

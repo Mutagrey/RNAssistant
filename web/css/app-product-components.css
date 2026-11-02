@@ -118,9 +118,9 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .rna-action-menu-check input { flex: 0 0 auto; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .navigation-tree { flex: 1; min-height: 0; overflow: auto; padding: 0; scrollbar-width: thin; font-size: var(--tree-text); font-weight: 400; line-height: 1.5; }
 .navigation-tree-list { list-style: none; margin: 0; padding: 0; }
-.navigation-tree-list .navigation-tree-list { margin-left: var(--space-3); padding-left: var(--space-1); border-left: 1px solid var(--line); }
+.navigation-tree-list .navigation-tree-list { margin-left: var(--space-3); }
 .navigation-tree-item { list-style: none; margin: 0; padding: 0; outline: none; }
-.navigation-tree-item[aria-expanded] { margin-bottom: var(--space-3); }
+.navigation-tree-item[aria-expanded] { margin-bottom: var(--space-2); }
 .navigation-tree-row, .rna-nav-button { box-sizing: border-box; display: flex; align-items: center; gap: var(--tree-gap); min-height: var(--tree-row-height); padding: var(--tree-parent-inset) var(--space-2); border-radius: var(--shell-radius); position: relative; color: var(--ink-muted); }
 .navigation-tree-item[aria-expanded] > .navigation-tree-row { padding: var(--tree-gap) var(--tree-parent-inset); font-weight: 500; color: var(--ink); }
 .rna-nav-button { justify-content: flex-start; width: 100%; margin-top: var(--space-1); border: 0; background: transparent; font-size: var(--tree-text); font-weight: 400; line-height: 1.5; text-align: left; }
@@ -186,11 +186,15 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .office-app-mark.is-outlook { --office-page: #0078d4; --office-tile: #0364b8; }
 .navigation-tree-badge { flex: none; color: var(--ink-muted); font-size: 10px; }
 .navigation-tree-badge.is-warning, .navigation-tree-badge.is-critical { color: var(--warning); }
-.navigation-tree .navigation-tree-label { flex: 1; min-width: 0; min-height: 0; display: block; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; border-radius: 0; background: none; font: inherit; color: inherit; }
+.navigation-tree .navigation-tree-label { flex: 1; min-width: 0; min-height: 0; display: block; padding: 0; text-align: left; white-space: nowrap; overflow: hidden; border: 0; border-radius: 0; background: none; font: inherit; color: inherit; }
+.navigation-tree .navigation-tree-label-text { display: block; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.navigation-tree .navigation-tree-label.is-scrolling .navigation-tree-label-text { width: max-content; overflow: visible; text-overflow: clip; will-change: transform; }
 .navigation-tree-item + .navigation-tree-item > .navigation-tree-row.is-group { margin-top: 3px; }
 .navigation-tree-row.is-group .navigation-tree-label { color: var(--ink-muted); font-size: 11px; }
-.navigation-tree .tree-actions { display: flex; visibility: hidden; pointer-events: none; align-items: center; flex-shrink: 0; gap: 0; margin-block: -4px; }
-.navigation-tree-row:hover > .tree-actions, .navigation-tree-row.is-focused > .tree-actions { visibility: visible; pointer-events: auto; }
+.navigation-tree .tree-trailing { position: relative; display: flex; flex: none; align-items: center; gap: var(--tree-gap); }
+.navigation-tree .tree-actions { position: absolute; z-index: 1; top: 50%; right: 100%; display: flex; visibility: hidden; pointer-events: none; align-items: center; gap: 0; transform: translateY(-50%); background: var(--surface-hover); }
+.navigation-tree-row:hover .tree-actions, .navigation-tree-row.is-focused .tree-actions { visibility: visible; pointer-events: auto; }
+.navigation-tree-row.selected .tree-actions { background: var(--surface-selected); }
 .navigation-tree .tree-action { box-sizing: border-box; display: grid; place-items: center; width: 24px; min-width: 24px; height: 26px; min-height: 0; padding: 5px; border: 0; border-radius: 6px; background: transparent; color: var(--ink-muted); }
 .navigation-tree .tree-action:hover { color: var(--ink); background: var(--surface-selected); }
 .navigation-tree .tree-action.is-danger:hover { color: var(--danger); }
@@ -209,7 +213,9 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 }
 @keyframes rna-surface-enter { from { opacity: 0; } to { opacity: 1; } }
 @keyframes tree-spin { to { transform: rotate(360deg); } }
-@media (hover: none) { .navigation-tree .tree-actions { visibility: visible; pointer-events: auto; } }
+@media (hover: none) {
+  .navigation-tree .tree-actions { position: static; transform: none; visibility: visible; pointer-events: auto; margin-block: -4px; background: transparent; }
+}
 @media (pointer: coarse) {
   .navigation-tree-row, [data-density="compact"] .navigation-tree-row { min-height: 40px; }
   .navigation-tree .tree-actions { margin-block: -5px; }

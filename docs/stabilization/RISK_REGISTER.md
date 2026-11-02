@@ -79,8 +79,9 @@ views — отдельное Shell evidence, не скрытое обещани�
 Owner: Web UI validation. В текущем рабочем дереве три более широкие проверки
 остаются красными: `chat-transcript-layout` не находит `chatComposer` в fixture,
 `workspace-chat-layout` не получает прокручиваемую Office-ленту перед сменой
-источника, `shell-navigation` ждёт Demo `.dv-tab` до timeout. Причинность этих
-падений не установлена. Адресные `conversation-view`,
+источника. `shell-navigation` в повторных запусках либо ждёт Demo `.dv-tab`, либо
+видит preview без Shell CSS (`nav` 1220 px вместо 224). Причинность этих падений
+не установлена. Адресные `conversation-view`,
 `conversation-scroll-interaction`, `shared-navigation-tree`, `chat-tree-layout`
 проходят; реальные Windows/Office сценарии остаются открытыми.
 

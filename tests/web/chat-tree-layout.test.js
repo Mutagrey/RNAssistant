@@ -58,6 +58,19 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const tree = page.getByRole("tree", { name: "Документы и чаты" });
     const current = tree.getByRole("treeitem", { name: "Обзор" });
     const closedDocument = tree.getByRole("treeitem", { name: /Бюджет.docx/ });
+    const geometry = await page.evaluate(() => {
+      const parent = document.querySelector('#chatSessionList .navigation-tree-item[aria-expanded="true"]');
+      const row = parent.querySelector(':scope > .navigation-tree-row');
+      const children = parent.querySelector(':scope > .navigation-tree-list');
+      const child = children.querySelector(':scope > .navigation-tree-item > .navigation-tree-row');
+      return { parentLabel: row.querySelector('.navigation-tree-label').getBoundingClientRect().left,
+        childLabel: child.querySelector('.navigation-tree-label').getBoundingClientRect().left,
+        border: getComputedStyle(children).borderLeftWidth, padding: getComputedStyle(children).paddingLeft,
+        height: child.getBoundingClientRect().height, overflow: children.scrollWidth > children.clientWidth + 1 };
+    });
+    assert.ok(Math.abs(geometry.parentLabel-geometry.childLabel)<=2,'chat and document labels align without wasted indent');
+    assert.deepEqual([geometry.border,geometry.padding,geometry.height,geometry.overflow],['0px','0px',32,false],
+      'chat tree has no guide line, extra inset or horizontal overflow');
     assert.equal(await tree.getByRole("treeitem").count(), 4, "closed document hides its chat");
     assert.equal(await current.getAttribute("tabindex"), "0");
     await current.focus();
@@ -103,6 +116,11 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     await page.evaluate(() => { state.chats[0].casMissingBlobCount = 1; renderChatSessionList(state.chats); });
     assert.match(await current.locator(".navigation-tree-badge").getAttribute("title"), /Отсутствуют CAS blobs/,
       "storage issues remain available on the warning badge");
+    assert.equal(await current.evaluate(node => {
+      const row=node.querySelector(':scope > .navigation-tree-row');
+      return row.querySelector('.tree-actions').getBoundingClientRect().right <=
+        row.querySelector('.navigation-tree-badge').getBoundingClientRect().left+1;
+    }),true,'overlay actions leave the warning badge visible');
     await page.evaluate(() => {
       state.chats[0].RunViewState = { lifecycle: "running" };
       state.chatNavigationTargetId = "first"; state.chatNavigationPending = true;

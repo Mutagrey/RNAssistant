@@ -11,18 +11,20 @@ const {spawn}=require('node:child_process'),{chromium}=require('playwright');
   const page=await browser.newPage({viewport:{width:1280,height:900}}),errors=[];page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));
   await page.goto(address+'preview/web/?scenario=ready');await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
   assert.equal(await page.evaluate(()=>!!document.activeElement.closest('#chatSessionList')),false,'initial selection must not steal focus into the tree');
-  // Compare the actual frozen Demo geometry, independent of production tokens and content.
+  // Compare Shell chrome with Demo; tree indentation follows the newer production review.
   const demo=await browser.newPage({viewport:{width:1280,height:900}});
   await demo.goto(address+'index.html');await demo.locator('.dv-tab').first().waitFor();
   const sample=(p,selectors)=>p.evaluate(selectors=>Object.fromEntries(Object.entries(selectors).map(([key,selector])=>{
    const n=document.querySelector(selector),s=getComputedStyle(n),r=n.getBoundingClientRect();
-   return [key,{width:r.width,height:r.height,padding:s.padding,marginLeft:s.marginLeft,lineHeight:s.lineHeight,gap:s.gap}];
+   return [key,{width:r.width,height:r.height,padding:s.padding,marginLeft:s.marginLeft,lineHeight:s.lineHeight,gap:s.gap,borderLeftWidth:s.borderLeftWidth}];
   })),selectors);
   const expected=await sample(demo,{nav:'.navigation',split:'.navigation-resize',dock:'.workspace-region',group:'.dv-groupview',tab:'.dv-tab',actions:'.group-actions',parent:'.tree-group > summary',child:'.nav-row',guide:'.tree-children'});
   const actual=await sample(page,{nav:'#chatLayout > .global-nav',split:'#chatLayout > .global-nav + .splitter',dock:'#chatDockHost',group:'.dv-groupview',tab:'.dv-tab',actions:'.dock-group-actions',parent:'#chatSessionList .navigation-tree-row',child:'#chatSessionList [aria-selected=true] > .navigation-tree-row',guide:'#chatSessionList .navigation-tree-list .navigation-tree-list'});
   for(const key of ['nav','split','dock','group','actions']) for(const field of ['width','height','padding']) assert.equal(actual[key][field],expected[key][field],key+' '+field+' matches Demo');
-  for(const key of ['tab','parent','child']) for(const field of ['height','padding','lineHeight']) assert.equal(actual[key][field],expected[key][field],key+' '+field+' matches Demo');
-  assert.equal(actual.guide.marginLeft,expected.guide.marginLeft);assert.equal(actual.guide.padding,expected.guide.padding);
+  for(const key of ['tab','child']) for(const field of ['height','padding','lineHeight']) assert.equal(actual[key][field],expected[key][field],key+' '+field+' matches Demo');
+  for(const field of ['height','lineHeight']) assert.equal(actual.parent[field],expected.parent[field],'parent '+field+' matches Demo');
+  assert.equal(actual.guide.marginLeft,expected.guide.marginLeft);
+  assert.deepEqual([actual.guide.padding,actual.guide.borderLeftWidth],['0px','0px'],'production tree has no extended guide or extra inset');
   await page.evaluate(()=>{window.initialFontSize=document.documentElement.style.fontSize;document.documentElement.style.fontSize='18px';});
   assert.equal(await page.locator('.dv-tab').first().evaluate(n=>getComputedStyle(n).padding),expected.tab.padding,'chat font scale does not change Dockview spacing');
   await page.evaluate(()=>{document.documentElement.style.fontSize=window.initialFontSize;});

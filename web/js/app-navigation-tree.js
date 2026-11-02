@@ -23,7 +23,7 @@
     var focused = root.contains(document.activeElement) && document.activeElement.closest('[role="treeitem"]');
     var focusKey = options.focusKey || (focused && focused.dataset.treeKey);
     var scroll = root.scrollTop;
-    if (old) old.events.abort();
+    if (old) { old.events.abort(); old.stopMarquee(); }
     else if (savedPosition) {
       focusKey = options.focusKey || savedPosition.focusKey;
       scroll = savedPosition.scroll;
@@ -35,6 +35,47 @@
     var record = { root: root, nodes: new Map(), rows: new Map(), events: new AbortController(), options: options };
     var selected = null;
     var prefix = root.id || "navigation-tree-" + (++sequence);
+    var marquee = null, hoveredRow = null;
+
+    function stopMarquee() {
+      if (!marquee) return;
+      window.clearTimeout(marquee.timer);
+      if (marquee.animation) marquee.animation.cancel();
+      marquee.label.classList.remove("is-scrolling");
+      marquee.label.title = marquee.tooltip;
+      marquee = null;
+    }
+    record.stopMarquee = stopMarquee;
+
+    function startMarquee(row) {
+      if (!row || window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var label = row.querySelector(".navigation-tree-label"), copy = label && label.firstElementChild;
+      if (!copy || !copy.animate) return;
+      var actions = row.querySelector(".tree-actions"), labelRect = label.getBoundingClientRect();
+      var visibleWidth = actions && getComputedStyle(actions).position === "absolute"
+        ? Math.max(1, Math.min(label.clientWidth, actions.getBoundingClientRect().left - labelRect.left - 4)) : label.clientWidth;
+      if (copy.scrollWidth <= visibleWidth + 1) return;
+      var current = marquee = { row: row, label: label, copy: copy, tooltip: label.title, timer: null, animation: null };
+      current.timer = window.setTimeout(function () {
+        if (marquee !== current || mounts.get(root) !== record || !label.isConnected) return;
+        label.classList.add("is-scrolling");
+        var distance = Math.ceil(copy.getBoundingClientRect().width - visibleWidth);
+        if (distance <= 1) { stopMarquee(); return; }
+        label.title = "";
+        current.animation = copy.animate([
+          { transform: "translateX(0)" }, { transform: "translateX(-" + distance + "px)" }
+        ], { duration: Math.max(900, Math.min(6500, distance * 20)), easing: "linear", fill: "forwards" });
+      }, 450);
+    }
+    function refreshMarquee() {
+      var active = document.activeElement;
+      var focused = active && active.matches && active.matches(":focus-visible") && active.closest('[role="treeitem"]');
+      var row = hoveredRow && root.contains(hoveredRow) ? hoveredRow :
+        focused && root.contains(focused) ? focused.firstElementChild : null;
+      if (marquee && marquee.row === row) return;
+      stopMarquee();
+      if (row) startMarquee(row);
+    }
 
     function build(items, depth, parentKey) {
       var list = element("ul", "navigation-tree-list");
@@ -75,7 +116,7 @@
           icon.innerHTML = node.iconHtml;
           row.appendChild(icon);
         }
-        var label = element("button", "navigation-tree-label" + (node.labelClassName ? " " + node.labelClassName : ""), node.title);
+        var label = element("button", "navigation-tree-label" + (node.labelClassName ? " " + node.labelClassName : ""));
         label.type = "button";
         if (node.labelId) label.id = node.labelId;
         label.tabIndex = -1;
@@ -85,12 +126,18 @@
         if (node.view) label.dataset.dtView = node.view;
         if (node.selected) label.setAttribute("aria-current", "page");
         label.title = node.tooltip || node.title;
+        label.appendChild(element("span", "navigation-tree-label-text", node.title));
         row.appendChild(label);
+        var trailing = null;
+        function appendTrailing(part) {
+          if (!trailing) trailing = element("span", "tree-trailing");
+          trailing.appendChild(part);
+        }
         if (node.badge) {
           var badge = element("span", "navigation-tree-badge" + (node.badgeKind ? " is-" + node.badgeKind : ""), node.badge);
           badge.title = node.badgeTitle || node.badge;
           badge.setAttribute("aria-label", badge.title);
-          row.appendChild(badge);
+          appendTrailing(badge);
         }
         if (node.status) {
           var status = element("span", "tree-status" + (node.status === "running" ? " tree-run" : node.status === "waiting" || node.status === "unknown" ? " tree-attention" : node.status === "unread" ? " tree-unread" : ""));
@@ -98,7 +145,7 @@
           var statusLabel = node.statusLabel || ({ running: "Запрос выполняется", waiting: "Требуется ответ", unread: "Новый ответ" }[node.status] || node.status);
           status.setAttribute("aria-label", statusLabel);
           status.title = statusLabel;
-          row.appendChild(status);
+          appendTrailing(status);
         }
         if (node.actions && node.actions.length) {
           var actions = element("span", "tree-actions");
@@ -114,8 +161,9 @@
             button.innerHTML = action.iconHtml || "";
             actions.appendChild(button);
           });
-          row.appendChild(actions);
+          appendTrailing(actions);
         }
+        if (trailing) row.appendChild(trailing);
         item.appendChild(row);
         record.rows.set(node.key, item);
         if (node.selected) selected = item;
@@ -195,9 +243,24 @@
     on("focusin", function (event) {
       var item = event.target.closest('[role="treeitem"]');
       if (item && root.contains(item)) setFocus(item, false);
+      refreshMarquee();
     });
     on("focusout", function () {
-      queueMicrotask(function () { if (!root.contains(document.activeElement)) root.querySelectorAll(".is-focused").forEach(function (row) { row.classList.remove("is-focused"); }); });
+      queueMicrotask(function () {
+        if (!root.contains(document.activeElement)) root.querySelectorAll(".is-focused").forEach(function (row) { row.classList.remove("is-focused"); });
+        refreshMarquee();
+      });
+    });
+    on("pointerover", function (event) {
+      if (event.pointerType === "touch") return;
+      var label = event.target.closest(".navigation-tree-label"), row = label && label.parentNode;
+      if (!row || !root.contains(row)) return;
+      hoveredRow = row; refreshMarquee();
+    });
+    on("pointerout", function (event) {
+      var label = event.target.closest(".navigation-tree-label"), row = label && label.parentNode;
+      if (!row || row !== hoveredRow || label.contains(event.relatedTarget)) return;
+      hoveredRow = null; refreshMarquee();
     });
     var search = "", searchAt = 0;
     on("keydown", function (event) {
@@ -243,6 +306,7 @@
     var focused = root.contains(document.activeElement) && document.activeElement.closest('[role="treeitem"]');
     if (positionKey) positions[positionKey] = { focusKey: focused && focused.dataset.treeKey, scroll: root.scrollTop };
     record.events.abort();
+    record.stopMarquee();
     mounts.delete(root);
   }
 

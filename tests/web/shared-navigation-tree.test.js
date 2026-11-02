@@ -37,7 +37,7 @@ const root=path.resolve(__dirname,'../..');
   assert.deepEqual(await standalone.evaluate(()=>[calls.cancel,calls.select]),[1,1],'dispose releases component callbacks');
   await standalone.evaluate(()=>{
    const root=document.createElement('div');root.id='stableTree';root.style.cssText='width:240px;height:96px;overflow:auto';document.body.appendChild(root);
-   window.stableNodes=Array.from({length:20},(_,i)=>({key:'row-'+i,kind:'chat',title:'Чат с длинным названием '+i,
+   window.stableNodes=Array.from({length:20},(_,i)=>({key:'row-'+i,kind:'chat',title:'Чат с длинным названием, которое не помещается в боковой панели '+i,
     selected:i===0,actions:[{title:'Изменить',iconHtml:RNAssistantIcons.render('edit')},{title:'Удалить',iconHtml:RNAssistantIcons.render('trash')}]}));
    RNAssistantNavigationTree.render(root,stableNodes);
   });
@@ -50,6 +50,26 @@ const root=path.resolve(__dirname,'../..');
   await standalone.locator('#stableTree [data-tree-key="row-0"]').hover();
   assert.deepEqual(await dimensions(),idleDimensions,'hover keeps tree row and label geometry stable');
   assert.equal(await standalone.locator('#stableTree .tree-actions').first().evaluate(n=>getComputedStyle(n).visibility),'visible');
+  const stableLabel=standalone.locator('#stableTree [data-tree-key="row-0"] .navigation-tree-label');
+  assert.equal(await stableLabel.evaluate(n=>n.classList.contains('is-scrolling')),false,'reduced motion keeps the static ellipsis and full tooltip');
+  await standalone.mouse.move(500,400);await standalone.emulateMedia({reducedMotion:'no-preference'});
+  await stableLabel.hover();
+  await standalone.waitForFunction(()=>document.querySelector('#stableTree [data-tree-key="row-0"] .navigation-tree-label')?.classList.contains('is-scrolling'));
+  await stableLabel.evaluate(n=>n.firstElementChild.getAnimations()[0].finished);
+  assert.equal(await stableLabel.evaluate(n=>n.firstElementChild.getBoundingClientRect().right <= n.parentNode.querySelector('.tree-actions').getBoundingClientRect().left-3),true,
+   'hover scroll reveals the title ending before overlay actions');
+  assert.deepEqual(await dimensions(),idleDimensions,'marquee does not resize the tree row');
+  await standalone.mouse.move(500,400);
+  assert.equal(await stableLabel.evaluate(n=>!n.classList.contains('is-scrolling')&&n.title.includes('Чат с длинным названием')),true,
+   'leaving restores the beginning and full tooltip');
+  await standalone.keyboard.press('Tab');
+  await standalone.locator('#stableTree [data-tree-key="row-0"]').focus();
+  await standalone.waitForFunction(()=>document.querySelector('#stableTree [data-tree-key="row-0"] .navigation-tree-label')?.classList.contains('is-scrolling'));
+  await standalone.locator('#actions').focus();
+  assert.equal(await stableLabel.evaluate(n=>n.classList.contains('is-scrolling')),false,'keyboard focus starts and releases marquee');
+  await standalone.emulateMedia({reducedMotion:'reduce'});
+  assert.deepEqual(await standalone.locator('#tree .navigation-tree-list .navigation-tree-list').first().evaluate(n=>{
+   const s=getComputedStyle(n);return[s.borderLeftWidth,s.paddingLeft];}),['0px','0px'],'shared nested rows have no guide line or extra inset');
   await standalone.evaluate(()=>{const root=document.getElementById('stableTree');root.scrollTop=160;RNAssistantNavigationTree.render(root,stableNodes);});
   await standalone.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
   assert.equal(await standalone.locator('#stableTree').evaluate(n=>n.scrollTop),160,'passive render does not jump back to selected row');
@@ -86,6 +106,8 @@ const root=path.resolve(__dirname,'../..');
    await product.locator(section==='instructions'?'#libraryRootTab':'.rail-button[data-tab="'+section+'"]').click();
    await product.waitForFunction(selector=>document.querySelector(selector)?.getAttribute('role')==='tree',selector);
    assert.equal(await product.locator(selector).getAttribute('role'),'tree');
+   const guide=product.locator(selector+' .navigation-tree-list .navigation-tree-list').first();
+   if(await guide.count())assert.equal(await guide.evaluate(n=>getComputedStyle(n).borderLeftWidth),'0px','no guide line in '+section);
    const heading=product.locator(section==='settings'?'.settings-nav-heading':'.panel.active .global-nav .product-nav-heading').first();
    assert.equal((await heading.boundingBox()).height,41,'shared sidebar heading: '+section);
    if(section==='settings') continue; // View-local categories no longer have a Shell splitter.
