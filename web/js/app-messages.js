@@ -1,15 +1,20 @@
-var CHAT_BOTTOM_THRESHOLD = 64;
-var renderedMessagesChatId = null;
-var renderedMessageUnits = {};
-var renderedLiveRunBase = null;
-var renderedLiveRunSuppressed = false;
-var renderedLiveRunBaseSignature = null;
-var renderedLiveRunPastActivities = {};
-var renderedLiveRunPastSteps = {};
-var chatScrollFollowing = true;
-var chatScrollInteraction = 0;
-var chatScrollPosition = 0;
-var suspendedOfficeTranscript = null;
+// Current singleton adapter. Retain the view while Dockview temporarily detaches its DOM.
+var currentConversationView = null;
+function messageView(box) {
+  if (!box && currentConversationView) return currentConversationView;
+  box = box || $("messages");
+  var current = box === $("messages");
+  var view = window.RNAssistantConversationView.get(box, {
+    button: box === $("messages") ? $("chatScrollBottomButton") : null,
+    clear: function () {
+      if (typeof releaseMessageMediaThumbnails === "function") releaseMessageMediaThumbnails(box);
+      if (typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
+    }
+  });
+  if (current) currentConversationView = view;
+  return view;
+}
+function officeConversationTarget() { return { source: "office", sessionId: state.activeChatId || "" }; }
 function createChatHistoryButton(direction, action) {
   var button = document.createElement("button");
   button.type = "button";
@@ -26,17 +31,7 @@ function officeTranscriptActive() {
   return !window.RNAssistantWorkspaceChat || window.RNAssistantWorkspaceChat.owner() === "office";
 }
 
-function resetRenderedMessageUnits(box) {
-  if (typeof resetMessageMediaThumbnails === "function") resetMessageMediaThumbnails();
-  if (box && typeof clearMarkdownEnhancements === "function") clearMarkdownEnhancements(box);
-  renderedMessageUnits = {};
-  renderedLiveRunBase = null;
-  renderedLiveRunBaseSignature = null;
-  renderedLiveRunSuppressed = false;
-  renderedLiveRunPastActivities = {};
-  renderedLiveRunPastSteps = {};
-  if (box) box.textContent = "";
-}
+function resetRenderedMessageUnits(box) { messageView(box).reset(); }
 
 function messageVisibleAttachments(message) {
   var represented = typeof messageImageAttachmentIds === "function"
@@ -48,181 +43,13 @@ function messageVisibleAttachments(message) {
   });
 }
 
-function chatDistanceFromBottom(box) {
-  if (!box) {
-    return 0;
-  }
-  return Math.max(0, box.scrollHeight - box.scrollTop - box.clientHeight);
-}
-
-function isChatNearBottom(box) {
-  return !box || chatDistanceFromBottom(box) <= CHAT_BOTTOM_THRESHOLD;
-}
-
-function shouldFollowChatScroll(box) {
-  var atBottom = chatDistanceFromBottom(box) <= 2;
-  // Layout growth alone is not a scroll gesture; shrinking content or a taller
-  // viewport can also clamp scrollTop upward while the reader is still at the end.
-  if (box.scrollTop > chatScrollPosition) chatScrollFollowing = atBottom;
-  else if (box.scrollTop < chatScrollPosition && !atBottom) chatScrollFollowing = false;
-  return chatScrollFollowing;
-}
-
-function updateChatScrollButton(box) {
-  box = box || $("messages");
-  if (box !== $("messages")) return;
-  var button = $("chatScrollBottomButton");
-  if (!box || !button) {
-    return;
-  }
-
-  var canScroll = box.scrollHeight > box.clientHeight + 2;
-  var visible = canScroll && (!isChatNearBottom(box) || !chatScrollFollowing && chatDistanceFromBottom(box) > 2);
-  button.classList.toggle("is-visible", visible);
-  button.setAttribute("aria-hidden", visible ? "false" : "true");
-  button.tabIndex = visible ? 0 : -1;
-}
-
-function scrollMessagesToBottom(smooth, box) {
-  box = box || $("messages");
-  if (!box) {
-    return;
-  }
-
-  chatScrollFollowing = true;
-  if (smooth && typeof box.scrollTo === "function" &&
-      !(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
-    box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
-  } else {
-    box.scrollTop = box.scrollHeight;
-  }
-  chatScrollPosition = box.scrollTop;
-  updateChatScrollButton(box);
-}
-
-function syncChatScroll(shouldScroll, smooth, box) {
-  box = box || $("messages");
-  if (shouldScroll) {
-    scrollMessagesToBottom(smooth, box);
-  } else {
-    updateChatScrollButton(box);
-  }
-
-  var interaction = chatScrollInteraction, chatId = state.activeChatId;
-  var session = box.dataset.session, owner = window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner();
-  var top = box.scrollTop;
-  if (shouldScroll && box === $("messages") && window.requestAnimationFrame) {
-    window.requestAnimationFrame(function () {
-      if (interaction === chatScrollInteraction && chatId === state.activeChatId &&
-          session === box.dataset.session && owner === (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner()) &&
-          chatScrollFollowing && box.scrollTop === top) scrollMessagesToBottom(false, box);
-    });
-  }
-}
-
-function resetChatScrollTracking(box) {
-  chatScrollInteraction += 1;
-  chatScrollFollowing = true;
-  chatScrollPosition = box.scrollTop;
-  updateChatScrollButton(box);
-}
-
-function bindMessageScrollControls() {
-  var box = $("messages");
-  var button = $("chatScrollBottomButton");
-  if (box) {
-    box.addEventListener("scroll", function () {
-      if (box.scrollTop !== chatScrollPosition) {
-        chatScrollInteraction += 1;
-        shouldFollowChatScroll(box);
-        chatScrollPosition = box.scrollTop;
-      }
-      updateChatScrollButton();
-    }, { passive: true });
-    function interrupt(upward) {
-      chatScrollInteraction += 1;
-      if (upward) chatScrollFollowing = false;
-    }
-    box.addEventListener("wheel", function (event) { interrupt(event.deltaY < 0); }, { passive: true });
-    box.addEventListener("pointerdown", function () { interrupt(false); }, { passive: true });
-    var touchY = 0;
-    box.addEventListener("touchstart", function (event) { touchY = event.touches[0].clientY; interrupt(false); }, { passive: true });
-    box.addEventListener("touchmove", function (event) {
-      var next = event.touches[0].clientY; interrupt(next > touchY); touchY = next;
-    }, { passive: true });
-    box.addEventListener("keydown", function (event) {
-      if (/^(INPUT|TEXTAREA|SELECT)$/.test(event.target.tagName) || event.target.isContentEditable) return;
-      if (["ArrowUp", "PageUp", "Home", "ArrowDown", "PageDown", "End", " "].indexOf(event.key) >= 0)
-        interrupt(event.key === "ArrowUp" || event.key === "PageUp" || event.key === "Home" || event.key === " " && event.shiftKey);
-    });
-    if (window.ResizeObserver) {
-      var resizeObserver = new window.ResizeObserver(function () {
-        if (box.getBoundingClientRect().height > 0) syncChatScroll(shouldFollowChatScroll(box), false, box);
-      });
-      resizeObserver.observe(box);
-      Array.prototype.forEach.call(box.children, function (node) { resizeObserver.observe(node, { box: "border-box" }); });
-      // The scroll box keeps its size when images/viewers change message height.
-      // Track direct message nodes, releasing detached ones after reconciliation.
-      var contentObserver = new window.MutationObserver(function (records) {
-        records.forEach(function (record) {
-          Array.prototype.forEach.call(record.removedNodes, function (node) {
-            if (node.nodeType === 1 && node.parentNode !== box) resizeObserver.unobserve(node);
-          });
-          Array.prototype.forEach.call(record.addedNodes, function (node) {
-            if (node.nodeType === 1 && node.parentNode === box) resizeObserver.observe(node, { box: "border-box" });
-          });
-        });
-      });
-      contentObserver.observe(box, { childList: true });
-    }
-  }
-  if (button) {
-    button.addEventListener("click", function () {
-      scrollMessagesToBottom(false);
-    });
-  }
-  updateChatScrollButton();
-}
-
-function captureMessageViewport(box) {
-  var snapshot = { top: box.scrollTop };
-  if (!box.getBoundingClientRect) return snapshot;
-  var top = box.getBoundingClientRect().top;
-  Array.prototype.some.call(box.children, function (node) {
-    if (node.getBoundingClientRect().bottom <= top) return false;
-    snapshot.key = node.messageUnitKey;
-    snapshot.offset = node.getBoundingClientRect().top - top;
-    return true;
-  });
-  return snapshot;
-}
-
-function restoreMessageViewport(box, snapshot, units) {
-  var unit = snapshot.key && (units || renderedMessageUnits)[snapshot.key];
-  if (unit && unit.node && unit.node.getBoundingClientRect) {
-    box.scrollTop += unit.node.getBoundingClientRect().top - box.getBoundingClientRect().top - snapshot.offset;
-  } else box.scrollTop = snapshot.top;
-  chatScrollPosition = box.scrollTop;
-}
-
-function suspendOfficeTranscript() {
-  var box = $("messages");
-  var visible = box.getBoundingClientRect().height > 0;
-  suspendedOfficeTranscript = { chatId: state.activeChatId, following: chatScrollFollowing,
-    viewport: visible ? captureMessageViewport(box) : { top: chatScrollPosition } };
-  resetRenderedMessageUnits(box);
-}
-
-function resumeOfficeTranscript() {
-  var saved = suspendedOfficeTranscript;
-  suspendedOfficeTranscript = null;
-  renderMessages({ fullReset: true, forceScroll: true });
-  if (saved && saved.chatId === state.activeChatId && !saved.following) {
-    restoreMessageViewport($("messages"), saved.viewport);
-    chatScrollFollowing = false;
-    updateChatScrollButton();
-  }
-}
+function shouldFollowChatScroll(box) { return messageView(box).shouldFollow(); }
+function updateChatScrollButton(box) { messageView(box).updateButton(); }
+function scrollMessagesToBottom(smooth, box) { messageView(box).bottom(smooth); }
+function syncChatScroll(shouldScroll, smooth, box) { messageView(box).sync(shouldScroll, smooth); }
+function bindMessageScrollControls() { messageView().bind(); }
+function captureMessageViewport(box) { return messageView(box).capture(); }
+function restoreMessageViewport(box, snapshot) { messageView(box).restore(snapshot); }
 
 function validChatTokenCount(value) {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
@@ -738,8 +565,8 @@ function liveAgentActivities() {
 
 function liveAgentTailActivities() {
   return liveAgentActivities().filter(function (activity) {
-    return !renderedLiveRunPastActivities[activityTimelineKey(activity)] &&
-      !(activityKind(activity) === "step" && renderedLiveRunPastSteps[activityStepId(activity)]);
+    return !messageView().cache.pastActivities[activityTimelineKey(activity)] &&
+      !(activityKind(activity) === "step" && messageView().cache.pastSteps[activityStepId(activity)]);
   });
 }
 
@@ -756,8 +583,8 @@ function liveAgentRunId() {
 
 function renderLiveAgentRun() {
   var activities = liveAgentTailActivities();
-  if ((!activities.length && !renderedLiveRunBase && !hasLiveAgentOutput()) || renderedLiveRunSuppressed) return null;
-  var items = renderedLiveRunBase ? renderedLiveRunBase.items.slice() : [];
+  if ((!activities.length && !messageView().cache.liveBase && !hasLiveAgentOutput()) || messageView().cache.liveSuppressed) return null;
+  var items = messageView().cache.liveBase ? messageView().cache.liveBase.items.slice() : [];
   var byKey = Object.create(null);
   items.forEach(function (item, index) { byKey[activityTimelineKey(item.activity)] = index; });
   activities.forEach(function (activity) {
@@ -777,8 +604,8 @@ function renderLiveAgentRun() {
   node.liveOutputVisible = hasLiveAgentOutput();
   node.liveDraftVisible = hasLiveAgentDraft();
   node.liveRunId = liveAgentRunId();
-  if (renderedLiveRunBase && typeof appendAgentRunResourceCards === "function") {
-    appendAgentRunResourceCards(node.querySelector(".agent-run-wrap"), renderedLiveRunBase.items, null);
+  if (messageView().cache.liveBase && typeof appendAgentRunResourceCards === "function") {
+    appendAgentRunResourceCards(node.querySelector(".agent-run-wrap"), messageView().cache.liveBase.items, null);
   }
   return node;
 }
@@ -996,11 +823,11 @@ function buildMessageUnits() {
   }
   var actionsSignature = messageActionsSignature();
   var liveRunId = liveAgentRunId();
-  renderedLiveRunBase = null;
-  renderedLiveRunBaseSignature = null;
-  renderedLiveRunSuppressed = false;
-  renderedLiveRunPastActivities = {};
-  renderedLiveRunPastSteps = {};
+  messageView().cache.liveBase = null;
+  messageView().cache.liveBaseSignature = null;
+  messageView().cache.liveSuppressed = false;
+  messageView().cache.pastActivities = {};
+  messageView().cache.pastSteps = {};
   var lastVisibleIndex = state.messages.length - 1;
   while (lastVisibleIndex >= 0 && messageProtocolMessage(state.messages[lastVisibleIndex])) lastVisibleIndex -= 1;
   forEachChatDisplayEntry(state.messages, null, function (run) {
@@ -1008,15 +835,15 @@ function buildMessageUnits() {
         var savedView = agentRunViewState(run.items, run.finalMessage);
         var terminalRun = savedView && ["completed", "failed", "cancelled"].indexOf(savedView.lifecycle) >= 0;
         if (!run.finalMessage && !terminalRun && run.nextIndex > lastVisibleIndex) {
-          renderedLiveRunBase = run;
-          renderedLiveRunBaseSignature = agentRunUnitSignature(run);
+          messageView().cache.liveBase = run;
+          messageView().cache.liveBaseSignature = agentRunUnitSignature(run);
           return;
         }
-        if (run.finalMessage || terminalRun) renderedLiveRunSuppressed = true;
+        if (run.finalMessage || terminalRun) messageView().cache.liveSuppressed = true;
         else run.items.forEach(function (item) {
-          renderedLiveRunPastActivities[activityTimelineKey(item.activity)] = true;
+          messageView().cache.pastActivities[activityTimelineKey(item.activity)] = true;
           var stepId = activityStepId(item.activity);
-          if (stepId) renderedLiveRunPastSteps[stepId] = true;
+          if (stepId) messageView().cache.pastSteps[stepId] = true;
         });
       }
       appendSavedRunUnit(units, run, false, actionsSignature);
@@ -1036,10 +863,10 @@ function buildMessageUnits() {
 function buildLiveMessageUnits() {
   var units = [];
   var activities = liveAgentTailActivities();
-  if (!renderedLiveRunSuppressed && (activities.length || renderedLiveRunBase || hasLiveAgentOutput())) {
+  if (!messageView().cache.liveSuppressed && (activities.length || messageView().cache.liveBase || hasLiveAgentOutput())) {
     appendMessageUnit(units, "live:agent-run",
       JSON.stringify({ stream: "agent", runId: liveAgentRunId(), value: activities,
-        base: renderedLiveRunBaseSignature, hasOutput: hasLiveAgentOutput(), hasDraft: hasLiveAgentDraft() }),
+        base: messageView().cache.liveBaseSignature, hasOutput: hasLiveAgentOutput(), hasDraft: hasLiveAgentDraft() }),
       function () { return renderLiveAgentRun(); }, "", null, refreshLiveAgentOutput);
   }
 
@@ -1117,8 +944,8 @@ function patchAgentRunArticle(node, run) {
   oldChildren.forEach(release);
 }
 
-function reconcileMessageUnits(box, units, liveOnly, cachedUnits) {
-  var previousCache = cachedUnits === undefined ? renderedMessageUnits : cachedUnits;
+function reconcileMessageUnits(box, units, liveOnly) {
+  var view = messageView(box), previousCache = view.cache.units;
   var nextCache = Object.create(null);
   if (liveOnly) Object.keys(previousCache).forEach(function (key) {
     if (key.indexOf("live:") !== 0) nextCache[key] = previousCache[key];
@@ -1212,40 +1039,31 @@ function reconcileMessageUnits(box, units, liveOnly, cachedUnits) {
     if (node !== cursor) box.insertBefore(node, cursor);
     else cursor = cursor.nextSibling;
   });
-  if (cachedUnits === undefined) renderedMessageUnits = nextCache;
+  view.cache.units = nextCache;
   return nextCache;
 }
 
 function scheduleLiveStreamRender(fullProjection) {
   if (fullProjection) state.liveFullRenderPending = true;
-  if (state.liveStreamRenderPending) {
-    return;
-  }
-  state.liveStreamRenderPending = true;
-  var render = function () {
-    state.liveStreamRenderPending = false;
+  if (!officeTranscriptActive()) return;
+  var view = messageView();
+  view.schedule("stream", function () {
     var full = state.liveFullRenderPending;
     state.liveFullRenderPending = false;
-    if (full) renderMessages();
-    else renderStreamingMessages(true);
-  };
-  if (window.requestAnimationFrame) {
-    window.requestAnimationFrame(render);
-  } else {
-    window.setTimeout(render, 16);
-  }
+    if (full) renderMessages(); else renderStreamingMessages(true);
+  });
 }
 
 function renderStreamingMessages(outputOnly) {
-  if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.canRenderConversation()) return;
+  if (currentConversationView && !currentConversationView.canRender()) return;
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   if (!officeTranscriptActive()) return;
-  var live = renderedMessageUnits["live:agent-run"];
-  if (renderedMessagesChatId !== state.activeChatId || !live && !Object.keys(renderedMessageUnits).length) {
+  var live = messageView().cache.units["live:agent-run"];
+  if (!messageView().matches(officeConversationTarget()) || !live && !Object.keys(messageView().cache.units).length) {
     renderMessages();
     return;
   }
-  if (outputOnly && renderedLiveRunSuppressed) return;
+  if (outputOnly && messageView().cache.liveSuppressed) return;
   var box = $("messages");
   var shouldScroll = shouldFollowChatScroll(box);
   var viewport = !shouldScroll ? captureMessageViewport(box) : null;
@@ -1261,20 +1079,15 @@ function renderStreamingMessages(outputOnly) {
 }
 
 function renderMessages(options) {
-  if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.canRenderConversation()) return;
+  if (currentConversationView && !currentConversationView.canRender()) return;
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   if (!officeTranscriptActive()) return;
   options = options || {};
   if (window.RNAssistantArtifactCatalog) window.RNAssistantArtifactCatalog.sync();
   var box = $("messages");
-  var chatChanged = renderedMessagesChatId !== state.activeChatId;
-  var viewport = captureMessageViewport(box);
-  if (chatChanged || options.forceScroll) chatScrollFollowing = true;
-  var shouldScroll = !options.preserveTop && (!!options.forceScroll || chatChanged || shouldFollowChatScroll(box));
-
-  renderedMessagesChatId = state.activeChatId;
-  if (chatChanged || options.fullReset) resetRenderedMessageUnits(box);
-  if (chatChanged) chatScrollPosition = box.scrollTop;
+  var view = messageView(box), frame = view.begin(officeConversationTarget(), options);
+  var viewport = frame.viewport, shouldScroll = frame.follow;
+  if (options.fullReset && !frame.changed) resetRenderedMessageUnits(box);
   if (state.chatDetailPending || state.chatDetailError) {
     resetRenderedMessageUnits(box);
     var notice = document.createElement("div");
@@ -1296,8 +1109,7 @@ function renderMessages(options) {
   if (!(typeof pendingChatInputs === "function" && pendingChatInputs().length) && !visibleMessages.length && !state.messageStartIndex && !hasLiveAgentOutput() && !state.liveActivity && !(state.liveAgentRun && state.liveAgentRun.length)) {
     resetRenderedMessageUnits(box);
     box.appendChild(renderChatEmptyState());
-    chatScrollFollowing = true;
-    chatScrollPosition = box.scrollTop;
+    view.follow();
     renderAgentPlanDock();
     renderAgentApprovalDock();
     syncChatScroll(false, false);
@@ -1305,15 +1117,15 @@ function renderMessages(options) {
     return;
   }
 
-  if (!Object.keys(renderedMessageUnits).length) box.textContent = "";
+  if (!Object.keys(messageView().cache.units).length) box.textContent = "";
   reconcileMessageUnits(box, buildMessageUnits());
 
   renderAgentPlanDock();
   renderAgentApprovalDock();
-  if (options.preserveTop && !viewport.key) {
+  if (options.preserveTop && (!viewport || !viewport.key)) {
     box.scrollTop += box.scrollHeight - options.previousScrollHeight;
-    chatScrollPosition = box.scrollTop;
-  } else if (!shouldScroll) restoreMessageViewport(box, viewport);
+    view.positionChanged();
+  } else if (!shouldScroll && viewport) restoreMessageViewport(box, viewport);
   syncChatScroll(shouldScroll, false);
   if (window.RNAssistantHtmlWorkspaceAnnotations) window.RNAssistantHtmlWorkspaceAnnotations.sync();
 }

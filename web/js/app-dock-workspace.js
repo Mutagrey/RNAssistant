@@ -2,9 +2,9 @@
   "use strict";
   // Placement only. Conversation state, commands and drafts retain their existing owners.
   var api, host, parking, roots = {}, owner = "office", section = "chat";
-  var dirtyConversation = false, conversationVisible = true, saveTimer, restoring = false;
+  var saveTimer, restoring = false;
   var compact = false, wideLayout = null, settingsVisible = false;
-  var conversationPosition = null, activation = 0, tabFrame;
+  var tabFrame;
   var inspectorWidth;
   var storageKey = "rnassistant.ui.dock.s1.v1", savedKey = storageKey + ".saved", nextChooser = 1;
   var views = {
@@ -27,19 +27,9 @@
   }
   function panel(id) { return api && api.getPanel(id); }
   function visible(id) { var item = panel(id); return section === "chat" && !!item && item.group.api.isVisible && item.api.isVisible; }
-  function conversationKey() {
-    var current = owner === "office" ? null : RNAssistantWorkspaceChat.snapshot();
-    return owner + ":" + (owner === "office" ? state.activeChatId : current && current.project && current.project.workspaceId) + ":" + (current && current.sessionId || "");
-  }
   function sync() {
     if (!api || restoring) return;
     var nextVisible = visible("conversation");
-    var activate = nextVisible && !conversationVisible;
-    if (conversationVisible && !nextVisible) {
-      conversationPosition = { key: conversationKey(), top: chatScrollPosition, following: chatScrollFollowing };
-      ++activation;
-    }
-    conversationVisible = nextVisible;
     roots.conversation.inert = !nextVisible;
     roots.inspector.inert = !visible("inspector");
     var nextSettings = visible("settings"), activateSettings = nextSettings && !settingsVisible;
@@ -58,22 +48,9 @@
       maximized: api.hasMaximizedGroup(), panels: api.panels.length, activeView: api.activePanel && api.activePanel.id,
       groups: api.groups.filter(function (group) { return group.api.isVisible; }).length } });
     updateContext();
-    if (activate && conversationPosition && conversationPosition.key === conversationKey()) {
-      var position = conversationPosition, version = ++activation;
-      requestAnimationFrame(function () {
-        if (version !== activation || !conversationVisible || position.key !== conversationKey()) return;
-        var list = document.getElementById("messages");
-        chatScrollFollowing = position.following;
-        if (position.following) scrollMessagesToBottom(false, list);
-        else { list.scrollTop = position.top; chatScrollPosition = list.scrollTop; updateChatScrollButton(list); }
-      });
-    }
-    if (activate && dirtyConversation) {
-      dirtyConversation = false;
-      if (owner === "office") { renderMessages(); renderSendControls(); }
-      else RNAssistantWorkspaceChat.refreshPresentation();
-    }
+    messageView().setVisible(nextVisible, function () { RNAssistantWorkspaceChat.refreshPresentation(); });
   }
+
   function notice(message) { RNAssistantShellLayout.notice(message); }
   function revealActiveTab() {
     cancelAnimationFrame(tabFrame);
@@ -372,7 +349,7 @@
       if (event.key === "Escape" && api.hasMaximizedGroup()) { api.exitMaximizedGroup(); event.preventDefault(); }
     });
     var observer = new ResizeObserver(function (entries) { resize(entries[0].contentRect.width); }); observer.observe(host);
-    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { ++activation; observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
+    window.addEventListener("pagehide", function (event) { clearTimeout(saveTimer); cancelAnimationFrame(tabFrame); persist(); if (!event.persisted) { messageView().dispose(); observer.disconnect(); RNAssistantActionMenu.closeAll(); api.dispose(); } });
     sync();
   }
   window.RNAssistantDockWorkspace = {
@@ -380,7 +357,6 @@
     isVisible: visible,
     setTitle: function (id, title) { var item = panel(id); if (item && item.title !== title) item.api.setTitle(title); },
     toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel,
-    canRenderConversation: function () { if (!api || conversationVisible) return true; dirtyConversation = true; return false; },
     onTabChange: function (name) {
       section = name; if (!api) return;
       RNAssistantActionMenu.closeAll(); sync();

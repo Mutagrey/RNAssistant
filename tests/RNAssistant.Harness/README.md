@@ -42,6 +42,10 @@ is authoritative` and `conversation: streams` / `conversation: resets stream` co
 scoped live usage, batch attribution, missing usage and immediate retry invalidation.
 Web checks: `context-usage`, `agent-timeline-order`, `chat-inbox`, `stream-render-cost`,
 `live-run-projection`, and Chromium `agent-activity-layout` / `chat-transcript-layout`.
+`conversation-view` checks independent presentation targets, stale frames, bounded
+scroll retention and dispose; `dock-workspace` / `workspace-chat-layout` exercise
+the same owner on production DOM through the mock bridge. Multiple chat tabs are
+not yet enabled in production.
 The separate composer unknown-warning mismatch remains in the risk register.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,

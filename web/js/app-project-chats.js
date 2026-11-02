@@ -558,7 +558,7 @@
     if (next === "projects") {
       render();
     } else if (window.RNAssistantWorkspaceChat.mount("office")) {
-      resumeOfficeTranscript();
+      renderMessages();
     }
     document.querySelectorAll(".chat-scope-switcher").forEach(function (picker) { picker.open = false; });
     var loaded;
@@ -784,7 +784,7 @@
       render(); if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout(); return;
     }
     if (scope === "projects") { window.RNAssistantWorkspaceChat.mount("project", el("Layout")); render(); refresh(); }
-    else if (window.RNAssistantWorkspaceChat.mount("office")) resumeOfficeTranscript();
+    else if (window.RNAssistantWorkspaceChat.mount("office")) renderMessages();
     if (window.RNAssistantPlugins) window.RNAssistantPlugins.preview.refreshLayout();
   }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,

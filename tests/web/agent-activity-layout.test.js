@@ -30,7 +30,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.logOnce = () => {};
       window.appendMessageArtifactCards = () => {};
     });
-    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-icons.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
+    for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js", "app-markdown.js", "app-icons.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-conversation-view.js", "app-messages.js", "app-viewer-registry.js", "app-json-viewer.js", "app-agent-data.js", "app-text-diff.js", "app-run-changes.js", "app-tool-result-preview.js", "app-agent-activity.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       const fixtures = [
@@ -473,7 +473,6 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       savedCommentRun.items[0].activity.ArgumentsJson = '{"target":"sales"}';
       window.refreshDisclosureFixture = signature => reconcileMessageUnits(host, [{ key: "focus-run", signature,
         render: () => renderAgentRunArticle(savedCommentRun) }], false);
-      renderedMessageUnits = {};
       refreshDisclosureFixture("before");
     });
     const refreshed = page.locator("#disclosure-refresh");

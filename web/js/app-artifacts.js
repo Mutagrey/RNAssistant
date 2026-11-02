@@ -531,11 +531,6 @@
 
   var chatThumbnailObserver = null;
 
-  function resetMessageMediaThumbnails() {
-    if (chatThumbnailObserver) chatThumbnailObserver.disconnect();
-    chatThumbnailObserver = null;
-  }
-
   function releaseMessageMediaThumbnails(root) {
     if (!chatThumbnailObserver || !root || !root.querySelectorAll) return;
     Array.prototype.forEach.call(root.querySelectorAll(".rn-artifact-thumbnail"), function (node) {
@@ -741,7 +736,6 @@
   window.loadArtifactThumbnail = loadArtifactThumbnail;
   window.messageImageAttachmentIds = messageImageAttachmentIds;
   window.appendMessageMediaGallery = appendMessageMediaGallery;
-  window.resetMessageMediaThumbnails = resetMessageMediaThumbnails;
   window.releaseMessageMediaThumbnails = releaseMessageMediaThumbnails;
   window.appendMessageArtifactCards = appendMessageArtifactCards;
   window.appendAgentRunResourceCards = appendAgentRunResourceCards;

@@ -44,12 +44,12 @@ const ctx = vm.createContext({
   $: () => box, renderChatResourceNavigation: () => {}, isPanelActive: () => true
 });
 ctx.window = ctx;
-for (const name of ["app-utils.js", "app-run-view-state.js", "app-conversation-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-messages.js"]) {
+for (const name of ["app-utils.js", "app-run-view-state.js", "app-conversation-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-conversation-view.js", "app-messages.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), ctx);
 }
 ctx.enhanceActivity = () => {};
-ctx.isChatNearBottom = () => false; ctx.syncChatScroll = () => {};
-ctx.renderedMessagesChatId = "chat";
+ctx.syncChatScroll = () => {};
+ctx.messageView().begin(ctx.officeConversationTarget());
 const action = (step, id, status, args) => ({ RunId: "r", Kind: "tool", ToolId: "core.read", ToolCallId: id,
   StepId: step, StepMessage: "Narration " + step, Status: status, ArgumentsJson: args,
   Subtitle: "Target " + id, ResultMessage: status === "completed" ? "Read complete" : null });

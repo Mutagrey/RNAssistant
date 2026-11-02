@@ -19,7 +19,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
     await page.setContent('<div id="messages" style="height:350px;overflow:auto"></div><div id="draft"></div><div id="viewer"></div>');
     for (const file of ["app-artifacts.css", "app-composer.css", "vendor/viewer.min.css", "app-resource-viewer.css"])
       await page.addStyleTag({ content: read("css/" + file) });
-    for (const file of ["app-artifacts.js", "app-messages.js", "app-attachments.js", "app-viewer-registry.js",
+    for (const file of ["app-artifacts.js", "app-conversation-view.js", "app-messages.js", "app-attachments.js", "app-viewer-registry.js",
       "vendor/viewer.min.js", "app-resource-viewer.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(async () => {

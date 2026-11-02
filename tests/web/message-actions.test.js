@@ -24,6 +24,7 @@ let sending = true, approval = false, renders = 0;
 const box = new Element();
 const ctx = vm.createContext({
   state: { messages: [{ Id: "user", Role: "user", Content: "Question" }], editingMessageIndex: -1 },
+  $: () => box,
   document: { createElement: () => new Element() },
   currentActiveSend: () => sending,
   pendingAgentApprovalActivity: () => approval,
@@ -40,7 +41,7 @@ const ctx = vm.createContext({
   copyText: () => {}, log: () => {}
 });
 ctx.window = ctx;
-for (const name of ["app-chat-edit.js", "app-messages.js", "app-agent.js"]) {
+for (const name of ["app-chat-edit.js", "app-conversation-view.js", "app-messages.js", "app-agent.js"]) {
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js", name), "utf8"), ctx);
 }
 ctx.messageUsageText = () => "";

@@ -362,11 +362,59 @@ preferences and wire`, `chat: session model overrides global settings`,
 Откат — revert атомарного commit S2a; новые store/формат сессий/vendor не добавлены.
 Сохранённое предпочтение модели остаётся обычным `ChatSession.Model`.
 
-Следующий атомарный срез S2a — общие attachment/context actions и состояния
-Office/project/plugin: инвентаризировать оставшиеся owner checks, затем переключать
-общие consumers с узкими domain adapters. Не копировать chat UI и не объявлять
-паритет там, где ещё отсутствует backend contract. Несколько живых chat views и
-paging остаются последующими ограниченными срезами; S3b preview сохраняет свой scope.
+### Остаток S2: единая реализация и независимые чаты
+
+S2a (`abfd7c85`) завершает модель/preferences, но **не весь общий чат**. По уточнению
+пользователя Office/project/plugin не должны иметь отдельные реализации chat UI;
+целевая граница — [единый чат](UI_ARCHITECTURE.md#единый-чат-обязательная-целевая-граница).
+Сейчас Dockview имеет один `conversation`: выбор другого чата заменяет его target.
+Открыть одновременно несколько независимых чатов пока нельзя.
+
+Порядок оставшейся работы, небольшими проверяемыми срезами:
+
+1. Выделить общий Chat View со state/lifecycle конкретного target; инвентаризировать
+   и переключать global/owner-specific render/commands на явный scope. Начать с
+   существующего одного view, удалить заменённые пути; runtime/store не дублировать.
+2. Через эту границу объединить вложения, контекст, подтверждения/вопросы и остальные
+   действия. Сверять весь набор возможностей на каждом источнике; недостающие typed
+   contracts закрывать у domain owners, а не постоянным скрытием кнопок по типу чата.
+3. В существующем DockWorkspace разрешить отдельные views разных exact chat targets.
+   Повторное открытие того же target активирует его view. Проверить одновременные
+   draft/edit/model/history/stream, late replies, move/split/close/reopen; закрытие
+   вкладки не отменяет run и не очищает чужое состояние.
+4. Сохранить cap 240 на view, lazy hidden rendering и отмену лишних reads; проверить
+   общие bounds памяти/подписок при нескольких чатах. Catalog paging вводить при
+   необходимом typed contract. Удалить временные adapters после переключения consumers.
+
+S2 завершён только после этих behavioral gates и визуального ревью; Windows/Office
+evidence остаётся отдельным gate. S3b сохраняет свой scope и не подменяет эту работу.
+
+### S2b.1: общий owner отрисовки — 2026-11-02
+
+Scope разрешён «Давай» после уточнения цели единого чата. Первый атомарный шаг
+пункта 1: ConversationView владеет target/generation, кешем DOM, прокруткой и
+paint lifecycle для всех источников. Заменённые Office/Workspace caches и Dock
+scroll/dirty state удалены. Визуальная компоновка, composer/draft store, contracts
+и runtime не меняются. На target switch/reparent/hide отменяются прежние frames;
+ожидающий paint вызывает refresh при возвращении. Позиции чтения bounded (16),
+без накопления histories/DOM. Cleanup media не затрагивает соседний view.
+
+Проверки среза — `conversation-view` (два независимых presentation instances,
+A→B→A/late frame, hide/restore, loading anchor, bounds/dispose), существующие
+`live-run-projection`, `stream-render-cost`, `message-actions`, Chromium
+`dock-workspace`, `workspace-chat-layout`, `chat-transcript-layout`,
+`chat-image-display`, `chat-input-delivery`. Визуальный статус **In Review**;
+headless mock не квалифицирует Windows/Office. Нет C# build или Office validation.
+
+Ревью в production preview: прокрутить длинный чат вверх; переключить источник и
+вернуться; закрыть/вернуть вкладку; перенести её справа/снизу во время ответа.
+Проверяются прежняя позиция чтения, неизменность ввода и отсутствие чужих сообщений.
+Откат — атомарный diff S2b.1: изменён только presentation, без durable migration.
+
+Далее завершить пункт 1: common builders/composer/commands и подписки получают
+explicit view scope вместо global active owner. Только затем включать разные
+chat targets одновременно. Ни общий чат целиком, ни multiple chat UI этим срезом
+не объявлены реализованными.
 
 ## Последующие срезы — только после ревью предыдущего
 

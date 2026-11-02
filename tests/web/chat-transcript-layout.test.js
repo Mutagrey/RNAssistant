@@ -26,6 +26,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.state = { activeChatId: "chat", messages: [], activeSends: {}, chatRuns: {}, settings: {},
         draftAttachments: [], pendingChatSubmits: {}, editingMessageIndex: -1, messageStartIndex: 0, messageTotalCount: 0 };
       window.$ = id => document.getElementById(id);
+      window.distanceFromBottom = box => Math.max(0, box.scrollHeight-box.scrollTop-box.clientHeight);
       window.RNAssistantAgentApproval = { create: () => ({ pendingActivity: () => null, renderDock() {} }) };
       window.currentActiveSend = () => true;
       window.hasActiveMessageEdit = () => false;
@@ -40,7 +41,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.log = () => {};
     });
     for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-icons.js", "app-accent.js", "app-utils.js",
-      "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-messages.js", "app-chat-inbox.js"])
+      "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js", "app-conversation-view.js", "app-messages.js", "app-chat-inbox.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(() => {
       window.renderAgentPlanDock = () => {};
@@ -115,14 +116,14 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     });
     await settleLayout();
     assert.ok(await page.locator("#messages").evaluate(box => box.scrollHeight) >= initialHeight + 240);
-    assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+    assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2,
       "late message growth keeps the actual end visible without another render");
     await page.evaluate(() => {
       $("lateMessageContent").style.height = "480px";
       state.liveStreamContent += "Новое продолжение ответа.\n";
       renderStreamingMessages();
     });
-    assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+    assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2,
       "a render before resize delivery does not mistake layout growth for manual scrolling");
     await settleLayout();
 
@@ -130,7 +131,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     for (const height of [1000, 650, 800]) {
       await page.setViewportSize({ width: 360, height });
       await settleLayout();
-      assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+      assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2,
         "following survives viewport growth and shrinkage at " + height + "px");
     }
     const manualTop = await page.evaluate(() => {
@@ -161,14 +162,14 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       const box = $("messages"); box.scrollTop = 800; box.dispatchEvent(new Event("scroll"));
       const top = box.scrollTop;
       for (let i = 0; i < 8; i++) { state.liveStreamContent += "Ещё данные\n".repeat(15); renderStreamingMessages(); }
-      return { top, after: box.scrollTop, distance: chatDistanceFromBottom(box) };
+      return { top, after: box.scrollTop, distance: distanceFromBottom(box) };
     });
     assert.ok(Math.abs(scroll.top - scroll.after) < 2, "stream replacements preserve free scroll inside a tall message");
     assert.ok(scroll.distance > 500, "reader remains well above the moving tail");
 
     await page.getByRole("button", { name: "К последним сообщениям", exact: true }).click();
     await page.evaluate(() => { state.liveStreamContent += "Ещё строка\n".repeat(10); renderStreamingMessages(); });
-    assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2, "explicit return resumes following");
+    assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2, "explicit return resumes following");
 
     // A render's deferred scroll must yield to an intervening user gesture.
     const deferred = await page.evaluate(async () => {
@@ -201,7 +202,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       state.messages = [{ Id: "fresh-user", Role: "user", Content: "Новый запрос" }];
       state.liveStreamContent = "Первый ответ в новом чате.\n\n".repeat(70); renderMessages();
     });
-    assert.ok(await page.evaluate(() => chatDistanceFromBottom($("messages"))) <= 2,
+    assert.ok(await page.evaluate(() => distanceFromBottom($("messages"))) <= 2,
       "an empty new chat does not inherit the previous chat's scroll position");
     if (process.env.LAYOUT_SCREENSHOT) {
       await page.evaluate(() => {

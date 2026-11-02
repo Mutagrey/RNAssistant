@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Общий transcript lifecycle S2b.1 — 2026-11-02
+
+Первый шаг после требования единого чата: один ConversationView теперь владеет
+target/generation, DOM cache, scroll/anchor, frames и visibility для всех источников.
+Прежние Office/Workspace caches и Dock viewport state удалены. Production пока
+использует один view через явный temporary adapter; ввод, команды и subscriptions
+ещё требуют scoping, полная parity и несколько чат-вкладок не завершены.
+[Ревью, проверки и следующий шаг](../ui/UI_MIGRATION_PLAN.md#s2b1-общий-owner-отрисовки--2026-11-02).
+Изменение presentation-only, In Review; Windows/Office evidence остаётся открытым.
+
 ## Модель общего чата S2a — 2026-11-02
 
 По прямому уточнению пользователя Office/project/plugin получили один picker и

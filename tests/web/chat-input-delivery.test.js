@@ -30,11 +30,14 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         "bindAttachmentActions", "createChat", "clearChat", "compactChatContext", "openActiveDocument",
         "cancelMessageEdit", "renderContext", "renderContextMeter", "renderModelControls", "renderAttachmentDrafts",
         "setComposerPickerDisabled", "logOnce", "log"]) window[name] = () => {};
-      document.querySelector(".shell").classList.add("navigation-closed");
+      // This fixture owns admission/composer behavior; the real Shell is covered by dock-workspace.
+      const chat = $("chatDropZone");
+      document.body.appendChild(chat); chat.style.height = "100vh";
+      document.querySelector(".shell").hidden = true;
     });
     for (const file of ["vendor/purify.min.js", "vendor/marked.min.js", "vendor/highlight.min.js", "app-utils.js",
       "app-markdown.js", "app-run-view-state.js", "app-agent-model.js", "app-agent.js", "app-agent-activity.js",
-      "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-conversation-observer.js", "app-conversation-input.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
+      "app-conversation-state.js", "app-conversation-view.js", "app-messages.js", "app-chat-state.js", "app-chat-composer.js", "app-attachments.js", "app-conversation-observer.js", "app-conversation-input.js", "app-chat-inbox.js", "app-chat-run.js", "app-chat.js", "app-workspace-chat.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     await page.evaluate(async () => {
       window.renderAgentPlanDock = window.renderChatSessions = window.bindAttachmentActions = () => {};

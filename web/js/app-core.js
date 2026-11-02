@@ -60,7 +60,6 @@ var state = {
   liveStreamContent: null,
   liveReasoning: "",
   liveReasoningComplete: false,
-  liveStreamRenderPending: false,
   editingMessageId: "",
   editingMessageIndex: -1,
   editingText: "",

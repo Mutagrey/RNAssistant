@@ -26,6 +26,51 @@ Package сохраняются как история/evidence. Их старые
 storage contracts остаются в domain docs из [README](../README.md).
 Новые документы про SDK, компоненты или performance отдельно пока не нужны.
 
+## Единый чат: обязательная целевая граница
+
+Уточнение пользователя 2026-11-02: один Chat View и одна реализация всех общих
+возможностей для любого чата. Office/project/plugin — источники контекста и
+адаптеры services/tools, не самостоятельные виды chat UI. Различаться могут
+доступные ресурсы/инструменты и реальные ограничения модели/сессии; тип источника
+сам по себе не ограничивает вложения, контекст, ввод, историю или действия чата.
+Отсутствующий контракт — открытая задача миграции, не постоянное исключение.
+
+Каждый открытый Chat View получает exact target и собственное presentation state:
+draft/edit, scroll, окно истории, загрузки, ошибки и lifecycle подписок. Общие
+компоненты и команды получают этот scope явно; глобальный active chat не определяет
+получателя позднего ответа или фонового события. Run/storage остаются у существующих
+domain owners; вкладка не создаёт второй durable store или runtime.
+
+**Текущее состояние не достигает этой цели.** S1a/S1b и S2a переиспользуют DOM,
+компоненты и часть правил, но оставляют singleton `conversation`, глобальное
+состояние Office и отдельную Workspace orchestration. Полное объединение и
+несколько независимых Chat View входят в незавершённый S2. Размножать нынешний
+singleton или переименовывать WorkspaceChat без смены ownership недостаточно.
+
+### S2b.1: состояние отрисовки и lifecycle представления
+
+Первый ограниченный шаг S2 после уточнения единого чата, 2026-11-02. Owner —
+[`ConversationView`](../../web/js/app-conversation-view.js): один экземпляр на DOM
+transcript, explicit target, generation, keyed DOM cache, scroll/follow/anchor,
+coalesced frames, visibility и освобождение listeners/observers. Office и Workspace
+используют один owner; plugin source использует тот же Workspace target, без
+отдельного кэша или правил отрисовки. DockWorkspace передаёт только visibility.
+
+Удалены глобальные Office renderer/scroll caches, `_workspaceEntries`, отдельное
+сохранение Office viewport и `conversationPosition`/dirty paint из DockWorkspace.
+Смена target и suspend перед reparenting отсекают старые frames, включая A→B→A.
+Hidden view не рисует tokens, отключает resize observation и при возврате применяет
+актуальную projection. Cleanup thumbnails ограничен subtree этого представления.
+Сохраняются максимум 16 позиций чтения на view: только target/key/offset, без истории
+или DOM прежних чатов. Сами сообщения по-прежнему ограничены cap 240.
+
+Это **не завершение шага 1/S2**: `messageView()` пока адаптирует единственную
+production-вкладку к новому owner. Builders Office/Workspace, ввод/edit/actions,
+получение snapshot и подписки runtime ещё используют прежних владельцев. Их
+переключение на explicit view scope — следующий срез перед несколькими вкладками.
+Transient UI cache не заменяет draft store, events или runtime authority.
+Условие удаления adapter — в [Migration Map](../stabilization/MIGRATION_MAP.md#conversation-view-s2b1--2026-11-02).
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

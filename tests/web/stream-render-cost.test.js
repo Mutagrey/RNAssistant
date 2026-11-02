@@ -20,7 +20,9 @@ const context = vm.createContext({ console, document: { activeElement: null }, s
   $: () => box, clearMarkdownEnhancements: node => cleaned.push(node.id), isPanelActive: () => true });
 context.window = context;
 context.requestAnimationFrame = callback => frames.push(callback);
+vm.runInContext(read("app-conversation-view.js"), context);
 vm.runInContext(read("app-messages.js"), context);
+context.messageView().begin(context.officeConversationTarget()); cleaned.length = 0;
 const unit = (key, signature) => ({ key, signature, render: () => new Node(signature) });
 const history = Array.from({ length: 1000 }, (_, i) => unit("message:" + i, "message" + i));
 context.reconcileMessageUnits(box, history.concat(unit("live:stream", "first")));
@@ -29,10 +31,8 @@ context.reconcileMessageUnits(box, history.concat(unit("live:stream", "second"))
 assert.equal(box.children.length, 1001);
 assert.ok(original.every((node, i) => node === box.children[i] && node.removals === 0));
 assert.deepEqual(cleaned, ["first"]);
-context.renderedMessagesChatId = "a";
 context.buildMessageUnits = () => { throw new Error("stream must not serialize history"); };
 context.renderChatResourceNavigation = () => { throw new Error("stream must not rebuild resources"); };
-context.isChatNearBottom = () => false;
 context.syncChatScroll = () => {};
 context.buildLiveMessageUnits = () => [unit("live:reasoning", "reasoning"), unit("live:stream", "third")];
 for (let i = 0; i < 100; i++) context.scheduleLiveStreamRender();
@@ -79,6 +79,9 @@ console.log("PASS background stream: 100 deltas produce one sidebar refresh with
 const foregroundFrames = [];
 let foregroundRenders = 0;
 bridge.requestAnimationFrame = callback => foregroundFrames.push(callback);
+const foregroundBox = new Node("foreground");
+bridge.document.getElementById = id => id === "messages" ? foregroundBox : null;
+vm.runInContext(read("app-conversation-view.js"), bridge);
 vm.runInContext(read("app-messages.js"), bridge);
 bridge.renderMessages = () => foregroundRenders++;
 bridge.normalizeProgressActivity = progress => ({ id: progress.message, kind: "notice", title: progress.message });

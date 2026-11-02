@@ -100,9 +100,9 @@ fs.mkdirSync(captures, {recursive:true});
       const list = document.querySelector('#messages');
       list.scrollTop = Math.floor((list.scrollHeight-list.clientHeight)/3);
       list.dispatchEvent(new Event('scroll'));
-      const top = list.scrollTop;
+      const top = list.scrollTop, viewport = captureMessageViewport(list);
       RNAssistantProjectChats.setScope('projects');
-      return {top:top,viewport:suspendedOfficeTranscript.viewport};
+      return {top:top,viewport:viewport};
     });
     assert.ok(officeScroll.top>0,'Office transcript is scrolled before navigation');
     await page.locator('#messages .message.user').first().waitFor();
@@ -133,7 +133,7 @@ fs.mkdirSync(captures, {recursive:true});
       chat.state.modelProgress.Message += ' Ещё текст после перехода вниз.'.repeat(8);
       RNAssistantWorkspaceChat.paintProgress(list, chat);
       await new Promise(resolve => requestAnimationFrame(resolve));
-      const jumped = chatDistanceFromBottom(list) <= 2 && !button.classList.contains('is-visible');
+      const jumped = Math.max(0, list.scrollHeight-list.scrollTop-list.clientHeight) <= 2 && !button.classList.contains('is-visible');
       RNAssistantProjectChats.render();
       return { mounted: button.parentElement.id === 'workspaceChatTranscriptMount', visible, anchored, jumped };
     });
@@ -194,7 +194,7 @@ fs.mkdirSync(captures, {recursive:true});
     assert.equal(await page.locator('#chatInput').inputValue(), 'Поздний черновик Office',
       'returning to Office restores its updated draft');
     const restoredOfficeAnchor = await page.evaluate(key => {
-      const list=document.querySelector('#messages'),unit=renderedMessageUnits[key];
+      const list=document.querySelector('#messages'),unit=messageView().cache.units[key];
       return unit&&unit.node.parentNode===list ? unit.node.getBoundingClientRect().top-list.getBoundingClientRect().top : null;
     },officeScroll.viewport.key);
     assert.ok(restoredOfficeAnchor!==null && Math.abs(restoredOfficeAnchor-officeScroll.viewport.offset)<4,

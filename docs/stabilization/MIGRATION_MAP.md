@@ -1,5 +1,18 @@
 # Current-to-target migration map
 
+## Conversation view S2b.1 — 2026-11-02
+
+Owner: Web conversation presentation. `app-conversation-view.js` — общий
+target-scoped cache/viewport/paint lifecycle для Office и Workspace/plugin.
+Временный adapter `messageView()` в `app-messages.js` удерживает текущий singleton
+даже при transient DOM detach в Dockview; он не хранит второй chat snapshot.
+Removal gate: builders, input/edit/actions и доставка snapshots/subscriptions
+принимают explicit view scope, все consumers переключены и проверены на двух
+независимых targets. Тогда удалить currentConversationView/global DOM route,
+а не клонировать его для каждой вкладки. Storage/run owners не меняются.
+Прежние global renderer/scroll caches, Workspace entries и Dock viewport/dirty
+state удалены в этом срезе; duplicate fallback для них не оставлен.
+
 ## Request view S3a — 2026-11-02
 
 Owner: Web diagnostics presentation / DockWorkspace. `request` — singleton в

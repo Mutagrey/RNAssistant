@@ -84,6 +84,7 @@
     if (!view || !list || !form || !input || (owner !== "office" && owner !== "project" && owner !== "plugin")) return false;
     if (owner !== "office" && !container) return false;
     var changed = activeOwner !== owner;
+    if (changed) messageView(list).suspend();
     if (changed && workspaceMessageEdit) cancelWorkspaceMessageEdit(false);
     if (changed && activeOwner !== "office") dispatch("suspend");
     if (activeOwner === "office" && owner !== "office") {
@@ -91,10 +92,7 @@
         officeComposerAnchor = document.createComment("Office composer");
         form.parentNode.insertBefore(officeComposerAnchor, form);
       }
-      suspendOfficeTranscript();
       captureChatDraft(state.activeChatId, false);
-      list._chatSignature = null;
-      delete list.dataset.session;
     }
     if (changed) ["composerAddPicker", "chatModelPicker"].forEach(function (id) {
       var picker = document.getElementById(id);
@@ -104,7 +102,6 @@
     var transcriptMount = document.getElementById(owner === "office" ? "officeChatTranscriptMount" : "workspaceChatTranscriptMount");
     if (list.parentNode !== transcriptMount) {
       transcriptMount.append(list, document.getElementById("chatScrollBottomButton"));
-      resetChatScrollTracking(list);
       changed = true;
     }
     activeOwner = owner;
@@ -245,12 +242,16 @@
       !!message.ReflectionDecision || !!message.ReasoningContent ||
       !!(message.Results && message.Results.length) || !!(message.Attachments && message.Attachments.length));
   }
+  function conversationTarget(chat) {
+    return { source: "workspace", workspaceId: field(field(chat, "project"), "workspaceId") || "",
+      sessionId: field(chat, "sessionId") || "" };
+  }
   function renderMessages(list, chat, emptyOptions, options) {
-    if (window.RNAssistantDockWorkspace && !window.RNAssistantDockWorkspace.canRenderConversation()) return;
+    var view = messageView(list);
+    if (!view.canRender()) return;
     chat = chat || { messages: [], state: {} };
-    var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", chat.sessionId || chat.pluginId || ""]), changed = list.dataset.session !== key;
-    if (changed) resetChatScrollTracking(list);
-    var following = !(options && options.preserveTop) && (changed || shouldFollowChatScroll(list));
+    var target = conversationTarget(chat), frame = view.begin(target, options);
+    var changed = frame.changed, following = frame.follow;
     var snapshot = field(chat, "state"), status = runStatus(snapshot), live = field(snapshot, "modelProgress");
     if (status !== "running" || field(live, "runId") !== field(snapshot, "runId")) live = null;
     var start = field(chat, "messageStartIndex") || 0;
@@ -258,10 +259,10 @@
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && canMessageAction("fork", actionMessage, 0);
     var signature = JSON.stringify([chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
-    if (!changed && list._chatSignature === signature) return;
-    var viewport = !following && !changed ? captureMessageViewport(list) : null;
-    if (changed) { list.replaceChildren(); list._workspaceEntries = Object.create(null); }
-    list.dataset.session = key; list.dataset.startIndex = String(start); list._chatSignature = signature;
+    if (!changed && view.cache.signature === signature) return;
+    var viewport = !following ? frame.viewport : null;
+    list.dataset.session = JSON.stringify([activeOwner, target.workspaceId, target.sessionId]);
+    list.dataset.startIndex = String(start); view.cache.signature = signature;
     var units = [];
     if (start > 0) {
       appendMessageUnit(units, "history:older", String(start), function () {
@@ -328,18 +329,20 @@
         return article;
       });
     });
-    list._workspaceEntries = reconcileMessageUnits(list, units, false, list._workspaceEntries || Object.create(null));
-    list._workspaceLiveRunId = liveRunId || null;
-    if (viewport) restoreMessageViewport(list, viewport, list._workspaceEntries);
+    reconcileMessageUnits(list, units, false);
+    view.cache.liveRunId = liveRunId || null;
+    if (viewport) restoreMessageViewport(list, viewport);
     syncChatScroll(following, false, list);
   }
   function paintProgress(list, chat) {
     var snapshot = field(chat, "state"), preview = field(snapshot, "modelProgress");
     var runId = field(snapshot, "runId");
-    var key = JSON.stringify([activeOwner, field(field(chat, "project"), "workspaceId") || "", field(chat, "sessionId") || ""]);
-    var entry = list && list._workspaceEntries && list._workspaceEntries["live:workspace-model"];
-    if (!entry || !entry.node || entry.node.parentNode !== list || list.dataset.session !== key ||
-        list._workspaceLiveRunId !== runId || runStatus(snapshot) !== "running" ||
+    if (!list) return false;
+    var view = messageView(list);
+    if (!view.canRender()) return false;
+    var entry = view.cache.units["live:workspace-model"];
+    if (!entry || !entry.node || entry.node.parentNode !== list || !view.matches(conversationTarget(chat)) ||
+        view.cache.liveRunId !== runId || runStatus(snapshot) !== "running" ||
         field(preview, "runId") !== runId) return false;
     var section = entry.node.querySelector(".agent-stream-step");
     if (!section) return false;
@@ -347,7 +350,7 @@
     var viewport = following ? null : captureMessageViewport(list);
     paintLiveModelOutput(section, { content: field(preview, "message"), reasoning: field(preview, "reasoning"),
       reasoningTruncated: field(preview, "reasoningTruncated"), retrying: field(preview, "retrying"), showStatus: true });
-    if (viewport) restoreMessageViewport(list, viewport, list._workspaceEntries);
+    if (viewport) restoreMessageViewport(list, viewport);
     syncChatScroll(following, false, list);
     return true;
   }

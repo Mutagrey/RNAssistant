@@ -104,6 +104,7 @@ function bindChatActions() {
   $("focusReplyButton").addEventListener("click", function () { $("chatInput").focus(); });
   window.addEventListener("resize", resizeChatInput);
   window.RNAssistantWorkspaceChat.registerActions("office", {
+    refresh: function () { renderMessages(); renderSendControls(); },
     submit: submitChatInput,
     stop: stopActiveSend,
     clear: function () { setChatInputText("", true); },

@@ -129,6 +129,13 @@ Office, project и plugin source показывают одинаковое ме�
 
 ## Entry points и оболочки
 
+S2b.1 меняет внутреннее владение transcript, без новых экранов или CSS. Office,
+Workspace и plugin используют один ConversationView для кеша/прокрутки/frames.
+Перемещение не пересоздаёт view; скрытие откладывает paint; возврат к недавно
+просмотренному target восстанавливает позицию чтения. Во время загрузки позиция
+не считается восстановленной. Одновременных chat tabs ещё нет: ввод, команды и
+доставка snapshots должны сначала получить explicit view scope.
+
 | Вход | Что реально запускается | Будущее назначение |
 |---|---|---|
 | Desktop / Office shells | Один [web/index.html](../../web/index.html), AssistantPaneControl/typed bridge | Одна RNAssistant Shell; существующий host adapter |
