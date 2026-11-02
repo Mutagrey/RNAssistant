@@ -171,4 +171,25 @@ console.log("PASS run overlap: persisted/live replay merges once by runtime iden
   source.invoke("loadPrevious");
   assert.equal(historyReads, 0, "A→B→A cannot revive old message handlers");
   console.log("PASS addressed actions: async deletion, delayed history and A→B→A stay bound to their original view");
+  // Exercise the actual delete delivery, including its error path.
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../../web/js/app-chat-session.js"), "utf8"), ctx);
+  const notices = [], applied = [], catalogs = [], requests = [];
+  ctx.showSendError = error => notices.push(error);
+  ctx.applyChatStateForChat = (value, id) => applied.push([value, id]);
+  ctx.applyChatCatalogState = value => catalogs.push(value);
+  ctx.send = (type, payload) => new Promise((resolve, reject) => requests.push({ type, payload, resolve, reject }));
+  const delayedError = ctx.deleteMessage({ Id: "last" }, 1, ctx.chatComposer().capture());
+  ctx.state.activeChatId = "other"; ctx.chatComposer().sync();
+  ctx.state.activeChatId = "source"; ctx.chatComposer().sync();
+  requests[0].reject(new Error("previous visit")); await delayedError;
+  assert.equal(notices.length, 0, "late error cannot replace the current visit's notice after A→B→A");
+  const delayedSuccess = ctx.deleteMessage({ Id: "last" }, 1, ctx.chatComposer().capture());
+  ctx.state.activeChatId = "other"; ctx.chatComposer().sync();
+  requests[1].resolve("background result"); await delayedSuccess;
+  assert.equal(applied.length, 0); assert.deepEqual(catalogs, ["background result"]);
+  const currentError = ctx.deleteMessage({ Id: "current" }, 0, ctx.chatComposer().capture());
+  requests[2].reject(new Error("current failure")); await currentError;
+  assert.deepEqual(notices, ["current failure"]);
+  assert.deepEqual(requests.map(x => x.payload.chatId), ["source", "source", "other"]);
+  console.log("PASS delete delivery: late success/error stay out of another chat and current failures remain visible");
 })().catch(error => { console.error(error); process.exitCode = 1; });

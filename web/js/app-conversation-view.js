@@ -11,7 +11,7 @@
     if (views.has(box)) return views.get(box);
     options = options || {};
     var button = options.button, key = null, target = null, generation = 0, visible = true, dirty = false, disposed = false;
-    var frames = Object.create(null), positions = new Map(), listeners = [], bound = false, bindingGeneration = 0;
+    var frames = Object.create(null), positions = new Map(), listeners = [], subscriptions = [], bound = false, bindingGeneration = 0;
     var following = true, position = 0, interaction = 0, pendingPosition = null, resizeObserver, contentObserver;
     var view = { cache: emptyCache() };
     function cancelFrames() {
@@ -167,16 +167,30 @@
     }
     function setVisible(value, refresh) {
       if (disposed || visible === value) return;
-      if (!value) { remember(); dirty = dirty || !!frames.stream; invalidate(); disconnect(); visible = false; return; }
+      if (!value) {
+        remember(); dirty = dirty || !!frames.stream; invalidate(); disconnect(); visible = false;
+        subscriptions.forEach(function (observer) { observer.suspend(); });
+        return;
+      }
       visible = true; observe();
       var previous = key, saved = positions.get(key);
       if (dirty) { dirty = false; refresh(); }
+      subscriptions.forEach(function (observer) { observer.resume(); });
       if (saved && key === previous) schedule("activate", function () {
         following = saved.following;
         if (following) bottom(false); else { restore(saved.viewport); updateButton(); }
       });
     }
     Object.assign(view, { begin: begin, reset: reset, suspend: suspend, schedule: schedule,
+      observe: function (options) {
+        if (disposed) throw new Error("Conversation view is disposed");
+        var observer = window.RNAssistantConversationObserver.create(Object.assign({}, options, {
+          scope: function () { return view.scope(); }
+        }));
+        subscriptions.push(observer);
+        if (!visible) observer.suspend();
+        return observer;
+      },
       scope: function () {
         var stamp = bindingGeneration;
         return { target: target, generation: stamp, isCurrent: function () { return !disposed && stamp === bindingGeneration; } };
@@ -190,6 +204,7 @@
       dispose: function () {
         if (disposed) return;
         invalidate(); disconnect(); listeners.forEach(function (remove) { remove(); }); listeners = [];
+        subscriptions.forEach(function (observer) { observer.dispose(); }); subscriptions = [];
         if (view.composer) view.composer.dispose();
         reset(); positions.clear(); disposed = true; views.delete(box);
       }

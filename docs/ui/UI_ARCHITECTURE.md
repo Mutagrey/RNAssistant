@@ -124,6 +124,33 @@ snapshot delivery/subscriptions, preference/draft adapter и вспомогат�
 inbox/approval/context/media readers ещё связаны с текущим owner. До переключения
 этих consumers production остаётся с одним conversation view.
 
+### S2b.4: lifecycle чтений и доставка поздних ответов
+
+Owner — ConversationView / существующий ConversationObserver. View создаёт
+подписки через `observe(options)`, передаёт им свой binding scope и владеет
+suspend/resume/dispose. Office inbox, его дополнительное чтение истории и
+Workspace snapshot используют один механизм. Source adapters задают exact target,
+свой navigation generation, read/callbacks, интервал и условия опроса.
+
+Ожидающие ответы/ошибки проверяют view binding, source/address, navigation generation
+и lifecycle epoch. Stop, hide и dispose отсекают старые delivery; новый read не ждёт
+ответа прежнего binding. Повторные refresh объединяются в один следующий read.
+Hidden view не опрашивается; событие обновления или незавершённое чтение сохраняет
+один catch-up при возврате, включая waiting/idle без polling timer. Реальный bridge
+request завершается своим прежним transport; run и durable receipts не отменяются.
+Без пропущенного обновления возврат соблюдает source `shouldPoll`: компоновка
+простаивающего чата не вызывает чтений данных.
+
+Удалены global `chatInboxObserver` и `state.inboxChatRefreshing`. Workspace factory
+принимает view явно; после dispose/смены binding её push callback не обновляет view.
+Поздний ответ deleteMessage применяет только catalog, если исходный command scope
+устарел; ошибка не подменяет notice другого чата или нового визита в тот же чат.
+
+Это ещё не общая per-target data factory: Office `state`, Workspace `active`,
+preference/draft adapter и вспомогательные inbox/approval/context/media consumers
+остаются у прежних owners. Глобальная доставка full push snapshots и оставшиеся one-off
+service operations ещё требуют адресации перед несколькими live Chat View.
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

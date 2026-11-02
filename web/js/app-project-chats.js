@@ -5,6 +5,7 @@
   var pendingCancels = new Set();
   var composer = null, uploadingFiles = false, uploadTarget = null;
   var runObserver = window.RNAssistantWorkspaceChat.createRunObserver(
+    messageView(),
     readProjectChat,
     function (snapshot) {
       var previousTitle = active && active.state && field(active.state, "title", "Title");

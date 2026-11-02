@@ -137,10 +137,10 @@
     current.messageTotalCount = windowed.messageTotalCount;
     return current;
   }
-  function createRunObserver(read, changed, failed, progressChanged) {
+  function createRunObserver(view, read, changed, failed, progressChanged) {
     var target = null, selected = null, generation = 0, lastPushAt = 0, polling = false;
-    var observer = window.RNAssistantConversationObserver.create({
-      current: function () { return target ? { workspaceId: target.workspaceId,
+    var observer = view.observe({
+      current: function () { return target ? { source: "workspace", workspaceId: target.workspaceId,
         sessionId: target.sessionId, generation: generation } : null; },
       read: read, changed: changed, failed: failed, interval: 10000,
       shouldPoll: function () { return !lastPushAt || Date.now() - lastPushAt >= 30000; }
@@ -160,7 +160,7 @@
         if (polling) observer.start(); else observer.stop();
       }
     }, acceptProgress: function (payload) {
-      if (!target || target.workspaceId !== field(payload, "workspaceId") ||
+      if (!view.matches(conversationTarget(selected)) || !target || target.workspaceId !== field(payload, "workspaceId") ||
           target.sessionId !== field(payload, "sessionId")) return;
       var preview = field(payload, "modelProgress"), state = field(selected, "state");
       if (field(state, "runId") && field(payload, "runId") &&

@@ -1,5 +1,16 @@
 # Stabilization progress
 
+## Наблюдение за чатом и поздние ответы S2b.4 — 2026-11-02
+
+S2b.3 сохранён в `60b04d71`. UI-чтения Office inbox/history и Workspace snapshots
+принадлежат ConversationView через общий Observer. Stop/hide/dispose и смена binding
+отсекают поздние replies/errors; resume выполняет coalesced catch-up. Убраны
+global inbox observer/history-refresh map. Поздний delete notice больше не попадает
+в чужой чат. Локальные JS/Chromium проверки сохраняют receipts, draft и stream.
+[Scope, ревью и остаток](../ui/UI_MIGRATION_PLAN.md#s2b4-наблюдение-и-поздние-ответы--2026-11-02).
+In Review; source snapshot factories, full push routing и остальные adapters ещё
+мигрируют. Несколько chat tabs и Windows/Office qualification не закрыты.
+
 ## Адресная отрисовка и действия чата S2b.3 — 2026-11-02
 
 S2b.2 сохранён в `19a271ed`. Общие builders/footer теперь получают view, target,

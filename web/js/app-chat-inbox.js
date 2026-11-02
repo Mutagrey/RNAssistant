@@ -160,14 +160,22 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
     if (state.activeChatId === chatId) renderChatInbox();
   }
 }
-async function refreshInboxChat(chatId) {
-  state.inboxChatRefreshing = state.inboxChatRefreshing || {};
-  if (state.inboxChatRefreshing[chatId]) return;
-  state.inboxChatRefreshing[chatId] = true;
-  try {
-    if (state.activeChatId === chatId) applyChatStateForChat(await loadChatState(chatId), chatId);
-  } catch (error) { log(error.message, "error"); }
-  finally { delete state.inboxChatRefreshing[chatId]; }
+function officeObservationTarget() {
+  if (!state.activeChatId || state.bridgeUnavailable || state.chatNavigationPending || state.chatDetailPending || state.chatDetailError ||
+      typeof isPanelActive === "function" && !isPanelActive("chat") ||
+      window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return null;
+  return { source: "office", sessionId: state.activeChatId, generation: state.chatNavigationVersion || 0 };
+}
+function refreshInboxChat(chatId) {
+  if (state.activeChatId !== chatId) return Promise.resolve(null);
+  var view = messageView();
+  if (!view.officeHistoryObserver) view.officeHistoryObserver = view.observe({
+    current: officeObservationTarget,
+    read: function (target) { return loadChatState(target.sessionId); },
+    changed: function (response, target) { applyChatStateForChat(response, target.sessionId); },
+    failed: function (error) { log(error.detail || error.message, "error"); }
+  });
+  return view.officeHistoryObserver.refresh();
 }
 async function changeInboxItem(action, item, text) {
   var chatId = state.activeChatId;
@@ -190,23 +198,18 @@ function inboxButton(label, action) {
 function renderChatInbox(options) {
   if (typeof renderMessages === "function") renderMessages(options);
 }
-var chatInboxObserver = null;
 function officeInboxObserver() {
-  if (chatInboxObserver) return chatInboxObserver;
-  chatInboxObserver = window.RNAssistantConversationObserver.create({
-    current: function () {
-      if (!state.activeChatId || state.bridgeUnavailable || state.chatNavigationPending || state.chatDetailPending || state.chatDetailError ||
-          typeof isPanelActive === "function" && !isPanelActive("chat") ||
-          window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return null;
-      return { chatId: state.activeChatId, generation: state.chatNavigationVersion || 0 };
-    },
+  var view = messageView();
+  if (view.officeInboxObserver) return view.officeInboxObserver;
+  view.officeInboxObserver = view.observe({
+    current: officeObservationTarget,
     shouldPoll: function (target) {
-      var box = chatInbox(target.chatId);
-      return document.visibilityState !== "hidden" && (!state.chatInboxes || !state.chatInboxes[target.chatId] ||
+      var box = chatInbox(target.sessionId);
+      return document.visibilityState !== "hidden" && (!state.chatInboxes || !state.chatInboxes[target.sessionId] ||
         box.running || (box.items || []).length || pendingChatInputs().length || currentActiveSend());
     },
     read: function (target) {
-      var chatId = target.chatId, previous = chatInbox(chatId);
+      var chatId = target.sessionId, previous = chatInbox(chatId);
       // Prioritize missing echoes so a large pending queue cannot starve terminal receipts.
       var queuedIds = new Set((previous.items || []).map(function (item) { return item.Id; }));
       var echoes = chatInputEchoes(chatId).filter(function (item) { return item.OperationId; });
@@ -216,20 +219,20 @@ function officeInboxObserver() {
       return send("getChatInbox", { chatId: chatId, receiptOperationIds: operationIds });
     },
     changed: function (inbox, target) {
-      if (!inbox || inbox.chatId !== target.chatId) return;
+      if (!inbox || inbox.chatId !== target.sessionId) return;
       // A pushed chat state may already have delivered this transition while the
       // poll was in flight. Compare with the state actually on screen now.
-      var previous = chatInbox(target.chatId);
+      var previous = chatInbox(target.sessionId);
       applyChatInbox(inbox);
-      var current = chatInbox(target.chatId);
+      var current = chatInbox(target.sessionId);
       // Phase-only updates are already rendered from the inbox/progress snapshot.
       // Reload history only at lifecycle boundaries or for a missing accepted input.
       if (current.epoch !== previous.epoch || current.running !== previous.running ||
-          chatInboxNeedsHistory(target.chatId)) refreshInboxChat(target.chatId);
+          chatInboxNeedsHistory(target.sessionId)) refreshInboxChat(target.sessionId);
     },
     failed: function () { /* The normal bridge banner reports disconnection; keep the saved projection. */ }
   });
-  return chatInboxObserver;
+  return view.officeInboxObserver;
 }
 function pollChatInbox() { return officeInboxObserver().readNow(); }
 function chatInboxNeedsHistory(chatId) {

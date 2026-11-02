@@ -27,7 +27,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.canEditMessage = () => false;
       window.smallIconButton = title => { const button = document.createElement("button"); button.title = title; return button; };
       for (const name of ["renderChatResourceNavigation", "appendMessageArtifactCards", "appendQuestionCards",
-        "bindAttachmentActions", "createChat", "clearChat", "compactChatContext", "openActiveDocument",
+        "bindAttachmentActions", "loadPreviousChatMessages", "jumpToLatestChatMessages", "createChat", "clearChat", "compactChatContext", "openActiveDocument",
         "cancelMessageEdit", "renderContext", "renderContextMeter", "renderModelControls", "renderAttachmentDrafts",
         "setComposerPickerDisabled", "logOnce", "log"]) window[name] = () => {};
       // This fixture owns admission/composer behavior; the real Shell is covered by dock-workspace.
@@ -101,8 +101,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         window.serverInbox = { ...serverInbox, revision: 2, items: [] };
         acknowledge({ ...serverInbox, acceptedInput });
       });
-      await page.waitForFunction(() => !RNAssistantConversationInput.isPending("office", { chatId: "chat" }) &&
-        !(state.inboxChatRefreshing || {}).chat);
+      await page.waitForFunction(() => !RNAssistantConversationInput.isPending("office", { chatId: "chat" }));
       assert.equal(await page.locator("#chatInput").inputValue(), "");
       assert.equal(await page.locator(".inbox-message").count(), 1, "history lag cannot make acknowledged text disappear");
       assert.ok(Math.abs(await page.locator("#messages").evaluate(el => el.scrollTop) - manualTop) < 2,
@@ -118,7 +117,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
         serverMessages = serverMessages.concat({ Id: "input", Role: "user", RunId: "run", Content: submitted.text });
         await pollChatInbox(); // Inbox revision is unchanged; unresolved echoes still trigger history refresh.
       });
-      await page.waitForFunction(() => !state.inboxChatRefreshing.chat);
+      await page.locator(".inbox-message").waitFor({ state: "detached" });
       assert.equal(await page.locator(".inbox-message").count(), 0);
       assert.equal(await page.locator(".message.user .markdown").filter({ hasText: "Уточнение во время работы: " + delivery }).count(), 1,
         "the exact persisted message replaces its echo once");

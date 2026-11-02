@@ -2,12 +2,12 @@
 
 ## Позднее уведомление deleteMessage — 2026-11-02
 
-Owner: Web Chat delivery, остаток S2 instance scoping. В code review обнаружено:
-`app-chat-session.js:deleteMessage` сохраняет target запроса, но его catch вызывает
-общий `showSendError` без проверки выбранного чата. Поздний отказ после A→B может
-показать ошибку в B. Отдельно не воспроизводилось; исправить при адресации delivery/
-error state. S2b.3 блокирует переадресацию последующих команд удаления, но не закрывает
-этот соседний путь уведомления и не заявляет полную изоляцию всех UI-состояний.
+Owner: Web Chat delivery. Исправлено в S2b.4: `deleteMessage` получает captured
+scope команды и проверяет его до применения active snapshot или notice ошибки.
+`message-actions` вызывает реальный delivery handler: late failure после A→B→A
+не подменяет notice, late success при выборе B обновляет только catalog; ошибка
+текущей команды остаётся видимой. Это локальное synthetic evidence, не Windows
+qualification и не закрытие остальных one-off UI delivery paths.
 
 ## Request view S3a: пределы измерений — 2026-11-02
 

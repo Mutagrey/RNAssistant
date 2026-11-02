@@ -29,6 +29,12 @@ selected state, Workspace transport/subscriptions и preference/draft adapter �
 следующий шаг. Вспомогательные inbox/approval/media/context readers также должны
 получить view scope до нескольких Dockview conversation instances.
 
+S2b.4: polling/history-read lifecycle передан `ConversationView.observe`; прежние
+global inbox observer/history-refresh map удалены. Source adapters используют
+общий capture/delivery guard. Selected Office state / Workspace active snapshot,
+full push delivery и preference/draft owner ещё требуют per-target factory;
+temporary singleton adapter не размножать для Dockview tabs.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

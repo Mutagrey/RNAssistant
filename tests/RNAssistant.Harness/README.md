@@ -55,6 +55,10 @@ run-deletion navigation / delayed-history checks to `message-actions`. Existing
 `stream-render-cost` still checks coalescing and retained nodes; Chromium
 `workspace-chat-progress`, `chat-inspector`, `run-changes-layout` exercise the
 same explicit presentation context, including exact Inspector/changes addresses.
+S2b.4: `conversation-observer` checks two view bindings, stop/hide/dispose, stale
+success/errors, coalesced follow-up and hidden passive refresh. `chat-inbox` covers
+the nested history-read boundary; `message-actions` checks actual late delete
+delivery. Pair with Chromium `workspace-chat-progress` / `chat-input-delivery`.
 The separate composer unknown-warning mismatch remains in the risk register.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,

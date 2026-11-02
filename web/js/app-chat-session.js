@@ -375,7 +375,8 @@ async function deleteChat(chatIdValue) {
   }
 }
 
-async function deleteMessage(message, index) {
+async function deleteMessage(message, index, scope) {
+  if (!scope || !scope.isCurrent() || !scope.target || scope.target.source !== "office" || !scope.target.sessionId) return;
   if (message && message.Local) {
     state.messages.splice(index, 1);
     if (message.Failed) {
@@ -387,13 +388,14 @@ async function deleteMessage(message, index) {
     return;
   }
 
-  var targetChatId = state.activeChatId;
+  var targetChatId = scope.target.sessionId;
   try {
     var response = await send("deleteMessage", { chatId: targetChatId, id: messageId(message), index: index });
-    applyChatStateForChat(response, targetChatId);
+    if (scope.isCurrent()) applyChatStateForChat(response, targetChatId);
+    else applyChatCatalogState(response);
     log("Сообщение удалено.");
   } catch (error) {
-    showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
+    if (scope.isCurrent()) showSendError(error.detail || error.message, state.failedSend ? state.failedSend.text : "");
     log(error.detail || error.message, "error");
   }
 }

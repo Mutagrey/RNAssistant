@@ -480,6 +480,41 @@ async delete/navigation, deferred history), `live-run-projection`,
 затем inbox/approval/context/attachment consumers в общей границе; только после
 этого независимые exact targets в Dockview. S2 и несколько chat tabs не завершены.
 
+### S2b.4: наблюдение и поздние ответы — 2026-11-02
+
+По «Коммит и далее» S2b.3 сохранён в `60b04d71`. Shared ConversationObserver теперь
+принадлежит конкретному view. Его lifecycle общий для Office inbox/history и
+Workspace snapshots; убраны Office singleton observer и отдельная глобальная
+карта history-refresh. Existing intervals, push freshness, exact receipts и runtime
+сохранены. Source adapters предоставляют данные и transport; новых stores нет.
+
+Stop/hide/dispose не позволяют ожидающему ответу/ошибке обновить прежний binding.
+Смена чата не блокируется старым запросом. Refresh bursts дают максимум один
+следующий read; пропущенное hidden обновление даёт один catch-up даже без таймера.
+Без такого события возврат соблюдает source `shouldPoll`; idle layout не читает данные.
+Это локальная экономия UI-опроса; общее ускорение приложения не заявляется.
+
+Закрыт [поздний notice deleteMessage](../stabilization/RISK_REGISTER.md#позднее-уведомление-deletemessage--2026-11-02):
+source команды передаёт captured scope, поздний error не попадает в другой чат,
+поздний success не заменяет его active snapshot. Вложенный inbox→history read также
+получил общий binding/lifecycle guard.
+
+Проверки: `conversation-observer` (два view, stop/hide/dispose, A→B→A, passive
+catch-up, 100 refresh→1 follow-up), `conversation-view`, `chat-inbox` с поздним
+history response, `message-actions` с реальным deleteMessage delivery,
+`multi-chat-requests`; Chromium `dock-workspace`, `workspace-chat-progress`, `workspace-chat-layout`,
+`chat-input-delivery`. Последний fixture ждёт результат в DOM вместо удалённого
+global pending flag. Scope — Web presentation, без C#/Office validation.
+
+**In Review**. В mock `/preview/web/?scenario=ready` запустить ответ, закрыть/вернуть
+conversation, переключить источник и вернуться; проверить актуальную ленту и
+сохранность ввода. Стили прежние. Закрытие UI не останавливает run. Windows/Office
+evidence остаётся открытым; откат — diff среза без migration пользовательских данных.
+
+Далее: service adapter конкретного target вместо Office global state / Workspace
+active selection, затем preference/draft, inbox/approval/context/attachment
+consumers. Пока общая карта Dockview сохраняет один conversation; S2 не завершён.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

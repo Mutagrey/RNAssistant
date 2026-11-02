@@ -4,11 +4,11 @@ function officeCanMessageAction(action) {
   return (action.name === "fork" || action.name === "delete") && !currentActiveSend() && !hasActiveMessageEdit() &&
     !(typeof pendingAgentApprovalActivity === "function" && pendingAgentApprovalActivity());
 }
-function officeMessageAction(action) {
+function officeMessageAction(action, scope) {
   if (!officeCanMessageAction(action)) return;
   if (action.name === "fork") return forkChatAtMessage(action.message, action.index);
   if (action.name === "edit") return startMessageEdit(action.message, action.index);
-  if (action.name === "delete") return deleteMessage(action.message, action.index);
+  if (action.name === "delete") return deleteMessage(action.message, action.index, scope);
 }
 
 async function runQuickAction(action) {
