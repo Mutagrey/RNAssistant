@@ -547,6 +547,34 @@ Chromium `model-settings` и `workspace-shared-draft`. Браузерная пр
 binding и вспомогательные inbox/approval/context/media consumers. Затем независимые
 chat targets в Dockview. Полный S2 и несколько вкладок чатов пока не завершены.
 
+### S2b.6: общая привязка черновика — 2026-11-02
+
+S2b.5 сохранён в `159a8fcc`. Owner — ChatComposer; оба источника используют общий
+capture/restore/accept/append, без отдельного store. Удалены Workspace
+`current/loaded/mode/reasoning` и прямое восстановление ввода из Office ACK.
+Исправлен overwrite незавершённой правки поздним ACK; отмена правки больше не
+возвращает уже отправленный текст. Поздняя ссылка на файл остаётся в обычном draft.
+Версии, protected persistence, receipts, C#/Bridge и визуальные стили не менялись.
+
+Проверки: `conversation-draft` с реальным ChatDrafts (version guards, edit/ACK,
+background append, два controller, dispose, 100 restores без записи в textarea),
+`conversation-composer`, `conversation-preferences`, `chat-inbox` с реальным
+ACK во время правки, `multi-chat-requests`. Chromium `chat-input-delivery` и
+`chat-draft-reload` прошли на изолированном `159a8fcc` + этот срез;
+`workspace-shared-draft` — в рабочем дереве после `75c59e88` (S3b.2).
+Это local/mock evidence, не Windows/Office qualification.
+
+**Принят пользователем для production 2026-11-02**. Реализация находится в `web/`.
+Запуск: `python3 prototypes/serve_ui.py`, `/preview/web/?scenario=ready`.
+Проверить: написать текст и переключить Office → проект → плагин → назад;
+начать правку сообщения, переключиться/вернуться и отменить её; отправить сообщение
+и сразу писать следующее; перезагрузить preview и проверить draft/план/reasoning.
+Компоновка прежняя. Откат — diff среза, без миграции данных.
+
+Следующий участок пункта 1: exact-target snapshot factories и full push routing.
+Затем остальные file/context/approval/media adapters перед независимыми chat tabs.
+Временные singleton consumers перечислены в Migration Map; полный S2 ещё открыт.
+
 ## Последующие срезы — только после ревью предыдущего
 
 | Срез | Содержание | Что удаляется после проверки |

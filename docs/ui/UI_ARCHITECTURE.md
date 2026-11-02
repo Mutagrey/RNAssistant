@@ -174,6 +174,24 @@ Send ждёт завершения. Workspace mode/reasoning остаются в
 ещё используют singleton adapters. Срез адресует команды настроек, а не завершает
 per-target data factory или несколько production chat views.
 
+### S2b.6: общая привязка черновика
+
+ChatComposer владеет capture/restore/accept/append текста для обоих источников.
+Он удерживает только ссылку на текущую запись ChatDrafts; storage, версии, receipts
+и attachment metadata остаются у прежних владельцев. Source adapters предоставляют
+чтение/запись существующего store, не копируют текст и правила восстановления.
+
+ACK обновляет обычный draft, не текст незавершённой правки. Поздняя ссылка на файл
+также добавляется в обычный draft, в том числе у фонового target. Версионные guards
+сохраняют новый ввод; unchanged record не переназначает textarea и не сбрасывает
+cursor. Dispose удаляет binding и не допускает поздней записи в DOM.
+
+Workspace `current/loaded/mode/reasoning` удалены: адрес берётся из controller,
+настройки — из ChatDrafts или source snapshot. `sharedComposer` пока остаётся
+file/service adapter единственной form; полные snapshots, full push routing и
+вспомогательные context/approval/media consumers ещё требуют instance scope.
+Несколько независимых chat views этим срезом не включаются.
+
 ## S1b: фактическая граница переноса
 
 Owner: Web presentation. Один [DockWorkspace](../../web/js/app-dock-workspace.js)

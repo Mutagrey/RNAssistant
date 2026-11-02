@@ -44,6 +44,12 @@ source preferenceService захватывает exact target. Global saving flag
 Workspace preference dispatch/render удалены. Facts всё ещё читаются через selected
 Office/Workspace adapter; полный snapshot и draft/file binding остаются removal gate.
 
+S2b.6: draft capture/restore/accept/append принадлежат тому же ChatComposer;
+Office ACK и Workspace больше не назначают обычный input отдельно. Workspace
+`current/loaded/mode/reasoning` удалены, существующий ChatDrafts не менялся.
+Остаток adapter: `sharedComposer` file/service binding, selected source snapshots,
+full push routing и вспомогательные consumers. Owner/removal gate выше сохраняются.
+
 ## Conversation view S2b.1 — 2026-11-02
 
 Owner: Web conversation presentation. `app-conversation-view.js` — общий

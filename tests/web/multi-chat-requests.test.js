@@ -38,6 +38,7 @@ context.acceptOfficeDraft = () => null;
 context.window.RNAssistantChatDrafts = { flushOffice: async () => {} };
 context.logToolResults = () => {};
 context.renderSendControls = () => {};
+context.updateComposerInputState = () => {};
 context.renderChatSessions = () => {};
 context.renderMessages = () => {};
 context.renderModelControls = () => {};

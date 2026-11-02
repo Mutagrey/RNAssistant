@@ -63,6 +63,10 @@ S2b.5: `conversation-preferences` covers exact-target pending/ACK, A→B→A rea
 uncertain delivery and disposal; `model-navigation` retains discovery/drain guards.
 Chromium `model-settings` checks confirmed Office mode with editable text during
 save; `workspace-shared-draft` retains project/plugin mode/reasoning and receipt checks.
+S2b.6: `conversation-draft` uses the real draft store for versioned ACK/edit/append,
+source isolation and stable textarea binding. `chat-inbox` covers Office ACK during
+a later edit; Chromium `chat-input-delivery`, `chat-draft-reload` and
+`workspace-shared-draft` retain persistence, receipt, late file and preference checks.
 The separate composer unknown-warning mismatch remains in the risk register.
 
 `history protocol:` checks 36 content-response/history-role/instruction-role/reflection combinations,

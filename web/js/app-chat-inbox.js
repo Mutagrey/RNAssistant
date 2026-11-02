@@ -133,18 +133,19 @@ async function submitInboxMessage(text, attachments, chatId, delivery, answers, 
     pending.localStatus = "syncing";
     applyChatInbox(inbox);
     delete state.inboxSubmissions[chatId];
-    if (state.activeChatId === chatId) {
-      if (!answers) {
-        captureChatDraft(chatId);
-        var acceptedDraft = acceptOfficeDraft(chatId, text, submittedDraft && submittedDraft.version, attachments);
+    if (!answers) {
+      var previousDraft = captureChatDraft(chatId);
+      var acceptedDraft = acceptOfficeDraft(chatId, text, submittedDraft && submittedDraft.version, attachments);
+      chatComposer().acceptDraft(officeComposerTarget(chatId), previousDraft, acceptedDraft);
+      if (state.activeChatId === chatId) {
         state.draftAttachments = acceptedDraft ? acceptedDraft.attachments.slice() : [];
-        setChatInputText(acceptedDraft ? acceptedDraft.text : "", false, false);
         if (typeof renderAttachmentDrafts === "function") renderAttachmentDrafts();
       }
+    }
+    if (state.activeChatId === chatId) {
+      updateComposerInputState();
       clearSendError();
       if ($("inboxStatus")) $("inboxStatus").textContent = "";
-    } else if (!answers) {
-      acceptOfficeDraft(chatId, text, submittedDraft && submittedDraft.version, attachments);
     }
     if (chatInboxNeedsHistory(chatId)) refreshInboxChat(chatId);
     return true;

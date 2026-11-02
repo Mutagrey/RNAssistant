@@ -12,6 +12,15 @@ retained DOM двух views. [Ревью, измерения и ограниче
 In Review. Далее общий HTML/plugin Browser S3b.3; Library/VBA и остальные панели S4.
 Cold restart mode/search/scroll, Windows/Office и прежние qualification gaps открыты.
 
+## Общая привязка черновика S2b.6 — 2026-11-02
+
+S2b.5 сохранён в `159a8fcc`. Office/Workspace используют общий draft binding
+ChatComposer; отдельные Workspace current/loaded/mode/reasoning удалены.
+ACK сохраняет незавершённую правку и новый ввод, поздний file link принадлежит
+обычному draft. Store/версии/receipts прежние; unchanged restore не трогает textarea.
+[Проверки, ревью и остаток](../ui/UI_MIGRATION_PLAN.md#s2b6-общая-привязка-черновика--2026-11-02).
+Принят пользователем для production. JS и Chromium draft/delivery проверки прошли; snapshots/full push и
+остальные adapters ещё мигрируют. Несколько chat tabs и Windows evidence открыты.
 
 ## Общие команды настроек чата S2b.5 — 2026-11-02
 
@@ -20,7 +29,7 @@ exact-target service adapters; global saving flags и Workspace preference path
 удалены. Сохранены draft/barrier/revision guards, uncertain read-back; A→B→A
 не применяет старый ответ. Office mode ждёт ACK, ввод доступен во время сохранения.
 [Scope, проверки и ревью](../ui/UI_MIGRATION_PLAN.md#s2b5-адресные-настройки-общего-composer--2026-11-02).
-In Review; полные snapshots/draft adapters и несколько chat tabs ещё не завершены.
+Сохранён в `159a8fcc`; полные snapshots/draft adapters и несколько chat tabs ещё не завершены.
 Локальный UI проверяется отдельно от параллельного S3b.2; Windows evidence открыт.
 
 ## Наблюдение за чатом и поздние ответы S2b.4 — 2026-11-02

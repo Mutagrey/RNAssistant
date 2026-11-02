@@ -5,7 +5,7 @@
   }
   function create(nodes) {
     var sources = Object.create(null), owner = "office", selected = "", generation = 0, bound = false, disposed = false;
-    var edits = new Map(), listeners = [], frames = new Set(), preferenceWrites = new Set();
+    var edits = new Map(), listeners = [], frames = new Set(), preferenceWrites = new Set(), draftBinding = null;
     function invalidate() {
       ++generation;
       frames.forEach(function (frame) { window.cancelAnimationFrame(frame); }); frames.clear();
@@ -66,6 +66,43 @@
       }
     }
     function edit(target) { return edits.get(key(target)) || null; }
+    function draftText(draft) { return draft ? draft.text : ""; }
+    function restoreDraft(target, draft) {
+      if (disposed) return false;
+      var actual = context().target;
+      if (!target || !actual || target.source !== actual.source || (target.workspaceId || "") !== (actual.workspaceId || "") ||
+          (target.sessionId || "") !== (actual.sessionId || "")) return false;
+      var id = key(target), editing = edit(target);
+      if (draftBinding && draftBinding.key === id && draftBinding.record === draft) return false;
+      draftBinding = { key: id, record: draft };
+      var text = editing ? editing.text : draftText(draft);
+      if (nodes.input.value !== text) nodes.input.value = text;
+      return true;
+    }
+    function captureDraft(target, write) {
+      if (disposed || !current(target)) return null;
+      var editing = edit(target), draft = write(editing ? editing.draft : nodes.input.value);
+      draftBinding = { key: key(target), record: draft };
+      return draft;
+    }
+    function acceptDraft(target, before, after) {
+      if (disposed || before === after) return false;
+      var editing = edit(target);
+      if (editing && editing.draft === draftText(before)) editing.draft = draftText(after);
+      if (!current(target) || !draftBinding || draftBinding.key !== key(target) || draftBinding.record !== before) return false;
+      draftBinding.record = after;
+      if (!editing && nodes.input.value === draftText(before)) nodes.input.value = draftText(after);
+      return true;
+    }
+    function appendDraft(target, store, line) {
+      var before = store.read(), text = draftText(before), editing = edit(target);
+      if (!disposed && current(target) && draftBinding && draftBinding.key === key(target) && draftBinding.record === before)
+        text = editing ? editing.draft : nodes.input.value;
+      var saved = store.write(text.trim() ? text.replace(/\s*$/, "") + "\n" + line : line);
+      if (editing && !disposed) editing.draft = draftText(saved);
+      restoreDraft(target, saved);
+      return saved;
+    }
     function defer(action) {
       var scope = capture(), frame = window.requestAnimationFrame(function () {
         frames.delete(frame);
@@ -137,11 +174,12 @@
       activate: function (name) { owner = name; context(); }, owner: function () { return owner; },
       capture: capture, dispatch: dispatch, sync: context, current: current, defer: defer,
       preferences: preferences, setPreference: setPreference, preferenceBusy: preferenceBusy,
+      captureDraft: captureDraft, restoreDraft: restoreDraft, acceptDraft: acceptDraft, appendDraft: appendDraft,
       edit: edit, startEdit: startEdit, cancelEdit: cancelEdit, bind: bind,
       dispose: function () {
         if (disposed) return;
         disposed = true; invalidate(); listeners.forEach(function (remove) { remove(); });
-        listeners = []; edits.clear(); preferenceWrites.clear(); sources = Object.create(null);
+        listeners = []; edits.clear(); preferenceWrites.clear(); draftBinding = null; sources = Object.create(null);
       }
     };
   }

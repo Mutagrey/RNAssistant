@@ -323,14 +323,29 @@
   function bindComposer(form, options) {
     if (sharedComposer) { if (options && options.onFiles) sharedComposer.attachFiles(options); return sharedComposer; }
     var input = form.querySelector("textarea");
-    var current = null, loaded = null, mode = "agent", reasoning = false, locked = false;
+    var locked = false;
     var draftStore = window.RNAssistantChatDrafts;
-    function sameTarget(left, right) {
-      return !!left && !!right && left.workspaceId === right.workspaceId && left.sessionId === right.sessionId;
+    function current() {
+      var target = chatComposer().capture().target;
+      return target && target.source === "workspace" && target.workspaceId && target.sessionId ? target : null;
     }
-    function save() {
-      if (currentMessageEdit()) return;
-      if (current) loaded = draftStore.saveWorkspace(current, { text: input.value, mode: mode, reasoning: reasoning });
+    function draftOptions(target) {
+      var saved = draftStore.readWorkspace(target);
+      if (saved) return saved;
+      var snapshot = chatComposer().current(workspaceComposerTarget(target)) ? field(dispatch("snapshot"), "state") : null;
+      return { text: "", mode: field(snapshot, "mode") || "agent",
+        reasoning: !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled") };
+    }
+    function writeDraft(target, text, changes) {
+      return draftStore.saveWorkspace(target, Object.assign({}, draftOptions(target), { text: text }, changes));
+    }
+    function captureDraft(changes, onlyChanged) {
+      var target = current();
+      if (!target) return null;
+      return chatComposer().captureDraft(target, function (text) {
+        var saved = draftStore.readWorkspace(target);
+        return onlyChanged && saved && saved.text === text ? saved : writeDraft(target, text, changes);
+      });
     }
     function showOfficeContext(snapshot) {
       if (chatComposer().owner() !== "project") { form.title = ""; return; }
@@ -355,17 +370,17 @@
       if (sharedComposer) update();
     }
     function pickFiles() {
-      if (chatComposer().owner() !== "project" || locked || !current || !fileOptions ||
+      if (chatComposer().owner() !== "project" || locked || !current() || !fileOptions ||
           fileOptions.canAttachFiles && !fileOptions.canAttachFiles()) return;
-      fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current;
+      fileTarget = fileOptions.fileTarget ? fileOptions.fileTarget() : current();
       picker.open = false; fileInput.click();
     }
     function preferences() {
-      var snapshot = field(dispatch("snapshot"), "state"), status = runStatus(snapshot);
-      return { selected: field(snapshot, "model") || "", mode: mode, reasoning: reasoning,
+      var snapshot = field(dispatch("snapshot"), "state"), status = runStatus(snapshot), draft = draftOptions(current());
+      return { selected: field(snapshot, "model") || "", mode: draft.mode, reasoning: draft.reasoning,
         runningModel: status === "running" || status === "awaiting_confirmation"
           ? field(field(snapshot, "modelConfiguration"), "model") : null,
-        disabled: locked || !current || state.bridgeUnavailable };
+        disabled: locked || !current() || state.bridgeUnavailable };
     }
     function effectiveModel() {
       var selection = preferences();
@@ -373,10 +388,11 @@
     }
     function update() {
       if (chatComposer().owner() === "office") return;
-      renderComposerInputState(input.value.trim() || loaded && loaded.attachments && loaded.attachments.length);
-      setComposerPickerDisabled(picker, locked || !current);
+      var draft = draftStore.readWorkspace(current());
+      renderComposerInputState(input.value.trim() || draft && draft.attachments && draft.attachments.length);
+      setComposerPickerDisabled(picker, locked || !current());
       renderChatModePicker();
-      fileAction.disabled = locked || !current || !fileOptions ||
+      fileAction.disabled = locked || !current() || !fileOptions ||
         chatComposer().owner() !== "project" || !!(fileOptions.canAttachFiles && !fileOptions.canAttachFiles());
       renderReasoningToggle();
       renderChatModelPicker();
@@ -385,64 +401,42 @@
     sharedComposer = {
       attachFiles: attachFiles,
       refresh: update,
-      input: function () { save(); update(); },
+      input: function () { if (!currentMessageEdit()) captureDraft(); update(); },
       preferences: preferences,
       savePreference: function (change, target) {
-        if (!sameTarget(current, target)) throw new Error("Чат изменился до сохранения настройки.");
-        if (change.name === "mode") mode = change.value;
-        else reasoning = change.value;
-        save();
+        if (!chatComposer().current(target)) throw new Error("Чат изменился до сохранения настройки.");
+        var changes = {}; changes[change.name] = change.value;
+        captureDraft(changes);
       },
       pickFiles: pickFiles,
       select: function (target, snapshot) {
         showOfficeContext(snapshot);
-        var next = target && target.workspaceId && target.sessionId
-          ? { workspaceId: target.workspaceId, sessionId: target.sessionId } : null;
-        var same = sameTarget(current, next);
-        current = next;
-        chatComposer().sync();
-        var saved = draftStore.readWorkspace(next);
-        if (same && saved === loaded) { update(); return; }
-        loaded = saved;
-        var edit = currentMessageEdit();
-        input.value = edit ? edit.text : saved ? saved.text : ""; mode = saved ? saved.mode : field(snapshot, "mode") || "agent";
-        reasoning = saved ? saved.reasoning : !!field(field(snapshot, "modelConfiguration"), "reasoningEnabled"); update();
+        if (target) chatComposer().restoreDraft(workspaceComposerTarget(target), draftStore.readWorkspace(target));
+        update();
       },
-      options: function () { return { Mode: mode,
-        ReasoningEnabled: reasoning && effectiveModelSupportsReasoning(effectiveModel()) !== false }; },
+      options: function () {
+        var selected = preferences();
+        return { Mode: selected.mode, ReasoningEnabled: selected.reasoning && effectiveModelSupportsReasoning(effectiveModel()) !== false };
+      },
       prepareInput: function (target, text, edit, activeRun) {
         var options = activeRun ? { SteerRunId: field(activeRun, "runId"), Mode: field(activeRun, "mode"),
           ReasoningEnabled: !!field(field(activeRun, "modelConfiguration"), "reasoningEnabled") } : this.options();
         return draftStore.prepareWorkspaceInput(target, text, Object.assign({}, options, edit ?
           { EditMessageId: edit.messageId, ExpectedRevision: edit.revision } : {}));
       },
-      draftVersion: function () {
-        if (!current) return null;
-        var saved = draftStore.readWorkspace(current);
-        if (saved !== loaded || !saved || saved.text !== input.value || saved.mode !== mode || saved.reasoning !== reasoning) save();
-        return loaded.version;
-      },
+      draftVersion: function () { var saved = captureDraft(null, true); return saved ? saved.version : null; },
       lock: function (value) { locked = value; update(); },
       append: function (target, line) {
-        if (sameTarget(current, target)) {
-          var latest = draftStore.readWorkspace(current);
-          if (latest !== loaded) this.select(target);
-          input.value = input.value.trim() ? input.value.replace(/\s*$/, "") + "\n" + line : line;
-          input.dispatchEvent(new Event("input", { bubbles: true }));
-          return;
-        }
-        var saved = draftStore.readWorkspace(target) || { text: "", mode: "agent", reasoning: false };
-        draftStore.saveWorkspace(target, { text: saved.text.trim() ? saved.text.replace(/\s*$/, "") + "\n" + line : line,
-          mode: saved.mode, reasoning: saved.reasoning });
+        chatComposer().appendDraft(workspaceComposerTarget(target), {
+          read: function () { return draftStore.readWorkspace(target); },
+          write: function (text) { return writeDraft(target, text); }
+        }, line);
+        if (chatComposer().current(workspaceComposerTarget(target))) update();
       },
       accepted: function (target, text, version, request) {
         var previous = draftStore.readWorkspace(target);
-        var cleared = draftStore.acceptWorkspaceInput(target, request, text, version);
-        if (cleared && chatComposer().owner() !== "office" && sameTarget(current, target) && loaded === previous) {
-          if (currentMessageEdit()) currentMessageEdit().draft = "";
-          else input.value = "";
-          loaded = cleared; update();
-        }
+        draftStore.acceptWorkspaceInput(target, request, text, version);
+        if (chatComposer().acceptDraft(workspaceComposerTarget(target), previous, draftStore.readWorkspace(target))) update();
       },
       acceptedEdit: function (target, request, edit) {
         draftStore.acknowledgeWorkspaceInput(target, request);

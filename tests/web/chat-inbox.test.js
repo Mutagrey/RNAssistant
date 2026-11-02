@@ -24,7 +24,7 @@ const context = vm.createContext({
   clearDraftAttachments() { context.state.draftAttachments = []; },
   send(type, payload) { calls.push({type, payload}); return transport(type, payload); },
   applyChatStateForChat() {}, loadChatState: () => Promise.resolve({}),
-  window: { requestAnimationFrame(fn) { fn(); } }
+  window: { requestAnimationFrame(fn) { fn(); }, cancelAnimationFrame() {} }
 });
 vm.runInContext(fs.readFileSync("web/js/app-chat-state.js", "utf8"), context);
 // Inbox-specific VM keeps protected storage outside this test; the browser reload
@@ -39,6 +39,11 @@ context.messageView = () => {
   return view;
 };
 vm.runInContext(fs.readFileSync("web/js/app-conversation-input.js", "utf8"), context);
+vm.runInContext(fs.readFileSync("web/js/app-chat-composer.js", "utf8"), context);
+const composer = context.window.RNAssistantChatComposer.create({ form: new Element(), input: context.$("chatInput") });
+composer.register("office", { target: () => context.officeComposerTarget() });
+context.chatComposer = () => composer;
+context.renderSendControls = context.updateComposerInputState = context.renderChatRunNotice = () => {};
 vm.runInContext(fs.readFileSync("web/js/app-chat-inbox.js", "utf8"), context);
 context.renderChatSessions = () => {};
 (async () => {
@@ -184,6 +189,25 @@ context.renderChatSessions = () => {};
   assert.equal(calls.at(-1).payload.text, null);
   assert.equal(context.$("chatInput").value, "Unsent draft", "question answers preserve composer text");
   assert.equal(context.state.draftAttachments[0].Id, "second", "question answers preserve composer attachments");
+
+  context.state.activeChatId = "editing";
+  context.state.draftAttachments = [];
+  context.$("chatInput").value = "sent before editing";
+  transport = () => new Promise(resolve => { resolveSend = resolve; });
+  const editRaceSend = context.submitInboxMessage("sent before editing", [], "editing", "Queue");
+  await new Promise(resolve => setImmediate(resolve));
+  const editTarget = context.officeComposerTarget();
+  composer.startEdit(editTarget, { messageId: "old-message", text: "unfinished edit" });
+  context.$("chatInput").value = "unfinished edit";
+  resolveSend({ chatId: "editing", revision: 1, items: [], acceptedInput: {
+    Id: "sent-before-edit", OperationId: calls.at(-1).payload.operationId,
+    Text: "sent before editing", Status: "Applied", Revision: 1 } });
+  assert.equal(await editRaceSend, true);
+  assert.equal(context.$("chatInput").value, "unfinished edit", "Office ACK cannot overwrite a later message edit");
+  assert.equal(composer.edit(editTarget).text, "unfinished edit");
+  composer.cancelEdit(editTarget);
+  assert.equal(context.$("chatInput").value, "", "cancel after ACK must not restore the already sent draft");
+
   context.state.activeChatId = "receipts";
   context.state.messages = [];
   let historyReads = 0;

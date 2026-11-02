@@ -398,12 +398,10 @@ window.RNAssistantChatDrafts.forgetOffice = forgetOfficeDraft;
 
 function captureChatDraft(chatIdValue, changed) {
   if (!chatIdValue) return null;
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return readOfficeDraft(chatIdValue);
-  var input = $("chatInput");
-  var edit = typeof chatComposer === "function" ? chatComposer().edit(officeComposerTarget(chatIdValue)) : null;
-  var text = edit ? edit.draft : (input ? input.value : "");
+  var target = officeComposerTarget(chatIdValue);
+  if (!chatComposer().current(target)) return readOfficeDraft(chatIdValue);
   var attachments = (state.draftAttachments || []).slice();
-  return saveOfficeDraft(chatIdValue, text, attachments, changed);
+  return chatComposer().captureDraft(target, function (text) { return saveOfficeDraft(chatIdValue, text, attachments, changed); });
 }
 
 function restoreChatDraft(chatIdValue) {
@@ -412,13 +410,9 @@ function restoreChatDraft(chatIdValue) {
   if (typeof renderAttachmentDrafts === "function") {
     renderAttachmentDrafts();
   }
-  if (window.RNAssistantWorkspaceChat && window.RNAssistantWorkspaceChat.owner() !== "office") return;
-  var edit = typeof chatComposer === "function" ? chatComposer().edit(officeComposerTarget(chatIdValue)) : null;
-  if (typeof chatComposer === "function") chatComposer().sync();
-  if (typeof setChatInputText === "function") {
-    setChatInputText(edit ? edit.text : draft ? draft.text : "", false, false);
-  } else if ($("chatInput")) {
-    $("chatInput").value = draft ? draft.text : "";
+  if (chatComposer().restoreDraft(officeComposerTarget(chatIdValue), draft)) {
+    updateComposerInputState();
+    chatComposer().defer(resizeChatInput);
   }
 }
 
