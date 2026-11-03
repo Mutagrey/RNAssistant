@@ -197,8 +197,6 @@ async function selectChat(id) {
   }
 }
 
-function loadPreviousChatMessages() { return chatComposer().dispatch("loadPrevious"); }
-function jumpToLatestChatMessages() { return chatComposer().dispatch("loadLatest"); }
 
 async function openActiveDocument(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;

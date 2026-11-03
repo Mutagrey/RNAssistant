@@ -4,7 +4,7 @@
     var target = component.target, id = target.sessionId, node = component.node, composer = component.composer;
     var owner = id ? component.view.bindProjection(officeChatSource(id), mergeOfficeChatSnapshot) : null;
     if (owner) owner.accept(createOfficeChatSnapshot(id));
-    var empty = createOfficeChatSnapshot(""), uploading = false, deleting = false;
+    var empty = createOfficeChatSnapshot(""), uploading = false, deleting = false, pageRead = null, historyGeneration = 0;
     function snapshot() { return owner ? owner.snapshot() : empty; }
     function draft() { return readOfficeDraft(id); }
     function writeDraft(text) { var saved = draft(); return saveOfficeDraft(id, text, saved && saved.attachments || [], true); }
@@ -42,8 +42,36 @@
     function refresh(options) {
       if (!id || !component.isCurrent()) return Promise.resolve();
       if (!snapshot().sessionRevision) component.loading = true;
-      if (options && options.latestMessages) return loadChatState(id).then(function (response) { if (component.isCurrent()) accept(response, options); }).catch(component.notice);
+      if (options && options.latestMessages) {
+        var generation = ++historyGeneration;
+        return loadChatState(id).then(function (response) {
+          if (component.isCurrent() && generation === historyGeneration) accept(response, options);
+        }).catch(function (error) { if (generation === historyGeneration) component.notice(error); });
+      }
       return history.refresh();
+    }
+    function loadPrevious() {
+      var data = snapshot(), start = data.messageStartIndex, revision = data.sessionRevision;
+      if (!start) return Promise.resolve();
+      if (pageRead && pageRead.generation === historyGeneration && pageRead.start === start && pageRead.revision === revision) return pageRead.promise;
+      var request = { generation: ++historyGeneration, start: start, revision: revision }; pageRead = request;
+      request.promise = (async function () {
+        try {
+          var page = await send("getPreviousChatMessages", { chatId: id, beforeIndex: start });
+          if (!component.isCurrent() || request.generation !== historyGeneration || snapshot().sessionRevision !== revision || snapshot().messageStartIndex !== start) return;
+          if (page.chatId !== id || page.sessionRevision !== revision) { await refresh(); return; }
+          Object.assign(snapshot(), RNAssistantConversationState.prependMessageWindow(snapshot(), page));
+          snapshot().artifacts = snapshot().artifacts.concat((page.artifacts || []).filter(function (entry) {
+            return !snapshot().artifacts.some(function (known) { return (known.Id || known.id) === (entry.Id || entry.id); });
+          }));
+          component.render({ preserveTop: true });
+        } catch (error) {
+          if (component.isCurrent() && request.generation === historyGeneration && snapshot().sessionRevision === revision && snapshot().messageStartIndex === start)
+            component.notice(error);
+        }
+        finally { if (pageRead === request) pageRead = null; }
+      })();
+      return request.promise;
     }
     async function action(type, payload) {
       try { var response = await send(type, Object.assign({ chatId: id }, payload));
@@ -122,20 +150,7 @@
         } catch (error) { component.notice(error); }
         finally { deleting = false; component.render(); }
       },
-      loadPrevious: async function () {
-        var data = snapshot(), start = data.messageStartIndex, revision = data.sessionRevision;
-        if (!start) return;
-        try {
-          var page = await send("getPreviousChatMessages", { chatId: id, beforeIndex: start });
-          if (!component.isCurrent() || snapshot().sessionRevision !== revision || snapshot().messageStartIndex !== start) return;
-          if (page.chatId !== id || page.sessionRevision !== revision) { await refresh(); return; }
-          Object.assign(snapshot(), RNAssistantConversationState.prependMessageWindow(snapshot(), page));
-          snapshot().artifacts = snapshot().artifacts.concat((page.artifacts || []).filter(function (entry) {
-            return !snapshot().artifacts.some(function (known) { return (known.Id || known.id) === (entry.Id || entry.id); });
-          }));
-          component.render({ preserveTop: true });
-        } catch (error) { component.notice(error); }
-      },
+      loadPrevious: loadPrevious,
       loadLatest: function () { return refresh({ latestMessages: true }); },
       compactContextButton: function () { return action("compactChatContext"); },
       addSelectionContextButton: function () { return addSelectionContext("full", component); },

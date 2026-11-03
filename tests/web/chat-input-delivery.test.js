@@ -24,7 +24,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.canEditMessage = () => false;
       window.smallIconButton = title => { const button = document.createElement("button"); button.title = title; return button; };
       for (const name of ["renderChatResourceNavigation", "appendMessageArtifactCards", "appendQuestionCards",
-        "bindAttachmentActions", "loadPreviousChatMessages", "jumpToLatestChatMessages", "createChat", "clearChat", "compactChatContext", "openActiveDocument",
+        "bindAttachmentActions", "createChat", "clearChat", "compactChatContext", "openActiveDocument",
         "cancelMessageEdit", "renderContext", "renderContextMeter", "renderModelControls", "renderAttachmentDrafts",
         "setComposerPickerDisabled", "logOnce", "log"]) window[name] = () => {};
       // This fixture owns admission/composer behavior; the real Shell is covered by dock-workspace.

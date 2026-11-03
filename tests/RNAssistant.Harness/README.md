@@ -20,8 +20,9 @@ settings/continuation, reload races and late presence ACK cleanup, and inspect n
 Zero rendering and hiding continuation against a stale response are covered as well. Temporary
 screenshots go to `/tmp/rnassistant-agent-communication*.png`. It checks bubble bounds,
 not full Shell zoom qualification; the existing retained-overlay clipping remains
-in RISK_REGISTER. `independent-chat-views` passes; existing `chat-inbox` and
-`model-settings` failures are recorded there separately. Windows/Office and live models are separate.
+in RISK_REGISTER. `independent-chat-views` passes; `model-settings` still has a
+singleton-selector gap. Inbox polling coverage now uses mounted views as described
+below. Windows/Office and live models are separate.
 
 Chat parity follow-up: `plugins: workspace uses common message attachments` checks
 scoped upload/CAS, foreign draft/lease denial, exact links, idempotency and bounded
@@ -271,6 +272,21 @@ Older singleton-DOM fixtures require migration before use with Chat View factory
 `chat-navigation-lifetime` covers immediate tree selection during a blocked native
 queue, closed-tab catalog sync, late selection/read/failure delivery, retained
 history, newer Dockview focus and keyboard selection at 600 px / 125% zoom.
+
+Chat audit (2026-11-03): `parallel-chat-navigation` runs two actual Office views,
+holds ACK/native navigation, closes/reopens the sender, and checks draft/focus
+isolation. Its 500-row/60-tick streaming probe asserts retained navigation DOM and
+zero unrelated composer/Inspector updates; timing is diagnostic, not an SLA.
+`chat-history-navigation` exercises Office/Workspace adapters for duplicate reads,
+both Previous/Latest response orders, revision changes, the 240-message bound and
+close. `chat-inbox-observer` checks compact remote receipts, phase/terminal reads,
+stalled sibling reads, hide/reactivate and late history after close. Obsolete
+singleton polling/paging assertions were replaced; `chat-history-paging`,
+`chat-inbox`, `multi-chat-requests` retain pure bounds/receipt/address tests.
+`chat-tree-layout` covers retained selection, launcher focus, keyboard and badges.
+`shared-navigation-tree` passes in the isolated chat commit. A separate Library
+deactivation pageerror found in the concurrent editor migration is tracked by
+that owner in RISK_REGISTER. No Office/VSTO validation is implied.
 
 `history protocol:` checks JSON-object/schema responses, instruction roles,
 optional message, accepted assistant decisions and user-role indexed result batches,
@@ -922,8 +938,9 @@ reject repeated work. Existing `--unified-agent-test`, `--inbox-test`, Harness
 `kernel replay:`, `protocol context:` and `storage: runtime commits` cover adjacent
 failure/recovery boundaries. `inbox:` also checks bounded terminal receipt lookup
 and replay; `bridge: typed input` checks its addressed DTO. Web
-`chat-inbox.test.js` covers local/remote removal, late acknowledgements, stale
-receipts and history ordering without redundant queue-only history fetches.
+`chat-inbox.test.js` covers local removal, late acknowledgements and stale receipts;
+`chat-inbox-observer.test.js` covers remote removal and history ordering through
+actual views without redundant queue-only history fetches.
 These are fake-host/model checks, not Windows/Office qualification.
 
 Questions: `node tests/web/questions-interaction.test.js` exercises the product

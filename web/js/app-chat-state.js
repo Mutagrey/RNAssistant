@@ -121,35 +121,15 @@ function sortedChatSessions(chats) {
   });
 }
 
-function renderChatSessions() {
+function renderChatSessions(options) {
   if (typeof isPanelActive === "function" && !isPanelActive("chat")) return;
-  var select = $("chatSessionSelect");
-  if (!select) {
-    return;
-  }
-
-  select.innerHTML = "";
-  var chats = sortedChatSessions(state.chats);
-  if (!chats.length) {
-    var empty = document.createElement("option");
-    empty.value = "";
-    empty.textContent = state.bridgeUnavailable ? "Панель недоступна" :
-      state.chatDetailPending ? "Загрузка чатов…" : state.chatDetailError ? "Ошибка загрузки чатов" : "Нет чатов";
-    select.appendChild(empty);
-  }
-  chats.forEach(function (chat) {
-    var option = document.createElement("option");
-    option.value = chatId(chat);
-    option.textContent = chatTitle(chat);
-    select.appendChild(option);
-  });
-  select.value = state.activeChatId || "";
-  select.disabled = !chats.length || state.bridgeUnavailable;
-  renderChatSessionList(chats);
+  if (!$("chatSessionList")) return;
+  renderChatSessionList(sortedChatSessions(state.chats));
 
   $("newChatButton").disabled = !!state.bridgeUnavailable;
-  if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.each(function (component) { component.controls(); });
   if (window.RNAssistantDockWorkspace) RNAssistantDockWorkspace.updateContext();
+  if (options && options.navigationOnly) return;
+  if (window.RNAssistantConversationPanel) RNAssistantConversationPanel.each(function (component) { component.controls(); });
   if (window.RNAssistantChatInspector) window.RNAssistantChatInspector.render();
 }
 
@@ -805,19 +785,48 @@ function applyChatCatalogState(response) {
   if (libraryChanged && typeof renderInstructions === "function") renderInstructions();
 }
 
+function chatSessionListKey(chats) {
+  // Only navigation presentation belongs in this key: never messages or tokens.
+  return JSON.stringify([state.bridgeUnavailable, state.chatSearch, state.host,
+    state.officeHostChatAvailable, state.officeHostChatPending, state.officeHostChatTarget,
+    state.officeHostChatError, state.officeHostLaunchOpen, officeHostChatUnavailableReason(),
+    !chats.length && [state.chatDetailPending, state.chatDetailError],
+    state.documents, state.collapsedChatDocuments,
+    chats.map(function (chat) {
+      var activity = chatTreeActivity(chat);
+      return [chatId(chat), !!(state.chatDeletions && state.chatDeletions[chatId(chat)]), chatTitle(chat), chatHost(chat), chatDocumentKey(chat),
+        chatDocumentTitle(chat), chatDocumentPath(chat), chatIsCurrentDocument(chat),
+        chatJsonlByteLength(chat), chatCasBlobCount(chat), chatCasLogicalByteLength(chat),
+        chatCasStoredByteLength(chat), chatCasMissingBlobCount(chat), chatCasReferenceIssueCount(chat),
+        chatStorageWarningLevel(chat), activity.run && activity.run.runId, activity.active,
+        activity.presence.status, activity.label];
+    })]);
+}
+
 function renderChatSessionList(chats) {
   var list = $("chatSessionList");
   if (!list) {
     return;
+  }
+  var renderKey = chatSessionListKey(chats);
+  var retainedTree = list.querySelector(".chat-navigation-tree");
+  var launchMount = $("chatOfficeLaunchMount") || list;
+  var officeWasFocused = document.activeElement && launchMount.contains(document.activeElement) &&
+    !!document.activeElement.closest(".chat-office-launch-list");
+  if (list.chatRenderKey === renderKey && retainedTree) {
+    if (list.dataset.selectedChatId === (state.activeChatId || "")) return false;
+    if (RNAssistantNavigationTree.setSelected(retainedTree, state.activeChatId ? "chat:" + state.activeChatId : null,
+        { focus: list.contains(document.activeElement) || officeWasFocused })) {
+      list.dataset.selectedChatId = state.activeChatId || "";
+      list.chatRenderKey = chatSessionListKey(chats);
+      return false;
+    }
   }
 
   var focused = document.activeElement && document.activeElement.closest("[data-tree-key]");
   var focusKey = focused && list.contains(focused) ? focused.dataset.treeKey : "";
   var previousTree = list.querySelector(".chat-navigation-tree");
   if (previousTree) window.RNAssistantNavigationTree.unmount(previousTree, "chat");
-  var launchMount = $("chatOfficeLaunchMount") || list;
-  var officeWasFocused = document.activeElement && launchMount.contains(document.activeElement) &&
-    !!document.activeElement.closest(".chat-office-launch-list");
   var previousScroll = list.scrollTop;
   var selectionChanged = list.dataset.selectedChatId !== (state.activeChatId || "");
   list.dataset.selectedChatId = state.activeChatId || "";
@@ -932,6 +941,9 @@ function renderChatSessionList(chats) {
     onSelect: function (node) { if (node.chatId && !state.bridgeUnavailable) selectChat(node.chatId); }
   });
   list.scrollTop = previousScroll;
+  // Document expansion is initialized during rendering; retain its final state.
+  list.chatRenderKey = chatSessionListKey(chats);
+  return true;
 }
 
 function renderOfficeHostLaunchRows(list) {
@@ -1020,11 +1032,11 @@ function chatDocumentTreeNode(documentItem, query) {
   };
 }
 
-function chatTreeNode(chat) {
+function chatTreeActivity(chat) {
   var id = chatId(chat);
-  var deleting = !!(state.chatDeletions && state.chatDeletions[id]);
   var persistedRun = chatSummaryRunViewState(chat);
-  var selectedRun = id === state.activeChatId ? state.activeRunViewState : null;
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(id);
+  var selectedRun = component ? component.snapshot().activeRunViewState : id === state.activeChatId ? state.activeRunViewState : null;
   if (selectedRun && (!persistedRun || selectedRun.runId === persistedRun.runId))
     persistedRun = selectedRun;
   var inbox = (state.chatInboxes || {})[id];
@@ -1036,6 +1048,14 @@ function chatTreeNode(chat) {
   var presence = window.RNAssistantConversationState.status(
     queuedWork && !state.bridgeUnavailable,
     !!(persistedRun && persistedRun.lifecycle === "running"), false);
+  return { run: persistedRun, active: hasActiveRun, presence: presence,
+    label: presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
+      ? "Запрос останавливается" : terminalRun && queuedWork ? "Запускается следующая задача" : presence.label };
+}
+
+function chatTreeNode(chat) {
+  var id = chatId(chat), activity = chatTreeActivity(chat);
+  var deleting = !!(state.chatDeletions && state.chatDeletions[id]);
   var warning = chatStorageWarningLevel(chat);
   var badgeLevel = chatCasMissingBlobCount(chat) || chatCasReferenceIssueCount(chat) ? "critical" : warning;
   var storageTooltip = badgeLevel !== "none" ? buildChatStorageTooltip(chat, badgeLevel) : "";
@@ -1045,17 +1065,16 @@ function chatTreeNode(chat) {
     selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable || deleting,
     tooltip: chatTitle(chat),
     badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,
-    status: deleting ? "running" : presence.status,
-    statusLabel: deleting ? "Удаление чата…" : presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
-      ? "Запрос останавливается" : terminalRun && queuedWork ? "Запускается следующая задача" : presence.label,
+    status: deleting ? "running" : activity.presence.status,
+    statusLabel: deleting ? "Удаление чата…" : activity.label,
     actions: [
       { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("chart"),
         onClick: function () { window.openRunJournal({ owner: "office", chatId: id, label: chatTitle(chat),
-          document: chatDocumentTitle(chat), runId: persistedRun && persistedRun.runId }); } },
+          document: chatDocumentTitle(chat), runId: activity.run && activity.run.runId }); } },
       { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"), disabled: deleting,
         onClick: function () { renameChat(id); } },
-      { title: deleting ? "Удаление…" : hasActiveRun ? "Сначала остановите запрос" : "Удалить чат",
-        iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true, disabled: hasActiveRun || deleting,
+      { title: deleting ? "Удаление…" : activity.active ? "Сначала остановите запрос" : "Удалить чат",
+        iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true, disabled: activity.active || deleting,
         onClick: function () { deleteChat(id); } }
     ]
   };

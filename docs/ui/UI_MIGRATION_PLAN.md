@@ -1124,16 +1124,50 @@ catalog sync. Старый путь сначала показывал прежн
 Проверки: Chromium `chat-navigation-lifetime` — реальное дерево с удержанной native
 очередью, закрытие всех вкладок, поздние preview/reply/read, новый Dockview focus,
 клавиатура/600 px/125% zoom; `chat-sync` и `model-navigation` прошли.
-`independent-chat-views` прошёл до параллельных HTML-изменений; повторный прогон
-текущего дерева получил `deactivateHtmlWorkspaceInspector is not defined` и
-падение проверки восстановления drafts. Этот [отдельный gap](../stabilization/RISK_REGISTER.md#chat-navigation-соседние-ui-gaps--2026-11-03)
-не закрыт адресной проверкой навигации. Снимки проверены локально; сохраняются
-narrow-overlay/CSS-zoom ограничения. Windows/Office latency и пользовательское
-визуальное принятие остаются открытыми.
+В параллельном рабочем HTML diff удалён вызов `deactivateHtmlWorkspaceInspector`
+из Materials: HTML view уже владеет lifecycle. Эта правка остаётся в HTML-срезе.
+Повтор `independent-chat-views` проходит и в изолированном chat diff,
+включая drafts/restore. Исправлена доставка selection event после синхронной
+замены дерева: narrow overlay закрывается. CSS-zoom clipping, Windows/Office
+latency и пользовательское визуальное принятие остаются открытыми.
 
 Ревью: закрыть чат → выбрать другой в дереве → быстро переключить/закрыть его
 во время загрузки → вернуть явно через дерево. Откат — обратный Web diff,
 без миграции данных. Это исправление текущего среза, не завершение S2.
+
+### Аудит параллельных чатов и производительности — In Review, 2026-11-03
+
+Owner: Web Chat View/source adapters и общий NavigationTree. Исправлены повторная
+полная отрисовка Office-дерева на фоновые tokens, обновление чужих composer/Inspector
+и гонка Previous/Latest. Удалены скрытый `chatSessionSelect` и мёртвые глобальные
+paging/send-controls aliases. Source/lifetime, bounded history и runtime остаются
+у существующих owners; нового store, registry или bridge contract нет.
+
+Локальная Chromium-проба: два Office-потока, 500 дополнительных строк каталога,
+60 обновлений каждого потока с интервалом 20 мс. До изменения работа дерева заняла
+738 мс за 2,4 с; после кеширования — около 6 мс за 1,3 с, DOM сохранён. Финальная
+проверка также подтверждает 0 обновлений чужих controls/Inspector и ввод/выбор при
+продолжающихся потоках и удержанной native navigation. Это синтетическая проба,
+не Office latency/SLA; начальная постройка большого дерева остаётся синхронной.
+
+Проверки: 15 адресных JS-файлов; Chromium `parallel-chat-navigation`,
+`chat-history-navigation`, `chat-inbox-observer`, `chat-navigation-lifetime`,
+`independent-chat-views`, `active-chat-runs`, `workspace-chat-progress`,
+`chat-tree-layout` проходят. Старые singleton polling/paging assertions заменены
+реальными Chat View, pure receipts/bounds оставлены. Перед коммитом отдельно
+проверен его изолированный состав: три новых browser checks,
+`chat-navigation-lifetime`, `independent-chat-views`, `shared-navigation-tree` проходят.
+На общем рабочем дереве с незавершённым переносом редакторов получен отдельный
+pageerror `syncSelectedSkillFromEditor` при уходе из Library. [Открытые ограничения](../stabilization/RISK_REGISTER.md#аудит-чатов-оставшиеся-ограничения--2026-11-03)
+не закрыты успешными чат-проверками. Native код проверен чтением; Office/VSTO,
+Windows/WebView2 и живые модели не запускались.
+
+Ревью: запустить `python3 prototypes/serve_ui.py`, открыть `/preview/web/?scenario=ready`.
+1. Разместить два чата рядом, отправить оба, выбирать строки дерева и вводить текст.
+2. Закрыть работающий чат и вернуть через дерево; соседний draft/focus сохраняются.
+3. В длинной истории быстро нажать Previous → Latest → Previous.
+4. В узком окне выбрать чат клавиатурой: overlay закрывается.
+Откат — обратный Web diff без миграции данных; UI остаётся In Review.
 
 ### Общее приветствие по Demo — In Review, 2026-11-03
 

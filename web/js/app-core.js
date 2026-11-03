@@ -4,7 +4,7 @@ function scheduleChatProgressRender() {
   chatProgressRenderPending = true;
   window.setTimeout(function () {
     chatProgressRenderPending = false;
-    renderChatSessions();
+    renderChatSessions({ navigationOnly: true });
   }, 100);
 }
 

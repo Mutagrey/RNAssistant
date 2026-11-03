@@ -98,7 +98,8 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.deepEqual(await page.evaluate(() => selectedChats), ["third"], "button Enter selects once");
     await tree.getByRole("treeitem", { name: "Бюджет", exact: true }).focus();
     await page.keyboard.press("Shift+F10");
-    assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Переименовать чат");
+    assert.equal(await page.evaluate(() => document.activeElement.getAttribute("aria-label")), "Диагностика чата",
+      "Shift+F10 focuses the first available row action");
     await launcher.locator("summary").click();
     await launcher.getByRole("button", { name: /Word/ }).focus();
     await page.evaluate(() => { state.activeChatId = "first"; renderChatSessionList(state.chats); });

@@ -232,32 +232,7 @@ context.renderChatSessions = () => {};
   assert.equal(historyReads, 0, "removed input does not cause a history refresh");
   assert.equal(context.state.inboxSubmissions.receipts, undefined, "terminal receipt lives only until submit settles");
 
-  const remote = { Id: "remote", OperationId: "remote-op", Revision: 1, Status: "Pending", Text: "other window" };
-  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 3, items: [remote], running: false });
-  transport = async (type, payload) => {
-    assert.equal(type, "getChatInbox");
-    assert.ok(payload.receiptOperationIds.includes("remote-op"), "poll requests terminal evidence for tracked input");
-    return { chatId: "receipts", epoch: "e", revision: 4, items: [], running: false,
-      receipts: [{ Id: "remote", OperationId: "remote-op", Revision: 2, Status: "Removed" }] };
-  };
-  await context.pollChatInbox();
-  assert.equal(context.pendingChatInputs().length, 0, "other-window removal clears its echo");
-  assert.equal(historyReads, 0, "queue-only removal does not fetch history");
-
-  const delivered = { Id: "delivered", OperationId: "delivered-op", Revision: 1, Status: "Pending", Text: "preserve until history" };
-  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 5, items: [delivered], running: false });
-  transport = async () => ({ chatId: "receipts", epoch: "e", revision: 6, items: [], running: false,
-    receipts: [{ Id: "delivered", OperationId: "delivered-op", Revision: 3, Status: "Applied" }] });
-  await context.pollChatInbox();
-  assert.equal(context.pendingChatInputs()[0].Text, delivered.Text, "compact receipt preserves echo text");
-  assert.equal(context.pendingChatInputs()[0].Status, "Applied");
-  assert.equal(historyReads, 1, "applied receipt requests missing history");
-  context.applyChatInbox({ chatId: "receipts", epoch: "e", revision: 4, items: [],
-    receipts: [{ Id: "delivered", OperationId: "delivered-op", Revision: 2, Status: "Delivering" }] });
-  assert.equal(context.pendingChatInputs()[0].Status, "Applied", "stale receipt cannot downgrade input");
-  context.reconcileChatInputEchoes("receipts", [{ Id: "delivered" }]);
-  assert.equal(context.pendingChatInputs().length, 0, "only the exact history message retires an applied echo");
-
+  // Per-view polling/receipts are exercised through production adapters in chat-inbox-observer.test.js.
   transport = () => new Promise(resolve => { resolveSend = resolve; });
   const staleSend = context.submitInboxMessage("accepted before push", [], "receipts", "Queue");
   await new Promise(resolve => setImmediate(resolve));
@@ -273,69 +248,6 @@ context.renderChatSessions = () => {};
     Id: "stale-ack", OperationId: staleOperation, Revision: 3, Status: "Applied" } });
   assert.equal(context.pendingChatInputs().length, 0, "settled old acknowledgement cannot recreate a rendered echo");
 
-  historyReads = 0;
-  context.state.activeChatId = "phase-only";
-  context.state.messages = [];
-  context.loadChatState = async () => { historyReads++; return {}; };
-  context.applyChatInbox({ chatId: "phase-only", epoch: "e", revision: 1, items: [], running: true, phase: "thinking" });
-  transport = () => Promise.resolve({ chatId: "phase-only", epoch: "e", revision: 1, items: [], running: true, phase: "executing" });
-  await context.pollChatInbox();
-  assert.equal(context.chatInbox().phase, "executing", "phase-only poll updates the live state");
-  assert.equal(historyReads, 0, "phase-only poll does not project the full chat again");
-  transport = () => Promise.resolve({ chatId: "phase-only", epoch: "e", revision: 2, items: [], running: false });
-  await context.pollChatInbox();
-  assert.equal(historyReads, 1, "terminal boundary still refreshes history");
-  context.applyChatInbox({ chatId: "phase-only", epoch: "e", revision: 3, items: [], running: true });
-  let finishPoll;
-  transport = () => new Promise(resolve => { finishPoll = resolve; });
-  const completing = context.pollChatInbox(); await new Promise(resolve => setImmediate(resolve));
-  const terminal = { chatId: "phase-only", epoch: "e", revision: 4, items: [], running: false };
-  context.applyChatInbox(terminal); // The full pushed chat state arrived before this poll.
-  finishPoll(terminal); await completing;
-  assert.equal(historyReads, 1, "a pushed terminal snapshot prevents a duplicate full history read");
-  const beforeHidden = calls.length;
-  context.isPanelActive = () => false;
-  await context.pollChatInbox();
-  assert.equal(calls.length, beforeHidden, "hidden Office chat does not poll");
-  context.isPanelActive = () => true;
-  context.state.chatDetailPending = true;
-  await context.pollChatInbox();
-  assert.equal(calls.length, beforeHidden, "initial detail owns the inbox read while loading");
-  context.state.chatDetailPending = false;
-
-  const polled = [];
-  let releaseOldPoll;
-  transport = (type, payload) => {
-    assert.equal(type, "getChatInbox");
-    polled.push(payload.chatId);
-    if (payload.chatId === "slow-a" && polled.filter(id => id === "slow-a").length === 1)
-      return new Promise(resolve => { releaseOldPoll = resolve; });
-    return Promise.resolve({ chatId: payload.chatId, epoch: "new", revision: 9, items: [], running: false });
-  };
-  context.state.activeChatId = "slow-a"; context.state.chatNavigationVersion = 10;
-  const oldPoll = context.pollChatInbox();
-  await new Promise(resolve => setImmediate(resolve));
-  context.state.activeChatId = "slow-b"; context.state.chatNavigationVersion++;
-  await context.pollChatInbox();
-  assert.equal(context.chatInbox("slow-b").revision, 9, "a slow old chat cannot block the newly selected chat");
-  context.state.activeChatId = "slow-a"; context.state.chatNavigationVersion++;
-  await context.pollChatInbox();
-  assert.deepEqual(polled, ["slow-a", "slow-b", "slow-a"], "a later visit gets its own read");
-  releaseOldPoll({ chatId: "slow-a", epoch: "old", revision: 3, items: [], running: true });
-  await oldPoll;
-  assert.equal(context.chatInbox("slow-a").revision, 9, "the previous visit cannot downgrade a newer snapshot");
-  const detailRequests = [], deliveredDetails = [];
-  context.loadChatState = chatId => new Promise(resolve => detailRequests.push({ chatId, resolve }));
-  context.applyChatStateForChat = (response, chatId) => deliveredDetails.push([response, chatId]);
-  context.state.activeChatId = "history-a"; context.state.chatNavigationVersion++;
-  const oldHistory = context.refreshInboxChat("history-a");
-  await new Promise(resolve => setImmediate(resolve));
-  context.state.activeChatId = "history-b"; context.state.chatNavigationVersion++;
-  const newHistory = context.refreshInboxChat("history-b");
-  await new Promise(resolve => setImmediate(resolve));
-  detailRequests[1].resolve("new detail"); await newHistory;
-  detailRequests[0].resolve("old detail"); await oldHistory;
-  assert.deepEqual(deliveredDetails, [["new detail", "history-b"]], "the nested history read also rejects a late reply from a previous binding");
   context.state.activeChatId = "same-text"; context.state.messages = [];
   const queued = new Map();
   transport = async (type, payload) => {
@@ -351,5 +263,5 @@ context.renderChatSessions = () => {};
   assert.equal(await context.submitInboxMessage("Продолжи", [], "same-text", "Queue"), true);
   assert.equal(queued.size, 2, "a deliberate identical send after ACK is a new input, not a transport retry");
   assert.equal(context.pendingChatInputs().length, 2, "both identical queued user messages remain visible");
-  console.log("PASS chat inbox: ack/retry, distinct identical inputs, stale receipts, addressed polling, history ordering, queue controls");
+  console.log("PASS chat inbox: ack/retry, distinct identical inputs, stale receipts, queue controls");
 })().catch(error => { console.error(error); process.exitCode = 1; });

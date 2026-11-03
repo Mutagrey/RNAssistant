@@ -175,6 +175,13 @@ leaf paints и attached history; hidden views откладывают paint и po
 activate читает пропущенное состояние. Максимум открытых Chat View — 12, In Review.
 Shell восстанавливает только target/placement, без сериализации истории и inputs.
 
+Previous/Latest используют поколение намерения внутри каждого source adapter:
+одинаковая pending page читается один раз; новый переход, revision или dispose
+делает прежний ответ неактуальным. Каталог Office кеширует только presentation
+дерева, без истории/токенов. Общий NavigationTree меняет selection в существующем
+DOM; фоновые tokens не обновляют чужие composer/Inspector. Скрытый select чатов
+и неиспользуемые глобальные команды paging удалены; второго пути навигации нет.
+
 `chatComposer()`, `messageView()`, `$()` и Office state accessors остаются **selected
 facade для ещё не перенесённых вторичных consumers**, а не singleton Chat View.
 Они возвращают существующий component/source, не создают копию store. Chat commands

@@ -328,7 +328,6 @@ function renderSendControls() {
   if ($("newChatButton")) $("newChatButton").disabled = !!(state.chatNavigationPending || state.bridgeUnavailable);
 }
 function updateComposerInputState() { renderSendControls(); }
-function updateSendButtonAvailability() { renderSendControls(); }
 
 function resizeChatInput() {
   resizeComposerInput($("chatInput"));

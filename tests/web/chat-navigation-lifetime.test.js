@@ -132,6 +132,8 @@ const {chromium} = require('playwright');
     await summary.focus(); await summary.press('Enter');
     await page.waitForFunction(() => RNAssistantConversationPanel.office('preview-summary') && !state.chatNavigationPending);
     assert.equal(await selected(), 'preview-summary', 'keyboard tree navigation works in the narrow layout at 125% zoom');
+    assert.equal(await page.locator('.shell').evaluate(node => node.classList.contains('navigation-open')), false,
+      'selection closes the overlay even when its original tree root was replaced');
     if (process.env.NAV_REVIEW_DIR) await page.screenshot({path: path.join(process.env.NAV_REVIEW_DIR, 'selection-narrow.png')});
     assert.deepEqual(errors, []);
     console.log('PASS chat navigation lifetime: immediate exact selection, all-closed sync, late preview/reply/failure/read and newer Dockview focus');

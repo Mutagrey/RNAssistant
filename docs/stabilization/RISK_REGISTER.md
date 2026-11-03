@@ -1,5 +1,30 @@
 # Stabilization risk register
 
+## Аудит чатов: оставшиеся ограничения — 2026-11-03
+
+Owner: Web Library/Dock lifecycle; Web navigation performance; Office qualification.
+
+- В текущем незавершённом переносе редакторов `library.onVisible(false)` вызывает
+  `syncSelectedSkillFromEditor` после отсоединения DOM. `skillIdInput` уже отсутствует:
+  `null.value` в `app-skills.js:675` прерывает DockWorkspace.sync. Воспроизведение:
+  открыть Library → skill → другой раздел; `shared-navigation-tree` доходит до
+  последнего assertion и фиксирует этот pageerror. Это отдельный дефект owner
+  редактора, не ошибка chat target/cache; отсутствие потери несохранённых полей
+  этим не доказано. Изолированный chat diff проходит `shared-navigation-tree`: gap
+  относится к рабочему editor diff, его исправление остаётся у HTML/Library owner.
+- Повторная постройка дерева на фоновые tokens устранена. Начальная постройка
+  500 раскрытых строк остаётся синхронной (в нагрузочной пробе был long task около
+  124 мс); изменение состава/статусов каталога тоже может потребовать rebuild.
+  Проба двух потоков не является SLA для произвольного размера каталога.
+- Native bridge worker/addressed-read paths просмотрены без изменения runtime.
+  Стоимость реального storage/CAS, document switch и COM/WebView2 delivery требует
+  Windows evidence. 15 JS и 8 Chromium chat checks не доказывают отсутствие всех
+  native гонок и не закрывают существующее retained-overlay CSS-zoom clipping.
+
+Closed locally: stale Materials callback/restore, потеря narrow overlay selection
+event, лишние renders на tokens, повторные history reads и Previous/Latest race.
+Подробности и проверка — [UI Migration Plan](../ui/UI_MIGRATION_PLAN.md#аудит-параллельных-чатов-и-производительности--in-review-2026-11-03).
+
 ## Общая UI-проверка: lifecycle материалов — 2026-11-03
 
 Owner: Web materials/Dock lifecycle. При проверке регрессий диагностики
@@ -46,15 +71,18 @@ Owner — Shell NavigationTree / HTML workspace migration. При проверк
 
 - В узкой навигации синхронная перерисовка Office-дерева отсоединяет root до
   `rna-navigation-select`; выбор клавиатурой работает, overlay может остаться открыт.
-  CSS-zoom обрезание ленты уже зарегистрировано ниже; локальных CSS overrides нет.
-- В текущих параллельных незавершённых HTML-изменениях `app-material-view.onVisible`
-  вызывает удалённый `deactivateHtmlWorkspaceInspector`. В boot/restore возникает
+  Исправлено доставкой event через сохранённого parent; `chat-navigation-lifetime`
+  проверяет закрытие overlay при 600 px / 125%. CSS-zoom обрезание ленты остаётся.
+- В параллельных незавершённых HTML-изменениях `app-material-view.onVisible`
+  вызывал удалённый `deactivateHtmlWorkspaceInspector`. В boot/restore возникал
   `ReferenceError`, который DockWorkspace перехватывает как ошибку раскладки и
   сбрасывает её. Подтверждено с прежней и исправленной Chat View selection;
-  требуется переключить оставшегося consumer в HTML-срезе и повторить restore.
+  требовалось переключить оставшегося consumer в HTML-срезе и повторить restore.
   Повтор `independent-chat-views` получил этот ReferenceError и пустые inputs
   вместо трёх восстановленных drafts; удаление durable drafts этим не доказано.
-  Это отдельный открытый gap, не passing evidence восстановления текущего HTML diff.
+  Исправлено удалением старого Materials callback в рабочем HTML diff; эта правка
+  остаётся в HTML-срезе. `independent-chat-views` проходит restore с тремя drafts
+  как в рабочем дереве, так и в изолированном chat diff.
 
 ## Agent communication: отдельные gaps — 2026-11-03
 
@@ -66,8 +94,8 @@ Owners: Tool Library inventory / Web Shell / Office qualification. Адресн�
   неизменённых в этом срезе tools. Массовое обновление исторической таблицы не выполнено.
 - `tests/web/model-settings.test.js` останавливается на старом singleton selector
   `#composerAddPicker > summary`, который отсутствует после независимых Chat Views.
-  Новый лимит проверен адресно: default 20, изменение и сброс. Старое падение
-  `chat-inbox` (`other-window removal clears its echo`) повторяется; baseline ниже.
+  Новый лимит проверен адресно: default 20, изменение и сброс. Старый `chat-inbox`
+  fixture исправлен в аудите чатов: polling проверяется через реальный per-view adapter.
 - При 640 px и CSS zoom 125% retained Dockview Chat View обрезает правую часть всей
   ленты: видно на обычных user/assistant сообщениях и на agent bubble. Это продолжение
   известного Shell retained-overlay zoom gap; собственная геометрия bubble не расходится
@@ -87,9 +115,11 @@ Owners: Application Workspace steering / Core source patch / Web Inbox fixtures.
 - `visual selection: workspace intake and common resource read`: проверка source
   patch ожидает `context_not_found`, получает `ambiguous_context` для `id="`.
 - `tests/web/chat-inbox.test.js`: `other-window removal clears its echo`, 1 вместо 0.
+  Закрыто аудитом fixtures: старый тест не создавал Chat View; pure receipts и
+  новый `chat-inbox-observer` с реальными per-view polling/late history проходят.
 
 Новые адресные native attachment/Queue и Chromium shared-draft/active-runs checks
-проходят, но не закрывают эти старые проверки. Полный S2: контекст/ручное сжатие,
+проходят, но не закрывают первые две старые проверки. Полный S2: контекст/ручное сжатие,
 pending-approval Steer, PDF/media read parity и secondary selected consumers остаются
 открытыми. Windows/Office/WebView2 и реальные модели не квалифицированы.
 

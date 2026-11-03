@@ -9,7 +9,7 @@ const root=path.resolve(__dirname,'../..');
   const address=await new Promise((resolve,reject)=>{server.once('error',reject);server.stdout.on('data',b=>{const m=/RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(b));if(m)resolve(m[1]);});});
   browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
   const standalone=await browser.newPage({reducedMotion:"reduce",viewport:{width:700,height:600}}),product=await browser.newPage({reducedMotion:"reduce",viewport:{width:1280,height:900}}),errors=[];
-  for(const page of [standalone,product]){page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.message));}
+  for(const page of [standalone,product]){page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.stack || e.message));}
   await standalone.setContent('<main style="width:340px"><div class="tree-toolbar"><button class="icon-btn" id="actions" aria-label="Действия">⋯</button></div><div id="tree"></div><section id="operation"></section></main>');
   for(const name of ['app-product-tokens.css','app-product-components.css'])await standalone.addStyleTag({path:path.join(root,'web/css',name)});
   for(const name of ['app-icons.js','app-accent.js','app-navigation-tree.js','app-action-menu.js'])await standalone.addScriptTag({path:path.join(root,'web/js',name)});

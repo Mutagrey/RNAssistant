@@ -65,7 +65,6 @@ function saveChatMode(mode) { return chatComposer().setPreference("mode", mode |
 
 function bindChatActions() {
   if (typeof bindModelContextActions === "function") bindModelContextActions();
-  $("chatSessionSelect").addEventListener("change", function () { selectChat($("chatSessionSelect").value); });
   $("newChatButton").addEventListener("click", createChat);
   $("chatSearchInput").addEventListener("input", function () {
     state.chatSearch = $("chatSearchInput").value || ""; renderChatSessionList(state.chats || []);

@@ -90,29 +90,10 @@ context.refreshInboxChat = chatId => refreshedChats.push(chatId);
   release();
   console.log("PASS multi-chat: submit barriers are scoped by owner and address");
 
-  const sendButton = {};
-  context.$ = id => id === "sendButton" ? sendButton : null;
-  context.hasActiveMessageEdit = () => false;
-  vm.runInContext(fs.readFileSync(path.join(root, "web/js/app-chat-composer.js"), "utf8"), context);
-  context.chatComposer().register("office", { target: () => context.officeComposerTarget() });
-  context.state.chatNavigationPending = 1;
-  context.updateSendButtonAvailability(true);
-  assert.equal(sendButton.disabled, true, "composer cannot submit against an uncommitted binding");
-  await context.submitChatInput();
-  context.state.chatNavigationPending = 0;
-  context.state.initializePromise = Promise.resolve();
-  context.updateSendButtonAvailability(true);
-  assert.equal(sendButton.disabled, true, "composer waits for initialization");
-  await context.submitChatInput();
-  assert.equal(requests.length, 2, "navigation and init submit attempts never reach the bridge");
-  context.state.initializePromise = null;
-  context.updateSendButtonAvailability(true);
-  assert.equal(sendButton.disabled, false, "composer becomes available after navigation drains");
-  console.log("PASS multi-chat: composer pauses and resumes around navigation");
-
+  // Mounted composers stay usable during native navigation: parallel-chat-navigation.test.js.
   const index = fs.readFileSync(path.join(root, "web/index.html"), "utf8");
   assert.match(index, /src="js\/app-chat-run\.js\?v=[^"]+"/);
-  console.log("OK 4/4");
+  console.log("OK 3/3");
 }()).catch(error => {
   console.error(error.stack || error);
   process.exitCode = 1;

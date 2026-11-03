@@ -233,7 +233,7 @@
   }
   function createPanelAdapter(component) {
     var target = component.target, node = component.node, composer = component.composer;
-    var owner = component.view.bindProjection(snapshotSource(target), latestSnapshot), uploading = false, cancelling = false;
+    var owner = component.view.bindProjection(snapshotSource(target), latestSnapshot), uploading = false, cancelling = false, pageRead = null, historyGeneration = 0;
     function snapshot() { return owner.snapshot() || { sessionId: target.sessionId, project: { workspaceId: target.workspaceId }, messages: [], state: {} }; }
     function state() { return field(snapshot(), "state") || {}; }
     function draft() { return readWorkspaceDraft(target); }
@@ -262,8 +262,32 @@
       failed: function (error) { component.loading = false; component.loadError = error.detail || error.message; component.render(); } });
     function refresh(options) {
       if (!owner.snapshot()) component.loading = true;
-      if (options && options.latestMessages) return read().then(function (value) { accept(value, options); }).catch(component.notice);
+      if (options && options.latestMessages) {
+        var generation = ++historyGeneration;
+        return read().then(function (value) {
+          if (component.isCurrent() && generation === historyGeneration) accept(value, options);
+        }).catch(function (error) { if (generation === historyGeneration) component.notice(error); });
+      }
       return history.refresh();
+    }
+    function loadPrevious() {
+      var before = snapshot().messageStartIndex, revision = field(state(), "revision");
+      if (!before) return Promise.resolve();
+      if (pageRead && pageRead.generation === historyGeneration && pageRead.before === before && pageRead.revision === revision) return pageRead.promise;
+      var request = { generation: ++historyGeneration, before: before, revision: revision }; pageRead = request;
+      request.promise = (async function () {
+        try {
+          var page = await send("getPreviousProjectChatMessages", { workspaceId: target.workspaceId, sessionId: target.sessionId, beforeIndex: before });
+          if (component.isCurrent() && request.generation === historyGeneration && snapshot().messageStartIndex === before && field(state(), "revision") === revision) {
+            prependMessages(snapshot(), page); component.render({ preserveTop: true });
+          }
+        } catch (error) {
+          if (component.isCurrent() && request.generation === historyGeneration && snapshot().messageStartIndex === before && field(state(), "revision") === revision)
+            component.notice(error);
+        }
+        finally { if (pageRead === request) pageRead = null; }
+      })();
+      return request.promise;
     }
     async function run(action, reportFailure) {
       var release = RNAssistantConversationInput.begin("workspace", target);
@@ -375,15 +399,7 @@
           else accept(result);
         } catch (error) { component.notice(error); }
       },
-      loadPrevious: async function () {
-        var before = snapshot().messageStartIndex, revision = field(state(), "revision"); if (!before) return;
-        try {
-          var page = await send("getPreviousProjectChatMessages", { workspaceId: target.workspaceId, sessionId: target.sessionId, beforeIndex: before });
-          if (component.isCurrent() && snapshot().messageStartIndex === before && field(state(), "revision") === revision) {
-            prependMessages(snapshot(), page); component.render({ preserveTop: true });
-          }
-        } catch (error) { component.notice(error); }
-      }, loadLatest: function () { return refresh({ latestMessages: true }); }, progress: observer.acceptProgress
+      loadPrevious: loadPrevious, loadLatest: function () { return refresh({ latestMessages: true }); }, progress: observer.acceptProgress
     };
     function renderUtilities() {
       node("activeChatTitle").textContent = field(state(), "title") || "Чат проекта";

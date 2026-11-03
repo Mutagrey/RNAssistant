@@ -226,11 +226,16 @@
       var node = record.nodes.get(item.dataset.treeKey);
       if (!node || node.disabled) return;
       if (node.kind === "group" || (node.kind === "parent" && !node.selectable)) { toggle(item, !node.expanded); return; }
+      var eventParent = root.parentElement;
       var accepted = typeof options.onSelect === "function" ? options.onSelect(node) : true;
       if (accepted === false) return;
-      root.dispatchEvent(new CustomEvent("rna-navigation-select", { bubbles: true }));
+      (root.isConnected ? root : eventParent || root).dispatchEvent(new CustomEvent("rna-navigation-select", { bubbles: true }));
       if (!root.contains(item)) return;
-      record.selectedKey = node.key;
+      paintSelection(item);
+      if (options.toggleOnSelect && isParent(node)) toggle(item, !node.expanded);
+    }
+    function paintSelection(item) {
+      record.selectedKey = item ? item.dataset.treeKey : null;
       record.rows.forEach(function (row) {
         row.removeAttribute("aria-current");
         row.setAttribute("aria-selected", "false");
@@ -238,12 +243,25 @@
         var button = row.firstElementChild.querySelector(".navigation-tree-label");
         if (button) button.removeAttribute("aria-current");
       });
+      if (!item) return;
       item.setAttribute("aria-current", "page");
       item.setAttribute("aria-selected", "true");
       item.firstElementChild.classList.add("selected");
       item.firstElementChild.querySelector(".navigation-tree-label").setAttribute("aria-current", "page");
-      if (options.toggleOnSelect && isParent(node)) toggle(item, !node.expanded);
     }
+    record.setSelected = function (key, selectionOptions) {
+      var item = key && record.rows.get(key);
+      if (key && !item) return false;
+      if (record.selectedKey === key) return true;
+      if (item) {
+        for (var parent = record.rows.get(item.dataset.parentKey); parent; parent = record.rows.get(parent.dataset.parentKey))
+          if (parent.getAttribute("aria-expanded") === "false") toggle(parent, true);
+      }
+      paintSelection(item);
+      if (item && selectionOptions && selectionOptions.focus) setFocus(item, true);
+      else if (item && root.getBoundingClientRect().height) item.firstElementChild.scrollIntoView({ block: "nearest" });
+      return true;
+    };
     function on(type, handler) { root.addEventListener(type, handler, { signal: record.events.signal }); }
     on("click", function (event) {
       var item = event.target.closest('[role="treeitem"]');
@@ -328,5 +346,6 @@
     mounts.delete(root);
   }
 
-  window.RNAssistantNavigationTree = { render: render, unmount: unmount, icon: icon };
+  window.RNAssistantNavigationTree = { render: render, unmount: unmount, icon: icon,
+    setSelected: function (root, key, options) { var record = mounts.get(root); return !!record && record.setSelected(key, options); } };
 })();
