@@ -464,8 +464,8 @@ namespace RNAssistant.Office.Services
 
         public string Prepare(ToolExecutionContext context, IDictionary<string, object> arguments, string preparedStateJson = null)
         {
-            // Cross-chat delivery has its own conversation journal, never document authority.
-            if (AgentCommunicationToolCatalog.Owns(context.Call.Name)) return null;
+            // Conversation metadata and cross-chat delivery never use document authority.
+            if (AgentCommunicationToolCatalog.Owns(context.Call.Name) || context.Call.Name == ChatRenameToolHandler.ToolId) return null;
             var route = ResourceMutationToolCatalog.Owns(context.Call.Name) ? RNAssistant.Office.Tools.ResourceMutationPrepared.Read(preparedStateJson) : null;
             var operation = route?.Operation ?? context.Call.Name;
             if (route != null) { arguments = route.RoutingArguments; preparedStateJson = route.OwnerState; }

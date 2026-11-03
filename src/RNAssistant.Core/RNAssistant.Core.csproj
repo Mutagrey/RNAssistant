@@ -255,6 +255,7 @@
     <Compile Include="Llm\TokenEstimateCalibration.cs" />
     <Compile Include="Llm\ContextUsageEstimator.cs" />
     <Compile Include="Tools\ToolArgumentNormalizer.cs" />
+    <Compile Include="Tools\ChatRenameToolHandler.cs" />
     <Compile Include="Tools\ToolSchemaSupport.cs" />
     <Compile Include="Tools\TextPatternEngine.cs" />
     <Compile Include="Tools\VbaToolManifestParser.cs" />

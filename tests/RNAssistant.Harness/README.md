@@ -1,5 +1,13 @@
 # RNAssistant Harness
 
+## Chat naming — 2026-11-03
+
+`chat rename:` covers exact policy and invalid/foreign target refusal, Office
+kernel persistence in Agent/Plan with document writes denied, placeholder/fallback
+precedence after reload, and Workspace/plugin source runs with smart naming enabled.
+`workspace: first message names the chat` retains automatic naming/manual rename
+race coverage. These are host-neutral checks, not Windows/Office qualification.
+
 ## Agent communication — 2026-11-03
 
 `agent communication:` checks the real Workspace A → B → A path against a scripted

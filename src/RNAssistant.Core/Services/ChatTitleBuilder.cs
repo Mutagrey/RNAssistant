@@ -88,7 +88,7 @@ namespace RNAssistant.Core.Services
 
         public static bool ShouldAssign(ChatSession session)
         {
-            if (session == null)
+            if (session == null || session.TitleAssignedByAgent)
             {
                 return false;
             }
@@ -98,7 +98,7 @@ namespace RNAssistant.Core.Services
 
         public static bool CanReplaceAutoTitle(ChatSession session, string expectedCurrentTitle)
         {
-            if (session == null)
+            if (session == null || session.TitleAssignedByAgent)
             {
                 return false;
             }

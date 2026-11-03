@@ -249,6 +249,11 @@ namespace RNAssistant.Office.Runtime
                     binding = AuthoredFileToolCatalog.BindingFor(registration.Descriptor.Id);
                     handler = new AuthoredFileToolHandler(authoredFiles, session);
                 }
+                else if (registration.Descriptor.Id == ChatRenameToolHandler.ToolId)
+                {
+                    binding = ChatRenameToolHandler.Binding;
+                    handler = new ChatRenameToolHandler(session);
+                }
                 else if (AgentCommunicationToolCatalog.Owns(registration.Descriptor.Id))
                 {
                     binding = AgentCommunicationToolCatalog.Binding(registration.Descriptor.Id);
@@ -356,7 +361,7 @@ namespace RNAssistant.Office.Runtime
                 string.Equals(toolId, UserQuestionToolCatalog.AskToolId,
                     StringComparison.Ordinal) ||
                 MarkdownDocumentToolCatalog.Owns(toolId) || AuthoredFileToolCatalog.Owns(toolId) ||
-                TaskListToolCatalog.Owns(toolId) || AgentCommunicationToolCatalog.Owns(toolId) ||
+                TaskListToolCatalog.Owns(toolId) || AgentCommunicationToolCatalog.Owns(toolId) || toolId == ChatRenameToolHandler.ToolId ||
                 HtmlWorkspaceToolCatalog.Owns(toolId) ||
                 CapabilityToolCatalog.Owns(toolId) ||
                 ToolAuthoringCatalog.Owns(toolId) ||

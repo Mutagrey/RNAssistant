@@ -13,6 +13,7 @@ namespace RNAssistant.Core.Tools
         {
             { "agents.list", new ToolDisplayMetadata("Собеседники", "Ищу открытые чаты", ToolDisplayOperation.Search) },
             { "agents.send", new ToolDisplayMetadata("Сообщение агенту", "Отправляю сообщение", ToolDisplayOperation.Write, new[] { "chat_id" }) },
+            { "chat.rename", new ToolDisplayMetadata("Название чата", "Переименовываю чат", ToolDisplayOperation.Write, new[] { "title" }) },
             { "core.tools.read", new ToolDisplayMetadata("Чтение описания", "Изучаю", ToolDisplayOperation.Learn, new[] { "id" }) },
             { "core.tools.search", new ToolDisplayMetadata("Поиск инструментов и навыков", "Ищу подходящие инструменты", ToolDisplayOperation.Search) },
             { "core.skills.load", new ToolDisplayMetadata("Настройка навыка", "Настраиваю навык", ToolDisplayOperation.Plan, new[] { "id", "action" }) },

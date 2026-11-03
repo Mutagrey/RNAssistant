@@ -256,6 +256,12 @@ it write authority. Scalar title/model/reasoning commits follow this rule; calle
 must explicitly reload before a subsequent write. Recovery after an actual append
 failure remains separate from refusal before writing.
 
+Agent `chat.rename` changes the bound session's `Title` and `TitleAssignedByAgent`
+metadata in the same kernel commit as its terminal tool result. Reload/replay
+retains the naming flag; automatic draft, fallback and smart-title updates respect
+it, including already pending generation. No separate title store or document
+mutation journal is introduced. Usage and policy: [chat naming](tool-library.md#chat-naming--2026-11-03).
+
 Chat-list/header reads use a separate reducer checkpoint in SQLite. It retains scalar header/run metadata, message ids/protocol flags, minimal active-HTML artifact references/counts and CAS reference metadata. Warm header reads do not read or deserialize the full projection root. Cold header builds reduce event metadata without storing message/tool bodies or context or hydrating CAS. HTML counts come only from artifact event metadata; old events without that metadata report zero counts. A later full read verifies the materialization flag again inside its read transaction so a concurrent header rebuild cannot appear as empty history.
 
 The indexed header derives per-chat storage usage. `JsonlByteLength` is the exact event file length. CAS totals deduplicate retained references by plaintext SHA-256: `CasLogicalByteLength` sums declared plaintext lengths, while `CasStoredByteLength` sums actual compressed/encrypted blob file lengths without loading their bodies. Shared blobs are counted for every chat that references them, so per-chat totals are diagnostic attribution rather than globally additive disk usage. Missing, invalid, or length-conflicting references raise a critical warning. Healthy chats warn at 64 MiB JSONL, 256 MiB combined JSONL plus stored CAS, or 512 MiB logical CAS; critical size thresholds are 256 MiB, 1 GiB, and 2 GiB respectively. These warnings are advisory: RNAssistant has no event retention or automatic history deletion.

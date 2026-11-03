@@ -1,5 +1,27 @@
 # Tool Library and capability truth
 
+## Chat naming — 2026-11-03
+
+`chat.rename` is a direct tool in the initial Office/Workspace/plugin profile.
+Its description owns the usage guidance: name a generic chat once the main task
+is clear, update an inaccurate title after a substantial topic/task change, or
+follow an explicit rename request. Use a concise, specific title in the user's
+language; preserve explicitly user-chosen names unless the user requests a rename,
+and avoid per-step or cosmetic renames. This does not require loading a skill.
+
+The only argument is `title`: a nonempty single line, at most 200 characters;
+surrounding whitespace is trimmed. The run's current session is the only target;
+the model supplies no chat/document ID. Core `ChatRenameToolHandler` owns the shared
+metadata mutation; the existing kernel commit persists it with the tool result.
+Exact binding `conversation.chat.rename.v1` permits this conversation-only write
+in Agent and Plan without confirmation, independently of document mutation policy.
+Office document authority and resource mutation journals are not involved.
+
+Runtime draft/smart naming remains available until the agent assigns a title.
+The durable `TitleAssignedByAgent` metadata then prevents fallback or late smart
+generation from overwriting it, even if the chosen text matches a draft/placeholder.
+`SmartChatTitles` controls automatic naming, not the availability of this tool.
+
 ## Agent communication tools — 2026-11-03
 
 `agents.list` and `agents.send` are built-in direct tools of the initial profile
@@ -32,7 +54,7 @@ a tool/model never supplies it. See [reference revision 4](protocols/CONVERSATIO
 Исторический [подсчёт встроенного каталога](audits/capability-inventory-2026-10-29.md):
 78 уникальных публичных ID вместо 91; это объединение host/settings-каталогов,
 включая условные и manual-only записи. Начальный профиль модели — 10 доступных
-Core tools плюс `agents.list/send` при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
+Core tools плюс `chat.rename`; `agents.list/send` добавляются при доступном messaging owner. Private owner commands и динамические пользовательские tools в эти
 78 не входят. Общая грамматика patch принадлежит его schema; skills дополняют её
 предметными правилами без копирования всего контракта.
 
@@ -82,6 +104,7 @@ available to its existing runtime consumers; no admission rule changes.
 Office, проект и плагин используют `CallableToolProfile.Core()` (`resource-core-v1`):
 `core.find`, `core.read`, `core.search`, `core.write`, `core.patch`, `core.replace`,
 `core.ask`, `core.tools.search`, `core.tools.read`, `core.skills.load`.
+Общий conversation tool `chat.rename` также входит в начальный профиль.
 Mode, read-only и доступность owner фильтруют этот список: отсутствующая возможность
 не появляется только из-за префикса `core.`. Встроенные host-specific tools не
 подмешиваются в начальную схему. Остальные descriptors подключаются через существующий

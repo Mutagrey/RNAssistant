@@ -173,6 +173,7 @@ namespace RNAssistant.Office.Tools
             RegisterControllerTools(controllerTools,
                 TaskListToolCatalog.GetTools());
             RegisterControllerTools(controllerTools, AgentCommunicationToolCatalog.GetTools());
+            RegisterControllerTools(controllerTools, new[] { ChatRenameToolHandler.Entry() });
             RegisterControllerTools(controllerTools, new[] { SkillLoadToolHandler.Entry() });
             RegisterControllerTools(controllerTools, ResourceMutationToolCatalog.GetTools());
             RegisterControllerTools(controllerTools,
