@@ -414,6 +414,10 @@ tokens/ActionMenu. Общие title ellipsis и search styles работают �
 Scroll/keyboard/expanded остаются у NavigationTree и source adapter. Повторный
 mount не создаёт обработчики; dispose снимает listeners/timer/tree binding.
 
+Ожидание удаления чата использует существующие status/disabled состояния дерева
+и префикс «Удаление…» в названии (виден при ellipsis); новые размеры, spinner и
+overrides не вводятся.
+
 Проверены реальные consumers и независимый VBA-shaped fixture без Office/bridge;
 [ревью и ограничения](UI_MIGRATION_PLAN.md#s3b1-общая-навигация--in-review-2026-11-02).
 

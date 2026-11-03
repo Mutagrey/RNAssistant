@@ -833,7 +833,8 @@ function renderChatSessionList(chats) {
     list.classList.add("is-empty");
     var empty = document.createElement("div");
     empty.className = "tree-empty";
-    empty.textContent = state.bridgeUnavailable ? "Панель недоступна." : "Чатов пока нет.";
+    empty.textContent = state.bridgeUnavailable ? "Панель недоступна." :
+      state.chatDetailPending ? "Загрузка чатов…" : state.chatDetailError || "Чатов пока нет.";
     list.appendChild(empty);
     return;
   }
@@ -1021,6 +1022,7 @@ function chatDocumentTreeNode(documentItem, query) {
 
 function chatTreeNode(chat) {
   var id = chatId(chat);
+  var deleting = !!(state.chatDeletions && state.chatDeletions[id]);
   var persistedRun = chatSummaryRunViewState(chat);
   var selectedRun = id === state.activeChatId ? state.activeRunViewState : null;
   if (selectedRun && (!persistedRun || selectedRun.runId === persistedRun.runId))
@@ -1038,22 +1040,22 @@ function chatTreeNode(chat) {
   var badgeLevel = chatCasMissingBlobCount(chat) || chatCasReferenceIssueCount(chat) ? "critical" : warning;
   var storageTooltip = badgeLevel !== "none" ? buildChatStorageTooltip(chat, badgeLevel) : "";
   return {
-    key: "chat:" + id, kind: "leaf", title: chatTitle(chat), chatId: id,
+    key: "chat:" + id, kind: "leaf", title: (deleting ? "Удаление… · " : "") + chatTitle(chat), chatId: id,
     iconHtml: window.RNAssistantNavigationTree.icon("chat"),
-    selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable,
+    selected: id === state.activeChatId, disabled: !!state.bridgeUnavailable || deleting,
     tooltip: chatTitle(chat),
     badge: badgeLevel !== "none" ? "!" : "", badgeKind: badgeLevel, badgeTitle: storageTooltip,
-    status: presence.status,
-    statusLabel: presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
+    status: deleting ? "running" : presence.status,
+    statusLabel: deleting ? "Удаление чата…" : presence.status === "running" && state.activeSends[id] && state.activeSends[id].canceling
       ? "Запрос останавливается" : terminalRun && queuedWork ? "Запускается следующая задача" : presence.label,
     actions: [
       { title: "Диагностика чата", iconHtml: window.RNAssistantNavigationTree.icon("chart"),
         onClick: function () { window.openRunJournal({ owner: "office", chatId: id, label: chatTitle(chat),
           document: chatDocumentTitle(chat), runId: persistedRun && persistedRun.runId }); } },
-      { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"),
+      { title: "Переименовать чат", iconHtml: window.RNAssistantNavigationTree.icon("edit"), disabled: deleting,
         onClick: function () { renameChat(id); } },
-      { title: hasActiveRun ? "Сначала остановите запрос" : "Удалить чат",
-        iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true, disabled: hasActiveRun,
+      { title: deleting ? "Удаление…" : hasActiveRun ? "Сначала остановите запрос" : "Удалить чат",
+        iconHtml: window.RNAssistantNavigationTree.icon("trash"), danger: true, disabled: hasActiveRun || deleting,
         onClick: function () { deleteChat(id); } }
     ]
   };

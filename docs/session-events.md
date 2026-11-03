@@ -199,6 +199,13 @@ applies that delta through the existing revision-aware catalog merger. Creation
 still drains admitted navigation/catalog requests to preserve exact document binding;
 that wait and actual Save As migration can therefore still delay the response.
 
+Deletion reuses the exact session reloaded under the controller's reservation;
+`DeleteAndSelectNext` does not load the deleted transcript again. Removing the last
+chat scans its document catalog once before creating a transient replacement.
+It still loads the next selected chat and returns its full state/catalog. Slow
+deletion reports load, delete/select and response-projection timings separately;
+these operations and the serialized navigation queue can still delay confirmation.
+
 Core `ChatStore` owns stream validation, locators, caching and lazy materialization;
 Application `ConversationInputJournal`/inbox own transition validation and delivery.
 Web rendering consumes the bounded message DTO (80 newest messages) and cannot

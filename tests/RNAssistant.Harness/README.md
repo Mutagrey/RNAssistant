@@ -180,6 +180,11 @@ Web checks: `instruction-loading`, `chat-inbox`, `chat-sync`, `bridge-bootstrap`
 call sites explicitly skip unused return projections; this controller wiring is
 source-reviewed. Real controller/Office delivery remains a Windows gate.
 
+`node tests/web/chat-loading-deletion.test.js` (Playwright) covers deferred startup
+with only Settings restored, delayed deletion, duplicate suppression, failed and
+confirmed removal. `chat sessions: delete selects remaining projection` also
+forbids a redundant deleted-session load and repeated empty-document catalog scan.
+
 `inbox: stop freezes queue and retains target` also checks idle Send after an empty
 cancelled queue and fresh input bypassing only its own retained pause. `conversation:
 application queue owns FIFO and drain` checks that the empty tail does not reload

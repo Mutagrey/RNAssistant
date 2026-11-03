@@ -1930,7 +1930,8 @@ namespace RNAssistant.Harness
             {
                 var adapter = new FakeOfficeAdapter();
                 var store = new ChatStore(paths);
-                var service = new ChatSessionService(adapter, ConversationStore(store));
+                var counted = new CatalogReadStore(ConversationStore(store));
+                var service = new ChatSessionService(adapter, counted);
                 var first = store.Create(
                     adapter.HostName,
                     adapter.DocumentKey,
@@ -1943,16 +1944,21 @@ namespace RNAssistant.Harness
                     "Second");
                 service.SetActiveSession(second);
 
-                var remaining = service.DeleteAndSelectNext(second.Id);
+                var remaining = service.DeleteAndSelectNext(second);
 
                 AssertEqual(first.Id, remaining.Id, "remaining durable chat selected");
+                AssertEqual(1, counted.FullLoads, "only the remaining chat is loaded, never the reserved deleted chat");
                 AssertTrue(store.Load(second.Id) == null, "deleted chat is absent");
                 AssertEqual(first.Id, store.LoadActiveSessionId(adapter.HostName, adapter.DocumentKey),
                     "active pointer follows remaining chat");
 
-                var draft = service.DeleteAndSelectNext(first.Id);
+                counted.FullLoads = 0;
+                counted.HeaderReads = 0;
+                var draft = service.DeleteAndSelectNext(remaining);
 
                 AssertTrue(!store.IsPersisted(draft), "last deletion creates only a transient draft");
+                AssertEqual(0, counted.FullLoads, "last deletion does not reload the deleted history");
+                AssertEqual(1, counted.HeaderReads, "empty current document catalog is scanned only once");
                 AssertEqual(0, store.ListHeaders(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle).Count,
                     "no durable projection remains");
                 AssertEqual(draft.Id, service.GetActiveSession().Id, "transient replacement is active");

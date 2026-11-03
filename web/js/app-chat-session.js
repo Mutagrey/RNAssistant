@@ -304,7 +304,7 @@ async function compactChatContext() {
 
 async function deleteChat(chatIdValue) {
   var targetChatId = typeof chatIdValue === "string" ? chatIdValue : state.activeChatId;
-  if (!targetChatId ||
+  if (!targetChatId || state.chatDeletions[targetChatId] ||
       (targetChatId === state.activeChatId &&
        typeof confirmDiscardHtmlWorkspaceChanges === "function" &&
        !confirmDiscardHtmlWorkspaceChanges("Удалить чат")) ||
@@ -312,6 +312,8 @@ async function deleteChat(chatIdValue) {
     return;
   }
 
+  state.chatDeletions[targetChatId] = true;
+  renderChatSessions({ navigationOnly: true });
   try {
     await window.RNAssistantChatDrafts.flushOffice(targetChatId);
     await navigateChat("deleteChat", { chatId: targetChatId });
@@ -321,6 +323,9 @@ async function deleteChat(chatIdValue) {
     log("Чат удален.");
   } catch (error) {
     log(error.detail || error.message, "error");
+  } finally {
+    delete state.chatDeletions[targetChatId];
+    renderChatSessions({ navigationOnly: true });
   }
 }
 

@@ -122,6 +122,7 @@ var state = {
   chatSyncPromise: null,
   chatNavigationPromise: null,
   chatNavigationPending: 0,
+  chatDeletions: {},
   initializePromise: null,
   chatNavigationVersion: 0,
   chatStateApplyVersion: 0

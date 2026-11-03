@@ -194,6 +194,8 @@ function renderContextList(notes, component) {
 }
 
 function renderContext(component) {
+  component = component || window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(state.activeChatId);
+  if (!component && window.RNAssistantConversationPanel) return;
   if (!component && typeof isPanelActive === "function" && !isPanelActive("chat")) return;
   var context = component ? component.snapshot().context || {} : state.context || {};
   var notes = (context.Notes || context.notes || []).filter(Boolean);

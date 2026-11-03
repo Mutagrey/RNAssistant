@@ -650,15 +650,24 @@ namespace RNAssistant.Office
 
         public ChatStateResponse DeleteChat(string chatId)
         {
-            var next = WithReservedSession(LoadSession(chatId), current =>
+            var timer = Stopwatch.StartNew();
+            var session = LoadSession(chatId);
+            var loadMs = timer.ElapsedMilliseconds;
+            var next = WithReservedSession(session, current =>
             {
                 var sessionId = current.Id;
-                var selected = _chatSessions.DeleteAndSelectNext(sessionId);
+                var selected = _chatSessions.DeleteAndSelectNext(current);
                 _resourceData.CloseTransfers(sessionId);
                 RemovePendingAgentToolsForSession(sessionId);
                 return selected;
             });
-            return ChatState(next);
+            var deleteMs = timer.ElapsedMilliseconds - loadMs;
+            var response = ChatState(next);
+            if (timer.ElapsedMilliseconds >= 250)
+                RNAssistant.Office.Diagnostics.RuntimeLog.Info("Chat delete timing: load=" + loadMs +
+                    "ms, deleteAndSelect=" + deleteMs + "ms, projection=" +
+                    (timer.ElapsedMilliseconds - loadMs - deleteMs) + "ms.");
+            return response;
         }
 
         public ChatStateResponse DeleteDocument(string host, string documentKey)

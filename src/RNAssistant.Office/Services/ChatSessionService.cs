@@ -623,18 +623,22 @@ namespace RNAssistant.Office.Services
                 host, runtimeKey, locator, session.DocumentAuthorityId).Id;
         }
 
-        public ChatSession DeleteAndSelectNext(string sessionId)
+        public ChatSession DeleteAndSelectNext(ChatSession current)
         {
-            var current = _conversations.Load(sessionId);
-            var host = current == null ? _adapter.HostName : current.Host;
-            var documentKey = current == null ? _adapter.DocumentKey : current.DocumentKey;
-            var documentTitle = current == null ? _adapter.DocumentTitle : current.DocumentTitle;
-            _conversations.Delete(host, documentKey, sessionId);
+            if (current == null) throw new ArgumentNullException(nameof(current));
+            // The controller already loaded and reserved this exact session.
+            var host = current.Host;
+            var documentKey = current.DocumentKey;
+            var documentTitle = current.DocumentTitle;
+            _conversations.Delete(host, documentKey, current.Id);
             var nextHeader = _conversations.ListHeaders(host, documentKey, documentTitle).FirstOrDefault();
             var next = nextHeader == null ? null : _conversations.Load(host, documentKey, nextHeader.Id);
             if (next == null)
             {
-                nextHeader = _conversations.ListHeaders(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
+                var sameDocument = string.Equals(host, _adapter.HostName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(documentKey, _adapter.DocumentKey, StringComparison.OrdinalIgnoreCase);
+                nextHeader = sameDocument ? null :
+                    _conversations.ListHeaders(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle).FirstOrDefault();
                 next = nextHeader == null
                     ? _conversations.CreateTransient(_adapter.HostName, _adapter.DocumentKey, _adapter.DocumentTitle, "New chat")
                     : _conversations.Load(_adapter.HostName, _adapter.DocumentKey, nextHeader.Id);
