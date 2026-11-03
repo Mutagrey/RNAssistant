@@ -1,5 +1,16 @@
 # Stabilization risk register
 
+## Общая UI-проверка: lifecycle материалов — 2026-11-03
+
+Owner: Web materials/Dock lifecycle. При проверке регрессий диагностики
+`shared-navigation-tree.test.js` прошёл проверки Tree/keyboard/disposal, но упал
+на pageerror `deactivateHtmlWorkspaceInspector is not defined` при переключении
+разделов. Причина — промежуточное состояние параллельного переноса HTML workspace:
+функция была удалена до переключения `app-material-view.js` / `onVisible(false)`.
+После удаления старого вызова в отдельной рабочей правке материалов общая проверка
+повторно прошла полностью. Этот consumer не входит в коммит RunJournal. Адресные
+`diagnostics-loading`, `chat-history-layout` и `diagnostics-navigation` проходят.
+
 ## Tools и skills: восстановление по фото — 2026-11-03
 
 Owners: Core capability admission/skill task state; Office/Workspace composition.

@@ -37,6 +37,16 @@
     var prefix = root.id || "navigation-tree-" + (++sequence);
     var marquee = null, hoveredRow = null;
 
+    function indexNodes(items) {
+      items.forEach(function (node) {
+        if (!node || !node.key || record.nodes.has(node.key)) throw new Error("Duplicate or missing tree key: " + (node && node.key));
+        record.nodes.set(node.key, node);
+        if (node.selected) record.selectedKey = node.key;
+        if (isParent(node)) indexNodes(node.children || []);
+      });
+    }
+    indexNodes(nodes);
+
     function stopMarquee() {
       if (!marquee) return;
       window.clearTimeout(marquee.timer);
@@ -81,9 +91,8 @@
       var list = element("ul", "navigation-tree-list");
       list.setAttribute("role", "group");
       items.forEach(function (node, index) {
-        if (!node || !node.key || record.nodes.has(node.key)) throw new Error("Duplicate or missing tree key: " + (node && node.key));
-        record.nodes.set(node.key, node);
         var parent = isParent(node);
+        var isSelected = node.key === record.selectedKey;
         var item = element("li", "navigation-tree-item" + (node.className ? " " + node.className : ""));
         item.id = prefix + "-" + encodeURIComponent(node.key);
         item.dataset.treeKey = node.key;
@@ -95,10 +104,10 @@
         item.setAttribute("aria-posinset", String(index + 1));
         item.tabIndex = -1;
         if (parent) item.setAttribute("aria-expanded", String(!!node.expanded));
-        else item.setAttribute("aria-selected", String(!!node.selected));
-        if (node.selected) item.setAttribute("aria-current", "page");
+        else item.setAttribute("aria-selected", String(isSelected));
+        if (isSelected) item.setAttribute("aria-current", "page");
 
-        var row = element("div", "navigation-tree-row" + (node.kind === "group" ? " is-group" : "") + (node.selected ? " selected" : ""));
+        var row = element("div", "navigation-tree-row" + (node.kind === "group" ? " is-group" : "") + (isSelected ? " selected" : ""));
         if (parent) {
           var expander = element("button", "navigation-tree-expander");
           expander.type = "button";
@@ -127,7 +136,7 @@
         label.dataset.treeSelect = node.key;
         if (node.page) label.dataset.settingsPage = node.page;
         if (node.view) label.dataset.dtView = node.view;
-        if (node.selected) label.setAttribute("aria-current", "page");
+        if (isSelected) label.setAttribute("aria-current", "page");
         label.title = node.tooltip || node.title;
         label.appendChild(element("span", "navigation-tree-label-text", node.title));
         row.appendChild(label);
@@ -169,9 +178,10 @@
         if (trailing) row.appendChild(trailing);
         item.appendChild(row);
         record.rows.set(node.key, item);
-        if (node.selected) selected = item;
+        if (isSelected) selected = item;
         if (parent) {
-          var children = build(node.children || [], depth + 1, node.key);
+          item.rnaDeferredChildren = !!options.lazyChildren && !node.expanded;
+          var children = build(item.rnaDeferredChildren ? [] : node.children || [], depth + 1, node.key);
           children.hidden = !node.expanded;
           item.appendChild(children);
         }
@@ -183,11 +193,10 @@
     root.replaceChildren();
     if (!nodes.length && options.emptyText !== "") root.appendChild(element("p", "tree-empty", options.emptyText || "Ничего не найдено"));
     else root.appendChild(build(nodes, 1, ""));
-    record.selectedKey = selected && selected.dataset.treeKey;
     mounts.set(root, record);
 
     function visibleRows() {
-      return Array.from(record.rows.values()).filter(function (item) { return !item.closest("ul[hidden]"); });
+      return Array.from(root.querySelectorAll('[role="treeitem"]')).filter(function (item) { return !item.closest("ul[hidden]"); });
     }
     function setFocus(item, move) {
       if (!item) return;
@@ -196,11 +205,15 @@
         row.firstElementChild.classList.toggle("is-focused", row === item && (move || row.contains(document.activeElement)));
         row.querySelectorAll(".tree-action").forEach(function (action) { action.tabIndex = row === item ? 0 : -1; });
       });
-      if (move) { item.focus({ preventScroll: true }); item.scrollIntoView({ block: "nearest" }); }
+      if (move) { item.focus({ preventScroll: true }); item.firstElementChild.scrollIntoView({ block: "nearest" }); }
     }
     function toggle(item, expanded) {
       var node = record.nodes.get(item.dataset.treeKey);
       if (!isParent(node)) return;
+      if (expanded && item.rnaDeferredChildren) {
+        item.replaceChild(build(node.children || [], Number(item.getAttribute("aria-level")) + 1, node.key), item.lastElementChild);
+        item.rnaDeferredChildren = false;
+      }
       node.expanded = expanded;
       item.setAttribute("aria-expanded", String(expanded));
       item.lastElementChild.hidden = !expanded;
@@ -217,6 +230,7 @@
       if (accepted === false) return;
       root.dispatchEvent(new CustomEvent("rna-navigation-select", { bubbles: true }));
       if (!root.contains(item)) return;
+      record.selectedKey = node.key;
       record.rows.forEach(function (row) {
         row.removeAttribute("aria-current");
         row.setAttribute("aria-selected", "false");
@@ -297,9 +311,9 @@
     if ((options.focusKey || focused) && initial) requestAnimationFrame(function () {
       if (root.isConnected && mounts.get(root) === record) setFocus(initial, true);
     });
-    if (selected && !focusKey && (old ? previousSelectedKey !== record.selectedKey : !savedPosition)) requestAnimationFrame(function () {
+    if (options.revealSelection !== false && selected && !focusKey && (old ? previousSelectedKey !== record.selectedKey : !savedPosition)) requestAnimationFrame(function () {
       if (root.isConnected && mounts.get(root) === record && root.getBoundingClientRect().height)
-        selected.scrollIntoView({ block: "nearest" });
+        selected.firstElementChild.scrollIntoView({ block: "nearest" });
     });
     return record;
   }

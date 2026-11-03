@@ -36,7 +36,7 @@
 .rn-run-journal-empty.is-error { color: var(--danger); }
 .agent-run-journal-actions { margin-top: var(--space-2); }
 @container (max-width: 620px) {
-  .rn-run-journal-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(110px, 38%) minmax(0, 1fr); }
+  .rn-run-journal-layout { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 38%) minmax(0, 1fr); }
   .rn-run-journal-nav.navigation-tree { border-right: 0; border-bottom: 1px solid var(--line); }
   .rn-run-journal-detail { padding: var(--space-2); }
 }

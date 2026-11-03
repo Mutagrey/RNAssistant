@@ -10,7 +10,7 @@
 .trajectory-export-bar { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 12px; padding-top: 8px; font-size: 11px; }
 .trajectory-export-cas { display: flex; align-items: center; gap: 4px; min-height: 30px; }
 #trajectoryExportNotice { flex-basis: 100%; color: var(--ink-muted); }
-.trajectory-status-row { display: flex; flex: none; min-height: 24px; gap: var(--space-2); align-items: center; justify-content: space-between; }
+.trajectory-status-row { display: flex; flex: none; min-height: var(--control-compact); gap: var(--space-2); align-items: center; justify-content: space-between; }
 .trajectory-status { color: var(--ink-muted); font-size: var(--text-xs); overflow-wrap: anywhere; }
 .trajectory-workspace {
   display: grid;

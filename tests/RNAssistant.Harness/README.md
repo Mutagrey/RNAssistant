@@ -2008,6 +2008,10 @@ exact navigation/back and scope, close/reopen/move/split/restore, lazy bodies, e
 states and settings-dirty isolation. Use the same `NODE_PATH` / `BROWSER_EXECUTABLE`;
 optional `HISTORY_SCREENSHOTS` writes captures. Pair with `run-journal.test.js`,
 `trajectory-json-viewer.test.js` and `json-viewer.test.js` for reader/lifecycle checks.
+`tests/web/diagnostics-loading.test.js` covers delayed/deduplicated reads, retained
+refresh and failed pagination, 5 × 200 events with deferred collapsed branches,
+keyboard/scroll order, short 600/390 × 400 panes and cancelled late responses.
+It uses the same preview/Playwright setup; it does not measure Office storage latency.
 `tests/web/product-shell-parity.test.js` compares shipped palette and joined header/
 splitter geometry in all six sections with the prototype, then checks native project
 tree search/collapse and shared panel toggles, including pointer focus after keyboard use.

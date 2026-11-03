@@ -39,6 +39,9 @@ RunJournal группирует обмены по записанным request/a
 уникальные step/call связи присоединяют метаданные и действия. Lifecycle events
 не создают самостоятельных обменов. Отсутствующая/неоднозначная связь показывается
 явно. Обзор строится из той же bounded projection, по 30 строк, без body reads.
+NavigationTree откладывает DOM свёрнутых веток журнала до раскрытия; модель дерева
+остаётся полной. Trajectory объединяет одинаковые pending reads по exact scope/query.
+Refresh сохраняет текущие строки до ответа; смена source/query очищает прежние данные.
 
 Основание: запрос «UI Strategy Transition» и сохранённый без изменений
 [исходный документ](reference/RNAssistant_UI_Architecture_and_Agent_Rules.md), v1.0 от 2026-11-01.

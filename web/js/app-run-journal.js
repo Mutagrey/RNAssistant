@@ -991,23 +991,24 @@
               if (options.onExpandedChange) options.onExpandedChange(parent, true);
               parent = parents[parent];
             }
-            select(targetId); renderTree();
+            select(targetId); renderTree(true);
           },
           isAlive: function () { return options.isAlive() && root.rnaJournalSelection === selectionToken; } });
         detail.dataset.selectionId = id;
         if (node.type === "event") renderEventDetail(detail, node.row, viewerOptions);
         else renderGroupDetail(detail, node, viewerOptions);
       }
-      function renderTree() {
+      function renderTree(revealSelection) {
         var selectedPath = [], parent = parents[selectedId];
         while (parent) { selectedPath.push(parent); parent = parents[parent]; }
         RNAssistantNavigationTree.render(list, tree.filter(function (node) { return visibleNode(node, filter); }).map(function (node) {
           return navigationNode(node, filter, options, latestRun, selectedId, selectedPath);
-        }), { label: "Запуски, запросы и действия", emptyText: "Для выбранного фильтра строк нет.", toggleOnSelect: true, reserveToggleSpace: true,
+        }), { label: "Запуски, запросы и действия", emptyText: "Для выбранного фильтра строк нет.", toggleOnSelect: true, reserveToggleSpace: true, lazyChildren: true,
+          revealSelection: revealSelection,
           onSelect: function (item) { select(item.key); },
           onToggle: function (item, expanded) { if (typeof options.onExpandedChange === "function") options.onExpandedChange(item.key, expanded); } });
       }
-      renderTree();
+      renderTree(options.revealSelection);
       if (selectedId) select(selectedId);
       else appendText(detail, "p", "rn-run-journal-empty", "Выберите запуск или запрос слева.");
       return {

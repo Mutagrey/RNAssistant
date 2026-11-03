@@ -11,6 +11,7 @@
   var routeHistory = [];
   var trajectoryRequestId = 0;
   var trajectoryQuery = null, pausedQuery = null;
+  var renderedQuery = "";
   var detailRequestId = 0;
   var journalFilter = "all";
   var journalSelectedId = "";
@@ -139,6 +140,7 @@
   function setTrajectoryBusy(busy) {
     $("refreshTrajectoryButton").disabled = !!busy;
     $("loadMoreTrajectoryButton").disabled = !!busy;
+    $("trajectoryWorkspace").setAttribute("aria-busy", String(!!busy));
   }
 
   function invalidateTrajectoryRequest() {
@@ -470,6 +472,9 @@
 
   function renderRunJournal(response, previousScroll, loadedLimitReached) {
     var root = $("trajectoryEvents");
+    var previousDetail = root.querySelector(".rn-run-journal-detail");
+    var detailScroll = previousDetail ? previousDetail.scrollTop : 0;
+    var detailSelection = previousDetail && previousDetail.dataset.selectionId;
     var adapter = window.RNAssistantRunJournal;
     previousScroll = Number(previousScroll || 0);
     var responseChatId = value(response, "ChatId", "chatId", selectedChatId() || "");
@@ -499,6 +504,7 @@
       controls: $("trajectoryJournalControls"), commands: $("trajectoryCommands"),
       filter: journalFilter,
       selectedId: journalSelectedId,
+      revealSelection: !previousDetail,
       expanded: expandedJournalRows, parts: journalParts,
       onSelect: function (id) { journalSelectedId = id; },
       onPartChange: function (id, part) { journalParts[id] = part; },
@@ -535,6 +541,8 @@
       Object.keys(journalParts).forEach(function (id) { if (!validIds.has(id)) delete journalParts[id]; });
     }
     var nav = root.querySelector(".rn-run-journal-nav"); if (nav) nav.scrollTop = previousScroll;
+    var detail = root.querySelector(".rn-run-journal-detail");
+    if (detail && detail.dataset.selectionId === detailSelection) detail.scrollTop = detailScroll;
     nextCursor = value(response, "NextCursor", "nextCursor", null);
     var hasMore = !!value(response, "HasMore", "hasMore", false);
     var total = value(response, "TotalRows", "totalRows", events.length);
@@ -864,9 +872,11 @@
   }
 
   function clearTrajectoryRows() {
+    renderedQuery = "";
     events = [];
     selected = null;
     nextCursor = null;
+    $("loadMoreTrajectoryButton").classList.add("hidden");
     if (window.RNAssistantRunJournal) window.RNAssistantRunJournal.unmount($("trajectoryEvents"));
     else $("trajectoryEvents").replaceChildren();
     $("trajectoryWorkspace").classList.add("hidden");
@@ -878,28 +888,47 @@
     renderCorrelationActions({});
   }
 
+  function showJournalState(message) {
+    var note = document.createElement("p");
+    note.className = "rn-run-journal-empty";
+    note.setAttribute("role", "status");
+    note.textContent = message;
+    $("trajectoryEvents").replaceChildren(note);
+    $("trajectoryWorkspace").classList.remove("hidden");
+  }
+
   async function refreshTrajectory(append, preserveJournalScroll) {
-    if (trajectoryQuery) invalidateTrajectoryRequest();
-    if (!append) cancelTrajectoryExport();
     var requestedView = $("trajectoryViewInput").value || "raw";
     var vba = requestedView === "vba-mutations";
     var chatId = selectedChatId();
+    var requestedScope = scopeKey(), workspaceId = trajectoryWorkspaceId;
+    var payload = queryPayload(chatId, append ? nextCursor : null);
+    var selectionKey = JSON.stringify([requestedScope, Object.assign({}, payload, { cursor: null })]);
+    var queryKey = JSON.stringify([selectionKey, payload.cursor, !!append]);
+    if (trajectoryQuery && trajectoryQuery.key === queryKey) return trajectoryQuery.completion;
+    if (trajectoryQuery) invalidateTrajectoryRequest();
+    pausedQuery = null;
+    if (!append) cancelTrajectoryExport();
+    var keepRows = events.length > 0 && renderedQuery === selectionKey &&
+      (append || requestedView === "run-causal" && preserveJournalScroll);
     var journalScrollTop = requestedView === "run-causal" && (append || preserveJournalScroll)
       ? currentJournalScrollTop() : 0;
-    if (!append) clearTrajectoryRows();
+    if (!append && !keepRows) clearTrajectoryRows();
     if (!vba && !chatId) {
       $("trajectoryStatus").textContent = "Нет активного чата.";
       return;
     }
     var requestId = ++trajectoryRequestId;
-    var operation = { append: append, preserveScroll: preserveJournalScroll, requestId: null };
+    var complete, success;
+    var operation = { append: append, preserveScroll: preserveJournalScroll, requestId: null, key: queryKey,
+      completion: new Promise(function (resolve) { complete = resolve; }) };
     trajectoryQuery = operation;
-    var requestedScope = scopeKey(), workspaceId = trajectoryWorkspaceId;
     try {
       setTrajectoryBusy(true);
       if (vba && workspaceId) throw new Error("Журнал VBA доступен только из Office-чата.");
-      $("trajectoryStatus").textContent = vba ? "Читаю VBA mutation journal…" : "Читаю event stream…";
-      var pending = send(vba ? "getVbaMutations" : "getChatTrajectory", queryPayload(chatId, append ? nextCursor : null));
+      $("trajectoryStatus").textContent = vba ? "Загружаю журнал VBA…" : keepRows ? "Обновляю историю…" : requestedView === "run-causal" ? "" : "Загружаю историю…";
+      if (requestedView === "run-causal" && !keepRows) showJournalState("Загружаю историю…");
+      var pending = send(vba ? "getVbaMutations" : "getChatTrajectory", payload);
       operation.requestId = pending.requestId;
       var response = await pending;
       if (requestId !== trajectoryRequestId ||
@@ -908,14 +937,20 @@
       if (requestedScope !== scopeKey()) return;
       if (!vba && !matchesScope(response, chatId, workspaceId)) throw new Error("Ответ журнала относится к другому чату или проекту.");
       renderEvents(response, !!append, journalScrollTop);
+      renderedQuery = selectionKey;
+      success = true;
       return true;
     } catch (error) {
       if (requestId !== trajectoryRequestId || requestedScope !== scopeKey()) return;
       $("trajectoryStatus").textContent = "Не удалось прочитать диагностику: " + error.message;
-      $("trajectoryWorkspace").classList.add("hidden");
+      if (!keepRows) {
+        if (requestedView === "run-causal") showJournalState("История недоступна. Нажмите «Обновить историю», чтобы повторить.");
+        else $("trajectoryWorkspace").classList.add("hidden");
+      }
     } finally {
       if (trajectoryQuery === operation) trajectoryQuery = null;
       if (requestId === trajectoryRequestId) setTrajectoryBusy(false);
+      complete(success);
     }
   }
 
@@ -1140,7 +1175,6 @@
     else source.chatId = options.chatId || source.chatId;
     if (!source.chatId) return false;
     RNAssistantDiagnostics.showJournal(Object.assign({}, source, { runId: options.runId }));
-    invalidateTrajectoryRequest();
     routeHistory = [];
     correlationFilter = {};
     useSource(source);
