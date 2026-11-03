@@ -297,6 +297,7 @@
     var format = needsComplete && !viewer.complete ? "text" : expectedKind;
     if (needsComplete && !viewer.complete) appendContentLabel(root, "Структурный просмотр доступен после полного чтения. Сейчас показана страница исходника.");
     window.RNAssistantViewerRegistry.mount(format, target, {
+      code: true, path: viewer.title || prop(artifact, "Title", "title", ""),
       text: viewer.complete ? viewer.fullText : page.text,
       pageText: page.text,
       completeness: viewer.complete ? "full" : "fragment",

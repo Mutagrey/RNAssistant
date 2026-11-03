@@ -86,6 +86,9 @@ namespace RNAssistant.Core.Models
         public string Title { get; set; }
         public string MimeType { get; set; }
         public string SourceMessageId { get; set; }
+        // Publication provenance from the retained record; never authority or a second store.
+        [Newtonsoft.Json.JsonIgnore]
+        public string SourceChatId { get; set; }
         public string DocumentAuthorityId { get; set; }
         // Workspace-owned Plan snapshots use their real workspace identity.
         // This is mutually exclusive with document ownership.

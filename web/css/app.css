@@ -841,34 +841,6 @@ button.icon-btn.is-busy svg {
   user-select: none;
 }
 
-.rn-code-editor.CodeMirror {
-  height: auto;
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--code-bg);
-  color: var(--code-text);
-  font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.rn-code-editor .CodeMirror-scroll {
-  min-height: inherit;
-}
-
-.rn-code-editor .CodeMirror-gutters {
-  border-right: 1px solid var(--line);
-  background: var(--surface-subtle);
-}
-
-.rn-code-editor .CodeMirror-linenumber {
-  color: var(--ink-faint);
-}
-
-.rn-code-editor .CodeMirror-activeline-background {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-}
-
 .rn-code-editor.cm-readonly {
   opacity: 0.72;
 }

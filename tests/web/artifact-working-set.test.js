@@ -26,6 +26,7 @@ const elements = Object.fromEntries(ids.map(id => ["artifactCatalog" + id, new E
 elements.artifactOverviewCreate = new Element(); elements.htmlWorkspaceLayout = new Element(); elements.htmlWorkspaceEditor = new Element(); elements.artifactNavSearch = new Element();
 elements.artifactCatalogScope.value = "chat";
 const requests = [], applied = [], targets = [];
+const menus = [];
 const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, crypto: webcrypto, URL, setTimeout, clearTimeout, confirm: () => true,
   Option: function (text, value) { const e = new Element("option"); e.textContent = text; e.value = value; return e; },
   document: { querySelectorAll: () => [], getElementById: id => elements[id], createElement: tag => new Element(tag) },
@@ -37,6 +38,7 @@ const context = vm.createContext({ console, TextDecoder, TextEncoder, Blob, cryp
 
 });
 context.RNAssistantNavigationPane = { mount(options, adapter) { options.more.addEventListener("click", adapter.onMore); return { setState() {} }; } };
+context.RNAssistantActionMenu = { open: (anchor, commands) => menus.push(commands) };
 context.RNAssistantNavigationTree = { icon: () => "" };
 context.RNAssistantIcons = { render: () => "" };
 context.window = context;
@@ -50,8 +52,8 @@ const itemUri = answer().items[0].resourceUri;
 (async () => {
   context.RNAssistantArtifactCatalog.show("all");
   assert.equal(requests[0].payload.scope, "all"); requests.shift().resolve(answer()); await flush();
-  assert.equal(tree()[0].title, "В документе", "current document keeps its ownership group");
-  assert.deepEqual(Array.from(tree()[0].children[0].children[0].rowActions, action => action.id), ["delete-document"],
+  assert.equal(tree()[0].title, "Book", "current document keeps its ownership group");
+  assert.deepEqual(Array.from(tree()[0].children[0].children[0].rowActions, action => action.id), ["menu"],
     "an unlinked material can be deleted from its document from the tree");
   await context.RNAssistantArtifactCatalog.select(itemUri);
   assert.equal(targets.at(-1).resourceUri, itemUri, "selection delegates the exact saved target");
@@ -85,8 +87,11 @@ const itemUri = answer().items[0].resourceUri;
   context.RNAssistantArtifactCatalog.show("chat");
   const linkedItem = { ...answer("b", 10).items[0], linked: true };
   requests.shift().resolve({ ...answer("b", 10), items: [linkedItem] }); await flush();
-  assert.deepEqual(Array.from(tree()[0].children[0].children[0].rowActions, action => action.id), ["detach", "delete-document"],
-    "a linked material exposes separate detach and document deletion actions");
+  assert.deepEqual(Array.from(tree()[0].children[0].children[0].rowActions, action => action.id), ["menu"],
+    "a linked material exposes one action menu");
+  context.RNAssistantArtifactCatalog.treeAction("menu", itemUri, new Element("button"));
+  assert.equal(menus.at(-1).filter(command => command.label === "Убрать из чата").length, 1);
+  assert.equal(menus.at(-1).filter(command => command.label === "Удалить из документа…").length, 1);
   const unlink = context.RNAssistantArtifactCatalog.treeAction("detach", itemUri);
   const detachment = requests.shift();
   assert.equal(detachment.type, "changeArtifactLink");
@@ -94,5 +99,14 @@ const itemUri = answer().items[0].resourceUri;
   assert.equal(detachment.payload.expectedSessionRevision, 10);
   detachment.resolve({ activeChatId: "b" }); await flush();
   requests.shift().resolve(answer("b", 11)); await unlink;
+  context.RNAssistantArtifactCatalog.show("all");
+  requests.shift().resolve({ ...answer("b", 12), items: [
+    {...linkedItem, sourceChatId: "origin-a", sourceChatTitle: "Первый чат"},
+    {...second, sourceChatId: "origin-b", sourceChatTitle: "Второй чат"},
+    {...second, documentId: "other", documentTitle: "Другой.xlsx", resourceUri: itemUri + "-other", sourceChatId: "origin-a", sourceChatTitle: "Первый чат"}
+  ] }); await flush();
+  assert.deepEqual(Array.from(tree(), group => group.title), ["Book", "Другой.xlsx"]);
+  assert.deepEqual(Array.from(tree()[0].children, group => group.title), ["Первый чат", "Второй чат"]);
+  assert.equal(tree()[1].children[0].children.length, 1, "same source chat never merges different documents");
   console.log("PASS artifact tree: scopes, pagination, exact view routing, duplicate/unconfirmed deletion, draft mutation guards and late responses");
 })().catch(error => { console.error(error); process.exitCode = 1; });

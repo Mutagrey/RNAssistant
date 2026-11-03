@@ -947,7 +947,8 @@
         var linked = item.linked && activeChatId === "preview-chat";
         var otherDocument = item.id === "sequence";
         return { documentId: otherDocument ? "preview-other-document" : "preview-document",
-          documentTitle: otherDocument ? "Все документы" : fixtures.document,
+          documentTitle: otherDocument ? "Справочные материалы.xlsx" : fixtures.document,
+          sourceChatId: "preview-chat", sourceChatTitle: fixtures.chat.title,
           resourceUri: item.resourceUri, title: item.title, kind: item.kind,
           mimeType: item.contentType, revision: 1, byteLength: item.body == null ? null : new TextEncoder().encode(item.body).length,
           updatedUtc: exampleDate(item), linked: linked, selected: linked,

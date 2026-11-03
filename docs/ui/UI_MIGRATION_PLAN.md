@@ -1012,7 +1012,7 @@ Mock прежде ограничивал Office reads/prefs выбранным �
 Откат — этот Web diff и mock fixture, без миграции данных. Старый layout без target
 сбрасывается явно. UI остаётся In Review, не Approved; Windows/Office/WebView2
 qualification открыта. Полный S2 не закрыт: очередь/steer capabilities Workspace,
-живые HTML/plugin providers S3b.3c и остальные secondary consumers ещё требуют
+живой HTML provider S3b.3c и остальные secondary consumers ещё требуют
 адресной интеграции. Следующая работа — по найденному поведению и этой конечной
 карте; отдельный подготовительный helper не объявляется переносом Chat View.
 
@@ -1043,7 +1043,7 @@ light/dark, 420/360 px, font 130% / CSS zoom 125% и переход к перв�
 | S2 | Независимые Chat View реализованы; остаток — parity действий и secondary consumers, перечисленные выше | Оставшиеся selected adapters; без второго durable store |
 | S3a | Запрос и Диагностика в Dockview реализованы | Текущие дефекты/review исправляются адресно, не новым переносом |
 | S3b.1–3b.3b | Общая навигация, независимые материалы, сохранённые HTML/plugin версии и Browser реализованы | Заменённые inline previews и старые splitters уже удалены |
-| S3b.3c | Осталось: scoped live HTML/plugin editors и адресные аннотации, dirty/save/close/stale guards | Mutable singleton providers и их selected зависимости |
+| S3b.3c | Plugin instances реализованы ниже; остаётся scoped live HTML editor и адресные аннотации, dirty/save/close/stale guards | HTML singleton и оставшиеся selected annotation consumers |
 | S4 | Осталось: Library/VBA/project views и редакторы через существующие registry/NavigationPane; cold-start mode/search/scroll | Заменённые editor-selection paths и legacy routes |
 | S5 | Финальная сверка и удаление оставшихся adapters; plugin views/export/public API — отдельный явный scope, не условие завершения Chat View | Мёртвые зависимости/overrides после проверки consumers; без новой платформы или SDK |
 
@@ -1302,6 +1302,34 @@ plugin 133.40→166.54 ms; source action 37.58→40.05 ms. Timings включа�
 **S4**: Library/VBA и другие редакторы через тот же catalog и NavigationPane;
 cold-start mode/search/scroll остаётся отдельным gap. Новый UI не закрывает прежние
 Office/endpoint qualification gates.
+
+### S3b.3c: plugin instances и замечания по фото — In Review, 2026-11-03
+
+Scope: независимый live plugin по pluginId; rail selection/оформление SVG;
+документ/source-chat группировка и одно меню строки Материалов; общий редактор
+исходников без внешних рамок/отступов. Owners: Web ShellLayout, Plugins/PluginView,
+ArtifactCatalog, CodeEditor; Core отдаёт provenance существующей retained record.
+Singleton plugin-browser удалён. Live HTML source/annotations и остальные S4
+owners остаются отдельной очередью; весь перенос экранов не объявляется завершённым.
+
+Baseline: `browser-saved-views` до изменения — HTML 2 reads и plugin 2 opens при
+A/B/A/B/A; готовый ввод сохраняется. После изменения bounds и эти счётчики прежние.
+Проверены Chromium: `plugin-view-selection` (два live plugin, rail, retained frame,
+move/restore, адресные аннотации, поздний close, SVG/палитра, 420 px / 125% / dark), `browser-saved-views`,
+`artifact-catalog-layout`, `shared-navigation-tree`, `html-workspace-layout`,
+`tool-library-layout`; pure text/JSON/working-set и
+vendor gate. Один host-neutral Harness case проверил provenance между чатами и
+stale session/writer guards. Windows/Office/WebView2 остаётся открытым evidence.
+Старый `browser-views` пока упирается в HTML annotation hit testing до plugin-части;
+этот сценарий не записан как пройденный.
+
+Локальный запуск: `python3 -B prototypes/serve_ui.py --port 8877`,
+`http://127.0.0.1:8877/preview/web/?scenario=ready`.
+Ревью: (1) открыть два плагина, вернуться по вкладкам/rail;
+(2) «+» или оформление плагина: одно название сверху, палитра раскрыта, переключить
+цвет; импорт раскрывает отдельное название SVG, после добавления сворачивается;
+(3) Материалы → документ/чат → «…», проверить разные действия удаления/исключения;
+(4) HTML → «Исходник», сменить файл/тему, проверить узкую ширину и возврат к странице.
 
 ### S3b: общая навигация и независимые просмотры — Proposed
 

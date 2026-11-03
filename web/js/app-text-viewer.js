@@ -126,7 +126,13 @@
     toolbar.appendChild(actions);
     if (options.toolbar !== false) root.appendChild(toolbar);
 
-    var source = element("div", "rn-text-viewer-source");
+    var source = element("div", "rn-text-viewer-source"), editor = null;
+    if (options.code && window.RNAssistantCodeEditor && window.CodeMirror) {
+      root.classList.add("has-code-editor");
+      root.appendChild(source);
+      editor = RNAssistantCodeEditor.mount(source, { text: displayed, startLine: displayedStartLine,
+        path: options.path, mode: options.mode });
+    } else {
     var gutter = element("pre", "rn-text-viewer-lines");
     var content = element("pre", "rn-text-viewer-content");
     gutter.setAttribute("aria-hidden", "true");
@@ -135,9 +141,10 @@
     source.appendChild(gutter);
     source.appendChild(content);
     root.appendChild(source);
+    }
     return {
       element: root,
-      destroy: function () { root.replaceChildren(); }
+      destroy: function () { if (editor) editor.destroy(); root.replaceChildren(); }
     };
   }
 
@@ -180,7 +187,7 @@
       sourceButton.classList.add("active");
       renderButton.setAttribute("aria-pressed", "false");
       sourceButton.setAttribute("aria-pressed", "true");
-      child = createText(Object.assign({}, options, { showCopy: false }));
+      child = createText(Object.assign({}, options, { showCopy: false, code: true, mode: "markdown" }));
       body.appendChild(child.element);
     }
 

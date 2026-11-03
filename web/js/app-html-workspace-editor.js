@@ -388,6 +388,8 @@
         selected.item.id || selected.item.Id, selected.type === "file" ? selected.item.sourceReadKey : artifactRevision(selected.item)]) : "";
       if (typeof setCodeEditorValue === "function") {
         setCodeEditorValue("htmlWorkspaceEditorInput", editorValue, editorKey);
+        if (typeof setCodeEditorSource === "function") setCodeEditorSource("htmlWorkspaceEditorInput",
+          selected && selected.type === "file" ? selected.item.path : selected && selected.type === "plan" ? "plan.md" : "source.json");
       } else if ($("htmlWorkspaceEditorInput")) {
         $("htmlWorkspaceEditorInput").value = editorValue;
       }

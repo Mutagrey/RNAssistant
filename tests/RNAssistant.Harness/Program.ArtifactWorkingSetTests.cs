@@ -195,6 +195,9 @@ namespace RNAssistant.Harness
                 var b = NewSession(adapter);
                 b.DocumentAuthorityId = a.DocumentAuthorityId;
                 var first = WorkingSetCatalog(links).List(b, new ArtifactCatalogRequest { Scope = "document", ChatId = b.Id }).Items.Single();
+                AssertEqual(a.Id, first.SourceChatId, "catalog provenance follows the publisher, not the viewing chat");
+                AssertEqual(a.Title, WorkingSetCatalog(links).List(a, new ArtifactCatalogRequest { Scope = "document", ChatId = a.Id }).Items.Single().SourceChatTitle,
+                    "current publisher title is metadata, not inferred from the resource URI");
                 executor.ExecuteManual(PlanWriteCommand( "title", "Race Plan", "markdown", "# Second", "status", "ready"),
                     tools, new AppSettings(), false, false, a);
                 RuntimeThrows<InvalidOperationException>(() => links.Change(b, LinkRequest(b, first.ResourceUri, false), chats.Save));

@@ -488,7 +488,6 @@ async function serve() {
     await normal.locator('#pluginName').fill('Сводка продаж');
     await normal.locator('#pluginTask').fill('Собрать сводку продаж');
     assert.equal(await normal.locator('#pluginRoot').isVisible(), false, 'the default source folder needs no path input');
-    await normal.locator('#pluginIconTrigger').click();
     await normal.locator('#pluginBuiltinIcons [data-icon-id="draw"]').click();
     await normal.locator('#pluginIconDescription').fill('Три растущих столбца');
     await normal.locator('#pluginIconDrawButton').click();

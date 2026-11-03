@@ -1,5 +1,15 @@
 # Stabilization risk register
 
+## Plugin views: адресная проверка и оставшийся HTML gate — 2026-11-03
+
+Owner: Web Plugins / HtmlWorkspace. Singleton live plugin заменён адресными views;
+`plugin-view-selection` проходит переключение двух iframe, move/restore, точную
+аннотацию source chat, поздний close и единственное выделение Shell rail.
+Это уточняет прежние записи S3b.3a/b ниже. Широкий `browser-views` по-прежнему
+нестабилен на pointer hit-test live HTML annotation до plugin-части: `.shell`
+перехватывает клик. Причинность не установлена; live HTML scoping и реальный
+Windows/Office/WebView2 остаются открытыми. Адресные проверки не закрывают этот gate.
+
 ## Фото: document lock timeout в диагностике — 2026-11-03
 
 Owner: Core ChatStore / Office diagnostics. Фото показывает повторные отказы

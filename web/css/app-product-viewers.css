@@ -17,7 +17,7 @@
 .product-viewer .rn-text-viewer-source pre { margin: 0; padding: 8px 0; border: 0; border-radius: 0; background: none; font: 14px/1.75 var(--font); white-space: pre-wrap; overflow-wrap: anywhere; }
 .product-viewer .rn-text-viewer-lines { display: none; }
 .product-viewer .rn-text-viewer-content { width: 100%; max-width: none; }
-.product-viewer .rn-text-viewer-status { padding: 8px 10px; background: var(--warning-soft); color: var(--warning); border-radius: var(--radius-sm); font-size: 12px; }
+.product-viewer .rn-text-viewer-status { padding: var(--space-2) var(--space-3); color: var(--ink-muted); font-size: var(--text-xs); }
 .product-viewer .rn-json-toolbar .rn-json-actions { align-items: center; }
 .product-viewer :is(.rn-resource-viewer-copy-status, .rn-pdf-viewer-copy-status, .rn-task-list-copy-status):empty { display: none; }
 .product-viewer .rn-task-list-toolbar { justify-content: flex-end; }
@@ -98,3 +98,17 @@ html[data-theme] .product-viewer :is(.rn-json-boolean, .rn-json-null) { color: v
   .product-viewer .rn-pdf-pages-layout { grid-template-columns: minmax(0, 1fr); }
   .product-viewer .rn-pdf-thumbnail-rail { display: none; }
 }
+
+/* Source mode uses the same edge-to-edge code surface as editable resources. */
+.product-viewer .rn-text-viewer.has-code-editor { gap:0; overflow:hidden; }
+.product-viewer .has-code-editor > .rn-text-viewer-toolbar { flex:none; padding:var(--space-2) var(--space-3); }
+.product-viewer .has-code-editor > .rn-text-viewer-source { overflow:hidden; }
+.product-viewer .has-code-editor .CodeMirror { height:100%; }
+.product-viewer .has-code-editor pre { margin:0; border:0; border-radius:0; background:none; font:inherit; overflow-wrap:normal; }
+.product-viewer .has-code-editor pre.CodeMirror-line,
+.product-viewer .has-code-editor pre.CodeMirror-line-like { padding:0 var(--space-2); white-space:pre; }
+
+.product-viewer .rn-json-body.has-code-editor { flex:1; overflow:hidden; }
+.product-viewer .rn-json-code { height:100%; min-height:0; }
+.product-viewer .rn-markdown-viewer:has(.has-code-editor) { display:flex; flex-direction:column; height:100%; }
+.product-viewer .rn-markdown-viewer-body:has(.has-code-editor) { flex:1; min-height:0; overflow:hidden; }

@@ -79,10 +79,10 @@
 .material-object-view > .resource-editor-head { flex: 0 0 auto; padding: var(--space-3) var(--page-inset); border-bottom: 1px solid var(--line); }
 .material-object-status { margin: 0; padding: var(--space-2) var(--page-inset); color: var(--ink-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .material-object-status[hidden] { display: none; }
-.material-object-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: var(--page-inset); }
+.material-object-content { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 0; }
 .material-object-content[data-product-viewer="image"],
 .material-object-content[data-product-viewer="pdf"] { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
-.material-object-content > .artifact-typed-viewer { min-height: 0; }
+.material-object-content > .artifact-typed-viewer { min-height: 0; height:100%; }
 .material-object-content[data-product-viewer="image"] > .artifact-typed-viewer,
 .material-object-content[data-product-viewer="pdf"] > .artifact-typed-viewer { flex: 1; height: 100%; }
 .material-object-content .rn-pdf-viewer-body { min-height: 0; height: 100%; }

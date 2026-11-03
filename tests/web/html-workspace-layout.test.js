@@ -16,6 +16,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     const panel = html.slice(html.indexOf('<section class="panel" id="tab-artifacts">'), html.indexOf('<section class="panel" id="tab-settings">'));
     await page.setContent(`<style>${css}\nbody{display:block}#tab-artifacts{display:flex;height:100vh}</style>${panel}`);
     for (const file of ["vendor/codemirror/codemirror.min.js", "vendor/codemirror/mode/javascript/javascript.min.js",
+      "vendor/codemirror/mode/xml/xml.min.js", "vendor/codemirror/mode/css/css.min.js", "vendor/codemirror/mode/htmlmixed/htmlmixed.min.js",
       "app-editors.js", "app-html-workspace-model.js", "app-html-workspace-editor.js"])
       await page.addScriptTag({ content: read("js/" + file) });
     const history = await page.evaluate(() => {
@@ -61,33 +62,23 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
     assert.equal(preview.hiddenSource, "", "preview releases the hidden code buffer");
     assert.deepEqual(preview.afterPreview, { undo: 0, redo: 0 });
     assert.equal(preview.source, "draft ", "empty hidden editor cannot overwrite the draft");
-    await page.frameLocator("#htmlWorkspacePreviewFrame").getByRole("heading", { name: "Отчёт по продажам" }).waitFor({ timeout: 5000 });
-
+    // Browser placement is covered by browser-saved-views; this fixture owns only the editor.
+    await page.evaluate(() => { state.htmlWorkspaceMode = "edit"; workspaceEditor.applyMode(); workspaceEditor.render(); });
     for (const width of [1100, 760, 420]) {
       await page.setViewportSize({ width, height: 760 });
-      const bounds = await page.locator("#htmlWorkspaceEditor").boundingBox();
-      for (const id of ["undoHtmlWorkspaceButton", "redoHtmlWorkspaceButton", "exportHtmlWorkspaceButton", "saveHtmlWorkspaceButton", "htmlWorkspaceMoreActions"]) {
-        const box = await page.locator("#" + id).boundingBox();
-        assert.ok(box.x >= bounds.x && box.x + box.width <= bounds.x + bounds.width + 1, `${id} fits at ${width}px`);
-      }
-      assert.ok((await page.locator("#htmlWorkspacePreviewFrame").boundingBox()).height > 250, "toolbar leaves room for the preview");
-      await page.locator("#htmlWorkspaceMoreActions > summary").click();
-      const reload = await page.locator("#reloadHtmlWorkspaceSourceButton").boundingBox();
-      assert.ok(reload.x >= 0 && reload.x + reload.width <= width, "actions menu remains inside the panel");
-      await page.locator("#htmlWorkspaceMoreActions > summary").click();
-      if (width > 560) {
-        await page.locator(".html-workspace-create-menu > summary").click();
-        const create = await page.locator("#addHtmlDataButton").boundingBox();
-        const sidebar = await page.locator("#htmlWorkspaceSidebar").boundingBox();
-        assert.ok(create.y + create.height <= sidebar.y + sidebar.height + 1, "creation options are not clipped by an empty sidebar");
-        await page.locator(".html-workspace-create-menu > summary").click();
-      } else {
-        assert.equal(await page.locator("#htmlWorkspaceSidebar").isVisible(), false,
-          "the narrow editor hides its inline sidebar");
-      }
+      const geometry = await page.locator(".CodeMirror").evaluate(node => ({
+        mode: node.CodeMirror.getMode().name, height: node.clientHeight, width: node.clientWidth,
+        parentHeight: node.parentNode.clientHeight, parentWidth: node.parentNode.clientWidth,
+        border: getComputedStyle(node).borderTopWidth, radius: getComputedStyle(node).borderRadius
+      }));
+      assert.equal(geometry.mode, "htmlmixed");
+      assert.ok(geometry.height > 250, "code fills the available editor height");
+      assert.ok(Math.abs(geometry.height - geometry.parentHeight) <= 1, "editor has no outer vertical inset");
+      assert.ok(Math.abs(geometry.width - geometry.parentWidth) <= 1, "editor has no outer horizontal inset");
+      assert.equal(geometry.border, "0px"); assert.equal(geometry.radius, "0px");
     }
     await page.setViewportSize({ width: 1100, height: 760 });
     if (process.env.LAYOUT_SCREENSHOT) await page.screenshot({ path: process.env.LAYOUT_SCREENSHOT });
-    console.log("PASS HTML panel: bounded CodeMirror history, local undo, preview cleanup and responsive toolbar");
+    console.log("PASS HTML panel: bounded CodeMirror history, local undo, preview cleanup, syntax mode and full-height source at 1100/760/420 px");
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

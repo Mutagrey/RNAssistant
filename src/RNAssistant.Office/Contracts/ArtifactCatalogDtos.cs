@@ -18,6 +18,8 @@ namespace RNAssistant.Office.Contracts
     {
         [JsonProperty("documentId")] public string DocumentId { get; set; }
         [JsonProperty("documentTitle")] public string DocumentTitle { get; set; }
+        [JsonProperty("sourceChatId")] public string SourceChatId { get; set; }
+        [JsonProperty("sourceChatTitle")] public string SourceChatTitle { get; set; }
         [JsonProperty("resourceUri")] public string ResourceUri { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("kind")] public string Kind { get; set; }

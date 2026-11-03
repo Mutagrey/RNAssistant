@@ -7,8 +7,8 @@
     toolReadmeInput: { mode: "markdown", minHeight: 150, lineWrapping: true },
     skillBodyInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
     promptEditInput: { mode: "markdown", minHeight: 0, lineWrapping: true },
-    vbaCodeInput: { mode: "vb", minHeight: 440 },
-    htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 440, lineWrapping: true }
+    vbaCodeInput: { mode: "vb", minHeight: 0 },
+    htmlWorkspaceEditorInput: { mode: "javascript", minHeight: 0, lineWrapping: true }
   };
   var positions = {
     skillBodyInput: "skillEditorPosition",
@@ -32,6 +32,26 @@
     wrapper.className += " rn-code-editor product-code-editor rn-code-editor-" + id;
     wrapper.style.minHeight = (typeof config.minHeight === "number" ? config.minHeight : 160) + "px";
   }
+
+  function sourceMode(path) {
+    var name = String(path || "").toLowerCase();
+    return /\.html?$/.test(name) ? "htmlmixed" : /\.css$/.test(name) ? "css" :
+      /\.json$/.test(name) ? "application/json" : /\.[cm]?js$/.test(name) ? "javascript" :
+      /\.(md|markdown)$/.test(name) ? "markdown" : /\.(vb|bas|cls)$/.test(name) ? "vb" : /\.(xml|svg)$/.test(name) ? "xml" : null;
+  }
+  // Instance-owned source viewer; the caller retains paging and exact resource scope.
+  window.RNAssistantCodeEditor = {
+    mount: function (root, options) {
+      var mode = sourceMode(options.path) || options.mode || null;
+      var cm = CodeMirror(root, { value: options.text, mode: mode, readOnly: true,
+        lineNumbers: true, firstLineNumber: options.startLine || 1, lineWrapping: false,
+        viewportMargin: 10, tabSize: 2, matchBrackets: true });
+      addEditorClass(cm, "source", { minHeight: 0 });
+      cm.getInputField().setAttribute("aria-label", "Исходный код — только чтение");
+      var observer = new ResizeObserver(function () { cm.refresh(); }); observer.observe(root);
+      return { editor: cm, destroy: function () { observer.disconnect(); root.replaceChildren(); } };
+    }
+  };
 
   function showVbaHints(editor) {
     if (editor && typeof editor.showHint === "function") {
@@ -208,6 +228,11 @@
       editors[id].setOption("readOnly", readOnly ? "nocursor" : false);
       editors[id].getWrapperElement().classList.toggle("cm-readonly", !!readOnly);
     }
+  };
+
+  window.setCodeEditorSource = function (id, path) {
+    var mode = sourceMode(path);
+    if (editors[id] && editors[id].getOption("mode") !== mode) editors[id].setOption("mode", mode);
   };
 
   window.setCodeEditorVisible = function (id, visible) {

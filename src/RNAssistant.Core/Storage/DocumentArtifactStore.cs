@@ -178,6 +178,7 @@ namespace RNAssistant.Core.Storage
                 revision.Payload.ByteLength != record.Original.ContentByteLength)
                 throw new InvalidDataException("The original record does not match its exact resource.");
             record.Artifact.OriginalAttachment = record.Original;
+            record.Artifact.SourceChatId = record.SourceChatId;
             return record.Artifact;
         }
 

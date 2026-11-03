@@ -894,5 +894,28 @@ policy: снимок retained data берётся при открытии/явн
 
 Удалены Catalog preview/read/source renderer/CSS и historical browsingRelease mode
 в plugin workbench. Материалы из дерева, таблицы и ленты используют один descriptor.
-Live editor/annotation и developer source watch остаются адресуемыми singleton adapters
-до S3b.3c; Library/VBA редакторы и cold-start presentation mementos — S4/открытый gap.
+Live HTML editor/annotation остаётся singleton adapter до своего среза S3b.3c;
+plugin source/candidate/watch перенесены в instances ниже; Library/VBA редакторы и cold-start presentation mementos — S4/открытый gap.
+
+
+### Plugin views и материалы — In Review, 2026-11-03
+
+`app-plugin-view.js` создаёт адресный live view по `pluginId` в существующем Dock
+catalog (до четырёх). Каждый экземпляр владеет DOM из template без global IDs,
+candidate, source watch, iframe, generations и VisualInspector/Annotations.
+`app-plugins.js` сохраняет каталог, оформление, кнопки rail и адресный переход в общий чат;
+выделение всех разделов рисует ShellLayout по active target Dockview, без второго
+обработчика выбора в Plugins. Второго registry/store нет. Старый singleton `plugin-browser` удалён. Скрытие
+останавливает watch, ready iframe сохраняется; поздний open после close закрывается.
+Аннотация разрешена только для выбранного чата соответствующего source workspace.
+Её draft container включён в общий Chat View template до создания экземпляров;
+поздняя вставка в глобальный composer удалена. Activate обновляет доступность
+инспектора после перехода между плагинами.
+
+ArtifactCatalog группирует документы по authority ID, HTML внутри — по source chat
+из существующей retained publication record. `SourceChatId` на ChatArtifact — только
+вычисляемое поле; typed catalog DTO переносит provenance, не новые полномочия.
+Тело и история чата для группировки не загружаются. Известный заголовок чата берётся
+из каталога/загруженных chat summaries, иначе явно показан короткий ID.
+Общий TextViewer использует instance CodeMirror для исходника; paging/copy/readers
+сохраняют прежние bounds. JSON source и Markdown source используют тот же компонент.

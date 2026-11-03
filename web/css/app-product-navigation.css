@@ -4,7 +4,6 @@
 .shell > .section-rail { grid-column: 1; grid-row: 2; display: flex; flex-direction: column; align-items: center; width: var(--shell-rail-width); height: 100%; padding: var(--space-2) var(--shell-rail-inset); gap: var(--space-2); background: var(--surface-subtle); border-right: 1px solid var(--line); overflow-x: hidden; overflow-y: auto; }
 .shell > .section-rail .rail-button { position: relative; display: grid; place-items: center; flex: 0 0 auto; width: var(--shell-rail-control); height: var(--shell-rail-control); min-height: var(--shell-rail-control); padding: var(--space-2); border: 0; border-radius: var(--shell-radius); background: transparent; color: var(--ink-muted); }
 .shell > .section-rail .rail-button[aria-current="page"] { background: var(--surface-selected); color: var(--accent); }
-.shell > .section-rail .rail-button[aria-current="page"]::before { content: ""; position: absolute; left: calc(-1 * var(--shell-rail-inset)); width: 2px; height: 20px; border-radius: 1px; background: var(--accent); }
 .shell > .section-rail > [data-section="diagnostics"] { margin-top: auto; }
 .shell > .content { grid-column: 2; grid-row: 2; min-height: 0; }
 .workspace-topbar { display: flex; align-items: center; gap: var(--space-5); padding: 0 var(--space-3); border-bottom: 1px solid var(--line); background: var(--surface-subtle); color: var(--ink-muted); z-index: 30; }

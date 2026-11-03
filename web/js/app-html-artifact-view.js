@@ -42,6 +42,7 @@
     function renderSource() {
       var file = files.find(function (f) { return f.id === picker.value; }), offset = positions[file.id] || 0;
       RNAssistantViewerRegistry.mount("text", source, { text: file.content.slice(offset, offset + pageSize),
+        code: true, path: file.path,
         offset: offset, totalCharacters: file.content.length, startLine: file.content.slice(0, offset).split("\n").length,
         hasPrevious: offset > 0, hasNext: offset + pageSize < file.content.length,
         onPrevious: function () { positions[file.id] = Math.max(0, offset - pageSize); renderSource(); },

@@ -40,7 +40,7 @@
       maximumInstances: 4, renderer: "onlyWhenVisible", titleFor: function (target) { return target.title; } }); },
     open: function (plugin, release) {
       return RNAssistantDockWorkspace.openTarget({ view: "plugin-release", pluginId: plugin.pluginId, releaseId: release.releaseId,
-        expectedActiveReleaseId: plugin.releaseId, title: plugin.name + " · v" + release.version }, { referencePanel: "plugin-browser" });
+        expectedActiveReleaseId: plugin.releaseId, title: plugin.name + " · v" + release.version }, { referencePanel: RNAssistantPluginView.key(plugin) });
     }
   };
 }());

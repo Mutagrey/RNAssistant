@@ -68,9 +68,9 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
       window.nativeOpenTarget = RNAssistantDockWorkspace.openTarget;
       RNAssistantDockWorkspace.openTarget = (target, options) => { openTargets.push(target); return true; };
       RNAssistantArtifactCatalog.show("document"); initializeSplitPanes(); });
-    await page.locator("#htmlWorkspaceTree").getByText("В документе", { exact: true }).waitFor();
-    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("HTML-проекты", { exact: true }).count(), 1,
-      "source adapter preserves the HTML project group inside its owner");
+    await page.locator("#htmlWorkspaceTree").getByText("Продажи.xlsx", { exact: true }).waitFor();
+    assert.equal(await page.locator("#htmlWorkspaceTree").getByText("Чат не указан", { exact: true }).count(), 1,
+      "HTML projects group by source chat inside their document");
     await page.locator("#artifactCatalogOverview").waitFor({ state: "visible" });
     assert.equal(await page.locator("#artifactCatalogOverviewRows tr").count(), 3, "demo-style catalog table uses the loaded projection");
     assert.equal(await page.locator("#htmlWorkspaceSearchInput").count(), 0, "catalog and tree use one material search");

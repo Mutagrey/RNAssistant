@@ -23,7 +23,7 @@
     return { view: "material", chatId: context.chatId || state.activeChatId,
       documentId: context.documentId || prop(artifact, "DocumentId", "documentId", "") || "",
       documentTitle: context.documentTitle || prop(artifact, "DocumentTitle", "documentTitle", "") || prop(actor, "DocumentTitle", "documentTitle", ""),
-      chatTitle: context.chatTitle || prop(actor, "Title", "title", ""), resourceUri: readers.exactArtifactUri(artifact),
+      chatTitle: context.chatTitle !== undefined ? context.chatTitle : prop(actor, "Title", "title", ""), resourceUri: readers.exactArtifactUri(artifact),
       title: prop(artifact, "Title", "title", "Материал"), kind: prop(artifact, "Kind", "kind", "file"),
       mimeType: readers.artifactMimeType(artifact), byteLength: prop(artifact, "ContentByteLength", "contentByteLength", prop(artifact, "ByteLength", "byteLength", null)),
       revision: context.revision || prop(artifact, "Revision", "revision", null),

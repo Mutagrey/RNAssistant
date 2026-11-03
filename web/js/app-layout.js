@@ -27,16 +27,20 @@
       document.getElementById("workspaceViewActions").hidden = !layout.visible;
       document.getElementById("toggleChatInspectorButton").hidden = !layout.visible;
       text("workspaceLayoutStatus", layout.visible ? "Вкладки: " + layout.panels + " · группы: " + layout.groups : "");
+      var target = layout.visible && layout.activeTarget, pluginId = target && target.pluginId;
+      var section = layout.section === "instructions" ? "library" : layout.section;
       if (layout.visible) {
-        ["settings", "diagnostics", "chat"].forEach(function (section) {
-          var selected = section === "settings" ? layout.activeView === "settings" :
-            section === "diagnostics" ? layout.activeView === "diagnostics" :
-              layout.section === "chat" && layout.activeView !== "settings" && layout.activeView !== "diagnostics";
-          var button = document.querySelector('.section-rail [data-section="' + section + '"]');
-          button.classList.toggle("active", selected);
-          if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
-        });
+        if (layout.activeView === "settings" || layout.activeView === "diagnostics") section = layout.activeView;
+        else if (pluginId) section = "plugins";
+        else if (target && (target.view === "material" || target.view === "materials")) section = "artifacts";
+        else if (target && target.view === "conversation") section = "chat";
       }
+      document.querySelectorAll('.section-rail [data-section], #pluginAdd').forEach(function (button) {
+        var selected = button.id === "pluginAdd" ? section === "plugins" && !pluginId :
+          button.dataset.pluginId ? section === "plugins" && button.dataset.pluginId === pluginId : button.dataset.section === section;
+        button.classList.toggle("active", selected);
+        if (selected) button.setAttribute("aria-current", "page"); else button.removeAttribute("aria-current");
+      });
     }
   }
 

@@ -17,7 +17,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
   try {
     const page = await browser.newPage();
     const html = read("index.html");
-    const editor = html.match(/<section[^>]+id="toolEditorPanel"[\s\S]*?<\/section>/)[0];
+    const editor = await page.evaluate(html => new DOMParser().parseFromString(html, "text/html").getElementById("toolEditorPanel").outerHTML, html);
     const css = [...html.matchAll(/<link rel="stylesheet" href="([^"?]+)[^"]*">/g)]
       .map(match => read(match[1])).join("\n");
     await page.setContent(`<style>${css}</style>${editor}`);
@@ -30,10 +30,9 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
       $("vbaToolEditor").classList.remove("hidden");
       $("toolComponentSelect").add(new Option("RNA_NewTool · StdModule"));
       $("toolComponentNameInput").value = "RNA_NewTool";
-      $("toolNameDisplay").value = "excel.format_sales";
       $("toolIdInput").value = "excel.format_sales";
       window.codeEditor = CodeMirror.fromTextArea($("toolCodeInput"), { lineNumbers: true });
-      codeEditor.getWrapperElement().classList.add("rn-code-editor", "rn-code-editor-toolCodeInput");
+      codeEditor.getWrapperElement().classList.add("rn-code-editor", "product-code-editor", "rn-code-editor-toolCodeInput");
       codeEditor.setValue("Option Explicit\n\nPublic Sub Execute()\n    Debug.Print \"hello\"\nEnd Sub");
       const state = { toolSchemaVisualDraft: {
         type: "object", properties: {
@@ -70,7 +69,6 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
               overflow: controls.filter(node => { const r = rect(node); return r.x < pane.x - 1 || r.right > pane.right + 1; }).map(node => node.id || node.className),
               toolbar: rect(document.querySelector(".component-toolbar")),
               fields: rect($("toolComponentNameInput")),
-              name: rect($("toolNameDisplay")),
               identifier: rect($("toolIdInput")),
               editor: rect(codeEditor.getWrapperElement()),
               testWidth: rect(active).width,
@@ -80,8 +78,7 @@ const read = file => fs.readFileSync(path.join(root, "web", file), "utf8");
           }, tab);
           assert.deepEqual(geometry.overflow, [], `${viewport}/${pane} ${theme} ${tab}: controls contained`);
           if (tab === "main") {
-            assert.ok(geometry.identifier.y > geometry.name.bottom, "ID follows displayed name as in demo");
-            assert.ok(geometry.name.width >= pane - 60, "name uses the editor width");
+            assert.ok(geometry.identifier.width >= pane - 60, "combined identifier/name uses the editor width");
           } else if (tab === "implementation") {
             assert.ok(geometry.fields.y >= geometry.toolbar.bottom, "metadata follows toolbar vertically");
             assert.ok(geometry.editor.width >= pane - 10, "code uses the full pane width");

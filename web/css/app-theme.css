@@ -224,28 +224,10 @@ html[data-theme="dark"] .message.failed .markdown {
   background: var(--danger-soft);
 }
 
-html[data-theme="dark"] .log-box,
-html[data-theme="dark"] .rn-code-editor.CodeMirror {
+html[data-theme="dark"] .log-box {
   border-color: var(--code-border);
   background: var(--code);
   color: var(--code-text);
-}
-
-html[data-theme="dark"] .rn-code-editor .CodeMirror-gutters {
-  border-color: var(--line);
-  background: var(--surface-subtle);
-}
-
-html[data-theme="dark"] .rn-code-editor .CodeMirror-linenumber {
-  color: var(--ink-faint);
-}
-
-html[data-theme="dark"] .rn-code-editor .CodeMirror-activeline-background {
-  background: var(--surface-hover);
-}
-
-html[data-theme="dark"] .CodeMirror-cursor {
-  border-left-color: var(--ink);
 }
 
 html[data-theme="dark"] .cm-s-default .cm-keyword,

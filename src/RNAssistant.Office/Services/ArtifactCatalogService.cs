@@ -65,6 +65,7 @@ namespace RNAssistant.Office.Services
                     if (request.Scope == "chat" && !linked || !string.IsNullOrEmpty(request.Kind) && request.Kind != item.Kind && !(request.Kind == "file" && item.Kind == ChatArtifactKinds.Attachment) ||
                         !string.IsNullOrEmpty(request.Query) && (item.Title ?? "").IndexOf(request.Query.Trim(), StringComparison.OrdinalIgnoreCase) < 0) continue;
                     items.Add(new ArtifactCatalogItem { DocumentId = doc.AuthorityId, DocumentTitle = Title(doc),
+                        SourceChatId = item.SourceChatId, SourceChatTitle = item.SourceChatId == actor.Id ? actor.Title : null,
                         ResourceUri = ChatResourceUri.CreateArtifactRevisionUri(source, item), Title = item.Title ?? "Недоступный ресурс",
                         Kind = item.Kind, MimeType = item.MimeType, Revision = Math.Max(1, item.Revision), ByteLength = item.ContentByteLength, UpdatedUtc = item.CreatedUtc, Linked = linked,
                         Selected = linked && (item.Id == actor.ActiveHtmlArtifactId || item.Id == actor.ActivePlanDocumentArtifactId ||

@@ -135,9 +135,7 @@
       if (!restoring && !panel("request")) RNAssistantModelContext.onDockState(false, false);
     });
     RNAssistantChatInspector.onDockState(!!panel("inspector"), visible("inspector"));
-    RNAssistantShellLayout.renderWorkspace({ layout: { visible: workspaceActive(), section: section, canMaximize: !!api.activePanel,
-      maximized: api.hasMaximizedGroup(), panels: api.panels.length, activeView: api.activePanel && api.activePanel.id,
-      groups: api.groups.filter(function (group) { return group.api.isVisible; }).length } });
+    refreshPresentation();
     Object.keys(views).forEach(function (id) {
       var view = views[id], shown = visible(id);
       if (view.onVisible && view.active !== shown) { view.active = shown; view.onVisible(shown); }
@@ -145,6 +143,14 @@
     });
     syncObjectViews();
     updateContext();
+  }
+
+  function refreshPresentation() {
+    if (!api) return;
+    RNAssistantShellLayout.renderWorkspace({ layout: { visible: workspaceActive(), section: section, canMaximize: !!api.activePanel,
+      maximized: api.hasMaximizedGroup(), panels: api.panels.length, activeView: api.activePanel && api.activePanel.id,
+      activeTarget: api.activePanel && api.activePanel.params && api.activePanel.params.target,
+      groups: api.groups.filter(function (group) { return group.api.isVisible; }).length } });
   }
 
   function notice(message) { RNAssistantShellLayout.notice(message); }
@@ -498,12 +504,13 @@
   window.RNAssistantDockWorkspace = {
     registerConversation: function (descriptor) { views.conversation = descriptor; },
     getView: function (id) { return objectViews[id] && objectViews[id].view || null; },
+    activeTarget: function () { return workspaceActive() && api && api.activePanel && api.activePanel.params && api.activePanel.params.target || null; },
     eachView: function (type, callback) { Object.keys(objectViews).forEach(function (id) {
       var item = panel(id); if (item && item.params && item.params.target.view === type) callback(objectViews[id].view);
     }); },
     registerTargetRoute: registerTargetRoute, registerView: registerView, openTarget: openTarget, sectionView: sectionView,
     isSectionVisible: function (name) { var id = sectionView(name); return !!id && visible(id); },
-    bind: bind, mount: mount, show: show, close: close, updateContext: updateContext,
+    bind: bind, mount: mount, show: show, close: close, updateContext: updateContext, refreshPresentation: refreshPresentation,
     isVisible: visible,
     setTitle: function (id, title) { var item = panel(id); if (item && item.title !== title) item.api.setTitle(title); },
     toggleTools: toggleTools, inspectorToggleLabel: inspectorToggleLabel,

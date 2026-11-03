@@ -13,7 +13,7 @@ const {chromium}=require('playwright');
     page.setDefaultTimeout(8000);page.on('pageerror',e=>errors.push(e.stack||e.message));
     await page.goto(address+'preview/web/?scenario=ready');
     await page.waitForFunction(()=>state.activeChatId==='preview-chat'&&!state.initializePromise);
-    await page.locator('#chatInput').fill('Черновик Office отдельно от просмотра');
+    await page.locator('[data-chat-node="chatInput"]').fill('Черновик Office отдельно от просмотра');
     await page.evaluate(()=>{
       window.browserTest={calls:[],loads:0,delayOpen:false};const original=send;
       send=function(command,payload){browserTest.calls.push({command,payload});if(command==='stageHtmlVisualSelection')return Promise.resolve({resource:{Id:'browser-html-annotation',FileName:'selection.json',Kind:'file',Size:180,Status:'ready'}});
@@ -55,33 +55,33 @@ const {chromium}=require('playwright');
     assert.equal(await page.evaluate(()=>browserTest.loads),baseline);
     // Independent plugin selection leaves the exact current conversation and draft intact.
     await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));
-    const plugin=page.frameLocator('#pluginPreviewFrameHost iframe');await plugin.getByRole('heading',{name:'Источники',exact:true}).waitFor();
+    const plugin=page.frameLocator('[data-plugin-node="PreviewFrameHost"] iframe');await plugin.getByRole('heading',{name:'Источники',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>RNAssistantWorkspaceChat.owner()),'office');
-    assert.equal(await page.locator('#chatInput').inputValue(),'Черновик Office отдельно от просмотра');
+    assert.equal(await page.locator('[data-chat-node="chatInput"]').inputValue(),'Черновик Office отдельно от просмотра');
     assert.equal(await page.evaluate(()=>browserTest.calls.some(c=>c.command==='getPluginChat')),false,'preview does not read/retarget source chat');
     await plugin.locator('body').evaluate(node=>{const input=document.createElement('input');input.id='browserStateProbe';input.value='plugin-retained';node.appendChild(input);});
-    await page.evaluate(()=>{browserTest.pluginFrame=document.querySelector('#pluginPreviewFrameHost iframe');browserTest.pluginDocument=browserTest.pluginFrame.contentDocument;});
+    await page.evaluate(()=>{browserTest.pluginFrame=document.querySelector('[data-plugin-node="PreviewFrameHost"] iframe');browserTest.pluginDocument=browserTest.pluginFrame.contentDocument;});
     await layout('Сохранить раскладку');await layout('Вернуть сохранённую');
     assert.equal(await plugin.locator('#browserStateProbe').inputValue(),'plugin-retained');
-    await page.locator('#pluginWorkbench').getByRole('button',{name:'Чат исходников',exact:true}).click();
+    await page.locator('[data-plugin-node="Workbench"]').getByRole('button',{name:'Чат исходников',exact:true}).click();
     await page.waitForFunction(()=>RNAssistantWorkspaceChat.owner()==='plugin');
-    await page.evaluate(()=>RNAssistantDockWorkspace.show('plugin-browser'));
+    await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));
     assert.equal(await plugin.locator('#browserStateProbe').inputValue(),'plugin-retained','moving workspace host to project chat retains plugin document');
-    await page.waitForFunction(()=>!document.querySelector('#pluginWorkbench .browser-annotate').disabled);
-    await page.locator('#pluginWorkbench .browser-annotate').click();
+    await page.waitForFunction(()=>!document.querySelector('[data-plugin-node="Workbench"] .browser-annotate').disabled);
+    await page.locator('[data-plugin-node="Workbench"] .browser-annotate').click();
     await plugin.getByRole('heading',{name:'Источники',exact:true}).click();
-    await page.locator('#pluginPreviewFrameHost .visual-annotation-editor textarea').fill('Проверка адресной plugin-аннотации');
-    await page.locator('#pluginPreviewFrameHost .visual-annotation-editor .primary').click();
+    await page.locator('[data-plugin-node="PreviewFrameHost"] .visual-annotation-editor textarea').fill('Проверка адресной plugin-аннотации');
+    await page.locator('[data-plugin-node="PreviewFrameHost"] .visual-annotation-editor .primary').click();
     await page.waitForFunction(()=>RNAssistantChatDrafts.readWorkspace({workspaceId:RNAssistantProjectChats.workspaceId(),sessionId:RNAssistantProjectChats.snapshot().sessionId}).attachments.some(item=>item.Id==='browser-plugin-annotation'));
     assert.ok(await page.evaluate(()=>browserTest.calls.some(c=>c.command==='stagePluginVisualSelection'&&c.payload.workspaceId==='preview-plugin-workspace'&&c.payload.instanceId&&c.payload.sessionId)));
-    if(await page.locator('#pluginWorkbench .browser-annotate').getAttribute('aria-pressed')==='true')await page.locator('#pluginWorkbench .browser-annotate').click();
+    if(await page.locator('[data-plugin-node="Workbench"] .browser-annotate').getAttribute('aria-pressed')==='true')await page.locator('[data-plugin-node="Workbench"] .browser-annotate').click();
     // Inspector is an independent view. Show it in the other group without closing Browser.
     await page.evaluate(()=>RNAssistantChatInspector.setOpen(true));
-    await page.evaluate(()=>RNAssistantDockWorkspace.show('plugin-browser'));
-    assert.ok(await page.evaluate(()=>browserTest.pluginFrame===document.querySelector('#pluginPreviewFrameHost iframe')&&browserTest.pluginDocument===browserTest.pluginFrame.contentDocument));
+    await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));
+    assert.ok(await page.evaluate(()=>browserTest.pluginFrame===document.querySelector('[data-plugin-node="PreviewFrameHost"] iframe')&&browserTest.pluginDocument===browserTest.pluginFrame.contentDocument));
     // Existing provider error is visible and does not claim the old page is current.
     await page.evaluate(()=>{const original=send;send=(command,payload)=>command==='checkPlugin'?Promise.reject(Error('Ошибка пакета: index.html отсутствует')):original(command,payload);browserTest.restoreSend=()=>{send=original;};});
-    await page.locator('#pluginPreview').click();await page.locator('#pluginPreviewMount .preview-surface-status').getByText(/Предпросмотр не обновлён/).waitFor();
+    await page.locator('[data-plugin-node="Preview"]').click();await page.locator('[data-plugin-node="PreviewMount"] .preview-surface-status').getByText(/Предпросмотр не обновлён/).waitFor();
     await page.evaluate(()=>browserTest.restoreSend());
     assert.equal(await plugin.locator('#browserStateProbe').inputValue(),'plugin-retained');
     // Every surface tracks its placeholder at narrow widths, dark theme and CSS zoom.
@@ -89,32 +89,32 @@ const {chromium}=require('playwright');
       const a=surface.getBoundingClientRect();return {left:a.left,right:a.right,width:a.width,viewport:innerWidth,overflow:surface.scrollWidth-surface.clientWidth};});}
     const captures=process.env.RNA_BROWSER_SCREENSHOTS;if(captures){fs.mkdirSync(captures,{recursive:true});await page.screenshot({path:path.join(captures,'s3b3a-light-1280.png')});}
     await page.setViewportSize({width:420,height:900});
-    await page.evaluate(()=>{document.documentElement.dataset.theme='dark';RNAssistantShellLayout.setNavigationOpen(false);RNAssistantDockWorkspace.show('plugin-browser');});
-    await page.locator('#pluginWorkbench').waitFor();await page.waitForFunction(()=>document.getElementById('pluginWorkbench').getBoundingClientRect().right<=innerWidth+1);let rect=await geometry();assert.ok(rect.left>=0&&rect.right<=rect.viewport+1&&rect.overflow<=1,JSON.stringify(rect));
+    await page.evaluate(()=>{document.documentElement.dataset.theme='dark';RNAssistantShellLayout.setNavigationOpen(false);RNAssistantPlugins.select('data-templates');});
+    await page.locator('[data-plugin-node="Workbench"]').waitFor();await page.waitForFunction(()=>document.querySelector('[data-plugin-node="Workbench"]').getBoundingClientRect().right<=innerWidth+1);let rect=await geometry();assert.ok(rect.left>=0&&rect.right<=rect.viewport+1&&rect.overflow<=1,JSON.stringify(rect));
     if(captures)await page.screenshot({path:path.join(captures,'s3b3a-dark-420.png')});
     await page.evaluate(()=>{document.body.style.zoom='1.25';});await page.waitForTimeout(100);rect=await geometry();assert.ok(rect.right<=rect.viewport+1,JSON.stringify(rect));
     await page.evaluate(()=>{document.body.style.zoom='';RNAssistantShellLayout.setNavigationOpen(true);});
-    assert.equal(await page.locator('#pluginWorkbench').isVisible(),false,'navigation overlay does not expose or intercept Browser');
+    assert.equal(await page.locator('[data-plugin-node="Workbench"]').isVisible(),false,'navigation overlay does not expose or intercept Browser');
     await page.evaluate(()=>RNAssistantShellLayout.setNavigationOpen(false));
     await page.locator('.browser-view-anchor:visible').focus();
     await page.locator('.browser-view-anchor:visible').press('Enter');
-    assert.ok(await page.evaluate(()=>document.getElementById('pluginWorkbench').contains(document.activeElement)));
+    assert.ok(await page.evaluate(()=>document.querySelector('[data-plugin-node="Workbench"]').contains(document.activeElement)));
     // A late source-chat lookup cannot take navigation back after another conversation was selected.
     await page.evaluate(()=>{browserTest.delayChat=true;});
-    await page.locator('#pluginWorkbench').getByRole('button',{name:'Чат исходников',exact:true}).click();
+    await page.locator('[data-plugin-node="Workbench"]').getByRole('button',{name:'Чат исходников',exact:true}).click();
     await page.waitForFunction(()=>!!browserTest.releaseChat);
-    await page.evaluate(()=>{RNAssistantProjectChats.setScope('office');browserTest.releaseChat();});
+    await page.evaluate(()=>{RNAssistantProjectChats.setScope('office');RNAssistantConversationPanel.open({source:'office',sessionId:'preview-chat'});browserTest.releaseChat();});
     await page.waitForFunction(()=>!RNAssistantPlugins.isChatBusy());
     assert.equal(await page.evaluate(()=>RNAssistantWorkspaceChat.owner()),'office');
     // Closing a ready view disposes the existing runtime instance; late open cannot resurrect it.
-    await page.evaluate(()=>RNAssistantDockWorkspace.close('plugin-browser'));
-    await page.waitForFunction(()=>!document.querySelector('#pluginPreviewFrameHost iframe'));
+    await page.evaluate(()=>RNAssistantDockWorkspace.close(RNAssistantPluginView.key({pluginId:'data-templates'})));
+    await page.waitForFunction(()=>!document.querySelector('[data-plugin-node="PreviewFrameHost"] iframe'));
     assert.ok(await page.evaluate(()=>browserTest.calls.some(c=>c.command==='closePlugin')));
     await page.evaluate(()=>{browserTest.delayOpen=true;RNAssistantPlugins.select('data-templates');});
-    await page.waitForFunction(()=>!!browserTest.release);await page.evaluate(()=>{RNAssistantDockWorkspace.close('plugin-browser');});
+    await page.waitForFunction(()=>!!browserTest.release);await page.evaluate(()=>{RNAssistantDockWorkspace.close(RNAssistantPluginView.key({pluginId:'data-templates'}));});
     await page.evaluate(()=>browserTest.release());
     await page.waitForFunction(()=>browserTest.calls.some(c=>c.command==='closePlugin'&&c.payload.instanceId===browserTest.late.instanceId));
-    assert.equal(await page.locator('#pluginPreviewFrameHost iframe').count(),0);
+    assert.equal(await page.locator('[data-plugin-node="PreviewFrameHost"] iframe').count(),0);
     await page.evaluate(()=>{state.activeHtmlArtifactId='different-source';renderHtmlWorkspace();RNAssistantDockWorkspace.show('html-browser');});
     assert.equal(await page.evaluate(()=>RNAssistantHtmlWorkspaceSurface.hasSource()),false,'active source change clears binding instead of retargeting');
     await page.locator('#htmlWorkspacePreview .preview-surface-status').getByText(/Выберите HTML/).waitFor();

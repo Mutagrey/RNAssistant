@@ -1,5 +1,15 @@
 # Stabilization progress
 
+## Плагины, материалы и исходники по фото — 2026-11-03, In Review
+
+Web: отдельные live plugin views, синхронное выделение rail, постоянно раскрытый
+SVG picker; дерево материалов по документам/source chats с одним меню действий.
+Исходники используют общий полноразмерный CodeMirror. Singleton plugin-browser
+удалён; runtime/SDK не переписаны, source-chat provenance читается из retained record.
+Адресные Chromium/pure JS и один host-neutral Harness case прошли; старый HTML
+annotation hit-test остаётся открытым, Windows/Office не квалифицированы.
+[Scope и ревью](../ui/UI_MIGRATION_PLAN.md#s3b3c-plugin-instances-и-замечания-по-фото--in-review-2026-11-03).
+
 ## Независимые вкладки чатов — 2026-11-03, In Review
 
 Production Web использует одну factory Chat View с отдельными экземплярами для

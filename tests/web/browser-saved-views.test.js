@@ -67,7 +67,7 @@ const {chromium}=require('playwright');
       const a=surface(htmlTitle('A'));
       const sourceStart=performance.now();
       await a.getByRole('button',{name:'Исходник',exact:true}).click();await a.getByRole('combobox',{name:'Файл проекта'}).selectOption('styles.css');
-      sourceMs=performance.now()-sourceStart;sourceCharacters=await a.locator('.rn-text-viewer-content').evaluate(n=>n.textContent.length);
+      sourceMs=performance.now()-sourceStart;sourceCharacters=await a.locator('.CodeMirror').evaluate(n=>n.CodeMirror.getValue().length);
       assert.ok(sourceCharacters<=32000);
       if(process.env.BROWSER_SCREENSHOT)await page.screenshot({path:process.env.BROWSER_SCREENSHOT+'-source1280.png'});
       await a.getByRole('button',{name:'Следующая страница',exact:true}).click();assert.match(await a.locator('.rn-text-viewer-status').innerText(),/32001/);
@@ -102,11 +102,11 @@ const {chromium}=require('playwright');
       assert.equal(await surface('Поздняя версия').count(),0);
     }
     await page.setViewportSize({width:1280,height:900});
-    await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));await page.locator('#pluginPreviewFrameHost iframe').waitFor();
+    await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));await page.locator('[data-plugin-node="PreviewFrameHost"] iframe').waitFor();
     const openRelease=async n=>{
-      await page.evaluate(()=>RNAssistantDockWorkspace.show('plugin-browser'));
-      await page.locator('#pluginVersions summary').click();await page.locator('#pluginVersionItems').getByRole('button',{name:new RegExp('^v'+n+' ')}).click();
-      if(baseline)await page.waitForFunction(n=>document.querySelector('#pluginPreviewFrameHost iframe')?.src.includes('saved-release-'+n),n);
+      await page.evaluate(()=>RNAssistantPlugins.select('data-templates'));
+      await page.locator('[data-plugin-node="Versions"] summary').click();await page.locator('[data-plugin-node="VersionItems"]').getByRole('button',{name:new RegExp('^v'+n+' ')}).click();
+      if(baseline)await page.waitForFunction(n=>document.querySelector('[data-plugin-node="PreviewFrameHost"] iframe')?.src.includes('saved-release-'+n),n);
       else await page.locator('.browser-object-view iframe[src*="saved-release-'+n+'"]').waitFor({state:'visible'});
     };
     const pluginTimes=[];

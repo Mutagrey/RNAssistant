@@ -787,6 +787,27 @@
       "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"
     },
     {
+      "path": "js/vendor/codemirror/mode/css/css.min.js",
+      "package": "codemirror",
+      "bytes": 27098,
+      "sha256": "ee0ce00f346a6d7e345a74ab32f2cc600e8b7df878b28715d7d52192fa274eee",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/mode/htmlmixed/htmlmixed.min.js",
+      "package": "codemirror",
+      "bytes": 2870,
+      "sha256": "506e12c1fc68437c2f5d45b2d7c8cd341f231ad94c5126667c0272bfe6359e6a",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"
+    },
+    {
+      "path": "js/vendor/codemirror/mode/xml/xml.min.js",
+      "package": "codemirror",
+      "bytes": 5981,
+      "sha256": "1403f6fc04264c38e933891710636ed07761898aa764de95a39a832d433cbe66",
+      "provenanceUrl": "https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"
+    },
+    {
       "path": "js/vendor/codemirror/mode/javascript/javascript.min.js",
       "package": "codemirror",
       "bytes": 17315,

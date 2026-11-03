@@ -238,7 +238,7 @@
       if (actionButton) {
         var node = record.nodes.get(item.dataset.treeKey);
         var action = node.actions[Number(actionButton.dataset.treeAction)];
-        if (action && !action.disabled && typeof action.onClick === "function") action.onClick(node);
+        if (action && !action.disabled && typeof action.onClick === "function") action.onClick(node, actionButton);
         return;
       }
       if (event.target.closest("[data-tree-toggle]")) toggle(item, !record.nodes.get(item.dataset.treeKey).expanded);

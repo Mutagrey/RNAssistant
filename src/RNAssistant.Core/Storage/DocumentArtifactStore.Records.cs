@@ -141,6 +141,7 @@ namespace RNAssistant.Core.Storage
                 }
                 else item.InlineText = _payloads.ReadText(body.ToBlobReference()) ?? throw new InvalidDataException("The artifact body is unavailable.");
             }
+            item.SourceChatId = record.SourceChatId;
             return item;
         }
 

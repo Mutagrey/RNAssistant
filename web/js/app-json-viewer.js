@@ -431,7 +431,7 @@
     toolbar.appendChild(modes); toolbar.appendChild(actions);
     var status = element("div", "rn-json-status");
     status.setAttribute("aria-live", "polite");
-    var body = element("div", "rn-json-body");
+    var body = element("div", "rn-json-body"), codeEditor = null;
     if (options.toolbar !== false) root.appendChild(toolbar);
     root.appendChild(status); root.appendChild(body);
     if (options.compact && options.toolbar !== false) toolbar.insertBefore(status, actions);
@@ -476,6 +476,8 @@
     }
 
     function render() {
+      if (codeEditor) { codeEditor.destroy(); codeEditor = null; }
+      body.classList.remove("has-code-editor");
       body.replaceChildren();
       state.domRows = 0;
       state.embeddedChars = 0;
@@ -505,8 +507,12 @@
           if (state.document.ok) setStatus("Исходный текст без изменений", "ok");
           else setStatus(errorText(state.document.error), "error");
         }
-        pre.textContent = shown;
-        body.appendChild(pre);
+        if (options.code && window.RNAssistantCodeEditor && window.CodeMirror) {
+          body.classList.add("has-code-editor");
+          var code = element("div", "rn-json-code"); code.setAttribute("data-json-view", pre.getAttribute("data-json-view"));
+          body.appendChild(code);
+          codeEditor = RNAssistantCodeEditor.mount(code, { text: shown, path: "source.json" });
+        } else { pre.textContent = shown; body.appendChild(pre); }
       }
     }
 
@@ -709,7 +715,7 @@
       collapseAll: collapseAll,
       getMode: function () { return state.mode; },
       getDocument: function () { return state.document; },
-      destroy: function () { state.copyVersion += 1; if (window.RNAssistantActionMenu) window.RNAssistantActionMenu.closeWithin(root); root.replaceChildren(); }
+      destroy: function () { state.copyVersion += 1; if (codeEditor) codeEditor.destroy(); if (window.RNAssistantActionMenu) window.RNAssistantActionMenu.closeWithin(root); root.replaceChildren(); }
     };
   }
 

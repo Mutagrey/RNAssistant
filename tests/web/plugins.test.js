@@ -147,10 +147,9 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginCreateForm').waitFor({state:'visible'});
     await page.waitForFunction(()=>!document.querySelector('.shell')?.classList.contains('navigation-transition'));
     assert.equal(await page.locator('#productMobileMenuButton').isVisible(),false,'creation screen has no redundant wide tree toggle');
-    assert.ok((await page.locator('.plugin-create-heading').boundingBox()).x<170,'plugin form aligns to the left');
+    assert.ok((await page.locator('#pluginCreateForm').boundingBox()).x<170,'plugin form aligns to the left');
     await page.locator('#pluginName').fill('Example');
-    assert.equal(await page.locator('#pluginCreateTitle').textContent(),'Example','plugin heading follows name');
-    await page.locator('#pluginIconTrigger').click();
+    assert.equal(await page.locator('#pluginCreateTitle').count(),0,'plugin name has one editable field');
     assert.equal(await page.locator('#pluginBuiltinIcons [data-icon-id="dataTemplates"] svg path').count(),1,'original Data Templates glyph is available');
     await page.locator('.plugin-icon-import summary').click();
     await page.locator('#pluginIconImportName').fill('Мой знак');
@@ -165,7 +164,6 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('#pluginIconDrawButton').click();
     await page.locator('#pluginSavedIcons [data-icon-id="icon-drawn"]').waitFor();
     assert.equal(drawCalls,1,'drawing saves a reusable icon immediately');
-    await page.locator('#pluginIconTrigger').click();
     await page.screenshot({path:path.join(captures,'plugin-create-desktop.png')});
     await page.setViewportSize({width:390,height:844});
     await page.waitForFunction(()=>!document.querySelector('.shell')?.classList.contains('navigation-transition'));
@@ -303,7 +301,7 @@ const captures=process.env.RNA_PLUGIN_SCREENSHOTS || path.join(os.tmpdir(),'rnas
     await page.locator('.rail-hover-card').getByRole('button',{name:'Удалить с панели'}).click();
     await page.locator('#pluginRail [data-plugin-id="example"]').waitFor({state:'detached'});
     assert.equal(item.releaseId,'release-1','removal preserves the restored publication');
-    assert.equal(await page.locator('#pluginCreateTitle').textContent(),'Новый плагин','successful creation clears its form before the next plugin');
+    assert.equal(await page.locator('#pluginName').inputValue(),'','successful creation clears its form before the next plugin');
     const restoredName='Плагин сводки продаж и проверки показателей';item.name=restoredName;
     await page.locator('#pluginAdd').hover();
     await page.locator('.rail-hover-card').getByRole('button',{name:restoredName}).waitFor();

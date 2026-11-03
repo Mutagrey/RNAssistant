@@ -12,7 +12,10 @@ state/store или per-tab копии глобального state нет. По�
 не адресует через него команды или async delivery. Это явное уточнение прежнего
 gate S2b.9–12 ниже, а не заявление об удалении всех legacy consumers.
 
-Removal gate: перевести оставшиеся live HTML/plugin source/annotation и
+Plugin source/candidate/watch уже instance-owned (S3b.3c ниже).
+`RNAssistantPluginAnnotations` пока остаётся selected façade для команды показа
+аннотации из общего чата; staged selection проверяет exact source/session.
+Removal gate: перевести оставшиеся live HTML source/annotation, выбранный annotation entrypoint и
 material/model-context consumers на explicit providers (S3b.3c / соответствующие
 срезы), проверить dirty/stale/close и убрать selected entrypoints после последнего
 consumer. Нельзя расширять facade новыми chat features. Runtime/drafts/receipts
@@ -40,8 +43,10 @@ S3b.3a удалил ChatBrowser/plugin splitters и смешанный Preview/I
 S3b.3b удалил HTML Catalog preview и browsingRelease из plugin workbench: exact saved
 HTML/release factories используют общий Browser lifetime/renderer и существующий
 transport. Catalog/download/source viewer не имеют второй реализации.
-Временные singleton adapters остаются у HtmlWorkspace (live editor/source/annotations)
-и Plugins (mutable source/candidate/watch/annotations). Owner: Web HtmlWorkspace/Plugins;
+S3b.3c (2026-11-03) удалил singleton Plugins: PluginView владеет mutable
+source/candidate/watch/annotations по pluginId, template имеет локальные роли.
+Временный singleton adapter остаётся у HtmlWorkspace (live editor/source/annotations).
+Owner: Web HtmlWorkspace;
 условие удаления в S3b.3c — scoped live providers с exact session/source ownership,
 annotation authority, close/stale и реальным UI evidence. Их глобальный state не
 клонируется. Сохранённый HTML не расширяет annotation права активной версии чата.

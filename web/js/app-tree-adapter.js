@@ -147,9 +147,9 @@
         children: navigationNodes(children, options, tree),
         actions: item.rnRowActions.map(function (action) {
           return { title: action.title, iconHtml: tree.icon(action.iconKind), danger: action.danger,
-            disabled: action.disabled, onClick: function () {
+            disabled: action.disabled, onClick: function (node, anchor) {
               if (typeof options.onAction === "function") {
-                options.onAction({ type: item.rnItemType, id: item.rnItemId, title: item.title }, action.id);
+                options.onAction({ type: item.rnItemType, id: item.rnItemId, title: item.title }, action.id, anchor);
               }
             } };
         }).concat(item.rnDeletable ? [{

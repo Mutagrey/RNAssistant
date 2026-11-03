@@ -75,24 +75,24 @@
 .shell #tab-vba .tool-search { border-color: var(--line); background: var(--surface); }
 .shell #tab-instructions .instruction-editor,
 .shell #tab-instructions #toolEditorPanel,
-.shell #tab-vba .vba-editor { min-width: 0; padding: 0 18px 12px; border: 0; border-radius: 0; background: var(--surface); }
+.shell #tab-vba .vba-editor { min-width: 0; padding: 0; border: 0; border-radius: 0; background: var(--surface); }
 .shell #tab-instructions .instruction-editor { padding: 0; }
-.shell #tab-instructions .instruction-editor-content { padding: 0 18px 12px; }
+.shell #tab-instructions .instruction-editor-content { padding: 0; }
 .shell #tab-instructions .library-editor-head,
-.shell #tab-vba .vba-editor-head { min-height: 52px; margin: 0 -18px; padding: 5px 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.shell #tab-vba .vba-editor-head { min-height: 52px; margin: 0; padding: 5px var(--page-inset); border-bottom: 1px solid var(--line); background: var(--surface); }
 .shell #tab-instructions .library-editor-head .resource-editor-titlebox,
 .shell #tab-vba .vba-editor-head .resource-editor-titlebox { display: flex; flex-direction: column-reverse; justify-content: center; }
 .shell #tab-instructions .resource-editor-title,
 .shell #tab-vba .resource-editor-title { color: var(--ink); font-size: 15px; font-weight: 600; }
 .shell #tab-instructions .resource-editor-meta,
 .shell #tab-vba .resource-editor-meta { margin: 0 0 2px; color: var(--ink-muted); font-size: 10px; }
-.shell #tab-instructions .library-editor-mode-row { min-height: 37px; margin: 0 -18px; padding: 0 18px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
+.shell #tab-instructions .library-editor-mode-row { min-height: 37px; margin: 0; padding: 0 var(--page-inset); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: var(--surface); }
 .shell #tab-instructions .library-editor-mode-row .mode-toggle { border: 0; border-radius: 0; background: transparent; }
 .shell #tab-instructions .library-editor-mode-row .mode-button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--ink-muted); }
 .shell #tab-instructions .library-editor-mode-row .mode-button.active { border-bottom-color: var(--accent); color: var(--ink); }
 .shell #tab-instructions .library-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr); gap: 0; }
 .shell #tab-instructions .prompt-editor-pane { grid-template-rows: 52px 37px minmax(0, 1fr) 25px; gap: 0; }
-.shell #tab-instructions .prompt-editor-stage { padding-top: 16px; }
+.shell #tab-instructions .prompt-editor-stage { padding: 0; }
 .shell #tab-instructions #toolForm { padding-top: 16px; }
 .shell #tab-instructions #toolForm { padding-bottom: 24px; }
 .shell #tab-instructions #toolForm .tool-editor-page { align-content: start; gap: 16px; max-width: 880px; }
@@ -107,7 +107,7 @@
 .shell #tab-instructions #toolForm .component-toolbar button,
 .shell #tab-instructions #toolForm .tool-installation-actions button { min-height: 30px; padding: 5px 10px; border-radius: var(--radius-sm); font-size: 12px; }
 .shell #tab-instructions #toolForm .tool-docs-page .tool-documentation-markdown { box-sizing: border-box; width: 100%; max-width: 740px; margin: 0 auto; padding: 28px 32px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-.shell #tab-instructions #toolForm #toolReadmeEditor { box-sizing: border-box; width: 100%; max-width: 740px; margin: 0 auto; }
+.shell #tab-instructions #toolForm #toolReadmeEditor { box-sizing: border-box; width: 100%; max-width: none; height:100%; margin: 0; }
 .shell #tab-instructions #toolForm #toolReadmeEditor label { display: grid; gap: 8px; }
 .shell #tab-instructions #toolForm #toolReadmeEditor textarea,
 .shell #tab-instructions #toolForm #toolReadmeEditor .CodeMirror { width: 100% !important; min-height: 400px !important; }
@@ -130,7 +130,7 @@
 .shell #tab-vba .vba-history-warning { max-width: 760px; margin: 0; }
 .shell #tab-instructions #toolDescriptionInput { min-height: 130px; }
 .shell #tab-instructions .tool-form-flags .checkline { color: var(--ink); font-weight: 400; }
-.shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; padding-top: 16px; }
+.shell #tab-instructions .skill-instruction-view { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 0; min-height: 0; padding-top: 0; }
 .shell #tab-instructions .skill-instruction-view:has(#skillResourceHeading[hidden]) { grid-template-rows: auto minmax(0, 1fr) 25px; }
 .shell #tab-instructions .skill-instruction-view > .library-editor-mode-row { justify-content: flex-end; min-height: 31px; margin: 0; padding: 0; border: 0; }
 .shell #tab-instructions .skill-instruction-view .library-editor-section-label { margin-right: auto; }
@@ -150,11 +150,11 @@
 .shell #tab-instructions .skill-file-action { flex: 0 0 auto; padding: 6px 4px; border: 0; background: transparent; color: var(--ink-muted); font-size: 11px; }
 .shell #tab-instructions .skill-file-action:hover { color: var(--accent); }
 .shell #tab-instructions .skill-file-action.is-danger:hover { color: var(--danger); }
-.shell .product-editor-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 25px; margin: 0 -18px -12px; padding: 4px 18px; border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 10px; }
+.shell .product-editor-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 25px; margin: 0; padding: 4px var(--page-inset); border-top: 1px solid var(--line); color: var(--ink-muted); font-size: 10px; }
 .shell #tab-vba .vba-editor { grid-template-rows: 52px 37px minmax(0, 1fr) 25px; gap: 0; }
 .shell #tab-vba .vba-editor.is-empty { grid-template-rows: 52px minmax(0, 1fr); }
 .shell #tab-vba .vba-editor.is-empty .vba-editor-status { display: none; }
-.shell #tab-vba .vba-code-pane { padding-top: 16px; }
+.shell #tab-vba .vba-code-pane { padding: 0; }
 .shell #tab-instructions .skill-page-tabs.hidden,
 .shell #tab-instructions .skill-instruction-view.hidden,
 .shell #tab-instructions .skill-files-view.hidden { display: none; }
