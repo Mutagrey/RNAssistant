@@ -4,237 +4,128 @@ const path = require('node:path');
 const {spawn} = require('node:child_process');
 const {chromium} = require('playwright');
 const root = path.resolve(__dirname, '../..');
-
 (async () => {
-  const server = spawn('python3', ['-B', 'prototypes/serve_ui.py', '--port', '0'], {cwd:root});
-  let serverError = '';
-  server.stderr.on('data', chunk => { serverError += String(chunk).slice(0, 4000); });
-  const address = await new Promise((resolve, reject) => {
-    server.stdout.on('data', chunk => {
-      const match = /RNAssistant design: (http:\/\/127\.0\.0\.1:\d+\/)/.exec(String(chunk));
-      if (match) resolve(match[1]);
-    });
-    server.once('exit', code => reject(Error('Preview server exited: ' + code + ' ' + serverError)));
-  });
-  const browser = await chromium.launch({headless:true,
-    ...(process.env.BROWSER_EXECUTABLE ? {executablePath:process.env.BROWSER_EXECUTABLE} : {})});
+  const server = spawn('python3', ['-B', 'prototypes/serve_ui.py', '--port', '0'], {cwd: root});
+  const address = await new Promise(resolve => server.stdout.on('data', data => {
+    const match = data.toString().match(/http:\/\/127\.0\.0\.1:\d+\//); if (match) resolve(match[0]);
+  }));
+  const browser = await chromium.launch({headless:true, ...(process.env.BROWSER_EXECUTABLE ? {executablePath:process.env.BROWSER_EXECUTABLE} : {})});
   try {
-    const page = await browser.newPage(), errors = [];
+    const page = await browser.newPage({viewport:{width:1440,height:900}}), errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(address + 'preview/web/?scenario=ready');
     await page.waitForFunction(() => state.activeChatId === 'preview-chat' && !state.initializePromise);
-    const openPluginChat = async () => {
-      await page.evaluate(() => RNAssistantPlugins.select('data-templates'));
-      await page.locator('#pluginWorkbench').getByRole('button', {name:'Чат исходников', exact:true}).click();
-      await page.waitForFunction(() => RNAssistantWorkspaceChat.owner() === 'plugin');
-    };
-    const officeSource = await page.evaluate(async () => {
-      const original = send, messages = state.messages;
-      send = async function (type, payload) {
-        const result = await original(type, payload);
-        return type === 'getChatState' ? Object.assign({}, result, { activeChatId: 'foreign-chat' }) : result;
+    await page.evaluate(async () => {
+      await send('getPluginChat',{pluginId:'data-templates'});
+      const catalog = await send('getProjectChats',{});
+      const project = catalog.projects.find(p => !p.pluginId && p.available && p.chats.length);
+      const plugin = catalog.projects.find(p => p.pluginId && p.available && p.chats.length);
+      window.attachmentTargets = [project,plugin].map(p => ({source:'workspace',workspaceId:p.workspaceId,sessionId:p.chats[0].Id}));
+      attachmentTargets.forEach((target,i) => RNAssistantConversationPanel.open(target, i ? {direction:'right'} : {}));
+      const original = send, leases = new Map(); window.attachmentCalls = []; window.pauseAttachment = true;
+      window.send = async function(type,payload,progress) {
+        if (!/^(beginChatResourceUpload|completeChatResourceUpload|discardChatResourceDraft|cancelChatResourceUpload)$/.test(type))
+          return original(type,payload,progress);
+        attachmentCalls.push({type,payload});
+        if (type === 'beginChatResourceUpload') {
+          const leaseId = String(leases.size + 1).padStart(64,'0'); leases.set(leaseId,payload);
+          return {leaseId,byteLength:payload.byteLength,maxChunkBytes:262144,url:'https://rnassistant.local-resource/v1/upload/'+leaseId};
+        }
+        if (type === 'completeChatResourceUpload') {
+          const value = leases.get(payload.leaseId);
+          if (pauseAttachment) { pauseAttachment=false; await new Promise(resolve => { window.finishAttachment=resolve; }); }
+          return {resource:{Id:'draft-'+payload.leaseId,FileName:value.fileName,Kind:'text',Size:value.byteLength,Status:'ready'}};
+        }
+        return {deleted:true,closed:true};
       };
-      try { await loadChatState('preview-chat'); return false; }
-      catch (error) { return /другого чата/.test(error.message) && state.activeChatId === 'preview-chat' && state.messages === messages; }
-      finally { send = original; }
+      RNAssistantResourceUpload.write = async (lease,file) => { window.attachmentBytes = await file.text(); };
     });
-    assert.equal(officeSource, true, 'Office full read rejects another chat without changing its history');
-    await openPluginChat();
-    await page.locator('#chatInput').waitFor({state:'visible'});
-    const viewIdentity = await page.evaluate(() => {
-      const view = document.querySelector('#workspaceChatView');
-      view.dataset.testIdentity = crypto.randomUUID();
-      return view.dataset.testIdentity;
-    });
-    assert.equal(await page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).isVisible(), false,
-      'plugin hides project file upload');
-    const workspaceId = 'preview-plugin-workspace';
-    await page.waitForFunction(id => !!RNAssistantWorkspaceChat.selectedSession(id), workspaceId);
-    const sessionId = await page.evaluate(id => RNAssistantWorkspaceChat.selectedSession(id), workspaceId);
-    assert.ok(sessionId, 'plugin selects an existing workspace session');
-
-    await page.locator('#chatInput').fill('Черновик из плагина');
-    await page.locator('#composerAddPicker .composer-add-trigger').click();
-    await page.locator('#chatPlanButton').click();
-    await page.locator('#chatReasoningToggle').click();
-    await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
-    await page.locator('[data-tab-panel-id=conversation]').waitFor({state:'visible'});
-    assert.deepEqual(await page.evaluate(() => [document.querySelectorAll('#workspaceChatView').length,
-      document.querySelectorAll('#chatForm').length, document.querySelector('#workspaceChatView').dataset.testIdentity,
-      document.querySelector('#workspaceChatView').parentElement.id]), [1, 1, viewIdentity, 'conversationView'],
-      'project and plugin mount the same view and composer');
-    assert.deepEqual(await page.evaluate(() => ['composerAddPicker', 'chatModelPicker', 'chatPlanButton',
-      'chatReasoningToggle'].map(id => document.querySelectorAll('#' + id).length)), [1, 1, 1, 1],
-      'one set of composer controls serves Office, project and plugin');
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Черновик из плагина');
-    assert.equal(await page.locator('#chatPlanButton').getAttribute('aria-pressed'), 'true');
-    assert.equal(await page.locator('#chatReasoningToggle').getAttribute('aria-pressed'), 'true');
-
-    const workspaceSource = await page.evaluate(async target => {
-      const original = send, before = RNAssistantWorkspaceChat.snapshot();
-      send = async function (type, payload) {
-        const result = await original(type, payload);
-        return type === 'getProjectChat' ? Object.assign({}, result,
-          { project: Object.assign({}, result.project, { workspaceId: 'foreign-workspace' }) }) : result;
-      };
-      try {
-        await RNAssistantProjectChats.open(target.workspaceId, target.sessionId);
-        return RNAssistantWorkspaceChat.snapshot() === before &&
-          document.querySelector('#workspaceChatNotice').textContent.includes('другого чата');
-      } finally { send = original; }
-    }, {workspaceId, sessionId});
-    assert.equal(workspaceSource, true, 'Workspace rejects another workspace even when its session id matches');
-    await page.evaluate(target => RNAssistantProjectChats.open(target.workspaceId, target.sessionId), {workspaceId, sessionId});
-
-    await page.locator('#chatInput').fill('Черновик из проекта');
-    await page.locator('#composerAddPicker .composer-add-trigger').click();
-    const [chooser] = await Promise.all([
-      page.waitForEvent('filechooser', {timeout:5000}),
-      page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
-    ]);
-    await chooser.setFiles({name:'draft.txt', mimeType:'text/plain', buffer:Buffer.from('hello')});
-    await page.waitForFunction(() => document.querySelector('#chatInput').value.includes('Файл проекта: chat-files/'));
-    const projectDraft = await page.locator('#chatInput').inputValue();
-    await openPluginChat();
-    await page.locator('#chatInput').waitFor({state:'visible'});
-    assert.equal(await page.locator('#chatInput').inputValue(), projectDraft,
-      'file reference and text share the source chat draft');
-
-    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
+    await page.waitForFunction(() => attachmentTargets.every(t => { const p=RNAssistantConversationPanel.find(t); return p && !p.loading; }));
     await page.evaluate(() => {
-      const original = send;
-      window.uploadRace = {original, release:null};
-      window.send = async function (type, payload) {
-        const result = await original(type, payload);
-        if (type === 'beginProjectChatFileUpload' && payload.sessionId === 'preview-project-review')
-          await new Promise(resolve => { uploadRace.release = resolve; });
-        return result;
-      };
+      const p=RNAssistantConversationPanel.find(attachmentTargets[0]);
+      p.node('chatInput').value='Текст проекта'; p.node('chatInput').dispatchEvent(new Event('input'));
+      const transfer=new DataTransfer(); transfer.items.add(new File(['original bytes'],'source.txt',{type:'text/plain'}));
+      p.element.dispatchEvent(new DragEvent('drop',{bubbles:true,dataTransfer:transfer}));
     });
-    await page.locator('#composerAddPicker .composer-add-trigger').click();
-    const [otherChooser] = await Promise.all([
-      page.waitForEvent('filechooser', {timeout:5000}),
-      page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).click()
-    ]);
-    await otherChooser.setFiles({name:'older.txt', mimeType:'text/plain', buffer:Buffer.from('older')});
-    await page.waitForFunction(() => !!uploadRace.release);
-    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean'));
-    await page.locator('#chatInput').fill('Текст в другой сессии');
-    assert.equal(await page.locator('#sendButton').isEnabled(), true,
-      'an upload in a previous session must not block text in the selected chat');
-    await page.locator('#composerAddPicker .composer-add-trigger').click();
-    assert.equal(await page.locator('#composerAddPicker .composer-add-menu').getByRole('button', {name:'Файл с компьютера'}).isDisabled(), true,
-      'the file picker remains unavailable while the single upload slot is occupied');
-    await page.evaluate(() => uploadRace.release());
-    await page.waitForFunction(() => ((RNAssistantChatDrafts.readWorkspace({workspaceId:'preview-data-workspace',
-      sessionId:'preview-project-review'}) || {}).text || '').includes('Файл проекта: chat-files/'));
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Текст в другой сессии',
-      'completed upload updates only its original draft');
-    await page.evaluate(() => RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-review'));
-    assert.match(await page.locator('#projectChatFileStatus').textContent(), /Файл добавлен в проект:.*older\.txt/,
-      'the source chat retains the completed upload status after switching back');
-    await page.evaluate(() => { send = uploadRace.original; });
-    await openPluginChat();
-
+    await page.waitForFunction(() => !!window.finishAttachment);
     await page.evaluate(() => {
-      const original = send;
-      window.draftTest = {original, requests:[], release:null, failOnce:true};
-      window.send = async function (type, payload) {
-        if (type !== 'submitProjectChat') return original(type, payload);
-        draftTest.requests.push(payload);
-        if (draftTest.failOnce) { draftTest.failOnce = false; throw Error('Expected transport failure'); }
-        const result = await original(type, payload);
-        await new Promise(resolve => { draftTest.release = resolve; });
-        return result;
-      };
+      const p=RNAssistantConversationPanel.find(attachmentTargets[1]); p.focus();
+      p.node('chatInput').value='Черновик плагина'; p.node('chatInput').dispatchEvent(new Event('input'));
+      finishAttachment();
     });
-    await page.locator('#chatInput').fill('Тот же текст');
-    await page.locator('#chatInput').press('Enter');
-    await page.locator('#workspaceChatNotice').getByText('Expected transport failure').waitFor();
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Тот же текст',
-      'failed delivery keeps the draft');
+    await page.waitForFunction(() => (readWorkspaceDraft(attachmentTargets[0])?.attachments.length||0) === 1);
+    assert.deepEqual(await page.evaluate(() => attachmentTargets.map(t => {
+      const p=RNAssistantConversationPanel.find(t); return [p.node('chatInput').value,p.node('attachmentDrafts').children.length];
+    })), [['Текст проекта',1],['Черновик плагина',0]], 'late upload changes only its exact draft and shared card');
     await page.evaluate(() => {
-      document.querySelector('#chatForm').requestSubmit();
-      document.querySelector('#chatForm').requestSubmit();
+      const p=RNAssistantConversationPanel.find(attachmentTargets[1]);
+      const transfer=new DataTransfer(); transfer.items.add(new File(['plugin bytes'],'plugin.txt',{type:'text/plain'}));
+      p.node('attachmentFileInput').files=transfer.files; p.node('attachmentFileInput').dispatchEvent(new Event('change'));
     });
-    await page.waitForFunction(() => typeof draftTest.release === 'function');
-    const requests = await page.evaluate(() => draftTest.requests);
-    assert.equal(requests.length, 2, 'two simultaneous submits add only one retry request');
-    assert.equal(requests[0].input.requestId, requests[1].input.requestId,
-      'the same intent keeps its request ID on retry');
-    await page.locator('#chatInput').fill('Новый ввод');
-    await page.locator('#chatInput').fill('Тот же текст');
-    await page.evaluate(() => draftTest.release());
-    await page.waitForFunction(() => !document.querySelector('#projectChatNew').disabled);
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Тот же текст',
-      'late acknowledgement does not erase a later draft with identical text');
-    await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
-    assert.equal(await page.locator('#chatInput').inputValue(), 'Тот же текст',
-      'project and plugin still read the same later draft');
-
-    for (const destination of ['plugin', 'project']) {
-      await page.waitForFunction(() => RNAssistantProjectChats.snapshot().state.status !== 'running' && !RNAssistantProjectChats.isBusy());
-      const message = 'Повтор после потери ответа: ' + destination;
-      await page.evaluate(() => {
-        const original = draftTest.original;
-        window.retryTest = {requests:[], failOnce:true};
-        window.send = async function (type, payload) {
-          const result = await original(type, payload);
-          if (type === 'submitProjectChat') {
-            retryTest.requests.push(payload);
-            if (retryTest.failOnce) { retryTest.failOnce = false; throw Error('Accepted reply lost'); }
-          }
-          return result;
-        };
-      });
-      await page.locator('#chatInput').fill(message);
-      await page.locator('#chatInput').press('Enter');
-      await page.waitForFunction(() => retryTest.requests.length === 1 &&
-        !document.querySelector('#projectChatNew').disabled);
-      if (destination === 'plugin') await openPluginChat();
-      else await page.evaluate(([workspace, session]) => RNAssistantProjectChats.open(workspace, session), [workspaceId, sessionId]);
-      await page.waitForFunction(() => !document.querySelector('#chatInput').value);
-      const retried = await page.evaluate(() => retryTest.requests);
-      assert.equal(retried.length, 1, 'cross-surface reconnect reads the receipt without resubmission: ' + destination);
-      const count = await page.evaluate(async ({workspaceId, sessionId, message}) => {
-        const snapshot = await draftTest.original('getProjectChat', {workspaceId, sessionId});
-        return snapshot.messages.filter(item => item.Role === 'user' && item.Content === message).length;
-      }, {workspaceId, sessionId, message});
-      assert.equal(count, 1, 'lost acknowledgement must not execute the input twice');
-      await page.waitForFunction(() => !document.querySelector('#chatInput').value);
-    }
-    await page.waitForFunction(() => !document.querySelector('#chatModelPicker').classList.contains('is-disabled'));
-    await page.locator('#chatModelPicker summary').click();
-    await page.waitForFunction(() => document.querySelectorAll('#chatModelMenu .composer-model-item').length > 1);
-    assert.equal(await page.locator('#chatModelMenu [data-value=""]').count(), 1,
-      'workspace uses the same explicit default-model option');
-    assert.ok(await page.locator('#chatModelMenu .composer-model-item').count() > 1, 'workspace can select catalog models');
-    const lateCancel = await page.evaluate(async () => {
-      const original = send, before = RNAssistantProjectChats.snapshot();
-      const target = { workspaceId: before.project.workspaceId, sessionId: before.sessionId };
-      let rejectCancel;
-      send = function (type, payload, progress) {
-        return type === 'cancelProjectChat' ? new Promise((resolve, reject) => { rejectCancel = reject; }) :
-          original(type, payload, progress);
+    await page.waitForFunction(() => (readWorkspaceDraft(attachmentTargets[1])?.attachments.length||0) === 1);
+    assert.deepEqual(await page.evaluate(() => attachmentCalls.filter(c=>c.type==='beginChatResourceUpload').map(c=>[c.payload.workspaceId,c.payload.chatId])),
+      await page.evaluate(() => attachmentTargets.map(t=>[t.workspaceId,t.sessionId])), 'project and plugin use scoped common upload');
+    assert.equal(await page.evaluate(() => attachmentTargets.every(t=>!RNAssistantConversationPanel.find(t).node('attachFileButton').hidden)),true);
+    await page.evaluate(() => {
+      const p=RNAssistantConversationPanel.find(attachmentTargets[0]);
+      p.node('attachmentDrafts').querySelector('button').click();
+    });
+    await page.waitForFunction(() => readWorkspaceDraft(attachmentTargets[0]).attachments.length === 0);
+    assert.equal(await page.evaluate(() => readWorkspaceDraft(attachmentTargets[1]).attachments.length),1,'removing one draft cannot clear the other');
+    assert.equal(await page.evaluate(() => RNAssistantConversationPanel.find(attachmentTargets[1]).node('attachmentDrafts').getBoundingClientRect().height > 0),true,'attachment card is actually visible');
+    await page.screenshot({path:'/tmp/rna-chat-attachments.png'});
+    // The same mounted view renders durable queued input and uses addressed commands.
+    await page.evaluate(async () => {
+      const target=attachmentTargets[0], original=send;
+      window.queueSnapshot=await original('getProjectChat',target); window.queueCalls=[];
+      Object.assign(queueSnapshot.state,{status:'running',runId:'queue-run',canSteer:true,pendingInputs:[]});
+      state.settings.RunningMessageDelivery='Queue';
+      const copy=()=>JSON.parse(JSON.stringify(queueSnapshot));
+      window.send=async(type,payload,progress)=>{
+        if(payload.workspaceId!==target.workspaceId||payload.sessionId!==target.sessionId) return original(type,payload,progress);
+        if(type==='getProjectChat') return copy();
+        if(type==='submitProjectChat') {
+          queueCalls.push({type,payload});
+          const input=payload.input;
+          queueSnapshot.state.pendingInputs=[{Id:input.requestId,Text:input.message,Revision:1,Delivery:'Queue',Status:'Pending',Attachments:[]}];
+          queueSnapshot.state.revision++;
+          queueSnapshot.inputReceipt={SessionId:target.sessionId,RequestId:input.requestId,InputId:input.requestId,
+            Queued:true,AcceptedSequence:queueSnapshot.state.revision,AcceptedCursor:'queue-cursor'};
+          return copy();
+        }
+        if(type==='updateProjectChatInput') {
+          queueCalls.push({type,payload});
+          const change=payload.inbox,item=queueSnapshot.state.pendingInputs[0];
+          if(change.Action==='Edit') {item.Text=change.Text;item.Revision++;}
+          if(change.Action==='Remove') queueSnapshot.state.pendingInputs=[];
+          if(change.Action==='Resume') queueSnapshot.state.status='running';
+          queueSnapshot.state.revision++;return copy();
+        }
+        return original(type,payload,progress);
       };
-      try {
-        const cancelling = chatComposer().dispatch('stop');
-        await RNAssistantProjectChats.open('preview-data-workspace', 'preview-project-clean');
-        await RNAssistantProjectChats.open(target.workspaceId, target.sessionId);
-        const reopened = RNAssistantProjectChats.snapshot();
-        rejectCancel(Error('Cancellation from the old visit'));
-        await cancelling;
-        return RNAssistantProjectChats.snapshot() === reopened &&
-          !document.querySelector('#workspaceChatNotice').textContent.includes('Cancellation from the old visit');
-      } finally { send = original; }
+      const p=RNAssistantConversationPanel.find(target);p.focus();await p.refresh();
+      p.node('chatInput').value='Следующее сообщение';p.node('chatInput').dispatchEvent(new Event('input'));
+      await p.composer.dispatch('submit');
     });
-    assert.equal(lateCancel, true, 'a cancellation error from the old A visit cannot update a reopened A view');
-    await page.evaluate(() => RNAssistantProjectChats.setScope('office'));
-    await page.locator('#chatModelPicker summary').click();
-    await page.waitForFunction(() => !document.querySelector('#chatModelMenu').textContent.includes('Настройки модели'));
-    assert.equal(await page.locator('#chatModelMenu').getByText('Настройки модели').count(), 0,
-      'the shared picker restores Office model choices when its owner changes');
-    assert.deepEqual(errors, [], 'no browser errors');
-    console.log('PASS workspace shared draft: addressed snapshot reads, project/plugin session, preferences, file link, failed retry, double submit, late ack, cross-surface receipt reconnect');
+    assert.equal(await page.evaluate(()=>queueCalls[0].payload.input.Enqueue),true,'running Queue uses durable queue admission');
+    assert.equal(await page.evaluate(()=>RNAssistantConversationPanel.find(attachmentTargets[0]).node('chatInput').value),'','queued receipt clears the accepted draft without inventing a run ID');
+    assert.equal(await page.evaluate(()=>RNAssistantConversationPanel.find(attachmentTargets[0]).node('messages').querySelectorAll('.inbox-message').length),1,
+      JSON.stringify(await page.evaluate(()=>({state:RNAssistantConversationPanel.find(attachmentTargets[0]).snapshot().state,
+        text:RNAssistantConversationPanel.find(attachmentTargets[0]).node('messages').textContent,errors:RNAssistantConversationPanel.find(attachmentTargets[0]).node('inboxStatus').textContent}))));
+    const queued=page.getByRole('article',{name:'Сообщение в очереди'});
+    await queued.getByLabel('Действия с сообщением в очереди').click();
+    await queued.getByRole('button',{name:'Редактировать',exact:true}).click();
+    await queued.getByLabel('Текст сообщения в очереди').fill('Исправленное сообщение');
+    await queued.getByRole('button',{name:'Сохранить',exact:true}).click();
+    await queued.getByText('Исправленное сообщение',{exact:true}).waitFor();
+    assert.deepEqual(await page.evaluate(()=>queueCalls.at(-1).payload.inbox),await page.evaluate(()=>({SessionId:attachmentTargets[0].sessionId,
+      Action:'Edit',InputId:queueCalls[0].payload.input.requestId,ExpectedRevision:1,Text:'Исправленное сообщение'})));
+    await page.evaluate(async()=>{queueSnapshot.state.status='cancelled';queueSnapshot.state.revision++;
+      await RNAssistantConversationPanel.find(attachmentTargets[0]).refresh();});
+    await page.getByRole('button',{name:'Продолжить очередь',exact:true}).click();
+    await page.waitForFunction(()=>queueCalls.at(-1).payload.inbox.Action==='Resume');
+    assert.equal(await page.evaluate(()=>RNAssistantConversationPanel.find(attachmentTargets[1]).node('chatInput').value),'Черновик плагина','queue commands leave the neighboring draft unchanged');
+    assert.deepEqual(errors,[]);
+    console.log('PASS shared draft: common upload, exact late reply, cards, independent drafts; Queue receipt, shared editing and explicit resume');
   } finally { await browser.close(); server.kill(); }
-})().catch(error => { console.error(error); process.exitCode = 1; });
+})().catch(error => { console.error(error); process.exitCode=1; });

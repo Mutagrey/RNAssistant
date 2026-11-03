@@ -1,5 +1,17 @@
 # Current-to-target migration map
 
+## Общие вложения, очередь и активные запросы — 2026-11-03
+
+Owners: Application Conversations/Workspace, Core attachments, Web ConversationPanel.
+`PluginApplicationService.ProjectFiles`, project upload DTO/bridge commands и
+`uploadProjectFile` с file-status/вставкой `chat-files/` удалены. Office/Workspace/
+plugin используют общий upload lease и attachment cards; draft scope остаётся exact.
+Workspace очередь переключена на существующие Inbox/Application owners и общий
+pending renderer, прежние отдельные Workspace pending bubbles удалены. Статусное
+меню читает текущих RunOwner без durable registry. Нового adapter/dual-write нет.
+Остаток S2: контекст/сжатие и pending-approval Steer parity, PDF/media explicit read,
+адресные secondary consumers; этот срез их закрытие не заявляет.
+
 ## Независимые Chat View — 2026-11-03
 
 Owner: Web ConversationPanel / source adapters; placement — DockWorkspace.

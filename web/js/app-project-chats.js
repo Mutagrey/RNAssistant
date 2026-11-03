@@ -4,7 +4,7 @@
     creatingSessionId = null, serial = 0;
   var selectedWorkspaceId = null, expanded = {}, query = "", connectionMode = "connect", connectionRequest = null;
   var treeRenderKey = null;
-  var noticeText = "", noticeError = false, fileNotices = new Map();
+  var noticeText = "", noticeError = false;
   function currentPanel() {
     var panel = window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected();
     return panel && panel.target.source === "workspace" ? panel : null;
@@ -40,7 +40,7 @@
     var snapshot = await source.read(function () { return send("getProjectChat", query); });
     if (pending &&
         window.RNAssistantConversationInput.accepted("workspace", target, pending.input.requestId,
-          snapshot.inputReceipt, pending.input.SteerRunId)) {
+          snapshot.inputReceipt, pending.input.SteerRunId, pending.input.Enqueue)) {
       if (pending.input.EditMessageId) drafts.acknowledgeWorkspaceInput(target, pending.input);
       else if (component) {
         var before = readWorkspaceDraft(target);
@@ -88,62 +88,6 @@
   function notice(text, error) {
     noticeText = text || ""; noticeError = !!error;
     var panel = currentPanel(); if (panel && error) panel.notice(text);
-  }
-  function fileStatus(target, message, error) {
-    fileNotices.set(chatRequestKey(target.workspaceId, target.sessionId),
-      { target: target, message: message || "", error: !!error });
-    var component = RNAssistantConversationPanel.find(Object.assign({ source: "workspace" }, target));
-    if (component) component.controls();
-  }
-  function fileChunkBase64(bytes) {
-    var binary = "";
-    for (var offset = 0; offset < bytes.length; offset += 0x8000)
-      binary += String.fromCharCode.apply(null, bytes.subarray(offset, offset + 0x8000));
-    return btoa(binary);
-  }
-  async function uploadProjectFile(target, file, component) {
-    var lease = null, completing = false;
-    if (!file || file.size < 1)
-      throw new Error("Выберите непустой файл.");
-    try {
-      lease = await send("beginProjectChatFileUpload", { workspaceId: target.workspaceId,
-        sessionId: target.sessionId, fileName: file.name, byteLength: file.size });
-      var limit = Math.min(256 * 1024, lease.maxChunkBytes);
-      if (!(limit > 0)) throw new Error("Приложение не сообщило допустимый размер фрагмента.");
-      for (var offset = 0; offset < file.size;) {
-        var bytes = new Uint8Array(await file.slice(offset, offset + limit).arrayBuffer());
-        var progress = await send("writeProjectChatFileChunk", { workspaceId: target.workspaceId,
-          sessionId: target.sessionId, leaseId: lease.leaseId, offset: offset, base64: fileChunkBase64(bytes) });
-        if (progress.nextOffset !== offset + bytes.length) throw new Error("Передача файла прервалась.");
-        offset = progress.nextOffset;
-        fileStatus(target, "Добавление «" + file.name + "»: " + Math.round(100 * offset / file.size) + "%");
-      }
-      completing = true;
-      var result = await send("completeProjectChatFileUpload", { workspaceId: target.workspaceId,
-        sessionId: target.sessionId, leaseId: lease.leaseId });
-      if (result.modelReadable) {
-        if (component) {
-          component.composer.appendDraft(component.target, { read: function () { return readWorkspaceDraft(target); },
-            write: function (text) { return updateWorkspaceDraft(target, { text: text }); } }, "Файл проекта: " + result.relativePath);
-          component.controls();
-        }
-        else {
-          var saved = readWorkspaceDraft(target);
-          updateWorkspaceDraft(target, { text: (saved && saved.text ? saved.text.replace(/\s*$/, "") + "\n" : "") + "Файл проекта: " + result.relativePath });
-        }
-      }
-      fileStatus(target, "Файл добавлен в проект: " + result.relativePath +
-        (result.modelReadable ? "" : ". Его содержимое пока недоступно для чтения моделью в проектном чате."));
-      return true;
-    } catch (error) {
-      if (lease && !completing) await send("cancelProjectChatFileUpload", { workspaceId: target.workspaceId,
-        sessionId: target.sessionId, leaseId: lease.leaseId }).catch(function () {});
-      var detail = error.detail || error.message || String(error);
-      if (completing) detail = "Результат добавления файла не подтверждён. Проверьте " +
-        (lease && lease.relativePath || "папку проекта") + " перед повторной загрузкой. " + detail;
-      fileStatus(target, detail, true);
-      return false;
-    }
   }
   function statusText() {
     var active = currentSnapshot(), state = active && active.state;
@@ -344,7 +288,6 @@
       }
       RNAssistantConversationPanel.closeDeleted({ source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
-      fileNotices.delete(chatRequestKey(entry.workspaceId, chat.Id));
       if (window.RNAssistantWorkspaceChat.selectedSession(entry.workspaceId) === chat.Id)
         window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       var removedSelected = projectId() === entry.workspaceId && currentId() === chat.Id;
@@ -372,9 +315,6 @@
       (entry.chats || []).forEach(function (chat) {
         RNAssistantConversationPanel.closeDeleted({ source: "workspace", workspaceId: entry.workspaceId, sessionId: chat.Id });
       window.RNAssistantChatDrafts.forgetWorkspace({ workspaceId: entry.workspaceId, sessionId: chat.Id });
-      });
-      fileNotices.forEach(function (fileNotice, key) {
-        if (fileNotice.target.workspaceId === entry.workspaceId) fileNotices.delete(key);
       });
       window.RNAssistantWorkspaceChat.rememberSession(entry.workspaceId, null);
       var removedSelected = projectId() === entry.workspaceId;
@@ -490,8 +430,7 @@
     window.RNAssistantDockWorkspace.refreshPresentation();
   }, scope: function () { return scope; }, workspaceId: projectId, setScope: setScope,
     refresh: refresh, refreshTree: renderTree, refreshControls: updateControls, render: render, create: create,
-    snapshot: currentSnapshot, read: readProjectChat, upload: uploadProjectFile,
-    fileStatus: function (target) { return fileNotices.get(chatRequestKey(target.workspaceId, target.sessionId)); },
+    snapshot: currentSnapshot, read: readProjectChat,
     focus: function (target) { selectedWorkspaceId = target.workspaceId; renderTree(); },
     targets: function () { return projects().filter(function (entry) { return entry.available; }).flatMap(function (entry) {
       return (entry.chats || []).map(function (chat) { return { title: entry.name + " · " + (chat.Title || "Чат"),

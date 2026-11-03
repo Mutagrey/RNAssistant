@@ -27,21 +27,54 @@
     popupTrigger = trigger; popup = document.createElement("div");
     popup.className = "rna-action-menu-popup rna-action-menu-body" + (options.className ? " " + options.className : "");
     popup.setAttribute("role", "menu"); popup.setAttribute("aria-label", options.label || trigger.getAttribute("aria-label") || "Действия");
-    items.forEach(function (item) {
-      if (item.separator) { popup.appendChild(document.createElement("hr")); return; }
+    var menu = popup;
+    function button(item, key) {
       var control = document.createElement("button"); control.type = "button";
+      control.dataset.menuKey = item.key || key;
       control.setAttribute("role", "menuitem"); control.setAttribute("aria-label", item.label); control.disabled = !!item.disabled;
-      control.innerHTML = icon(item.icon || "right") + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
+      control.innerHTML = (item.icon === false ? "" : icon(item.icon || "right")) + '<span class="rna-action-menu-label">' + escape(item.label) + '</span>';
       if (item.status) { var status = document.createElement("small"); status.textContent = item.status; control.appendChild(status); }
       control.addEventListener("click", function () { closePopup(true); item.onSelect(); });
-      popup.appendChild(control);
-    });
+      return control;
+    }
+    function render(values) {
+      var active = menu.contains(document.activeElement) && document.activeElement.dataset.menuKey, scroll = menu.scrollTop;
+      menu.replaceChildren();
+      values.forEach(function (item, index) {
+        if (item.separator) { menu.appendChild(document.createElement("hr")); return; }
+        var control = button(item, String(index));
+        if (item.secondary) {
+          var row = document.createElement("div"); row.className = "rna-action-menu-row"; row.setAttribute("role", "none");
+          var secondary = button(item.secondary, String(index) + ":secondary");
+          secondary.className = "rna-action-menu-secondary"; secondary.title = item.secondary.label;
+          row.append(control, secondary); menu.appendChild(row);
+        } else menu.appendChild(control);
+      });
+      if (active) {
+        var controls = Array.from(menu.querySelectorAll("button:not(:disabled)"));
+        var next = controls.find(function (item) { return item.dataset.menuKey === active; }) || controls[0] || trigger;
+        next.focus({ preventScroll: true });
+      }
+      menu.scrollTop = scroll;
+    }
+    render(items);
     document.body.appendChild(popup); trigger.setAttribute("aria-expanded", "true");
-    var rect = trigger.getBoundingClientRect(), styles = getComputedStyle(popup);
-    var inset = Number.parseFloat(styles.getPropertyValue("--space-2")), offset = Number.parseFloat(styles.getPropertyValue("--menu-offset"));
-    popup.style.left = Math.max(inset, Math.min(rect.right - popup.offsetWidth, innerWidth - popup.offsetWidth - inset)) + "px";
-    popup.style.top = Math.max(inset, Math.min(rect.bottom + offset, innerHeight - popup.offsetHeight - inset)) + "px";
+    function position() {
+      var rect = trigger.getBoundingClientRect(), styles = getComputedStyle(menu);
+      var scale = menu.getBoundingClientRect().width / menu.offsetWidth || 1;
+      var inset = Number.parseFloat(styles.getPropertyValue("--space-2")) * scale;
+      var offset = Number.parseFloat(styles.getPropertyValue("--menu-offset")) * scale;
+      menu.style.maxWidth = "min(var(--menu-max-width, 100vw), " + Math.max(0, (innerWidth - 2 * inset) / scale) + "px)";
+      menu.style.maxHeight = Math.max(0, (innerHeight - 2 * inset) / scale) + "px";
+      var bounds = menu.getBoundingClientRect();
+      menu.style.left = Math.max(inset, Math.min(rect.right - bounds.width, innerWidth - bounds.width - inset)) / scale + "px";
+      var top = options.placement === "top" ? rect.top - bounds.height - offset : rect.bottom + offset;
+      menu.style.top = Math.max(inset, Math.min(top, innerHeight - bounds.height - inset)) / scale + "px";
+    }
+    position();
     var first = popup.querySelector("button:not(:disabled)"); if (first) first.focus();
+    return { update: function (values) { if (popup === menu) { render(values); position(); } },
+      isOpen: function () { return popup === menu; } };
   }
 
   function createTrigger(label) {

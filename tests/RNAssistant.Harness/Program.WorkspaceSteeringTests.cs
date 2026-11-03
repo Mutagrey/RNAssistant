@@ -179,6 +179,96 @@ namespace RNAssistant.Harness
             }
         }
 
+        private static void WorkspaceQueueUsesCommonOwner()
+        {
+            foreach (var stop in new[] { false, true }) WithPluginPaths(paths => {
+                var probe = new TcpListener(IPAddress.Loopback, 0); probe.Start();
+                var port = ((IPEndPoint)probe.LocalEndpoint).Port; probe.Stop();
+                using (var listener = new HttpListener())
+                using (var arrived = new ManualResetEventSlim())
+                using (var finish = new ManualResetEventSlim())
+                using (var cancel = new CancellationTokenSource())
+                using (var owner = new WorkspaceConversationService(paths))
+                using (var application = new PluginApplicationService(paths))
+                {
+                    var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "test-model",
+                        StreamResponses = false, SmartChatTitles = false, AutoCompressContext = false };
+                    var workspaceId = application.CreateProjectWorkspace(new ProjectConnectionRequest {
+                        RootPath = Path.Combine(paths.Root, "queue") }).SelectedWorkspaceId;
+                    var workspace = new WorkspaceStore(paths).OpenConnected(workspaceId);
+                    var chat = application.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId });
+                    var requests = new System.Collections.Generic.List<string>();
+                    listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                    var server = Task.Run(async () => {
+                        for (var index = 0; index < 2; index++)
+                        {
+                            var context = await listener.GetContextAsync().ConfigureAwait(false);
+                            using (var reader = new StreamReader(context.Request.InputStream))
+                                requests.Add(await reader.ReadToEndAsync().ConfigureAwait(false));
+                            if (index == 0) { arrived.Set(); if (!finish.Wait(10000)) throw new TimeoutException("Queue response not released."); }
+                            try { await SteeringReply(context, ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "No tools needed.", "Готово.", results: new ConversationResultClaim[0], outcome: ConversationOutcome.Completed)).ConfigureAwait(false); }
+                            catch (Exception error) when (stop && index == 0 && (error is IOException || error is HttpListenerException || error is ObjectDisposedException)) { }
+                        }
+                    });
+                    try
+                    {
+                        var run = owner.SubmitInputAsync(workspace, new WorkspaceSubmitInputRequest { SessionId = chat.SessionId,
+                            RequestId = "first", Message = "FIRST" }, settings, () => "", cancellationToken: cancel.Token);
+                        AssertTrue(arrived.Wait(5000), "first model request starts");
+                        var initial = application.ProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId });
+                        var store = new AttachmentStore(paths);
+                        var draft = store.Import("queue.txt", "text/plain", Encoding.UTF8.GetBytes("queued original"), chat.SessionId);
+                        store.SaveDraftMetadata(draft);
+                        var queued = new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId,
+                            Input = new WorkspaceSubmitInputRequest { SessionId = chat.SessionId, RequestId = "queued-once",
+                                Enqueue = true, Message = "QUEUED", ResourceDraftIds = new System.Collections.Generic.List<string> { draft.Id } } };
+                        var accepted = application.SubmitProjectChatAsync(queued, settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
+                        AssertTrue(accepted.InputReceipt.Queued && !accepted.InputReceipt.DeliveryRecorded &&
+                            accepted.InputReceipt.RunId == null && accepted.State.RunId == initial.State.RunId,
+                            "queue receipt proves intake without claiming delivery or a new run");
+                        var pending = accepted.State.PendingInputs.Single();
+                        AssertEqual(InputDelivery.Queue, pending.Delivery, "pending delivery stays Queue");
+                        application.UpdateProjectChatInputAsync(new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId,
+                            Inbox = new WorkspaceInboxCommand { SessionId = chat.SessionId, Action = WorkspaceInboxAction.Edit,
+                                InputId = pending.Id, ExpectedRevision = pending.Revision, Text = "QUEUED_EDITED" } },
+                            settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
+                        var duplicate = application.SubmitProjectChatAsync(queued, settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
+                        AssertEqual(accepted.InputReceipt.InputId, duplicate.InputReceipt.InputId, "retry keeps the original queued identity after edit");
+                        AssertEqual(1, duplicate.Messages.Count(item => item.Role == "user"), "queue intake does not alter the running transcript");
+                        var active = owner.ActiveChatRuns().Single();
+                        AssertTrue(active.ChatId == chat.SessionId && active.RunId == initial.State.RunId && active.WorkspaceId == workspaceId,
+                            "active run listing is independent of UI selection and history reads");
+                        AssertTrue(!owner.StopActiveChatRun(workspaceId, chat.SessionId, "stale-run"), "menu cannot stop a replacement run");
+                        if (stop) AssertTrue(owner.StopActiveChatRun(workspaceId, chat.SessionId, initial.State.RunId), "menu stops its exact run");
+                        finish.Set();
+                        AssertTrue(run.Wait(5000) && owner.RunsDrained.Wait(5000), "original run and automatic queue drain");
+                        if (stop)
+                        {
+                            AssertEqual(RunLifecycle.Cancelled, run.Result.Summary.Lifecycle, "Stop cancels the first run");
+                            var paused = application.ProjectChat(queued);
+                            AssertTrue(paused.State.PendingInputs.Count == 1 && paused.Messages.Count(item => item.Role == "user") == 1,
+                                "Stop retains queued input without automatic replay");
+                            application.UpdateProjectChatInputAsync(new ProjectChatRequest { WorkspaceId = workspaceId, SessionId = chat.SessionId,
+                                Inbox = new WorkspaceInboxCommand { SessionId = chat.SessionId, Action = WorkspaceInboxAction.Resume } },
+                                settings, () => "", CancellationToken.None).GetAwaiter().GetResult();
+                            AssertTrue(application.Conversations.RunsDrained.Wait(5000), "explicit resume drains retained queue");
+                        }
+                        AssertTrue(server.Wait(5000), "exactly two model requests complete: " + JsonConvert.SerializeObject(run.Result.Summary) +
+                            "; queue=" + new ConversationInputJournal(new ChatEventStoreAdapter(new ChatStore(paths)))
+                                .Read(owner.GetSession(workspace, chat.SessionId), false).LastOrDefault()?.Change.PauseReason);
+                        var session = owner.GetSession(workspace, chat.SessionId);
+                        var user = session.Messages.Single(item => item.Id == pending.Id);
+                        AssertTrue(user.RunId != initial.State.RunId && user.Content == "QUEUED_EDITED" &&
+                            Encoding.UTF8.GetString(store.ReadBytes(user.Attachments.Single())) == "queued original",
+                            "next run consumes the edited queued message and immutable attachment once");
+                        AssertTrue(!requests[0].Contains("QUEUED_EDITED") && requests[1].Contains("QUEUED_EDITED"), "queue never steers the first model request");
+                    }
+                    finally { finish.Set(); cancel.Cancel(); listener.Stop(); }
+                }
+            });
+        }
+
         private static async Task SteeringReply(HttpListenerContext context, string content)
         {
             var bytes = Encoding.UTF8.GetBytes(new JObject { ["choices"] = new JArray(new JObject {

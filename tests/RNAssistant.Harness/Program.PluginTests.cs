@@ -547,7 +547,7 @@ namespace RNAssistant.Harness
                             AssertEqual(plugin.ReleaseId, visualView.VisualSourceArtifactId,
                                 "sent annotation remains pinned to the retained release");
                             var committed = user.Attachments.Single();
-                            AssertTrue(modelRequest.Contains("Current user visual selections") &&
+                            AssertTrue(modelRequest.Contains("Current user attachments") &&
                                 modelRequest.Contains("skills.workspace.plugin.authoring") &&
                                 modelRequest.Contains("\\\"attachment\\\"") &&
                                 !modelRequest.Contains("rnassistant.html-visual-selection") &&
@@ -675,78 +675,74 @@ namespace RNAssistant.Harness
                     var root = Path.Combine(paths.Root, "upload-project"); Directory.CreateDirectory(root);
                     var workspaceId = service.ConnectProjectWorkspace(new ProjectConnectionRequest { RootPath = root }).SelectedWorkspaceId;
                     var sessionId = service.CreateProjectChat(new ProjectChatRequest { WorkspaceId = workspaceId }).SessionId;
-                    var source = Encoding.UTF8.GetBytes("Отчёт проекта\nСтрока 2");
-                    PluginFailure(() => service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "../escape.txt", ByteLength = 1 }),
-                        "project_file_invalid");
-                    PluginFailure(() => service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
-                        WorkspaceId = workspaceId, SessionId = "foreign", FileName = "notes.txt", ByteLength = 1 }),
-                        "project_chat_missing");
-                    var opened = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "notes.txt", ByteLength = source.Length });
-                    AssertTrue(opened.RelativePath.StartsWith("chat-files/", StringComparison.Ordinal), "upload target stays inside project chat-files");
-                    PluginFailure(() => service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
-                        WorkspaceId = "other", SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 0,
-                        Base64 = Convert.ToBase64String(source) }), "project_file_lease_missing");
-                    PluginFailure(() => service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 1,
-                        Base64 = Convert.ToBase64String(source) }), "project_file_offset_invalid");
-                    var first = service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 0,
-                        Base64 = Convert.ToBase64String(source, 0, 4) });
-                    AssertEqual(4L, first.NextOffset, "first chunk acknowledges its exact byte offset");
-                    PluginFailure(() => service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId }), "project_file_incomplete");
-                    service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId, Offset = 4,
-                        Base64 = Convert.ToBase64String(source, 4, source.Length - 4) });
-                    var result = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId });
-                    AssertEqual(opened.RelativePath, result.RelativePath, "published path matches the announced target");
-                    AssertTrue(result.ModelReadable, "UTF-8 file is readable by project model resources");
-                    AssertTrue(source.SequenceEqual(File.ReadAllBytes(Path.Combine(root, result.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
-                        "exact uploaded bytes are published in the selected project");
-                    PluginFailure(() => service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = opened.LeaseId }), "project_file_lease_missing");
-                    var files = new WorkspaceFileService(paths).ListPage(new WorkspaceStore(paths).OpenConnected(workspaceId), "chat-files");
-                    AssertTrue(files.Names.Contains(Path.GetFileName(result.RelativePath)), "uploaded file is discoverable in the project resource tree");
-                    var binary = new byte[] { 0x00, 0xff, 0x31 };
-                    var binaryLease = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "sample.bin", ByteLength = binary.Length });
-                    service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = binaryLease.LeaseId,
-                        Offset = 0, Base64 = Convert.ToBase64String(binary) });
-                    var binaryResult = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = binaryLease.LeaseId });
-                    AssertTrue(!binaryResult.ModelReadable &&
-                        binary.SequenceEqual(File.ReadAllBytes(Path.Combine(root, binaryResult.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
-                        "binary file is retained exactly without claiming model text access");
-                    var largeText = Encoding.UTF8.GetBytes(new string('a', 127) + "😀" + new string('b', 1024 * 1024));
-                    foreach (var validUtf8 in new[] { true, false })
+                    var chats = new ChatStore(paths);
+                    var session = chats.Load(sessionId);
+                    var projectFiles = Directory.GetFiles(root, "*", SearchOption.AllDirectories);
+                    var original = new string('a', 127) + "😀" + new string('b', 1024 * 1024) + "EXACT-TAIL";
+                    var bytes = Encoding.UTF8.GetBytes(original);
+                    var attachments = new AttachmentStore(paths);
+                    var ingestion = new RNAssistant.Office.Services.ChatResourceIngestionService(attachments, chats.DocumentArtifacts);
+                    ChatAttachment draft;
+                    using (var data = new RNAssistant.Office.Services.ResourceDataPlaneService(
+                        new RNAssistant.Office.Services.ResourceGatewayService(), (chat, owner) =>
+                            chat == sessionId && owner == "attachment-upload:" + workspaceId))
                     {
-                        if (!validUtf8) largeText[largeText.Length - 1] = 0xff;
-                        var largeLease = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
-                            WorkspaceId = workspaceId, SessionId = sessionId,
-                            FileName = validUtf8 ? "large.txt" : "late-invalid.bin", ByteLength = largeText.Length });
-                        for (var offset = 0; offset < largeText.Length; offset += 256 * 1024)
-                            service.WriteProjectChatFileChunk(new ProjectChatUploadChunkRequest {
-                                WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = largeLease.LeaseId,
-                                Offset = offset, Base64 = Convert.ToBase64String(largeText, offset,
-                                    Math.Min(256 * 1024, largeText.Length - offset)) });
-                        var largeResult = service.CompleteProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
-                            WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = largeLease.LeaseId });
-                        AssertEqual(validUtf8, largeResult.ModelReadable,
-                            "streamed upload readability checks the whole UTF-8 source without a size or surrogate-boundary refusal");
-                        AssertTrue(largeText.SequenceEqual(File.ReadAllBytes(Path.Combine(root,
-                            largeResult.RelativePath.Replace('/', Path.DirectorySeparatorChar)))),
-                            "large upload preserves the exact source bytes");
+                        var lease = data.OpenUpload(session, UploadRequest(session, bytes.Length));
+                        var router = new RNAssistant.Office.Services.ResourceDataRouter(data);
+                        for (var offset = 0; offset < bytes.Length; offset += lease.MaxChunkBytes)
+                        {
+                            var count = Math.Min(lease.MaxChunkBytes, bytes.Length - offset);
+                            using (var stream = new MemoryStream(bytes, offset, count, false))
+                                UploadResponse(router.Handle("POST", lease.Url + "?offset=" + offset + "&count=" + count,
+                                    CancellationToken.None, stream), 200);
+                        }
+                        RuntimeThrows<ResourceRequestException>(() => data.CompleteUpload(new ChatSession {
+                            Id = sessionId, WorkspaceId = "other-workspace" }, lease.LeaseId, ingestion));
+                        draft = data.CompleteUpload(session, lease.LeaseId, ingestion).Resource;
                     }
-                    var cancelled = service.BeginProjectChatFileUpload(new ProjectChatUploadOpenRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, FileName = "cancel.txt", ByteLength = 3 });
-                    service.CancelProjectChatFileUpload(new ProjectChatUploadLeaseRequest {
-                        WorkspaceId = workspaceId, SessionId = sessionId, LeaseId = cancelled.LeaseId });
-                    AssertTrue(!File.Exists(Path.Combine(root, cancelled.RelativePath.Replace('/', Path.DirectorySeparatorChar))),
-                        "cancelled upload never publishes a project file");
+                    AssertEqual(sessionId, draft.DraftChatId, "common upload stages in the addressed workspace chat");
+                    AssertTrue(projectFiles.SequenceEqual(Directory.GetFiles(root, "*", SearchOption.AllDirectories)),
+                        "attaching a file does not mutate project source");
+                    RuntimeThrows<InvalidOperationException>(() => attachments.LoadDrafts(new[] { draft.Id }, "foreign-chat"));
+                    var portProbe = new TcpListener(IPAddress.Loopback, 0); portProbe.Start();
+                    var port = ((IPEndPoint)portProbe.LocalEndpoint).Port; portProbe.Stop();
+                    using (var listener = new HttpListener())
+                    {
+                        listener.Prefixes.Add("http://127.0.0.1:" + port + "/"); listener.Start();
+                        string modelRequest = null;
+                        var server = Task.Run(async () => {
+                            var context = await listener.GetContextAsync().ConfigureAwait(false);
+                            using (var reader = new StreamReader(context.Request.InputStream))
+                                modelRequest = await reader.ReadToEndAsync().ConfigureAwait(false);
+                            await SteeringReply(context, ModelProtocolWire.WriteAcceptedDecision(ConversationResponse.FinishAction,
+                                "No tool is needed.", "Файл принят.", results: new ConversationResultClaim[0],
+                                outcome: ConversationOutcome.Completed)).ConfigureAwait(false);
+                        });
+                        var input = new WorkspaceSubmitInputRequest { SessionId = sessionId, RequestId = "file-once",
+                            Message = "Keep this original", Mode = ChatModes.Agent,
+                            ResourceDraftIds = new System.Collections.Generic.List<string> { draft.Id } };
+                        var settings = new AppSettings { BaseUrl = "http://127.0.0.1:" + port, Model = "test-model",
+                            StreamResponses = false, AutoCompressContext = false, SmartChatTitles = false };
+                        service.SubmitProjectChatAsync(new ProjectChatRequest { WorkspaceId = workspaceId,
+                            SessionId = sessionId, Input = input }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                        server.GetAwaiter().GetResult(); service.Conversations.RunsDrained.GetAwaiter().GetResult();
+                        service.SubmitProjectChatAsync(new ProjectChatRequest { WorkspaceId = workspaceId,
+                            SessionId = sessionId, Input = input }, settings, () => "test-key", CancellationToken.None).GetAwaiter().GetResult();
+                        AssertTrue(modelRequest.Contains("message attachment: notes.txt") && !modelRequest.Contains("EXACT-TAIL"),
+                            "workspace model gets an attachment target without implicit large text injection");
+                    }
+                    session = chats.Load(sessionId);
+                    var user = session.Messages.Single(item => item.Role == "user" && !item.ProtocolMessage);
+                    AssertTrue(attachments.ReadBytes(user.Attachments.Single()).SequenceEqual(bytes), "accepted attachment retains its exact original");
+                    var provider = new WorkspaceChatAttachmentResourceProvider(paths, session);
+                    var target = provider.Find(null).Items.Single().Target;
+                    var head = provider.Read(target, 128);
+                    AssertTrue(!head.Result.Complete && head.Result.Text.Length == 127, "bounded default read never splits a surrogate pair");
+                    var tail = provider.Read(target, 128, startChar: original.Length - 128, charCount: 128);
+                    AssertTrue(tail.Result.Text.EndsWith("EXACT-TAIL") && tail.Result.TotalCharacters == original.Length &&
+                        tail.Evidence.Single().Immutable, "bounded continuation reads the committed tail with immutable evidence");
+                    user.ResourceRefs.Clear();
+                    RuntimeThrows<ResourceRequestException>(() => provider.Read(target, 128));
                 }
             });
         }

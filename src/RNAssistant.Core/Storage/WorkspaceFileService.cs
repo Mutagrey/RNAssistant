@@ -236,7 +236,7 @@ namespace RNAssistant.Core.Storage
                 throw new ArgumentOutOfRangeException(nameof(maximumCharacters));
             if (maximumCharacters < MaximumTextBytes)
                 return ReadTextWindow(workspace, relativePath,
-                    new TextWindow(0, maximumCharacters, false, maximumCharacters, true), token,
+                    new ResourceTextWindow(0, maximumCharacters, false, maximumCharacters, true), token,
                     promoteCompleteText: true);
             try
             {
@@ -245,7 +245,7 @@ namespace RNAssistant.Core.Storage
             }
             catch (WorkspaceFileException error) when (error.Code == "file_too_large") { }
             return ReadTextWindow(workspace, relativePath,
-                new TextWindow(0, maximumCharacters, false, maximumCharacters, true), token,
+                new ResourceTextWindow(0, maximumCharacters, false, maximumCharacters, true), token,
                 promoteCompleteText: true);
         }
 
@@ -256,7 +256,7 @@ namespace RNAssistant.Core.Storage
             if (startLine < 1 || lineCount < 1 ||
                 maximumCharacters < 1 || maximumCharacters > MaximumWindowTextCharacters)
                 throw new WorkspaceFileException("resource_lines_invalid", "Use positive startLine and lineCount within the model read budget.");
-            return ReadTextWindow(workspace, relativePath, new TextWindow(startLine, lineCount, true, maximumCharacters), token);
+            return ReadTextWindow(workspace, relativePath, new ResourceTextWindow(startLine, lineCount, true, maximumCharacters), token);
         }
 
         public WorkspaceFileObservation ReadTextCharacters(WorkspaceDescriptor workspace, string relativePath,
@@ -268,7 +268,7 @@ namespace RNAssistant.Core.Storage
                 charCount > maximumCharacters)
                 throw new WorkspaceFileException("resource_chars_invalid",
                     "Use zero-based startChar and a positive charCount within the selected read budget.");
-            return ReadTextWindow(workspace, relativePath, new TextWindow(startChar, charCount, false, maximumCharacters), token);
+            return ReadTextWindow(workspace, relativePath, new ResourceTextWindow(startChar, charCount, false, maximumCharacters), token);
         }
 
         public WorkspaceFileObservation ReadVbaProcedure(WorkspaceDescriptor workspace, string relativePath,
@@ -288,7 +288,7 @@ namespace RNAssistant.Core.Storage
             VbaProcedureSelector.RequireFits(procedure, maximumCharacters);
             // Decode the same immutable bytes, never recapture a possibly newer file.
             return ReadTextWindow(workspace, relativePath,
-                new TextWindow(procedure.StartChar, procedure.EndChar - procedure.StartChar, false, maximumCharacters), token, snapshot);
+                new ResourceTextWindow(procedure.StartChar, procedure.EndChar - procedure.StartChar, false, maximumCharacters), token, snapshot);
         }
 
         // Application-only bounded text view. An exact continuation consumes only
@@ -311,11 +311,11 @@ namespace RNAssistant.Core.Storage
                 pinned = new WorkspaceFileSnapshot(relativePath, raw);
             }
             return ReadTextWindow(workspace, relativePath,
-                new TextWindow(startChar, charCount, false, ResourceReadRequest.MaximumCharacters, true), token, pinned);
+                new ResourceTextWindow(startChar, charCount, false, ResourceReadRequest.MaximumCharacters, true), token, pinned);
         }
 
         private WorkspaceFileObservation ReadTextWindow(WorkspaceDescriptor workspace, string relativePath,
-            TextWindow window, CancellationToken token, WorkspaceFileSnapshot pinned = null,
+            ResourceTextWindow window, CancellationToken token, WorkspaceFileSnapshot pinned = null,
             bool promoteCompleteText = false)
         {
             // Pin raw bytes once; decode the retained revision with fixed buffers.
@@ -324,25 +324,8 @@ namespace RNAssistant.Core.Storage
             using (var input = OpenExactRead(workspace, relativePath, snapshot.Reference,
                 long.MaxValue, token))
             {
-                var decoder = StrictUtf8.GetDecoder();
-                var bytes = new byte[81920];
-                var chars = new char[81922];
-                try
-                {
-                    int count;
-                    while ((count = input.Read(bytes, 0, bytes.Length)) != 0)
-                    {
-                        token.ThrowIfCancellationRequested();
-                        var length = decoder.GetChars(bytes, 0, count, chars, 0, false);
-                        for (var i = 0; i < length; i++) window.Accept(chars[i]);
-                    }
-                    var tail = decoder.GetChars(Array.Empty<byte>(), 0, 0, chars, 0, true);
-                    for (var i = 0; i < tail; i++) window.Accept(chars[i]);
-                }
-                catch (DecoderFallbackException)
-                { throw new WorkspaceFileException("encoding_ambiguous", "Only strict UTF-8 text is supported."); }
+                window.Read(input, token);
             }
-            window.Finish();
             var text = window.Text;
             var payload = PayloadRef.FromBlob(_blobs.StoreText(text, "text/plain; charset=utf-8"));
             var raw = snapshot.Evidence;
@@ -358,85 +341,6 @@ namespace RNAssistant.Core.Storage
                 Evidence = new ResourceEvidence("ev_" + Guid.NewGuid().ToString("N"), raw.ScopeId,
                     raw.Resource, ResourceRepresentations.Text, coverage,
                     complete, raw.AuthorityGeneration, payload, raw.Dependencies, contentSha256: raw.ContentSha256) };
-        }
-
-        private sealed class TextWindow
-        {
-            private readonly int _requestedStart, _requestedCount;
-            private readonly bool _lines;
-            private readonly int _maximumCharacters;
-            private readonly bool _trimSplitEnd;
-            private readonly StringBuilder _selected = new StringBuilder();
-            private int _line = 1;
-            private bool _pendingCr;
-            private char _previous;
-            public int Start { get; private set; }
-            public int End { get; private set; }
-            public int TotalCharacters { get; private set; }
-            public string Text { get { return _selected.ToString(); } }
-
-            public TextWindow(int requestedStart, int requestedCount, bool lines, int maximumCharacters,
-                bool trimSplitEnd = false)
-            {
-                _requestedStart = requestedStart; _requestedCount = requestedCount; _lines = lines;
-                _maximumCharacters = maximumCharacters; _trimSplitEnd = trimSplitEnd;
-                Start = lines ? requestedStart == 1 ? 0 : -1 : requestedStart;
-                End = -1;
-            }
-
-            public void Accept(char value)
-            {
-                if (TotalCharacters == int.MaxValue)
-                    throw new WorkspaceFileException("file_too_large",
-                        "Text exceeds the current UTF-16 coordinate range.");
-                var offset = TotalCharacters;
-                if (_lines && _pendingCr && value != '\n') AdvanceLine(offset);
-                if (!_lines && (offset == Start || offset == (long)Start + _requestedCount) &&
-                    char.IsLowSurrogate(value) && char.IsHighSurrogate(_previous))
-                {
-                    if (offset == Start || !_trimSplitEnd)
-                        throw new WorkspaceFileException("resource_chars_invalid",
-                            "The selected character range splits a UTF-16 surrogate pair. Adjust startChar or charCount by one.");
-                    _selected.Length--;
-                    End = offset - 1;
-                }
-                var selected = _lines
-                    ? _line >= _requestedStart && (long)_line < (long)_requestedStart + _requestedCount
-                    : offset >= Start && (long)offset < (long)Start + _requestedCount;
-                if (selected)
-                {
-                    if (_selected.Length == _maximumCharacters)
-                        throw new WorkspaceFileException("read_too_large",
-                            "Selected lines exceed " + _maximumCharacters + " characters; reduce lineCount or use startChar/charCount for a long line.");
-                    _selected.Append(value);
-                }
-                TotalCharacters++;
-                if (_lines)
-                {
-                    if (value == '\n') { _pendingCr = false; AdvanceLine(TotalCharacters); }
-                    else _pendingCr = value == '\r';
-                }
-                _previous = value;
-            }
-
-            private void AdvanceLine(int offset)
-            {
-                _line++;
-                if (_line == _requestedStart) Start = offset;
-                if ((long)_line == (long)_requestedStart + _requestedCount) End = offset;
-            }
-
-            public void Finish()
-            {
-                if (_lines && _pendingCr) AdvanceLine(TotalCharacters);
-                if (_lines && Start < 0)
-                    throw new WorkspaceFileException("resource_lines_invalid",
-                        "startLine exceeds the current source's " + _line + " lines.");
-                if (!_lines && Start > TotalCharacters)
-                    throw new WorkspaceFileException("resource_chars_invalid",
-                        "startChar exceeds the current source's " + TotalCharacters + " characters.");
-                if (End < 0) End = _lines ? TotalCharacters : (int)Math.Min((long)TotalCharacters, (long)Start + _requestedCount);
-            }
         }
 
         // Slice a captured/read-back source, never a candidate or a new live read.

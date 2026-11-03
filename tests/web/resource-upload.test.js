@@ -10,7 +10,7 @@ const id = "a".repeat(64), url = "https://rnassistant.local-resource/v1/upload/"
 const file = new Blob([new Uint8Array([0, 255, 65, 13, 10, 128, 42])], { type: "image/png" });
 file.name = "image.png";
 
-function fixture() {
+function fixture(workspaceId) {
   const calls = [], chunks = [], events = new EventTarget();
   const context = vm.createContext({ AbortController, setTimeout, clearTimeout });
   context.window = context;
@@ -20,8 +20,9 @@ function fixture() {
   context.send = async (type, payload) => {
     calls.push({ type, payload });
     assert.equal(payload.chatId, "chat-a");
+    assert.equal(payload.workspaceId, workspaceId);
     if (type === "beginChatResourceUpload") {
-      assert.deepEqual(Object.keys(payload).sort(), ["byteLength", "chatId", "contentType", "fileName"]);
+      assert.deepEqual(Object.keys(payload).sort(), ["byteLength", "chatId", "contentType", "fileName"].concat(workspaceId ? ["workspaceId"] : []));
       return lease;
     }
     if (type === "completeChatResourceUpload") return { resource: { Id: "draft-a" } };
@@ -142,7 +143,19 @@ function fixture() {
     assert.equal(f.calls.at(-1).payload.id, "draft-a");
     console.log("PASS upload: page close discards a known late completion");
   }
+  {
+    const f = fixture("workspace-a"), send = f.context.send;
+    f.context.send = async (type, payload) => {
+      const value = await send(type, payload);
+      if (type === "completeChatResourceUpload") f.events.dispatchEvent(new Event("pagehide"));
+      return value;
+    };
+    await assert.rejects(f.context.uploadChatResourceFile("chat-a", file, undefined, "workspace-a"), /RESOURCE_UPLOAD_CANCELLED/);
+    assert.equal(f.calls.at(-1).type, "discardChatResourceDraft");
+    assert.ok(f.calls.every(call => call.payload.workspaceId === "workspace-a"), "upload, completion and cleanup retain the workspace scope");
+    console.log("PASS upload: Workspace uses the common lease with exact scope through late cleanup");
+  }
   assert.equal(/fileToBase64|readAsDataURL|send\("stageChatResource"/.test(source), false);
   console.log("PASS upload: legacy bridge body path is removed");
-  console.log("OK 9/9");
+  console.log("OK 10/10");
 }()).catch(error => { console.error(error.stack || error); process.exitCode = 1; });

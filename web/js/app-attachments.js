@@ -18,14 +18,15 @@ function formatAttachmentSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " МБ";
 }
 
-async function uploadChatResourceFile(chatId, file, signal) {
+async function uploadChatResourceFile(chatId, file, signal, workspaceId) {
   var lease, draft, pendingRequestId, completed = false;
+  function address(values) { return Object.assign({ chatId: chatId }, workspaceId ? { workspaceId: workspaceId } : {}, values); }
   var lifetime = new AbortController();
   var cancel = function () {
     lifetime.abort();
     if (pendingRequestId) cancelBridgeRequest(pendingRequestId).catch(function () {});
     if (lease && lease.leaseId)
-      send("cancelChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId }).catch(function () {});
+      send("cancelChatResourceUpload", address({ leaseId: lease.leaseId })).catch(function () {});
   };
   if (signal) signal.addEventListener("abort", cancel, { once: true });
   window.addEventListener("pagehide", cancel, { once: true });
@@ -34,10 +35,10 @@ async function uploadChatResourceFile(chatId, file, signal) {
   }
   try {
     active();
-    var opening = send("beginChatResourceUpload", {
-      chatId: chatId, fileName: file.name || ("clipboard-" + Date.now() + ".png"),
+    var opening = send("beginChatResourceUpload", address({
+      fileName: file.name || ("clipboard-" + Date.now() + ".png"),
       contentType: file.type || "application/octet-stream", byteLength: file.size
-    });
+    }));
     pendingRequestId = opening.requestId;
     lease = await opening;
     pendingRequestId = null;
@@ -45,7 +46,7 @@ async function uploadChatResourceFile(chatId, file, signal) {
     await window.RNAssistantResourceUpload.write(lease, file, { maxBytes: ATTACHMENT_MAX_FILE_BYTES,
       signal: lifetime.signal, isCurrent: function () { return !(signal && signal.aborted); } });
     active();
-    var finishing = send("completeChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId });
+    var finishing = send("completeChatResourceUpload", address({ leaseId: lease.leaseId }));
     pendingRequestId = finishing.requestId;
     draft = await finishing;
     pendingRequestId = null;
@@ -58,9 +59,9 @@ async function uploadChatResourceFile(chatId, file, signal) {
     if (!completed && lease && lease.leaseId) {
       // No retry of an uncertain chunk or completion. Cancelling releases transient
       // buffers; a known late draft is discarded through its existing owner.
-      await send("cancelChatResourceUpload", { chatId: chatId, leaseId: lease.leaseId }).catch(function () {});
+      await send("cancelChatResourceUpload", address({ leaseId: lease.leaseId })).catch(function () {});
       if (draft && (draft.resource || draft.Resource))
-        await send("discardChatResourceDraft", { chatId: chatId, id: attachmentId(draft.resource || draft.Resource) }).catch(function () {});
+        await send("discardChatResourceDraft", address({ id: attachmentId(draft.resource || draft.Resource) })).catch(function () {});
     }
   }
 }
@@ -79,12 +80,18 @@ function draftAttachmentsForChat(chatId) {
   return draft && draft.attachments ? draft.attachments : [];
 }
 
-function setAttachmentStatus(chatId, message, level) {
+function attachmentStatusKey(chatId, workspaceId) { return workspaceId ? JSON.stringify([workspaceId, chatId]) : chatId; }
+function conversationAttachmentStatus(target) {
+  return state.chatAttachmentStatus && state.chatAttachmentStatus[attachmentStatusKey(target.sessionId, target.workspaceId)];
+}
+function setAttachmentStatus(chatId, message, level, workspaceId) {
   state.chatAttachmentStatus = state.chatAttachmentStatus || {};
-  if (message) state.chatAttachmentStatus[chatId] = { message: message, level: level };
-  else delete state.chatAttachmentStatus[chatId];
-  if (state.activeChatId === chatId) renderAttachmentStatus();
-  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(chatId);
+  var key = attachmentStatusKey(chatId, workspaceId);
+  if (message) state.chatAttachmentStatus[key] = { message: message, level: level };
+  else delete state.chatAttachmentStatus[key];
+  if (!workspaceId && state.activeChatId === chatId) renderAttachmentStatus();
+  var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.find({
+    source: workspaceId ? "workspace" : "office", workspaceId: workspaceId, sessionId: chatId });
   if (component) component.controls();
   if (message && level) log(message, level);
 }
@@ -109,35 +116,38 @@ function attachmentIngestionBlockedReason() {
   return "";
 }
 
-async function stageChatResourceFiles(targetChatId, files) {
-  var existingAttachments = draftAttachmentsForChat(targetChatId);
+async function stageChatResourceFiles(targetChatId, files, workspaceTarget) {
+  function draft() { return workspaceTarget ? readWorkspaceDraft(workspaceTarget) : readOfficeDraft(targetChatId); }
+  function status(message, level) { setAttachmentStatus(targetChatId, message, level, workspaceTarget && workspaceTarget.workspaceId); }
+  var existingAttachments = (draft() || {}).attachments || [];
   var existingBytes = existingAttachments.reduce(function (sum, item) { return sum + attachmentSize(item); }, 0);
   if (existingAttachments.length + files.length > ATTACHMENT_MAX_FILES) {
-    setAttachmentStatus(targetChatId, "Можно добавить не более 10 файлов.", "warning");
+    status("Можно добавить не более 10 файлов.", "warning");
     return false;
   }
   if (files.some(function (file) { return file.size <= 0 || file.size > ATTACHMENT_MAX_FILE_BYTES; }) ||
       existingBytes + files.reduce(function (sum, file) { return sum + file.size; }, 0) > ATTACHMENT_MAX_TOTAL_BYTES) {
-    setAttachmentStatus(targetChatId, "Файл должен быть непустым и поддерживаться текущим способом импорта.", "warning");
+    status("Файл должен быть непустым и поддерживаться текущим способом импорта.", "warning");
     return false;
   }
   try {
     for (var index = 0; index < files.length; index += 1) {
       var file = files[index];
-      setAttachmentStatus(targetChatId, "Добавление " + (index + 1) + "/" + files.length + ": " + file.name + "…");
-      var response = await uploadChatResourceFile(targetChatId, file);
+      status("Добавление " + (index + 1) + "/" + files.length + ": " + file.name + "…");
+      var response = await uploadChatResourceFile(targetChatId, file, null, workspaceTarget && workspaceTarget.workspaceId);
       var attachment = response.resource || response.Resource;
       if (file.type.indexOf("image/") === 0) attachment.previewUrl = URL.createObjectURL(file);
-      var draft = readOfficeDraft(targetChatId);
-      saveOfficeDraft(targetChatId, draft ? draft.text : "", (draft && draft.attachments || []).concat(attachment), true);
-      var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.office(targetChatId);
+      var saved = draft(), attachments = (saved && saved.attachments || []).concat(attachment);
+      if (workspaceTarget) updateWorkspaceDraft(workspaceTarget, { attachments: attachments });
+      else saveOfficeDraft(targetChatId, saved ? saved.text : "", attachments, true);
+      var component = window.RNAssistantConversationPanel && RNAssistantConversationPanel.find(workspaceTarget || { source: "office", sessionId: targetChatId });
       if (component) component.controls();
-      else if (state.activeChatId === targetChatId) { state.draftAttachments = draftAttachmentsForChat(targetChatId); renderAttachmentDrafts(); }
+      else if (!workspaceTarget && state.activeChatId === targetChatId) { state.draftAttachments = draftAttachmentsForChat(targetChatId); renderAttachmentDrafts(); }
     }
-    setAttachmentStatus(targetChatId, "");
+    status("");
     return true;
   } catch (error) {
-    setAttachmentStatus(targetChatId, "Не удалось добавить «" + file.name + "»: " + (error.detail || error.message), "error");
+    status("Не удалось добавить «" + file.name + "»: " + (error.detail || error.message), "error");
     return false;
   }
 }
@@ -238,6 +248,23 @@ function attachmentCard(item, removable, lifecycle, removeAction) {
     card.appendChild(remove);
   }
   return card;
+}
+
+function renderConversationAttachments(component, draft, remove, controller) {
+  var box = component.node("attachmentDrafts"), items = draft && draft.attachments || [];
+  if (box.draftRecord !== draft || box.annotationController !== controller) {
+    box.draftRecord = draft; box.annotationController = controller; box.replaceChildren();
+    var annotations = controller ? controller.visibleDrafts() : [];
+    box.classList.toggle("has-visual-annotations", !!annotations.length);
+    box.classList.toggle("hidden", !items.length && !annotations.length);
+    if (annotations.length) controller.renderDrafts(box, annotations);
+    items.filter(function (item) { return !(controller && RNAssistantVisualAnnotations.annotation(item)); })
+      .forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft", remove)); });
+    if (controller) controller.sync();
+  }
+  var status = conversationAttachmentStatus(component.target), message = component.node("attachmentStatus");
+  message.hidden = !status; message.textContent = status ? status.message : "";
+  message.classList.toggle("is-error", !!(status && status.level));
 }
 
 function renderAttachmentDrafts() {

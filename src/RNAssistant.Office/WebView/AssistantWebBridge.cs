@@ -238,10 +238,8 @@ namespace RNAssistant.Office.WebView
                     case BridgeOperationId.DeleteProjectChatMessage:
                     case BridgeOperationId.SetProjectChatModel:
                     case BridgeOperationId.RenameProjectChat: case BridgeOperationId.DeleteProjectChat: case BridgeOperationId.DeleteProjectHistory:
-                    case BridgeOperationId.SubmitProjectChat:
+                    case BridgeOperationId.SubmitProjectChat: case BridgeOperationId.UpdateProjectChatInput:
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
-                    case BridgeOperationId.BeginProjectChatFileUpload: case BridgeOperationId.WriteProjectChatFileChunk:
-                    case BridgeOperationId.CompleteProjectChatFileUpload: case BridgeOperationId.CancelProjectChatFileUpload:
                         responsePayload = await HandlePluginAsync(id, type, payload, cancellationToken, reportStage).ConfigureAwait(false);
                         break;
                     case BridgeOperationId.GetWorkspaceState:
@@ -516,6 +514,26 @@ namespace RNAssistant.Office.WebView
                             return result;
                         }, cancellationToken).ConfigureAwait(false);
                         break;
+                    case BridgeOperationId.GetActiveChatRuns:
+                        responsePayload = new ActiveChatRunsResponse { Runs = _controller.ActiveChatRuns()
+                            .Concat(Plugins == null ? new RNAssistant.Application.Conversations.ConversationActiveSnapshot[0] : Plugins.Conversations.ActiveChatRuns())
+                            .OrderBy(item => item.StartedUtc).Select(item => new ActiveChatRunDto {
+                                Source = item.WorkspaceId == null ? "office" : "workspace", WorkspaceId = item.WorkspaceId,
+                                SessionId = item.ChatId, RunId = item.RunId, Title = item.Title,
+                                ScopeTitle = item.ScopeTitle, Phase = item.Phase, StartedUtc = item.StartedUtc }).ToArray() };
+                        break;
+                    case BridgeOperationId.StopActiveChatRun:
+                        var stopRun = Payload<StopActiveChatRunRequest>(payload);
+                        if (string.IsNullOrWhiteSpace(stopRun.SessionId) || string.IsNullOrWhiteSpace(stopRun.RunId) ||
+                            stopRun.Source != "office" && stopRun.Source != "workspace" ||
+                            stopRun.Source == "workspace" && string.IsNullOrWhiteSpace(stopRun.WorkspaceId) ||
+                            stopRun.Source == "office" && stopRun.WorkspaceId != null)
+                            throw new ArgumentException("An exact conversation and run are required.");
+                        responsePayload = await RunBridgeWorkAsync(() => new StopActiveChatRunResponse {
+                            Requested = stopRun.Source == "office" ? _controller.StopActiveChatRun(stopRun.SessionId, stopRun.RunId) :
+                                Plugins != null && Plugins.Conversations.StopActiveChatRun(stopRun.WorkspaceId, stopRun.SessionId, stopRun.RunId)
+                        }, cancellationToken).ConfigureAwait(false);
+                        break;
                     case BridgeOperationId.StopChatInbox:
                         responsePayload = await RunBridgeWorkAsync(() => _controller.StopChatInbox(Payload<ChatPayload>(payload).ChatId), cancellationToken).ConfigureAwait(false);
                         break;
@@ -556,7 +574,7 @@ namespace RNAssistant.Office.WebView
                         break;
                     case BridgeOperationId.DiscardChatResourceDraft:
                         var discardResource = Payload<DiscardChatResourceDraftPayload>(payload);
-                        responsePayload = _controller.DiscardChatResourceDraft(discardResource.ChatId, discardResource.Id);
+                        responsePayload = _controller.DiscardChatResourceDraft(discardResource.ChatId, discardResource.Id, discardResource.WorkspaceId);
                         break;
                     case BridgeOperationId.DeleteMessage:
                         var deleteMessage = Payload<MessageActionPayload>(payload);

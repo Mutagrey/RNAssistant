@@ -1,5 +1,15 @@
 # RNAssistant Harness
 
+Chat parity follow-up: `plugins: workspace uses common message attachments` checks
+scoped upload/CAS, foreign draft/lease denial, exact links, idempotency and bounded
+UTF-16 reads without implicit large-text delivery. `workspace: queue uses common
+owner and explicit resume` checks cross-service queue intake/edit, next-turn delivery,
+exact runtime metadata/Stop, retained work after cancellation and explicit resume.
+Web `workspace-shared-draft` uses mounted ChatViews for attachment cards, late upload,
+queue receipt/editor/resume and source isolation; `active-chat-runs` covers background
+close, exact jump/Stop, pending/stale controls, content width, narrow/zoom and keyboard.
+No real Office or model; baseline failures are recorded in RISK_REGISTER.
+
 JSON-profile coverage (no inference/Office): `history protocol:` checks optional
 message against the schema, exact batch/result mapping, partial receipts, frozen
 repair and early identical-response stop; `model protocol:` checks transport and

@@ -89,6 +89,16 @@ namespace RNAssistant.Application.Conversations
             return false;
         }
 
+        internal ChatSession RunnableSession(string chatId, string workspaceId)
+        {
+            List<Inbox> candidates;
+            lock (_sync) candidates = _inboxes.Values.Where(box => box.Session.Id == chatId &&
+                box.Session.WorkspaceId == workspaceId).ToList();
+            foreach (var box in candidates)
+                lock (box.Sync) if (!box.Worker && !box.Running && HasRunnableLocked(box, box.Session)) return box.Session;
+            return null;
+        }
+
         internal Inbox Get(ChatSession session)
         {
             bool created;
@@ -292,6 +302,19 @@ namespace RNAssistant.Application.Conversations
             }
         }
 
+        internal void SubmitQueuedToRun(ChatSession session, string runId, ConversationInput input)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (input == null || input.Delivery != InputDelivery.Queue || input.AcceptedRunId != null || input.PendingId != null)
+                    throw new ArgumentException("Queued input belongs to the conversation, not the current run.");
+                if (!box.Running || !box.Accepting || box.Session.LastRun?.RunId != runId)
+                    throw new InvalidOperationException("Запуск уже завершает работу. Обновите чат и отправьте сообщение снова.");
+                SubmitLocked(box, input);
+            }
+        }
+
         internal void SubmitToPending(ChatSession session, string runId, string pendingId,
             ConversationInput input)
         {
@@ -358,6 +381,16 @@ namespace RNAssistant.Application.Conversations
         {
             var box = Get(session);
             lock (box.Sync) PauseLocked(box, reason);
+        }
+        internal bool PauseForRun(ChatSession session, string runId)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (box.Session.LastRun?.RunId != runId) return false;
+                PauseLocked(box, "Остановлено пользователем");
+                return true;
+            }
         }
         private void PauseLocked(Inbox box, string reason)
         {
@@ -539,6 +572,17 @@ namespace RNAssistant.Application.Conversations
                 next = Clone(next); next.Status = ConversationInputStatus.Delivering; next.Revision++;
                 Write(box, next);
                 return next;
+            }
+        }
+        internal void BindQueuedTurn(ChatSession session, string inputId)
+        {
+            var box = Get(session);
+            lock (box.Sync)
+            {
+                if (!box.Worker || box.Running || !box.Inputs.Any(item => item.Id == inputId &&
+                    item.Status == ConversationInputStatus.Delivering))
+                    throw new InvalidOperationException("The queue no longer owns this input.");
+                box.Session = session;
             }
         }
         internal void EnsureCanDispatch(ChatSession session, string inputId)

@@ -171,6 +171,7 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("messageId")] public string MessageId { get; set; }
         [JsonProperty("title")] public string Title { get; set; }
         [JsonProperty("input")] public WorkspaceSubmitInputRequest Input { get; set; }
+        [JsonProperty("inbox")] public WorkspaceInboxCommand Inbox { get; set; }
         [JsonProperty("receiptRequestId")] public string ReceiptRequestId { get; set; }
         [JsonProperty("runId")] public string RunId { get; set; }
         [JsonProperty("cursor")] public string Cursor { get; set; }
@@ -195,43 +196,6 @@ namespace RNAssistant.Application.Contracts
         [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
         [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
         [JsonProperty("beforeIndex", Required = Required.Always)] public int BeforeIndex { get; set; }
-    }
-    public sealed class ProjectChatUploadOpenRequest
-    {
-        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
-        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
-        [JsonProperty("fileName", Required = Required.Always)] public string FileName { get; set; }
-        [JsonProperty("byteLength", Required = Required.Always)] public long ByteLength { get; set; }
-    }
-    public sealed class ProjectChatUploadChunkRequest
-    {
-        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
-        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
-        [JsonProperty("leaseId", Required = Required.Always)] public string LeaseId { get; set; }
-        [JsonProperty("offset", Required = Required.Always)] public long Offset { get; set; }
-        [JsonProperty("base64", Required = Required.Always)] public string Base64 { get; set; }
-    }
-    public sealed class ProjectChatUploadLeaseRequest
-    {
-        [JsonProperty("workspaceId", Required = Required.Always)] public string WorkspaceId { get; set; }
-        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
-        [JsonProperty("leaseId", Required = Required.Always)] public string LeaseId { get; set; }
-    }
-    public sealed class ProjectChatUploadOpenDto
-    {
-        [JsonProperty("leaseId")] public string LeaseId { get; set; }
-        [JsonProperty("maxChunkBytes")] public int MaxChunkBytes { get; set; }
-        [JsonProperty("relativePath")] public string RelativePath { get; set; }
-    }
-    public sealed class ProjectChatUploadProgressDto
-    {
-        [JsonProperty("nextOffset")] public long NextOffset { get; set; }
-    }
-    public sealed class ProjectChatImportedFileDto
-    {
-        [JsonProperty("relativePath")] public string RelativePath { get; set; }
-        [JsonProperty("byteLength")] public long ByteLength { get; set; }
-        [JsonProperty("modelReadable")] public bool ModelReadable { get; set; }
     }
     public sealed class ProjectChatProjectDto
     {

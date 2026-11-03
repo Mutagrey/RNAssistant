@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Общие вложения, очередь и меню запросов — 2026-11-03, In Review
+
+Office/Workspace/plugin используют общие attachment cards и scoped upload/CAS;
+старый project-file upload удалён. Workspace Queue подключена к существующим
+Inbox/Application owners: exact ACK, edit/remove/steer, автоматический следующий ход
+после завершения и явное продолжение после Stop. Нижнее меню открывает и
+останавливает exact работающий чат, даже если его вкладка закрыта; закрытие вкладки
+оставляет run в фоне. По просьбе пользователя строки без chat icons, ширина по
+содержимому до 340 px. Native attachment/queue checks и адресные Chromium проверки
+прошли. Полный S2 и Windows/Office qualification остаются открытыми;
+[scope и ревью](../ui/UI_MIGRATION_PLAN.md#общие-вложения-очередь-и-меню-запросов--in-review-2026-11-03),
+[старые падения](RISK_REGISTER.md#проверки-parity-чата-старые-падения--2026-11-03).
+
 ## Плагины, материалы и исходники по фото — 2026-11-03, In Review
 
 Web: отдельные live plugin views, синхронное выделение rail, постоянно раскрытый

@@ -1,5 +1,22 @@
 # Stabilization risk register
 
+## Проверки parity чата: старые падения — 2026-11-03
+
+Owners: Application Workspace steering / Core source patch / Web Inbox fixtures.
+При срезе вложений/очереди воспроизведены те же три падения на чистом архиве
+`a96a1500` без текущего diff:
+
+- `workspace: steer uses active run owner`: tool scenario не достигает
+  `tool executes before steer`; model-wait scenario проходит, причина tool gap открыта.
+- `visual selection: workspace intake and common resource read`: проверка source
+  patch ожидает `context_not_found`, получает `ambiguous_context` для `id="`.
+- `tests/web/chat-inbox.test.js`: `other-window removal clears its echo`, 1 вместо 0.
+
+Новые адресные native attachment/Queue и Chromium shared-draft/active-runs checks
+проходят, но не закрывают эти старые проверки. Полный S2: контекст/ручное сжатие,
+pending-approval Steer, PDF/media read parity и secondary selected consumers остаются
+открытыми. Windows/Office/WebView2 и реальные модели не квалифицированы.
+
 ## Plugin views: адресная проверка и оставшийся HTML gate — 2026-11-03
 
 Owner: Web Plugins / HtmlWorkspace. Singleton live plugin заменён адресными views;

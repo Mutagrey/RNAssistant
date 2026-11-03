@@ -123,6 +123,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
-  initialize().then(function () { if (window.RNAssistantPlugins) window.RNAssistantPlugins.refresh().catch(function (error) { document.getElementById("pluginStatus").textContent = error.message; }); });
+  initialize().then(function () { RNAssistantActiveRuns.start(); if (window.RNAssistantPlugins) window.RNAssistantPlugins.refresh().catch(function (error) { document.getElementById("pluginStatus").textContent = error.message; }); });
   state.syncTimer = window.setInterval(synchronizeChatState, 60000);
 });

@@ -4,6 +4,33 @@ using RNAssistant.Core.Models;
 
 namespace RNAssistant.Office.Contracts
 {
+    public sealed class ActiveChatRunDto
+    {
+        [JsonProperty("source")] public string Source { get; set; }
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId")] public string SessionId { get; set; }
+        [JsonProperty("runId")] public string RunId { get; set; }
+        [JsonProperty("title")] public string Title { get; set; }
+        [JsonProperty("scopeTitle")] public string ScopeTitle { get; set; }
+        [JsonProperty("phase")] public string Phase { get; set; }
+        [JsonProperty("startedUtc")] public System.DateTime StartedUtc { get; set; }
+    }
+    public sealed class ActiveChatRunsResponse
+    {
+        [JsonProperty("runs")] public IReadOnlyList<ActiveChatRunDto> Runs { get; set; }
+    }
+    public sealed class StopActiveChatRunRequest
+    {
+        [JsonProperty("source", Required = Required.Always)] public string Source { get; set; }
+        [JsonProperty("workspaceId")] public string WorkspaceId { get; set; }
+        [JsonProperty("sessionId", Required = Required.Always)] public string SessionId { get; set; }
+        [JsonProperty("runId", Required = Required.Always)] public string RunId { get; set; }
+    }
+    public sealed class StopActiveChatRunResponse
+    {
+        [JsonProperty("requested")] public bool Requested { get; set; }
+    }
+
     public sealed class ChatInboxRequest : ChatPayload
     {
         public List<string> ReceiptOperationIds { get; set; }

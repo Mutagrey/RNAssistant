@@ -191,7 +191,7 @@ namespace RNAssistant.Runtime
 
         private WorkspaceInputReceipt FindAcceptedInput(ChatSession session, string requestId, string fingerprint)
         {
-            var accepted = _conversationInbox.ReadAccepted(session, requestId, fingerprint, requireRunId: true);
+            var accepted = _conversationInbox.ReadAccepted(session, requestId, fingerprint);
             return accepted == null ? null : Receipt(accepted.Event, accepted.Initial,
                 accepted.Current.Status == ConversationInputStatus.Applied);
         }
@@ -200,7 +200,8 @@ namespace RNAssistant.Runtime
         { return new WorkspaceInputReceipt { SessionId = fact.SessionId, RequestId = input.OperationId,
             InputId = input.Id, RunId = input.AcceptedRunId, AcceptedSequence = fact.Sequence,
             AcceptedCursor = ConversationEventFeed.Cursor(fact), DeliveryRecorded = delivered,
-            Steering = input.Delivery == InputDelivery.Steer }; }
+            Steering = input.Delivery == InputDelivery.Steer,
+            Queued = input.Delivery == InputDelivery.Queue && input.AcceptedRunId == null }; }
 
         private static void ValidateInput(WorkspaceSubmitInputRequest request)
         {
@@ -208,12 +209,12 @@ namespace RNAssistant.Runtime
             if (request.RequestId != null && (string.IsNullOrWhiteSpace(request.RequestId) || request.RequestId.Length > 128 ||
                 string.IsNullOrWhiteSpace(request.SessionId)))
                 throw new ArgumentException("A request ID must be 1–128 characters and requires an existing --session (use session create first).");
-            if (request.SteerRunId != null && (string.IsNullOrWhiteSpace(request.SteerRunId) || request.SteerRunId.Length > 128 ||
-                string.IsNullOrWhiteSpace(request.RequestId) || string.IsNullOrWhiteSpace(request.Message) ||
-                request.Message.Length > 128 * 1024 || request.EditMessageId != null || request.Answers != null ||
-                request.Acceptance != null || request.MutationPolicy.HasValue || request.AutoConfirmToolActions.HasValue ||
-                (request.ResourceDraftIds?.Count ?? 0) > 0))
-                throw new ArgumentException("Уточнение требует текущий запуск и текст без смены политики, вложений или редактирования истории.");
+            if ((request.SteerRunId != null || request.Enqueue) &&
+                (request.SteerRunId != null && (string.IsNullOrWhiteSpace(request.SteerRunId) || request.SteerRunId.Length > 128 || request.Enqueue) ||
+                string.IsNullOrWhiteSpace(request.RequestId) || (request.Message?.Length ?? 0) > 128 * 1024 ||
+                request.EditMessageId != null || request.Answers != null || request.Acceptance != null ||
+                request.MutationPolicy.HasValue || request.AutoConfirmToolActions.HasValue))
+                throw new ArgumentException("Сообщение во время запуска не меняет его политику и историю.");
             var draftIds = request.ResourceDraftIds ?? new System.Collections.Generic.List<string>();
             if (draftIds.Count > AttachmentStore.MaxFilesPerMessage ||
                 draftIds.Any(id => string.IsNullOrWhiteSpace(id) || id.Length > 128) ||
@@ -240,7 +241,7 @@ namespace RNAssistant.Runtime
         {
             // Transport identity is bound to submitted intent. Environment/model
             // settings are execution configuration; a duplicate never reapplies them.
-            var canonical = new WorkspaceSubmitInputRequest { Message = request.Message, SteerRunId = request.SteerRunId,
+            var canonical = new WorkspaceSubmitInputRequest { Message = request.Message, SteerRunId = request.SteerRunId, Enqueue = request.Enqueue,
                 EditMessageId = request.EditMessageId, ExpectedRevision = request.ExpectedRevision,
                 ResourceDraftIds = request.ResourceDraftIds?.Count > 0 ? request.ResourceDraftIds : null,
                 Mode = request.Mode == null ? null : ChatModes.Require(request.Mode), MutationPolicy = request.MutationPolicy,

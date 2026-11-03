@@ -92,6 +92,7 @@ namespace RNAssistant.Runtime
         {
             var initialRevision = session.Revision;
             var run = reservation.Activate(session.LastRun.RunId, cancellationToken);
+            _activeRuns.UpdateIdentity(session, session.LastRun.RunId);
             try
             {
                 return new WorkspaceRunControl(_paths.WorkspaceDirectory, session.Id, session.LastRun.RunId,
@@ -99,7 +100,8 @@ namespace RNAssistant.Runtime
                         session.Revision > initialRevision && ConversationEventFeed.Cursor(session) == cursor,
                     () => LocalModelProgress(session), run,
                     input == null ? null : new Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt>(input.Submit),
-                    () => input != null && input.Accepting);
+                    () => input != null && input.Accepting,
+                    command => ChangeInbox(session, command));
             }
             catch { run.Dispose(); throw; }
         }

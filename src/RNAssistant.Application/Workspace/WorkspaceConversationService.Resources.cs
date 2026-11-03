@@ -12,7 +12,15 @@ namespace RNAssistant.Runtime
 {
     public sealed partial class WorkspaceConversationService
     {
-        private List<ChatAttachment> LoadVisualSelectionDrafts(WorkspaceDescriptor workspace,
+        private static void LinkInputAttachments(ChatSession session, ChatMessage message)
+        {
+            ChatMessageAttachmentService.Link(session, message);
+            foreach (var source in message.Attachments.Select(item => item.VisualSelectionSource).Where(item => item != null))
+                if (!message.ResourceRefs.Any(item => item.Uri == source.Uri && item.Revision == source.Revision))
+                    message.ResourceRefs.Add(source.Copy());
+        }
+
+        private List<ChatAttachment> LoadResourceDrafts(WorkspaceDescriptor workspace,
             ChatSession session, IReadOnlyList<string> draftIds, AttachmentStore attachments)
         {
             var drafts = attachments.LoadDrafts(draftIds, session.Id);
@@ -22,6 +30,9 @@ namespace RNAssistant.Runtime
                 var plugins = new PluginStore(_paths);
                 foreach (var draft in drafts)
                 {
+                    if (draft.Status != "ready")
+                        throw new InvalidOperationException(draft.Error ?? "Вложение не готово к отправке.");
+                    if (draft.VisualSelectionSource == null) continue;
                     ResourceAddress address;
                     var source = draft.VisualSelectionSource;
                     if (draft.Status != "ready" || draft.Kind != "text" ||

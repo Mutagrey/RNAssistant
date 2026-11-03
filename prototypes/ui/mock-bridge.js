@@ -80,7 +80,6 @@
   var projectRevisions = Object.create(null);
   if (dataProject) projectMessages["preview-plan-chat"] = [];
   var projectRuns = Object.create(null), projectRequests = Object.create(null);
-  var projectFileUploads = Object.create(null);
   var pluginItem = { pluginId: "data-templates", sourceWorkspaceId: "preview-plugin-workspace", name: "Данные и шаблоны", icon: "dataTemplates",
     sourceRoot: "Локальный демонстрационный плагин", releaseId: "preview-release-1", enabled: true,
     previewSimulated: true };
@@ -284,7 +283,7 @@
     var answer = fixtures.chat.assistant + "\n\n_Это смоделированный ответ: модель и Office не запускались._";
     var split = Math.ceil(answer.length / 2);
     function progress(phase, message, contentDelta) {
-      if (!previewRuns[chatId]) return;
+      if (!previewRuns[chatId] || previewRuns[chatId].runId !== runId) return;
       previewRuns[chatId].phase = phase;
       emit({ type: "progress", id: "inbox:" + chatId,
         payload: { chatId: chatId, runId: runId, phase: phase, message: message, contentDelta: contentDelta || "" } });
@@ -293,7 +292,7 @@
     setTimeout(function () { progress("streaming", null, answer.slice(0, split)); }, 220);
     setTimeout(function () { progress("streaming", null, answer.slice(split)); }, 520);
     setTimeout(function () {
-      if (!previewRuns[chatId]) return;
+      if (!previewRuns[chatId] || previewRuns[chatId].runId !== runId) return;
       var now = new Date().toISOString();
       messagesByChat[chatId].push({ Id: "preview-reply-" + number, Role: "assistant", Content: answer,
         RunId: runId, RunViewState: runView(runId, now), CreatedUtc: now });
@@ -507,6 +506,32 @@
       if (type === "getChatState") requireArtifactReader(payload);
       return chatState(type === "listChats" ? null : payload.chatId);
     }
+    if (type === "getActiveChatRuns") {
+      var activeRequests = Object.keys(previewRuns).map(function (chatId) {
+        var chat = chats.find(function (item) { return item.Id === chatId; }), run = previewRuns[chatId];
+        return { source: "office", sessionId: chatId, runId: run.runId, title: chat && chat.Title,
+          scopeTitle: chat && chat.DocumentTitle, phase: run.phase, startedUtc: run.startedUtc };
+      });
+      workspaceProjects.forEach(function (project) { (project.chats || []).forEach(function (chat) {
+        var run = projectRuns[chat.Id]; if (!run) return;
+        activeRequests.push({ source: "workspace", workspaceId: project.workspaceId, sessionId: chat.Id,
+          runId: run.runId, title: chat.Title, scopeTitle: project.name, phase: "thinking", startedUtc: run.startedUtc });
+      }); });
+      return { runs: activeRequests };
+    }
+    if (type === "stopActiveChatRun") {
+      if (payload.source === "office") {
+        var officeRun = previewRuns[payload.sessionId];
+        if (!officeRun || officeRun.runId !== payload.runId) return { requested: false };
+        delete previewRuns[payload.sessionId]; inboxRevision++; emitChatState(payload.sessionId);
+      } else {
+        requireProjectChat({ workspaceId: payload.workspaceId, sessionId: payload.sessionId });
+        var workspaceRun = projectRuns[payload.sessionId];
+        if (!workspaceRun || workspaceRun.runId !== payload.runId) return { requested: false };
+        delete projectRuns[payload.sessionId];
+      }
+      return { requested: true };
+    }
     if (type === "getChatInbox") {
       requireArtifactReader(payload);
       var inbox = chatInbox(null, payload.chatId);
@@ -530,7 +555,7 @@
           Revision: 1, Attachments: [] };
         inputReceipts[payload.operationId] = receipt;
         messagesByChat[payload.chatId].push({ Id: receipt.Id, Role: "user", Content: payload.text, CreatedUtc: now });
-        previewRuns[payload.chatId] = { phase: "thinking" };
+        previewRuns[payload.chatId] = { phase: "thinking", runId: "preview-run-" + number, startedUtc: now };
         revision++; inboxRevision++;
         var active = chats.find(function (chat) { return chat.Id === payload.chatId; });
         active.MessageCount = messagesByChat[payload.chatId].length; active.Revision = revision; active.LastActivityUtc = now;
@@ -679,43 +704,6 @@
       if (receiptInput && receiptInput.sessionId === payload.sessionId) observed.inputReceipt = clone(receiptInput.receipt);
       return observed;
     }
-    if (type === "beginProjectChatFileUpload") {
-      requireProjectChat(payload);
-      if (!payload.fileName || payload.byteLength < 1 || payload.byteLength > 20 * 1024 * 1024)
-        fail("Выберите непустой файл размером не более 20 МБ.", "preview_project_file_invalid");
-      var fileLease = leaseId();
-      var relativePath = "chat-files/" + fileLease + "-" + payload.fileName;
-      projectFileUploads[fileLease] = { workspaceId: payload.workspaceId, sessionId: payload.sessionId,
-        relativePath: relativePath, byteLength: payload.byteLength, chunks: [], received: 0 };
-      return { leaseId: fileLease, maxChunkBytes: 256 * 1024, relativePath: relativePath };
-    }
-    if (type === "writeProjectChatFileChunk" || type === "completeProjectChatFileUpload" ||
-        type === "cancelProjectChatFileUpload") {
-      var projectUpload = projectFileUploads[payload.leaseId];
-      if (!projectUpload || projectUpload.workspaceId !== payload.workspaceId || projectUpload.sessionId !== payload.sessionId)
-        fail("Загрузка файла не найдена.", "preview_project_file_missing");
-      if (type === "cancelProjectChatFileUpload") {
-        delete projectFileUploads[payload.leaseId]; return { nextOffset: projectUpload.received };
-      }
-      if (type === "writeProjectChatFileChunk") {
-        var data = atob(payload.base64 || "");
-        if (payload.offset !== projectUpload.received || !data.length || data.length > 256 * 1024 ||
-            projectUpload.received + data.length > projectUpload.byteLength)
-          fail("Фрагменты файла идут не подряд.", "preview_project_file_offset");
-        projectUpload.chunks.push(data); projectUpload.received += data.length;
-        return { nextOffset: projectUpload.received };
-      }
-      if (projectUpload.received !== projectUpload.byteLength)
-        fail("Файл передан не полностью.", "preview_project_file_incomplete");
-      delete projectFileUploads[payload.leaseId];
-      var projectTextReadable = projectUpload.received <= 1024 * 1024;
-      if (projectTextReadable) try {
-        var rawFile = Uint8Array.from(projectUpload.chunks.join(""), function (character) { return character.charCodeAt(0); });
-        new TextDecoder("utf-8", { fatal: true }).decode(rawFile);
-      } catch (_) { projectTextReadable = false; }
-      return { relativePath: projectUpload.relativePath, byteLength: projectUpload.received,
-        modelReadable: projectTextReadable };
-    }
     if (type === "createProjectChat") {
       var targetWorkspace = requireWorkspace(payload);
       var created = { Id: "preview-project-" + (++projectChatSequence), Title: payload.title || "Новый чат", RunStatus: "" };
@@ -801,7 +789,7 @@
         accepted = projectRequests[input.requestId] = { sessionId: submitting.Id, message: input.message };
         projectMessages[submitting.Id].push({ Id: input.requestId, Role: "user", Content: input.message });
         projectRevisions[submitting.Id] = (projectRevisions[submitting.Id] || 0) + 1;
-        var run = { runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
+        var run = { startedUtc: new Date().toISOString(), runId: "preview-project-run-" + input.requestId, cursor: "preview-project-cursor-" + input.requestId };
         projectRuns[submitting.Id] = run; submitting.RunStatus = "running";
         accepted.receipt = { SessionId: submitting.Id, RequestId: input.requestId, InputId: input.requestId,
           RunId: run.runId, AcceptedSequence: projectRevisions[submitting.Id], AcceptedCursor: run.cursor,

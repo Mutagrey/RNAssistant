@@ -5,7 +5,6 @@
     var owner = id ? component.view.bindProjection(officeChatSource(id), mergeOfficeChatSnapshot) : null;
     if (owner) owner.accept(createOfficeChatSnapshot(id));
     var empty = createOfficeChatSnapshot(""), uploading = false, deleting = false;
-    component.inboxState = { inboxEditing: null, inboxEditDraft: null };
     function snapshot() { return owner ? owner.snapshot() : empty; }
     function draft() { return readOfficeDraft(id); }
     function writeDraft(text) { var saved = draft(); return saveOfficeDraft(id, text, saved && saved.attachments || [], true); }
@@ -159,28 +158,15 @@
       if (node("contextStrip").context !== snapshot().context) {
         node("contextStrip").context = snapshot().context; renderContext(component);
       }
-      var saved = draft(), items = saved && saved.attachments || [], box = node("attachmentDrafts");
       var controller = RNAssistantConversationPanel.selected() === component && window.RNAssistantHtmlWorkspaceAnnotations;
-      if (box.draftRecord !== saved || box.annotationController !== controller) {
-        box.annotationController = controller;
-        box.draftRecord = saved; box.replaceChildren(); box.classList.toggle("hidden", !items.length);
-        var annotations = controller ? controller.visibleDrafts() : [];
-        box.classList.toggle("has-visual-annotations", !!annotations.length);
-        box.classList.toggle("hidden", !items.length && !annotations.length);
-        if (annotations.length) controller.renderDrafts(box, annotations);
-        items.filter(function (item) { return !(controller && RNAssistantVisualAnnotations.annotation(item)); })
-          .forEach(function (item) { box.appendChild(attachmentCard(item, true, "draft", async function () {
-          try {
-            if (!item.unavailable) await send("discardChatResourceDraft", { chatId: id, id: attachmentId(item) });
-            var current = draft(); if (current) saveOfficeDraft(id, current.text, current.attachments.filter(function (value) { return attachmentId(value) !== attachmentId(item); }), true);
-            if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); component.controls();
-          } catch (error) { component.notice(error); }
-        })); });
-        if (controller) controller.sync();
-      }
-      var status = state.chatAttachmentStatus && state.chatAttachmentStatus[id];
-      node("attachmentStatus").hidden = !status; node("attachmentStatus").textContent = status ? status.message : "";
-      node("attachmentStatus").classList.toggle("is-error", !!(status && status.level));
+      renderConversationAttachments(component, draft(), async function (item) {
+        try {
+          if (!item.unavailable) await send("discardChatResourceDraft", { chatId: id, id: attachmentId(item) });
+          var current = draft();
+          if (current) saveOfficeDraft(id, current.text, current.attachments.filter(function (value) { return attachmentId(value) !== attachmentId(item); }), true);
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); component.controls();
+        } catch (error) { component.notice(error); }
+      }, controller);
       node("workspaceChatControl").hidden = true; node("workspaceChatQuestions").hidden = true;
     }
     return { commands: commands, projection: function () { return owner; }, snapshot: snapshot, accept: accept, refresh: refresh,

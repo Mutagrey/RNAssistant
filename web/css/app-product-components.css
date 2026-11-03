@@ -108,9 +108,9 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .rna-action-menu-trigger svg, .rna-action-menu-body > button svg { flex: 0 0 auto; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }
 .rna-action-menu-body { display: grid; gap: 2px; }
 :is(.rna-action-menu-popup, .rail-hover-card) { position: fixed; z-index: 100; width: var(--menu-width); max-width: calc(100vw - 2 * var(--space-2)); max-height: calc(100dvh - 2 * var(--space-2)); overflow: auto; gap: 0; padding: var(--menu-padding); border: 1px solid var(--line); border-radius: var(--menu-radius); background: var(--surface); color: var(--ink); box-shadow: var(--shadow); font: var(--text-sm)/1.5 var(--font); }
-:is(.rna-action-menu-popup > button, .rail-hover-body > button) { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); width: 100%; min-height: var(--tree-row-height); padding: var(--menu-row-padding); border: 0; border-radius: var(--menu-radius); background: transparent; color: inherit; font: inherit; text-align: left; }
-:is(.rna-action-menu-popup > button, .rail-hover-body > button):is(:hover, :focus-visible) { background: var(--surface-hover); }
-:is(.rna-action-menu-popup > button, .rail-hover-body > button) svg { width: var(--shell-icon); height: var(--shell-icon); flex: none; }
+:is(.rna-action-menu-popup > button, .rna-action-menu-row > button, .rail-hover-body > button) { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); width: 100%; min-height: var(--tree-row-height); padding: var(--menu-row-padding); border: 0; border-radius: var(--menu-radius); background: transparent; color: inherit; font: inherit; text-align: left; }
+:is(.rna-action-menu-popup > button, .rna-action-menu-row > button, .rail-hover-body > button):is(:hover, :focus-visible) { background: var(--surface-hover); }
+:is(.rna-action-menu-popup > button, .rna-action-menu-row > button, .rail-hover-body > button) svg { width: var(--shell-icon); height: var(--shell-icon); flex: none; }
 .rna-action-menu-popup small { margin-left: auto; color: var(--accent); font-size: var(--text-xs); }
 .rna-action-menu-body > button:disabled { opacity: .5; cursor: default; }
 .rna-action-menu-body > button:disabled:hover { background: transparent; }
@@ -268,3 +268,9 @@ select:not([multiple]):not([size]) { appearance: none; padding-inline-end: 34px;
 .navigation-pane-state { padding: var(--space-2) 0; }
 .navigation-pane-state p { margin: 0 0 var(--space-2); overflow-wrap: anywhere; }
 .navigation-pane-state [hidden], .navigation-pane-state[hidden] { display: none; }
+
+.rna-action-menu-row { display: flex; min-width: 0; align-items: stretch; }
+.rna-action-menu-row > button:first-child { min-width: 0; flex: 1; }
+.rna-action-menu-row > button.rna-action-menu-secondary { width: var(--control); flex: 0 0 var(--control); justify-content: center; padding: var(--space-1); }
+.rna-action-menu-secondary .rna-action-menu-label { display: none; }
+.rna-action-menu-row > button:disabled { opacity: .5; cursor: default; }

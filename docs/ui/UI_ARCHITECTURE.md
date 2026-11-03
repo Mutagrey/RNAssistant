@@ -46,6 +46,26 @@ storage contracts остаются в domain docs из [README](../README.md).
 
 ## Единый чат: обязательная целевая граница
 
+Срез 2026-11-03, In Review: Workspace/plugin используют общий staged attachment
+upload, CAS и renderer карточек. Прежний upload файла в папку проекта с вставкой
+пути в composer удалён. Exact workspace/chat входит в lease owner; message event
+закрепляет ресурс, текст читается ограниченным окном через `core.read`.
+Очередь Workspace использует существующие ConversationInboxService и
+ConversationApplicationService; отдельного worker/store нет. Queue ACK означает
+сохранённый ввод, а не доставку модели; Steer остаётся привязан к exact run.
+Редактирование/удаление/явное продолжение — typed scoped commands и общие pending
+cards. Остановка сохраняет неприменённый ввод и не разрешает автоматический повтор.
+
+`app-active-runs` — consumer метаданных ConversationRunOwner через typed bridge,
+без чтения истории/каталога и без собственного runtime registry. Нижнее меню
+показывает работающие запросы текущего assistant runtime, включая закрытые Chat
+View. Переход использует существующий ConversationPanel.open; Stop адресует exact
+source/workspace/session/run и сначала сигнализирует отмену. Close view освобождает
+UI, но не отменяет run. Опрос метаданных раз в 2 секунды при видимом документе;
+generation guard исключает поздний ответ до Stop. Список не объединяет владельцев
+отдельных процессов/других окон Office. Pending approvals сами по себе не являются
+работающими запросами.
+
 Срез ленты 2026-11-03, In Review: существующие Messages / ConversationView владеют
 сохранением принятых пояснений и `reason`, обновлением live-узлов и раскрытиями.
 `ChatActivity.StepReason` поступает из принятого ответа через Office и

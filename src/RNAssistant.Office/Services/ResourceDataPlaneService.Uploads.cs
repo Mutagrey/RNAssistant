@@ -15,6 +15,8 @@ namespace RNAssistant.Office.Services
     internal sealed partial class ResourceDataPlaneService
     {
         internal const string UploadOwner = "attachment-upload";
+        internal static string AttachmentUploadOwner(string workspaceId)
+        { return string.IsNullOrWhiteSpace(workspaceId) ? UploadOwner : UploadOwner + ":" + workspaceId; }
         internal const int MaximumUploadChunkBytes = 256 * 1024;
         private readonly Dictionary<string, Upload> _uploads = new Dictionary<string, Upload>(StringComparer.Ordinal);
 
@@ -22,6 +24,7 @@ namespace RNAssistant.Office.Services
             CancellationToken cancellationToken = default(CancellationToken), string owner = UploadOwner,
             long maximumBytes = AttachmentStore.MaxFileBytes, bool allowEmpty = false)
         {
+            if (owner == UploadOwner) owner = AttachmentUploadOwner(session?.WorkspaceId);
             if (session == null || string.IsNullOrWhiteSpace(session.Id) || request == null || request.ChatId != session.Id ||
                 string.IsNullOrWhiteSpace(owner) || _ownerIsActive != null && !_ownerIsActive(session.Id, owner))
                 throw Error("RESOURCE_ACCESS_DENIED", "An explicit addressed chat is required for upload.");
@@ -98,7 +101,7 @@ namespace RNAssistant.Office.Services
             ChatAttachment draft = null;
             try
             {
-                return ConsumeUpload(session, leaseId, UploadOwner, (bytes, fileName, contentType) =>
+                return ConsumeUpload(session, leaseId, AttachmentUploadOwner(session.WorkspaceId), (bytes, fileName, contentType) =>
                 {
                     draft = ingestion.Stage(session, fileName, contentType, bytes);
                     return new ChatResourceDraftResponse { Resource = draft };

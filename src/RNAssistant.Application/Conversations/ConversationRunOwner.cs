@@ -82,6 +82,10 @@ namespace RNAssistant.Application.Conversations
         public string Phase { get; set; }
         public string CurrentAction { get; set; }
         public DateTime StartedUtc { get; set; }
+        public string WorkspaceId { get; set; }
+        public string Title { get; set; }
+        public string ScopeTitle { get; set; }
+        public string Host { get; set; }
         public ChatSession Session { get; set; }
         internal CancellationTokenSource Cancellation { get; set; }
         internal IDisposable RunLock { get; set; }
@@ -158,6 +162,7 @@ namespace RNAssistant.Application.Conversations
                             Cancellation = cancellation,
                             RunLock = runLock
                         };
+                        if (session != null) SetIdentity(run, session);
                         _runs[chatId] = run;
                         return new ConversationRunHandle(this, chatId, runId,
                             cancellation == null ? CancellationToken.None : cancellation.Token);
@@ -179,7 +184,7 @@ namespace RNAssistant.Application.Conversations
                 if (_runs.TryGetValue(chatId ?? string.Empty, out run) &&
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
-                    run.Phase = string.IsNullOrWhiteSpace(phase) ? run.Phase : phase;
+                    if (run.Status != "cancelling") run.Phase = string.IsNullOrWhiteSpace(phase) ? run.Phase : phase;
                     run.CurrentAction = string.IsNullOrWhiteSpace(currentAction) ? run.CurrentAction : currentAction;
                 }
             }
@@ -196,9 +201,29 @@ namespace RNAssistant.Application.Conversations
                     string.Equals(run.RunId, runId, StringComparison.OrdinalIgnoreCase))
                 {
                     run.Session = snapshot;
+                    SetIdentity(run, session);
                 }
             }
         }
+
+        private static void SetIdentity(ConversationActiveSnapshot run, ChatSession session)
+        {
+            run.WorkspaceId = session.WorkspaceId; run.Title = session.Title;
+            run.ScopeTitle = session.DocumentTitle; run.Host = session.Host;
+        }
+
+        internal void UpdateIdentity(ChatSession session, string runId, string scopeTitle = null)
+        {
+            lock (_sync)
+            {
+                ConversationActiveSnapshot run;
+                if (_runs.TryGetValue(session.Id, out run) && run.RunId == runId)
+                { SetIdentity(run, session); if (scopeTitle != null) run.ScopeTitle = scopeTitle; }
+            }
+        }
+
+        internal IReadOnlyList<ConversationActiveSnapshot> Active()
+        { lock (_sync) return _runs.Values.Select(ShallowClone).ToArray(); }
 
         public bool Cancel(string chatId, string runId)
         {
@@ -361,6 +386,8 @@ namespace RNAssistant.Application.Conversations
                 Phase = source.Phase,
                 CurrentAction = source.CurrentAction,
                 StartedUtc = source.StartedUtc,
+                WorkspaceId = source.WorkspaceId, Title = source.Title,
+                ScopeTitle = source.ScopeTitle, Host = source.Host,
                 Session = source.Session
             };
         }

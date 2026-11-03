@@ -92,7 +92,7 @@ namespace RNAssistant.Core.Services
             return (session.Messages ?? new List<ChatMessage>()).AsEnumerable().Reverse()
                 .Where(message => message != null && !message.ProtocolMessage && message.Role == "user")
                 .SelectMany(message => (message.Attachments ?? new List<ChatAttachment>())
-                    .Where(attachment => attachment != null && attachment.VisualSelectionSource?.IsExact == true)
+                    .Where(attachment => attachment != null)
                     .Select(attachment => new Binding { Message = message, Attachment = attachment,
                         Target = Target(message, attachment) })).ToArray();
         }
@@ -120,22 +120,23 @@ namespace RNAssistant.Core.Services
             if (message == null || attachment == null || string.IsNullOrWhiteSpace(message.Id) ||
                 session.Messages.Count(item => item != null && item.Id == message.Id) != 1 ||
                 !session.Messages.Any(item => object.ReferenceEquals(item, message)) ||
-                string.IsNullOrWhiteSpace(attachment.Id) || attachment.Kind != "text" ||
-                !string.Equals(attachment.ContentType, "application/json", StringComparison.OrdinalIgnoreCase) ||
-                attachment.Size < 1 || attachment.Size > HtmlVisualSelectionPolicy.MaximumBodyBytes ||
+                string.IsNullOrWhiteSpace(attachment.Id) || attachment.Status != "ready" ||
+                attachment.Size < 1 || attachment.RelativePath != null ||
                 !string.IsNullOrWhiteSpace(attachment.DraftChatId) ||
                 string.IsNullOrWhiteSpace(attachment.ContentSha256) ||
                 attachment.ContentByteLength != attachment.Size ||
-                attachment.VisualSelectionSource?.IsExact != true ||
+                (attachment.VisualSelectionSource != null && (attachment.VisualSelectionSource.IsExact != true ||
+                    attachment.Kind != "text" || attachment.ContentType != "application/json" ||
+                    attachment.Size > HtmlVisualSelectionPolicy.MaximumBodyBytes)) ||
                 message.Attachments == null ||
                 message.Attachments.Count(item => item != null && item.Id == attachment.Id) != 1 ||
                 !message.Attachments.Any(item => object.ReferenceEquals(item, attachment)))
-                throw new ResourceRequestException("The workspace selection has no unambiguous committed original.",
+                throw new ResourceRequestException("The workspace attachment has no unambiguous committed original.",
                     "resource_attachment_binding_invalid", false);
             var artifacts = (session.Artifacts ?? new List<ChatArtifact>()).Where(item => item != null &&
                 item.Id == "attachment_" + attachment.Id).Take(2).ToArray();
             if (artifacts.Length != 1 || artifacts[0].Revision != 1 ||
-                artifacts[0].Kind != ChatArtifactKinds.Attachment ||
+                artifacts[0].Kind != (attachment.Kind == "image" ? ChatArtifactKinds.Image : ChatArtifactKinds.Attachment) ||
                 artifacts[0].DocumentAuthorityId != null || artifacts[0].WorkspaceId != null ||
                 artifacts[0].SourceMessageId != message.Id ||
                 artifacts[0].MimeType != attachment.ContentType ||
@@ -143,13 +144,13 @@ namespace RNAssistant.Core.Services
                 artifacts[0].ContentSha256 != attachment.ContentSha256 ||
                 artifacts[0].ContentByteLength != attachment.ContentByteLength ||
                 AttachmentId(artifacts[0]) != attachment.Id)
-                throw new ResourceRequestException("The workspace selection artifact is unavailable or ambiguous.",
+                throw new ResourceRequestException("The workspace attachment artifact is unavailable or ambiguous.",
                     "resource_attachment_binding_invalid", false);
             var expected = ChatResourceUri.CreateArtifactRevision(session, artifacts[0]);
             var references = (message.ResourceRefs ?? new List<ResourceRef>()).Where(item => item != null &&
                 item.IsExact && item.Uri == expected.Uri && item.Revision == expected.Revision).Take(2).ToArray();
             if (references.Length != 1)
-                throw new ResourceRequestException("The workspace selection is missing its exact message link.",
+                throw new ResourceRequestException("The workspace attachment is missing its exact message link.",
                     "resource_attachment_binding_invalid", false);
             binding.Reference = expected;
         }

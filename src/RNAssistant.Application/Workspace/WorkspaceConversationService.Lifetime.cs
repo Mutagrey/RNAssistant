@@ -32,7 +32,7 @@ namespace RNAssistant.Runtime
             WorkspaceSubmitInputRequest request, AppSettings settings, Func<string> apiKeyProvider,
             Action<WorkspaceRunEvent> progress, CancellationToken cancellationToken)
         {
-            if (request?.SteerRunId != null) return SteerInputAsync(workspace, request, cancellationToken);
+            if (request?.SteerRunId != null || request?.Enqueue == true) return SteerInputAsync(workspace, request, cancellationToken);
             return StartInput(workspace, request, settings, apiKeyProvider, progress, cancellationToken,
                 null, detachAfterAcceptance: true).Receipt.Task;
         }
@@ -43,10 +43,13 @@ namespace RNAssistant.Runtime
             CancellationToken callerToken, string modelDigest, bool detachAfterAcceptance)
         {
             settings = settings?.Clone();
-            return _conversationApplication.StartOperation<WorkspaceRunResult, WorkspaceInputReceipt, WorkspaceRunEvent>(operation => ExecuteInputAsync(
-                workspace, request, settings, apiKeyProvider,
-                value => Report(operation, value), operation.Token, modelDigest,
-                waitForLease: !detachAfterAcceptance), result => result.Receipt,
+            return _conversationApplication.StartOperation<WorkspaceRunResult, WorkspaceInputReceipt, WorkspaceRunEvent>(async operation => {
+                var result = await ExecuteInputAsync(workspace, request, settings, apiKeyProvider,
+                    value => Report(operation, value), operation.Token, modelDigest,
+                    waitForLease: !detachAfterAcceptance).ConfigureAwait(false);
+                StartQueuedInputs(workspace, result.SessionId, settings, apiKeyProvider, progress, modelDigest);
+                return result;
+            }, result => result.Receipt,
                 progress, callerToken, detachAfterAcceptance, _runtimeUseLease);
         }
 
@@ -73,10 +76,13 @@ namespace RNAssistant.Runtime
             CancellationToken callerToken, string modelDigest, bool detachAfterAcceptance)
         {
             settings = settings?.Clone();
-            return _conversationApplication.StartOperation<WorkspaceRunResult, WorkspaceInputReceipt, WorkspaceRunEvent>(operation => ExecutePendingAsync(
-                workspace, sessionId, pendingId, approve, settings, apiKeyProvider,
-                value => Report(operation, value), operation.Token, modelDigest,
-                operation.AcceptContinuation, waitForLease: !detachAfterAcceptance),
+            return _conversationApplication.StartOperation<WorkspaceRunResult, WorkspaceInputReceipt, WorkspaceRunEvent>(async operation => {
+                var result = await ExecutePendingAsync(workspace, sessionId, pendingId, approve, settings, apiKeyProvider,
+                    value => Report(operation, value), operation.Token, modelDigest,
+                    operation.AcceptContinuation, waitForLease: !detachAfterAcceptance).ConfigureAwait(false);
+                StartQueuedInputs(workspace, sessionId, settings, apiKeyProvider, progress, modelDigest);
+                return result;
+            },
                 result => result.Receipt, progress, callerToken, detachAfterAcceptance, _runtimeUseLease);
         }
 

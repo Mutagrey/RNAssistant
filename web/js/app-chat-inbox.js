@@ -219,23 +219,24 @@ function pendingInputStatus(item, box) {
   if (item.localStatus === "submitting") return "Отправка…";
   if (item.localStatus === "unconfirmed") return "Отправка не подтверждена";
   if (!(box.items || []).some(function (pending) { return pending.Id === item.Id; })) return "Обновление истории…";
-  if (item.Delivery === "Steer" && item.AcceptedRunId && !box.running)
+  if (item.Delivery === "Steer" && item.AcceptedRunId && (!box.running || box.runId && box.runId !== item.AcceptedRunId))
     return "Не доставлено в исходный запуск";
   if (box.paused && !box.running) return "В очереди · приостановлено";
   if (item.Status === "Delivering") return "Передаю агенту…";
   if (item.Delivery === "Steer" && box.running) return box.phase === "executing" ? "Применится после текущего действия" : "Ожидает применения";
   return box.activeRun ? "В очереди" : "Передаю агенту…";
 }
-function renderPendingInput(item, chatId, editing, component) {
+function renderPendingInput(item, chatId, editing, component, source) {
   var state = component ? component.inboxState : window.state;
   var $ = component ? component.node : window.$;
   function renderChatInbox() { if (component) component.render(); else window.renderChatInbox(); }
-  function changeInboxItem(action, value, text) { return window.changeInboxItem(action, value, text, component); }
+  var box = source ? source.box : chatInbox(chatId);
+  function changeInboxItem(action, value, text) { return source ? source.change(action, value, text) : window.changeInboxItem(action, value, text, component); }
   var node = document.createElement("article"); node.className = "message user pending inbox-message";
   node.setAttribute("aria-label", "Сообщение в очереди");
   var heading = document.createElement("div"); heading.className = "inbox-heading";
   var status = document.createElement("span"); status.className = "inbox-item-status";
-  status.textContent = pendingInputStatus(item, chatInbox(chatId)); heading.appendChild(status);
+  status.textContent = pendingInputStatus(item, box); heading.appendChild(status);
   node.appendChild(heading);
   if (editing) {
     var draft = state.inboxEditDraft;
@@ -261,7 +262,7 @@ function renderPendingInput(item, chatId, editing, component) {
     var body = document.createElement("div"); body.className = "markdown inbox-pending-text";
     body.textContent = item.Text || (item.Answers ? "Ответы на вопросы" : "Вложения"); node.appendChild(body);
     var actions = document.createElement("div"); actions.className = "inbox-actions";
-    var queued = (chatInbox(chatId).items || []).some(function (pending) { return pending.Id === item.Id; });
+    var queued = (box.items || []).some(function (pending) { return pending.Id === item.Id; });
     if (item.localStatus === "unconfirmed") actions.appendChild(inboxButton("Повторить отправку", function () {
       submitInboxMessage(item.Text, item.Attachments || [], chatId, item.Delivery, item.Answers,
         item.SteerRunId || item.AcceptedRunId, item.SteerPendingId || item.PendingId);
@@ -274,9 +275,12 @@ function renderPendingInput(item, chatId, editing, component) {
         renderChatInbox();
       }));
     }
-    if (queued && (item.Status === "Pending" || chatInbox(chatId).paused && !chatInbox(chatId).running)) {
+    if (queued && (item.Status === "Pending" || box.paused && !box.running)) {
       actions.appendChild(inboxButton("Удалить", function () { changeInboxItem("removeChatInput", item); }));
     }
+    if (source && source.appendDraft && item.Text && item.Delivery === "Steer" && item.AcceptedRunId &&
+        (!box.running || box.runId && box.runId !== item.AcceptedRunId))
+      actions.appendChild(inboxButton("Вставить в ввод", function () { source.appendDraft(item.Text); }));
     if (actions.childNodes.length) {
       var menu = document.createElement("details"); menu.className = "inbox-item-menu";
       menu.setAttribute("data-disclosure-key", "input-menu");
@@ -299,16 +303,16 @@ function renderPendingInput(item, chatId, editing, component) {
   }
   return node;
 }
-function buildPendingInputUnits(component) {
+function buildPendingInputUnits(component, source) {
   var state = component ? component.inboxState : window.state;
-  var chatId = component ? component.target.sessionId : state.activeChatId, box = chatInbox(chatId), units = [];
+  var chatId = component ? component.target.sessionId : state.activeChatId, box = source ? source.box : chatInbox(chatId), units = [];
   var history = component ? component.snapshot().messages : state.messages;
-  var items = chatInputEchoes(chatId).filter(function (item) { return !item.Id || !(history || []).some(function (message) { return messageId(message) === item.Id; }); });
+  var items = (source ? box.items : chatInputEchoes(chatId)).filter(function (item) { return !item.Id || !(history || []).some(function (message) { return messageId(message) === item.Id; }); });
   if (box.paused && (box.items || []).length) units.push({ key: "live:inbox-paused", transient: true, signature: JSON.stringify([box.pauseReason, box.running]), render: function () {
     var note = document.createElement("div"); note.className = "inbox-pause";
     var reason = document.createElement("span"); reason.textContent = box.pauseReason || "Очередь приостановлена"; note.appendChild(reason);
     note.appendChild(inboxButton("Продолжить очередь", async function () {
-      try { applyChatInbox(await send("resumeChatInbox", { chatId: chatId })); }
+      try { if (source) await source.resume(); else applyChatInbox(await send("resumeChatInbox", { chatId: chatId })); }
       catch (error) { if (component) component.notice(error); else if (state.activeChatId === chatId) $("inboxStatus").textContent = error.message; }
     }));
     return note;
@@ -319,9 +323,9 @@ function buildPendingInputUnits(component) {
     return { key: "live:input:" + (item.OperationId || item.Id), transient: true,
       // Polling must not replace a focused editor or its selection. Save uses its captured revision.
       signature: JSON.stringify(editing ? [item.Id, "editing"] : [item,
-        (box.items || []).some(function (pending) { return pending.Id === item.Id; }), box.paused && !box.running]),
+        (box.items || []).some(function (pending) { return pending.Id === item.Id; }), box.paused && !box.running, box.runId]),
       actionsSignature: statusText,
       refreshActions: function (node) { node.querySelector(".inbox-item-status").textContent = statusText; },
-      render: function () { return renderPendingInput(item, chatId, editing, component); } };
+      render: function () { return renderPendingInput(item, chatId, editing, component, source); } };
   }));
 }

@@ -410,24 +410,8 @@ async function serve() {
     await normal.locator("#messages .chat-empty-suggestion").first().click();
     assert.match(await normal.locator("#chatInput").inputValue(), /Сравни сентябрь с августом/);
     await normal.locator("#chatInput").fill("");
-    await normal.locator('#composerAddPicker .composer-add-trigger').click();
-    assert.equal(await normal.locator('#composerAddPicker .composer-add-menu').getByText('Файл с компьютера').count(), 1,
-      'project chat offers file selection beside planning');
-    await normal.locator('#composerAddPicker .composer-add-menu').getByText('Файл с компьютера').click();
-    await normal.locator('#workspaceFileInput').setInputFiles({
-      name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Проектный файл для проверки.')
-    });
-    await normal.waitForFunction(() => document.querySelector('#chatInput').value.includes('chat-files/'));
-    assert.match(await normal.locator('#projectChatFileStatus').textContent(), /Файл добавлен в проект/);
-    await normal.locator("#chatInput").fill("");
-    await normal.locator('#composerAddPicker .composer-add-trigger').click();
-    await normal.locator('#composerAddPicker .composer-add-menu').getByText('Файл с компьютера').click();
-    await normal.locator('#workspaceFileInput').setInputFiles({
-      name: 'raw.bin', mimeType: 'application/octet-stream', buffer: Buffer.from([0, 255, 1])
-    });
-    await normal.locator('#projectChatFileStatus').getByText(/недоступно для чтения моделью/).waitFor();
-    assert.equal(await normal.locator('#chatInput').inputValue(), '',
-      'a binary upload does not claim that the project model can read it');
+    // Common attachment upload, independent drafts and late replies are exercised
+    // against mounted ChatViews in workspace-shared-draft.test.js.
     await normal.locator("#projectChatNew").click();
     await normal.waitForFunction(() => document.querySelector("#projectChatTree [aria-current='page']")?.textContent.includes("Новый чат"));
     await normal.locator("#chatInput").fill("Проверь источники");

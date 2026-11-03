@@ -107,6 +107,7 @@
   --shell-chooser-item-width: 170px;
   --menu-width: 248px;
   --shell-group-menu-width: 240px;
+  --shell-runs-menu-max-width: 340px;
   --menu-padding: var(--space-1);
   --menu-offset: 6px;
   --menu-row-padding: 7px var(--space-2);

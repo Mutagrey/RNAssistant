@@ -536,8 +536,10 @@ S2b.1–S2b.12 ниже — история выполненной подгото
 
 Ближайший законченный результат — одинаковые возможности уже работающего чата:
 
-1. Устранить оставшиеся расхождения Queue/Steer, вложений и контекста между
-   источниками. Проверить подтверждения/вопросы и ошибки в нескольких вкладках;
+1. Общие вложения и очередь активного Workspace реализованы в срезе ниже.
+   Устранить остаток: контекст/ручное сжатие, Steer при pending approval,
+   PDF page selectors и явное чтение исторических media-вложений. Проверить
+   подтверждения/вопросы и ошибки в нескольких вкладках;
    их адресная доставка уже подключена, но это ещё не полная parity capabilities.
    Недостающие contracts закрывать у domain owners, не постоянным скрытием controls.
 2. Переключить оставшиеся secondary consumers с selected facade на explicit
@@ -549,6 +551,42 @@ S2b.1–S2b.12 ниже — история выполненной подгото
 
 Полный S2 закрывается после parity и visual/behavior review. Windows/Office evidence
 остаётся отдельным gate; локальные mock/Chromium проверки его не заменяют.
+
+### Общие вложения, очередь и меню запросов — In Review, 2026-11-03
+
+Baseline `a96a1500`; owners: Core attachments, Application Conversations/Workspace,
+Web ConversationPanel/ActionMenu. Продолжение S2 и нижнее меню разрешены пользователем.
+
+- Workspace/plugin принимают общие staged attachments, immutable CAS и точные
+  message links. Upload lease включает workspace/chat; большие тексты входят
+  только через bounded `core.read`, без вставки тела в исходный prompt.
+  Старый upload в папку проекта/bridge/DTO/UI удалён.
+- Queue/Steer используют существующий ConversationInboxService и Application worker.
+  Очередь не получает выдуманный run ID; обычное завершение запускает следующий ввод,
+  Stop сохраняет его до явного продолжения. Edit/remove/steer адресуют input revision;
+  UI использует общие pending cards. Неприменённый Steer старого run не replay.
+- «Запросы N» в status bar читает RunOwner текущего assistant runtime без истории.
+  Строка открывает exact чат, Stop работает без его вкладки; close UI оставляет run
+  в фоне. Generation guards и run ID защищают от отмены нового запроса.
+  По уточнению пользователя: без chat icons, content width до 340 px.
+
+Минимальные проверки: Harness `plugins: workspace uses common message attachments`
+и `workspace: queue uses common owner and explicit resume`; Chromium
+`workspace-shared-draft`, `independent-chat-views`, `active-chat-runs`; pure JS
+`resource-upload` и `conversation-draft`. Проверены foreign workspace/draft,
+idempotent receipt, bounded UTF-16 окна, отмена/явное продолжение, exact late reply,
+общий queue editor, закрытые вкладки, stale Stop, narrow/125% zoom и focus.
+Три старых падения воспроизведены на чистом baseline и остаются в
+[RISK_REGISTER](../stabilization/RISK_REGISTER.md#проверки-parity-чата-старые-падения--2026-11-03).
+Это адресное host-neutral evidence, не зелёный полный Harness или Office qualification.
+
+Ревью: открыть production preview `/preview/web/?scenario=ready`, отправить запрос
+из Office и проекта, закрыть одну chat-вкладку, открыть её из «Запросы», остановить
+другую строку прямо в меню. Проверить короткое/длинное имя и узкое окно. Native
+queue/upload поведение проверяет Harness; mock не запускает модель. Откат — diff
+среза, без миграции сохранённых данных и без удаления старых пользовательских файлов.
+Остаток S2 перечислен выше; pending-approval/context/media parity и secondary
+consumers не объявлены завершёнными. Меню не агрегирует другие процессы/Office окна.
 
 ### S2b.1: общий owner отрисовки — 2026-11-02
 

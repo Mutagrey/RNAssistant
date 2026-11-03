@@ -90,7 +90,7 @@
       <button class="rail-button rail-settings" data-section="settings" data-tab="settings" data-rail-popover="settings-menu" aria-label="Настройки" title="Настройки"><svg data-rna-icon="settings" viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
 
-    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="workspaceDiagnostics" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
+    <footer class="workspace-statusbar"><span id="workspaceHostStatus"></span><span id="workspaceLayoutNotice" role="status" aria-live="polite"></span><span id="workspaceLayoutStatus"></span><button type="button" id="activeChatRunsButton" aria-label="Активные запросы" aria-haspopup="menu" aria-expanded="false"><svg data-rna-icon="chat" aria-hidden="true"></svg><span>Запросы</span><b id="activeChatRunsCount">0</b></button><button type="button" id="workspaceDiagnostics" title="Диагностика текущего чата"><svg data-rna-icon="chart" aria-hidden="true"></svg><span>Диагностика</span></button></footer>
     <button type="button" class="navigation-scrim" id="productNavigationScrim" aria-label="Закрыть навигацию" tabindex="-1" hidden></button>
     <main class="content">
       <section class="panel active" id="tab-chat">
@@ -162,7 +162,6 @@
           <div class="attachment-drafts hidden" id="attachmentDrafts" aria-live="polite"></div>
           <div class="attachment-drafts has-visual-annotations" id="pluginAnnotationDrafts" hidden></div>
           <div class="attachment-status" id="attachmentStatus" role="status" aria-live="polite" hidden></div>
-          <div class="attachment-status workspace-composer-only" id="projectChatFileStatus" role="status" aria-live="polite" hidden></div>
           <div class="context-strip hidden" id="contextStrip">
             <div class="context-strip-head">
               <button type="button" class="context-manage-button" id="openContextTabButton" title="Управлять контекстом" aria-label="Управлять контекстом" aria-expanded="false">
@@ -1189,6 +1188,7 @@
   <script src="js/app-plugin-release-view.js?v=plugin-materials-20261103"></script>
   <script src="js/app-material-view.js?v=plugin-materials-20261103"></script>
   <script src="js/app-dock-workspace.js?v=plugin-materials-20261103"></script>
+  <script src="js/app-active-runs.js?v=chat-parity-20261103"></script>
   <script src="js/app.js?v=chat-views-20261103"></script>
 </body>
 </html>

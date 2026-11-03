@@ -182,7 +182,6 @@ namespace RNAssistant.Application
                 foreach (var grant in _data.Values) grant.Dispose();
                 _data.Clear(); _candidates.Clear(); _revoked.Clear();
                 Conversations.Dispose();
-                CancelAllProjectChatFileUploads();
                 Conversations = new WorkspaceConversationService(_paths, _webHost, CaptureTools, _officeCapabilities,
                     () => PluginStore.AcquireRuntimeUse(_paths), IsPluginSourceWorkspace);
             }
@@ -1009,6 +1008,19 @@ namespace RNAssistant.Application
             var snapshot = ProjectChat(request);
             snapshot.InputReceipt = receipt;
             return snapshot;
+            }
+        }
+
+        public async Task<ProjectChatStateDto> UpdateProjectChatInputAsync(ProjectChatRequest request, AppSettings settings,
+            Func<string> key, CancellationToken token, Action<WorkspaceRunEvent> progress = null)
+        {
+            using (PluginStore.AcquireRuntimeUse(_paths))
+            {
+                var workspace = RequireProjectWorkspace(request?.WorkspaceId);
+                if (request.Inbox == null || request.Inbox.SessionId != request.SessionId)
+                    throw new PluginException("project_chat_invalid", "The queue target changed.");
+                await Conversations.UpdateInboxAsync(workspace, request.Inbox, settings, key, progress, token).ConfigureAwait(false);
+                return ProjectChat(request);
             }
         }
 

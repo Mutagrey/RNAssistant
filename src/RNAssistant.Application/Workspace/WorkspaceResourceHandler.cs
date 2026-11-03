@@ -124,7 +124,7 @@ namespace RNAssistant.Runtime
                         throw Error("Attachment reads require one semantic target and optional text window.",
                             "RESOURCE_REQUEST_INVALID");
                     read = _chatAttachments.Read(target, _maximumTextReadCharacters,
-                        startLine, lineCount, startChar, charCount);
+                        startLine, lineCount, startChar, charCount, cancellationToken);
                     var selected = startChar.HasValue
                         ? ResourceReadProjection.FromCharacters(read.Result, target, "attachment", "conversation",
                             startChar.Value, charCount.Value)
@@ -153,8 +153,8 @@ namespace RNAssistant.Runtime
                         : ResourceCoverage.Whole();
                     read = read.WithReadMetadata(selected, attachmentRequestedCoverage);
                     if (read.Result.Complete) read.RequireCompleteExactText();
-                    return Return(ToolResult.Ok(read.Result.Complete ? "Complete visual selection read." :
-                        "Exact bounded visual selection excerpt read.", JsonConvert.SerializeObject(selected),
+                    return Return(ToolResult.Ok(read.Result.Complete ? "Complete attachment text read." :
+                        "Exact bounded attachment text excerpt read.", JsonConvert.SerializeObject(selected),
                         new[] { read.Result.Resource.Reference }), read.Evidence);
                 }
                 if (isTree && (type != "file" || !hasPointer || depth < 0 || treeOffset < 0 || treeLimit < 1 ||

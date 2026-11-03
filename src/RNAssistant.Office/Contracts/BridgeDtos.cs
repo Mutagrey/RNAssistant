@@ -480,6 +480,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class DiscardChatResourceDraftPayload : ChatPayload
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("id")]
         public string Id { get; set; }
     }

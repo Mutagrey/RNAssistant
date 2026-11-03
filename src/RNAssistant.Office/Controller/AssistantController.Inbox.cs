@@ -70,6 +70,17 @@ namespace RNAssistant.Office
             return InboxResponse(_inbox.Snapshot(session));
         }
 
+        internal IReadOnlyList<ConversationActiveSnapshot> ActiveChatRuns() { return _activeRuns.Active(); }
+
+        internal bool StopActiveChatRun(string chatId, string runId)
+        {
+            var run = _activeRuns.Active().FirstOrDefault(item => item.ChatId == chatId && item.RunId == runId);
+            if (run == null || !_activeRuns.Cancel(chatId, runId)) return false;
+            // Signal cancellation before any durable queue write can wait on storage.
+            if (run.Session != null) _inbox.PauseForRun(run.Session, runId);
+            return true;
+        }
+
         public ChatResourceDraftResponse StageSelectionInput(string mode, string chatId)
         {
             if (string.IsNullOrWhiteSpace(chatId)) throw new ArgumentException("An explicit chat is required.");

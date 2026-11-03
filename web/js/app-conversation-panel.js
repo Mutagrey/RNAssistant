@@ -48,6 +48,7 @@
       approve: node("workspaceChatApprove"), reject: node("workspaceChatReject") });
     view.composer = composer;
     var component = { target: address, route: route(address), element: root, view: view, composer: composer, node: node,
+      inboxState: { inboxEditing: null, inboxEditDraft: null },
       loading: false, loadError: "", error: "", isCurrent: function () { return !disposed; },
       snapshot: function () { return adapter.snapshot(); },
       refresh: function (options) { return adapter.refresh(options); },

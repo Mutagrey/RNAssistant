@@ -207,7 +207,7 @@ namespace RNAssistant.Office
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
             // Staging owns only a bounded upload lease, never the run's mutable history.
-            return _resourceData.OpenUpload(LoadAddressedSession(request.ChatId), request, cancellationToken);
+            return _resourceData.OpenUpload(LoadDiagnosticsSession(request.ChatId, request.WorkspaceId), request, cancellationToken);
         }
 
         public async Task<ChatResourceDraftResponse> CompleteChatResourceUploadAsync(ResourceUploadLeaseRequest request,
@@ -215,7 +215,7 @@ namespace RNAssistant.Office
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            var session = LoadAddressedSession(request.ChatId);
+            var session = LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
             // Extraction produces a chat-owned draft; publication happens only at a run boundary.
             return await Task.Run(() => _resourceData.CompleteUpload(session, request.LeaseId,
                 _chatResourceIngestion, cancellationToken), cancellationToken).ConfigureAwait(false);
@@ -225,13 +225,15 @@ namespace RNAssistant.Office
         {
             if (request == null || string.IsNullOrWhiteSpace(request.ChatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            _resourceData.CloseUpload(request.ChatId, request.LeaseId);
+            if (request.WorkspaceId != null) LoadDiagnosticsSession(request.ChatId, request.WorkspaceId);
+            _resourceData.CloseUpload(request.ChatId, request.LeaseId,
+                ResourceDataPlaneService.AttachmentUploadOwner(request.WorkspaceId));
             return new ResourceDataCloseResponse { Closed = true };
         }
 
-        public DeleteResponse DiscardChatResourceDraft(string chatId, string id)
+        public DeleteResponse DiscardChatResourceDraft(string chatId, string id, string workspaceId = null)
         {
-            var session = LoadAddressedSession(chatId);
+            var session = LoadDiagnosticsSession(chatId, workspaceId);
             _chatResourceIngestion.Discard(session, id);
             return new DeleteResponse { Deleted = true };
         }

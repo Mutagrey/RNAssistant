@@ -6,12 +6,33 @@ using RNAssistant.Core.Agent;
 
 namespace RNAssistant.Runtime.Contracts
 {
+    [JsonConverter(typeof(Newtonsoft.Json.Converters.StringEnumConverter))]
+    public enum WorkspaceInboxAction { Edit, Remove, Steer, Resume }
+
+    public sealed class WorkspaceInboxCommand
+    {
+        public string SessionId { get; set; }
+        public WorkspaceInboxAction Action { get; set; }
+        public string InputId { get; set; }
+        public long ExpectedRevision { get; set; }
+        public string Text { get; set; }
+    }
+
+    public sealed class WorkspaceInboxReceipt
+    {
+        public string SessionId { get; set; }
+        public string InputId { get; set; }
+        public long Revision { get; set; }
+    }
+
     public sealed class WorkspaceSubmitInputRequest
     {
         public string SessionId { get; set; }
         public string RequestId { get; set; }
         [JsonProperty(NullValueHandling = NullValueHandling.Ignore)]
         public string SteerRunId { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Enqueue { get; set; }
         public string Message { get; set; }
         public string EditMessageId { get; set; }
         public long? ExpectedRevision { get; set; }
@@ -38,6 +59,8 @@ namespace RNAssistant.Runtime.Contracts
         // Durable intake for an exact active run; delivery may still be pending.
         [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
         public bool Steering { get; set; }
+        [JsonProperty(DefaultValueHandling = DefaultValueHandling.Ignore)]
+        public bool Queued { get; set; }
     }
 
     public sealed class WorkspaceSessionSnapshot
@@ -86,6 +109,10 @@ namespace RNAssistant.Runtime.Contracts
         public string Id { get; set; }
         public string RunId { get; set; }
         public string Text { get; set; }
+        public long Revision { get; set; }
+        public InputDelivery Delivery { get; set; }
+        public ConversationInputStatus Status { get; set; }
+        public IReadOnlyList<ChatAttachment> Attachments { get; set; }
     }
 
     public sealed class WorkspaceContextUsage

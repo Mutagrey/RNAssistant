@@ -16,6 +16,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ResourceUploadOpenRequest : ChatPayload
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("fileName")] public string FileName { get; set; }
         [JsonProperty("contentType")] public string ContentType { get; set; }
         [JsonProperty("byteLength")] public long ByteLength { get; set; }
@@ -23,6 +24,7 @@ namespace RNAssistant.Office.Contracts
 
     public sealed class ResourceUploadLeaseRequest : ChatPayload
     {
+        [JsonProperty("workspaceId", NullValueHandling = NullValueHandling.Ignore)] public string WorkspaceId { get; set; }
         [JsonProperty("leaseId")] public string LeaseId { get; set; }
     }
 

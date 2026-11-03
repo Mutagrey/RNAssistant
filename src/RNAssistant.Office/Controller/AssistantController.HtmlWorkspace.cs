@@ -48,7 +48,7 @@ namespace RNAssistant.Office
         private bool ResourceOwnerIsActive(string chatId, string workspaceId)
         {
             if (Volatile.Read(ref _disposed) != 0 || string.IsNullOrWhiteSpace(chatId)) return false;
-            var diagnosticOwner = new[] { ModelContextInspectorService.Owner, TrajectoryPayloadService.Owner, TrajectoryExportDownloadService.Owner }
+            var diagnosticOwner = new[] { ResourceDataPlaneService.UploadOwner, ModelContextInspectorService.Owner, TrajectoryPayloadService.Owner, TrajectoryExportDownloadService.Owner }
                 .FirstOrDefault(owner => workspaceId != null && workspaceId.StartsWith(owner + ":", StringComparison.Ordinal));
             if (diagnosticOwner != null)
             {
@@ -63,7 +63,8 @@ namespace RNAssistant.Office
             try
             {
                 // Lease checks never select a different chat or fall back to the active one.
-                var session = LoadAddressedSession(chatId);
+                var session = workspaceId == ResourceDataPlaneService.UploadOwner
+                    ? LoadDiagnosticsSession(chatId, null) : LoadAddressedSession(chatId);
                 return session != null && (workspaceId == "viewer" || workspaceId == ArtifactCatalogService.Owner || workspaceId == ResourceDataPlaneService.UploadOwner ||
                     workspaceId == TrajectoryExportDownloadService.Owner ||
                     workspaceId == TrajectoryPayloadService.Owner ||

@@ -46,12 +46,13 @@ namespace RNAssistant.Runtime
 
         public WorkspaceRunControl(string scope, string sessionId, string runId, Func<string, bool> matches,
             Func<WorkspaceModelProgress> preview, ConversationRunHandle run,
-            Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input = null, Func<bool> acceptsInput = null)
+            Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input = null, Func<bool> acceptsInput = null,
+            Func<WorkspaceInboxCommand, WorkspaceInboxReceipt> inbox = null)
         {
             _run = run ?? throw new ArgumentNullException(nameof(run));
             var name = Name(scope, sessionId, runId);
             var pipe = Server(name); // Bind before returning the application owner.
-            _listener = ListenAsync(name, pipe, matches, preview, input, acceptsInput);
+            _listener = ListenAsync(name, pipe, matches, preview, input, acceptsInput, inbox);
         }
 
         private static string Name(string scope, string sessionId, string runId)
@@ -137,9 +138,15 @@ namespace RNAssistant.Runtime
             }
         }
 
+        private sealed class InboxAdmission
+        {
+            public WorkspaceInboxReceipt Receipt { get; set; }
+            public string Error { get; set; }
+        }
+
         private async Task ListenAsync(string name, NamedPipeServerStream first, Func<string, bool> matches,
             Func<WorkspaceModelProgress> preview, Func<WorkspaceSubmitInputRequest, WorkspaceInputReceipt> input,
-            Func<bool> acceptsInput)
+            Func<bool> acceptsInput, Func<WorkspaceInboxCommand, WorkspaceInboxReceipt> inbox)
         {
             var pipe = first;
             while (true)
@@ -171,6 +178,20 @@ namespace RNAssistant.Runtime
                                 await pipe.WriteAsync(size, 0, size.Length, deadline.Token).ConfigureAwait(false);
                                 if (content.Length > 0)
                                     await pipe.WriteAsync(content, 0, content.Length, deadline.Token).ConfigureAwait(false);
+                            }
+                            else if (request == "inbox")
+                            {
+                                var content = await ReadFrameAsync(pipe, InputMaximumBytes, deadline.Token).ConfigureAwait(false);
+                                var response = new InboxAdmission();
+                                try
+                                {
+                                    if (inbox == null) throw new InvalidOperationException("Очередь запуска недоступна.");
+                                    deadline.Token.ThrowIfCancellationRequested();
+                                    response.Receipt = inbox(JsonConvert.DeserializeObject<WorkspaceInboxCommand>(Encoding.UTF8.GetString(content)));
+                                }
+                                catch (Exception error) when (error is ArgumentException || error is InvalidOperationException || error is JsonException)
+                                { response.Error = error.Message; }
+                                await WriteFrameAsync(pipe, Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(response)), deadline.Token).ConfigureAwait(false);
                             }
                             else if (request == "input")
                             {
@@ -224,12 +245,12 @@ namespace RNAssistant.Runtime
         }
 
         public static async Task<WorkspaceInputReceipt> SendInputAsync(string scope, WorkspaceSubmitInputRequest request,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken, string destinationRunId = null)
         {
             var content = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(request));
             if (content.Length > InputMaximumBytes) throw new ArgumentException("Уточнение слишком большое.");
             using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
-            using (var pipe = new NamedPipeClientStream(".", Name(scope, request.SessionId, request.SteerRunId), PipeDirection.InOut, ClientOptions))
+            using (var pipe = new NamedPipeClientStream(".", Name(scope, request.SessionId, destinationRunId ?? request.SteerRunId), PipeDirection.InOut, ClientOptions))
             {
                 deadline.CancelAfter(2000);
                 try
@@ -243,14 +264,38 @@ namespace RNAssistant.Runtime
                     var response = JsonConvert.DeserializeObject<WorkspaceInputAdmission>(Encoding.UTF8.GetString(bytes));
                     if (response?.Error != null) throw new InvalidOperationException(response.Error);
                     var receipt = response?.Receipt;
-                    if (receipt == null || receipt.SessionId != request.SessionId || receipt.RunId != request.SteerRunId ||
-                        receipt.RequestId != request.RequestId || !receipt.Steering || string.IsNullOrWhiteSpace(receipt.InputId) ||
+                    if (receipt == null || receipt.SessionId != request.SessionId ||
+                        (request.Enqueue ? !receipt.Queued || receipt.Steering : receipt.RunId != request.SteerRunId || !receipt.Steering) ||
+                        receipt.RequestId != request.RequestId || string.IsNullOrWhiteSpace(receipt.InputId) ||
                         string.IsNullOrWhiteSpace(receipt.AcceptedCursor) || receipt.AcceptedSequence < 1)
                         throw new IOException("Input admission receipt is missing or belongs to another request.");
                     return receipt;
                 }
                 catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
                 { throw new IOException("Приём уточнения не подтверждён. Черновик сохранён; обновление чата проверит доставку."); }
+            }
+        }
+
+        public static async Task<WorkspaceInboxReceipt> SendInboxAsync(string scope, string runId,
+            WorkspaceInboxCommand request, CancellationToken cancellationToken)
+        {
+            var content = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(request));
+            if (content.Length > InputMaximumBytes) throw new ArgumentException("Сообщение очереди слишком большое.");
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            using (var pipe = new NamedPipeClientStream(".", Name(scope, request.SessionId, runId), PipeDirection.InOut, ClientOptions))
+            {
+                deadline.CancelAfter(2000);
+                await pipe.ConnectAsync(deadline.Token).ConfigureAwait(false);
+                RequireCurrentUser(pipe);
+                var command = Encoding.ASCII.GetBytes("inbox\n");
+                await pipe.WriteAsync(command, 0, command.Length, deadline.Token).ConfigureAwait(false);
+                await WriteFrameAsync(pipe, content, deadline.Token).ConfigureAwait(false);
+                var bytes = await ReadFrameAsync(pipe, InputMaximumBytes, deadline.Token).ConfigureAwait(false);
+                var response = JsonConvert.DeserializeObject<InboxAdmission>(Encoding.UTF8.GetString(bytes));
+                if (response?.Error != null) throw new InvalidOperationException(response.Error);
+                if (response?.Receipt?.SessionId != request.SessionId || response.Receipt.InputId != request.InputId)
+                    throw new IOException("Queue change is unconfirmed. Refresh before retrying.");
+                return response.Receipt;
             }
         }
 

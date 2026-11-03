@@ -24,7 +24,7 @@
     return function () { if (pending.get(key) === token) pending.delete(key); };
   }
 
-  function accepted(kind, target, operationId, candidate, steerRunId) {
+  function accepted(kind, target, operationId, candidate, steerRunId, queued) {
     if (!target || !operationId || !candidate) return false;
     var receipt = kind === "office" ? candidate.acceptedInput : candidate;
     if (!receipt) return false;
@@ -36,17 +36,18 @@
     }
     if (kind !== "workspace") throw new Error("Unknown conversation input kind: " + kind);
     if (receipt.SessionId !== target.sessionId || receipt.RequestId !== operationId ||
-        !receipt.InputId || !receipt.RunId || !receipt.AcceptedCursor ||
+        !receipt.InputId || !receipt.AcceptedCursor ||
         !Number.isSafeInteger(receipt.AcceptedSequence) || receipt.AcceptedSequence <= 0) return false;
     if (steerRunId) return receipt.RunId === steerRunId && receipt.Steering === true;
-    return receipt.DeliveryRecorded === true && receipt.Steering !== true;
+    if (queued) return receipt.Queued === true && receipt.Steering !== true;
+    return !!receipt.RunId && receipt.DeliveryRecorded === true && receipt.Steering !== true;
   }
 
-  function create(kind, target, operationId, steerRunId, onAccepted) {
+  function create(kind, target, operationId, steerRunId, onAccepted, queued) {
     var acknowledged = false;
     function accept(candidate) {
       if (acknowledged) return true;
-      if (!accepted(kind, target, operationId, candidate, steerRunId)) return false;
+      if (!accepted(kind, target, operationId, candidate, steerRunId, queued)) return false;
       if (onAccepted) onAccepted(candidate);
       acknowledged = true;
       return true;

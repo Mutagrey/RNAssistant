@@ -619,6 +619,16 @@ the Office HTML and workspace plugin authoring skills. It does not establish a
 DOM-to-file mapping or grant mutation authority; exact source matching, guarded
 patching and visible preview verification remain separate steps.
 
+Workspace/project/plugin chats also accept ordinary files through the same scoped
+binary upload and AttachmentStore path (2026-11-03). They no longer copy uploads to
+`chat-files/` or insert paths in the composer. The accepted input event and user
+message retain exact original/extraction hashes and source links. `core.find`
+returns message-attachment targets; `core.read` streams verified extracted UTF-8
+into the shared bounded ResourceTextWindow, preserving UTF-16 boundaries, source
+truncation and cancellation. Current image/audio delivery uses the existing LlmClient
+attachment readers. PDF page selectors and explicit historical media reads in this
+Workspace provider remain open parity work; unavailable representations fail explicitly.
+
 The provider still verifies document ownership, committed publication, original
 metadata and explicit removal; content reads retain exact hash/length checks.
 Missing links/metadata, ambiguous labels and damaged originals fail explicitly;

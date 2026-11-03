@@ -100,10 +100,10 @@ namespace RNAssistant.Office.WebView
                         var submit = Payload<ProjectChatRequest>(payload);
                         return await Plugins.SubmitProjectChatAsync(submit, settings.Load(), settings.LoadApiKey, token,
                             progress => ReportWorkspaceProgress(id, submit, progress));
-                    case BridgeOperationId.BeginProjectChatFileUpload: return Plugins.BeginProjectChatFileUpload(Payload<ProjectChatUploadOpenRequest>(payload));
-                    case BridgeOperationId.WriteProjectChatFileChunk: return Plugins.WriteProjectChatFileChunk(Payload<ProjectChatUploadChunkRequest>(payload));
-                    case BridgeOperationId.CompleteProjectChatFileUpload: return Plugins.CompleteProjectChatFileUpload(Payload<ProjectChatUploadLeaseRequest>(payload),token);
-                    case BridgeOperationId.CancelProjectChatFileUpload: return Plugins.CancelProjectChatFileUpload(Payload<ProjectChatUploadLeaseRequest>(payload));
+                    case BridgeOperationId.UpdateProjectChatInput:
+                        var inbox = Payload<ProjectChatRequest>(payload);
+                        return await Plugins.UpdateProjectChatInputAsync(inbox, settings.Load(), settings.LoadApiKey, token,
+                            progress => ReportWorkspaceProgress(id, inbox, progress));
                     case BridgeOperationId.ResolveProjectChat: case BridgeOperationId.CancelProjectChat:
                         var control = Payload<ProjectChatRequest>(payload);
                         return await Plugins.ControlProjectChatAsync(control, operation==BridgeOperationId.CancelProjectChat,

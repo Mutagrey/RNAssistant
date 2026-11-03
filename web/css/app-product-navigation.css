@@ -85,3 +85,11 @@
   .workspace-menu-button { width: 28px; padding: 5px; }
   .workspace-statusbar button { margin-left: auto; }
 }
+
+#activeChatRunsButton { flex: 0 0 auto; white-space: nowrap; }
+#activeChatRunsButton.has-active-runs { color: var(--accent); }
+#activeChatRunsCount { font-weight: 600; min-width: 1ch; font-variant-numeric: tabular-nums; }
+.active-chat-runs-menu { --menu-width: max-content; --menu-max-width: var(--shell-runs-menu-max-width); }
+.active-chat-runs-menu .rna-action-menu-row > button:first-child { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 0; }
+.active-chat-runs-menu .rna-action-menu-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.active-chat-runs-menu .rna-action-menu-row small { margin-left: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-muted); }

@@ -2,7 +2,7 @@
   "use strict";
   var selectedSessions = new Map();
   var viewNodes = { Messages: "messages", Form: "chatForm", Input: "chatInput", Send: "sendButton", Stop: "stopButton",
-    Notice: "inboxStatus", FileStatus: "projectChatFileStatus", Control: "workspaceChatControl", Pending: "workspaceChatPending",
+    Notice: "inboxStatus", Control: "workspaceChatControl", Pending: "workspaceChatPending",
     Approve: "workspaceChatApprove", Reject: "workspaceChatReject", Questions: "workspaceChatQuestions" };
   function selected() { return window.RNAssistantConversationPanel && RNAssistantConversationPanel.selected(); }
   function node(name) { var component = selected(); return viewNodes[name] ? component ? component.node(viewNodes[name]) : document.getElementById(viewNodes[name]) : null; }
@@ -137,7 +137,8 @@
     var messages = chat.messages || [];
     var actionMessage = messages.find(visibleMessage);
     var historyActions = !!actionMessage && presentation.invoke("canMessageAction", { name: "fork", message: actionMessage, index: 0 });
-    var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions]);
+    var signature = JSON.stringify([presentation.actionKey, chat.messages || [], live, field(snapshot, "pendingInputs"), status, start, field(chat, "messageTotalCount"), historyActions, emptyOptions,
+      RNAssistantConversationPanel.find(conversationTarget(chat))?.inboxState?.inboxEditing]);
     if (!changed && view.cache.signature === signature) return;
     var viewport = !following ? frame.viewport : null;
     list.dataset.session = JSON.stringify([target.source, target.workspaceId, target.sessionId]);
@@ -193,24 +194,19 @@
         return createChatHistoryButton("latest", function () { return presentation.invoke("loadLatest"); });
       });
     }
-    (field(snapshot, "pendingInputs") || []).forEach(function (pending) {
-      var waiting = status === "running" && pending.RunId === field(snapshot, "runId");
-      appendMessageUnit(units, "input:" + pending.Id, JSON.stringify([pending, waiting, presentation.actionKey]), function () {
-        var article = document.createElement("article"); article.className = "message user pending inbox-message";
-        article.dataset.inputId = pending.Id;
-        var status = document.createElement("div"); status.className = "inbox-item-status";
-        status.textContent = pending.RunId === field(snapshot, "runId") ? "Уточнение сохранено, но ещё не применено" :
-          "Уточнение из предыдущего запуска не применено";
-        var body = document.createElement("div"); body.className = "markdown inbox-pending-text"; body.textContent = pending.Text;
-        article.append(status, body);
-        if (!waiting) {
-          var restore = document.createElement("button"); restore.type = "button"; restore.textContent = "Вставить в ввод";
-          restore.onclick = function () { presentation.invoke("appendDraft", pending.Text); };
-          article.appendChild(restore);
-        }
-        return article;
+    var component = RNAssistantConversationPanel.find(conversationTarget(chat));
+    if (component) {
+      var queue = (field(snapshot, "pendingInputs") || []).map(function (item) {
+        return Object.assign({}, item, { AcceptedRunId: item.RunId,
+          Delivery: item.Delivery || "Steer", Status: item.Status || "Pending" });
       });
-    });
+      var inboxSource = { box: { items: queue, running: status === "running", runId: field(snapshot, "runId"), activeRun: status === "running" || !!chat.pendingId,
+        paused: status !== "running" && !chat.pendingId },
+        change: function (action, item, text) { return presentation.invoke("updateInbox", { action: action, item: item, text: text }); },
+        appendDraft: function (text) { return presentation.invoke("appendDraft", text); },
+        resume: function () { return presentation.invoke("updateInbox", { action: "resumeChatInbox" }); } };
+      buildPendingInputUnits(component, inboxSource).forEach(function (unit) { units.push(unit); });
+    }
     reconcileMessageUnits(list, units, false);
     view.cache.liveRunId = liveRunId || null;
     if (viewport) restoreMessageViewport(list, viewport);
@@ -249,7 +245,7 @@
     function pluginBusy() { return window.RNAssistantPlugins && RNAssistantPlugins.isChatBusy(target); }
     function pending() { return uploading || RNAssistantConversationInput.isPending("workspace", target); }
     function sendBlocked() { return pluginBusy() || snapshot().project && snapshot().project.available === false ||
-      !!snapshot().pendingId || running() && (!field(state(), "canSteer") || !!(draft() && draft().attachments.length)); }
+      !!snapshot().pendingId || running() && !field(state(), "canSteer"); }
     function accept(value, options) {
       if (!component.isCurrent()) return false;
       owner.accept(value, options); component.loading = false; component.loadError = "";
@@ -286,7 +282,8 @@
         Mode: running() ? field(state(), "mode") : saved && saved.mode || "agent",
         ReasoningEnabled: running() ? !!field(field(state(), "modelConfiguration"), "reasoningEnabled") :
           !!(saved && saved.reasoning) && effectiveModelSupportsReasoning(field(state(), "model") || settingsModel()) !== false,
-        SteerRunId: running() ? field(state(), "runId") : null,
+        SteerRunId: running() && runningMessageDelivery() !== "Queue" ? field(state(), "runId") : null,
+        Enqueue: running() && runningMessageDelivery() === "Queue",
         EditMessageId: editing && editing.messageId, ExpectedRevision: editing && editing.revision });
       var gate = RNAssistantConversationInput.create("workspace", target, input.requestId, input.SteerRunId, function () {
         if (answers) return;
@@ -296,7 +293,7 @@
         } else {
           var before = draft(); acceptWorkspaceInput(target, input, text, saved && saved.version); component.acceptDraft(before, draft());
         }
-      });
+      }, input.Enqueue);
       if (editing) editing.busy = true;
       await run(function () {
         return gate.submit(function () { return answers ? Promise.resolve() : RNAssistantChatDrafts.flushWorkspace(target); },
@@ -310,6 +307,17 @@
       if (editing) editing.busy = false; component.render();
     }
     var commands = {
+      updateInbox: function (change) {
+        var actions = { editChatInput: "Edit", removeChatInput: "Remove", steerChatInput: "Steer", resumeChatInbox: "Resume" };
+        var action = actions[change.action]; if (!action) return;
+        return run(async function () {
+          var value = await send("updateProjectChatInput", { workspaceId: target.workspaceId, sessionId: target.sessionId,
+            inbox: { SessionId: target.sessionId, Action: action, InputId: change.item && change.item.Id,
+              ExpectedRevision: change.item && change.item.Revision || 0, Text: change.text } });
+          component.inboxState.inboxEditing = null; component.inboxState.inboxEditDraft = null;
+          return value;
+        });
+      },
       snapshot: snapshot,
       preferences: function () { var saved = draft(); return { selected: field(state(), "model") || "", mode: saved && saved.mode || "agent",
         reasoning: !!(saved && saved.reasoning), runningModel: running() ? field(field(state(), "modelConfiguration"), "model") : null,
@@ -383,9 +391,14 @@
       node("activeChatSubtitle").textContent = [snapshot().project && snapshot().project.name,
         component.loading ? "Загрузка чата…" : component.loadError || formatChatMessageCount((snapshot().messages || []).length)].filter(Boolean).join(" · ");
       node("documentNotice").classList.add("hidden"); node("agentApprovalDock").classList.add("hidden");
-      var status = RNAssistantProjectChats.fileStatus(target), box = node("projectChatFileStatus");
-      box.textContent = status && status.message || ""; box.hidden = !box.textContent;
-      box.classList.toggle("is-error", !!(status && status.error));
+      renderConversationAttachments(component, draft(), async function (item) {
+        try {
+          if (!item.unavailable) await send("discardChatResourceDraft", { workspaceId: target.workspaceId, chatId: target.sessionId, id: attachmentId(item) });
+          var saved = draft();
+          if (saved) updateWorkspaceDraft(target, { attachments: saved.attachments.filter(function (value) { return attachmentId(value) !== attachmentId(item); }) });
+          if (item.previewUrl) URL.revokeObjectURL(item.previewUrl); component.controls();
+        } catch (error) { component.notice(error); }
+      });
       node("workspaceChatControl").hidden = !snapshot().pendingId;
       node("workspaceChatPending").textContent = snapshot().pendingId ? (snapshot().pendingTool || "Действие") + "\n" + (snapshot().pendingArguments || "") : "";
       if (snapshot().pendingId && snapshot().patchPreview && window.RNAssistantRunChanges)
@@ -403,12 +416,11 @@
       hasAttachments: function () { var saved = draft(); return !!(saved && saved.attachments.length); },
       renderUtilities: renderUtilities,
       presentation: function () { return { running: running(), canceling: cancelling, readOnly: readOnly(snapshot()), sendBlocked: sendBlocked(),
-        awaitingReply: runStatus(state()) === "awaiting_user", awaitingApproval: !!snapshot().pendingId, queue: false }; },
+        awaitingReply: runStatus(state()) === "awaiting_user", awaitingApproval: !!snapshot().pendingId, queue: runningMessageDelivery() === "Queue" }; },
       attachFiles: async function (files) {
         if (!files.length || pending() || edit() || readOnly(snapshot()) || component.loading || window.state.bridgeUnavailable) return;
-        if (files.length > 10) { component.notice("За один раз можно добавить не более 10 файлов."); return; }
         uploading = true; component.controls();
-        try { for (var i = 0; i < files.length; i++) if (!await RNAssistantProjectChats.upload(target, files[i], component)) break; }
+        try { await stageChatResourceFiles(target.sessionId, files, target); }
         finally { uploading = false; component.controls(); }
       },
       activate: function () { observer.select(snapshot(), pending()); }, progress: observer.acceptProgress,
