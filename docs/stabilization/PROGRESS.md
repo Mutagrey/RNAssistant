@@ -1,5 +1,18 @@
 # Stabilization progress
 
+## Фото: блокировка при открытии диагностики — 2026-11-03
+
+Owners: Core ChatStore / Office diagnostic scope and bridge. Повторный
+`GetChatTrajectory` на фото получает document-lock timeout; держатель работает
+несколько секунд. Воспроизведена лишняя загрузка каталога/полного чата перед
+диагностикой. Теперь scope читает только сохранённые identity/authority/revision,
+не восстанавливает run и не загружает execution CAS. Raw event reads используют
+двухсекундный read timeout; bridge возвращает `chat_storage_busy` без общего stack
+trace. Лог называет ожидающую/удерживающую операции и длительность удержания.
+8 адресных host-neutral проверок прошли. Полный raw scan остаётся под lock;
+конкретный Windows-держатель по старому фото неизвестен. Это уменьшение лишней
+работы и исправление обработки busy, не закрытие Windows latency/qualification.
+
 ## Пропажа сообщений Office-чата — 2026-11-03
 
 Owners: общий Web ConversationState/Messages и Office Inbox. Воспроизведены и

@@ -9,6 +9,8 @@ namespace RNAssistant.Core.Persistence
         ChatSession CreateTransient(string host, string documentKey, string documentTitle, string title);
         ChatSession Load(string host, string documentKey, string sessionId);
         ChatSession Load(string sessionId);
+        // Identity/revision only for read-only diagnostics; never commit this partial session.
+        ChatSession ReadDiagnosticsSession(string sessionId);
         void Commit(ChatSession session, ConversationCommit commit);
         void CommitRun(ChatSession session, ConversationRunCommit commit);
         void SetTitle(ChatSession session, string title);

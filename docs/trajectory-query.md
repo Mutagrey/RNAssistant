@@ -27,6 +27,11 @@ requests carry explicit `workspaceId` and `chatId`; each response confirms both.
 `ChatDiagnosticsScope` validates a connected workspace/session before event reads,
 including saved history while its source folder is unavailable. It also owns the
 shared scope check used by Model Context; its old private workspace loader is removed.
+Office and workspace scope resolution reads only stored identity/authority/revision
+from the verified projection, without hydrating a conversation or recovering its run.
+Contention returns `chat_storage_busy`; the UI may request the read again explicitly.
+Raw event validation still scans the journal under the document boundary; no new
+snapshot store, automatic retry or reduced integrity check is introduced.
 Workspace payload/export leases use `trajectory-payload:<workspaceId>` and
 `trajectory-export:<workspaceId>`. Office owners remain unchanged.
 

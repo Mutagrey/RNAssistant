@@ -746,7 +746,7 @@ namespace RNAssistant.Harness
                 var gate = typeof(ChatStore).GetMethod("AcquireDocumentLock", BindingFlags.Instance | BindingFlags.NonPublic);
                 Task<ChatSession> read;
                 using (var started = new ManualResetEventSlim())
-                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey }))
+                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey, "testWriter" }))
                 {
                     read = Task.Run(() => { started.Set(); return new ChatStore(paths).Load(chat.Host, chat.DocumentKey, chat.Id); });
                     AssertTrue(started.Wait(3000), "reader starts while the document append boundary is held");
@@ -773,6 +773,7 @@ namespace RNAssistant.Harness
                 };
                 writer.Save(chat);
                 var diagnostics = new List<string>();
+                writer.PerformanceLog = diagnostics.Add;
                 var reader = new ChatStore(paths)
                 {
                     ReadLockTimeout = TimeSpan.FromMilliseconds(300),
@@ -780,16 +781,26 @@ namespace RNAssistant.Harness
                 };
                 var service = new ChatSessionService(adapter, ConversationStore(reader));
                 var gate = typeof(ChatStore).GetMethod("AcquireDocumentLock", BindingFlags.Instance | BindingFlags.NonPublic);
-                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey }))
+                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey, "testWriter" }))
                 {
                     service.ReconcileInterruptedRuns("current");
                     var refused = false;
                     try { reader.LoadOrCreateActive(chat.Host, chat.DocumentKey, chat.DocumentTitle); }
                     catch (ChatStorageLockTimeoutException) { refused = true; }
                     AssertTrue(refused, "busy active chat is not replaced by a transient new chat");
+                    var eventStore = new ChatEventStoreAdapter(reader);
+                    foreach (var mode in new[] { SessionEventReadMode.Validated, SessionEventReadMode.RequireComplete })
+                    {
+                        var timer = System.Diagnostics.Stopwatch.StartNew();
+                        RuntimeThrows<ChatStorageLockTimeoutException>(() => eventStore.Read(chat, mode));
+                        AssertTrue(timer.ElapsedMilliseconds < 3000, "diagnostic event reads use the short read timeout");
+                    }
                 }
                 AssertTrue(diagnostics.Any(line => line.Contains("stage=documentLockTimeout") &&
-                    line.Contains("localThread=")), "busy lock reports a tracked local owner without a path");
+                    line.Contains("localThread=") && line.Contains("ownerOperation=testWriter") &&
+                    line.Contains("operation=ReadEvents")), "busy lock identifies the reader and holder without a path");
+                AssertTrue(diagnostics.Any(line => line.Contains("stage=documentLockHeld") &&
+                    line.Contains("operation=testWriter")), "slow holder reports its duration after release");
                 var recovered = service.LoadSession(null);
                 AssertEqual(chat.Id, recovered.Id, "existing active chat opens after its lock releases");
                 AssertEqual("interrupted", recovered.LastRun.Status,
@@ -884,7 +895,7 @@ namespace RNAssistant.Harness
                 var gate = typeof(ChatStore).GetMethod("AcquireDocumentLock", BindingFlags.Instance | BindingFlags.NonPublic);
                 Task<IReadOnlyList<ChatSessionHeader>> catalog;
                 Task<ConversationMessageWindow> page;
-                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey }))
+                using ((IDisposable)gate.Invoke(writer, new object[] { chat.Host, chat.DocumentKey, "testWriter" }))
                 {
                     catalog = Task.Run(() => reader.ListHeaders());
                     page = Task.Run(() => reader.ReadMessageWindow(chat.Id, 1, 1));
@@ -1024,6 +1035,8 @@ namespace RNAssistant.Harness
                     "an unavailable runtime body does not block recovery of another chat");
                 AssertEqual(2, reader.ListHeaders().Count, "unavailable chat remains listed");
                 RuntimeThrows<RuntimePayloadUnavailableException>(() => service.LoadAddressedSession(broken.Id));
+                AssertEqual(broken.Id, service.LoadDiagnosticsSession(broken.Id).Id,
+                    "diagnostics remain addressable without hydrating unavailable execution bodies");
                 AssertEqual(healthy.Id, service.LoadAddressedSession(healthy.Id).Id, "healthy chat can open");
                 AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(eventPath)),
                     "missing evidence cannot rewrite the run or mark an unobserved tool as completed");

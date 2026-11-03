@@ -214,6 +214,8 @@ namespace RNAssistant.Harness
                 var workspace = workspaces.ConnectProject(System.IO.Path.Combine(paths.Root, "project"), true);
                 var other = workspaces.ConnectProject(System.IO.Path.Combine(paths.Root, "other-project"), true);
                 var session = workspaces.CreateSession(chats, workspace, "Diagnostics");
+                session.Messages.Add(new ChatMessage { Role = "user", Content = "Do not hydrate for diagnostics" });
+                chats.Save(session);
                 var foreign = workspaces.CreateSession(chats, other, "Other");
                 const string body = "{\"messages\":[{\"role\":\"user\",\"content\":\"Прочитай отчёт\"}]}";
                 var request = chats.AppendTrace(session, SessionEventTypes.LlmRequest,
@@ -225,6 +227,7 @@ namespace RNAssistant.Harness
                 var foreignEvent = chats.AppendTrace(foreign, SessionEventTypes.LlmRequest,
                     new LlmTraceRecord { RequestId = "shared-id" }, "{}", "application/json", "run", "turn", "step");
                 var loaded = ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, session.Id);
+                AssertEqual(0, loaded.Messages.Count, "workspace diagnostics use identity without hydrating chat messages");
                 RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, other.WorkspaceId, session.Id));
                 RuntimeThrows<InvalidOperationException>(() => ChatDiagnosticsScope.ReadWorkspaceSession(paths, chats, workspace.WorkspaceId, ""));
                 using (var data = new ResourceDataPlaneService(new ResourceGatewayService()))

@@ -1,5 +1,26 @@
 # Stabilization risk register
 
+## Фото: document lock timeout в диагностике — 2026-11-03
+
+Owner: Core ChatStore / Office diagnostics. Фото показывает повторные отказы
+`LoadDiagnosticsSession → LoadAddressedSession → ChatStore.LoadSession` и локального
+держателя на несколько секунд. Старый лог сообщает thread/held, но не операцию;
+по нему нельзя доказать deadlock, повреждение истории или конкретного writer.
+
+Локально воспроизведён ненужный catalog/full-session read при просмотре диагностики.
+Новый read-only scope берёт identity/authority/revision из существующей проверенной
+проекции, без восстановления run, сообщений и execution CAS. Проверены отсутствие
+изменений журнала/выбора, unsaved chat, недоступный execution CAS, workspace isolation,
+read-lock timeout и typed bridge busy; 8 адресных проверок прошли. До правки новый
+сценарий падал на лишнем catalog scan.
+
+Открыто: полный raw event scan, холодная индексация и обычная загрузка чата всё ещё
+могут долго удерживать document lock. Новый `ownerOperation` и `documentLockHeld`
+позволяют различить их по фото; короткий timeout ограничивает ожидание, не саму
+операцию. Busy не означает потерю чата, не даёт разрешения повторять mutation и
+не возвращает успешный пустой журнал. Реальная Windows/Office/WebView2 задержка и
+controller delivery остаются непроверенными; исходные данные не удаляются.
+
 ## VBA patch shown as changed, source reported absent — 2026-11-03
 
 Owner: Office VBA mutation/read-back and resource authority; model guidance for

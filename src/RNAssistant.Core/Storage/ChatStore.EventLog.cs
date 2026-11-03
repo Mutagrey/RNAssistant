@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
@@ -22,14 +23,18 @@ namespace RNAssistant.Core.Storage
         private sealed class TrackedPathLock : IDisposable
         {
             private readonly string _path;
+            private readonly ChatStore _store;
             private FileStream _stream;
             internal readonly long AcquiredAt = Stopwatch.GetTimestamp();
             internal readonly int ThreadId = Thread.CurrentThread.ManagedThreadId;
+            internal readonly string Operation;
 
-            internal TrackedPathLock(string path, FileStream stream)
+            internal TrackedPathLock(ChatStore store, string path, FileStream stream, string operation)
             {
+                _store = store;
                 _path = path;
                 _stream = stream;
+                Operation = operation;
             }
 
             public void Dispose()
@@ -41,6 +46,10 @@ namespace RNAssistant.Core.Storage
                 {
                     ((ICollection<KeyValuePair<string, TrackedPathLock>>)LocalPathLocks)
                         .Remove(new KeyValuePair<string, TrackedPathLock>(_path, this));
+                    _store.LogPerformance("documentLockHeld",
+                        (long)((Stopwatch.GetTimestamp() - AcquiredAt) * 1000.0 / Stopwatch.Frequency),
+                        "lock=" + Path.GetFileNameWithoutExtension(_path).Substring(0, 17) +
+                        ", operation=" + Operation + ", localThread=" + ThreadId);
                 }
             }
         }
@@ -286,7 +295,7 @@ namespace RNAssistant.Core.Storage
             return _protectionProvider() ?? StorageProtector.None;
         }
 
-        private IDisposable AcquirePathLock(string targetPath, TimeSpan? waitTimeout = null)
+        private IDisposable AcquirePathLock(string targetPath, TimeSpan? waitTimeout, string operation)
         {
             var timer = Stopwatch.StartNew();
             var directory = Path.Combine(_paths.Root, "locks");
@@ -299,10 +308,10 @@ namespace RNAssistant.Core.Storage
                 try
                 {
                     var lease = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                    var tracked = new TrackedPathLock(lockPath, lease);
+                    var tracked = new TrackedPathLock(this, lockPath, lease, operation);
                     LocalPathLocks[lockPath] = tracked;
                     LogPerformance("documentLockWait", timer.ElapsedMilliseconds,
-                        "lock=" + Path.GetFileNameWithoutExtension(lockPath).Substring(0, 17));
+                        "lock=" + Path.GetFileNameWithoutExtension(lockPath).Substring(0, 17) + ", operation=" + operation);
                     return tracked;
                 }
                 catch (IOException)
@@ -311,11 +320,12 @@ namespace RNAssistant.Core.Storage
                     {
                         TrackedPathLock localOwner;
                         var owner = LocalPathLocks.TryGetValue(lockPath, out localOwner)
-                            ? ", localThread=" + localOwner.ThreadId + ", localHeld=" +
+                            ? ", ownerOperation=" + localOwner.Operation + ", localThread=" + localOwner.ThreadId + ", localHeld=" +
                                 (long)((Stopwatch.GetTimestamp() - localOwner.AcquiredAt) * 1000.0 / Stopwatch.Frequency) + "ms"
                             : ", localOwner=untracked";
                         LogPerformance("documentLockTimeout", timer.ElapsedMilliseconds,
-                            "lock=" + Path.GetFileNameWithoutExtension(lockPath).Substring(0, 17) + owner);
+                            "lock=" + Path.GetFileNameWithoutExtension(lockPath).Substring(0, 17) +
+                            ", operation=" + operation + owner);
                         throw new ChatStorageLockTimeoutException();
                     }
                     Thread.Sleep(25);
@@ -323,34 +333,34 @@ namespace RNAssistant.Core.Storage
             }
         }
 
-        private IDisposable AcquireDocumentLock(string host, string documentKey)
+        private IDisposable AcquireDocumentLock(string host, string documentKey, [CallerMemberName] string operation = null)
         {
-            return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey));
+            return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey), operation: operation);
         }
 
-        private IDisposable AcquireDocumentLockForRead(string host, string documentKey)
+        private IDisposable AcquireDocumentLockForRead(string host, string documentKey, [CallerMemberName] string operation = null)
         {
-            return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey), ReadLockTimeout);
+            return AcquireDocumentDirectoryLock(GetDocumentDirectory(host, documentKey), ReadLockTimeout, operation);
         }
 
-        private IDisposable AcquireDocumentPathLock(string path)
+        private IDisposable AcquireDocumentPathLock(string path, [CallerMemberName] string operation = null)
         {
-            return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty));
+            return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty), operation: operation);
         }
 
-        private IDisposable AcquireDocumentPathLockForRead(string path)
+        private IDisposable AcquireDocumentPathLockForRead(string path, [CallerMemberName] string operation = null)
         {
-            return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty), ReadLockTimeout);
+            return AcquireDocumentDirectoryLock(Path.GetDirectoryName(path ?? string.Empty), ReadLockTimeout, operation);
         }
 
-        private IDisposable AcquireDocumentDirectoryLock(string directory)
+        private IDisposable AcquireDocumentDirectoryLock(string directory, [CallerMemberName] string operation = null)
         {
-            return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document");
+            return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document", null, operation);
         }
 
-        private IDisposable AcquireDocumentDirectoryLock(string directory, TimeSpan waitTimeout)
+        private IDisposable AcquireDocumentDirectoryLock(string directory, TimeSpan waitTimeout, [CallerMemberName] string operation = null)
         {
-            return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document", waitTimeout);
+            return AcquirePathLock((directory ?? _paths.ChatDirectory) + ".document", waitTimeout, operation);
         }
 
         private IDisposable AcquireTwoDocumentLocks(string firstHost, string firstKey, string secondHost, string secondKey)

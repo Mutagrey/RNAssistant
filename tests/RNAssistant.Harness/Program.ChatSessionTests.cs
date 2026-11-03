@@ -1996,6 +1996,7 @@ namespace RNAssistant.Harness
             public ChatSession Load(string host, string key, string id)
             { RequireFullLoad(); return _inner.Load(host, key, id); }
             public ChatSession Load(string id) { RequireFullLoad(); return _inner.Load(id); }
+            public ChatSession ReadDiagnosticsSession(string id) { return _inner.ReadDiagnosticsSession(id); }
             public ChatSession CreateTransient(string host, string key, string title, string name)
             { return _inner.CreateTransient(host, key, title, name); }
             public void Commit(ChatSession session, ConversationCommit commit) { _inner.Commit(session, commit); }

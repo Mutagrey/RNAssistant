@@ -12,7 +12,7 @@ namespace RNAssistant.Office.Services
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an exact workspace and chat are required.");
             var workspaces = new WorkspaceStore(paths);
             var workspace = workspaces.OpenConnectedHistory(workspaceId);
-            var session = workspaces.LoadSession(chats, workspace, chatId) ??
+            var session = chats.ReadDiagnosticsSession("Workspace", workspace.WorkspaceId, chatId) ??
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: the chat is absent from this workspace.");
             Require(session, chatId, workspaceId);
             return session;

@@ -97,11 +97,15 @@ and queued confirmation continuations skip the unused return DTO; their post-wor
 completion callback pushes addressed detail without rescanning the global
 chat/document or tool/skill catalogs. Direct edit/confirmation callers still receive
 their requested response. Persistence, leases and failure recovery are unchanged.
-Active-pointer, catalog, message-page and full-session reads wait at most two seconds for that document lock;
+Active-pointer, catalog, message-page, diagnostic scope, full-session and validated/complete event reads use a two-second wait for that document lock;
 the timeout is a typed busy result and cannot be treated as a missing chat. Writes retain
 their ten-second lock wait. Startup recovery defers a busy document and reconciles an
 unfinished run when its chat is next opened. Slow-lock diagnostics identify the lock by
-an opaque hash prefix and report a tracked in-process holder when one exists.
+an opaque hash prefix and report a tracked in-process holder when one exists,
+including the waiting and holding operation names. Slow completed holds report
+`documentLockHeld` after release; raw validated scans report `eventReadValidated`.
+The bridge maps contention to `chat_storage_busy` with an actionable message,
+without treating it as an unexpected failure or automatically repeating an action.
 SQLite itself also has a two-second managed busy timeout; busy/locked errors become
 the same typed busy result and never cause sidecar deletion or a missing-chat result.
 Startup recovery serializes attempts but does not retain a thrown exception for
@@ -138,6 +142,15 @@ recovery still validates every cold chat before its first detail response; its c
 with all retained JSONL bytes, not with the selected chat's visible message count.
 
 ### Chat selection ownership and performance
+
+Saved diagnostics resolve only identity, document/workspace authority and revision
+through the existing verified SQLite projection. They do not load message/artifact
+bodies, hydrate execution CAS, scan the catalog, bind the current Office document or
+recover an interrupted run. An exact unsaved selected draft remains an empty,
+unpersisted diagnostic source. This removes the normal chat-loading path from
+trajectory, export, payload and saved Model Context reads. Cold index validation
+and full raw event scans still take the document lock and can be expensive; the
+short acquisition timeout does not bound their execution time.
 
 Office navigation serializes selection and drains already admitted catalog and
 preference requests before a possible host switch. This prevents an old controller

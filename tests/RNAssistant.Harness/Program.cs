@@ -551,6 +551,7 @@ namespace RNAssistant.Harness
                 Test("chat sessions: saved content does not rewrite selection", SavedSessionDoesNotRewriteSelection),
                 Test("storage: session read waits for document writer", SessionReadUsesDocumentBoundary),
                 Test("storage: busy chat stays visible and recovers after lock release", BusyChatDoesNotBecomeNewChat),
+                Test("chat sessions: diagnostics do not hydrate or recover history", DiagnosticsDoNotHydrateOrRecoverHistory),
                 Test("storage: sqlite projection pages messages", SqliteProjectionPagesMessages),
                 Test("storage: sqlite cold catalog defers message indexes", ColdCatalogDefersMessageIndexes),
                 Test("storage: sqlite catalog and pages share document boundary", SqliteCatalogAndPagesShareDocumentBoundary),

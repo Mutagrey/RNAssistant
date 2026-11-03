@@ -16,6 +16,37 @@ namespace RNAssistant.Harness
 {
     internal static partial class Program
     {
+        private static void DiagnosticsDoNotHydrateOrRecoverHistory()
+        {
+            WithTempPaths(paths =>
+            {
+                var adapter = FakeOfficeAdapter.ForHost("Word");
+                var store = new ChatStore(paths);
+                var saved = store.Create(adapter.HostName, adapter.DocumentKey, adapter.DocumentTitle, "History");
+                saved.DocumentAuthorityId = "diagnostic-document";
+                saved.Messages.Add(new ChatMessage { Role = "user", Content = new string('x', 12000) });
+                saved.LastRun = new ChatRunRecord { RunId = "unfinished", RuntimeId = "previous", Status = "running" };
+                store.Save(saved);
+                var canonical = File.ReadAllBytes(SessionEventFile(paths, saved));
+                var guarded = new CatalogReadStore(ConversationStore(new ChatStore(paths)))
+                    { ForbidFullLoads = true, ForbidHeaderReads = true };
+                var service = new ChatSessionService(adapter, guarded);
+                var draft = service.CreateChat("Unsaved");
+                var scope = service.LoadDiagnosticsSession(saved.Id);
+                AssertEqual(saved.Id, scope.Id, "diagnostics retain the addressed chat");
+                AssertEqual(saved.Revision, scope.Revision, "scope carries the durable revision");
+                AssertEqual(saved.DocumentAuthorityId, scope.DocumentAuthorityId, "scope preserves resource authority");
+                AssertEqual(0, scope.Messages.Count, "diagnostic scope does not hydrate the transcript");
+                AssertTrue(scope.LastRun == null, "diagnostic scope does not restore an executable continuation");
+                AssertEqual(draft.Id, service.ActiveTransientSessionId, "diagnostics do not change selection");
+                AssertEqual(draft.Id, service.LoadDiagnosticsSession(draft.Id).Id, "unsaved chat keeps its exact empty scope");
+                AssertTrue(!store.IsPersisted(draft), "empty diagnostic read does not persist the draft");
+                RuntimeThrows<InvalidOperationException>(() => service.LoadDiagnosticsSession("absent"));
+                AssertTrue(canonical.SequenceEqual(File.ReadAllBytes(SessionEventFile(paths, saved))),
+                    "viewing diagnostics does not recover or write the unfinished run");
+            });
+        }
+
         private static void UnreadableProjectionIsNotMissingChat()
         {
             WithTempPaths(paths =>

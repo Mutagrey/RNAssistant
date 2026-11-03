@@ -23,7 +23,7 @@ namespace RNAssistant.Office
         {
             if (string.IsNullOrWhiteSpace(chatId))
                 throw new InvalidOperationException("RESOURCE_ACCESS_DENIED: an explicit chat is required.");
-            var session = workspaceId == null ? LoadAddressedSession(chatId) :
+            var session = workspaceId == null ? _chatSessions.LoadDiagnosticsSession(chatId) :
                 ChatDiagnosticsScope.ReadWorkspaceSession(_paths, _chatStore, workspaceId, chatId);
             ChatDiagnosticsScope.Require(session, chatId, workspaceId);
             return session;

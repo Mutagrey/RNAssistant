@@ -132,8 +132,10 @@ namespace RNAssistant.Office
                 StartIndex = Math.Max(0, beforeIndex), TotalCount = 0,
                 Messages = new ChatMessageViewDto[0] };
         }
+        internal Exception TrajectoryFailure { get; set; }
         public ChatTrajectoryResponse GetChatTrajectory(ChatTrajectoryRequest request)
         {
+            if (TrajectoryFailure != null) throw TrajectoryFailure;
             LastDiagnosticsWorkspaceId = request?.WorkspaceId;
             LastChatId = request == null ? null : request.ChatId;
             LastTrajectoryView = request == null ? null : request.View;

@@ -25,7 +25,7 @@ namespace RNAssistant.Core.Storage
     public sealed class ChatStorageLockTimeoutException : ChatConcurrencyException
     {
         public ChatStorageLockTimeoutException()
-            : base("Chat storage is busy. Retry this operation after the current write finishes.")
+            : base("Chat storage is busy. Wait for the current operation to finish, then refresh the chat state.")
         {
         }
     }
@@ -494,9 +494,13 @@ namespace RNAssistant.Core.Storage
             var path = GetSessionPath(host, documentKey, sessionId);
             using (AcquirePersistenceRead())
             {
-                using (AcquireDocumentLock(host, documentKey))
+                using (AcquireDocumentLockForRead(host, documentKey))
                 {
+                    var timer = Stopwatch.StartNew();
                     var log = ReadEventLog(path);
+                    LogPerformance("eventReadValidated", timer.ElapsedMilliseconds,
+                        "bytes=" + (log == null ? 0 : log.ByteLength) +
+                        ", events=" + (log == null ? 0 : log.Events.Count));
                     return log == null ? new List<SessionEvent>() : log.Events;
                 }
             }
@@ -508,7 +512,7 @@ namespace RNAssistant.Core.Storage
             var path = GetSessionPath(host, documentKey, sessionId);
             using (AcquirePersistenceRead())
             {
-                using (AcquireDocumentLock(host, documentKey))
+                using (AcquireDocumentLockForRead(host, documentKey))
                 {
                     var timer = Stopwatch.StartNew();
                     var log = ReadEventLog(path);

@@ -686,6 +686,49 @@ namespace RNAssistant.Core.Storage
             }
         }
 
+        internal ChatSession ReadDiagnosticsSession(string chatId)
+        {
+            if (string.IsNullOrWhiteSpace(chatId)) return null;
+            foreach (var path in SafeFindSessionFiles(chatId))
+            {
+                var source = ReadDiagnosticsSessionAtPath(path, chatId);
+                if (source != null) return source;
+            }
+            return null;
+        }
+
+        internal ChatSession ReadDiagnosticsSession(string host, string documentKey, string chatId)
+        {
+            if (string.IsNullOrWhiteSpace(chatId)) return null;
+            return ReadDiagnosticsSessionAtPath(GetSessionPath(host, documentKey, chatId), chatId);
+        }
+
+        private ChatSession ReadDiagnosticsSessionAtPath(string path, string chatId)
+        {
+            using (AcquirePersistenceRead())
+            using (AcquireDocumentPathLockForRead(path))
+            {
+                if (!File.Exists(path)) return null;
+                return ReadSqliteProjection(path, connection =>
+                {
+                    var cursor = EnsureSqliteProjection(connection, path);
+                    if (cursor == null) return null;
+                    if (!string.Equals(cursor.SessionId, chatId, StringComparison.OrdinalIgnoreCase))
+                        throw new ChatConcurrencyException("The diagnostic source does not match the requested chat.");
+                    // The existing verified index owns identity. Do not hydrate messages,
+                    // runtime CAS, artifacts or an execution just to address a journal.
+                    var root = cursor.Root;
+                    return new ChatSession
+                    {
+                        Id = cursor.SessionId, Revision = cursor.Sequence,
+                        Host = (string)root["Host"], DocumentKey = (string)root["DocumentKey"],
+                        WorkspaceId = (string)root["WorkspaceId"],
+                        DocumentAuthorityId = (string)root["DocumentAuthorityId"]
+                    };
+                });
+            }
+        }
+
         internal ConversationMessageWindow ReadMessageWindow(string chatId, int beforeIndex, int pageSize)
         {
             if (string.IsNullOrWhiteSpace(chatId)) return null;

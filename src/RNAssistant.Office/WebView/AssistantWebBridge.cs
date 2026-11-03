@@ -984,6 +984,11 @@ namespace RNAssistant.Office.WebView
             {
                 return SerializeFailure(id, ex.Message, ex.Message, "bridge_switch_busy", false);
             }
+            catch (ChatStorageLockTimeoutException)
+            {
+                const string message = "Хранилище чата занято другой операцией. Дождитесь её завершения и обновите состояние чата.";
+                return SerializeFailure(id, message, message, "chat_storage_busy", false);
+            }
             catch (WorkspaceApplicationException ex)
             { return SerializeFailure(id, ex.Message, ex.Message, ex.Code, false); }
             catch (PluginException ex)

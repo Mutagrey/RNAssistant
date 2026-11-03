@@ -469,6 +469,18 @@ namespace RNAssistant.Harness
             AssertEqual("log-only", controller.LastTrajectoryVisibility, "trajectory visibility");
             AssertEqual("llm.failure", controller.LastTrajectoryEventTypes[1], "trajectory event types remain native array");
 
+            controller.TrajectoryFailure = new RNAssistant.Core.Storage.ChatStorageLockTimeoutException();
+            var busy = JObject.Parse(bridge.HandleMessageAsync(JsonConvert.SerializeObject(new {
+                contractVersion = 2, id = "trajectory-busy", type = "getChatTrajectory", bridgeToken = token,
+                payload = new { chatId = "chat-query" }
+            })).GetAwaiter().GetResult());
+            AssertTrue(!(bool)busy["ok"], "busy diagnostics are not a successful empty journal");
+            AssertEqual("trajectory-busy", (string)busy["id"], "busy reply retains its request identity");
+            AssertEqual("chat_storage_busy", (string)busy["errorCode"], "busy storage has its own typed bridge code");
+            AssertContains((string)busy["error"], "Хранилище чата занято", "busy response gives an actionable message");
+            AssertContains((string)busy["error"], "обновите состояние", "busy never instructs a blind repeat of a possible mutation");
+            controller.TrajectoryFailure = null;
+
             responseJson = bridge.HandleMessageAsync(
                 "{\"contractVersion\":2,\"id\":\"trajectory2\",\"type\":\"exportChatTrajectory\",\"bridgeToken\":\"" + token +
                 "\",\"payload\":{\"chatId\":\"chat-export\",\"workspaceId\":\"workspace-diagnostics\",\"view\":\"raw\",\"search\":\"failed\",\"eventTypes\":[\"llm.failure\"],\"visibility\":\"log-only\",\"redactionMode\":\"none\",\"includeCasPayloads\":true}}")

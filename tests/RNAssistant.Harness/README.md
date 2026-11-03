@@ -85,6 +85,15 @@ are Core/Application behavior checks independent of UI structure. The opt-in
 and a 23 MiB journal, reporting catalog, load, reference full scan and indexed inbox
 times; it has no machine-dependent time gate. Actual Office host-switch delivery
 and Windows timings remain separate qualification.
+
+`chat sessions: diagnostics do not hydrate or recover history` forbids catalog/full
+loads and verifies read-only identity/revision, unchanged history/selection and an
+unsaved draft. `storage: busy chat stays visible` checks the short validated/complete
+event-read timeout and named holder diagnostics. `storage: CAS missing runtime body`
+keeps diagnostics addressable without execution hydration. `model context: workspace
+exchange and scope` checks the same identity-only workspace route; `bridge: typed
+trajectory query` checks `chat_storage_busy` instead of generic failure/empty success.
+These do not qualify the real Office controller or Windows lock durations.
 `chat sessions: selection loads and binds once` verifies one session load and one
 active-pointer write, including explicit navigation during deferred Save As
 migration. Both ordinary selection and host initialization use this service owner.
